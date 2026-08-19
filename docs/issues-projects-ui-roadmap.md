@@ -56,6 +56,26 @@ Acceptance:
 - The same `Layouts.app` wrapper is on every page with `current_scope` assigned.
 - The subnav links to `/:owner/:repo/issues`, `/:owner/:repo/projects`, and so on.
 
+## Phase 0: GitHub authentication and real data
+
+All issue, project, and label surfaces must use the real, signed-in GitHub user. No seeded or placeholder users are allowed. This phase ports the OAuth flow from `~/work/sarah` and wires it into the OpenAgents router, controllers, and LiveViews. See `docs/github-auth-plan.md` for the test-driven implementation plan.
+
+### What this phase delivers
+
+- GitHub OAuth sign-in and sign-out at `/auth/github`, `/auth/github/callback`, and `/logout`.
+- A `users` table that stores the GitHub id, login, name, avatar, and an encrypted token.
+- A `github_oauth_attempts` table for PKCE/state validation.
+- `OpenAgentsWeb.UserAuth` with session management and `on_mount` hooks.
+- Authentication required for all `/:owner/:repo` issue and project pages.
+- A homepage sign-in button and a navbar avatar/logout control.
+
+### Acceptance
+
+- `/` shows a **Sign in with GitHub** button when the visitor is not authenticated.
+- A logged-in user can open `/:owner/:repo/issues/new` without hitting a placeholder owner.
+- `/:owner/:repo/issues` and related paths redirect an unauthenticated visitor to `/auth/github`.
+- `mix test` covers user upsert, token vault, OAuth flow, and the protected LiveView routes.
+
 ## Phase 1: Placeholder homepage
 
 What the surface shows:
@@ -385,6 +405,7 @@ Acceptance:
 
 ## Implementation order
 
+0. GitHub authentication and real data. See `docs/github-auth-plan.md`.
 1. Layout foundation and placeholder homepage.
 2. Issues list with open and closed tabs.
 3. Issue detail and comment thread.

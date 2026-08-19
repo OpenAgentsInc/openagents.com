@@ -1,10 +1,15 @@
+---
+name: google-developer-style
+description: Apply the Google Developer Documentation Style Guide to user-facing docs, READMEs, AGENTS.md, and commit messages. Use when writing or reviewing prose in this repo.
+---
+
 # Google Developer Documentation Style
 
-Use this skill when writing or reviewing user-facing documentation, READMEs, `AGENTS.md`, and commit messages for OpenAgents.
+Use this skill when you write or review user-facing documentation, READMEs, `AGENTS.md`, and commit messages for OpenAgents.
 
-## How to invoke
+## How to use this skill
 
-Apply these rules to the text you are about to produce or edit. When a rule would make something less clear, break the rule and stay consistent.
+Apply these rules to the text you produce or edit. When a rule would make something less clear, break the rule and stay consistent.
 
 ## Voice and tone
 
@@ -18,7 +23,7 @@ Apply these rules to the text you are about to produce or edit. When a rule woul
 ## Language and grammar
 
 - Use active voice. Make clear who performs the action.
-- Use second person (`you`) for the reader.
+- Use second person ("you") for the reader.
 - Use present tense.
 - Use standard American spelling and punctuation.
 - Put conditions before instructions, not after.

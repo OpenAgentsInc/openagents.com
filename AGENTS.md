@@ -2,7 +2,7 @@ This is a web application written using the Phoenix web framework.
 
 ## Communication style
 
-All text in this repo — docs, README, `AGENTS.md`, commit messages, and agent responses — follows the [Google Developer Documentation Style Guide](https://developers.google.com/style). When writing or reviewing text, invoke the `google-developer-style` skill.
+All text in this repo — docs, README, `AGENTS.md`, commit messages, and agent responses — follows the [Google Developer Documentation Style Guide](https://developers.google.com/style). When writing or reviewing text, read the `google-developer-style` skill at `.agents/skills/google-developer-style/SKILL.md`.
 
 - Write in active voice and address the reader as `you`.
 - Use sentence case for all headings and titles.
@@ -48,7 +48,7 @@ custom classes must fully style the input
   - You must import the vendor deps into app.js and app.css to use them
   - **Never write inline <script>custom js</script> tags within templates**
 
-### UI/UX & design guidelines
+### UI and UX design guidelines
 
 - **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
 - Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)

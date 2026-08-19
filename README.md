@@ -4,13 +4,13 @@ OpenAgents is a source-code forge. We are building it to replace GitHub for our 
 
 ## What we are building
 
-We are building the Agent Forge from scratch. We are not reusing the Sarah codebase as a base. We will port the parts of Sarah that worked well, especially the BEAM-based hot reload and release upgrade system.
+We are building the Agent Forge from scratch. This is a clean-room, independent implementation. It does not use code or design from any earlier internal or external forge.
 
 The first public surface is an issue and project tracker. We will use the Agent Forge to build OpenAgents.com itself. Every change ships through the forge with live hot reload.
 
 ## Why start from scratch
 
-Sarah taught us a lot. Starting fresh lets us keep the good parts and avoid the parts that don't fit a public, contributor-friendly forge. The BEAM runtime, Phoenix LiveView, and hot reload are the good parts.
+Starting fresh lets us build a forge that is open, contributor-friendly, and defined by its own runtime behavior rather than by compatibility with an existing platform. The BEAM runtime, Phoenix LiveView, and hot reload are the implementation choices.
 
 ## What works now
 

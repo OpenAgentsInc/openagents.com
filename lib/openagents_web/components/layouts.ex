@@ -39,23 +39,46 @@ defmodule OpenAgentsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar bg-base-100 border-b border-base-300 px-4 sm:px-6 lg:px-8">
+    <div class="min-h-screen flex flex-col bg-base-100">
+      <.command_bar current_scope={@current_scope} />
+
+      <div class="flex-1 flex overflow-hidden">
+        <%= if @current_scope do %>
+          <.sidebar current_scope={@current_scope} />
+        <% end %>
+
+        <main class={[
+          "flex-1 min-w-0",
+          @current_scope && "h-full overflow-y-auto bg-base-100 p-4",
+          !@current_scope && "px-4 py-20 sm:px-6 lg:px-8"
+        ]}>
+          <%= if @current_scope do %>
+            {render_slot(@inner_block)}
+          <% else %>
+            <div class={["mx-auto space-y-4", @wide && "max-w-6xl", !@wide && "max-w-2xl"]}>
+              {render_slot(@inner_block)}
+            </div>
+          <% end %>
+        </main>
+      </div>
+
+      <.flash_group flash={@flash} />
+    </div>
+    """
+  end
+
+  defp command_bar(assigns) do
+    ~H"""
+    <header class="navbar bg-base-100 border-b border-base-300 px-4 h-16 shrink-0">
       <div class="navbar-start">
         <.link navigate={~p"/"} class="btn btn-ghost text-xl">
           OpenAgents
         </.link>
       </div>
+
       <div class="navbar-end gap-2">
-        <.link navigate={~p"/"} class="btn btn-ghost btn-sm">Home</.link>
-        <.link navigate={~p"/components"} class="btn btn-ghost btn-sm">Components</.link>
         <%= if @current_scope do %>
-          <span class="self-center text-sm text-base-content/70">
-            {@current_scope.github_login}
-          </span>
-          <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0">
-            <input type="hidden" name="_method" value="delete" />
-            <.button type="submit" class="btn btn-ghost btn-sm">Log out</.button>
-          </.form>
+          <.account_dropdown current_scope={@current_scope} />
         <% else %>
           <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
             <.button type="submit" class="btn btn-primary btn-sm">Sign in with GitHub</.button>
@@ -64,16 +87,109 @@ defmodule OpenAgentsWeb.Layouts do
         <.theme_toggle />
       </div>
     </header>
-
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class={["mx-auto space-y-4", @wide && "max-w-6xl", !@wide && "max-w-2xl"]}>
-        {render_slot(@inner_block)}
-      </div>
-    </main>
-
-    <.flash_group flash={@flash} />
     """
   end
+
+  defp account_dropdown(assigns) do
+    ~H"""
+    <details class="dropdown dropdown-end">
+      <summary class="btn btn-ghost btn-sm list-none flex items-center gap-2 cursor-pointer">
+        <img
+          src={@current_scope.github_avatar_url}
+          alt={"GitHub avatar for @#{@current_scope.github_login}"}
+          class="w-8 h-8 rounded-full"
+        />
+        <span class="hidden sm:inline">@{@current_scope.github_login}</span>
+        <.icon name="hero-chevron-down" class="size-4" />
+      </summary>
+      <ul class="menu dropdown-content bg-base-100 rounded-box z-10 w-56 p-2 shadow border border-base-300">
+        <li class="p-2">
+          <span class="font-semibold">{account_display_name(@current_scope)}</span>
+          <span :if={@current_scope.github_name} class="text-sm text-base-content/70">
+            @{@current_scope.github_login}
+          </span>
+        </li>
+        <li>
+          <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0 w-full">
+            <input type="hidden" name="_method" value="delete" />
+            <button type="submit" class="w-full text-left flex items-center gap-2">
+              <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" /> Log out
+            </button>
+          </.form>
+        </li>
+      </ul>
+    </details>
+    """
+  end
+
+  defp sidebar(assigns) do
+    ~H"""
+    <aside class="w-64 hidden lg:flex flex-col border-r border-base-300 bg-base-200 h-full">
+      <nav class="flex-1 p-4 overflow-y-auto">
+        <ul class="menu menu-sm rounded-box space-y-1">
+          <li>
+            <.link navigate={~p"/"}>
+              <.icon name="hero-home" class="size-4" /> Home
+            </.link>
+          </li>
+          <li>
+            <.link navigate={~p"/chat"}>
+              <.icon name="hero-chat-bubble-left-right" class="size-4" /> Chat
+            </.link>
+          </li>
+          <li>
+            <.link navigate={~p"/components"}>
+              <.icon name="hero-squares-2x2" class="size-4" /> Components
+            </.link>
+          </li>
+          <li>
+            <.link navigate={~p"/OpenAgents/openagents/issues"}>
+              <.icon name="hero-circle-stack" class="size-4" /> Issues
+            </.link>
+          </li>
+          <li>
+            <.link navigate={~p"/OpenAgents/openagents/projects"}>
+              <.icon name="hero-rectangle-group" class="size-4" /> Projects
+            </.link>
+          </li>
+        </ul>
+
+        <div class="mt-6">
+          <h3 class="text-xs font-bold uppercase text-base-content/50 mb-2 px-3">Work</h3>
+          <ul class="menu menu-sm rounded-box space-y-1">
+            <li><a>Explore repo</a></li>
+            <li><a>Plan change</a></li>
+            <li><a>Run tests</a></li>
+          </ul>
+        </div>
+
+        <div class="mt-6">
+          <h3 class="text-xs font-bold uppercase text-base-content/50 mb-2 px-3">Memory</h3>
+          <p class="text-sm text-base-content/70 px-3">No saved records yet.</p>
+        </div>
+      </nav>
+
+      <div class="p-4 border-t border-base-300">
+        <div class="flex items-center gap-3">
+          <img
+            src={@current_scope.github_avatar_url}
+            alt={"GitHub avatar for @#{@current_scope.github_login}"}
+            class="w-10 h-10 rounded-full"
+          />
+          <div class="min-w-0">
+            <p class="font-semibold truncate">{account_display_name(@current_scope)}</p>
+            <p :if={@current_scope.github_name} class="text-sm text-base-content/70 truncate">
+              @{@current_scope.github_login}
+            </p>
+          </div>
+        </div>
+      </div>
+    </aside>
+    """
+  end
+
+  defp account_display_name(%{github_name: name}) when is_binary(name) and name != "", do: name
+  defp account_display_name(%{github_login: login}), do: "@" <> login
 
   @doc """
   Shows the flash group with standard titles and content.

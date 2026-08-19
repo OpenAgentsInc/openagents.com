@@ -20,10 +20,13 @@ defmodule OpenAgentsWeb.Router do
     get "/", PageController, :home
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", OpenAgentsWeb do
-  #   pipe_through :api
-  # end
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :api
+
+    resources "/repos/:owner/:repo/issues", IssueController,
+      only: [:index, :create, :show, :update],
+      param: "issue_number"
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:openagents, :dev_routes) do

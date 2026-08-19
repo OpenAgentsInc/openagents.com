@@ -2,9 +2,9 @@ import Config
 
 # Configure your database
 config :openagents, OpenAgents.Repo,
-  username: "postgres",
-  password: "postgres",
-  hostname: "localhost",
+  username: System.get_env("USER") || "christopherdavid",
+  password: "",
+  socket_dir: "/tmp",
   database: "openagents_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,

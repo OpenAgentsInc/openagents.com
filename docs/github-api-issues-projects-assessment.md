@@ -3,6 +3,8 @@
 Date: 2026-08-19
 Source: `rest-api-description/descriptions/api.github.com/api.github.com.2026-03-10.yaml`
 
+For the concrete work breakdown, parallelization map, and subagent dispatch notes, see `docs/issues-projects-work-plan.md`.
+
 ## Goal
 
 Dogfood OpenAgents by using it to track this repo's own issues and projects. We want enough GitHub REST API parity that `gh`, Octokit, and the GitHub CLI can talk to OpenAgents without changes, but we will only build the subset we actually use.

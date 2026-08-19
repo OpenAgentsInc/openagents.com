@@ -160,6 +160,7 @@
 @media (hover: hover) {
   .sidebar-row:hover {
     background: var(--color-base-300);
+    color: #fff;
   }
 }
 
@@ -179,6 +180,7 @@
 .sidebar-row--static:hover,
   .sidebar-row--empty:hover {
   background: transparent;
+  color: var(--color-base-content);
 }
 
 .sidebar-row__hit {
@@ -206,7 +208,7 @@
   width: 20px;
   flex: none;
   justify-content: center;
-  color: var(--color-base-content);
+  color: currentColor;
   font-size: 1.25rem;
 }
 

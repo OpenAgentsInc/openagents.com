@@ -81,6 +81,8 @@ defmodule OpenAgents.MixProject do
        depth: 1},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
+      {:mdex, "~> 0.3"},
+      {:websockex, "~> 0.5.1"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:gettext, "~> 1.0"},

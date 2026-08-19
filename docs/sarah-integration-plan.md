@@ -2,9 +2,19 @@
 
 Date: 2026-08-19
 
-Status: Planned
+Status: In progress
+
+Last updated: 2026-08-19
 
 Supersedes: `docs/chat-inference-plan.md` (the previous `pro.openagents.com` split is no longer the target; the goal now is to merge the entire Sarah product into `openagents.com` as a single application).
+
+## Progress
+
+- **Phase 1: Foundation and application wiring** — done.
+  - Added `{:mdex, "~> 0.3"}` and `{:websockex, "~> 0.5.1"}` to `mix.exs`.
+  - Created `OpenAgents.Sarah.Supervisor` as a placeholder supervisor under `lib/openagents/sarah/supervisor.ex`.
+  - Wired the supervisor into `OpenAgents.Application`.
+  - `mix precommit` passes. `mdex` replaces the retired and CVE-flagged `earmark` package.
 
 ## Outcome
 
@@ -137,7 +147,7 @@ lib/sarah_web/
 
 | Dependency | Purpose | Required? |
 | --- | --- | --- |
-| `earmark` | Markdown parsing in chat messages | Yes for chat |
+| `mdex` | Markdown parsing in chat messages | Yes for chat; replaces retired `earmark` |
 | `websockex` | WebSocket client for voice/computer | Yes for voice and machines |
 | `horde` | Distributed process registry | Only if cluster is kept |
 | `ra` | Raft consensus | Only if cluster is kept |
@@ -181,22 +191,21 @@ A re-namespaced Sarah `Application`, `Repo`, `PubSub`, `Telemetry`, and cluster 
 ### Tasks
 
 1. Add missing dependencies to `mix.exs` and run `mix deps.get`:
-   - `{:earmark, "~> 1.4"}`
+   - `{:mdex, "~> 0.3"}` (replaces retired `earmark`)
    - `{:websockex, "~> 0.5.1"}`
    - `{:horde, "~> 0.9.0"}` (optional, behind a feature flag if not needed)
    - `{:ra, "~> 2.16"}` (optional, behind a feature flag if not needed)
-   - `{:dns_cluster, "~> 0.2.0"}` (optional)
-2. Lift `lib/sarah/application.ex` to `lib/openagents/application.ex` and merge with the existing `OpenAgents.Application`.
-3. Lift `lib/sarah/cluster`, `lib/sarah/network_status.ex`, and `lib/sarah/cluster/sessions.ex` if clustering is required. If not, stub the cluster references so the rest compiles.
-4. Lift `lib/sarah/telemetry.ex` and merge with `OpenAgentsWeb.Telemetry`.
-5. Lift `lib/sarah/repo.ex` if it adds functions; otherwise point all new contexts at `OpenAgents.Repo`.
-6. Add Sarah's `Endpoint` and socket configuration to `OpenAgentsWeb.Endpoint` (voice/channels).
+2. Create `OpenAgents.Sarah.Supervisor` as a placeholder supervisor that will hold the re-namespaced Sarah children as they are lifted.
+3. Wire `OpenAgents.Sarah.Supervisor` into `OpenAgents.Application` before `OpenAgentsWeb.Endpoint`.
+4. Add the voice `/controller/socket` and any additional sockets to `OpenAgentsWeb.Endpoint` when the rest of the web layer is ported.
+5. Lift `lib/sarah/telemetry.ex` and merge telemetry metrics with `OpenAgentsWeb.Telemetry` in a later phase.
 
 ### Exit criteria
 
 - `mix compile` succeeds.
 - New dependencies are in `mix.lock`.
-- `OpenAgents.Application` starts the Sarah supervision tree (or a stubbed version of it) without runtime errors.
+- `OpenAgents.Application` starts the Sarah placeholder supervisor without runtime errors.
+- `mix precommit` passes.
 
 ## Phase 2: Accounts and authentication
 

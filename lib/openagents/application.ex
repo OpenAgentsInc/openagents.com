@@ -12,6 +12,7 @@ defmodule OpenAgents.Application do
       OpenAgents.Repo,
       {DNSCluster, query: Application.get_env(:openagents, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: OpenAgents.PubSub},
+      OpenAgents.Sarah.Supervisor,
       # Start a worker by calling: OpenAgents.Worker.start_link(arg)
       # {OpenAgents.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -6,7 +6,7 @@ Status: Planned
 
 ## Outcome
 
-OpenAgents will serve the `/chat` user interface from this public repository. The interface lets an authenticated user chat with Sarah through a separate API service, configured as `https://api.openagents.com` in production.
+OpenAgents will serve the `/chat` user interface from this public repository. The interface lets an authenticated user chat with Sarah through a separate API service, configured as `https://pro.openagents.com` in production.
 
 This repository owns the presentation layer and API client. The private API service owns Sarah’s behavior and all sensitive application logic.
 
@@ -49,7 +49,7 @@ openagents.com
   |
   | HTTPS, service authentication, user assertion
   v
-api.openagents.com
+pro.openagents.com
   - conversation and message authority
   - Sarah persona and inference
   - memory and tools
@@ -106,7 +106,7 @@ The current application needs authenticated browser sessions before the chat rou
 2. Pass `current_scope` to `<Layouts.app>` and derive a stable, non-email user subject from it.
 3. Create a short-lived service assertion for every API request or stream connection. Use a signed JWT or workload-identity token with these claims:
    - `iss`: `openagents.com`
-   - `aud`: `api.openagents.com`
+   - `aud`: `pro.openagents.com`
    - `sub`: the stable OpenAgents user ID
    - `sid`: the browser-session identifier
    - `scope`: the minimum API scopes required for the request
@@ -675,4 +675,4 @@ Run the final drill against a staging instance of the private API:
 12. Inspect browser source, LiveView assigns, logs, and telemetry for service credentials, prompts, provider payloads, hidden tool arguments, and data from another account.
 13. Run `mix precommit` and all JavaScript tests at the final SHA.
 
-After this drill passes, `openagents.com` owns the complete public chat experience while `api.openagents.com` remains the private behavioral and data authority.
+After this drill passes, `openagents.com` owns the complete public chat experience while `pro.openagents.com` remains the private behavioral and data authority.

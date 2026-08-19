@@ -26,6 +26,12 @@ defmodule OpenAgentsWeb.Router do
     resources "/repos/:owner/:repo/issues", IssueController,
       only: [:index, :create, :show, :update],
       param: "issue_number"
+
+    resources "/repos/:owner/:repo/issues/:issue_number/comments", CommentController,
+      only: [:index, :create]
+
+    resources "/repos/:owner/:repo/issues/comments", CommentController,
+      only: [:show, :update, :delete]
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

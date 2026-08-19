@@ -5,6 +5,7 @@ defmodule OpenAgents.Issues do
 
   import Ecto.Query, warn: false
   alias OpenAgents.Repo
+  alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
 
   def list_issues(opts \\ []) do
@@ -77,6 +78,66 @@ defmodule OpenAgents.Issues do
 
   defp maybe_filter_state(query, "all"), do: query
   defp maybe_filter_state(query, state), do: where(query, state: ^state)
+
+  def list_comments(issue_id) do
+    Comment
+    |> where(issue_id: ^issue_id)
+    |> order_by(:created_at)
+    |> Repo.all()
+  end
+
+  def get_comment!(id), do: Repo.get!(Comment, id)
+
+  def create_comment(attrs \\ %{}) do
+    normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
+    issue_id = Map.get(normalized, "issue_id")
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    normalized =
+      normalized
+      |> Map.put_new("created_at", now)
+      |> Map.put_new("updated_at", now)
+
+    Repo.transaction(fn ->
+      with {:ok, %Comment{} = comment} <-
+             %Comment{}
+             |> Comment.changeset(normalized)
+             |> Repo.insert(),
+           {1, nil} <-
+             from(i in Issue, where: i.id == ^issue_id, update: [inc: [comments: 1]])
+             |> Repo.update_all([]) do
+        comment
+      else
+        {:error, changeset} -> Repo.rollback(changeset)
+        {_, _} -> Repo.rollback(%Comment{})
+      end
+    end)
+  end
+
+  def update_comment(%Comment{} = comment, attrs) do
+    normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    normalized = Map.put(normalized, "updated_at", now)
+
+    comment
+    |> Comment.changeset(normalized)
+    |> Repo.update()
+  end
+
+  def delete_comment(%Comment{} = comment) do
+    Repo.transaction(fn ->
+      issue_id = comment.issue_id
+
+      with {:ok, %Comment{}} <- Repo.delete(comment),
+           {1, nil} <-
+             from(i in Issue, where: i.id == ^issue_id, update: [inc: [comments: -1]])
+             |> Repo.update_all([]) do
+        :ok
+      else
+        {:error, changeset} -> Repo.rollback(changeset)
+        {_, _} -> Repo.rollback(:ok)
+      end
+    end)
+  end
 
   defp next_issue_number do
     case Repo.aggregate(Issue, :max, :number) do

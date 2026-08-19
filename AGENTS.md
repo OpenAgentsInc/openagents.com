@@ -1,5 +1,17 @@
 This is a web application written using the Phoenix web framework.
 
+## Communication style
+
+All text in this repo — docs, README, `AGENTS.md`, commit messages, and agent responses — follows the [Google Developer Documentation Style Guide](https://developers.google.com/style). When writing or reviewing text, invoke the `google-developer-style` skill.
+
+- Write in active voice and address the reader as `you`.
+- Use sentence case for all headings and titles.
+- Use code font for code, filenames, class names, HTTP status codes, and placeholders.
+- Use bold for UI elements.
+- Use numbered lists for procedures and bulleted lists for unrelated items.
+- Avoid jargon, buzzwords, metaphors, exclamation marks, and phrases like `simply` or `just`.
+- Avoid `please` in instructions.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues

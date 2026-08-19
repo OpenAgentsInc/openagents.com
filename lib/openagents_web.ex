@@ -53,6 +53,8 @@ defmodule OpenAgentsWeb do
       use Phoenix.LiveView
 
       unquote(html_helpers())
+
+      import OpenAgentsWeb.Components.RepoHeader
     end
   end
 

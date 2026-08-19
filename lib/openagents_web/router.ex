@@ -17,7 +17,18 @@ defmodule OpenAgentsWeb.Router do
   scope "/", OpenAgentsWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", HomeLive, :index
+
+    live "/:owner/:repo/issues/new", IssueNewLive, :new
+    live "/:owner/:repo/issues/:number", IssueShowLive, :show
+    live "/:owner/:repo/issues", IssueIndexLive, :index
+
+    live "/:owner/:repo/labels", LabelIndexLive, :index
+    live "/:owner/:repo/milestones", MilestoneIndexLive, :index
+    live "/:owner/:repo/assignees", AssigneeIndexLive, :index
+
+    live "/:owner/:repo/projects/:number", ProjectShowLive, :show
+    live "/:owner/:repo/projects", ProjectIndexLive, :index
   end
 
   scope "/api/v3", OpenAgentsWeb do

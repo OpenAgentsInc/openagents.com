@@ -14,6 +14,6 @@ defmodule OpenAgents.Labels.Label do
   def changeset(label, attrs) do
     label
     |> cast(attrs, [:name, :color, :description])
-    |> validate_required([:name, :color, :description])
+    |> validate_required([:name, :color])
   end
 end

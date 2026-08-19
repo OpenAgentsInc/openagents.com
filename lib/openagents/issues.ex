@@ -7,6 +7,8 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Repo
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Labels
+  alias OpenAgents.Milestones
 
   def list_issues(opts \\ []) do
     state = Keyword.get(opts, :state, "open")
@@ -24,18 +26,27 @@ defmodule OpenAgents.Issues do
 
   def create_issue(attrs \\ %{}) do
     number = next_issue_number()
-    normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
+
+    normalized =
+      attrs
+      |> to_string_map()
+      |> Map.put("number", number)
+      |> prepare_collections()
 
     %Issue{}
-    |> Issue.changeset(Map.put(normalized, "number", number))
+    |> Issue.changeset(normalized)
     |> Repo.insert()
   end
 
   def update_issue(%Issue{} = issue, attrs) do
-    attrs = maybe_closed_attrs(issue, attrs)
+    normalized =
+      issue
+      |> maybe_closed_attrs(attrs)
+      |> to_string_map()
+      |> prepare_collections()
 
     issue
-    |> Issue.changeset(attrs)
+    |> Issue.changeset(normalized)
     |> Repo.update()
   end
 
@@ -43,41 +54,44 @@ defmodule OpenAgents.Issues do
     Issue.changeset(issue, attrs)
   end
 
-  defp maybe_closed_attrs(issue, %{"state" => "closed"} = attrs) do
-    if issue.state == "open" do
-      attrs
-      |> Map.put("closed_at", DateTime.utc_now() |> DateTime.truncate(:second))
-      |> Map.put_new("state_reason", "completed")
-    else
-      attrs
-    end
+  def add_labels(%Issue{} = issue, names) when is_list(names) do
+    new_labels =
+      names
+      |> Enum.map(&Labels.get_label_by_name!/1)
+      |> Enum.map(&label_json/1)
+
+    existing = issue.labels || []
+    labels = (existing ++ new_labels) |> Enum.uniq_by(& &1["name"])
+    update_issue(issue, %{"labels" => labels})
   end
 
-  defp maybe_closed_attrs(_issue, %{state: "closed"} = attrs) do
-    if is_nil(attrs[:closed_at]) do
-      Map.put(attrs, :closed_at, DateTime.utc_now() |> DateTime.truncate(:second))
-    else
-      attrs
-    end
-    |> Map.put_new(:state_reason, "completed")
+  def remove_label(%Issue{} = issue, name) when is_binary(name) do
+    name = URI.decode(name)
+    labels = Enum.reject(issue.labels || [], &label_match?(&1, name))
+    update_issue(issue, %{"labels" => labels})
   end
 
-  defp maybe_closed_attrs(_issue, %{"state" => "open"} = attrs) do
-    attrs
-    |> Map.put("closed_at", nil)
-    |> Map.put("state_reason", nil)
+  def add_assignees(%Issue{} = issue, logins) when is_list(logins) do
+    new = Enum.map(logins, &%{"login" => &1})
+    existing = issue.assignees || []
+    assignees = (existing ++ new) |> Enum.uniq_by(& &1["login"])
+    update_issue(issue, %{"assignees" => assignees})
   end
 
-  defp maybe_closed_attrs(_issue, %{state: "open"} = attrs) do
-    attrs
-    |> Map.put(:closed_at, nil)
-    |> Map.put(:state_reason, nil)
+  def remove_assignees(%Issue{} = issue, logins) when is_list(logins) do
+    logins = MapSet.new(logins)
+    assignees = Enum.reject(issue.assignees || [], & &1["login"] in logins)
+    update_issue(issue, %{"assignees" => assignees})
   end
 
-  defp maybe_closed_attrs(_issue, attrs), do: attrs
+  def set_milestone(%Issue{} = issue, nil) do
+    update_issue(issue, %{"milestone" => nil})
+  end
 
-  defp maybe_filter_state(query, "all"), do: query
-  defp maybe_filter_state(query, state), do: where(query, state: ^state)
+  def set_milestone(%Issue{} = issue, number) when is_integer(number) do
+    milestone = Milestones.get_milestone_by_number!(number)
+    update_issue(issue, %{"milestone" => milestone_json(milestone)})
+  end
 
   def list_comments(issue_id) do
     Comment
@@ -89,13 +103,13 @@ defmodule OpenAgents.Issues do
   def get_comment!(id), do: Repo.get!(Comment, id)
 
   def create_comment(attrs \\ %{}) do
-    normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
-    issue_id = Map.get(normalized, "issue_id")
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
     normalized =
-      normalized
-      |> Map.put_new("created_at", now)
-      |> Map.put_new("updated_at", now)
+      attrs
+      |> to_string_map()
+      |> Map.put_new("created_at", DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Map.put_new("updated_at", DateTime.utc_now() |> DateTime.truncate(:second))
+
+    issue_id = Map.get(normalized, "issue_id")
 
     Repo.transaction(fn ->
       with {:ok, %Comment{} = comment} <-
@@ -114,9 +128,10 @@ defmodule OpenAgents.Issues do
   end
 
   def update_comment(%Comment{} = comment, attrs) do
-    normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
-    normalized = Map.put(normalized, "updated_at", now)
+    normalized =
+      attrs
+      |> to_string_map()
+      |> Map.put("updated_at", DateTime.utc_now() |> DateTime.truncate(:second))
 
     comment
     |> Comment.changeset(normalized)
@@ -139,10 +154,120 @@ defmodule OpenAgents.Issues do
     end)
   end
 
+  defp maybe_closed_attrs(issue, %{"state" => "closed"} = attrs) do
+    if issue.state == "open" do
+      attrs
+      |> Map.put("closed_at", DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Map.put_new("state_reason", "completed")
+    else
+      attrs
+    end
+  end
+
+  defp maybe_closed_attrs(_issue, %{"state" => "open"} = attrs) do
+    attrs
+    |> Map.put("closed_at", nil)
+    |> Map.put("state_reason", nil)
+  end
+
+  defp maybe_closed_attrs(_issue, %{state: "closed"} = attrs) do
+    if is_nil(attrs[:closed_at]) do
+      Map.put(attrs, :closed_at, DateTime.utc_now() |> DateTime.truncate(:second))
+    else
+      attrs
+    end
+    |> Map.put_new(:state_reason, "completed")
+  end
+
+  defp maybe_closed_attrs(_issue, %{state: "open"} = attrs) do
+    attrs
+    |> Map.put(:closed_at, nil)
+    |> Map.put(:state_reason, nil)
+  end
+
+  defp maybe_closed_attrs(_issue, attrs), do: attrs
+
+  defp maybe_filter_state(query, "all"), do: query
+  defp maybe_filter_state(query, state), do: where(query, state: ^state)
+
   defp next_issue_number do
     case Repo.aggregate(Issue, :max, :number) do
       nil -> 1
       n -> n + 1
     end
   end
+
+  defp to_string_map(attrs) do
+    for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
+  end
+
+  defp prepare_collections(attrs) do
+    attrs
+    |> maybe_convert_milestone()
+    |> maybe_convert_labels()
+    |> maybe_convert_assignees()
+  end
+
+  defp maybe_convert_milestone(%{"milestone" => milestone} = attrs) when is_integer(milestone) do
+    milestone = Milestones.get_milestone_by_number!(milestone)
+    Map.put(attrs, "milestone", milestone_json(milestone))
+  end
+
+  defp maybe_convert_milestone(%{"milestone" => nil} = attrs) do
+    Map.put(attrs, "milestone", nil)
+  end
+
+  defp maybe_convert_milestone(attrs), do: attrs
+
+  defp maybe_convert_labels(%{"labels" => labels} = attrs) when is_list(labels) do
+    if Enum.all?(labels, &is_binary/1) do
+      existing =
+        Labels.list_labels()
+        |> Enum.map(&label_json/1)
+        |> Map.new(&{&1["name"], &1})
+
+      label_maps =
+        Enum.map(labels, fn name ->
+          Map.get(existing, name, %{"name" => name, "color" => "ffffff"})
+        end)
+
+      Map.put(attrs, "labels", label_maps)
+    else
+      attrs
+    end
+  end
+
+  defp maybe_convert_labels(attrs), do: attrs
+
+  defp maybe_convert_assignees(%{"assignees" => logins} = attrs) when is_list(logins) do
+    if Enum.all?(logins, &is_binary/1) do
+      assignees = Enum.map(logins, &%{"login" => &1})
+      Map.put(attrs, "assignees", assignees)
+    else
+      attrs
+    end
+  end
+
+  defp maybe_convert_assignees(attrs), do: attrs
+
+  defp label_json(%OpenAgents.Labels.Label{} = label) do
+    %{
+      "id" => label.id,
+      "name" => label.name,
+      "color" => label.color,
+      "description" => label.description
+    }
+  end
+
+  defp milestone_json(%OpenAgents.Milestones.Milestone{} = milestone) do
+    %{
+      "number" => milestone.number,
+      "title" => milestone.title,
+      "state" => milestone.state,
+      "description" => milestone.description,
+      "due_on" => milestone.due_on
+    }
+  end
+
+  defp label_match?(label, name), do: label["name"] == name
 end

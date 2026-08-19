@@ -32,6 +32,31 @@ defmodule OpenAgentsWeb.Router do
 
     resources "/repos/:owner/:repo/issues/comments", CommentController,
       only: [:show, :update, :delete]
+
+    resources "/repos/:owner/:repo/issues/:issue_number/labels", IssueLabelController,
+      only: [:index, :create]
+
+    delete "/repos/:owner/:repo/issues/:issue_number/labels/:name",
+           IssueLabelController,
+           :delete
+
+    resources "/repos/:owner/:repo/issues/:issue_number/assignees", IssueAssigneeController,
+      only: [:index, :create]
+
+    delete "/repos/:owner/:repo/issues/:issue_number/assignees",
+           IssueAssigneeController,
+           :delete
+
+    resources "/repos/:owner/:repo/labels", LabelController,
+      only: [:index, :create, :show, :update, :delete],
+      param: "name"
+
+    resources "/repos/:owner/:repo/milestones", MilestoneController,
+      only: [:index, :create, :show, :update, :delete],
+      param: "milestone_number"
+
+    get "/repos/:owner/:repo/assignees", AssigneeController, :index
+    get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

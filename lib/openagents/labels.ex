@@ -37,6 +37,10 @@ defmodule OpenAgents.Labels do
   """
   def get_label!(id), do: Repo.get!(Label, id)
 
+  def get_label_by_name!(name) when is_binary(name) do
+    Repo.get_by!(Label, name: URI.decode(name))
+  end
+
   @doc """
   Creates a label.
 

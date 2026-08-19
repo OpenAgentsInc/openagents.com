@@ -4,7 +4,7 @@ defmodule OpenAgents.Milestones.Milestone do
 
   schema "milestones" do
     field :title, :string
-    field :state, :string
+    field :state, :string, default: "open"
     field :description, :string
     field :due_on, :string
     field :number, :integer
@@ -16,6 +16,6 @@ defmodule OpenAgents.Milestones.Milestone do
   def changeset(milestone, attrs) do
     milestone
     |> cast(attrs, [:title, :state, :description, :due_on, :number])
-    |> validate_required([:title, :state, :description, :due_on, :number])
+    |> validate_required([:title, :number])
   end
 end

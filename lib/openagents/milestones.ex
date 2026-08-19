@@ -37,6 +37,9 @@ defmodule OpenAgents.Milestones do
   """
   def get_milestone!(id), do: Repo.get!(Milestone, id)
 
+  def get_milestone_by_number!(number) when is_integer(number),
+    do: Repo.get_by!(Milestone, number: number)
+
   @doc """
   Creates a milestone.
 
@@ -49,10 +52,20 @@ defmodule OpenAgents.Milestones do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_milestone(attrs) do
+  def create_milestone(attrs \\ %{}) do
+    number = next_milestone_number()
+    normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
+
     %Milestone{}
-    |> Milestone.changeset(attrs)
+    |> Milestone.changeset(Map.put_new(normalized, "number", number))
     |> Repo.insert()
+  end
+
+  defp next_milestone_number do
+    case Repo.aggregate(Milestone, :max, :number) do
+      nil -> 1
+      n -> n + 1
+    end
   end
 
   @doc """

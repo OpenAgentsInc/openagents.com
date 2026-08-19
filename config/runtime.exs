@@ -1,5 +1,27 @@
 import Config
 
+if config_env() == :dev do
+  env_file = Path.expand("../.env", __DIR__)
+
+  if File.regular?(env_file) do
+    env_file
+    |> File.stream!()
+    |> Stream.map(&String.trim/1)
+    |> Stream.reject(&(&1 == "" or String.starts_with?(&1, "#")))
+    |> Enum.each(fn line ->
+      case String.split(line, "=", parts: 2) do
+        [key, value] when key != "" ->
+          if System.get_env(key) == nil do
+            System.put_env(key, String.trim(value, "\"'"))
+          end
+
+        _other ->
+          :ok
+      end
+    end)
+  end
+end
+
 github_oauth = Application.get_env(:openagents, :github_oauth, [])
 
 github_oauth =

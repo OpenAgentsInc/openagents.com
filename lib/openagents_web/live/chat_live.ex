@@ -34,79 +34,96 @@ defmodule OpenAgentsWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} wide>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      wide
+      title="Chat"
+      subtitle="Mock inference and voice pipeline"
+    >
       <div
         id="chat-app"
         class="h-[calc(100%-2rem)] w-full flex flex-col border border-base-300 rounded-lg overflow-hidden"
       >
-        <header class="p-4 border-b border-base-300 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <.icon name="hero-sparkles" class="size-6 text-primary" />
-            <h1 class="font-semibold">Sarah</h1>
-            <span class="badge badge-sm badge-ghost">Mock</span>
-          </div>
-          <div class="flex items-center gap-2 text-sm text-base-content/70">
-            <.icon name="hero-cpu-chip" class="size-4" />
-            <span>Core chat and inference logic in this repo</span>
-          </div>
-        </header>
-
         <div
           id="transcript"
-          class="flex-1 overflow-y-auto p-4 space-y-4"
+          class="chat-transcript flex-1 overflow-y-auto p-4 space-y-6"
         >
           <%= for message <- @messages do %>
             <.message_row message={message} id={message.id} />
           <% end %>
         </div>
 
-        <.form
-          for={@form}
-          id="chat-form"
-          phx-submit="send_message"
-          class="p-4 border-t border-base-300"
-        >
-          <div class="flex items-end gap-2">
-            <.input
-              field={@form[:content]}
-              type="textarea"
-              placeholder="Message Sarah..."
-              class="flex-1"
-              rows="2"
-            />
-            <.button type="submit" variant="primary" class="btn-md">
-              Send
-            </.button>
-          </div>
-        </.form>
+        <.composer_stack form={@form} />
       </div>
     </Layouts.app>
     """
   end
 
+  attr :message, :map, required: true
+  attr :id, :string, required: true
+
   defp message_row(assigns) do
     ~H"""
-    <div id={@id} class={["chat", @message.role == "user" && "chat-end"]}>
-      <div class="chat-image avatar">
-        <div class="w-10 rounded-full bg-base-300 flex items-center justify-center">
-          <.icon name={avatar_icon(@message.role)} class="size-6" />
+    <article
+      id={@id}
+      class={[
+        "message-row",
+        "message-row--#{@message.role}"
+      ]}
+    >
+      <div class="message-body">
+        <div
+          :if={@message.inserted_at}
+          class="message-time"
+        >
+          {Calendar.strftime(@message.inserted_at, "%H:%M")}
         </div>
+        <p class={[
+          "message-content",
+          @message.role == "user" && "message-bubble"
+        ]}>
+          {@message.content}
+        </p>
       </div>
-      <div class="chat-header">
-        <span class="text-sm font-semibold capitalize">{@message.role}</span>
-      </div>
-      <div class={[
-        "chat-bubble",
-        @message.role == "user" && "chat-bubble-primary"
-      ]}>
-        {@message.content}
-      </div>
-    </div>
+    </article>
     """
   end
 
-  defp avatar_icon("user"), do: "hero-user"
-  defp avatar_icon(_), do: "hero-sparkles"
+  attr :form, :any, required: true
+
+  defp composer_stack(assigns) do
+    ~H"""
+    <.form
+      for={@form}
+      id="chat-form"
+      phx-submit="send_message"
+      class="composer"
+    >
+      <div class="composer-card">
+        <div class="composer-grid">
+          <.input
+            field={@form[:content]}
+            type="textarea"
+            class="composer-input"
+            placeholder="Message Sarah..."
+            aria-label="Message Sarah..."
+            rows="1"
+          />
+          <div class="composer-trailing">
+            <.button
+              type="submit"
+              class="send-action"
+              aria-label="Send"
+            >
+              <.icon name="arrow-up" class="size-5" />
+            </.button>
+          </div>
+        </div>
+      </div>
+    </.form>
+    """
+  end
 
   defp composer_form do
     to_form(%{"content" => ""}, as: :chat)

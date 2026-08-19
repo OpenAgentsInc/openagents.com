@@ -35,6 +35,10 @@ defmodule OpenAgentsWeb.Layouts do
     default: false,
     doc: "use a wider content column for catalog and list surfaces"
 
+  attr :title, :string, default: nil, doc: "the page title to display in the command bar"
+
+  attr :subtitle, :string, default: nil, doc: "the page subtitle to display in the command bar"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -45,7 +49,7 @@ defmodule OpenAgentsWeb.Layouts do
       <% end %>
 
       <div class="flex-1 min-w-0 flex flex-col h-screen">
-        <.command_bar current_scope={@current_scope} />
+        <.command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle} />
 
         <main class={[
           "flex-1 min-w-0 overflow-y-auto overscroll-none p-4",
@@ -66,6 +70,10 @@ defmodule OpenAgentsWeb.Layouts do
     """
   end
 
+  attr :current_scope, :map, default: nil
+  attr :title, :string, default: nil
+  attr :subtitle, :string, default: nil
+
   defp command_bar(assigns) do
     ~H"""
     <header class="navbar bg-base-100 border-b border-base-300 px-4 h-16 shrink-0">
@@ -74,6 +82,14 @@ defmodule OpenAgentsWeb.Layouts do
           <.link navigate={~p"/"} class="btn btn-ghost text-xl">
             OpenAgents
           </.link>
+        <% end %>
+        <%= if @title do %>
+          <div class="flex flex-col justify-center">
+            <h1 class="text-base font-semibold leading-tight">{@title}</h1>
+            <%= if @subtitle do %>
+              <p class="text-xs text-base-content/60">{@subtitle}</p>
+            <% end %>
+          </div>
         <% end %>
       </div>
 

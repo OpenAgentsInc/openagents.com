@@ -169,6 +169,7 @@ defmodule OpenAgentsWeb.Layouts do
         </div>
       </nav>
 
+      <%!--
       <div class="sidebar-sections">
         <section class="sidebar-section" aria-label="Work">
           <h2 class="sidebar-section-label">WORK</h2>
@@ -192,6 +193,7 @@ defmodule OpenAgentsWeb.Layouts do
           </div>
         </section>
       </div>
+      --%>
 
       <nav class="sidebar-nav" aria-label="OpenAgents tools">
         <div class="sidebar-row">

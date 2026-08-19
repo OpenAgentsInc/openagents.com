@@ -42,7 +42,7 @@ defmodule OpenAgentsWeb.HomeLive do
       </section>
 
       <div class="flex justify-center -mt-20 mb-20 px-4">
-        <div class="mockup-browser border bg-base-100 w-full max-w-4xl">
+        <div class="mockup-browser border bg-base-200 w-full max-w-4xl">
           <div class="mockup-browser-toolbar">
             <div class="input">openagents.com/OpenAgents/openagents/issues</div>
           </div>

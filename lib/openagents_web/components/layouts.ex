@@ -123,52 +123,86 @@ defmodule OpenAgentsWeb.Layouts do
 
   defp sidebar(assigns) do
     ~H"""
-    <aside class="w-64 hidden lg:flex flex-col border-r border-base-300 bg-base-200 h-full">
-      <nav class="flex-1 p-4 overflow-y-auto">
-        <ul class="menu menu-sm rounded-box space-y-1">
-          <li>
-            <.link navigate={~p"/"}>
-              <.icon name="hero-home" class="size-4" /> Home
-            </.link>
-          </li>
-          <li>
-            <.link navigate={~p"/chat"}>
-              <.icon name="hero-chat-bubble-left-right" class="size-4" /> Chat
-            </.link>
-          </li>
-          <li>
-            <.link navigate={~p"/components"}>
-              <.icon name="hero-squares-2x2" class="size-4" /> Components
-            </.link>
-          </li>
-          <li>
-            <.link navigate={~p"/OpenAgents/openagents/issues"}>
-              <.icon name="hero-circle-stack" class="size-4" /> Issues
-            </.link>
-          </li>
-          <li>
-            <.link navigate={~p"/OpenAgents/openagents/projects"}>
-              <.icon name="hero-rectangle-group" class="size-4" /> Projects
-            </.link>
-          </li>
-        </ul>
+    <aside class="sidebar hidden lg:flex">
+      <header class="sidebar-header">
+        <span class="brand-name">OpenAgents</span>
+      </header>
 
-        <div class="mt-6">
-          <h3 class="text-xs font-bold uppercase text-base-content/50 mb-2 px-3">Work</h3>
-          <ul class="menu menu-sm rounded-box space-y-1">
-            <li><a>Explore repo</a></li>
-            <li><a>Plan change</a></li>
-            <li><a>Run tests</a></li>
-          </ul>
+      <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
+        <div class="sidebar-row">
+          <.link navigate={~p"/"} class="sidebar-row__hit" aria-label="Home"></.link>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="home" /></span>
+            <span class="sidebar-row__label">Home</span>
+          </span>
         </div>
 
-        <div class="mt-6">
-          <h3 class="text-xs font-bold uppercase text-base-content/50 mb-2 px-3">Memory</h3>
-          <p class="text-sm text-base-content/70 px-3">No saved records yet.</p>
+        <div class="sidebar-row">
+          <.link navigate={~p"/chat"} class="sidebar-row__hit" aria-label="Chat"></.link>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="chat" /></span>
+            <span class="sidebar-row__label">Chat</span>
+          </span>
+        </div>
+
+        <div class="sidebar-row">
+          <.link navigate={~p"/components"} class="sidebar-row__hit" aria-label="Components"></.link>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="widget" /></span>
+            <span class="sidebar-row__label">Components</span>
+          </span>
+        </div>
+
+        <div class="sidebar-row">
+          <.link
+            navigate={~p"/OpenAgents/openagents/issues"}
+            class="sidebar-row__hit"
+            aria-label="Issues"
+          ></.link>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="bug" /></span>
+            <span class="sidebar-row__label">Issues</span>
+          </span>
+        </div>
+
+        <div class="sidebar-row">
+          <.link
+            navigate={~p"/OpenAgents/openagents/projects"}
+            class="sidebar-row__hit"
+            aria-label="Projects"
+          ></.link>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="folder" /></span>
+            <span class="sidebar-row__label">Projects</span>
+          </span>
         </div>
       </nav>
 
-      <div class="p-4 border-t border-base-300">
+      <div class="sidebar-sections">
+        <section class="sidebar-section" aria-label="Work">
+          <h2 class="sidebar-section-label">WORK</h2>
+          <div class="sidebar-row sidebar-row--static">
+            <span class="sidebar-row__content">
+              <span class="sidebar-row__icon"><.icon name="bolt" /></span>
+              <span class="sidebar-row__label">Explore repo</span>
+            </span>
+          </div>
+          <div class="sidebar-row sidebar-row--static">
+            <span class="sidebar-row__content">
+              <span class="sidebar-row__icon"><.icon name="bolt" /></span>
+              <span class="sidebar-row__label">Plan change</span>
+            </span>
+          </div>
+          <div class="sidebar-row sidebar-row--static">
+            <span class="sidebar-row__content">
+              <span class="sidebar-row__icon"><.icon name="bolt" /></span>
+              <span class="sidebar-row__label">Run tests</span>
+            </span>
+          </div>
+        </section>
+      </div>
+
+      <footer class="sidebar-footer">
         <div class="flex items-center gap-3">
           <img
             src={@current_scope.github_avatar_url}
@@ -182,7 +216,7 @@ defmodule OpenAgentsWeb.Layouts do
             </p>
           </div>
         </div>
-      </div>
+      </footer>
     </aside>
     """
   end

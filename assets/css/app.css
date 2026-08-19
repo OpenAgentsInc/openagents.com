@@ -103,3 +103,165 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* ── Sidebar (Sarah-style layout with OpenAgents color tokens) ───────────── */
+.sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  width: 280px;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid var(--color-base-300);
+  background: var(--color-base-200);
+}
+
+.sidebar-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 8px 8px 16px;
+  border-bottom: 1px solid var(--color-base-300);
+}
+
+.brand-name {
+  flex: none;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-base-content);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+  padding-block: 6px;
+}
+
+.sidebar-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  margin-inline: 6px;
+  padding-inline: 10px;
+  padding-block: 6px;
+  border-radius: 10px;
+  color: var(--color-base-content);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+  transition: background-color 150ms ease;
+}
+
+@media (hover: hover) {
+  .sidebar-row:hover {
+    background: var(--color-base-300);
+  }
+}
+
+.sidebar-row:has(.sidebar-row__hit:active) {
+  background: var(--color-base-300);
+}
+
+.sidebar-row[data-selected] {
+  background: var(--color-base-300);
+}
+
+.sidebar-row--static,
+  .sidebar-row--empty {
+  cursor: default;
+}
+
+.sidebar-row--static:hover,
+  .sidebar-row--empty:hover {
+  background: transparent;
+}
+
+.sidebar-row__hit {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-row__content {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.sidebar-row__icon {
+  display: inline-flex;
+  width: 20px;
+  flex: none;
+  justify-content: center;
+  color: var(--color-neutral);
+  font-size: 1.25rem;
+  transition: color 150ms ease;
+}
+
+@media (hover: hover) {
+  .sidebar-row:hover .sidebar-row__icon {
+    color: var(--color-primary);
+  }
+}
+
+.sidebar-row[data-selected] .sidebar-row__icon {
+  color: var(--color-primary);
+}
+
+.sidebar-row__label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sidebar-sections {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-section {
+  position: relative;
+  padding-block-end: 6px;
+}
+
+.sidebar-section-label {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: 16px;
+  background: var(--color-base-200);
+  color: var(--color-neutral);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px;
+  border-top: 1px solid var(--color-base-300);
+}

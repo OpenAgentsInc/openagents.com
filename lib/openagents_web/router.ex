@@ -18,6 +18,7 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :browser
 
     live "/", HomeLive, :index
+    live "/components", ComponentsLive, :index
 
     live "/:owner/:repo/issues/new", IssueNewLive, :new
     live "/:owner/:repo/issues/:number", IssueShowLive, :show

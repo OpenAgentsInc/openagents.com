@@ -6,6 +6,8 @@ Source: `docs/issues-projects-work-plan.md`, `docs/github-api-issues-projects-as
 
 This roadmap outlines a simple browser UI for the existing OpenAgents issues, labels, assignees, milestones, comments, and Projects V2 API. The implementation uses Phoenix 1.8 LiveView, `OpenAgentsWeb.CoreComponents`, and DaisyUI component classes. The goal is a GitHub-shaped surface that is usable, not a pixel-perfect clone.
 
+The reusable-component inventory, live catalog, and the list of components still to build are in `docs/component-library.md`. Shipped components render at `/components`.
+
 ## Scope and assumptions
 
 - The JSON API is in place and follows the paths in `docs/github-api-issues-projects-assessment.md`.

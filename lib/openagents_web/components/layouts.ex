@@ -31,6 +31,10 @@ defmodule OpenAgentsWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
 
+  attr :wide, :boolean,
+    default: false,
+    doc: "use a wider content column for catalog and list surfaces"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -43,12 +47,13 @@ defmodule OpenAgentsWeb.Layouts do
       </div>
       <div class="navbar-end gap-2">
         <.link navigate={~p"/"} class="btn btn-ghost btn-sm">Home</.link>
+        <.link navigate={~p"/components"} class="btn btn-ghost btn-sm">Components</.link>
         <.theme_toggle />
       </div>
     </header>
 
     <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+      <div class={["mx-auto space-y-4", @wide && "max-w-6xl", !@wide && "max-w-2xl"]}>
         {render_slot(@inner_block)}
       </div>
     </main>

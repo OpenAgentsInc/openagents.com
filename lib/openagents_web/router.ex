@@ -57,6 +57,18 @@ defmodule OpenAgentsWeb.Router do
 
     get "/repos/:owner/:repo/assignees", AssigneeController, :index
     get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
+
+    get "/users/:username/projectsV2", ProjectController, :index
+    post "/:owner/projectsV2", ProjectController, :create
+    get "/users/:username/projectsV2/:project_number", ProjectController, :show
+    get "/users/:username/projectsV2/:project_number/items", ProjectController, :items
+    post "/users/:username/projectsV2/:project_number/items", ProjectController, :create_item
+
+    patch "/users/:username/projectsV2/:project_number/items/:item_id",
+          ProjectController,
+          :update_item
+
+    get "/users/:username/projectsV2/:project_number/fields", ProjectController, :fields
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

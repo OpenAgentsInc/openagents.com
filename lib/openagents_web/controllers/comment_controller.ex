@@ -19,11 +19,14 @@ defmodule OpenAgentsWeb.CommentController do
       |> json(%{message: "Not Found"})
   end
 
-  def create(conn, %{
-        "owner" => _owner,
-        "repo" => _repo,
-        "issue_number" => issue_number
-      } = params) do
+  def create(
+        conn,
+        %{
+          "owner" => _owner,
+          "repo" => _repo,
+          "issue_number" => issue_number
+        } = params
+      ) do
     issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
 
     case Issues.create_comment(Map.put(params, :issue_id, issue.id)) do

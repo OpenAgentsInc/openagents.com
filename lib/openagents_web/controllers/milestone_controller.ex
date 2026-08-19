@@ -37,11 +37,14 @@ defmodule OpenAgentsWeb.MilestoneController do
       |> json(%{message: "Not Found"})
   end
 
-  def update(conn, %{
-        "owner" => owner,
-        "repo" => repo,
-        "milestone_number" => milestone_number
-      } = params) do
+  def update(
+        conn,
+        %{
+          "owner" => owner,
+          "repo" => repo,
+          "milestone_number" => milestone_number
+        } = params
+      ) do
     milestone = Milestones.get_milestone_by_number!(String.to_integer(milestone_number))
 
     case Milestones.update_milestone(milestone, params) do

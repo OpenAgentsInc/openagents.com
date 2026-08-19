@@ -38,11 +38,14 @@ defmodule OpenAgentsWeb.IssueController do
       |> json(%{message: "Not Found"})
   end
 
-  def update(conn, %{
-        "owner" => owner,
-        "repo" => repo,
-        "issue_number" => issue_number
-      } = params) do
+  def update(
+        conn,
+        %{
+          "owner" => owner,
+          "repo" => repo,
+          "issue_number" => issue_number
+        } = params
+      ) do
     issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
 
     case Issues.update_issue(issue, params) do

@@ -35,7 +35,12 @@ defmodule OpenAgents.LabelsTest do
 
     test "update_label/2 with valid data updates the label" do
       label = label_fixture()
-      update_attrs = %{name: "some updated name", description: "some updated description", color: "some updated color"}
+
+      update_attrs = %{
+        name: "some updated name",
+        description: "some updated description",
+        color: "some updated color"
+      }
 
       assert {:ok, %Label{} = label} = Labels.update_label(label, update_attrs)
       assert label.name == "some updated name"

@@ -13,11 +13,14 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
       |> json(%{message: "Not Found"})
   end
 
-  def create(conn, %{
-        "owner" => _owner,
-        "repo" => _repo,
-        "issue_number" => issue_number
-      } = params) do
+  def create(
+        conn,
+        %{
+          "owner" => _owner,
+          "repo" => _repo,
+          "issue_number" => issue_number
+        } = params
+      ) do
     issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
     logins = params["assignees"] || []
 
@@ -37,11 +40,14 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
       |> json(%{message: "Not Found"})
   end
 
-  def delete(conn, %{
-        "owner" => _owner,
-        "repo" => _repo,
-        "issue_number" => issue_number
-      } = params) do
+  def delete(
+        conn,
+        %{
+          "owner" => _owner,
+          "repo" => _repo,
+          "issue_number" => issue_number
+        } = params
+      ) do
     issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
     logins = params["assignees"] || []
 

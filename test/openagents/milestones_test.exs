@@ -21,7 +21,13 @@ defmodule OpenAgents.MilestonesTest do
     end
 
     test "create_milestone/1 with valid data creates a milestone" do
-      valid_attrs = %{state: "some state", description: "some description", title: "some title", number: 42, due_on: "some due_on"}
+      valid_attrs = %{
+        state: "some state",
+        description: "some description",
+        title: "some title",
+        number: 42,
+        due_on: "some due_on"
+      }
 
       assert {:ok, %Milestone{} = milestone} = Milestones.create_milestone(valid_attrs)
       assert milestone.state == "some state"
@@ -37,9 +43,18 @@ defmodule OpenAgents.MilestonesTest do
 
     test "update_milestone/2 with valid data updates the milestone" do
       milestone = milestone_fixture()
-      update_attrs = %{state: "some updated state", description: "some updated description", title: "some updated title", number: 43, due_on: "some updated due_on"}
 
-      assert {:ok, %Milestone{} = milestone} = Milestones.update_milestone(milestone, update_attrs)
+      update_attrs = %{
+        state: "some updated state",
+        description: "some updated description",
+        title: "some updated title",
+        number: 43,
+        due_on: "some updated due_on"
+      }
+
+      assert {:ok, %Milestone{} = milestone} =
+               Milestones.update_milestone(milestone, update_attrs)
+
       assert milestone.state == "some updated state"
       assert milestone.description == "some updated description"
       assert milestone.title == "some updated title"

@@ -80,7 +80,7 @@ defmodule OpenAgents.Issues do
 
   def remove_assignees(%Issue{} = issue, logins) when is_list(logins) do
     logins = MapSet.new(logins)
-    assignees = Enum.reject(issue.assignees || [], & &1["login"] in logins)
+    assignees = Enum.reject(issue.assignees || [], &(&1["login"] in logins))
     update_issue(issue, %{"assignees" => assignees})
   end
 

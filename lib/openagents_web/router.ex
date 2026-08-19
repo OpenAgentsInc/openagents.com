@@ -31,6 +31,12 @@ defmodule OpenAgentsWeb.Router do
       live "/components/icons", IconIndexLive, :index
     end
 
+    live_session :docs,
+      layout: {OpenAgentsWeb.Layouts, :docs},
+      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/docs", DocsLive, :index
+    end
+
     post "/auth/github", AuthController, :start
     get "/auth/github/callback", AuthController, :callback
     delete "/logout", AuthController, :logout

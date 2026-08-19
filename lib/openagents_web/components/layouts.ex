@@ -204,7 +204,7 @@ defmodule OpenAgentsWeb.Layouts do
           </span>
         </div>
         <div class="sidebar-row">
-          <a href="/docs" class="sidebar-row__hit" aria-label="Documentation"></a>
+          <.link navigate={~p"/docs"} class="sidebar-row__hit" aria-label="Documentation"></.link>
           <span class="sidebar-row__content">
             <span class="sidebar-row__icon"><.icon name="book" /></span>
             <span class="sidebar-row__label">Documentation</span>

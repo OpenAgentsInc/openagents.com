@@ -4,11 +4,11 @@ Date: 2026-08-19
 
 Source: `~/work/sarah` GitHub OAuth implementation and the current OpenAgents issue tracker UI.
 
-OpenAgents needs a real, server-side GitHub OAuth flow before any issue or project page can claim to use real data. This plan ports the proven auth stack from `sarah`, adapts it to the OpenAgents namespace, and drives every step out with a failing test first.
+OpenAgents needs a real, server-side GitHub OAuth flow so that issue and project pages can authenticate the visitor as a real GitHub user. This plan ports the proven auth stack from `sarah`, adapts it to the OpenAgents namespace, and drives every step out with a failing test first.
 
 ## Goal
 
-A visitor can sign in with GitHub and then access the issue tracker at `/:owner/:repo/issues` and `/:owner/:repo/issues/new`. There are no seeded users, no placeholder owners, and no fake tokens. The API calls that back the UI use the signed-in user's own GitHub access token.
+A visitor can sign in with GitHub and then access the issue tracker at `/:owner/:repo/issues` and `/:owner/:repo/issues/new`. There are no seeded users, no placeholder owners, and no fake tokens. The issue tracker keeps its own data; GitHub is only used for login and identity.
 
 ## What we are copying from `sarah`
 
@@ -32,7 +32,7 @@ These `sarah` modules are the reference implementation:
 - `OpenAgents.Accounts.User` — Ecto schema for `users` with `github_id`, `github_login`, `github_name`, `github_avatar_url`, `status`, `last_authenticated_at`, and `github_token_ciphertext`.
 - `OpenAgents.Accounts.OAuthAttempt` — Ecto schema for `github_oauth_attempts` with `state_digest`, `expires_at`, and `consumed_at`.
 - `OpenAgents.Accounts.TokenVault` — AES-256-GCM seal and unseal for the GitHub access token.
-- `OpenAgents.GitHub` — read-only GitHub REST wrapper that uses the user's token. To start, we only need `list_repositories/2` and `read_path/4` later; the immediate use is validating the token works after login.
+- `OpenAgents.GitHub` — read-only GitHub REST wrapper that uses the user's token for repository operations such as listing owned repos. The issue tracker does not pull issue, label, milestone, or project data from GitHub.
 - `OpenAgents.GitHubOAuth` — PKCE authorize URL, state/attempt handling, code exchange, and profile fetch.
 - `OpenAgents.GitHubOAuth.RuntimeConfig` — validate `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_REDIRECT_URI`.
 
@@ -100,7 +100,6 @@ For each step, write the test first, run `mix test <file>` to confirm it fails, 
 4. Add `OpenAgentsWeb.AuthController` and the `/auth/github`, `/auth/github/callback`, and `/logout` routes.
 5. Add `OpenAgentsWeb.UserAuth` and the `:authenticated` pipeline, then wrap the `/:owner/:repo` LiveViews in an authenticated `live_session`.
 6. Update `HomeLive` and `Layouts.app` to show the sign-in or user state.
-7. Switch the `OpenAgents.Issues` API to load the signed-in user's token from the session so `/:owner/:repo/issues/new` can call GitHub with real credentials.
 
 ## Configuration
 

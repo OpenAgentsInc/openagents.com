@@ -56,7 +56,7 @@ Acceptance:
 - The same `Layouts.app` wrapper is on every page with `current_scope` assigned.
 - The subnav links to `/:owner/:repo/issues`, `/:owner/:repo/projects`, and so on.
 
-## Phase 0: GitHub authentication and real data
+## Phase 0: GitHub authentication and user identity
 
 All issue, project, and label surfaces must use the real, signed-in GitHub user. No seeded or placeholder users are allowed. This phase ports the OAuth flow from `~/work/sarah` and wires it into the OpenAgents router, controllers, and LiveViews. See `docs/github-auth-plan.md` for the test-driven implementation plan.
 
@@ -405,7 +405,7 @@ Acceptance:
 
 ## Implementation order
 
-0. GitHub authentication and real data. See `docs/github-auth-plan.md`.
+0. GitHub authentication and user identity. See `docs/github-auth-plan.md`.
 1. Layout foundation and placeholder homepage.
 2. Issues list with open and closed tabs.
 3. Issue detail and comment thread.

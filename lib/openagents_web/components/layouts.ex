@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.Layouts do
         <% end %>
 
         <main class={[
-          "flex-1 min-w-0 h-full overflow-y-auto p-4",
+          "flex-1 min-w-0 h-full overflow-y-auto overscroll-none p-4",
           @current_scope && "bg-base-100"
         ]}>
           <%= if @current_scope do %>

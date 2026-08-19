@@ -201,6 +201,13 @@ defmodule OpenAgentsWeb.Layouts do
             <span class="sidebar-row__label">Components</span>
           </span>
         </div>
+        <div class="sidebar-row">
+          <a href="/docs" class="sidebar-row__hit" aria-label="Documentation"></a>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="book" /></span>
+            <span class="sidebar-row__label">Docs</span>
+          </span>
+        </div>
       </nav>
     </aside>
     """

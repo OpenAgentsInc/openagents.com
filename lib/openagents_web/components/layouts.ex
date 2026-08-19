@@ -39,16 +39,16 @@ defmodule OpenAgentsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <div class="h-screen flex flex-col overflow-hidden bg-base-100">
-      <.command_bar current_scope={@current_scope} />
+    <div class="h-screen flex overflow-hidden bg-base-100">
+      <%= if @current_scope do %>
+        <.sidebar current_scope={@current_scope} />
+      <% end %>
 
-      <div class="flex-1 flex min-h-0">
-        <%= if @current_scope do %>
-          <.sidebar current_scope={@current_scope} />
-        <% end %>
+      <div class="flex-1 min-w-0 flex flex-col h-screen">
+        <.command_bar current_scope={@current_scope} />
 
         <main class={[
-          "flex-1 min-w-0 h-full overflow-y-auto overscroll-none p-4",
+          "flex-1 min-w-0 overflow-y-auto overscroll-none p-4",
           @current_scope && "bg-base-100"
         ]}>
           <%= if @current_scope do %>
@@ -70,9 +70,11 @@ defmodule OpenAgentsWeb.Layouts do
     ~H"""
     <header class="navbar bg-base-100 border-b border-base-300 px-4 h-16 shrink-0">
       <div class="navbar-start">
-        <.link navigate={~p"/"} class="btn btn-ghost text-xl">
-          OpenAgents
-        </.link>
+        <%= if !@current_scope do %>
+          <.link navigate={~p"/"} class="btn btn-ghost text-xl">
+            OpenAgents
+          </.link>
+        <% end %>
       </div>
 
       <div class="navbar-end gap-2">

@@ -148,14 +148,6 @@ defmodule OpenAgentsWeb.Layouts do
         </div>
 
         <div class="sidebar-row">
-          <.link navigate={~p"/components"} class="sidebar-row__hit" aria-label="Components"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="widget" /></span>
-            <span class="sidebar-row__label">Components</span>
-          </span>
-        </div>
-
-        <div class="sidebar-row">
           <.link
             navigate={~p"/OpenAgents/openagents/issues"}
             class="sidebar-row__hit"
@@ -204,16 +196,26 @@ defmodule OpenAgentsWeb.Layouts do
         </section>
       </div>
 
+      <nav class="sidebar-nav" aria-label="OpenAgents tools">
+        <div class="sidebar-row">
+          <.link navigate={~p"/components"} class="sidebar-row__hit" aria-label="Components"></.link>
+          <span class="sidebar-row__content">
+            <span class="sidebar-row__icon"><.icon name="widget" /></span>
+            <span class="sidebar-row__label">Components</span>
+          </span>
+        </div>
+      </nav>
+
       <footer class="sidebar-footer">
         <div class="flex items-center gap-3">
           <img
             src={@current_scope.github_avatar_url}
             alt={"GitHub avatar for @#{@current_scope.github_login}"}
-            class="w-10 h-10 rounded-full"
+            class="w-7 h-7 rounded-full"
           />
           <div class="min-w-0">
-            <p class="font-semibold truncate">{account_display_name(@current_scope)}</p>
-            <p :if={@current_scope.github_name} class="text-sm text-base-content/70 truncate">
+            <p class="text-sm font-semibold truncate">{account_display_name(@current_scope)}</p>
+            <p :if={@current_scope.github_name} class="text-xs text-base-content/70 truncate">
               @{@current_scope.github_login}
             </p>
           </div>

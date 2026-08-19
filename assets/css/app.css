@@ -123,12 +123,11 @@
   gap: 10px;
   min-height: 52px;
   padding: 8px 8px 8px 16px;
-  border-bottom: 1px solid var(--color-base-300);
 }
 
 .brand-name {
   flex: none;
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--color-base-content);
 }

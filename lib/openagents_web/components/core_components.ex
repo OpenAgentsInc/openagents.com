@@ -460,6 +460,23 @@ defmodule OpenAgentsWeb.CoreComponents do
     """
   end
 
+  def icon(assigns) do
+    {view_box, inner} = OpenAgentsWeb.Icons.fetch!(assigns.name)
+    assigns = assign(assigns, :view_box, view_box) |> assign(:inner, inner)
+
+    ~H"""
+    <svg
+      class={["icon", @class]}
+      viewBox={@view_box}
+      width="1em"
+      height="1em"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >{Phoenix.HTML.raw(@inner)}</svg>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do

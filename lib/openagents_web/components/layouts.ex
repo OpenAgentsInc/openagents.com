@@ -39,18 +39,17 @@ defmodule OpenAgentsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <div class="min-h-screen flex flex-col bg-base-100">
+    <div class="h-screen flex flex-col overflow-hidden bg-base-100">
       <.command_bar current_scope={@current_scope} />
 
-      <div class="flex-1 flex overflow-hidden">
+      <div class="flex-1 flex min-h-0">
         <%= if @current_scope do %>
           <.sidebar current_scope={@current_scope} />
         <% end %>
 
         <main class={[
-          "flex-1 min-w-0",
-          @current_scope && "h-full overflow-y-auto bg-base-100 p-4",
-          !@current_scope && "px-4 py-20 sm:px-6 lg:px-8"
+          "flex-1 min-w-0 h-full overflow-y-auto p-4",
+          @current_scope && "bg-base-100"
         ]}>
           <%= if @current_scope do %>
             {render_slot(@inner_block)}
@@ -62,7 +61,7 @@ defmodule OpenAgentsWeb.Layouts do
         </main>
       </div>
 
-      <.flash_group flash={@flash} />
+      <.flash_group flash={@flash} class="fixed bottom-4 right-4 z-50" />
     </div>
     """
   end
@@ -200,10 +199,11 @@ defmodule OpenAgentsWeb.Layouts do
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
   attr :id, :string, default: "flash-group", doc: "the optional id of flash container"
+  attr :class, :any, default: nil, doc: "additional classes for the container"
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div id={@id} class={@class} aria-live="polite">
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 

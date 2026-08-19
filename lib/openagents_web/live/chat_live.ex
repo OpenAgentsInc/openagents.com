@@ -37,7 +37,7 @@ defmodule OpenAgentsWeb.ChatLive do
     <Layouts.app flash={@flash} current_scope={@current_scope} wide>
       <div
         id="chat-app"
-        class="h-full flex flex-col border border-base-300 rounded-lg overflow-hidden"
+        class="h-[calc(100%-2rem)] w-full flex flex-col border border-base-300 rounded-lg overflow-hidden"
       >
         <header class="p-4 border-b border-base-300 flex items-center justify-between">
           <div class="flex items-center gap-3">

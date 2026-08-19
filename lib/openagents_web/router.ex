@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.Router do
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/", HomeLive, :index
       live "/components", ComponentsLive, :index
+      live "/components/icons", IconIndexLive, :index
     end
 
     post "/auth/github", AuthController, :start

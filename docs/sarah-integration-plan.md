@@ -27,6 +27,27 @@ Supersedes: `docs/chat-inference-plan.md` (the previous `pro.openagents.com` spl
   - Added minimal stub modules so the new contexts compile without the full memory, voice, and work subsystems.
   - `OpenAgents.Chat` and `OpenAgentsWeb.ChatLive` remain untouched so the existing `/chat` UI still works.
 
+## Data migration
+
+The pre-Sarah `openagents.com` database has only one table that overlaps with the new chat system: `users`. The old `OpenAgents.Chat` mock kept messages in memory; there are no durable messages, conversations, or visitors to port.
+
+### Stock
+
+- `users`: one row for every GitHub-authenticated account. These must each get a `visitors` row and a `conversations` row.
+- `visitors`/`conversations`/`messages`: empty before the new Sarah migrations run.
+- `oauth_attempts`, `token_vaults`, `forge_*`, issues, and projects: not in scope for the chat migration.
+
+### Backfill plan
+
+1. Run `mix ecto.migrate` to create the `visitors`, `conversations`, and `messages` tables.
+2. Run `mix openagents.backfill_visitors` to create a `Visitor` and `Conversation` for every existing `User`.
+3. The task is idempotent: users that already have a visitor are skipped and no messages are duplicated.
+4. After the backfill, every authenticated user has a conversation and a single greeting message.
+
+### Rollback
+
+The backfill is not reversible. If a rollback is required, restore from a database snapshot taken before the task runs.
+
 ## Outcome
 
 Move the complete Sarah product from `~/work/sarah` into the `openagents.com` repository and run it from a single Elixir/Phoenix application. The final application keeps the `OpenAgents` namespace but owns the full Sarah chat, voice, memory, work, machine-delegation, and operator tooling systems.

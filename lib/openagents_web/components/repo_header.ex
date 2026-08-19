@@ -7,6 +7,8 @@ defmodule OpenAgentsWeb.Components.RepoHeader do
   attr :owner, :string, required: true
   attr :repo, :string, required: true
   attr :active, :string, default: "issues"
+  attr :open_count, :integer, default: nil
+  attr :closed_count, :integer, default: nil
 
   def repo_header(assigns) do
     ~H"""
@@ -34,7 +36,7 @@ defmodule OpenAgentsWeb.Components.RepoHeader do
           patch={~p"/#{@owner}/#{@repo}/issues"}
           class={["tab", @active == "issues" && "tab-active"]}
         >
-          Issues
+          Issues {if is_integer(@open_count), do: "(#{@open_count})"}
         </.link>
         <.link
           patch={~p"/#{@owner}/#{@repo}/labels"}

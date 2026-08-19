@@ -42,7 +42,7 @@ defmodule OpenAgentsWeb.Layouts do
     <header class="navbar bg-base-100 border-b border-base-300 px-4 sm:px-6 lg:px-8">
       <div class="navbar-start">
         <.link navigate={~p"/"} class="btn btn-ghost text-xl">
-          <img src={~p"/images/logo.svg"} width="32" class="mr-2" /> OpenAgents
+          OpenAgents
         </.link>
       </div>
       <div class="navbar-end gap-2">

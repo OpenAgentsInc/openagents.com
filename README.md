@@ -25,7 +25,7 @@ Starting fresh lets us build a forge that is open, contributor-friendly, and def
 - **PostgreSQL** — primary database.
 - **Google Cloud** — hosting and infrastructure.
 - **Tailwind CSS** — styling.
-- **Basecoat** — UI component library.
+- **DaisyUI** — UI component library.
 
 ## First deliverable: Issues and projects
 

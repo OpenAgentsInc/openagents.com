@@ -3,8 +3,10 @@ defmodule OpenAgents.ProgramLifecycle do
 
   def capture(_ref) do
     %OpenAgents.ProgramArtifacts.Snapshot{
+      signature_id: nil,
       artifact: nil,
       degraded?: false,
+      reason: nil,
       receipt: nil
     }
   end

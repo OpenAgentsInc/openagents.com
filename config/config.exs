@@ -14,7 +14,27 @@ config :openagents,
   conversation_page_size: 25,
   maximum_message_bytes: 8192,
   turn_rate_limit: 50,
-  admin_github_ids: []
+  admin_github_ids: [],
+  computer_controller_enabled: false,
+  work_workers_enabled: false,
+  work: [enabled: false],
+  voice: [
+    enabled: false,
+    architecture: :openai_realtime,
+    provider: "openai",
+    model: "gpt-realtime-2.1",
+    voice: "marin",
+    reasoning_effort: "low",
+    maximum_session_seconds: 3_000
+  ],
+  voice_attempt_limit: 6,
+  voice_attempt_window_seconds: 600,
+  voice_maximum_concurrent_sessions: 8,
+  voice_maximum_session_tokens: 5_000_000,
+  voice_maximum_response_output_tokens: 4_096,
+  voice_maximum_estimated_cost_microusd: 20_000_000,
+  voice_operational_retention_days: 90,
+  voice_compaction_input_token_threshold: 16_000
 
 # Configure the endpoint
 config :openagents, OpenAgentsWeb.Endpoint,

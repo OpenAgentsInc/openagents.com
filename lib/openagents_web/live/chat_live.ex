@@ -106,8 +106,8 @@ defmodule OpenAgentsWeb.ChatLive do
             field={@form[:content]}
             type="textarea"
             class="composer-input"
-            placeholder="Message Sarah..."
-            aria-label="Message Sarah..."
+            placeholder="Message OpenAgents..."
+            aria-label="Message OpenAgents..."
             rows="1"
           />
           <div class="composer-trailing">

@@ -1,8 +1,10 @@
 defmodule OpenAgents.Sarah.Supervisor do
   @moduledoc """
-  Placeholder supervisor for the Sarah subsystems that are being lifted
-  into OpenAgents. It starts empty until the conversation, memory, voice,
-  and work contexts are ported in later phases.
+  Supervisor for the ported Sarah subsystems.
+
+  Currently starts the local cluster registry and supervisor used by work,
+  computer, and memory workers. Voice and explicit memory workers are left
+  disabled behind feature flags until they are fully wired.
   """
 
   use Supervisor
@@ -13,9 +15,11 @@ defmodule OpenAgents.Sarah.Supervisor do
 
   @impl true
   def init(_init_arg) do
-    # Children are added phase by phase as the Sarah subsystems are lifted.
-    # Keeping the supervisor empty keeps the foundation build green while the
-    # chat, memory, voice, and work modules are re-namespaced and merged.
-    Supervisor.init([], strategy: :one_for_one)
+    children = [
+      {Registry, keys: :unique, name: OpenAgents.HordeRegistry},
+      {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.HordeSupervisor}
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end

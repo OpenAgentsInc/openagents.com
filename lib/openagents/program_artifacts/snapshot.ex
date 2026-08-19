@@ -1,5 +1,14 @@
 defmodule OpenAgents.ProgramArtifacts.Snapshot do
-  @moduledoc false
+  @moduledoc "Turn-start capture of one admitted artifact or deterministic baseline."
 
-  defstruct [:artifact, :degraded?, :receipt, :signature_id, :digest, :id, :reason]
+  @enforce_keys [:signature_id, :artifact, :degraded?, :reason, :receipt]
+  defstruct @enforce_keys
+
+  @type t :: %__MODULE__{
+          signature_id: String.t(),
+          artifact: OpenAgents.ProgramArtifacts.Artifact.t() | nil,
+          degraded?: boolean(),
+          reason: String.t(),
+          receipt: map()
+        }
 end

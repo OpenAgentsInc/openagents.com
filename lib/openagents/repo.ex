@@ -5,4 +5,12 @@ defmodule OpenAgents.Repo do
 
   def get_for_update!(queryable, id), do: get!(queryable, id, lock: true)
   def get_for_update!(queryable, id, opts), do: get!(queryable, id, [{:lock, true} | opts])
+
+  def get_for_update(queryable, id), do: get(queryable, id, lock: true)
+  def get_for_update(queryable, id, opts), do: get(queryable, id, [{:lock, true} | opts])
+
+  def get_by_for_update(queryable, clauses), do: get_by(queryable, clauses, lock: true)
+
+  def get_by_for_update(queryable, clauses, opts),
+    do: get_by(queryable, clauses, [{:lock, true} | opts])
 end

@@ -18,6 +18,7 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/components", ComponentsLive, :index
   end
 
   scope "/api/v3", OpenAgentsWeb do

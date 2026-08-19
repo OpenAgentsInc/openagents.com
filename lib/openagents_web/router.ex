@@ -40,6 +40,8 @@ defmodule OpenAgentsWeb.Router do
 
     live_session :authenticated,
       on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
+      live "/chat", ChatLive, :index
+
       live "/:owner/:repo/issues/new", IssueNewLive, :new
       live "/:owner/:repo/issues/:number", IssueShowLive, :show
       live "/:owner/:repo/issues", IssueIndexLive, :index

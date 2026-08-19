@@ -10,7 +10,9 @@ defmodule OpenAgents.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers(),
+      compilers: [:appup, :phoenix_live_view] ++ Mix.compilers(),
+      appup: "rel/openagents.appup.exs",
+      releases: releases(),
       listeners: [Phoenix.CodeReloader]
     ]
   end
@@ -28,6 +30,18 @@ defmodule OpenAgents.MixProject do
   def cli do
     [
       preferred_envs: [precommit: :test]
+    ]
+  end
+
+  # Hot-upgrade-capable release: castle/forecastle add appup + relup generation
+  # and release_handler runtime support on top of `mix release`.
+  defp releases do
+    [
+      openagents: [
+        include_erts: true,
+        include_src: false,
+        steps: [&Forecastle.pre_assemble/1, :assemble, &Forecastle.post_assemble/1, :tar]
+      ]
     ]
   end
 
@@ -72,6 +86,7 @@ defmodule OpenAgents.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
+      {:castle, "~> 0.3.0"},
       {:bandit, "~> 1.5"}
     ]
   end

@@ -18,6 +18,10 @@ defmodule OpenAgents.Accounts.User do
     field :ban_reason_code, :string
     field :last_authenticated_at, :utc_datetime_usec
     field :github_token_ciphertext, :binary, redact: true
+    field :public_leaderboard_opted_out, :boolean, default: false
+    field :browser_key_hash, :binary
+
+    has_one :storage_owner, OpenAgents.Conversations.Visitor
 
     timestamps()
   end
@@ -33,6 +37,8 @@ defmodule OpenAgents.Accounts.User do
           ban_reason_code: String.t() | nil,
           last_authenticated_at: DateTime.t() | nil,
           github_token_ciphertext: binary() | nil,
+          public_leaderboard_opted_out: boolean(),
+          browser_key_hash: binary() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
@@ -58,6 +64,22 @@ defmodule OpenAgents.Accounts.User do
     |> validate_format(:github_login, ~r/\A[A-Za-z0-9][A-Za-z0-9-]*\z/)
     |> validate_avatar_url()
     |> unique_constraint(:github_id)
+  end
+
+  def ban_changeset(user, reason_code) do
+    user
+    |> cast(
+      %{
+        status: "banned",
+        banned_at: DateTime.utc_now(),
+        ban_reason_code: reason_code
+      },
+      [:status, :banned_at, :ban_reason_code]
+    )
+    |> validate_required([:status, :banned_at])
+    |> validate_length(:ban_reason_code, max: 80)
+    |> check_constraint(:status, name: :users_status_check)
+    |> check_constraint(:status, name: :users_ban_state_check)
   end
 
   defp validate_avatar_url(changeset) do

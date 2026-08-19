@@ -75,6 +75,32 @@ defmodule OpenAgents.Accounts do
     end
   end
 
+  @doc """
+  Whether this account may use the operator surface.
+
+  Matched on GitHub's immutable numeric ID, never on the login.
+  """
+  @spec admin?(User.t() | nil) :: boolean()
+  def admin?(%User{status: "active", github_id: github_id}) when is_integer(github_id),
+    do: github_id in admin_github_ids()
+
+  def admin?(_user), do: false
+
+  @doc "The configured operator GitHub IDs."
+  @spec admin_github_ids() :: [pos_integer()]
+  def admin_github_ids do
+    :openagents
+    |> Application.get_env(:admin_github_ids, [])
+    |> Enum.filter(&(is_integer(&1) and &1 > 0))
+  end
+
+  @doc false
+  def ban_user(%User{} = user, reason_code) when is_binary(reason_code) do
+    user
+    |> User.ban_changeset(reason_code)
+    |> Repo.update()
+  end
+
   def create_oauth_attempt(state, expires_at)
       when is_binary(state) and is_struct(expires_at, DateTime) do
     prune_oauth_attempts()

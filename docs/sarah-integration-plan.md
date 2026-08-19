@@ -15,6 +15,17 @@ Supersedes: `docs/chat-inference-plan.md` (the previous `pro.openagents.com` spl
   - Created `OpenAgents.Sarah.Supervisor` as a placeholder supervisor under `lib/openagents/sarah/supervisor.ex`.
   - Wired the supervisor into `OpenAgents.Application`.
   - `mix precommit` passes. `mdex` replaces the retired and CVE-flagged `earmark` package.
+- **Phase 2: Accounts and authentication** — done.
+  - Merged Sarah `User` fields and `OpenAgents.Accounts` functions (`admin?/1`, `admin_github_ids/0`, `ban_user/2`) into the existing `OpenAgents.Accounts`.
+  - Added `public_leaderboard_opted_out`, `browser_key_hash`, and the `OpenAgents.Conversations.Visitor` association.
+  - Added `admin_github_ids`, `conversation_page_size`, `maximum_message_bytes`, and `turn_rate_limit` to `config/config.exs`.
+  - Generated `add_sarah_user_fields` migration.
+- **Phase 3: Core chat schema and contexts** — done.
+  - Lifted `lib/sarah/conversations/` into `lib/openagents/conversations/` and re-namespaced to `OpenAgents.Conversations`.
+  - Created the `Conversation`, `Message`, `Turn`, `TurnReceipt`, `Visitor`, `ProviderStep`, and `ToolStep` schemas.
+  - Generated the `create_sarah_conversations` migration for `visitors`, `conversations`, `messages`, `turns`, `turn_receipts`, `turn_provider_steps`, and `turn_tool_steps`.
+  - Added minimal stub modules so the new contexts compile without the full memory, voice, and work subsystems.
+  - `OpenAgents.Chat` and `OpenAgentsWeb.ChatLive` remain untouched so the existing `/chat` UI still works.
 
 ## Outcome
 

@@ -10,7 +10,11 @@ import Config
 config :openagents,
   namespace: OpenAgents,
   ecto_repos: [OpenAgents.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  conversation_page_size: 25,
+  maximum_message_bytes: 8192,
+  turn_rate_limit: 50,
+  admin_github_ids: []
 
 # Configure the endpoint
 config :openagents, OpenAgentsWeb.Endpoint,

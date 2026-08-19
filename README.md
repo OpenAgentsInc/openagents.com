@@ -18,6 +18,15 @@ Starting fresh lets us build a forge that is open, contributor-friendly, and def
 - **Release upgrades (relups):** deploys use Erlang/OTP release upgrade patterns for zero-downtime updates.
 - **Live surfaces:** pages update for every connected viewer at the same time through Phoenix PubSub.
 
+## Tech stack
+
+- **Elixir on the BEAM** — the runtime for hot reload, release upgrades, and live, concurrent page updates.
+- **Phoenix and Phoenix LiveView** — web framework and live UI layer.
+- **PostgreSQL** — primary database.
+- **Google Cloud** — hosting and infrastructure.
+- **Tailwind CSS** — styling.
+- **Basecoat** — UI component library.
+
 ## First deliverable: Issues and projects
 
 The first public surface is an issue and project tracker. We will use it to run OpenAgents.com's own development. You can:

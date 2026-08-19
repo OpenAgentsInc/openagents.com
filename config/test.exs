@@ -13,6 +13,16 @@ config :openagents, OpenAgents.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
+# Test-only GitHub OAuth and vault keys. GitHub is mocked in tests.
+config :openagents, :github_oauth,
+  client_id: "test-client-id",
+  client_secret: "test-client-secret",
+  redirect_uri: "http://localhost:4002/auth/github/callback"
+
+config :openagents,
+       :github_token_encryption_key,
+       Base.encode64("openagents-test-token-vault-key3")
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :openagents, OpenAgentsWeb.Endpoint,

@@ -14,7 +14,7 @@ defmodule OpenAgentsWeb.IssueNewLive do
 
     socket =
       socket
-      |> assign(:current_scope, nil)
+      |> assign(:current_scope, socket.assigns[:current_scope])
       |> assign(:owner, owner)
       |> assign(:repo, repo)
       |> assign(:form, to_form(changeset))

@@ -48,6 +48,19 @@ defmodule OpenAgentsWeb.Layouts do
       <div class="navbar-end gap-2">
         <.link navigate={~p"/"} class="btn btn-ghost btn-sm">Home</.link>
         <.link navigate={~p"/components"} class="btn btn-ghost btn-sm">Components</.link>
+        <%= if @current_scope do %>
+          <span class="self-center text-sm text-base-content/70">
+            {@current_scope.github_login}
+          </span>
+          <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0">
+            <input type="hidden" name="_method" value="delete" />
+            <.button type="submit" class="btn btn-ghost btn-sm">Log out</.button>
+          </.form>
+        <% else %>
+          <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
+            <.button type="submit" class="btn btn-primary btn-sm">Sign in with GitHub</.button>
+          </.form>
+        <% end %>
         <.theme_toggle />
       </div>
     </header>

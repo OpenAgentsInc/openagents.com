@@ -1,5 +1,43 @@
 import Config
 
+github_oauth = Application.get_env(:openagents, :github_oauth, [])
+
+github_oauth =
+  github_oauth
+  |> Keyword.merge(
+    client_id: System.get_env("GITHUB_CLIENT_ID") || github_oauth[:client_id],
+    client_secret: System.get_env("GITHUB_CLIENT_SECRET") || github_oauth[:client_secret],
+    redirect_uri: System.get_env("GITHUB_REDIRECT_URI") || github_oauth[:redirect_uri]
+  )
+  |> OpenAgents.GitHubOAuth.RuntimeConfig.load!(config_env(),
+    public_host: System.get_env("PHX_HOST")
+  )
+
+config :openagents, :github_oauth, github_oauth
+
+token_encryption_key =
+  case System.get_env("GITHUB_TOKEN_ENCRYPTION_KEY") do
+    nil -> nil
+    value -> String.trim(value)
+  end
+
+valid_token_key? =
+  is_binary(token_encryption_key) and
+    match?({:ok, key} when byte_size(key) == 32, Base.decode64(token_encryption_key))
+
+if config_env() == :prod and not valid_token_key? do
+  raise """
+  environment variable GITHUB_TOKEN_ENCRYPTION_KEY is missing or invalid.
+  It must be a base64-encoded 32-byte key, for example generated with:
+
+      openssl rand -base64 32
+  """
+end
+
+if valid_token_key? do
+  config :openagents, :github_token_encryption_key, token_encryption_key
+end
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration

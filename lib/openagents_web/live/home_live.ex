@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.HomeLive do
   use OpenAgentsWeb, :live_view
 
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, :current_scope, nil)}
+    {:ok, socket}
   end
 
   def render(assigns) do
@@ -21,16 +21,24 @@ defmodule OpenAgentsWeb.HomeLive do
               Purpose-built for planning and shipping issues. Designed for the agent era.
             </p>
             <div class="flex flex-wrap justify-center gap-4">
-              <.button
-                id="home-cta-create"
-                navigate={~p"/OpenAgents/openagents/issues/new"}
-                variant="primary"
-              >
-                Create new issue
-              </.button>
-              <.button id="home-cta-browse" navigate={~p"/OpenAgents/openagents/issues"}>
-                View issues
-              </.button>
+              <%= if @current_user do %>
+                <.button
+                  id="home-cta-create"
+                  navigate={~p"/OpenAgents/openagents/issues/new"}
+                  variant="primary"
+                >
+                  Create new issue
+                </.button>
+                <.button id="home-cta-browse" navigate={~p"/OpenAgents/openagents/issues"}>
+                  View issues
+                </.button>
+              <% else %>
+                <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
+                  <.button type="submit" variant="primary" id="home-cta-signin">
+                    Sign in with GitHub
+                  </.button>
+                </.form>
+              <% end %>
             </div>
           </div>
         </div>

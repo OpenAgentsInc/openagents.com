@@ -15,7 +15,7 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
 
     {:ok,
      socket
-     |> assign(:current_scope, nil)
+     |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:assignees, assignees)}

@@ -62,7 +62,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} wide>
+    <Layouts.app flash={@flash} current_scope={@current_scope} wide>
       <div id="components-gallery" class="space-y-12">
         <header class="space-y-3">
           <.header>

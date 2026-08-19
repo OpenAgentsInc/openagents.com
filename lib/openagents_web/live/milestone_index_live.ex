@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     {:ok,
      socket
-     |> assign(:current_scope, nil)
+     |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:milestones, milestones_with_stats())

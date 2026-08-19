@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.Router do
   use OpenAgentsWeb, :router
 
+  import OpenAgentsWeb.UserAuth
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,28 +10,47 @@ defmodule OpenAgentsWeb.Router do
     plug :put_root_layout, html: {OpenAgentsWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
   end
 
+  pipeline :authenticated do
+    plug :require_authenticated_user
+  end
+
   scope "/", OpenAgentsWeb do
     pipe_through :browser
 
-    live "/", HomeLive, :index
-    live "/components", ComponentsLive, :index
+    live_session :public,
+      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/", HomeLive, :index
+      live "/components", ComponentsLive, :index
+    end
 
-    live "/:owner/:repo/issues/new", IssueNewLive, :new
-    live "/:owner/:repo/issues/:number", IssueShowLive, :show
-    live "/:owner/:repo/issues", IssueIndexLive, :index
+    post "/auth/github", AuthController, :start
+    get "/auth/github/callback", AuthController, :callback
+    delete "/logout", AuthController, :logout
+  end
 
-    live "/:owner/:repo/labels", LabelIndexLive, :index
-    live "/:owner/:repo/milestones", MilestoneIndexLive, :index
-    live "/:owner/:repo/assignees", AssigneeIndexLive, :index
+  scope "/", OpenAgentsWeb do
+    pipe_through [:browser, :authenticated]
 
-    live "/:owner/:repo/projects/:number", ProjectShowLive, :show
-    live "/:owner/:repo/projects", ProjectIndexLive, :index
+    live_session :authenticated,
+      on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
+      live "/:owner/:repo/issues/new", IssueNewLive, :new
+      live "/:owner/:repo/issues/:number", IssueShowLive, :show
+      live "/:owner/:repo/issues", IssueIndexLive, :index
+
+      live "/:owner/:repo/labels", LabelIndexLive, :index
+      live "/:owner/:repo/milestones", MilestoneIndexLive, :index
+      live "/:owner/:repo/assignees", AssigneeIndexLive, :index
+
+      live "/:owner/:repo/projects/:number", ProjectShowLive, :show
+      live "/:owner/:repo/projects", ProjectIndexLive, :index
+    end
   end
 
   scope "/api/v3", OpenAgentsWeb do

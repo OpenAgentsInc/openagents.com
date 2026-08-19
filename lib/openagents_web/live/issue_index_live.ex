@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   alias OpenAgents.Issues
 
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, :current_scope, nil)}
+    {:ok, assign(socket, :current_scope, socket.assigns[:current_scope])}
   end
 
   def handle_params(%{"owner" => owner, "repo" => repo} = params, _url, socket) do

@@ -10,6 +10,16 @@ config :openagents, OpenAgents.Repo,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 
+# Development-only GitHub OAuth placeholders. Override with real values in .env.
+config :openagents, :github_oauth,
+  client_id: System.get_env("GITHUB_CLIENT_ID") || "dev-client-id",
+  client_secret: System.get_env("GITHUB_CLIENT_SECRET") || "dev-client-secret",
+  redirect_uri: "http://localhost:4000/auth/github/callback"
+
+config :openagents,
+       :github_token_encryption_key,
+       Base.encode64("openagents-dev-token-vault-key32")
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

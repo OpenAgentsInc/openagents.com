@@ -85,7 +85,6 @@ defmodule OpenAgentsWeb.Layouts do
             <.button type="submit" class="btn btn-primary btn-sm">Sign in with GitHub</.button>
           </.form>
         <% end %>
-        <.theme_toggle />
       </div>
     </header>
     """
@@ -94,14 +93,12 @@ defmodule OpenAgentsWeb.Layouts do
   defp account_dropdown(assigns) do
     ~H"""
     <details class="dropdown dropdown-end">
-      <summary class="btn btn-ghost btn-sm list-none flex items-center gap-2 cursor-pointer">
+      <summary class="btn btn-ghost btn-circle avatar list-none cursor-pointer">
         <img
           src={@current_scope.github_avatar_url}
           alt={"GitHub avatar for @#{@current_scope.github_login}"}
           class="w-8 h-8 rounded-full"
         />
-        <span class="hidden sm:inline">@{@current_scope.github_login}</span>
-        <.icon name="hero-chevron-down" class="size-4" />
       </summary>
       <ul class="menu dropdown-content bg-base-100 rounded-box z-10 w-56 p-2 shadow border border-base-300">
         <li class="p-2">
@@ -205,22 +202,6 @@ defmodule OpenAgentsWeb.Layouts do
           </span>
         </div>
       </nav>
-
-      <footer class="sidebar-footer">
-        <div class="flex items-center gap-3">
-          <img
-            src={@current_scope.github_avatar_url}
-            alt={"GitHub avatar for @#{@current_scope.github_login}"}
-            class="w-7 h-7 rounded-full"
-          />
-          <div class="min-w-0">
-            <p class="text-sm font-semibold truncate">{account_display_name(@current_scope)}</p>
-            <p :if={@current_scope.github_name} class="text-xs text-base-content/70 truncate">
-              @{@current_scope.github_login}
-            </p>
-          </div>
-        </div>
-      </footer>
     </aside>
     """
   end

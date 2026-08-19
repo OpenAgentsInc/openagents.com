@@ -102,8 +102,6 @@ defmodule OpenAgentsWeb.IssueShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.repo_header owner={@owner} repo={@repo} active="issues" />
-
       <%= if @editing do %>
         <.form
           for={@form}

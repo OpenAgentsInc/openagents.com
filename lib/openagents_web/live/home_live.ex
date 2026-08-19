@@ -51,7 +51,6 @@ defmodule OpenAgentsWeb.HomeLive do
             <div class="input">openagents.com/OpenAgents/openagents/issues</div>
           </div>
           <div class="p-6">
-            <.repo_header owner="OpenAgents" repo="openagents" active="issues" />
             <div class="card bg-base-100 border border-base-300 mt-4">
               <div class="card-body">
                 <div class="flex items-start gap-4">

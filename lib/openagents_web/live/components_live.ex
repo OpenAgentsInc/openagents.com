@@ -216,7 +216,6 @@ defmodule OpenAgentsWeb.ComponentsLive do
           title="Repo header"
           source="OpenAgentsWeb.Components.RepoHeader.repo_header/1"
         >
-          <.repo_header owner="OpenAgents" repo="openagents" active="issues" />
         </.catalog_section>
       </div>
     </Layouts.app>

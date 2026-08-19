@@ -82,8 +82,6 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.repo_header owner={@owner} repo={@repo} active="milestones" />
-
       <div class="flex items-center justify-between mb-4">
         <h1 class="text-2xl font-bold">Milestones</h1>
       </div>

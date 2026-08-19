@@ -32,14 +32,6 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.repo_header
-        owner={@owner}
-        repo={@repo}
-        active="issues"
-        open_count={@open_count}
-        closed_count={@closed_count}
-      />
-
       <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden">
         <div class="flex flex-wrap items-center gap-3 p-4 border-b border-base-300">
           <div class="flex items-center gap-1">

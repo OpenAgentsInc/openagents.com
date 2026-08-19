@@ -65,8 +65,6 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.repo_header owner={@owner} repo={@repo} active="projects" />
-
       <div class="flex items-center justify-between mb-4">
         <h1 class="text-2xl font-bold">{@project.title}</h1>
         <.link navigate={~p"/#{@owner}/#{@repo}/projects"} class="btn btn-ghost btn-sm">

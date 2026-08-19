@@ -24,8 +24,6 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.repo_header owner={@owner} repo={@repo} active="issues" />
-
       <h1 class="text-2xl font-bold mb-4">Assignees</h1>
 
       <%= if @assignees == [] do %>

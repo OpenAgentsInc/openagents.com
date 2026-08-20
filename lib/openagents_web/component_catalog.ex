@@ -59,6 +59,20 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Wrapper that stacks a label, control, and validation message."
         },
         %{
+          slug: "openagents-breadcrumb",
+          title: "Breadcrumb",
+          icon: "compass",
+          source: "OpenAgentsWeb.UI.breadcrumb/1",
+          summary: "Ancestor trail ending in the current page, which is not a link."
+        },
+        %{
+          slug: "openagents-copy-button",
+          title: "Copy button",
+          icon: "copy",
+          source: "OpenAgentsWeb.UI.copy_button/1",
+          summary: "Copies text and confirms it, so the reader is not left guessing."
+        },
+        %{
           slug: "openagents-header",
           title: "Header",
           icon: "book",

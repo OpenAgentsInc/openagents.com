@@ -57,8 +57,32 @@
     </nav>
   </aside>
 
-  <main class="docs-main">
-    <.flash_group flash={@flash} />
-    {@inner_content}
-  </main>
+  <div class="docs-column">
+    <%!-- The header spans the content column, not the sidebar: the trail names
+    where you are within the library, and the controls act on the page you are
+    reading. Same arrangement as the docs surface it is modelled on. --%>
+    <header class="docs-header">
+      <UI.breadcrumb label="Component library">
+        <:item navigate={~p"/components"}>Components</:item>
+        <:item :if={assigns[:section_title]}>{@section_title}</:item>
+        <:item :if={assigns[:item]}>{@item.title}</:item>
+      </UI.breadcrumb>
+
+      <div class="docs-header__controls">
+        <Layouts.theme_toggle />
+        <UI.copy_button
+          :if={assigns[:item]}
+          id="copy-component-source"
+          text={@item.source}
+          label="Copy source"
+          copied_label="Copied"
+        />
+      </div>
+    </header>
+
+    <main class="docs-main">
+      <.flash_group flash={@flash} />
+      {@inner_content}
+    </main>
+  </div>
 </div>

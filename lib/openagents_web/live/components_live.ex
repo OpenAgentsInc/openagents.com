@@ -81,6 +81,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
      socket
      |> assign(:page_title, "Components")
      |> assign(:active_component, :index)
+     |> assign(:section_title, nil)
      |> assign(:item, nil)}
   end
 
@@ -97,6 +98,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
          socket
          |> assign(:page_title, item.title)
          |> assign(:active_component, item.slug)
+         |> assign(:section_title, section_title_for(item.slug))
          |> assign(:item, item)}
     end
   end
@@ -689,5 +691,59 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <Graph.scv_swarm scvs={@demo_swarm} selected_id="scv-04" />
     </div>
     """
+  end
+
+  defp component_demo(%{item: %{slug: "openagents-breadcrumb"}} = assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">
+          A full trail. The last item is the current page, so it is text rather than a
+          link — a link to the page you are already on is a dead control that still
+          looks live.
+        </p>
+        <UI.breadcrumb>
+          <:item navigate={~p"/"}>OpenAgents</:item>
+          <:item navigate={~p"/components"}>Components</:item>
+          <:item>Breadcrumb</:item>
+        </UI.breadcrumb>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">Two levels, and a lone root.</p>
+        <UI.breadcrumb>
+          <:item navigate={~p"/components"}>Components</:item>
+          <:item>Badge</:item>
+        </UI.breadcrumb>
+        <UI.breadcrumb>
+          <:item>OpenAgents</:item>
+        </UI.breadcrumb>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "openagents-copy-button"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Click it. The glyph becomes a tick and the label changes for a moment, then
+        returns — a copy control that changes nothing leaves you unsure it worked.
+      </p>
+      <UI.copy_button
+        id="demo-copy-button"
+        text="OpenAgentsWeb.UI.copy_button/1"
+        label="Copy source"
+      />
+    </div>
+    """
+  end
+
+  # The breadcrumb names the section a component lives in, so the trail matches
+  # the sidebar the reader navigated through.
+  defp section_title_for(slug) do
+    Enum.find_value(ComponentCatalog.sections(), fn section ->
+      if Enum.any?(section.items, &(&1.slug == slug)), do: section.title
+    end)
   end
 end

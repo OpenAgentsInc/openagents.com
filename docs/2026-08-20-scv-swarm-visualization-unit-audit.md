@@ -155,8 +155,8 @@ COLOR_BLUE  = '#0066ff'   COLOR_LINK_BLUE  = '#1d62c9'
 ```
 
 **This is directly compatible with the palette this repo just adopted.**
-`assets/css/app.css` now carries Linear's neutral ramp (`#08090a` → `#f7f8f8`)
-with a single indigo accent. Unit's structure — a long neutral ramp plus sparse
+`assets/css/app.css` now carries a neutral ramp (`#08090a` → `#f7f8f8`) with a
+single indigo accent. Unit's structure — a long neutral ramp plus sparse
 semantic accents, with links a shade darker than fills — maps onto our existing
 tokens without introducing a third palette, which `UI-003` forbids
 (`INVARIANTS.md:1520`: "not introduce a third palette").

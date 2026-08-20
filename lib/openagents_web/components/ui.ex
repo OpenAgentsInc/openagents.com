@@ -777,6 +777,112 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
+  A trail of ancestor links ending in the current page.
+
+  The last item is the current page: it renders as `aria-current="page"` and is
+  not a link, because linking a page to itself is a dead control that still
+  looks live. Separators carry `aria-hidden` so assistive technology reads the
+  trail as a list of places rather than a stream of glyphs.
+  """
+  attr :class, :any, default: nil
+  attr :label, :string, default: "Breadcrumb"
+  attr :rest, :global
+
+  slot :item, required: true do
+    attr :navigate, :string
+    attr :patch, :string
+    attr :href, :string
+  end
+
+  def breadcrumb(assigns) do
+    assigns = assign(assigns, :last_index, length(assigns.item) - 1)
+
+    ~H"""
+    <nav class={["breadcrumb", @class]} aria-label={@label} {@rest}>
+      <ol>
+        <li :for={{item, index} <- Enum.with_index(@item)}>
+          <span :if={index > 0} class="breadcrumb__separator" aria-hidden="true">/</span>
+          <.link
+            :if={index < @last_index}
+            navigate={item[:navigate]}
+            patch={item[:patch]}
+            href={item[:href]}
+            class="breadcrumb__link"
+          >
+            {render_slot(item)}
+          </.link>
+          <span :if={index == @last_index} aria-current="page" class="breadcrumb__current">
+            {render_slot(item)}
+          </span>
+        </li>
+      </ol>
+    </nav>
+    """
+  end
+
+  @doc """
+  A control that copies text to the clipboard and reports that it did.
+
+  The confirmation is the point. A copy button that changes nothing on click
+  leaves the reader unsure whether it worked, so this flips `data-copied` and
+  swaps the glyph for a tick, then returns. The state lives on the element
+  rather than in the LiveView because it is presentational and per-visitor.
+  """
+  attr :id, :string, required: true
+  attr :text, :string, required: true, doc: "the text placed on the clipboard"
+  attr :label, :string, default: "Copy"
+  attr :copied_label, :string, default: "Copied"
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def copy_button(assigns) do
+    ~H"""
+    <button
+      id={@id}
+      type="button"
+      class={["btn copy-button", @class]}
+      data-variant="secondary"
+      data-size="sm"
+      data-copied="false"
+      data-copy-text={@text}
+      data-copied-label={@copied_label}
+      aria-label={@label}
+      phx-hook=".CopyToClipboard"
+      {@rest}
+    >
+      <.icon name="copy" class="copy-button__idle" />
+      <.icon name="check" class="copy-button__done" />
+      <span class="copy-button__label">{@label}</span>
+    </button>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyToClipboard">
+      export default {
+        mounted() {
+          this.el.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(this.el.dataset.copyText)
+            } catch (_error) {
+              return
+            }
+            const label = this.el.querySelector(".copy-button__label")
+            const original = label && label.textContent
+            this.el.dataset.copied = "true"
+            if (label) label.textContent = this.el.dataset.copiedLabel
+            clearTimeout(this.resetTimer)
+            this.resetTimer = setTimeout(() => {
+              this.el.dataset.copied = "false"
+              if (label) label.textContent = original
+            }, 1600)
+          })
+        },
+        destroyed() {
+          clearTimeout(this.resetTimer)
+        }
+      }
+    </script>
+    """
+  end
+
+  @doc """
   One glyph from the governed two-tier icon set.
 
   Renders inline SVG at `1em` in `currentColor`, so a glyph takes the size and

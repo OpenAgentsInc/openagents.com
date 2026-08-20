@@ -25,6 +25,7 @@
  * only source of that geometry, so nothing here is optional. This list is the
  * exact structure consumed by `OpenAgentsWeb.UI`. */
 @import "../vendor/basecoat/base/base.css";
+@import "../vendor/basecoat/components/breadcrumb.css";
 @import "../vendor/basecoat/components/button.css";
 @import "../vendor/basecoat/components/button-group.css";
 @import "../vendor/basecoat/components/input.css";
@@ -76,24 +77,25 @@
  * surface and inverse control invert on their own when the ink flips — that is
  * the whole point of deriving them rather than listing them twice.
  *
- * Values are Linear's, taken from a saved copy of their docs: neutral to
- * faintly cool, never blue. The previous palette was tinted (chroma ~.03-.07
- * around hue 263) which read as blue on every surface.
+ * The ramp is neutral to faintly cool, never blue. The previous palette was
+ * tinted (chroma ~.03-.07 around hue 263), which read as blue on every
+ * surface -- borders, muted text, and each of the three ink rungs.
  */
 :root {
   color-scheme: dark;
 
-  /* PRIMITIVES — Linear's dark ramp, verbatim.
-     void #08090a is their --color-bg-primary, surface #0f1011 their level-1
-     panel, raised #141516 their level-2. Raised is LIGHTER than void; light
-     mode keeps that direction rather than flipping it. */
+  /* PRIMITIVES — the dark ramp.
+     Three surface rungs, each a small step up in lightness: page and sidebar on
+     void, the working canvas on surface, elevated components on raised. Raised
+     is LIGHTER than void; light mode keeps that direction rather than flipping
+     it, so a card reads as nearer the reader in both themes. */
   --ink-void: #08090a; /* darkest: page, sidebar */
   --ink-surface: #0f1011; /* +1: canvas, chrome */
   --ink-raised: #141516; /* +2: elevated components */
   --text-ink: #f7f8f8; /* the one text/icon/wash ink (their --color-fg-primary) */
 
-  /* The single accent. Linear's brand indigo, used only for the primary action
-     and links; every other surface is neutral.
+  /* The single accent, used only for the primary action and links; every other
+     surface is neutral.
      NAME COLLISION, deliberate: Basecoat's base.css also defines --accent, but
      as shadcn does — a subtle hover background paired with --accent-foreground,
      not a brand color. Ours is defined later at equal specificity so it wins.
@@ -107,9 +109,9 @@
   --warning: #d4b144;
   --danger: #eb5757;
 
-  /* DERIVATIONS — text tiers. Literals are Linear's fg ramp; the percentages
-     beside them are the equivalent alpha step, kept so the ladder stays legible
-     if a later theme wants to derive rather than list. */
+  /* DERIVATIONS — text tiers. The percentages beside each literal are the
+     equivalent alpha step, kept so the ladder stays legible if a later theme
+     wants to derive these rather than list them. */
   --text-primary: color-mix(in oklab, var(--text-ink) 100%, transparent); /* 100% */
   --text-body: #d0d6e0; /* their fg-secondary */
   --text-muted: #8a8f98; /* their fg-tertiary */
@@ -138,7 +140,7 @@
   --control-inverse-bg: var(--text-primary);
   --control-inverse-fg: var(--ink-void);
 
-  /* Borders. Linear's border ramp. */
+  /* Borders. Two rungs: a resting hairline and a stronger edge for controls. */
   --line: #23252a; /* their --color-border-primary */
   --line-soft: color-mix(in oklab, var(--text-ink) 8%, transparent); /* 8% */
   --line-faint: color-mix(in oklab, var(--text-ink) 4%, transparent); /* 4% */
@@ -147,10 +149,9 @@
 
 /* LIGHT.
  *
- * Linear publishes no light palette (their site is dark-only), so this is
- * derived in the same language rather than copied: the same neutral hue
- * discipline, the same surface-ladder direction (raised is lighter than void),
- * and the same ink flipped to their darkest value.
+ * Derived from the dark ramp rather than authored separately: the same neutral
+ * hue discipline, the same surface-ladder direction (raised is lighter than
+ * void), and the ink flipped to the darkest rung.
  *
  * Only the primitives and the four literal exceptions are restated. The icon
  * tiers, washes, hover surface and inverse control are all derived from

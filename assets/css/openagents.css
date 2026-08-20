@@ -1833,3 +1833,119 @@
     }
   }
 }
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────── */
+
+/* Basecoat supplies the list structure; this supplies the voice. The trail is
+ * quiet by default and only the hovered ancestor brightens -- a breadcrumb is
+ * orientation, not a call to action, so it should not compete with the page. */
+
+@layer components {
+  .breadcrumb {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    color: var(--text-dim);
+  }
+
+  .breadcrumb > ol {
+    gap: 6px;
+  }
+
+  .breadcrumb li {
+    gap: 6px;
+  }
+
+  .breadcrumb__separator {
+    color: var(--line-strong);
+    user-select: none;
+  }
+
+  .breadcrumb__link {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color var(--motion-fast) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .breadcrumb__link:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  .breadcrumb__link:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .breadcrumb__current {
+    color: var(--text-body);
+  }
+}
+
+/* ── Docs header ──────────────────────────────────────────────────────────── */
+
+/* Breadcrumb on the left, controls pushed right by the trail's own growth
+ * rather than a fixed width, so a long component name never collides with the
+ * controls -- it truncates instead. */
+
+@layer components {
+  .docs-column {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .docs-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding-inline: 32px;
+    border-bottom: 1px solid var(--line);
+    background: var(--ink-void);
+  }
+
+  .docs-header .breadcrumb {
+    min-width: 0;
+    margin-right: auto;
+  }
+
+  .docs-header .breadcrumb__current {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .docs-header__controls {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+/* ── Copy button ──────────────────────────────────────────────────────────── */
+
+@layer components {
+  .copy-button {
+    gap: 6px;
+  }
+
+  /* One glyph is shown at a time; both occupy the flow so the control does not
+     resize when it flips, which would nudge everything beside it. */
+  .copy-button__done {
+    display: none;
+  }
+
+  .copy-button[data-copied="true"] .copy-button__idle {
+    display: none;
+  }
+
+  .copy-button[data-copied="true"] .copy-button__done {
+    display: inline-flex;
+    color: var(--success);
+  }
+}

@@ -47,13 +47,19 @@ defmodule OpenAgentsWeb.UserAuth do
     end
   end
 
+  # The scope is the user, plus the answers the layout needs on every render
+  # and must not re-ask for. Resolved once here, at mount.
+  defp scope(user) do
+    %{user | agent_surfaces?: OpenAgents.Conversations.user_has_messages?(user)}
+  end
+
   def on_mount(:mount_current_user, _params, session, socket) do
     with user_id when is_binary(user_id) <- session[@session_key],
          {:ok, user} <- Accounts.get_active_user(user_id) do
       {:cont,
        socket
        |> Phoenix.Component.assign(:current_user, user)
-       |> Phoenix.Component.assign(:current_scope, user)}
+       |> Phoenix.Component.assign(:current_scope, scope(user))}
     else
       _missing_or_inactive ->
         {:cont,
@@ -69,7 +75,7 @@ defmodule OpenAgentsWeb.UserAuth do
       {:cont,
        socket
        |> Phoenix.Component.assign(:current_user, user)
-       |> Phoenix.Component.assign(:current_scope, user)
+       |> Phoenix.Component.assign(:current_scope, scope(user))
        |> Phoenix.LiveView.attach_hook(
          :active_user_guard,
          :handle_event,

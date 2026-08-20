@@ -25,6 +25,12 @@ defmodule OpenAgents.Accounts.User do
     field :public_leaderboard_opted_out, :boolean, default: false
     field :browser_key_hash, :binary
 
+    # Not a column: resolved once by `UserAuth.on_mount/4` when it builds the
+    # scope, because the sidebar asks on every render and the answer must not
+    # be a query each time. Defaults to false, so a user loaded by any other
+    # path is treated as new rather than accidentally grandfathered.
+    field :agent_surfaces?, :boolean, virtual: true, default: false
+
     has_one :storage_owner, OpenAgents.Conversations.Visitor
 
     timestamps()
@@ -47,6 +53,7 @@ defmodule OpenAgents.Accounts.User do
           github_token_rotated_at: DateTime.t() | nil,
           public_leaderboard_opted_out: boolean(),
           browser_key_hash: binary() | nil,
+          agent_surfaces?: boolean(),
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }

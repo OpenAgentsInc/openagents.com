@@ -252,7 +252,8 @@ defmodule OpenAgentsWeb.Layouts do
   the section you are reading would hide your own location.
   """
   attr :title, :string, required: true
-  attr :open, :boolean, default: false
+  attr :open, :boolean, default: false, doc: "first paint only; the reader's choice wins after"
+
   attr :id, :string, default: nil, doc: "defaults to a slug of the title"
   slot :inner_block, required: true
 
@@ -269,7 +270,6 @@ defmodule OpenAgentsWeb.Layouts do
       class="docs-sidebar__section sidebar-section"
       open={@open}
       phx-hook=".SidebarSection"
-      data-holds-active={to_string(@open)}
     >
       <summary class="sidebar-section-label sidebar-section__summary">
         <UI.icon name="chevron-right" class="sidebar-section__caret" />
@@ -279,13 +279,14 @@ defmodule OpenAgentsWeb.Layouts do
         {render_slot(@inner_block)}
       </div>
     </details>
-    <%!-- `open` above is a seed, not the truth. The server can only derive it
-    from the active page, so re-deriving it on every navigation collapses every
-    section the reader opened but is not currently inside. The hook makes the
-    reader's own choices the state and keeps them in sessionStorage; the server
-    still decides on first paint and whenever a section holds the active page,
-    so a page can never be hidden inside a section the reader had closed, and
-    the sidebar works with no JavaScript at all. --%>
+    <%!-- `open` above is a seed, not the truth. Re-applying it on every
+    navigation collapses every section the reader opened but is not currently
+    inside, and re-opens every section they closed that happens to be open by
+    default. The hook makes the reader's own choices the state and keeps them
+    in sessionStorage; the seed decides first paint, and a section containing
+    the active row still opens regardless, so a page can never be hidden inside
+    a section the reader had closed. With no JavaScript the seed governs and
+    the sidebar still works. --%>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".SidebarSection">
       const KEY = "sidebar-sections"
 
@@ -337,7 +338,12 @@ defmodule OpenAgentsWeb.Layouts do
         restore() {
           // A section holding the active page opens regardless of what the
           // reader last did, so navigation can never land on a hidden row.
-          if (this.el.dataset.holdsActive === "true") {
+          // Asked of the DOM rather than of the server: the active row already
+          // marks itself `aria-current`, and a server-side answer has to be
+          // derived from the section's `open` attribute, which is true for a
+          // section that is merely open by default -- so every navigation
+          // re-forced such a section open and undid the reader's collapse.
+          if (this.el.querySelector("[aria-current]")) {
             this.el.open = true
             this.onToggle()
             return
@@ -540,6 +546,8 @@ defmodule OpenAgentsWeb.Layouts do
   slot :extra, doc: "rows contributed by the current page"
 
   defp sidebar(assigns) do
+    assigns = assign(assigns, :agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
+
     ~H"""
     <aside id="sidebar" class="sidebar hidden lg:flex">
       <Layouts.sidebar_brand />
@@ -565,7 +573,7 @@ defmodule OpenAgentsWeb.Layouts do
       the two things it can reach -- and reading as a group says that in a way
       six flat rows cannot. Open by default: grouping is for orientation here,
       not for hiding. --%>
-      <Layouts.sidebar_section title="Sarah" open>
+      <Layouts.sidebar_section :if={@agent_surfaces?} title="Sarah" open>
         <Layouts.sidebar_link path={~p"/chat"} label="Chat" icon="chat" patchable={false} />
         <Layouts.sidebar_link
           path={~p"/computers"}
@@ -589,6 +597,14 @@ defmodule OpenAgentsWeb.Layouts do
     </aside>
     """
   end
+
+  # The agent's surfaces are grandfathered, not launched: an account that has
+  # already talked to her keeps them, and an operator always has them, but a
+  # new account never sees them. `agent_surfaces?` is resolved once by
+  # `UserAuth.on_mount/4`; this runs on every render, so it must stay a field
+  # read and never become a query.
+  defp agent_surfaces?(nil), do: false
+  defp agent_surfaces?(user), do: user.agent_surfaces? or admin?(user)
 
   # A nil scope is not an operator. The footer renders on public pages too.
   defp admin?(nil), do: false

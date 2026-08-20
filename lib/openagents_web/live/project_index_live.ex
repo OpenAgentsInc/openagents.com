@@ -70,8 +70,8 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
         <section>No projects yet.</section>
       </div>
 
-      <div :if={@projects != []} class="project-list">
-        <div :for={project <- @projects} class="project-list__row">
+      <div :if={@projects != []} class="project-index">
+        <div :for={project <- @projects} class="project-index__row">
           <Circle.project_row
             name={project.title}
             navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
@@ -82,7 +82,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
           row grew: the row is a link to a board, and a destructive action
           inside a link target is how people delete things by accident. --%>
           <button
-            class="btn project-list__delete"
+            class="btn project-index__delete"
             data-variant="ghost"
             data-size="sm"
             data-tone="danger"

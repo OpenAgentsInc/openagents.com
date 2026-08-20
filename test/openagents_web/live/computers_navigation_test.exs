@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.ComputersNavigationTest do
   import Phoenix.LiveViewTest
 
   test "the canonical Computers surface carries authenticated application chrome", %{conn: conn} do
-    conn = log_in_github_user(conn, "computers-surface")
+    conn = log_in_chatting_user(conn, "computers-surface")
     {:ok, view, _html} = live(conn, ~p"/computers")
 
     assert has_element?(view, "#computers-page")

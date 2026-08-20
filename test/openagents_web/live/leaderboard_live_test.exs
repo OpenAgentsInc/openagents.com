@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.LeaderboardLiveTest do
   end
 
   test "carries the shell account menu and sidebar when logged in", %{conn: conn} do
-    conn = log_in_github_user(conn, "leaderboard-header-browser")
+    conn = log_in_chatting_user(conn, "leaderboard-header-browser")
 
     {:ok, _view, html} = live(conn, ~p"/leaderboard")
 

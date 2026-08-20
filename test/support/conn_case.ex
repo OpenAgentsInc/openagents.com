@@ -64,6 +64,21 @@ defmodule OpenAgentsWeb.ConnCase do
     Plug.Test.init_test_session(conn, %{"user_id" => user.id})
   end
 
+  @doc """
+  Logs in an account that has already written to the agent.
+
+  Her surfaces are grandfathered rather than launched, so an account that has
+  never sent a message does not see them. A test about the sidebar's shared
+  destinations wants an account that does.
+  """
+  def log_in_chatting_user(conn, key) when is_binary(key) do
+    user = github_user(key)
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(user)
+    {:ok, _records} = OpenAgents.Conversations.create_turn(conversation, "Hello.")
+
+    Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+  end
+
   def put_forge_api_token(conn, key) when is_binary(key) do
     user = github_user("api-token-" <> key)
 

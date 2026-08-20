@@ -48,6 +48,32 @@ defmodule OpenAgents.Conversations do
     end)
   end
 
+  @doc """
+  Whether this account has ever sent a message to the agent.
+
+  Asks for a message the *person* wrote. Every conversation is created with an
+  assistant greeting already in it, so "has any message" is true for an account
+  that has never opened chat, and would grandfather everyone.
+
+  Existence only, and bounded by `limit: 1`: this runs on every page render to
+  decide whether the sidebar shows the agent's surfaces at all.
+  """
+  @spec user_has_messages?(User.t() | nil) :: boolean()
+  def user_has_messages?(nil), do: false
+
+  def user_has_messages?(%User{id: user_id}) do
+    from(m in Message,
+      join: c in Conversation,
+      on: c.id == m.conversation_id,
+      join: v in assoc(c, :visitor),
+      where: v.user_id == ^user_id and m.role == "user",
+      select: 1,
+      limit: 1
+    )
+    |> Repo.one()
+    |> is_integer()
+  end
+
   def get_conversation_for_user(%User{id: user_id}) do
     from(c in Conversation,
       join: v in assoc(c, :visitor),

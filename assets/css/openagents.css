@@ -3344,6 +3344,12 @@
     left: 0;
     width: 100%;
     pointer-events: none;
+    /* Two independent dials, multiplied, so neither has to know the other's
+       value: `--glow-base` is what the theme allows, `--glow-scale` is what a
+       given placement asks for. A single `opacity` cannot do this -- the light
+       theme's rule outranks a placement's, so dimming one glow would silently
+       do nothing in light mode. */
+    opacity: calc(var(--glow-base, 1) * var(--glow-scale, 1));
   }
 
   .glow--top { top: 0; }
@@ -3391,7 +3397,7 @@
      backdrop on a dark surface reads as a stain on a white one. */
   :root[data-theme="light"] .glow,
   :root:not([data-theme="dark"]) .glow {
-    opacity: 0.35;
+    --glow-base: 0.35;
   }
 
   @media (min-width: 640px) {
@@ -4883,6 +4889,9 @@
   .hero__glow {
     top: 38%;
     z-index: 0;
+    /* Half strength. At full it lit the headline from behind hard enough to
+       read as a light source in the page rather than depth behind it. */
+    --glow-scale: 0.5;
   }
 
   /* Two edges of one line. The copyright says who owns this and the note says
@@ -6201,19 +6210,24 @@
 
 @layer components {
   /* A project row plus its own destructive control. The row fills the width and
-     the control sits outside it, so clicking the row can only ever navigate. */
-  .project-list__row {
+     the control sits outside it, so clicking the row can only ever navigate.
+
+     Named for the index, not for "project list": the dashboard already had a
+     `.project-list__row`, and this rule's `> :first-child { flex: 1 }` landed
+     on that row's leading icon and stretched it, pushing the title into the
+     middle of an empty row. Two different rows had the same name. */
+  .project-index__row {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .project-list__row > :first-child {
+  .project-index__row > :first-child {
     min-width: 0;
     flex: 1;
   }
 
-  .project-list__delete {
+  .project-index__delete {
     flex: none;
   }
 }

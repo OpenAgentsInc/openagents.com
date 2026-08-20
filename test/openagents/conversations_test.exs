@@ -146,4 +146,50 @@ defmodule OpenAgents.ConversationsTest do
     assert length(older) == 6
     assert MapSet.disjoint?(MapSet.new(recent, & &1.id), MapSet.new(older, & &1.id))
   end
+
+  describe "user_has_messages?/1" do
+    # This decides whether the agent's surfaces appear in the sidebar at all:
+    # an account that has already talked to her keeps them, a new one never
+    # sees them. Getting it wrong in the permissive direction is invisible --
+    # the section simply shows for everybody -- so the greeting case below is
+    # the one that matters.
+
+    test "an account that has never opened chat has not sent a message" do
+      user = OpenAgents.AccountsFixtures.repository_user_fixture("never-chatted")
+      refute Conversations.user_has_messages?(user)
+    end
+
+    test "the seeded greeting does not count as the person having written" do
+      # Every conversation is created with an assistant greeting already in it,
+      # so "does this account have any message" is true the instant chat is
+      # opened -- which would grandfather every account that ever loaded the
+      # page. The question has to be about a message the person wrote.
+      user = OpenAgents.AccountsFixtures.repository_user_fixture("only-greeted")
+      assert {:ok, conversation} = Conversations.ensure_conversation(user)
+
+      {[%Message{role: "assistant"}], false} = Conversations.list_messages(conversation)
+      refute Conversations.user_has_messages?(user)
+    end
+
+    test "an account that has written is grandfathered" do
+      user = OpenAgents.AccountsFixtures.repository_user_fixture("has-chatted")
+      assert {:ok, conversation} = Conversations.ensure_conversation(user)
+      assert {:ok, _records} = Conversations.create_turn(conversation, "Hello.")
+
+      assert Conversations.user_has_messages?(user)
+    end
+
+    test "one account's messages do not grandfather another" do
+      talker = OpenAgents.AccountsFixtures.repository_user_fixture("talker")
+      bystander = OpenAgents.AccountsFixtures.repository_user_fixture("bystander")
+      assert {:ok, conversation} = Conversations.ensure_conversation(talker)
+      assert {:ok, _records} = Conversations.create_turn(conversation, "Hello.")
+
+      refute Conversations.user_has_messages?(bystander)
+    end
+
+    test "no account at all has no messages" do
+      refute Conversations.user_has_messages?(nil)
+    end
+  end
 end

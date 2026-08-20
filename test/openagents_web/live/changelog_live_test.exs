@@ -56,7 +56,7 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
   end
 
   test "carries the shell sidebar when logged in", %{conn: conn} do
-    conn = log_in_github_user(conn, "changelog-header-browser")
+    conn = log_in_chatting_user(conn, "changelog-header-browser")
 
     {:ok, _view, html} = live(conn, ~p"/changelog")
 

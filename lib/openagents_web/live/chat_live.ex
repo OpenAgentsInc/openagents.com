@@ -382,6 +382,7 @@ defmodule OpenAgentsWeb.ChatLive do
           |> assign(:tool_activity, [])
           |> assign(:composer_error, nil)
           |> assign(:form, composer_form())
+          |> grant_agent_surfaces()
           |> push_event("composer:clear", %{})
           |> push_event("chat:scroll-bottom", %{})
 
@@ -391,6 +392,17 @@ defmodule OpenAgentsWeb.ChatLive do
         {:noreply, assign(socket, :composer_error, error_message(reason))}
     end
   end
+
+  # Writing to her is the act that earns the sidebar section. The scope is
+  # resolved once at mount, so without this the person who just sent their
+  # first message would not see the section until their next page load.
+  defp grant_agent_surfaces(
+         %{assigns: %{current_scope: %{agent_surfaces?: false} = scope}} = socket
+       ) do
+    Phoenix.Component.assign(socket, :current_scope, %{scope | agent_surfaces?: true})
+  end
+
+  defp grant_agent_surfaces(socket), do: socket
 
   @maximum_queued_messages 10
 

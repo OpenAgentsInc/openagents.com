@@ -401,6 +401,17 @@
 
 .sidebar-section {
   position: relative;
+  /* A section heading needs air above it or it reads as one more row in the
+     list it is naming. The nav lost its block padding when the sticky heading
+     was fixed, and nothing replaced it, so "Sarah" sat hard against the row
+     above. The space belongs to the section rather than the nav, which is why
+     it survives a heading sticking to the scrollport edge. */
+  margin-block-start: 16px;
+}
+
+/* A section that opens the rail has nothing above it to be held off from. */
+.sidebar-section:first-child {
+  margin-block-start: 0;
 }
 
 /* Only an open section needs holding off the next one. Paying that gap while

@@ -52,8 +52,9 @@ defmodule OpenAgentsWeb.ChatLiveTest do
            end)
   end
 
-  test "the sidebar carries the shared destinations for everyone", %{conn: conn} do
-    conn = log_in_github_user(conn, "computers-nav-browser")
+  test "the sidebar carries the shared destinations for an account that has written",
+       %{conn: conn} do
+    conn = log_in_chatting_user(conn, "computers-nav-browser")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
     # Computers, Memory and Leaderboard are destinations for everyone, so they

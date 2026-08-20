@@ -26,10 +26,12 @@ No part of this repository is approved for production deployment yet.
 - Issues, comments, labels, milestones, projects, public status, changelog, and
   bounded source-browsing surfaces.
 - Git HTTP, push receipts, promotion targets, build receipts, and local BEAM
-  deployment primitives.
-- An owned local test gate covering browser JavaScript, the Phoenix application,
-  distributed cluster cases, merged coverage, and a disposable production
-  release smoke test.
+  deployment primitives, including transactional direct loading, two-way
+  relups, and provider-neutral rolling replacement.
+- An owned exact-SHA release gate covering browser JavaScript, the Phoenix
+  application, distributed cluster cases, direct transactions, relup and
+  interruption recovery, rolling replacement, repository contracts, and a
+  disposable packaged-release smoke test.
 
 "Implemented" means the code and local tests exist. It does not mean the
 feature has passed staging, security review, failure injection, or a soak.
@@ -47,8 +49,6 @@ feature has passed staging, security review, failure injection, or a soak.
 ### Planned or blocked on hardening
 
 - Repository-backed tenant isolation for every issue and project record.
-- Complete route-authority, token-lifecycle, recovery, build-isolation, and
-  transactional fleet-deployment gates.
 - Separate web and distributed staging lanes, a full regression matrix,
   failure-injection drills, and a 48-hour soak.
 - Any production rollout. Production remains explicitly out of scope until the
@@ -89,15 +89,16 @@ mix setup
 mix phx.server
 ```
 
-Before committing, run the repository-owned gate:
+Before committing, run the fast repository checks:
 
 ```sh
 mix precommit
 ```
 
-Distributed, merged-coverage, relup, and release-smoke checks live under
-`ops/` and are composed by the exact-SHA baseline gate while hardening is in
-progress. This repository deliberately has no hosted CI configuration.
+Before pushing a release candidate, provision a disposable database and run
+`ops/ci/gate.sh` as documented in
+[the release deployment fallback runbook](docs/operations/release-deployment-fallbacks.md).
+This repository deliberately has no hosted CI configuration.
 
 ## Contributing and source control
 

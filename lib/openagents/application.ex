@@ -37,6 +37,7 @@ defmodule OpenAgents.Application do
     children = [
       OpenAgentsWeb.Telemetry,
       OpenAgents.Repo,
+      OpenAgents.ReleaseState,
       # Deployment identity and boot convergence must settle before cluster
       # discovery or the endpoint can make this node externally reachable.
       OpenAgents.Forge.DeploymentNode,

@@ -4,7 +4,7 @@ defmodule OpenAgents.MixProject do
   def project do
     [
       app: :openagents,
-      version: "0.1.0",
+      version: release_version(),
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -34,15 +34,31 @@ defmodule OpenAgents.MixProject do
     ]
   end
 
+  defp release_version do
+    System.get_env("OPENAGENTS_RELEASE_VSN", "0.2.0")
+  end
+
   # Hot-upgrade-capable release: castle/forecastle add appup + relup generation
   # and release_handler runtime support on top of `mix release`.
   defp releases do
-    [
-      openagents: [
+    release_path = System.get_env("OPENAGENTS_RELEASE_PATH")
+
+    options =
+      [
         include_erts: true,
         include_src: false,
-        steps: [&Forecastle.pre_assemble/1, :assemble, &Forecastle.post_assemble/1, :tar]
+        steps: [
+          &OpenAgents.ReleaseAssembler.pre_assemble/1,
+          :assemble,
+          &OpenAgents.ReleaseAssembler.post_assemble/1,
+          :tar
+        ]
       ]
+
+    options = if release_path, do: Keyword.put(options, :path, release_path), else: options
+
+    [
+      openagents: options
     ]
   end
 

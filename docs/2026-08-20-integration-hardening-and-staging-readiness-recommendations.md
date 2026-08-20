@@ -1096,6 +1096,45 @@ should run:
 **Exit criteria:** Every supported change has a safe deployment class, a tested
 rollback or recovery path, and an exact-SHA gate receipt.
 
+### Gate 11 implementation status
+
+Implemented locally on 2026-08-20:
+
+- Replaced the relup placeholders with explicit `0.1.0` and `0.2.0` release
+  builds, a generated forward and reverse `relup`, and a packaged candidate
+  that carries the generated release instructions.
+- Added `OpenAgents.ReleaseState` and its versioned state struct. Focused and
+  packaged-node proofs preserve the process PID and observations through
+  upgrade, downgrade, and re-upgrade.
+- Added a deterministic install barrier and a live recovery proof that kills
+  the emulator after the point of no return, verifies that the prior permanent
+  release boots, re-stages the consumed immutable tar, and completes the retry.
+- Added `OpenAgents.Forge.RelupNode` and
+  `OpenAgents.Forge.RelupDeployment` for digest verification, immutable cache
+  retention, stage restoration, preflight, one-node-at-a-time installation,
+  health and state checks, permanence, reverse relup, and fleet-wide reversal
+  of already-upgraded nodes after a later failure.
+- Added `OpenAgents.Forge.RollingReplacement` and the staging-provider
+  behavior. The coordinator removes one node from readiness, waits for drain,
+  checks remaining capacity and quorum, replaces by image digest, and requires
+  membership, boot, database, SHA, digest, and readiness convergence before it
+  continues. Unsafe pre-replacement capacity restores readiness; failed rejoin
+  restores the last-known-good image and stops the rollout.
+- Added an exact-SHA receipt verifier, the owned `ops/ci/gate.sh`, a pre-push
+  hook, and a receipt-gated immutable local image builder. The release gate
+  composes warning-free compilation, precommit, distributed, browser, direct,
+  relup, interruption, rolling, contract, and packaged startup checks.
+- Documented operation and additive migration constraints in the
+  [release deployment fallback runbook](operations/release-deployment-fallbacks.md).
+- Retained the direct lane's existing end-to-end push, build, canary, fleet,
+  and live proof with the exact `OpenAgents.BuildInfo` allowlist entry. The
+  broader allowlist remains unchanged and disabled outside tests.
+
+The implementation is ready for an exact-commit local gate. Keep every deploy
+lane disabled until Gate 12 provides an isolated distributed staging fleet and
+an infrastructure-specific rolling provider. No staging or production
+environment changed during this gate.
+
 ## Gate 12: Build an isolated staging environment
 
 The existing Cloud Run staging service can validate the web application, OAuth,

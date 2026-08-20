@@ -13,7 +13,7 @@ defmodule OpenAgents.Cluster do
   @erpc_timeout_ms 5_000
 
   @doc "The currently expected relup marker for live nodes."
-  def relup_marker, do: "v2-relup-live"
+  def relup_marker, do: "v2-relup-capable"
 
   @doc "All cluster members, including this node."
   @spec members() :: [node()]

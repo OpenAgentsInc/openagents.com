@@ -100,7 +100,7 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-19 05:38:00Z],
         "d82d174",
         "feature",
-        "openagents.com/status became the public network page: fleet, quorum, and the live rollout pipeline with push→live timing."
+        "The status surface gained bounded fleet, quorum, rollout, and push-to-live projections for staging validation."
       ),
       e(
         ~U[2026-08-19 05:13:00Z],
@@ -112,25 +112,25 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-19 04:01:00Z],
         "70c34ba",
         "forge",
-        "The hot-load deploy lane shipped: push → promote → incremental build → canary → fleet-wide live, receipted; first loop 13.2 s push→live."
+        "The local hot-load proof covers push → promote → incremental build → canary → fleet commit with immutable receipts."
       ),
       e(
         ~U[2026-08-19 03:44:00Z],
         "677c9ba",
         "forge",
-        "Sarah serves her own git: smart-HTTP forge at openagents.com/git, pushes acked only after WAL persist to object storage."
+        "The forge implements smart HTTP and acknowledges a push only after durable WAL persistence."
       ),
       e(
         ~U[2026-08-19 03:41:00Z],
         "eb93e53",
         "infra",
-        "Releases are gated by owned chaos drills — node kill, Raft partition, SIGKILL-mid-upgrade — on our own machines, no hosted CI."
+        "The owned local gate includes node, Raft, and interrupted-upgrade drills without hosted CI."
       ),
       e(
         ~U[2026-08-19 02:47:00Z],
         "c0a96f1",
         "infra",
-        "Live in-place hot code upgrade (relup) proven on the fleet: 0.1.0 → 0.2.0 with state migrated and no restart."
+        "The relup foundation can generate a 0.1.0 to 0.2.0 state migration for later isolated-fleet proof."
       ),
 
       # ── 2026-08-18 — the Immortal Sarah build day
@@ -138,7 +138,7 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-19 00:43:00Z],
         "2071eaf",
         "infra",
-        "Zero-downtime rolling node replacement: drain, replace, rejoin — the cluster never loses quorum during a deploy."
+        "The rolling-replacement contract defines drain, replace, rejoin, and quorum checks for later isolated-fleet proof."
       ),
       e(
         ~U[2026-08-18 23:21:00Z],
@@ -150,7 +150,7 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-18 21:12:00Z],
         "f6afd61",
         "infra",
-        "Sarah became a 3-node clustered BEAM fleet on GCE — the single-instance Cloud Run era ended."
+        "A local three-node BEAM proof established membership, quorum, and state-handoff contracts for isolated staging."
       ),
       e(
         ~U[2026-08-18 23:13:00Z],

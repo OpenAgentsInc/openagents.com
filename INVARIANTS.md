@@ -1631,24 +1631,49 @@ production WebSocket read-back.
 
 ### RELEASE-004 — CI runs on owned infrastructure only, and gates every release
 
-Status: Proposed
+Status: Current
 
 The target release gate permits no hosted CI: no GitHub Actions workflows, no
 GitHub-hosted or third-party runners, and no repository automation, secrets, or
 scheduling handed to external CI compute. All checks run on owned machines.
-The full matrix must bind unit, browser, distributed cluster, coverage,
-release, relup, version-chain, failure, and staging evidence to the exact
-candidate SHA, and every deploy command must refuse a stale or absent receipt.
+The full local matrix binds unit, browser, distributed cluster, direct
+transaction, release, relup, version-chain, interrupted-install, rolling
+replacement, and repository-contract evidence to the exact candidate SHA.
+Relup and rolling coordinators refuse a stale or absent receipt before they
+change a node. `.githooks/pre-push` invokes the same gate. A bounded, logged
+emergency override exists only for operator-directed recovery.
 
-This complete deploy refusal is proposed, not implemented. The repository
-currently has an exact-SHA baseline receipt, merged coverage, release smoke,
-and relup proof primitives, but Gate 12 must compose them into the final owned
-release gate and bind every deployment entry point to its receipt.
+Staging evidence remains a separate later gate. A local receipt does not claim
+that the candidate passed staging or authorize a production release.
 
-Current progress evidence: `ops/ci/baseline.sh`, `ops/ci/coverage.sh`,
-`ops/ci/release-smoke.sh`, `ops/relup-proof/run.sh`,
-`ops/relup-proof/version-chain.sh`, and
+Evidence: `ops/ci/gate.sh`, `.githooks/pre-push`,
+`OpenAgents.Forge.GateReceipt`, `OpenAgents.Forge.GateReceiptTest`,
+`ops/relup-proof/run.sh`, `ops/relup-proof/version-chain.sh`, and
 `ops/relup-proof/kill-during-install.sh`.
+
+### RELEASE-005 — Every code change has a fail-closed deployment class
+
+Status: Current
+
+Direct BEAM candidates use an exact-fleet prepare, canary, apply, verify,
+commit, and rollback transaction. The supported `0.1.0` to `0.2.0` application
+transition uses a two-way relup, versioned process state, node-by-node health
+checks, and reverse installation. Every structural or unclassified candidate
+uses digest-addressed rolling replacement with readiness drain, remaining-
+capacity and quorum checks, exact rejoin verification, and last-known-good
+image recovery. A failed relup or replacement aborts before another node
+changes.
+
+All deployment workers remain disabled until isolated staging proves their
+complete provider and topology. Current means that the local mechanism and its
+refusal and recovery paths exist; it does not authorize staging or production.
+
+Evidence: `OpenAgents.Forge.Deployment`, `OpenAgents.Forge.RelupDeployment`,
+`OpenAgents.Forge.RelupNode`, `OpenAgents.ReleaseState`,
+`OpenAgents.Forge.RollingReplacement`,
+`test/openagents/forge/relup_deployment_test.exs`,
+`test/openagents/forge/rolling_replacement_test.exs`, and
+`docs/operations/release-deployment-fallbacks.md`.
 
 ### STATUS-001 — The status page publishes one bounded, content-free projection
 
@@ -1811,6 +1836,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-001 | `ops/ci/release-smoke.sh`, `test/openagents_web/controllers/health_controller_test.exs` |
 | RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
 | RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
-| RELEASE-004 | Proposed; current primitives are listed in its entry above. |
+| RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs` |
+| RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |

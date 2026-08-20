@@ -7,34 +7,38 @@ defmodule OpenAgents.Cluster.CodeChangeTest do
   """
   use ExUnit.Case, async: true
 
-  alias OpenAgents.Test.UpgradableCounter, as: Counter
+  alias OpenAgents.ReleaseState
+  alias OpenAgents.ReleaseState.State
 
-  test "code_change/3 migrates old (v1) state to the new struct without restarting the process" do
-    {:ok, pid} = Counter.start_link()
+  test "upgrade, downgrade, and re-upgrade preserve PID and observations" do
+    pid = start_supervised!({ReleaseState, name: nil})
+    :ok = ReleaseState.observe("retained", pid)
 
-    # Simulate a process that was started under the OLD release: force its state
-    # to the v1 shape (a bare map with :count, no :label / :version).
-    :sys.replace_state(pid, fn _new -> %{count: 7} end)
-    assert :sys.get_state(pid) == %{count: 7}
+    :sys.replace_state(pid, fn %State{} = state ->
+      %State{state | schema_version: 1, integrity: nil}
+    end)
 
-    # Suspend → change_code (runs code_change("1", state, [])) → resume, exactly
-    # as a relup's {update, Mod, {advanced, _}} instruction does.
     :ok = :sys.suspend(pid)
-    :ok = :sys.change_code(pid, Counter, "1", [])
+    :ok = :sys.change_code(pid, ReleaseState, ~c"0.1.0", [])
     :ok = :sys.resume(pid)
 
-    # Same process, migrated state: the v1 count survived and the v2 fields were
-    # filled in — no drop, no restart.
-    assert Process.alive?(pid)
-    migrated = :sys.get_state(pid)
-    assert migrated == %Counter{version: 2, count: 7, label: "default"}
-    assert GenServer.call(pid, :get) == migrated
+    assert %State{schema_version: 2, observations: ["retained"], integrity: integrity} =
+             ReleaseState.snapshot(pid)
 
-    GenServer.stop(pid)
-  end
+    assert is_binary(integrity)
 
-  test "code_change/3 is idempotent for a state already at the current version" do
-    state = %Counter{version: 2, count: 3, label: "x"}
-    assert Counter.code_change("2", state, []) == {:ok, state}
+    :ok = :sys.suspend(pid)
+    :ok = :sys.change_code(pid, ReleaseState, {:down, ~c"0.2.0"}, [])
+    :ok = :sys.resume(pid)
+
+    assert %State{schema_version: 1, observations: ["retained"], integrity: nil} =
+             ReleaseState.snapshot(pid)
+
+    :ok = :sys.suspend(pid)
+    :ok = :sys.change_code(pid, ReleaseState, ~c"0.1.0", [])
+    :ok = :sys.resume(pid)
+
+    assert %State{schema_version: 2, observations: ["retained"]} = ReleaseState.snapshot(pid)
+    assert %State{} = :sys.get_state(pid)
   end
 end

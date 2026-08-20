@@ -1,10 +1,9 @@
 defmodule OpenAgents.Forge.DeployReceipt do
   @moduledoc """
-  Receipt for one hot-deploy attempt (`forge_deploys`, roadmap P4): what was
-  loaded (or refused), on which nodes, with the canary outcome and the
-  first-class **push→live duration** measured from the matching push receipt.
-  Every outcome is receipted — `live`, `reverted`, `needs_rolling_replace`,
-  and `failed` alike — so the deploy lane never fails silently.
+  Immutable terminal receipt for one fleet deployment attempt. The receipt
+  binds the candidate to its deployment, artifact, manifest, expected member
+  set, bounded per-node outcomes, rollback verification, and push-to-live
+  duration. PostgreSQL rejects updates and deletes after insertion.
   """
 
   use Ecto.Schema
@@ -19,11 +18,20 @@ defmodule OpenAgents.Forge.DeployReceipt do
     field :repo, :string
     field :sha, :string
     field :target_id, :binary_id
+    field :deployment_id, :binary_id
+    field :artifact_digest, :string
+    field :manifest_digest, :string
     field :modules, {:array, :string}, default: []
     field :nodes, {:array, :string}, default: []
+    field :expected_nodes, {:array, :string}, default: []
+    field :node_results, :map, default: %{}
     field :result, :string
     field :canary, :string
+    field :error_code, :string
+    field :rollback_verified, :boolean
     field :push_to_live_ms, :integer
+    field :started_at, :utc_datetime_usec
+    field :completed_at, :utc_datetime_usec
     timestamps(updated_at: false)
   end
 
@@ -31,19 +39,78 @@ defmodule OpenAgents.Forge.DeployReceipt do
   def results, do: @results
 
   def changeset(receipt, attrs) do
+    now = DateTime.utc_now()
+
+    attrs =
+      attrs
+      |> default(:deployment_id, Ecto.UUID.generate())
+      |> default(:started_at, now)
+      |> default(:completed_at, now)
+
     receipt
     |> cast(attrs, [
       :repo,
       :sha,
       :target_id,
+      :deployment_id,
+      :artifact_digest,
+      :manifest_digest,
       :modules,
       :nodes,
+      :expected_nodes,
+      :node_results,
       :result,
       :canary,
-      :push_to_live_ms
+      :error_code,
+      :rollback_verified,
+      :push_to_live_ms,
+      :started_at,
+      :completed_at
     ])
-    |> validate_required([:repo, :sha, :target_id, :result])
+    |> validate_required([
+      :repo,
+      :sha,
+      :target_id,
+      :deployment_id,
+      :result,
+      :started_at,
+      :completed_at
+    ])
     |> validate_inclusion(:result, @results)
+    |> validate_format(:sha, ~r/^[0-9a-f]{40}$/)
+    |> validate_format(:artifact_digest, ~r/^[0-9a-f]{64}$/)
+    |> validate_format(:manifest_digest, ~r/^[0-9a-f]{64}$/)
+    |> validate_length(:modules, max: 512)
+    |> validate_length(:nodes, max: 100)
+    |> validate_length(:expected_nodes, max: 100)
+    |> validate_length(:canary, max: 255)
+    |> validate_length(:error_code, max: 128)
+    |> validate_node_results()
+    |> unique_constraint(:deployment_id)
     |> check_constraint(:result, name: :forge_deploys_result)
+    |> check_constraint(:artifact_digest, name: :forge_deploys_artifact_digest)
+    |> check_constraint(:manifest_digest, name: :forge_deploys_manifest_digest)
+    |> check_constraint(:node_results, name: :forge_deploys_node_bounds)
+  end
+
+  defp default(attrs, key, value) do
+    cond do
+      Map.has_key?(attrs, key) -> attrs
+      Map.has_key?(attrs, to_string(key)) -> attrs
+      true -> Map.put(attrs, key, value)
+    end
+  end
+
+  defp validate_node_results(changeset) do
+    validate_change(changeset, :node_results, fn :node_results, results ->
+      valid? =
+        is_map(results) and map_size(results) <= 100 and
+          Enum.all?(results, fn {node, result} ->
+            is_binary(node) and byte_size(node) in 1..255 and is_binary(result) and
+              byte_size(result) in 1..255
+          end)
+
+      if valid?, do: [], else: [node_results: "must contain at most 100 bounded outcomes"]
+    end)
   end
 end

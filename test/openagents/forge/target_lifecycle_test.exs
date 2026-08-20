@@ -1,6 +1,6 @@
 defmodule OpenAgents.Forge.TargetLifecycleTest do
   use OpenAgents.DataCase, async: false
-  alias OpenAgents.Forge.{Repos, Targets}
+  alias OpenAgents.Forge.{DeployReceipt, Repos, Targets}
 
   setup do
     base = Path.join(System.tmp_dir!(), "forge-targets-#{System.unique_integer([:positive])}")
@@ -105,5 +105,99 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     {:ok, second} = Targets.promote("demo", sha, "operator:pin-back")
     assert Targets.current("demo").id == second.id
     assert length(Targets.recent("demo")) == 2
+  end
+
+  test "deployment ownership refuses a superseded built target", %{sha: sha} do
+    {:ok, first} = Targets.promote("demo", sha, "operator:first")
+    {:ok, _building} = Targets.advance(first.id, "building")
+    {:ok, _built} = Targets.advance(first.id, "built")
+    {:ok, second} = Targets.promote("demo", sha, "operator:second")
+
+    assert {:error, :superseded_target} = Targets.begin_deployment(first.id)
+    assert Targets.current("demo").id == second.id
+    assert Repo.get!(OpenAgents.Forge.Target, first.id).status == "built"
+  end
+
+  test "duplicate deployment delivery cannot claim an active target twice", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+
+    assert {:ok, %{status: "deploying"}} = Targets.begin_deployment(target.id)
+
+    assert {:error, {:invalid_transition, "deploying", "deploying"}} =
+             Targets.begin_deployment(target.id)
+
+    assert Repo.get!(OpenAgents.Forge.Target, target.id).status == "deploying"
+  end
+
+  test "fleet commit writes the live target and terminal receipt atomically", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _deploying} = Targets.begin_deployment(target.id)
+
+    deployment_id = Ecto.UUID.generate()
+    digest = String.duplicate("a", 64)
+    manifest_digest = String.duplicate("b", 64)
+
+    assert {:ok, %{target: live, receipt: receipt}} =
+             Targets.finish_deployment(
+               target.id,
+               "live",
+               %{"deployment_id" => deployment_id},
+               %{
+                 deployment_id: deployment_id,
+                 artifact_digest: digest,
+                 manifest_digest: manifest_digest,
+                 expected_nodes: ["one", "two", "three"],
+                 nodes: ["one=committed", "two=committed", "three=committed"],
+                 node_results: %{
+                   "one" => "committed",
+                   "two" => "committed",
+                   "three" => "committed"
+                 },
+                 rollback_verified: nil
+               }
+             )
+
+    assert live.status == "live"
+    assert receipt.result == "live"
+    assert receipt.deployment_id == deployment_id
+    assert receipt.artifact_digest == digest
+    assert receipt.manifest_digest == manifest_digest
+  end
+
+  test "PostgreSQL rejects deployment receipt mutation", %{sha: sha} do
+    target =
+      %OpenAgents.Forge.Target{}
+      |> OpenAgents.Forge.Target.changeset(%{
+        repo: "demo",
+        sha: sha,
+        promoted_by: "operator:test",
+        status: "failed"
+      })
+      |> Repo.insert!()
+
+    receipt =
+      %DeployReceipt{}
+      |> DeployReceipt.changeset(%{
+        repo: "demo",
+        sha: sha,
+        target_id: target.id,
+        result: "failed"
+      })
+      |> Repo.insert!()
+
+    assert_raise Postgrex.Error, ~r/forge deployment receipts are immutable/, fn ->
+      Repo.transaction(
+        fn ->
+          Repo.query!("UPDATE forge_deploys SET result = 'live' WHERE id = $1", [
+            Ecto.UUID.dump!(receipt.id)
+          ])
+        end,
+        mode: :savepoint
+      )
+    end
   end
 end

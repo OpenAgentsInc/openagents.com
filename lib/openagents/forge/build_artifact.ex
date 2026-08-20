@@ -289,13 +289,43 @@ defmodule OpenAgents.Forge.BuildArtifact do
       )
 
     try do
-      with :ok <- :erl_tar.create(String.to_charlist(path), entries),
+      with :ok <- write_reproducible_tar(path, entries),
            {:ok, bytes} <- File.read(path),
            :ok <- validate_artifact_size(bytes) do
         {:ok, bytes}
       end
     after
       File.rm(path)
+    end
+  end
+
+  defp write_reproducible_tar(path, entries) do
+    case :erl_tar.open(String.to_charlist(path), [:write]) do
+      {:ok, tar} ->
+        write_result =
+          Enum.reduce_while(entries, :ok, fn entry, :ok ->
+            case :erl_tar.add(tar, entry,
+                   mtime: 0,
+                   atime: 0,
+                   ctime: 0,
+                   uid: 0,
+                   gid: 0
+                 ) do
+              :ok -> {:cont, :ok}
+              {:error, reason} -> {:halt, {:error, reason}}
+            end
+          end)
+
+        close_result = :erl_tar.close(tar)
+
+        case {write_result, close_result} do
+          {:ok, :ok} -> :ok
+          {{:error, reason}, _close} -> {:error, reason}
+          {:ok, {:error, reason}} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

@@ -58,20 +58,25 @@ defmodule OpenAgents.Cluster do
 
   @doc """
   A bounded health report for this node. Liveness means the VM and BEAM are
-  running; readiness is a runtime assertion that will be driven by boot
-  convergence and application health checks in later phases.
+  running. Readiness requires successful boot convergence and no active or
+  divergent forge deployment.
   """
   @spec local_report() :: map()
   def local_report do
+    boot = OpenAgents.Forge.BootConverge.state()
+    boot_ready? = OpenAgents.Forge.BootConverge.ready?()
+    deployment = OpenAgents.Forge.DeploymentNode.health()
+
     %{
       "schema" => "openagents.cluster_health.v1",
       "node" => to_string(Node.self()),
       "version" => to_string(Application.spec(:openagents, :vsn) || "unknown"),
-      "revision" => OpenAgents.BuildInfo.revision(),
-      "boot_converged" => nil,
+      "revision" => deployment["revision"] || boot["sha"] || OpenAgents.BuildInfo.revision(),
+      "boot_converged" => boot_ready?,
+      "deployment_ready" => deployment["participant_ready"],
       "uptime_ms" => uptime_ms(),
       "live" => true,
-      "ready" => true
+      "ready" => boot_ready? and deployment["ready"] == true
     }
   end
 

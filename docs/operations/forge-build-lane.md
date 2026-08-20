@@ -2,18 +2,21 @@
 
 Date: 2026-08-20
 
-Status: Implemented locally; keep staging deployment disabled until Gate 10 is complete
+Status: Implemented locally; the transactional deployment lane now consumes its verified artifacts
 
 ## Purpose
 
 The forge build lane turns one operator-promoted, fully qualified Git commit
-into a reproducible BEAM artifact. Compilation runs in an isolated builder
-container. The public release receives no compiler, Docker socket, Git
+into a reproducible BEAM artifact with fixed tar ownership and time metadata.
+Compilation runs in an isolated builder container. The public release receives
+no compiler, Docker socket, Git
 credential, or ability to execute queue contents.
 
-This lane only produces and verifies artifacts. Gate 10 owns transactional
-fleet deployment. Do not enable direct staging loads merely because a build
-completes.
+This lane only produces and verifies artifacts. The
+[transactional deployment runbook](forge-transactional-deployment.md) owns
+fleet application. Do not enable direct staging loads merely because a build
+completes; the isolated distributed staging lane and fallback deployment
+classes remain required.
 
 ## Runtime roles
 

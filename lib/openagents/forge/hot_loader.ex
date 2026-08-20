@@ -1,16 +1,9 @@
 defmodule OpenAgents.Forge.HotLoader do
   @moduledoc """
-  Hot-load lane (roadmap P4): applies built beam artifacts to the running
-  fleet without a restart.
-
-  Listens on `forge:builds` for build-ready broadcasts and, serially per
-  build: refuses any artifact touching a module off the operator-owned
-  hot-load allowlist (honest `needs_rolling_replace`, never a partial load),
-  canaries the load on the local node with revert-on-failure, then
-  `:erpc.multicall`s the rest of the fleet. Every outcome — `live`,
-  `reverted`, `needs_rolling_replace`, `failed` — lands as a
-  `forge_deploys` receipt including the measured push→live duration, and
-  the target row advances honestly at each step.
+  Coordinates immutable build artifacts through the transactional direct-load
+  lane. The coordinator refuses structural or off-allowlist changes before
+  deployment, then delegates prepare, canary, fleet apply, verification,
+  commit, and exact rollback to `OpenAgents.Forge.Deployment`.
   """
 
   use GenServer
@@ -20,6 +13,7 @@ defmodule OpenAgents.Forge.HotLoader do
   require Logger
 
   alias OpenAgents.Forge.BuildArtifact
+  alias OpenAgents.Forge.Deployment
   alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Forge.PushReceipt
   alias OpenAgents.Forge.Targets
@@ -28,26 +22,11 @@ defmodule OpenAgents.Forge.HotLoader do
   @builds_topic "forge:builds"
   @deploys_topic "forge:deploys"
   @default_allowlist ["OpenAgents.Scratch.", "OpenAgents.BuildInfo"]
-  @fleet_timeout_ms 15_000
 
   # ── api ──────────────────────────────────────────────────────────────────
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @doc """
-  Load a set of `{module, beam_binary}` pairs on this node. Public because
-  the canary node calls it on the rest of the fleet via `:erpc.multicall`
-  (no remote revert logic in v0 — per-node results are recorded instead).
-  """
-  def load_beams(beams) do
-    Enum.map(beams, fn {mod, binary} ->
-      case :code.load_binary(mod, ~c"forge-hot-load", binary) do
-        {:module, ^mod} -> {mod, :ok}
-        {:error, reason} -> {mod, {:error, reason}}
-      end
-    end)
   end
 
   @doc """
@@ -98,8 +77,9 @@ defmodule OpenAgents.Forge.HotLoader do
 
   defp handle_build(%{repo: repo, sha: sha, target_id: target_id, modules: modules} = build) do
     if File.exists?(build.artifact) do
-      with {:ok, verified} <-
-             BuildArtifact.verify_file(build.artifact,
+      with {:ok, artifact_bytes} <- File.read(build.artifact),
+           {:ok, verified} <-
+             BuildArtifact.verify(artifact_bytes,
                digest: Map.get(build, :artifact_digest),
                repo: repo,
                source_sha: sha,
@@ -109,7 +89,7 @@ defmodule OpenAgents.Forge.HotLoader do
            true <-
              is_nil(Map.get(build, :manifest)) or Map.get(build, :manifest) == verified.manifest or
                {:error, :declared_manifest_mismatch} do
-        route_verified(build, verified)
+        route_verified(build, verified, artifact_bytes)
       else
         {:error, reason} -> fail_verified_build(build, reason)
       end
@@ -125,7 +105,7 @@ defmodule OpenAgents.Forge.HotLoader do
     :refused -> :ok
   end
 
-  defp route_verified(build, verified) do
+  defp route_verified(build, verified, artifact_bytes) do
     allowlist = Application.get_env(:openagents, :forge_hot_load_allowlist, @default_allowlist)
     offending = Enum.reject(verified.modules, &allowlisted?(&1, allowlist))
 
@@ -137,7 +117,13 @@ defmodule OpenAgents.Forge.HotLoader do
         route_rolling(build, Enum.map(offending, &"off_allowlist:#{&1}"))
 
       true ->
-        deploy(build, verified)
+        build =
+          build
+          |> Map.put(:artifact_digest, verified.digest)
+          |> Map.put(:build_id, verified.manifest["build_id"])
+          |> Map.put(:manifest, verified.manifest)
+
+        deploy(build, verified, artifact_bytes)
     end
   end
 
@@ -166,32 +152,117 @@ defmodule OpenAgents.Forge.HotLoader do
     broadcast_deploy(repo, sha, "failed")
   end
 
-  defp deploy(%{repo: repo, sha: sha, target_id: target_id, modules: modules}, verified) do
-    case advance(target_id, "deploying") do
-      :ok -> :ok
-      :error -> throw(:refused)
-    end
-
-    # Atom creation happens only here, after the full tar and manifest have
-    # passed every bounded identity and classification check.
-    beams =
-      Enum.map(verified.beams, fn %{module: module, binary: binary} ->
-        {BuildArtifact.module_atom(module), binary}
-      end)
-
-    case canary_load(beams) do
-      :ok ->
-        nodes = fleet_load(beams)
-        advance(target_id, "live", %{"modules" => modules})
-        push_ms = push_to_live_ms(repo, sha)
-        insert_receipt(repo, sha, target_id, modules, nodes, "live", "ok", push_ms)
-        broadcast_deploy(repo, sha, "live")
+  defp deploy(%{target_id: target_id} = build, verified, bytes) do
+    case Targets.begin_deployment(target_id) do
+      {:ok, _target} ->
+        run_transaction(build, verified, bytes)
 
       {:error, reason} ->
-        advance(target_id, "reverted", %{"error" => bounded(reason)})
-        insert_receipt(repo, sha, target_id, modules, [], "reverted", bounded(reason), nil)
-        broadcast_deploy(repo, sha, "reverted")
+        Logger.warning("forge_deployment_refused code=#{OpenAgents.OperationalLog.code(reason)}")
     end
+  rescue
+    error ->
+      fail_started_deployment(build, %{error_code: OpenAgents.OperationalLog.code(error)})
+  catch
+    kind, reason ->
+      fail_started_deployment(build, %{error_code: OpenAgents.OperationalLog.code({kind, reason})})
+  end
+
+  defp run_transaction(build, verified, bytes) do
+    case Deployment.run(build, verified, bytes) do
+      {:ok, session} -> commit_live(build, session)
+      {:error, outcome} -> finish_failed_transaction(build, outcome)
+    end
+  end
+
+  defp commit_live(build, session) do
+    receipt = receipt_attributes(build, session, "ok", push_to_live_ms(build.repo, build.sha))
+
+    case Targets.finish_deployment(
+           build.target_id,
+           "live",
+           live_details(build, session),
+           receipt
+         ) do
+      {:ok, _committed} ->
+        case Deployment.finalize(session) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            Logger.error(
+              "forge_deployment_finalize_failed code=#{OpenAgents.OperationalLog.code(reason)}"
+            )
+        end
+
+        broadcast_deploy(build.repo, build.sha, "live")
+
+      {:error, reason} ->
+        rollback_after_database_failure(build, session, reason)
+    end
+  end
+
+  defp rollback_after_database_failure(build, session, database_reason) do
+    case Deployment.rollback(session) do
+      {:ok, node_results} ->
+        outcome =
+          session
+          |> Map.merge(%{
+            result: "reverted",
+            rollback_verified: true,
+            error_code: OpenAgents.OperationalLog.code(database_reason),
+            node_results: node_results,
+            nodes: node_lines(node_results)
+          })
+
+        finish_failed_transaction(build, outcome)
+
+      {:error, node_results} ->
+        outcome =
+          session
+          |> Map.merge(%{
+            result: "failed",
+            rollback_verified: false,
+            error_code: "database_commit_and_rollback_failed",
+            node_results: node_results,
+            nodes: node_lines(node_results)
+          })
+
+        finish_failed_transaction(build, outcome)
+    end
+  end
+
+  defp finish_failed_transaction(build, outcome) do
+    status = if outcome.result == "reverted", do: "reverted", else: "failed"
+    details = %{"error_code" => outcome.error_code, "modules" => build.modules}
+    receipt = receipt_attributes(build, outcome, bounded(outcome.error_code), nil)
+
+    case Targets.finish_deployment(build.target_id, status, details, receipt) do
+      {:ok, _committed} ->
+        broadcast_deploy(build.repo, build.sha, status)
+
+      {:error, reason} ->
+        Logger.error(
+          "forge_deployment_receipt_failed code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
+    end
+  end
+
+  defp fail_started_deployment(build, outcome) do
+    defaults = %{
+      deployment_id: Ecto.UUID.generate(),
+      artifact_digest: Map.get(build, :artifact_digest),
+      manifest_digest: manifest_digest(Map.get(build, :manifest)),
+      expected_nodes: [],
+      node_results: %{},
+      nodes: [],
+      canary: nil,
+      rollback_verified: false,
+      started_at: DateTime.utc_now(),
+      result: "failed"
+    }
+
+    finish_failed_transaction(build, Map.merge(defaults, outcome))
   end
 
   # Every terminal outcome is announced on the deploys topic — live,
@@ -215,93 +286,6 @@ defmodule OpenAgents.Forge.HotLoader do
       {:error, reason} ->
         raise "artifact verification failed for #{artifact}: #{inspect(reason)}"
     end
-  end
-
-  # ── canary (local node, revert on any failure) ───────────────────────────
-
-  defp canary_load(beams), do: canary_load(beams, [])
-
-  defp canary_load([], loaded) do
-    case smoke_check(loaded) do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        revert(loaded)
-        {:error, reason}
-    end
-  end
-
-  defp canary_load([{mod, binary} | rest], loaded) do
-    # Keep the currently loaded object code so a later failure can revert.
-    previous = :code.get_object_code(mod)
-
-    case :code.load_binary(mod, ~c"forge-hot-load", binary) do
-      {:module, ^mod} ->
-        canary_load(rest, [{mod, previous} | loaded])
-
-      {:error, reason} ->
-        revert(loaded)
-        {:error, "canary load of #{inspect(mod)} failed: #{inspect(reason)}"}
-    end
-  end
-
-  defp smoke_check(loaded) do
-    Enum.reduce_while(loaded, :ok, fn {mod, _previous}, :ok ->
-      cond do
-        not Code.ensure_loaded?(mod) ->
-          {:halt, {:error, "smoke check: #{inspect(mod)} not loaded"}}
-
-        function_exported?(mod, :revision, 0) and not revision_binary?(mod) ->
-          {:halt, {:error, "smoke check: #{inspect(mod)}.revision/0 did not return a binary"}}
-
-        true ->
-          {:cont, :ok}
-      end
-    end)
-  end
-
-  defp revision_binary?(mod) do
-    is_binary(mod.revision())
-  rescue
-    _ -> false
-  end
-
-  defp revert(loaded) do
-    Enum.each(loaded, fn
-      {mod, {_mod, binary, file}} ->
-        :code.load_binary(mod, file, binary)
-
-      {mod, :error} ->
-        # Was not loaded before this deploy: remove it entirely.
-        :code.purge(mod)
-        :code.delete(mod)
-    end)
-  end
-
-  # ── fleet ────────────────────────────────────────────────────────────────
-
-  defp fleet_load(beams) do
-    remote =
-      case Node.list() do
-        [] ->
-          []
-
-        nodes ->
-          nodes
-          |> Enum.zip(:erpc.multicall(nodes, __MODULE__, :load_beams, [beams], @fleet_timeout_ms))
-          |> Enum.map(fn
-            {node, {:ok, results}} ->
-              if Enum.all?(results, &match?({_mod, :ok}, &1)),
-                do: "#{node}=ok",
-                else: "#{node}=error"
-
-            {node, _failure} ->
-              "#{node}=error"
-          end)
-      end
-
-    ["#{Node.self()}=ok" | remote]
   end
 
   # ── receipts ─────────────────────────────────────────────────────────────
@@ -345,7 +329,54 @@ defmodule OpenAgents.Forge.HotLoader do
       :error
   end
 
-  defp advance(target_id, status, details \\ %{}) do
+  defp receipt_attributes(build, outcome, canary, push_ms) do
+    %{
+      deployment_id: outcome.deployment_id,
+      artifact_digest: outcome.artifact_digest,
+      manifest_digest: outcome.manifest_digest,
+      modules: build.modules,
+      nodes: outcome.nodes,
+      expected_nodes: outcome.expected_nodes,
+      node_results: outcome.node_results,
+      canary: canary || outcome.canary,
+      error_code: outcome.error_code,
+      rollback_verified: outcome.rollback_verified,
+      started_at: outcome.started_at,
+      push_to_live_ms: push_ms
+    }
+  end
+
+  defp live_details(build, session) do
+    %{
+      "artifact" => Map.get(build, :artifact) |> relative_artifact(),
+      "artifact_digest" => session.artifact_digest,
+      "build_id" => build.build_id,
+      "deployment_id" => session.deployment_id,
+      "manifest" => build.manifest,
+      "manifest_digest" => session.manifest_digest,
+      "modules" => build.modules,
+      "nodes" => length(session.expected_nodes)
+    }
+  end
+
+  defp relative_artifact(nil), do: nil
+
+  defp relative_artifact(path) do
+    Path.relative_to(path, OpenAgents.Forge.Repos.data_dir())
+  end
+
+  defp manifest_digest(nil), do: nil
+
+  defp manifest_digest(manifest) do
+    manifest
+    |> OpenAgents.Forge.BuildProtocol.canonical_json()
+    |> BuildArtifact.digest()
+  end
+
+  defp node_lines(results),
+    do: results |> Enum.map(fn {node, result} -> "#{node}=#{result}" end) |> Enum.sort()
+
+  defp advance(target_id, status, details) do
     case Targets.advance(target_id, status, details) do
       {:ok, _target} ->
         :ok

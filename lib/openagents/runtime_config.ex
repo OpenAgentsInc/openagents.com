@@ -449,6 +449,10 @@ defmodule OpenAgents.RuntimeConfig do
     expected_fleet_size = Map.get(settings, :forge_expected_fleet_size)
     artifact_store = Map.get(settings, :forge_artifact_store)
     build_executor = Map.get(settings, :forge_build_executor)
+    deploy_timeout_ms = Map.get(settings, :forge_deploy_timeout_ms)
+    deploy_token_ttl_ms = Map.get(settings, :forge_deploy_token_ttl_ms)
+    boot_retry_min_ms = Map.get(settings, :forge_boot_retry_min_ms)
+    boot_retry_max_ms = Map.get(settings, :forge_boot_retry_max_ms)
     operator_token = Map.get(settings, :forge_operator_token)
     mirror_urls = Map.get(settings, :forge_mirror_urls)
     durable_required? = environment in [:staging, :production] and features.forge
@@ -502,6 +506,27 @@ defmodule OpenAgents.RuntimeConfig do
              is_atom(build_executor),
              :forge_build_executor,
              "must be a module"
+           ),
+         :ok <-
+           ensure(
+             is_integer(deploy_timeout_ms) and deploy_timeout_ms in 1_000..120_000,
+             :forge_deploy_timeout_ms,
+             "must be between 1 and 120 seconds"
+           ),
+         :ok <-
+           ensure(
+             is_integer(deploy_token_ttl_ms) and deploy_token_ttl_ms in 30_000..1_800_000 and
+               deploy_token_ttl_ms >= deploy_timeout_ms * 8,
+             :forge_deploy_token_ttl_ms,
+             "must cover eight deployment phase timeouts"
+           ),
+         :ok <-
+           ensure(
+             is_integer(boot_retry_min_ms) and is_integer(boot_retry_max_ms) and
+               boot_retry_min_ms in 100..60_000 and boot_retry_max_ms in 1_000..300_000 and
+               boot_retry_min_ms <= boot_retry_max_ms,
+             :forge_boot_retry_bounds,
+             "must define an ordered bounded backoff"
            ),
          :ok <-
            ensure(

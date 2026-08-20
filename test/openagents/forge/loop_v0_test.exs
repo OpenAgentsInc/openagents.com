@@ -8,7 +8,7 @@ defmodule OpenAgents.Forge.LoopV0Test do
   """
 
   use OpenAgents.DataCase, async: false
-  alias OpenAgents.Forge.{FakeBuildExecutor, Targets}
+  alias OpenAgents.Forge.{DeploymentNode, FakeBuildExecutor, Targets}
 
   defmodule TestPipeline do
     @moduledoc false
@@ -33,6 +33,14 @@ defmodule OpenAgents.Forge.LoopV0Test do
       allowlist: Application.get_env(:openagents, :forge_hot_load_allowlist)
     }
 
+    previous_node_state = :sys.get_state(DeploymentNode)
+    previous_persisted = :persistent_term.get({DeploymentNode, :state}, :missing)
+    :persistent_term.erase({DeploymentNode, :state})
+
+    :sys.replace_state(DeploymentNode, fn state ->
+      %{state | transactions: %{}, live: nil, divergence: nil, faults: %{}, notify: nil}
+    end)
+
     Application.put_env(:openagents, :forge_data_dir, Path.join(base, "data"))
     Application.put_env(:openagents, :forge_wal_dir, Path.join(base, "wal"))
     Application.put_env(:openagents, :forge_build_executor, FakeBuildExecutor)
@@ -47,6 +55,8 @@ defmodule OpenAgents.Forge.LoopV0Test do
       restore(:forge_wal_dir, previous.wal)
       restore(:forge_build_executor, previous.executor)
       restore(:forge_hot_load_allowlist, previous.allowlist)
+      :sys.replace_state(DeploymentNode, fn _state -> previous_node_state end)
+      restore_persistent(previous_persisted)
       File.rm_rf(base)
     end)
 
@@ -58,6 +68,11 @@ defmodule OpenAgents.Forge.LoopV0Test do
   # an absent previous value must be restored by deleting the key.
   defp restore(key, nil), do: Application.delete_env(:openagents, key)
   defp restore(key, value), do: Application.put_env(:openagents, key, value)
+
+  defp restore_persistent(:missing), do: :persistent_term.erase({DeploymentNode, :state})
+
+  defp restore_persistent(state),
+    do: :persistent_term.put({DeploymentNode, :state}, state)
 
   defp purge!(mod) do
     :code.purge(mod)
@@ -120,6 +135,7 @@ defmodule OpenAgents.Forge.LoopV0Test do
 
     # The module is actually live in this runtime.
     module = Module.concat([module_name])
+    on_exit(fn -> purge!(module) end)
     assert module.revision() == "loop-v0"
 
     # Target walked the full lifecycle.

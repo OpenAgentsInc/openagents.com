@@ -37,6 +37,10 @@ defmodule OpenAgents.Application do
     children = [
       OpenAgentsWeb.Telemetry,
       OpenAgents.Repo,
+      # Deployment identity and boot convergence must settle before cluster
+      # discovery or the endpoint can make this node externally reachable.
+      OpenAgents.Forge.DeploymentNode,
+      OpenAgents.Forge.BootConverge,
       {DNSCluster, query: Application.get_env(:openagents, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: OpenAgents.PubSub},
       OpenAgents.RuntimeSupervisor,

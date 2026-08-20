@@ -62,9 +62,16 @@ defmodule OpenAgents.NetworkStatus do
     # not report itself healthy). Where Ra is off (single-node Cloud Run) the
     # expected size is honestly 1.
     expected =
-      if Application.get_env(:openagents, :ra_enabled, false),
-        do: Application.get_env(:openagents, :ra_expected_size, 3),
-        else: 1
+      cond do
+        Application.get_env(:openagents, :ra_enabled, false) ->
+          Application.get_env(:openagents, :ra_expected_size, 3)
+
+        Application.get_env(:openagents, :forge_deploy_lane_enabled, false) ->
+          Application.get_env(:openagents, :forge_expected_fleet_size, 1)
+
+        true ->
+          1
+      end
 
     quorum = safely(fn -> OpenAgents.Cluster.quorum?(max(expected, 1)) end) || false
 
@@ -89,12 +96,14 @@ defmodule OpenAgents.NetworkStatus do
         Map.put(report, "label", "node #{index}")
       end)
 
+    nodes_ready? = Enum.all?(nodes, &(&1["reachable"] == true and &1["ready"] == true))
+
     %{
       "schema" => @schema,
       # Legacy /status compatibility keys — pollers migrating from the old
       # payload find them here unchanged.
-      "status" => if(quorum or length(beam_nodes) == 1, do: "ok", else: "degraded"),
-      "revision" => safely(fn -> OpenAgents.BuildInfo.revision() end),
+      "status" => if(quorum and nodes_ready?, do: "ok", else: "degraded"),
+      "revision" => safely(fn -> OpenAgents.Forge.DeploymentNode.health()["revision"] end),
       "cluster" => %{
         "distributed" => Map.get(cluster, "distributed", false),
         "beam" => length(beam_nodes),
@@ -201,14 +210,29 @@ defmodule OpenAgents.NetworkStatus do
   @doc false
   def local_report do
     {wall_ms, _} = :erlang.statistics(:wall_clock)
+    boot = OpenAgents.Forge.BootConverge.state()
+    boot_ready? = OpenAgents.Forge.BootConverge.ready?()
+    deployment = OpenAgents.Forge.DeploymentNode.health()
 
     %{
       "reachable" => true,
+      "ready" => boot_ready? and deployment["ready"] == true,
       "release" => safely(fn -> permanent_release_version() end),
-      "revision" => safely(fn -> OpenAgents.BuildInfo.revision() end),
+      "revision" => deployment["revision"] || boot["sha"] || OpenAgents.BuildInfo.revision(),
       "hot_loaded_at" => safely(fn -> OpenAgents.BuildInfo.loaded_at() end),
       "marker" => safely(fn -> OpenAgents.Cluster.relup_marker() end),
-      "boot" => safely(fn -> OpenAgents.Forge.BootConverge.state()["state"] end),
+      "boot" => %{
+        "state" => boot["state"],
+        "ready" => boot_ready?,
+        "reason" => boot["reason"],
+        "attempts" => boot["attempts"],
+        "retry_in_ms" => boot["retry_in_ms"]
+      },
+      "deployment" => %{
+        "ready" => deployment["participant_ready"],
+        "phase" => deployment["phase"],
+        "reason" => deployment["reason"]
+      },
       "uptime_seconds" => div(wall_ms, 1_000),
       "beam_seen" => 1 + length(Node.list()),
       "raft_seen" => safely(fn -> length(OpenAgents.Cluster.Ra.members()) end) || 0

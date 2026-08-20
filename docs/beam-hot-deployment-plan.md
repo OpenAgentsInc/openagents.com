@@ -220,8 +220,9 @@ The build coordinator processes one target at a time. Every node may hear the pr
 
 Implementation status: Gate 9 completed this phase on 2026-08-20. See the
 [forge build lane runbook](operations/forge-build-lane.md) for the deployed
-contract. Fleet application remains disabled pending the transactional work in
-Phase 5 and Gate 10.
+contract. Gate 10 completed transactional fleet application, but the lane
+remains disabled until isolated distributed staging and the fallback classes
+are ready.
 
 ## Phase 5: Add direct BEAM classification and local canary loading
 
@@ -261,6 +262,11 @@ Store deployment tokens in bounded node-local state with expiration. A token mus
 
 **Exit criteria:** multi-node tests prove all-node success, remote timeout, remote load failure, exact fleet rollback, duplicate event handling, node membership changes during deployment, and refusal to mark a divergent fleet live.
 
+Implementation status: Gate 10 completed this phase on 2026-08-20. The
+[transactional deployment runbook](operations/forge-transactional-deployment.md)
+documents the implemented node protocol, atomic receipt boundary, readiness
+behavior, and three-node proofs.
+
 ## Phase 7: Converge replacement and restarted nodes
 
 Add `OpenAgents.Forge.BootConverge` as a synchronous boot step after `OpenAgents.Repo` starts and before `DNSCluster`, `OpenAgents.PubSub`, and `OpenAgentsWeb.Endpoint` start.
@@ -269,12 +275,20 @@ Add `OpenAgents.Forge.BootConverge` as a synchronous boot step after `OpenAgents
 2. If the target has a direct BEAM artifact, load it from the local cache or fetch it from the durable artifact store.
 3. Verify the digest, allowlist, and module manifest before loading.
 4. Record the outcome in `:persistent_term` for health and status reports.
-5. Treat a live target with an empty artifact as converged.
+5. Treat a live target with no artifact as converged only when the image
+   revision exactly matches that target.
 6. Start on image code if the target or artifact cannot load, but keep readiness false while the node differs from the live target.
 7. Retry convergence with bounded backoff so an artifact-store interruption does not require another restart.
 8. Prune old local artifacts while retaining the current target and immediate rollback artifacts. Never prune the durable copy or receipts.
 
 **Exit criteria:** tests cover local convergence, durable fetch, no target, non-live target, empty artifact, missing artifact, off-allowlist content, corrupt digest, and readiness behavior.
+
+Implementation status: Gate 10 completed readiness-bound convergence on
+2026-08-20. It starts synchronously before discovery and the endpoint, fetches
+from durable storage on a cold cache, retains the immediate predecessor, prunes
+older digest-addressed cache entries, periodically checks the durable live
+target, retries with bounded backoff, and keeps divergent code out of
+readiness.
 
 ## Phase 8: Add the production relup lane
 

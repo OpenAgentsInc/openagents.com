@@ -284,6 +284,11 @@ if config_env() == :prod do
       parse_integer.("OPENAGENTS_FORGE_BUILD_TIMEOUT_MS", 30_000..1_800_000),
     forge_build_output_retention_ms:
       parse_integer.("OPENAGENTS_FORGE_BUILD_OUTPUT_RETENTION_MS", 86_400_000..2_592_000_000),
+    forge_deploy_timeout_ms: parse_integer.("OPENAGENTS_FORGE_DEPLOY_TIMEOUT_MS", 1_000..120_000),
+    forge_deploy_token_ttl_ms:
+      parse_integer.("OPENAGENTS_FORGE_DEPLOY_TOKEN_TTL_MS", 30_000..1_800_000),
+    forge_boot_retry_min_ms: parse_integer.("OPENAGENTS_FORGE_BOOT_RETRY_MIN_MS", 100..60_000),
+    forge_boot_retry_max_ms: parse_integer.("OPENAGENTS_FORGE_BOOT_RETRY_MAX_MS", 1_000..300_000),
     forge_artifact_store: forge_artifact_store,
     forge_build_executor: forge_build_executor,
     forge_expected_fleet_size: parse_integer.("OPENAGENTS_FORGE_EXPECTED_FLEET_SIZE", 1..100),

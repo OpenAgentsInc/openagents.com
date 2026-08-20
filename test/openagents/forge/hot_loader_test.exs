@@ -4,6 +4,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
   alias OpenAgents.Forge.ArtifactFixtures
   alias OpenAgents.Forge.DeployReceipt
+  alias OpenAgents.Forge.DeploymentNode
   alias OpenAgents.Forge.HotLoader
   alias OpenAgents.Forge.PushReceipt
   alias OpenAgents.Forge.Target
@@ -15,11 +16,32 @@ defmodule OpenAgents.Forge.HotLoaderTest do
   # async: false tests (start_owner!(shared: true)), so the HotLoader
   # GenServer shares the test connection without an explicit mode call.
   setup do
+    base = Path.join(System.tmp_dir!(), "hot-loader-#{System.unique_integer([:positive])}")
+    previous_data = Application.get_env(:openagents, :forge_data_dir)
+    previous_node_state = :sys.get_state(DeploymentNode)
+    previous_persisted = :persistent_term.get({DeploymentNode, :state}, :missing)
+    Application.put_env(:openagents, :forge_data_dir, base)
+    :persistent_term.erase({DeploymentNode, :state})
+
+    :sys.replace_state(DeploymentNode, fn state ->
+      %{state | transactions: %{}, live: nil, divergence: nil, faults: %{}, notify: nil}
+    end)
+
     pid =
       case Process.whereis(HotLoader) do
         nil -> start_supervised!(HotLoader)
         pid -> pid
       end
+
+    on_exit(fn ->
+      if previous_data,
+        do: Application.put_env(:openagents, :forge_data_dir, previous_data),
+        else: Application.delete_env(:openagents, :forge_data_dir)
+
+      File.rm_rf(base)
+      :sys.replace_state(DeploymentNode, fn _state -> previous_node_state end)
+      restore_persistent(previous_persisted)
+    end)
 
     %{loader: pid}
   end
@@ -48,6 +70,11 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     :code.delete(mod)
     :code.purge(mod)
   end
+
+  defp restore_persistent(:missing), do: :persistent_term.erase({DeploymentNode, :state})
+
+  defp restore_persistent(state),
+    do: :persistent_term.put({DeploymentNode, :state}, state)
 
   defp artifact(entries, sha) do
     built = ArtifactFixtures.create!("openagents.com", sha, entries)
@@ -122,18 +149,22 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     broadcast_build_ready(loader, build_payload(target, sha, artifact))
 
+    receipt = deploy_receipt(sha)
     assert Code.ensure_loaded?(mod)
     assert mod.revision() == revision
 
     assert Repo.get!(Target, target.id).status == "live"
 
-    receipt = deploy_receipt(sha)
     assert receipt.result == "live"
     assert receipt.repo == "openagents.com"
     assert receipt.target_id == target.id
     assert receipt.modules == [name]
     assert receipt.canary == "ok"
-    assert receipt.nodes == ["#{Node.self()}=ok"]
+    assert receipt.nodes == ["#{Node.self()}=committed"]
+    assert receipt.expected_nodes == [to_string(Node.self())]
+    assert receipt.rollback_verified == nil
+    assert is_binary(receipt.artifact_digest)
+    assert is_binary(receipt.manifest_digest)
 
     assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "live"}}
   end

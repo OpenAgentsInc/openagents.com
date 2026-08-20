@@ -35,8 +35,7 @@ defmodule OpenAgents.RuntimeSupervisor do
         OpenAgents.Leaderboard.Server,
         {Task.Supervisor, name: OpenAgents.ProviderTaskSupervisor},
         {Task.Supervisor, name: OpenAgents.ToolTaskSupervisor},
-        {Task.Supervisor, name: OpenAgents.ShadowProgramTaskSupervisor},
-        OpenAgents.Forge.BootConverge
+        {Task.Supervisor, name: OpenAgents.ShadowProgramTaskSupervisor}
       ] ++
         maybe_forge() ++
         maybe_semantic_worker() ++

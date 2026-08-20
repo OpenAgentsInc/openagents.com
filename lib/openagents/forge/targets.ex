@@ -14,6 +14,7 @@ defmodule OpenAgents.Forge.Targets do
   import Ecto.Query
 
   alias OpenAgents.Forge.Target
+  alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Repo
 
   @statuses ~w(promoted building built deploying live failed reverted needs_rolling_replace)
@@ -86,6 +87,38 @@ defmodule OpenAgents.Forge.Targets do
     |> Repo.one()
   end
 
+  @doc "Newest immutable live targets for `repo`, bounded and newest first."
+  def live_history(repo, limit \\ 2) do
+    Target
+    |> where([t], t.repo == ^repo and t.status == "live")
+    |> order_by([t], desc: t.updated_at, desc: t.inserted_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  @doc "Resolve the durable authority for one committed node token."
+  def deployment_authority(target_id, deployment_id, artifact_digest) do
+    case Repo.get(Target, target_id) do
+      %Target{
+        status: "live",
+        details: %{
+          "deployment_id" => ^deployment_id,
+          "artifact_digest" => ^artifact_digest
+        }
+      } ->
+        :candidate_live
+
+      %Target{status: "deploying"} ->
+        :pending
+
+      %Target{} ->
+        :candidate_not_live
+
+      nil ->
+        :candidate_not_live
+    end
+  end
+
   @doc "Recent targets for a repo, newest first, bounded."
   def recent(repo, limit \\ 10) do
     Target
@@ -133,6 +166,82 @@ defmodule OpenAgents.Forge.Targets do
     with {:ok, target} <- result do
       broadcast_status(target)
       {:ok, target}
+    end
+  end
+
+  @doc "Fence deployment ownership to the newest promoted target."
+  def begin_deployment(target_id) do
+    result =
+      :global.trans({{:forge_target_deploy, target_id}, self()}, fn ->
+        Repo.transaction(fn ->
+          target = Repo.get(Target, target_id, lock: "FOR UPDATE") || Repo.rollback(:not_found)
+
+          current_id =
+            Target
+            |> where([t], t.repo == ^target.repo)
+            |> order_by([t], desc: t.inserted_at)
+            |> limit(1)
+            |> select([t], t.id)
+            |> Repo.one()
+
+          if current_id != target.id, do: Repo.rollback(:superseded_target)
+
+          unless target.status == "built" do
+            Repo.rollback({:invalid_transition, target.status, "deploying"})
+          end
+
+          target
+          |> Target.status_changeset("deploying", %{})
+          |> Repo.update!()
+        end)
+      end)
+
+    with {:ok, target} <- result do
+      broadcast_status(target)
+      {:ok, target}
+    end
+  end
+
+  @doc "Atomically write a terminal deployment receipt and target status."
+  def finish_deployment(target_id, status, details, receipt_attrs)
+      when status in ~w(live reverted failed) and is_map(details) and is_map(receipt_attrs) do
+    result =
+      :global.trans({{:forge_target_deploy, target_id}, self()}, fn ->
+        Repo.transaction(fn ->
+          target = Repo.get(Target, target_id, lock: "FOR UPDATE") || Repo.rollback(:not_found)
+
+          unless target.status == "deploying" do
+            Repo.rollback({:invalid_transition, target.status, status})
+          end
+
+          target =
+            target
+            |> Target.status_changeset(status, bounded_details(details))
+            |> Repo.update!()
+
+          receipt_attrs =
+            receipt_attrs
+            |> Map.put(:target_id, target.id)
+            |> Map.put(:repo, target.repo)
+            |> Map.put(:sha, target.sha)
+            |> Map.put(:result, status)
+
+          receipt =
+            %DeployReceipt{}
+            |> DeployReceipt.changeset(receipt_attrs)
+            |> Repo.insert()
+            |> case do
+              {:ok, receipt} -> receipt
+              {:error, changeset} -> Repo.rollback({:invalid_receipt, changeset})
+            end
+
+          %{target: target, receipt: receipt}
+        end)
+      end)
+
+    with {:ok, %{target: target} = committed} <- result do
+      broadcast_status(target)
+      {:ok, committed}
     end
   end
 

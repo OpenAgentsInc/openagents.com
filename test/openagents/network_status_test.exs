@@ -23,6 +23,13 @@ defmodule OpenAgents.NetworkStatusTest do
     assert [first | _rest] = projection["nodes"]
     assert first["label"] =~ ~r/^node \d+$/
     assert first["reachable"] == true
+    assert is_boolean(first["ready"])
+    assert Map.keys(first["boot"]) == ["attempts", "ready", "reason", "retry_in_ms", "state"]
+    refute inspect(first["boot"]) =~ ~r/[0-9a-f]{64}/
+
+    assert %{"phase" => _phase, "ready" => _ready, "reason" => _reason} =
+             first["deployment"]
+
     assert is_integer(first["uptime_seconds"])
 
     # Counts only, never content.
@@ -44,6 +51,22 @@ defmodule OpenAgents.NetworkStatusTest do
 
     refreshed = NetworkStatus.projection(refresh: true)
     assert refreshed["schema"] == first["schema"]
+  end
+
+  test "a single forge node cannot report configured fleet quorum" do
+    previous_lane = Application.get_env(:openagents, :forge_deploy_lane_enabled)
+    previous_size = Application.get_env(:openagents, :forge_expected_fleet_size)
+    Application.put_env(:openagents, :forge_deploy_lane_enabled, true)
+    Application.put_env(:openagents, :forge_expected_fleet_size, 3)
+
+    on_exit(fn ->
+      restore_env(:forge_deploy_lane_enabled, previous_lane)
+      restore_env(:forge_expected_fleet_size, previous_size)
+    end)
+
+    projection = NetworkStatus.projection(refresh: true)
+    refute projection["cluster"]["quorum"]
+    assert projection["status"] == "degraded"
   end
 
   describe "forge section (#126)" do
@@ -143,4 +166,7 @@ defmodule OpenAgents.NetworkStatusTest do
       assert loop["median_ms"] == 20_000
     end
   end
+
+  defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
+  defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
 end

@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–5 and 7–9 complete, Gate 6 application controls locally verified
+Status: In progress; Gates 0–5 and 7–10 complete, Gate 6 application controls locally verified
 
 ## Outcome
 
@@ -893,7 +893,9 @@ Completed locally on 2026-08-20:
   disables terminal prompting.
 - Added deterministic BEAM normalization and canonical artifact manifests with
   source, baseline, Elixir, OTP, ERTS, application version/spec, and dependency
-  lock identities plus complete added, changed, and deleted module sets.
+  lock identities plus complete added, changed, and deleted module sets. Fixed
+  tar ownership and time metadata so identical inputs remain byte-for-byte
+  reproducible across wall-clock boundaries.
 - Addressed artifacts by the full tar SHA-256 in both the local cache and
   durable WAL store. A target cannot become `built` until independent
   verification, local publication, durable storage, and receipt completion all
@@ -921,10 +923,12 @@ Completed locally on 2026-08-20:
   classification, verification, recovery, retention, and staging proof in the
   [forge build lane runbook](operations/forge-build-lane.md).
 
-Gate 9 is complete. Keep the staging deploy lane disabled until Gate 10 makes
-fleet application transactional. Gates 12–15 must still exercise the real
-builder image against the exact staging SHA and retain the image, build,
-artifact, and output-proof identities; local success is not staging admission.
+Gate 9 is complete, and Gate 10 now provides transactional fleet application.
+Keep the staging deploy lane disabled until Gate 11 adds the fallback lanes and
+Gate 12 creates the isolated distributed staging environment. Gates 12–15 must
+exercise the real builder image against the exact staging SHA and retain the
+image, build, artifact, and output-proof identities; local success is not
+staging admission.
 
 ## Gate 10: Make fleet deployment transactional
 
@@ -959,6 +963,81 @@ Make boot convergence part of readiness:
 **Exit criteria:** Three-node tests prove consistent success, exact rollback,
 timeout behavior, node replacement, cold-cache convergence, and refusal to
 serve divergent code.
+
+### Gate 10 implementation status
+
+Completed locally on 2026-08-20:
+
+- Replaced the one-way remote load with an explicit fleet transaction that
+  snapshots the exact healthy member set, requires the configured fleet size,
+  selects one canary, and rechecks membership between every mutating phase.
+- Added a supervised participant on every node. It independently verifies the
+  artifact, canonical manifest, source, build, runtime toolchain,
+  classification, and allowlist before creating module atoms. It caches the
+  digest-addressed bytes and captures exact prior object code before returning
+  a random 256-bit token.
+- Bound each token to one deployment, target, build, source SHA, artifact,
+  manifest, candidate, prior object set, and expected fleet. Tokens expire and
+  admit at most four prepared transactions per node. Expired uncommitted tokens
+  restore immediately. Expired committed tokens finalize only when the durable
+  target and artifact identities match, defer while the database commit remains
+  in progress, and restore after a durable refusal.
+- Persisted the bounded participant fence across supervised process restarts.
+  A participant restart therefore recovers the token, exact prior object code,
+  candidate identity, and readiness fence instead of exposing partially
+  applied code.
+- Kept every participant out of external readiness from prepare through fleet
+  commit. Candidate verification checks loaded BEAM MD5 identities,
+  application version, candidate revision, and node-level deployment
+  readiness before commit.
+- Made all errors and timeouts trigger rollback on every prepared node. A node
+  reloads or removes every affected module and verifies the exact restored
+  BEAM identity. Only a fully verified fleet restoration records `reverted`;
+  an unreachable or divergent node records `failed` and remains out of
+  readiness.
+- Added a database transaction that advances the target to `live` only in the
+  same commit that inserts its terminal deployment receipt. The receipt binds
+  deployment, artifact, manifest, expected membership, bounded per-node
+  outcomes, rollback verification, and timing. PostgreSQL rejects receipt
+  updates and deletes.
+- Rehearsed the receipt migration forward, backward, and forward again on a
+  disposable populated database. The migration backfilled legacy rows,
+  preserved them across rollback, and recreated the hardened schema without
+  data loss.
+- Fenced deployment ownership to the newest promotion, so a late build for a
+  superseded target cannot change fleet code.
+- Moved the deployment participant and synchronous boot convergence after
+  PostgreSQL but before cluster discovery, PubSub, runtime workers, and the
+  endpoint. A cold node verifies its local artifact or fetches the identical
+  durable blob, retains the current and immediate rollback artifacts, prunes
+  older digest-addressed cache entries, and retries failures with capped
+  exponential backoff.
+- Added durable live-target checks to readiness and the periodic convergence
+  cycle. A late-joining or replaced node leaves readiness while a target is
+  deploying or as soon as a newer live target exists, then converges before it
+  serves that revision.
+- Made `/healthz` return `503` while boot code or a deployment participant is
+  divergent. Added a bounded, content-free boot and deployment projection to
+  `/status`, and made its quorum calculation honor the configured forge fleet
+  size even when Ra is disabled.
+- Added direct participant tests for token fencing, exact rollback, expiry,
+  commit authority, and supervised restart recovery; database tests for
+  duplicate delivery, superseded targets, atomic live completion, and receipt
+  immutability; boot tests for cold-cache fetch, cache retention, stale-target
+  refusal, and degraded retry; and real three-node tests for success, remote
+  failure with exact rollback, rollback refusal, timeout, and membership loss.
+- Passed 107 default forge tests and five real three-node deployment tests.
+  The full precommit gate passed 17 browser tests and 1,318 default Elixir
+  tests, with 14 distributed tests excluded from the default lane. The pinned
+  Elixir 1.20.3 and OTP 29.0.5 `forge-builder` target also built the production
+  release without application warnings.
+- Documented the operator contract in the
+  [transactional deployment runbook](operations/forge-transactional-deployment.md).
+
+Gate 10 is complete locally. Keep the deploy and boot-convergence features
+disabled until Gate 11 supplies relup and rolling-replacement fallbacks and
+Gate 12 provides an isolated distributed staging lane. No staging or
+production environment was changed.
 
 ## Gate 11: Complete relup and rolling replacement
 
@@ -1381,8 +1460,8 @@ each handoff.
 - [x] Voice recording starts only after generation admission.
 - [x] Build requests are structured, unique, bounded, and non-executable.
 - [x] Artifacts are immutable, digested, manifest-checked, and durably stored.
-- [ ] Fleet deployment is transactional and rolls back every affected node.
-- [ ] Boot convergence controls readiness.
+- [x] Fleet deployment is transactional and rolls back every affected node.
+- [x] Boot convergence controls readiness.
 - [ ] Relup and rolling replacement pass their staging drills.
 - [ ] Owned local gates produce exact-SHA receipts.
 - [ ] Web and distributed staging are isolated from production.

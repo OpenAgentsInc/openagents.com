@@ -9,6 +9,7 @@ defmodule OpenAgents.Forge.BootConvergeTest do
   use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.ArtifactFixtures
   alias OpenAgents.Forge.BootConverge
+  alias OpenAgents.Forge.DeploymentNode
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target
   alias OpenAgents.Repo
@@ -22,6 +23,14 @@ defmodule OpenAgents.Forge.BootConvergeTest do
         {key, Application.get_env(:openagents, key)}
       end
 
+    previous_node_state = :sys.get_state(DeploymentNode)
+    previous_persisted = :persistent_term.get({DeploymentNode, :state}, :missing)
+    :persistent_term.erase({DeploymentNode, :state})
+
+    :sys.replace_state(DeploymentNode, fn state ->
+      %{state | transactions: %{}, live: nil, divergence: nil, faults: %{}, notify: nil}
+    end)
+
     Application.put_env(:openagents, :forge_data_dir, Path.join(base, "data"))
     Application.put_env(:openagents, :forge_wal_dir, Path.join(base, "wal"))
 
@@ -34,6 +43,8 @@ defmodule OpenAgents.Forge.BootConvergeTest do
 
       File.rm_rf(base)
       :persistent_term.erase({BootConverge, :state})
+      :sys.replace_state(DeploymentNode, fn _state -> previous_node_state end)
+      restore_persistent(previous_persisted)
     end)
 
     %{base: base}
@@ -78,6 +89,11 @@ defmodule OpenAgents.Forge.BootConvergeTest do
         "artifact" => "beams/#{built.digest}.tar",
         "artifact_digest" => built.digest,
         "build_id" => built.build_id,
+        "manifest" => built.manifest,
+        "manifest_digest" =>
+          built.manifest
+          |> OpenAgents.Forge.BuildProtocol.canonical_json()
+          |> OpenAgents.Forge.BuildArtifact.digest(),
         "modules" => Enum.map(built.beams, & &1.module)
       }
     }
@@ -102,19 +118,20 @@ defmodule OpenAgents.Forge.BootConvergeTest do
 
   test "boots on image code, honestly, for every degraded path" do
     # No target at all.
-    assert %{"state" => "image", "reason" => "no_target"} = BootConverge.converge(@repo)
+    assert %{"state" => "image", "reason" => "no_live_target", "ready" => true} =
+             BootConverge.converge(@repo)
 
     # A target that is not live.
     insert_target!("failed", %{})
 
-    assert %{"state" => "image", "reason" => "target_not_live:failed"} =
+    assert %{"state" => "image", "reason" => "no_live_target", "ready" => true} =
              BootConverge.converge(@repo)
 
     # A live target whose artifact this node does not have (replaced node).
     {missing_module, missing_binary} = scratch_beam(OpenAgents.Scratch.BootConvergeMissing)
     missing = artifact(missing_module, missing_binary)
     insert_target!("live", missing.details)
-    assert %{"state" => "image", "reason" => "artifact_missing"} = BootConverge.converge(@repo)
+    assert %{"state" => "degraded", "ready" => false} = BootConverge.converge(@repo)
 
     # A live target with an off-allowlist module in the tar.
     {module, binary} = scratch_beam(OpenAgents.NotAllowed.BootConvergeOffLimits)
@@ -123,7 +140,7 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     File.write!(artifact_abs, off_limit.built.bytes)
     insert_target!("live", off_limit.details)
 
-    assert %{"state" => "image", "reason" => "off_allowlist:" <> _rest} =
+    assert %{"state" => "degraded", "ready" => false} =
              BootConverge.converge(@repo)
 
     refute Code.ensure_loaded?(OpenAgents.NotAllowed.BootConvergeOffLimits)
@@ -150,8 +167,126 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     :code.delete(module)
   end
 
-  test "a live no-op target (no artifact recorded) counts as converged" do
-    insert_target!("live", %{})
-    assert %{"state" => "converged", "modules" => 0} = BootConverge.converge(@repo)
+  test "convergence retains current and predecessor artifacts and prunes older cache entries" do
+    {predecessor_module, predecessor_binary} =
+      scratch_beam(OpenAgents.Scratch.BootConvergePredecessor)
+
+    predecessor = artifact(predecessor_module, predecessor_binary)
+
+    File.write!(
+      Path.join(Repos.data_dir(), predecessor.details["artifact"]),
+      predecessor.built.bytes
+    )
+
+    insert_target!("live", predecessor.details)
+
+    {current_module, current_binary} = scratch_beam(OpenAgents.Scratch.BootConvergeCurrent)
+    current = artifact(current_module, current_binary)
+    File.write!(Path.join(Repos.data_dir(), current.details["artifact"]), current.built.bytes)
+    insert_target!("live", current.details)
+
+    orphan_digest = String.duplicate("a", 64)
+    orphan_path = Path.join([Repos.data_dir(), "beams", orphan_digest <> ".tar"])
+    File.write!(orphan_path, "obsolete-cache-entry")
+
+    assert %{"state" => "converged"} = BootConverge.converge(@repo)
+    assert File.exists?(Path.join(Repos.data_dir(), current.details["artifact"]))
+    assert File.exists?(Path.join(Repos.data_dir(), predecessor.details["artifact"]))
+    refute File.exists?(orphan_path)
+
+    :code.purge(current_module)
+    :code.delete(current_module)
   end
+
+  test "a live target without artifact identity stays out of readiness" do
+    insert_target!("live", %{})
+
+    assert %{
+             "state" => "degraded",
+             "ready" => false,
+             "reason" => "live_artifact_identity_missing"
+           } = BootConverge.converge(@repo)
+  end
+
+  test "readiness fails closed when a newer live target appears" do
+    {module, binary} = scratch_beam(OpenAgents.Scratch.BootConvergeFreshness)
+    artifact = artifact(module, binary)
+    File.write!(Path.join(Repos.data_dir(), artifact.details["artifact"]), artifact.built.bytes)
+    insert_target!("live", artifact.details)
+
+    assert %{"state" => "converged", "ready" => true} = BootConverge.converge(@repo)
+
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+
+    on_exit(fn -> restore_env(:forge_boot_converge_enabled, previous_enabled) end)
+
+    assert BootConverge.ready?(@repo)
+
+    newer =
+      %Target{}
+      |> Target.changeset(%{
+        repo: @repo,
+        sha: String.duplicate("e", 40),
+        promoted_by: "operator:t",
+        status: "promoted"
+      })
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(%{status: "deploying", details: %{}})
+      |> Repo.update!()
+
+    refute BootConverge.ready?(@repo)
+    assert BootConverge.ready_for_deployment?(@repo, newer.id)
+
+    newer
+    |> Ecto.Changeset.change(%{status: "live"})
+    |> Repo.update!()
+
+    refute BootConverge.ready?(@repo)
+
+    :code.purge(module)
+    :code.delete(module)
+  end
+
+  test "the supervised worker retains degraded readiness and caps retry backoff" do
+    insert_target!("live", %{})
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    previous_min = Application.get_env(:openagents, :forge_boot_retry_min_ms)
+    previous_max = Application.get_env(:openagents, :forge_boot_retry_max_ms)
+
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+    Application.put_env(:openagents, :forge_boot_retry_min_ms, 10)
+    Application.put_env(:openagents, :forge_boot_retry_max_ms, 20)
+
+    name = Module.concat(__MODULE__, "Retry#{System.unique_integer([:positive])}")
+
+    start_supervised!(
+      Supervisor.child_spec(
+        {BootConverge, name: name, repo: @repo},
+        id: name
+      )
+    )
+
+    server_state = :sys.get_state(name)
+    convergence = BootConverge.state()
+
+    refute convergence["ready"]
+    assert convergence["state"] == "degraded"
+    assert convergence["retry_in_ms"] == 10
+    assert server_state.retry_ms == 20
+
+    on_exit(fn ->
+      restore_env(:forge_boot_converge_enabled, previous_enabled)
+      restore_env(:forge_boot_retry_min_ms, previous_min)
+      restore_env(:forge_boot_retry_max_ms, previous_max)
+    end)
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
+  defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
+
+  defp restore_persistent(:missing), do: :persistent_term.erase({DeploymentNode, :state})
+
+  defp restore_persistent(state),
+    do: :persistent_term.put({DeploymentNode, :state}, state)
 end

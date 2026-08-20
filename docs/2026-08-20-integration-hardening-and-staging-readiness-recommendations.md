@@ -1,0 +1,938 @@
+# Integration hardening and staging readiness recommendations
+
+Date: 2026-08-20
+
+Status: Proposed
+
+## Outcome
+
+Make `openagents.com` one coherent public AGPL application, deploy it safely to
+staging, and prove its behavior there before any production work begins.
+
+The complete Sarah product is intentionally part of this repository. The
+remaining work is not to restore a private-service split. The work is to make
+the merged application internally consistent, secure its authority and data
+boundaries, finish the deployment system, remove obsolete source-project
+assumptions, and establish reproducible staging evidence.
+
+Production is out of scope. Do not deploy production traffic, mount production
+credentials, repoint production DNS, or promote a production fleet target as
+part of this plan.
+
+## Executive recommendations
+
+Complete the work in this order:
+
+1. Establish one accurate architecture and terminology baseline.
+2. Repair documentation, invariants, configuration, and generic runtime names.
+3. Harden authentication, repository scoping, data ownership, and administrative
+   authority.
+4. Consolidate the UI, icon, Markdown, and dependency stacks.
+5. Harden the forge build and deployment lanes before enabling hot loading.
+6. Create an isolated staging environment that represents the intended runtime.
+7. Run the complete staging regression and failure-injection matrix.
+8. Hold the staging release through a soak period and close every unexplained
+   error before discussing production.
+
+Treat each numbered gate in this document as blocking. A later gate cannot make
+an earlier failure acceptable.
+
+## Ground rules
+
+- Keep Sarah-specific identity, persona, voice, and evaluation material public
+  under the AGPL license.
+- Use `OpenAgents` for application infrastructure and Sarah only for the agent,
+  persona, or behavior that is specifically Sarah's.
+- Keep direct provider credentials on the server. The browser must never receive
+  an OpenAI key, forge operator token, machine token, or recording key.
+- Keep hosted CI disabled. Run checks on owned machines, local hooks, and owned
+  deployment infrastructure.
+- Keep all new deployment capabilities disabled by default. Enable them in
+  staging only after their preceding gates pass.
+- Treat PostgreSQL rows and immutable receipts as authority. Treat LiveView,
+  PubSub, caches, and status pages as projections.
+- Preserve historical migrations. Correct live schema problems with new
+  migrations instead of rewriting migrations that may already have run.
+- Use the completed Issues and Projects coverage work as an input to this plan.
+  Do not duplicate that work or weaken its assertions to make a gate pass.
+- Record every staging result against an exact Git SHA, image digest, artifact
+  digest, migration version, and staging revision.
+
+## Gate 0: Freeze and measure the baseline
+
+Create a reliable starting point before changing architecture or infrastructure.
+
+1. Record the current Git SHA and confirm the worktree is clean.
+2. Run `mix precommit` on an owned test machine.
+3. Run `mix test --only cluster` as a separate stage.
+4. Run the JavaScript tests for voice state, recording, and browser hooks.
+5. Run `mix test --cover` and merge its result with the separate cluster stage.
+6. Record compile warnings, test exclusions, flaky tests, and test duration.
+7. Build a release and run its startup path against a disposable database.
+8. Save the result as a local, content-free gate receipt tied to the SHA.
+
+Do not use the current green suite as evidence for untested code. The updated
+coverage audit records strong Issues and Projects coverage and the defects it
+found. Recovery workers and release-only entry points still need direct
+evidence.
+
+**Exit criteria:** The team has one reproducible baseline with no hidden test
+filters and a named owner for every known failure or exclusion.
+
+## Gate 1: Define the integrated architecture
+
+Write one architecture document that describes the application that now exists.
+It should replace the conflicting public-shell, private-service, mock-chat, and
+partial-port narratives.
+
+The architecture document should state these decisions:
+
+- `openagents.com` owns the browser UI, Sarah persona, conversation and turn
+  lifecycle, provider orchestration, tools, memory, delegated work, voice,
+  machines, issues, projects, forge, and administrative surfaces.
+- Provider adapters are replaceable server-side boundaries. Direct OpenAI use
+  is an adapter choice, not an application-wide dependency.
+- PostgreSQL is the durable product authority.
+- The forge's Git and deployment planes are separate concerns inside one
+  application namespace.
+- Public, authenticated, operator, machine, and internal-service routes have
+  distinct authorization rules.
+- Direct BEAM load, relup, and rolling replacement are different deployment
+  strategies with different safety requirements.
+
+Add focused architecture decision records for:
+
+- The full public AGPL integration.
+- Sarah as a persona within the `OpenAgents` application.
+- Direct provider integration and credential boundaries.
+- GitHub identity and access-token retention.
+- Basecoat and the application UI component system.
+- The staging and eventual production fleet topology.
+- Forge-canonical source control and GitHub mirroring, if that remains the
+  intended cutover.
+
+**Exit criteria:** A contributor can explain the application and its trust
+boundaries without reading a superseded plan or another repository.
+
+## Gate 2: Remove stale names and references
+
+Apply a semantic naming rule instead of a blind search-and-replace.
+
+### Keep Sarah references where they are accurate
+
+Keep Sarah in names that identify Sarah-specific behavior or data, such as:
+
+- Persona artifact IDs and source manifests.
+- Persona evaluation corpora.
+- User-visible Sarah identity and voice copy.
+- Sarah-specific role or behavior revisions when the identity is part of the
+  artifact contract.
+
+### Rename generic application infrastructure
+
+Rename generic infrastructure that still carries a source-project name. Review
+at least these areas:
+
+- `OpenAgents.Sarah.Supervisor`.
+- `sarah_live_view`, `sarah_html`, and `sarah_html_helpers`.
+- `assets/css/sarah.css` and comments that call the whole application Sarah.
+- Generic test cases and helpers named `SarahConnCase`, `SarahDataCase`, or
+  `SarahChannelCase`.
+- `sarah_source_dir` and other generic application configuration keys.
+- `/tmp/sarah_*` and `/var/lib/sarah/*` runtime paths.
+- Forge defaults that name the `sarah` repository instead of
+  `OpenAgentsInc/openagents.com`.
+- Builder sidecar names, queue paths, WAL paths, and artifact paths.
+- Generic user-agent strings and internal service labels.
+
+Prefer names such as `OpenAgents.RuntimeSupervisor`, `openagents_live_view`,
+`openagents.css`, `source_repo_dir`, and `/var/lib/openagents`. Do not rename a
+Sarah persona artifact to OpenAgents if that would erase its actual identity.
+
+### Establish an allowed-reference check
+
+Add a repository check that searches source, tests, configuration, and docs for
+`Sarah`, `sarah`, old filesystem roots, old application atoms, and retired
+service domains. Maintain a small allowlist of intentional Sarah-specific
+locations. Fail the check on every unclassified match.
+
+**Exit criteria:** Every remaining Sarah reference is intentional, documented,
+and specific to Sarah rather than inherited infrastructure.
+
+## Gate 3: Reconcile all documentation and invariants
+
+Documentation currently describes several incompatible generations of the
+application. Make documentation a release gate rather than a historical
+accident.
+
+### Repair the top-level narrative
+
+- Rewrite `README.md` to describe the integrated application accurately.
+- Remove the clean-room statement because the repository intentionally contains
+  the integrated product implementation.
+- Replace DaisyUI references with the current Basecoat and OpenAgents style
+  system.
+- Separate working features, staging-only features, disabled features, and
+  planned features. Do not describe a disabled or incomplete deploy lane as
+  production-ready.
+- State the AGPL licensing decision and identify vendored third-party licenses.
+
+### Retire or rewrite obsolete plans
+
+- Mark `docs/chat-inference-plan.md` as superseded or remove it after preserving
+  any still-valid provider-boundary requirements.
+- Convert `docs/sarah-integration-plan.md` into a historical migration record or
+  replace its stale status and skipped-test counts.
+- Close or archive `docs/2026-08-19-gap-implementation-plan.md` after moving each
+  unresolved item into the current hardening plan.
+- Update `docs/component-library.md` and
+  `docs/issues-projects-ui-roadmap.md` for Basecoat, `SarahUI`, and the actual
+  component catalog.
+- Update `docs/github-auth-plan.md` after deciding whether GitHub access tokens
+  remain stored.
+- Keep the test coverage audit as a dated measurement. Add a later audit instead
+  of rewriting the original numbers.
+
+### Repair the invariant ledger
+
+Review every invariant in `INVARIANTS.md` against code, schema, configuration,
+tests, and documentation.
+
+- Give every invariant a unique ID. Resolve the duplicate `DEGRADE-001` entries.
+- Correct nonexistent paths such as `priv/openagents`, `OpenAgentsWeb.UI`, and
+  `style-openagents.css`, or rename the implementation first.
+- Resolve the contradiction between discarding GitHub tokens and the current
+  encrypted-token storage path.
+- Distinguish implemented invariants from proposed invariants. A proposed
+  contract cannot claim current evidence.
+- Port, recreate, or remove references to missing evidence documents.
+- Ensure each current invariant names at least one executable test or a concrete
+  manual release proof.
+- Remove references to modules, controllers, routes, and admin recording
+  behavior that no longer exist.
+
+### Add documentation validation
+
+Add an owned local check that:
+
+- Verifies relative Markdown links and referenced local files.
+- Detects duplicate invariant IDs.
+- Detects banned obsolete terms such as DaisyUI and retired service domains.
+- Detects absolute developer-specific paths such as `~/work` and
+  `/Users/<name>`.
+- Confirms that every evidence file named by `INVARIANTS.md` exists.
+
+**Exit criteria:** Every current document agrees on product ownership,
+components, authentication, deployment maturity, and staging status, and all
+local references resolve.
+
+## Gate 4: Harden dependencies, assets, and the component system
+
+### Complete the Markdown parser migration
+
+The integration plan says MDEx replaced Earmark, while the application still
+depends on and calls Earmark. Hex marks Earmark as retired and no longer
+maintained. Migrate to MDEx or another maintained parser before staging, then
+verify sanitization, security history, and output compatibility.
+
+Whichever parser remains must pass tests for:
+
+- Raw HTML refusal.
+- Script and event-handler removal.
+- Unsafe URL scheme rejection.
+- Bounded nesting, input size, and output size.
+- Code blocks, lists, links, tables, and malformed Markdown.
+- Stable rendering for streamed and persisted assistant text.
+
+Remove the unused parser and update every related document in the same commit.
+
+### Complete UI consolidation
+
+- Choose the final generic module name: preferably `OpenAgentsWeb.UI` once the
+  source-project migration is complete.
+- Move all product surfaces onto that component system.
+- Keep `CoreComponents` only as a temporary compatibility layer with an explicit
+  removal list.
+- Remove DaisyUI aliases and compatibility tokens after every surface has
+  migrated.
+- Use one application icon path. Remove Heroicons and its dependency after the
+  remaining issue and layout surfaces use vendored icons.
+- Keep Basecoat imports per component and do not load Basecoat JavaScript.
+- Rename the style pack after generic application components no longer depend on
+  the Sarah name.
+- Make the component catalog the executable inventory of supported primitives.
+
+### Audit dependencies and licenses
+
+- Remove unused dependencies and stale lock entries.
+- Run Hex retirement and vulnerability checks on owned infrastructure.
+- Generate a dependency and license inventory for the release artifact.
+- Verify the Basecoat, icon, font, and brand-mark attribution files.
+- Pin every Git dependency to an immutable tag or revision.
+- Build an SBOM for the staging image and retain it with the staging evidence.
+
+**Exit criteria:** The application has one Markdown parser, one component
+system, one icon path, no unexplained dependency, and complete license records.
+
+## Gate 5: Make runtime configuration explicit and fail closed
+
+Create one typed runtime configuration boundary. Do not scatter environment
+parsing across feature modules.
+
+Validate these groups at boot:
+
+- Endpoint host, allowed origins, HTTPS aliases, and secure cookie settings.
+- Database connection and migration behavior.
+- GitHub OAuth client, callback, scope, and token-encryption keys.
+- OpenAI text, voice, embedding, and shadow-program provider settings.
+- Voice admission, recording, retention, and encryption settings.
+- Work, machine, recovery, memory, and graph feature dependencies.
+- Forge repository, owner, Git URL, WAL, artifact store, build sidecar, operator
+  token, allowlist, and fleet size.
+- Horde, Ra, DNS discovery, node naming, and distribution settings.
+
+Apply these rules:
+
+- Use explicit staging values instead of relying on development defaults.
+- Refuse invalid or incomplete feature combinations. For example, refuse an
+  enabled recording feature without a recording key.
+- Redact values from errors and logs. Name the missing setting, not its value.
+- Give every feature a documented default and staging override.
+- Disable voice, work, semantic memory, forge deployment, and boot convergence
+  until their specific staging gates begin.
+- Do not enable Ra by default on a topology that cannot form the expected
+  cluster.
+- Put Ra data, forge artifacts, WAL caches, and build queues on intentional
+  durable or disposable volumes. Do not use inherited `/tmp/sarah_*` defaults.
+- Make the target repository `OpenAgentsInc/openagents.com` explicit.
+
+Add a command that prints a content-free configuration readiness report. It
+should show enabled features and validation status without printing secrets,
+URLs with credentials, internal node names, or tokens.
+
+**Exit criteria:** A staging release either starts with a valid, reviewed
+configuration or exits before serving traffic with a redacted diagnostic.
+
+## Gate 6: Harden identity, authorization, and secrets
+
+### Decide GitHub token retention deliberately
+
+The current OAuth path stores an encrypted GitHub token even though some
+invariants say the token is discarded after identity projection.
+
+Choose one model:
+
+- **Identity-only:** request the minimum identity scope, discard the access
+  token, and remove repository tools that depend on it.
+- **Identity and GitHub tools:** store the token because the user explicitly
+  enabled GitHub-backed tools, request the minimum required scopes, disclose the
+  retention, encrypt it at rest, support key rotation, revoke it on disconnect,
+  and include its metadata in data-rights behavior without exporting the token.
+
+Do not describe the first model while implementing the second.
+
+### Separate route authority classes
+
+Classify every route as public read, authenticated browser, authenticated API,
+operator, machine, internal service, or Git transport. Add an automated route
+inventory test.
+
+- Keep public health, status, leaderboard, changelog, and configured source
+  projections content-free or bounded by their publication contract.
+- Require authentication and authorization for every product mutation.
+- Keep browser mutations CSRF-protected.
+- Give CLI-compatible API clients a deliberate bearer-token or personal-access-
+  token flow rather than relying on browser cookies.
+- Require operator identity for promotion and other operator writes.
+- Require scoped, expiring, replay-resistant credentials for machines and
+  inference grants.
+- Return indistinguishable responses for hidden operator and private repository
+  surfaces where the invariant requires it.
+
+### Protect secrets and logs
+
+- Inventory every secret and assign a staging-only secret name and runtime
+  identity.
+- Remove secrets from build arguments, images, repository URLs, receipts, and
+  exception text.
+- Do not embed the forge operator token in a URL that can reach process lists or
+  logs.
+- Redact OAuth callback query parameters at the platform logging boundary.
+- Scan application logs for message, prompt, transcript, memory, tool argument,
+  SDP, credential, and machine-token leakage.
+- Rotate any credential that may have appeared in prior staging logs.
+
+**Exit criteria:** Every mutation has an explicit principal and scope, GitHub
+token behavior matches its documentation, and staging logs contain no secret or
+private-content fields.
+
+## Gate 7: Add real repository and tenant scoping
+
+The Issues and Projects routes carry `owner` and `repo`, but several contexts
+currently read and mutate global tables. Fix the domain model before treating
+the tracker as a multi-repository forge.
+
+1. Add a canonical repository entity with owner, name, visibility, default
+   branch, and stable ID.
+2. Add `repository_id` foreign keys to issues, labels, milestones, comments,
+   assignee relationships, and repository projects where appropriate.
+3. Make issue and milestone numbers unique per repository, not globally.
+4. Scope every lookup by repository and resource identifier in one query.
+5. Scope labels and assignable users to repository authorization rules.
+6. Scope project ownership and project-item issue references.
+7. Reject cross-repository issue, label, milestone, and project identifiers.
+8. Add database constraints that enforce the same relationships as the
+   application.
+9. Backfill current rows into an explicit initial repository with a reversible,
+   rehearsed migration.
+10. Make public reads and authenticated writes explicit rather than leaving all
+    `/api/v3` routes on the same unauthenticated pipeline.
+
+Build on the completed controller, LiveView, and domain coverage. Add
+multi-repository isolation cases without duplicating the existing mount,
+interaction, and JSON-contract cases.
+
+**Exit criteria:** An owner or repository path can never read or mutate a row
+owned by another repository, and PostgreSQL enforces the boundary.
+
+## Gate 8: Harden chat, memory, work, machines, and voice
+
+### Chat and provider lifecycle
+
+- Keep LiveView free of direct HTTP, credential, retry, and provider event code.
+- Bound every message, stream frame, tool call, continuation, and rendered
+  projection.
+- Require durable turn, message, provider-step, and tool-step state before
+  broadcasting completion.
+- Verify cancellation, reconnect, duplicate event, timeout, malformed provider
+  data, and process-restart paths.
+- Make retry behavior operation-specific. Do not retry a mutation unless its
+  idempotency contract makes repetition safe.
+- Confirm that every provider failure produces a bounded, provider-neutral
+  result.
+
+### Memory and data rights
+
+- Test account isolation at the query and database levels for every memory
+  plane.
+- Confirm that recall snapshots exclude later writes and foreign accounts.
+- Confirm that reset, export, delete, correction, forget, retention, and purge
+  paths include all newly integrated tables.
+- Verify that derived semantic and graph data can be rebuilt from durable
+  authority and disappears when its authoritative source is deleted.
+- Keep every export bounded and require a disposable staging account for
+  destructive export and deletion tests.
+
+### Recovery workers
+
+Add direct tests for:
+
+- `OpenAgents.TurnRecovery` after a turn process dies mid-stream.
+- `OpenAgents.VoiceRecovery` after a voice runtime disappears.
+- `OpenAgents.WorkRecovery` after a delegated worker dies at each durable
+  checkpoint.
+- `OpenAgents.Memory.SemanticWorker` after provider, database, and process
+  failures.
+
+Use process monitors, supervised processes, and durable state assertions. Do not
+use fixed sleeps as the correctness mechanism.
+
+### Voice and recording
+
+- Fix the recording start race so the admitted server generation exists before
+  the browser processes the remote track event.
+- Verify that recording failure never fails the call.
+- Keep typed chat available during every voice failure.
+- Verify barge-in, interruption, session end, tab destruction, and track cleanup.
+- Verify typed input during a live voice call without ending that call or
+  starting a competing typed assistant response.
+- Verify disclosure before microphone access and a visible indicator only while
+  recording runs.
+- Verify chunk sequencing, size limits, truncation, late-chunk grace, encryption,
+  retention, operator playback, export metadata, and deletion.
+
+### Machines and delegated work
+
+- Keep pairing and claim secrets out of logs, screenshots, and test output.
+- Require one-time claim, owner approval, token replay refusal, and revocation.
+- Bind every job to an owner, conversation, machine, authority set, and budget.
+- Verify cancellation, worker restart, duplicate delivery, and terminal report
+  persistence.
+- Run only harmless staging jobs against disposable repositories and machines.
+
+**Exit criteria:** Every asynchronous subsystem has tested interruption,
+recovery, idempotency, ownership, and bounded-failure behavior.
+
+## Gate 9: Harden the forge build lane
+
+Do not enable staging hot loading while the current v0 build and load protocol
+can accept partial fleet success.
+
+### Replace the sidecar queue protocol
+
+- Give every build a unique build ID. Do not key work only by SHA.
+- Use JSON or another non-executable structured format.
+- Write requests and responses through atomic temporary-file renames.
+- Validate repository, SHA, request version, size, and allowed fields.
+- Pass credentials through a protected file descriptor, mounted secret, or
+  workload identity. Do not place credentials in repository URLs.
+- Bound compiler output and preserve the full output only in an operator-owned
+  artifact with defined retention.
+- Recover or expire abandoned jobs without confusing their responses with a
+  retry.
+
+### Make artifacts immutable and verifiable
+
+- Build the exact pushed commit in an isolated production toolchain.
+- Record Elixir, OTP, application, dependency-lock, source, and baseline
+  identities.
+- Compare against the current live target's immutable manifest, not a sidecar's
+  last warm build.
+- Detect module additions, changes, and deletions.
+- Normalize BEAM files before hashing and record an artifact SHA-256 digest.
+- Store the artifact by digest in durable staging storage.
+- Verify the digest, tar bounds, module count, entry names, BEAM module identity,
+  and declared manifest before creating module atoms or loading code.
+- Route deletions, NIF changes, application changes, dependencies, assets,
+  configuration, ERTS, and OTP changes away from direct loading.
+
+**Exit criteria:** A build can be reproduced and independently verified from
+its pushed commit and immutable receipt, and malformed artifacts fail before
+loading any module.
+
+## Gate 10: Make fleet deployment transactional
+
+Replace one-way remote loading with prepare, apply, verify, commit, and rollback.
+
+1. Snapshot the expected healthy node set.
+2. Verify the artifact and capture exact prior object code on every node.
+3. Return an expiring deployment token from every prepared node.
+4. Apply and smoke-test one canary.
+5. Apply to the remaining prepared nodes.
+6. Verify module identities, application revision, readiness, and expected node
+   membership everywhere.
+7. Commit only when every expected node reports success.
+8. Restore every node that applied the candidate if any node fails or times
+   out.
+9. Verify the restored revision before recording `reverted`.
+10. Remove a divergent node from readiness if rollback cannot restore it.
+
+Never advance a target to `live` merely because the local canary passed. A
+remote `error`, timeout, missing node, unexpected node, or failed verification
+must block `live`.
+
+Make boot convergence part of readiness:
+
+- Fetch the current live artifact from durable storage on an empty node.
+- Verify the same digest and manifest used during promotion.
+- Keep readiness false when image code differs from the live target.
+- Retry with bounded backoff.
+- Retain the current and immediate rollback artifacts locally.
+- Report a content-free convergence state on `/status`.
+
+**Exit criteria:** Three-node tests prove consistent success, exact rollback,
+timeout behavior, node replacement, cold-cache convergence, and refusal to
+serve divergent code.
+
+## Gate 11: Complete relup and rolling replacement
+
+Direct loading is only one deployment class. Implement and test the two required
+fallbacks before broadening the direct-load allowlist.
+
+### Relup lane
+
+- Use versioned state structs for long-lived processes that must survive an
+  upgrade.
+- Add tested `code_change/3` callbacks for every supported state transition.
+- Build forward and reverse relups from explicit release versions.
+- Stage, check, unpack, install, verify, and make permanent one node at a time.
+- Reverse the relup when a health check fails.
+- Re-stage consumed release artifacts after an interrupted install.
+- Prove that a stateful process keeps its PID and data through upgrade,
+  downgrade, and re-upgrade.
+
+### Rolling replacement lane
+
+- Build an immutable image identified by digest.
+- Require a complete local gate receipt for the exact SHA.
+- Drain one node, verify remaining capacity and quorum, replace it, and wait for
+  membership and readiness before continuing.
+- Abort before replacing another node when one node fails to rejoin.
+- Keep database migrations additive while old and new revisions overlap.
+- Contract schemas only in a later release after rollback is no longer needed.
+
+### Owned release gate
+
+Add `ops/ci/gate.sh` and `.githooks/pre-push` on owned infrastructure. The gate
+should run:
+
+1. Compile with warnings as errors.
+2. `mix precommit`.
+3. The separate cluster suite.
+4. JavaScript tests.
+5. Direct-load transaction tests.
+6. Relup, reverse-relup, version-chain, and kill-during-install proofs.
+7. Rolling drain and replacement proofs.
+8. Documentation, invariant, secret, CSS, and icon contract checks.
+9. A release build and startup smoke test.
+10. A content-free gate receipt bound to the exact SHA.
+
+**Exit criteria:** Every supported change has a safe deployment class, a tested
+rollback or recovery path, and an exact-SHA gate receipt.
+
+## Gate 12: Build an isolated staging environment
+
+The existing Cloud Run staging service can validate the web application, OAuth,
+LiveView, chat, memory, provider, and voice behavior. It cannot by itself prove
+three-node BEAM hot loading, stable node identity, relup installation, or
+node-by-node rolling replacement.
+
+Use two staging lanes until the intended fleet replaces the web-only lane:
+
+### Web acceptance lane
+
+Use an isolated staging hostname such as `stage.openagents.com` for browser and
+API acceptance. It needs:
+
+- A staging-only GitHub OAuth application and callback.
+- A staging-only database and database role.
+- Staging-only OpenAI, encryption, forge, machine, and recording credentials.
+- Secure cookies, HTTPS, WebSocket origin validation, CSP, and microphone policy.
+- A reset feature enabled only for staging test accounts.
+- Revision labels and log access that identify the exact deployment under test.
+
+If Cloud Run remains temporarily, hard-reload every browser tab after a deploy.
+An open LiveView socket can remain pinned to a draining old revision and produce
+false regression results.
+
+### Distributed deployment lane
+
+Create a separate three-node staging fleet using stable instances or stateful
+pods that support:
+
+- Stable BEAM node names and private distribution.
+- Private service discovery and expected membership.
+- PostgreSQL connectivity and migration locks.
+- Durable artifact and WAL storage.
+- Node-local artifact caches.
+- Build sidecar queues isolated from serving containers.
+- Readiness removal and node drain.
+- One-node-at-a-time replacement.
+- Intentional Ra data storage and quorum behavior.
+
+Match the eventual production topology closely enough that a staging relup or
+rolling drill proves the same mechanism. Do not claim Cloud Run revision rollout
+as evidence for an OTP relup.
+
+### Staging isolation requirements
+
+- Use a separate Google Cloud project or a strictly isolated staging boundary.
+- Use staging-specific service accounts with minimum permissions.
+- Use separate Secret Manager secrets, database, buckets, DNS records, OAuth
+  client, and machine tokens.
+- Deny access to production secrets and production databases.
+- Mark every staging banner, status response, log entry, and receipt as staging.
+- Take a database snapshot before migration and destructive data-rights drills.
+- Define one command that removes disposable machines, repositories, recordings,
+  and test accounts after the run.
+
+**Exit criteria:** Staging can test both the user-facing product and the complete
+distributed deployment mechanism without touching production state.
+
+## Gate 13: Deploy to staging reproducibly
+
+Use this sequence for every staging candidate:
+
+1. Select an exact clean Git SHA.
+2. Require its local gate receipt.
+3. Build and retain the image, release, SBOM, build manifest, and artifact
+   digests.
+4. Restore a recent sanitized staging snapshot into a disposable rehearsal
+   database and run every migration.
+5. Run startup, rollback-compatible schema, and data-integrity checks against
+   the rehearsal database.
+6. Snapshot the actual staging database.
+7. Deploy the candidate to the web acceptance lane with high-risk features
+   disabled.
+8. Confirm migration completion, `/healthz`, `/status`, database connectivity,
+   LiveView connection, and revision identity.
+9. Hard-reload persistent browser sessions so they connect to the new revision.
+10. Enable one gated subsystem at a time and run its regression group.
+11. Deploy the same candidate to the distributed lane.
+12. Run direct-load, rollback, boot-convergence, relup, and rolling-replacement
+   drills.
+13. Collect sanitized logs, database truth checks, receipts, screenshots, and
+   timing evidence.
+14. Roll back staging if any blocking check fails.
+
+Do not combine an application change, schema contraction, infrastructure
+change, and first-time feature enablement in one staging candidate.
+
+**Exit criteria:** Another operator can repeat the deploy from the recorded SHA
+and obtain the same revision, schema, configuration posture, and checks.
+
+## Gate 14: Run the staging regression matrix
+
+Record every case as passed, failed, blocked, or not applicable. A retry does not
+erase the first failure; record both attempts and explain the result.
+
+### Public and browser surfaces
+
+- `/healthz`, `/status`, `/api/status`, and `/favicon.ico` return their bounded
+  expected responses.
+- `/`, `/leaderboard`, `/changelog`, `/docs`, `/components`, and configured
+  public forge pages render without an authenticated session where intended.
+- Hidden, private, operator, and unconfigured forge surfaces do not disclose
+  their existence.
+- LiveView reconnects after a transient network interruption.
+- CSP, cookie, origin, image, and microphone policies match the architecture.
+- Phone, tablet, desktop, keyboard-only, reduced-motion, and screen-reader
+  checks pass for critical flows.
+
+### Authentication and account state
+
+- GitHub OAuth state, PKCE, attempt expiry, replay refusal, callback errors, and
+  banned-user behavior work.
+- The persistent staging browser session remains logged in. Do not log it out
+  when a user-controlled GitHub login would be required to restore it.
+- Session renewal, logout, and concurrent-browser account continuity work.
+- GitHub token storage or disposal matches the chosen contract.
+- Account export, reset, and deletion operate only on the authenticated owner.
+
+### Typed chat and Markdown
+
+- A first conversation creates one greeting and one canonical conversation.
+- Typed messages stream, persist, reload, paginate, cancel, fail, and recover
+  correctly.
+- A reset through `#reset-conversation-form` removes messages and memory for the
+  staging account and returns to one greeting.
+- Markdown renders supported structures and refuses raw HTML, unsafe URLs,
+  script content, oversized input, and malformed nesting.
+- Tool activity uses bounded persisted projections and never displays provider
+  IDs or secrets.
+- Rate, size, continuation, and tool budgets fail honestly.
+
+### Memory and data rights
+
+- Remember, list, search, correct, forget, export, reset, and delete flows pass.
+- Activity chips and memory panels reflect PostgreSQL state after reload.
+- Cross-account and cross-conversation reads fail.
+- Snapshot fences exclude writes made after capture.
+- Semantic failure returns the documented lexical fallback.
+- A direct staging database query confirms the durable result when UI and cache
+  behavior are ambiguous.
+
+### Voice and recording
+
+- `#voice-start`, `#voice-status`, and `#voice-end` drive a clean call lifecycle.
+- The fake-media harness observes listening, Sarah speaking, barge-in,
+  interruption, and clean end.
+- `POST /voice/calls` returns `201` and the final delete returns `204` on a good
+  run.
+- Typed input during an active voice call persists without ending voice or
+  starting a competing typed assistant response.
+- The next spoken response can use the injected typed content.
+- Voice tool calls complete within their budgets.
+- Reloaded chat shows durable voice transcript items and interruption markers.
+- Recording disclosure appears before microphone access.
+- Recording chunks and completion reach the server with the correct generation.
+- The operator can play the assembled recording, and unauthorized users cannot.
+- Channel layout, encryption, truncation, retention, export metadata, and delete
+  behavior match the invariant.
+- A failed or unsupported recorder leaves the live call and typed chat usable.
+
+### Leaderboard and administrative surfaces
+
+- Anonymous leaderboard rows expose only the published entry fields.
+- Typed and voice usage invalidates and refreshes the board without a database
+  query per viewer.
+- Operator allowlisting uses immutable GitHub IDs.
+- Unauthorized `/admin` and `/admin/forge` access is indistinguishable from the
+  documented unauthenticated path.
+- Promotion accepts only a pushed commit and writes an immutable operator
+  receipt.
+- Administrative pages expose no transcript, prompt, credential, or private
+  memory content beyond their explicit contract.
+
+### Issues and Projects
+
+- Public reads and authenticated writes follow the chosen route policy.
+- Issue, comment, label, milestone, assignee, project, field, and item endpoints
+  return the documented statuses and shapes.
+- Browser LiveViews mount, show empty and populated states, validate forms, and
+  perform one meaningful interaction each.
+- Repository A cannot read, update, label, assign, or add an issue from
+  Repository B.
+- Issue and milestone numbers can repeat safely in different repositories.
+- Pagination, filters, malformed IDs, missing rows, oversized input, and rate
+  limits behave consistently.
+
+### Machines and delegated work
+
+- Public pairing creation, one-time claim, owner approval, inventory, offline
+  and online state, and revoke work.
+- Token replay fails after claim and after revoke.
+- A harmless real staging coding-agent job appears live, reaches a terminal
+  state, and writes its report into the conversation.
+- Cancellation and worker restart preserve committed evidence and never execute
+  a step twice.
+- Cleanup removes the ephemeral controller home and disposable project.
+
+### Forge and deployment
+
+- Clone, fetch, and push work against the staging forge.
+- WAL and mirror receipts match the pushed refs.
+- A valid allowlisted change passes build, canary, fleet transaction, and live
+  receipt.
+- An off-allowlist module refuses the complete direct-load candidate.
+- Corrupt digest, manifest mismatch, module deletion, oversized tar, and invalid
+  module identity fail before loading.
+- Remote timeout and remote load failure restore every affected node.
+- A cold replacement node fetches the durable artifact and becomes ready only
+  after convergence.
+- A stateful relup preserves PID and state through upgrade, downgrade, and
+  re-upgrade.
+- Killing a node during relup installation returns it on the prior permanent
+  release and permits a clean retry.
+- A structural change uses rolling replacement and removes only one node from
+  readiness at a time.
+- Failed replacement stops the sequence before another node drains.
+
+### Logs and operational truth
+
+- Query logs against the exact new revision and the exact test window.
+- Inspect severity-based errors and application `[error]` text entries.
+- Separate deploy-overlap database connection noise from candidate regressions.
+- Correlate failures with request IDs and receipt IDs without logging content.
+- Use direct database queries to distinguish projection failure from persistence
+  failure.
+- Confirm that logs contain no OAuth codes, tokens, prompts, messages,
+  transcripts, memory claims, tool payloads, SDP, audio, or credentials.
+
+**Exit criteria:** Every applicable case passes on the same candidate SHA, and
+every failed first attempt has a documented cause and successful corrective
+verification.
+
+## Gate 15: Run failure injection and soak staging
+
+After functional regression passes, test the system under controlled failure.
+
+Inject these failures one at a time:
+
+- Provider timeout, malformed event, and stream closure without completion.
+- PostgreSQL restart and temporary connection exhaustion.
+- PubSub interruption and LiveView reconnect.
+- Turn, voice, work, semantic worker, builder, and deployer process termination.
+- Machine disconnect during a job.
+- Artifact-store unavailability and corrupt cache.
+- One unreachable fleet node.
+- Node membership change during a deployment.
+- Build sidecar crash and stale response.
+- Browser navigation and tab destruction during microphone use.
+- Recording upload failure and late final chunk.
+
+After failure injection, run a staging soak:
+
+- Keep the web and distributed staging lanes active for at least 48 hours.
+- Exercise scheduled typed, memory, voice, tracker, Git, and status canaries.
+- Watch database connections, queue depth, mailbox growth, process count,
+  memory, CPU, restart count, artifact cache, Ra state, and node convergence.
+- Investigate every crash, unexplained retry, stale active row, divergent node,
+  leaked process, and content-bearing log entry.
+- Repeat the full smoke group after the soak without redeploying.
+
+**Exit criteria:** Staging survives controlled failures and the soak without
+data loss, authority expansion, fleet divergence, secret leakage, or unexplained
+error accumulation.
+
+## Required staging evidence
+
+Store one staging report per candidate. Include:
+
+- Git SHA, branch, image digest, release version, artifact digests, and SBOM.
+- Database migration versions and rehearsal result.
+- Redacted configuration readiness report.
+- Default and cluster test counts, coverage summary, and JavaScript results.
+- Staging service revision and distributed node release identities.
+- A pass, fail, blocked, or not-applicable result for every regression group.
+- Sanitized screenshots or recordings for critical UI and voice flows.
+- Sanitized log queries and direct database truth checks.
+- Forge build, deployment, rollback, relup, and rolling receipts.
+- Failure-injection and soak timelines.
+- Every known issue, its owner, severity, and disposition.
+
+Never store session cookies, OAuth codes, access tokens, database passwords,
+machine tokens, provider keys, raw prompts, transcripts, memory values, or audio
+in the report.
+
+## Production hold conditions
+
+Production remains blocked while any of these conditions is true:
+
+- Documentation and `INVARIANTS.md` disagree with the implementation.
+- A current invariant points to missing evidence.
+- Any test is silently skipped or a cluster test is not run.
+- A critical route lacks an explicit authority class.
+- Repository data is not scoped and constrained by repository ID.
+- GitHub token retention is undocumented or cannot be rotated and revoked.
+- A recovery worker lacks direct tests.
+- The forge can mark a partial fleet deployment live.
+- Artifact identity, digest, rollback, boot convergence, relup, or rolling
+  replacement lacks staging proof.
+- Staging depends on production credentials or data.
+- A staging regression, failure-injection case, or soak issue remains
+  unexplained.
+- Logs contain secrets or private product content.
+- The candidate did not complete the full staging matrix on one exact SHA.
+
+Passing staging does not automatically authorize production. It only creates a
+reviewable production-readiness candidate for a later plan and explicit owner
+decision.
+
+## Suggested commit sequence
+
+Keep commits independently reviewable and run the relevant local gates before
+each handoff.
+
+| Order | Commit | Required evidence |
+| --- | --- | --- |
+| 1 | Add integrated architecture decisions and repair the README | Documentation checks pass |
+| 2 | Reconcile plans, component docs, and invariant evidence | No broken evidence links or duplicate invariant IDs |
+| 3 | Rename generic Sarah infrastructure and configure `openagents.com` targets | Allowed-reference check passes |
+| 4 | Centralize and validate runtime configuration | Invalid staging configurations fail before traffic |
+| 5 | Resolve Markdown, UI, icon, dependency, and license consolidation | Parser security and component contract tests pass |
+| 6 | Resolve GitHub token policy and classify route authority | Auth, CSRF, replay, and secret-redaction tests pass |
+| 7 | Add repository entities and tenant-scoped tracker data | Cross-repository isolation tests pass |
+| 8 | Close chat, recovery, memory, voice, work, and machine hardening gaps | Async failure and recovery tests pass |
+| 9 | Replace the forge build queue and add immutable artifact manifests | Build reproducibility and corruption tests pass |
+| 10 | Add transactional fleet deployment and readiness-bound boot convergence | Three-node rollback and cold-boot tests pass |
+| 11 | Complete relup, reverse-relup, and rolling replacement | Upgrade and replacement drills pass |
+| 12 | Add the owned release gate and content-free receipts | Exact-SHA refusal and full local gate pass |
+| 13 | Provision isolated web and distributed staging lanes | Isolation and configuration review pass |
+| 14 | Add staging harnesses and the evidence report template | Regression harness dry run passes |
+| 15 | Deploy one staging candidate and complete the full matrix | Staging report is complete |
+| 16 | Complete failure injection and the 48-hour soak | No unexplained blocking issues remain |
+
+## Final staging readiness checklist
+
+- [ ] The repository has one accurate architecture narrative.
+- [ ] Every remaining Sarah reference is intentional and specific.
+- [ ] All documentation links and invariant evidence resolve.
+- [ ] The application has one Markdown parser, component system, and icon path.
+- [ ] Runtime configuration is typed, redacted, and staging-specific.
+- [ ] Every route has an explicit authority class.
+- [ ] GitHub token behavior matches code, UI disclosure, and data rights.
+- [ ] Issues and Projects are scoped by repository in code and PostgreSQL.
+- [ ] Every asynchronous recovery path has direct tests.
+- [ ] Voice recording starts only after generation admission.
+- [ ] Build requests are structured, unique, bounded, and non-executable.
+- [ ] Artifacts are immutable, digested, manifest-checked, and durably stored.
+- [ ] Fleet deployment is transactional and rolls back every affected node.
+- [ ] Boot convergence controls readiness.
+- [ ] Relup and rolling replacement pass their staging drills.
+- [ ] Owned local gates produce exact-SHA receipts.
+- [ ] Web and distributed staging are isolated from production.
+- [ ] The complete regression matrix passes on one SHA.
+- [ ] Failure injection and the 48-hour soak pass.
+- [ ] The staging evidence report contains no secrets or private content.
+- [ ] No production action has occurred.

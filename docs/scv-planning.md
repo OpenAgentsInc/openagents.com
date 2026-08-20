@@ -2,7 +2,9 @@
 
 Date: 2026-08-20
 
-Status: Proposed architecture; implementation and autonomous deployment remain disabled
+Status: Proposed architecture; OpenCode is the designated first execution
+runtime and qualification workload;
+implementation and autonomous deployment remain disabled
 
 ## Outcome
 
@@ -34,7 +36,9 @@ must not bypass the repository's current safety contracts:
   an SCV identity in the existing free-form `promoted_by` field and call that
   authorization.
 
-The recommended first milestone is a continuously running, propose-only SCV.
+The recommended first milestone is a continuously running, propose-only SCV
+that uses OpenCode inside an isolated worker. Qualify the worker against the
+OpenCode repository before using the same runtime to improve `openagents.com`.
 The recommended first autonomous milestone is staging-only deployment of a
 narrow, low-risk change class. Production autonomy is a later admission, not a
 configuration toggle hidden inside the first release.
@@ -49,8 +53,13 @@ An SCV should:
 - Read and change the exact repository that Forge recognizes as source truth.
 - Use an isolated, secret-free workspace with a complete compiler and test
   toolchain.
+- Route work to capability-described workers so an SCV can use Elixir, Bun,
+  Node.js, Python, Rust, browser, and platform-specific toolchains without
+  adding those runtimes to the Phoenix release.
 - Preserve every model request, tool decision, command result, commit, gate,
   promotion, deployment, verification, and rollback as bounded evidence.
+- Collect host-observed resource use, benchmark samples, and OpenCode usage
+  statistics with enough provenance to compare equivalent runs.
 - Recover after node, process, provider, and executor failures without repeating
   an uncertain external effect.
 - Enforce token, cost, time, CPU, memory, disk, command, diff, commit, and
@@ -73,6 +82,8 @@ The first SCV should not:
 - Modify production data, perform destructive migrations, rotate secrets,
   change billing policy, or widen an authorization boundary.
 - Run several repository-writing SCVs concurrently.
+- Treat workers with different images, resource classes, operating systems,
+  toolchain versions, or cache states as interchangeable benchmark hosts.
 - Deploy a structural or unclassified candidate automatically in the first
   autonomous release.
 - Treat a passing model-authored test as sufficient evidence of correctness.
@@ -136,12 +147,21 @@ sanitized evidence and operator work
        |                    |
        | provider events    | typed executor requests
        v                    v
-server provider adapter   isolated SCV worker
-                            |-- exact Forge checkout
-                            |-- bounded file tools
-                            |-- bounded command runner
-                            |-- disposable database and services
-                            `-- no production secrets
+server provider adapter   capability scheduler
+                                   |
+                 +-----------------+-----------------+
+                 |                 |                 |
+                 v                 v                 v
+          OpenCode core      browser worker      Rust worker
+          SCV worker         and benchmarks      and native build
+                 |                 |                 |
+                 +-----------------+-----------------+
+                                   |
+                                   |-- exact Forge checkout
+                                   |-- bounded file tools
+                                   |-- bounded command runner
+                                   |-- disposable database and services
+                                   `-- no production secrets
                                    |
                                    v
                          SCV candidate commit and push
@@ -169,10 +189,12 @@ Ecto, and supervised tasks. Do not make an external coding CLI the SCV's
 authority or durable state machine.
 
 Run candidate code and build commands in a separate SCV worker container or
-owned worker VM. The worker may also run Elixir, but it must use a separate
-runtime identity and mounts from the Phoenix release. This preserves the Forge
-build-lane rule that the web release receives no compiler, Docker socket, or
-general command-execution authority.
+owned worker VM. Run an Elixir/OTP worker release there with a separate runtime
+identity and mounts from the Phoenix release. Start only the worker supervision
+tree; do not start the Phoenix endpoint, application Repo, Forge control plane,
+or deployment coordinators. This preserves the Forge build-lane rule that the
+web release receives no compiler, Docker socket, or general command-execution
+authority.
 
 The worker needs:
 
@@ -189,6 +211,407 @@ The worker needs:
 Candidate code is untrusted during evaluation even though the worker runs in an
 owned environment. Tests and Mix tasks can execute arbitrary repository code.
 Do not mount any credential that candidate code could read or transmit.
+
+## OpenCode as the first execution runtime
+
+Use OpenCode for the first end-to-end SCV worker implementation. This validates
+non-Elixir execution, long model-driven runs, structured events, permission
+handling, a large polyglot repository, and measurable performance work before
+the SCV targets `openagents.com` itself.
+
+Keep these milestones separate:
+
+1. **Runtime qualification:** Build the OpenCode worker image, compile and test
+   the inspected OpenCode source, exercise one bounded OpenCode session, and
+   collect resource and benchmark evidence without pushing a candidate.
+2. **Self-targeting proof:** Use the read-only admitted OpenCode runtime to fix
+   a seeded OpenCode defect in the separate target checkout. Stop at a
+   propose-only run ref.
+3. **Product pilot:** Use the qualified OpenCode runtime to improve
+   `openagents.com`, pass its Elixir and Forge gates, and keep promotion human
+   controlled.
+
+Passing runtime qualification does not admit an OpenCode candidate, and passing
+the self-targeting proof does not authorize an `openagents.com` deployment.
+Mirror the inspected OpenCode commit into a dedicated Forge qualification
+repository and keep its run refs internal. Do not push a self-targeting proof to
+the upstream OpenCode repository or treat Forge as upstream authority.
+
+### Inspected baseline
+
+This plan uses the OpenCode `dev` branch at commit
+`b155b15694dbcc6768f11d2f25cc2bdd1f738ab4` as its inspected baseline. The
+repository is a Bun-first TypeScript monorepo, not a generic Node.js project.
+Its relevant contracts include:
+
+- Bun `1.3.14` from the root `packageManager` declaration;
+- Node.js 24 in continuous integration, with Node.js `24.15` used for the
+  Playwright path because the repository records a Chromium extraction issue
+  with the next patch release;
+- Ubuntu 24.04 for the primary Linux test environment;
+- Python 3 and `setuptools` for dependency compatibility;
+- native build tools, `pkg-config`, Git, OpenSSH client, `curl`, certificates,
+  `jq`, `ripgrep`, `unzip`, `xz-utils`, and `zip`;
+- package-scoped tests and type checks, because the root test configuration
+  intentionally refuses test execution;
+- Rust stable for native and desktop work, plus GTK, WebKit, and Tauri system
+  packages for Linux desktop builds;
+- Playwright Chromium and its system dependencies for application end-to-end
+  and performance work;
+- Windows and macOS runners for complete platform and release coverage.
+
+OpenCode already publishes Linux container layers for a base toolchain,
+Bun plus Node.js, Rust, Tauri Linux, and publishing. Reuse their pinned versions
+as input evidence, but build and sign SCV-owned images. Do not trust a mutable
+tag or let repository code select the worker image.
+
+### Trust boundary
+
+OpenCode is an execution runtime inside a worker. It is not the SCV coordinator,
+lease authority, policy engine, receipt store, or promotion authority. The
+Elixir control plane owns those responsibilities even when OpenCode manages the
+model and tool loop for one run.
+
+When an SCV works on OpenCode, keep two separate copies:
+
+- Install the admitted OpenCode runtime under a read-only path such as
+  `/opt/scv/opencode/bin/opencode`. Bind its version to the worker image digest.
+- Check out the target OpenCode SHA under the disposable writable workspace.
+  Treat every file and executable produced there as candidate code.
+
+The target checkout must not replace the admitted runtime during a run. A gate
+may build and execute the candidate OpenCode binary as an untrusted test
+artifact, but that binary cannot control the run, approve permissions, write
+receipts, or evaluate its own gate.
+
+### First worker image
+
+Build `scv-opencode-core` before creating generic language images. The image is
+the first executable SCV milestone and should contain:
+
+| Layer | Pinned contents |
+| --- | --- |
+| Operating system | Ubuntu 24.04 for parity with OpenCode's primary Linux tests |
+| JavaScript runtimes | Bun `1.3.14` baseline build, Node.js `24.15`, and Corepack |
+| Native support | Python 3, `setuptools`, `build-essential`, `pkg-config`, `libgcc`, and `libstdc++` |
+| Repository tools | Git, OpenSSH client without credentials, `curl`, certificates, `jq`, `ripgrep`, `unzip`, `xz-utils`, and `zip` |
+| SCV runtime | A self-contained Elixir/OTP worker release with ERTS, a pinned read-only OpenCode binary, and cgroup and process-tree measurement support |
+| Runtime identity | An unprivileged UID, empty home and XDG roots per execution, a read-only root filesystem, and a bounded writable workspace and cache |
+
+Do not include Chromium, Rust, a Docker daemon or socket, a cloud CLI,
+credential helpers, an SSH agent, or production credentials in this first
+image. Build dependencies while the image build has admitted network access.
+Run candidate commands without general network access.
+
+Address the image by its manifest digest. Produce an SBOM and record the source
+SHA, Dockerfile digest, base image digest, OpenCode version, package-manager
+lock digest, toolchain versions, and build receipt. Forge should admit that
+manifest before any worker registers with it.
+
+Use a multi-stage build. Compile the minimal SCV worker release and the admitted
+OpenCode binary in build stages, then copy their immutable artifacts into the
+final toolchain image. Do not copy source credentials, package-manager tokens,
+Hex state, SSH state, or build-stage homes into the final image. The worker
+release should spawn OpenCode and language tools as contained OS processes and
+remain the parent authority for deadlines, cancellation, output bounds, and
+receipts.
+
+### Worker image family
+
+Use additional images only when the work item requires their capabilities:
+
+| Worker image | Adds | Intended work |
+| --- | --- | --- |
+| `scv-opencode-core` | Bun, Node.js, Python, native build tools, and the admitted OpenCode runtime | OpenCode CLI and server changes, unit tests, type checks, source benchmarks, and most TypeScript work |
+| `scv-opencode-browser` | Playwright Chromium, browser system libraries, and production application assets | Application end-to-end tests, trace capture, and UI performance benchmarks |
+| `scv-opencode-rust` | A pinned stable minimal Rust toolchain | Rust crates, native helpers, and cross-language changes |
+| `scv-opencode-tauri-linux` | GTK, WebKit, librsvg, Tauri prerequisites, and packaging utilities | Linux desktop compilation and packaging |
+| Platform workers | Native Windows or macOS environment with the same SCV protocol | Platform behavior and release evidence that Linux cannot prove |
+
+Derive later `scv-node`, `scv-python`, and `scv-rust` images from the same worker
+contract. A new language requires an image and capability manifest, not a new
+privilege in the Phoenix release.
+
+Use this initial artifact layout when implementation starts:
+
+```text
+ops/scv/images/opencode-core/Dockerfile
+ops/scv/images/opencode-browser/Dockerfile
+ops/scv/images/opencode-rust/Dockerfile
+ops/scv/images/opencode-tauri-linux/Dockerfile
+ops/scv/images/versions.env
+ops/scv/worker/entrypoint.sh
+```
+
+Keep versions and expected digests in an operator-owned manifest. The
+entrypoint may start only the compiled worker release. It must not interpret
+repository input or construct a shell command.
+
+### OpenCode execution adapter
+
+Implement `OpenAgents.SCV.Executor.OpenCode` behind the generic executor
+protocol. Start with one admitted OpenCode process per run:
+
+1. Create isolated `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+   `XDG_STATE_HOME`, and `XDG_CACHE_HOME` directories.
+2. Generate operator-owned OpenCode configuration through
+   `OPENCODE_CONFIG_CONTENT` and record its redacted digest.
+3. Start `opencode run --format json` with the admitted model, directory, and
+   bounded prompt.
+4. Parse JSON events as nested observational records under one outer SCV
+   execution step.
+5. Mark the outer step uncertain and discard its workspace if OpenCode exits
+   without a terminal event. Do not infer which internal tool effects finished.
+6. Cancel the entire process tree when the lease, generation, deadline, budget,
+   or operator state changes.
+7. Reconcile the OpenCode session ID and local database at termination, retain
+   admitted artifacts, and destroy the run home.
+
+Do not use `--auto`, `--yolo`, or `--dangerously-skip-permissions`. Those modes
+bypass the permission boundary that an SCV needs to test. A later adapter may
+run `opencode serve` inside each worker for durable multi-turn sessions. Bind it
+to loopback, require a random `OPENCODE_SERVER_PASSWORD`, keep the password in
+the sidecar, and address sessions by their recorded OpenCode session IDs.
+
+The native JSON stream provides useful visibility, but it cannot prove that the
+SCV persisted each tool request before OpenCode executed it. Treat the first
+compatibility run as one coarse, disposable effect. Before crash-resumable
+candidate construction, add an SCV-specific OpenCode tool transport that:
+
+1. Disables OpenCode's direct edit and command execution for SCV sessions.
+2. Sends each typed tool request, session ID, run generation, and idempotency
+   key to the sidecar.
+3. Persists the requested `scv_step` before the sidecar acknowledges it.
+4. Executes the request in the credential-free candidate compartment after
+   policy and generation checks pass.
+5. Returns a signed, digest-addressed result that OpenCode can use as its tool
+   output.
+6. Resolves retries from the committed step instead of repeating the effect.
+
+Implement this transport as a narrow OpenCode integration or admitted patch,
+not by parsing terminal output and reconstructing tool calls afterward. Keep
+OpenCode's SDK, server event stream, session API, and permission API available
+for session control, but do not confuse those APIs with the durable effect
+barrier.
+
+OpenCode project configuration, plugins, Model Context Protocol servers,
+skills, instructions, and language-server downloads are executable or
+instruction-bearing repository inputs. The first adapter should disable
+automatic project configuration and downloads with
+`OPENCODE_DISABLE_PROJECT_CONFIG=1` and
+`OPENCODE_DISABLE_LSP_DOWNLOAD=1`. Resolve `AGENTS.md` and other required
+repository instructions separately, admit their exact digests, and pass their
+bounded content as evidence. Enable a project feature only after the host
+policy classifies and receipts it.
+
+Configure OpenCode permissions explicitly. Start from deny and admit only the
+read, list, search, workspace edit, and structured command operations that the
+current phase needs. Pass the operator-owned rule set through
+`OPENCODE_PERMISSION` and record its digest. OpenCode's permission result is one
+input to enforcement; the outer worker namespace, filesystem mounts, command
+policy, cgroup, and network policy remain authoritative.
+
+### Provider credentials
+
+Give OpenCode a short-lived, run-scoped inference grant for an
+OpenAI-compatible internal endpoint. Bind it to the SCV ID, run ID, admitted
+model set, request count, token budget, cost budget, expiry, and worker
+generation. Never place a reusable provider key in the image or workspace.
+
+OpenCode normally launches tool processes beneath itself. Assume those child
+processes can inspect the OpenCode environment until isolation proves
+otherwise. The first experiment may use only a disposable, tightly budgeted
+grant with no authority outside inference. It does not satisfy the final
+credential-isolation requirement.
+
+Before an SCV receives autonomous write or deployment authority, separate the
+OpenCode model process from candidate command execution. Route tool requests
+through the sidecar into a credential-free execution compartment. Keep the
+inference grant in the model compartment or authenticate to a local inference
+proxy through an out-of-band worker identity. Prove that candidate code cannot
+read, reuse, or transmit the grant.
+
+### First OpenCode validation run
+
+Use a fixed workload against the inspected baseline before admitting arbitrary
+OpenCode work:
+
+1. Build and admit `scv-opencode-core` by digest.
+2. Import the exact OpenCode baseline into the dedicated Forge qualification
+   repository and verify its object and WAL receipts.
+3. Check out the exact OpenCode baseline in a clean disposable workspace.
+4. Verify the Bun, Node.js, Python, Git, and admitted OpenCode versions.
+5. Run `bun install --frozen-lockfile` and record cold-cache and warm-cache
+   receipts.
+6. Run `bun typecheck` and `bun test --timeout 30000 --only-failures` from
+   `packages/opencode`.
+7. Run `bun run test:httpapi` from `packages/opencode` on the core worker.
+8. Run `bun run bench:test` from `packages/opencode`, first with one measured
+   run and then with explicit `BENCH_WARMUPS` and `BENCH_RUNS` values.
+9. Run `bun run profile:test` from `packages/opencode` with explicit
+   `TEST_PROFILE_GLOB`, `TEST_PROFILE_LIMIT`, `TEST_PROFILE_TIMEOUT`, and
+   `TEST_PROFILE_TOP` values.
+10. Start one bounded `opencode run --format json` session, exercise admitted
+    read and command operations, and prove every permission denial and event
+    reaches the SCV receipt chain.
+11. Cancel a second run at each external boundary and prove generation fencing,
+    process-tree termination, and workspace cleanup.
+
+Run the browser performance suite only on `scv-opencode-browser`. Run it
+serially against a production build, preserve the emitted `BENCHMARK` and
+`BENCHMARK_PAGE` JSON records, and retain optional Chrome trace artifacts by
+digest. Invoke `bun run test:bench` from `packages/app`. Use
+`bun run test:e2e:local` from the same package for the normal end-to-end gate.
+Do not make Rust, Tauri, Windows, or macOS gates mandatory for a change that
+does not reach those surfaces.
+
+The first improvement candidate should fix a seeded, reproducible OpenCode
+defect or performance regression with an existing or independently authored
+test. Keep the candidate propose-only. This proves the worker and evidence
+system before any Forge deployment path opens.
+
+## Worker pool and capability routing
+
+Run multiple workers under one Elixir scheduler. Each worker registers an
+operator-admitted capability manifest containing:
+
+- worker image and SBOM digests;
+- operating system, architecture, and resource class;
+- CPU count or admitted CPU class, memory and disk limits, and process limit;
+- runtime, compiler, package-manager, browser, and OpenCode versions;
+- supported command and network profiles;
+- benchmark isolation and tracing capabilities;
+- current state: `starting`, `ready`, `busy`, `draining`, `unhealthy`, or
+  `offline`.
+
+The scheduler matches a work item's required capabilities to an exact manifest.
+It must not infer compatibility from a worker name. A worker claims one
+execution lease with the current run generation, heartbeats while active, and
+rejects stale or duplicate requests. Draining prevents new claims without
+interrupting an admitted execution.
+
+Keep one repository writer per integration history. Multiple workers may run
+read-only investigation, exact-SHA tests, benchmarks, or independent evaluation
+in parallel against immutable checkouts. Candidate-affecting results must bind
+to one exact SHA. A parallel result from an older SHA becomes evidence for a
+later decision; it cannot silently update the active candidate.
+
+Separate the logical SCV run from its worker executions. One run may dispatch a
+core type check, browser benchmark, and Rust gate to different workers while
+the coordinator retains the run lease and joins their immutable receipts.
+Cancel or supersede each execution independently when its result is no longer
+needed.
+
+### Worker protocol
+
+Use a versioned, language-neutral protocol so Linux containers, owned virtual
+machines, and native Windows or macOS workers implement the same boundary. Do
+not require a remote worker to join the BEAM cluster.
+
+The protocol needs these operations:
+
+- register an admitted image and capability manifest;
+- heartbeat, renew an execution claim, and report health;
+- claim the next compatible execution with its run generation;
+- acknowledge a requested step only after the control plane persists it;
+- stream bounded progress and host-observed measurements;
+- publish a terminal receipt and artifact digests;
+- cancel one execution or all executions for a run generation;
+- drain, retire, and reject an image.
+
+Authenticate workers with an SCV-specific machine identity over mutually
+authenticated transport. Bind every message to the SCV ID, run ID, execution
+ID, generation, protocol revision, and idempotency key. Sign or MAC terminal
+receipts and verify them before the coordinator changes durable state.
+
+Let workers pull compatible work instead of accepting arbitrary commands on a
+general remote-execution port. The control plane stores the request before it
+becomes claimable. Large source bundles, logs, traces, and profiles move through
+digest-addressed artifact storage; protocol messages carry bounded metadata and
+artifact refs. Use `Req` for the Elixir HTTP client if the first protocol uses
+HTTPS. Keep transport selection behind the protocol behavior so an admitted
+queue can replace HTTPS without changing run semantics.
+
+## Resource, benchmark, and statistics evidence
+
+Measure candidate processes from outside their namespace. OpenCode output and
+repository benchmark scripts provide domain metrics, but only the worker host
+can provide authoritative resource use.
+
+### Execution measurements
+
+Record these values for each structured command and aggregate them for the run:
+
+- monotonic start and finish times, wall duration, exit status, signal, retry,
+  and cancellation reason;
+- user and system CPU time, allocated CPU class, throttled CPU time, and
+  throttling count;
+- current and peak memory, swap use, page faults, and out-of-memory events;
+- filesystem bytes read and written, workspace and cache size, disk peak, and
+  inode use;
+- process and thread peak, descendant count, and leaked-process findings;
+- network bytes, destination classes, and denied connection count;
+- standard output and error bytes, retained bytes, truncation, and artifact
+  digests;
+- cold, warm, or disabled cache state and relevant cache digests.
+
+Collect cgroup or container-runtime counters before cleanup. Sample long
+commands at a bounded interval and store a compact time series outside the
+workspace. Candidate code cannot write or amend these measurements.
+
+### OpenCode usage measurements
+
+Normalize OpenCode JSON events into SCV metrics for:
+
+- session, provider, and model IDs;
+- model requests, retries, time to first event, and total completion time;
+- input, output, reasoning, cache-read, and cache-write tokens;
+- estimated and provider-reconciled cost;
+- tool calls by type, duration, result, output size, and permission decision;
+- changed files, added and removed lines, commands, checkpoints, compactions,
+  and terminal reason.
+
+OpenCode's `stats` command aggregates sessions, messages, token classes, cost,
+tool use, model use, date range, cost per day, tokens per session, and median
+tokens per session from its local SQLite data. Import that result only as
+reconciliation evidence. SCV step receipts and the inference ledger remain the
+usage authority because a candidate can influence the local OpenCode store.
+
+### Benchmark receipts
+
+Store every benchmark as a definition plus immutable samples. A definition
+includes the repository SHA, worker image digest, resource class, operating
+system and architecture, toolchain versions, command profile, dataset or
+fixture digest, cache policy, warmup count, measured run count, timeout, and
+environment digest.
+
+A sample stores its raw metric records and artifacts plus normalized values.
+Summaries may report minimum, maximum, mean, median, and percentiles only when
+the sample count supports them. Keep failed and cancelled samples; removing
+them biases the result.
+
+For OpenCode, ingest:
+
+- `METRIC test_suite_seconds`, `test_suite_best_seconds`, and
+  `test_suite_worst_seconds` from `bench:test`;
+- per-file timings, `slowest_test_file_seconds`, and `profiled_test_files` from
+  `profile:test`;
+- application `BENCHMARK` and `BENCHMARK_PAGE` JSON lines;
+- Chrome Performance traces and any admitted CPU or visual profiles;
+- SCV host measurements for the same processes.
+
+Compare a candidate with its recorded base only when the worker image, resource
+class, operating system, architecture, toolchains, benchmark definition, cache
+policy, and isolation level match. Otherwise mark the comparison
+`not_comparable`. Use medians from repeated runs for performance decisions.
+Keep correctness gates separate from performance evidence, and do not create
+machine-dependent pass thresholds for OpenCode's browser benchmarks.
+
+Reserve the benchmark worker exclusively for a comparison window. Run base and
+candidate samples on the same worker when possible, alternate their order, and
+record thermal, throttling, memory-pressure, and background-load invalidation
+signals. Do not publish an improvement when environmental noise exceeds the
+definition's admitted envelope.
 
 ## Durable execution model
 
@@ -359,7 +782,9 @@ they fit. Add SCV-specific tools for:
 - file creation, deletion, and rename with path and byte bounds;
 - focused test discovery and execution;
 - Mix help and admitted Mix tasks;
-- JavaScript tests through the repository's pinned package command;
+- OpenCode runs through the admitted OpenCode adapter;
+- repository-defined Bun, Node.js, Python, Rust, browser, and Mix commands
+  through capability-specific profiles;
 - formatting and final diff inspection;
 - checkpoint and candidate submission.
 
@@ -372,7 +797,7 @@ work. Use policy profiles instead:
 
 - A read profile admits bounded Git and source-inspection commands.
 - A focused-test profile admits exact repository-owned test entry points and
-  Mix tasks after validating their options.
+  repository tasks after validating their options.
 - A candidate-gate profile admits only the immutable gate definition.
 - A networked profile remains disabled in the first release.
 
@@ -422,6 +847,7 @@ Store one bounded execution episode:
 - SCV, work item, base SHA, integration WAL position, and generation;
 - program, policy, tool-catalog, evaluator, and gate digests;
 - model and provider adapter IDs;
+- requested worker capabilities, benchmark definitions, and comparison base;
 - phase and terminal status;
 - token, cost, tool, command, time, CPU, memory, disk, and diff usage;
 - structured checkpoint and bounded report;
@@ -441,6 +867,71 @@ Store every provider and tool boundary in order:
 Store large input and output only in a bounded, access-controlled artifact
 store when diagnosis requires it. Database rows should contain redacted
 excerpts and digests.
+
+### `scv_worker_images`
+
+Store admitted immutable worker manifests:
+
+- image, SBOM, Dockerfile, base image, source, and build receipt digests;
+- operating system, architecture, toolchains, OpenCode runtime, and supported
+  capability names;
+- default resource bounds and permitted command and network profiles;
+- admission, retirement, and vulnerability-review state;
+- creation and immutable admission timestamps.
+
+### `scv_workers`
+
+Store the current worker registration and lease surface:
+
+- stable worker ID, admitted image ID, resource class, and capabilities digest;
+- state, health, drain request, and last heartbeat;
+- current execution, run generation, claim expiry, and coordinator owner;
+- boot identity and monotonic registration generation;
+- bounded health details without hostnames, credentials, or internal addresses
+  in operator projections.
+
+### `scv_executions`
+
+Store one dispatch to one worker:
+
+- run, step, worker image, required capabilities, and exact repository SHA;
+- execution generation, idempotency key, claim, start, heartbeat, cancellation,
+  and terminal timestamps;
+- command profile and redacted environment digest;
+- exit, signal, timeout, cancellation, and uncertainty result;
+- resource summary, output, event stream, and artifact refs.
+
+### `scv_benchmark_definitions`
+
+Store the admitted comparison contract:
+
+- stable name and revision;
+- repository paths, structured commands, metric parsers, fixture digests, and
+  required capabilities;
+- warmup, repetition, serial-execution, cache, timeout, and tracing rules;
+- normalized metric names, units, direction, and decision policy;
+- operator admission and immutable definition digest.
+
+### `scv_benchmark_runs` and `scv_benchmark_samples`
+
+Store the benchmark execution and its samples:
+
+- definition, base or candidate SHA, worker image, resource class, toolchain,
+  cache, and environment digests;
+- sample ordinal, warmup flag, status, raw metric refs, normalized metrics, and
+  host resource summary;
+- aggregate statistics, comparison result, confidence policy, and
+  `not_comparable` reasons;
+- retained trace, profile, and diagnostic artifact refs.
+
+### `scv_resource_samples`
+
+Store compact host-observed measurements for long executions:
+
+- execution ID, monotonic offset, and sample interval;
+- CPU, throttling, memory, swap, filesystem, process, and network counters;
+- cgroup or runtime source and collection error;
+- immutable sample and summary digests.
 
 ### `scv_candidates`
 
@@ -543,8 +1034,10 @@ Run checks in increasing order of cost and stop on the first failure:
 2. Validate changed paths, diff bounds, generated artifacts, and protected
    surfaces.
 3. Run formatting and focused regression tests.
-4. Run compile with warnings as errors.
-5. Run `mix precommit`.
+4. Run the repository's admitted compile or type-check profile with warnings as
+   errors where the toolchain supports it.
+5. Run the repository's final precommit profile. Use `mix precommit` for
+   `openagents.com` and the exact package-scoped Bun gates for OpenCode.
 6. Commit and push the exact candidate SHA.
 7. Run the required exact-SHA release gate in a fresh checkout.
 8. Verify that the gate definition digest matches the base policy.
@@ -561,7 +1054,8 @@ For a low-risk automatic candidate, require all of these facts:
 - the candidate descends from the admitted integration head;
 - focused tests prove the reported defect or improvement;
 - no protected surface changed;
-- `mix precommit` passes without retries or modified thresholds;
+- the repository's admitted final gate passes without retries or modified
+  thresholds;
 - the exact-SHA gate passes in the trusted evaluator;
 - Forge independently classifies the complete candidate as `direct_candidate`;
 - every changed runtime module matches the narrower SCV allowlist and Forge's
@@ -791,9 +1285,13 @@ Add an operator-only SCV surface with stable IDs and bounded projections. Show:
   head;
 - active and recent work items, runs, candidates, and budgets;
 - current phase, elapsed time, and cancellation state;
+- worker pool health, admitted image digests, capabilities, resource classes,
+  active executions, queue pressure, and drain state;
 - changed paths and diff summary after a candidate exists;
 - focused tests, exact-SHA gate, Forge build, target, deployment, and observation
   receipts;
+- resource summaries, comparable benchmark results, OpenCode usage totals, and
+  retained trace or profile refs;
 - terminal result, rollback state, and circuit reason;
 - **Pause**, **Resume**, **Cancel run**, **Reject candidate**, **Require human
   review**, and **Open diff** controls.
@@ -808,6 +1306,9 @@ Emit content-free telemetry for:
 - work discovery and admission;
 - run, provider, tool, and command duration;
 - token and cost use;
+- worker claims, queue time, utilization, health, resource use, and out-of-memory
+  results;
+- benchmark samples, comparison eligibility, regressions, and improvements;
 - candidate refusal reasons;
 - gate and build outcomes;
 - promotion, deploy, observation, and rollback results;
@@ -820,14 +1321,25 @@ Add typed, fail-closed settings such as:
 ```text
 OPENAGENTS_FEATURE_SCV
 OPENAGENTS_SCV_MODE=observe|propose|staging_auto|production_auto
-OPENAGENTS_SCV_REPOSITORIES=openagents.com
+OPENAGENTS_SCV_REPOSITORIES=anomalyco/opencode
 OPENAGENTS_SCV_PROGRAM_REVISION=<revision>
 OPENAGENTS_SCV_POLICY_REVISION=<revision>
+OPENAGENTS_SCV_PROCESS_ROLE=coordinator|worker
 OPENAGENTS_SCV_EXECUTOR=<adapter>
 OPENAGENTS_SCV_EXECUTOR_QUEUE_DIR=<absolute-path>
 OPENAGENTS_SCV_WORKSPACE_DIR=<absolute-path>
+OPENAGENTS_SCV_WORKER_IMAGES=<admitted-manifest-digests>
+OPENAGENTS_SCV_OPENCODE_IMAGE=<admitted-manifest-digest>
+OPENAGENTS_SCV_MAX_WORKERS=<bounded-integer>
 OPENAGENTS_SCV_MAX_ACTIVE_RUNS=1
+OPENAGENTS_SCV_MAX_ACTIVE_REPOSITORY_WRITERS=1
+OPENAGENTS_SCV_WORKER_CPU=<bounded-resource-class>
+OPENAGENTS_SCV_WORKER_MEMORY_BYTES=<bounded-integer>
+OPENAGENTS_SCV_WORKER_DISK_BYTES=<bounded-integer>
+OPENAGENTS_SCV_RESOURCE_SAMPLE_MS=<bounded-integer>
 OPENAGENTS_SCV_RUN_TIMEOUT_MS=<bounded-integer>
+OPENAGENTS_SCV_BENCHMARK_RETENTION_MS=<bounded-integer>
+OPENAGENTS_SCV_ARTIFACT_RETENTION_MS=<bounded-integer>
 OPENAGENTS_SCV_DAILY_TOKEN_BUDGET=<bounded-integer>
 OPENAGENTS_SCV_DAILY_COST_MICROUSD=<bounded-integer>
 OPENAGENTS_SCV_DAILY_DEPLOYMENTS=<bounded-integer>
@@ -838,11 +1350,19 @@ OPENAGENTS_SCV_OBSERVATION_MS=<bounded-integer>
 The runtime boundary should reject:
 
 - any enabled mode without admitted program and policy digests;
+- a worker whose image, SBOM, capability, or command-profile digest is not
+  admitted;
+- an OpenCode adapter without an admitted OpenCode image and explicit
+  permissions;
+- a worker process role that also starts the Phoenix endpoint, application
+  Repo, Forge control plane, or deployment coordinators;
 - an executor path under `/tmp` in staging or production;
 - an automatic mode before Forge deployment, boot convergence, durable
   artifacts, and isolated staging are enabled;
 - `production_auto` while production deployment remains globally disabled;
 - multiple active runs in the first policy revision;
+- multiple repository writers for one integration history;
+- a benchmark comparison across incompatible provenance;
 - a deployment budget without an observation window and rollback authority;
 - an SCV repository that is absent from the configured Forge repositories.
 
@@ -861,6 +1381,16 @@ lib/openagents/scv/work_item.ex
 lib/openagents/scv/run.ex
 lib/openagents/scv/step.ex
 lib/openagents/scv/candidate.ex
+lib/openagents/scv/worker_image.ex
+lib/openagents/scv/worker.ex
+lib/openagents/scv/worker_supervisor.ex
+lib/openagents/scv/worker_client.ex
+lib/openagents/scv/worker_runner.ex
+lib/openagents/scv/execution.ex
+lib/openagents/scv/benchmark_definition.ex
+lib/openagents/scv/benchmark_run.ex
+lib/openagents/scv/benchmark_sample.ex
+lib/openagents/scv/resource_sample.ex
 lib/openagents/scv/program.ex
 lib/openagents/scv/policy.ex
 lib/openagents/scv/change_classifier.ex
@@ -872,8 +1402,12 @@ lib/openagents/scv/provider_loop.ex
 lib/openagents/scv/tool_catalog.ex
 lib/openagents/scv/workspace.ex
 lib/openagents/scv/executor.ex
+lib/openagents/scv/executor/open_code.ex
 lib/openagents/scv/executor/sidecar.ex
 lib/openagents/scv/executor_protocol.ex
+lib/openagents/scv/worker_scheduler.ex
+lib/openagents/scv/resource_collector.ex
+lib/openagents/scv/benchmark_parser.ex
 lib/openagents/scv/gate.ex
 lib/openagents/scv/promoter.ex
 lib/openagents/scv/observer.ex
@@ -901,11 +1435,13 @@ candidate, which changes can qualify, and how the operator stops the system.
 
 ### Phase 1: Observe and queue
 
-1. Add SCV, work-item, run, step, and candidate schemas with database guards.
+1. Add SCV, work-item, run, step, candidate, worker, execution, resource, and
+   benchmark schemas with database guards.
 2. Add the coordinator, lease, budgets, recovery, pause, and circuit state.
 3. Ingest operator work items and sanitized owned-gate failures.
 4. Run selection and planning without repository writes.
-5. Add the operator surface and content-free telemetry.
+5. Add the capability scheduler, worker registration, operator surface, and
+   content-free telemetry without starting candidate commands.
 
 **Exit criteria:** An SCV runs continuously in `observe` mode, survives process
 and node loss, deduplicates work, spends within budget, and performs no external
@@ -913,28 +1449,59 @@ effect.
 
 ### Phase 2: Build candidates
 
-1. Add the isolated executor protocol and worker.
-2. Add exact Forge checkout, workspace confinement, SCV tools, command profiles,
-   and candidate-code sandboxing.
-3. Add focused tests, commit resolution, run-ref push, WAL receipt linking, and
+1. Build and admit `scv-opencode-core` by digest before any generic language
+   worker.
+2. Add the isolated executor protocol, OpenCode adapter, capability scheduler,
+   worker leases, and resource collector.
+3. Add exact Forge checkout, workspace confinement, the durable OpenCode tool
+   transport, SCV tools, OpenCode event receipts, command profiles, and
+   candidate-code sandboxing.
+4. Register multiple `scv-opencode-core` workers, but retain one repository
+   writer for the OpenCode integration history.
+5. Run the fixed OpenCode validation workload, ingest its native benchmarks,
+   and prove credential, permission, cancellation, and generation boundaries.
+6. Add focused tests, commit resolution, run-ref push, WAL receipt linking, and
    cleanup.
-4. Keep every candidate propose-only.
+7. Keep every candidate propose-only.
 
-**Exit criteria:** An SCV can reproduce, test, patch, commit, and push a bounded
-candidate. Crash tests prove that no uncertain push or command becomes success.
+**Exit criteria:** An SCV can use OpenCode internally to reproduce, test, patch,
+commit, and push a bounded OpenCode candidate. Multiple workers can execute
+exact-SHA read and gate work without creating multiple writers. Resource and
+benchmark receipts remain complete across crash tests, and no uncertain push
+or command becomes success.
 
-### Phase 3: Gate and review
+### Phase 3: Qualify and review OpenCode
 
 1. Add the independent change classifier and protected-surface enforcement.
-2. Add immutable focused-test, `mix precommit`, exact-SHA release-gate, and
-   evaluator receipts.
+2. Add immutable focused-test, repository precommit, exact-SHA release-gate,
+   benchmark, and evaluator receipts.
+3. Run the OpenCode runtime qualification and self-targeting proof against the
+   inspected baseline.
+4. Add human review from the SCV candidate surface without a deployment action.
+5. Reconstruct the complete chain from work evidence through OpenCode session,
+   worker executions, resource samples, candidate push, exact-SHA gate, and
+   benchmark comparison.
+
+**Exit criteria:** A human can review a propose-only OpenCode candidate with all
+evidence visible. The admitted OpenCode runtime remains separate from the
+candidate checkout, and every refused class stops before source admission.
+
+### Phase 4: Pilot `openagents.com`
+
+1. Build and admit an `scv-openagents` capability image with the repository's
+   pinned Elixir, Erlang, Mix, asset, database, and test toolchains. Keep the
+   admitted OpenCode runtime as the model and tool-loop process.
+2. Run the fixed fixture defect through focused tests, `mix precommit`, the
+   exact-SHA release gate, and independent policy evaluation.
 3. Add human promotion from the SCV candidate surface.
-4. Reconstruct the complete chain from work evidence to Forge deploy receipt.
+4. Reconstruct the complete chain from work evidence to the Forge deploy and
+   observation receipts.
 
-**Exit criteria:** A human can review and promote a low-risk SCV candidate with
-all evidence visible, and every refused class stops before promotion.
+**Exit criteria:** A human can review and promote a low-risk
+`openagents.com` candidate with all evidence visible, and every refused class
+stops before promotion.
 
-### Phase 4: Automate isolated staging
+### Phase 5: Automate isolated staging
 
 Start only after ADR 0007's Forge-canonical cutover and the isolated staging
 deployment gates pass.
@@ -951,7 +1518,7 @@ deployment gates pass.
 failure cases without mixed revisions, lost commits, unreceipted effects, or
 continued deployment after rollback.
 
-### Phase 5: Expand admitted scope
+### Phase 6: Expand admitted scope
 
 Expand one independent policy revision at a time. Possible later admissions
 include broader direct-load modules, source-only integration, relup candidates,
@@ -983,6 +1550,24 @@ successful staging SCV.
   cloud, or user credential.
 - Prove network and environment profiles fail closed.
 - Prove cancellation terminates descendant processes and cleans the workspace.
+- Prove the target checkout cannot change the admitted OpenCode runtime.
+- Prove OpenCode home and XDG data never cross run or worker boundaries.
+- Prove candidate commands cannot read or reuse the inference grant before
+  enabling autonomous authority.
+
+### Workers and scheduling
+
+- Refuse unadmitted image, SBOM, capability, resource, and command-profile
+  digests.
+- Match every execution to its required operating system, architecture,
+  toolchain, browser, and tracing capabilities.
+- Prove worker heartbeat expiry and drain behavior cannot duplicate an
+  execution.
+- Run read-only exact-SHA executions on multiple workers while one writer owns
+  the integration history.
+- Supersede late results from an older candidate without rewriting their
+  immutable receipts.
+- Prove a platform-specific gate never runs on an incompatible worker.
 
 ### Model and tools
 
@@ -993,6 +1578,22 @@ successful staging SCV.
 - Force a bounded report on token, continuation, command, and wall-clock limits.
 - Run adversarial repository text that asks an SCV to expose secrets, weaken
   gates, expand authority, or deploy directly.
+- Refuse OpenCode automatic-permission flags, project plugins, unadmitted Model
+  Context Protocol servers, and automatic language-server downloads.
+- Reconcile OpenCode session statistics against SCV steps and the inference
+  ledger without trusting the local SQLite store as authority.
+
+### Resources and benchmarks
+
+- Compare cgroup or runtime CPU, memory, disk, process, and network summaries
+  with known fixture workloads.
+- Prove candidate code cannot amend host-observed resource samples.
+- Parse OpenCode `METRIC`, `BENCHMARK`, and `BENCHMARK_PAGE` records and retain
+  raw artifacts by digest.
+- Refuse comparisons when image, resource class, platform, toolchain, benchmark
+  definition, cache policy, or isolation differs.
+- Retain failed, cancelled, timed-out, and out-of-memory samples.
+- Prove benchmark processes run serially when the definition requires it.
 
 ### Change policy
 
@@ -1031,7 +1632,7 @@ Create a fixture defect with a stable failing test. An SCV should:
 2. Read the relevant code and invariant.
 3. Add or select the regression test.
 4. Make the smallest patch.
-5. Pass focused checks and `mix precommit`.
+5. Pass focused checks and the repository's admitted final gate.
 6. Commit and push an exact SHA to its run ref.
 7. Pass the independent exact-SHA gate and change policy.
 8. Produce a policy-bound promotion receipt.
@@ -1046,18 +1647,28 @@ the circuit.
 
 Ship the first SCV with this deliberately narrow posture:
 
-- one repository: `openagents.com`;
-- one logical SCV and one active run;
+- one repository: OpenCode, initially anchored to the inspected `dev` baseline;
+- one logical SCV, one active run, and one repository writer;
+- multiple registered `scv-opencode-core` workers for read-only investigation,
+  exact-SHA gates, and benchmark execution;
+- `scv-opencode-core` as the first admitted image, with browser, Rust, Tauri,
+  Windows, and macOS images added only when a required gate needs them;
 - `observe` and `propose` modes only;
 - operator-created work items plus reproducible owned-gate failures;
 - a dedicated SCV program, tool catalog, service principal, and budget ledger;
-- a sidecar executor with no production secrets or general network access;
+- an OpenCode executor behind a sidecar with no production secrets or general
+  candidate-command network access;
+- explicit OpenCode permissions, isolated XDG state, and no automatic
+  permissions or unadmitted project extensions;
 - run branches and complete receipt chains;
-- source, diff, focused-test, and `mix precommit` gates;
+- source, diff, package-scoped type-check, focused-test, HTTP API, resource, and
+  benchmark receipts;
 - no automatic promotion, integration-ref advance, or deployment.
 
-This release validates the difficult lifecycle, sandbox, Git, and evidence
-contracts without granting deployment authority. The next release can add
+This release validates the lifecycle, polyglot worker, OpenCode runtime,
+sandbox, Git, resource, benchmark, and evidence contracts without granting
+deployment authority. After it succeeds, target `openagents.com` with an Elixir
+capability image and the same worker protocol. The next release can add
 human-reviewed SCV candidates. Staging autodeploy should follow only after the
 Forge-canonical and isolated-fleet prerequisites pass.
 
@@ -1069,6 +1680,12 @@ Do not describe an SCV as autonomous until all of these conditions hold:
 - Every candidate descends from and conditionally advances one linear
   integration history.
 - Candidate code runs without production or operator credentials.
+- Candidate code cannot read an inference grant or replace the admitted
+  OpenCode runtime.
+- Every execution binds an admitted worker image, capability manifest, resource
+  class, and host-observed resource receipt.
+- Performance decisions use comparable benchmark definitions and preserve raw
+  samples, including failures.
 - Host policy, not model output, determines risk, gates, budgets, and promotion.
 - Protected changes cannot approve themselves.
 - A push cannot directly create a target.

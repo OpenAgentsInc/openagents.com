@@ -1130,10 +1130,18 @@ Implemented locally on 2026-08-20:
   and live proof with the exact `OpenAgents.BuildInfo` allowlist entry. The
   broader allowlist remains unchanged and disabled outside tests.
 
-The implementation is ready for an exact-commit local gate. Keep every deploy
-lane disabled until Gate 12 provides an isolated distributed staging fleet and
-an infrastructure-specific rolling provider. No staging or production
-environment changed during this gate.
+Gate 11 is complete locally on exact implementation commit
+`2e1c9240d0b172501a93bef7b02e934a63b447ae`. The exact-SHA release gate passed
+test and production compilation, precommit, 14 distributed tests, 17 browser
+tests, 42 focused direct-transaction tests, live upgrade/downgrade/re-upgrade,
+interrupted-install recovery, four rolling-replacement tests, 68 contract
+tests, and packaged startup with zero automatic retries. The immutable local
+image is `sha256:56e472ce2ac3a967e21f6906c08f87933228d74e6f26d3c041661f180872d472`.
+See the [Gate 11 evidence](evidence/gate-11/2e1c9240d0b172501a93bef7b02e934a63b447ae/README.md).
+
+Keep every deploy lane disabled until Gate 12 provides an isolated distributed
+staging fleet and an infrastructure-specific rolling provider. No image was
+pushed, and no staging or production environment changed during this gate.
 
 ## Gate 12: Build an isolated staging environment
 

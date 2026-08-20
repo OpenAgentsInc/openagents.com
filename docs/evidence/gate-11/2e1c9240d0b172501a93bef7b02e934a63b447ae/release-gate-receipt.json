@@ -1,0 +1,23 @@
+{
+  "schema": "openagents.release-gate.v1",
+  "git_sha": "2e1c9240d0b172501a93bef7b02e934a63b447ae",
+  "status": "passed",
+  "started_at": "2026-08-20T11:26:48Z",
+  "completed_at": "2026-08-20T11:28:20Z",
+  "total_duration_seconds": 92,
+  "automatic_retries": 0,
+  "stages": {
+    "compile": {"status": "passed", "duration_seconds": 0},
+    "production_compile": {"status": "passed", "duration_seconds": 1},
+    "precommit": {"status": "passed", "duration_seconds": 23},
+    "cluster": {"status": "passed", "duration_seconds": 33},
+    "javascript": {"status": "passed", "duration_seconds": 1},
+    "direct_transaction": {"status": "passed", "duration_seconds": 1},
+    "relup": {"status": "passed", "duration_seconds": 14},
+    "version_chain": {"status": "passed", "duration_seconds": 6},
+    "interrupted_install": {"status": "passed", "duration_seconds": 6},
+    "rolling_replacement": {"status": "passed", "duration_seconds": 1},
+    "contracts": {"status": "passed", "duration_seconds": 1},
+    "release_smoke": {"status": "passed", "duration_seconds": 5}
+  }
+}

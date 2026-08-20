@@ -1,0 +1,11 @@
+{
+  "schema": "openagents.relup-build-proof.v1",
+  "git_sha": "2e1c9240d0b172501a93bef7b02e934a63b447ae",
+  "from_version": "0.1.0",
+  "to_version": "0.2.0",
+  "forward": true,
+  "reverse": true,
+  "release_0_1_0_digest": "e34a5cee288193546b755fdd90a9a9b98f380eaec992f37bcbd620bf0f6a71aa",
+  "release_0_2_0_digest": "920f91f89696477cd2b0585dea64d686496af571a09dab5c66dffd11307ab1e1",
+  "relup_digest": "0b05db5289d0abb7bf8b9e7e9e61f3df0298c0dbd686e33d743601f8a4fb5a09"
+}

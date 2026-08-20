@@ -1,0 +1,17 @@
+{
+  "schema": "openagents.rolling-image-proof.v1",
+  "git_sha": "2e1c9240d0b172501a93bef7b02e934a63b447ae",
+  "status": "passed",
+  "image_digest": "sha256:56e472ce2ac3a967e21f6906c08f87933228d74e6f26d3c041661f180872d472",
+  "image_scope": "local_only",
+  "rolling_replacement_tests": 4,
+  "recovery_cases": [
+    "pre_replacement_capacity_failure_restores_readiness",
+    "failed_rejoin_restores_previous_sha_and_digest",
+    "successful_node_rejoin_precedes_next_replacement",
+    "membership_change_aborts_before_next_replacement"
+  ],
+  "automatic_retries_in_successful_run": 0,
+  "staging_changed": false,
+  "production_changed": false
+}

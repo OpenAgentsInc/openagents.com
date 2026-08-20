@@ -25,6 +25,8 @@ steps:
       - --build-arg
       - OPENCODE_VERSION=${_OPENCODE_VERSION}
       - --build-arg
+      - TARGETARCH=amd64
+      - --build-arg
       - OPENAGENTS_BUILD_REVISION=${_BUILD_REVISION}
       - --build-arg
       - SOURCE_DATE_EPOCH=${_SOURCE_DATE_EPOCH}

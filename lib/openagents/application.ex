@@ -7,6 +7,13 @@ defmodule OpenAgents.Application do
 
   @impl true
   def start(_type, _args) do
+    # Releases migrate on boot (RELEASE-001): the schema must precede traffic.
+    # Ecto.Migrator.with_repo takes the migration advisory lock, so concurrent
+    # fleet nodes serialize safely and an already-migrated DB is a no-op.
+    if Application.get_env(:openagents, :migrate_on_boot, false) do
+      OpenAgents.Release.migrate()
+    end
+
     # Install immutable release artifacts before any traffic can reach them.
     OpenAgents.Persona.install!(OpenAgents.Persona.SourceManifest.load!())
     OpenAgents.ProgramArtifacts.install!()

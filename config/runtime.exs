@@ -139,6 +139,12 @@ if config_env() == :prod do
 
   config :openagents, OpenAgents.Repo, repo_config
 
+  # Always migrate on boot in production so the schema precedes traffic
+  # (RELEASE-001). Ecto.Migrator.with_repo takes the advisory lock, so
+  # concurrent fleet nodes serialize safely and an already-migrated DB is a
+  # no-op.
+  config :openagents, :migrate_on_boot, true
+
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
   # want to use a different value for prod and you most likely don't want

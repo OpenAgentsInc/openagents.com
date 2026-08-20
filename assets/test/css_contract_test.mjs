@@ -16,7 +16,12 @@ test("the compiled cascade preserves every governed button variant", () => {
     execFileSync(
       "mix",
       ["tailwind", "openagents", "--minify", `--output=${output}`],
-      {cwd: projectDir, encoding: "utf8", stdio: "pipe"},
+      {
+        cwd: projectDir,
+        encoding: "utf8",
+        env: {...process.env, MIX_ENV: process.env.MIX_ENV ?? "test"},
+        stdio: "pipe",
+      },
     )
 
     const css = readFileSync(output, "utf8")

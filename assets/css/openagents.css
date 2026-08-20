@@ -4181,3 +4181,310 @@
     }
   }
 }
+
+/* ── Dashboard ────────────────────────────────────────────────────────────── */
+
+/* The signed-in home. A marketing pitch is the wrong thing to show someone who
+ * has already signed in, so this is the state of the work instead: a feed
+ * column beside a rail of standing facts, the shape a code host's home takes.
+ *
+ * Panels are bordered rather than filled. A page of filled cards on a dark
+ * surface reads as a stack of separate applications; a hairline says "these
+ * are parts of one page" while still separating them. */
+
+@layer components {
+  .dashboard {
+    display: grid;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  @media (min-width: 1024px) {
+    .dashboard {
+      grid-template-columns: minmax(0, 1fr) 320px;
+    }
+  }
+
+  .dashboard__main,
+  .dashboard__rail {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--ink-surface);
+    padding: 16px;
+  }
+
+  .panel__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .panel__title {
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .panel__more {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    text-decoration: none;
+    transition: color 150ms var(--ease);
+  }
+
+  .panel__more .icon {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+  }
+
+  @media (hover: hover) {
+    .panel__more:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  /* An empty panel says so in the same voice as a full one, rather than being
+     padded out with a placeholder that pretends there is something there. */
+  .panel__empty {
+    color: var(--text-dim);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .panel__empty a {
+    color: var(--text-muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ── Issue feed ─────────────────────────────────────────────────────────── */
+
+  .issue-feed {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .issue-feed__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding-block: 10px;
+  }
+
+  .issue-feed__row + .issue-feed__row {
+    border-top: 1px solid var(--line-faint);
+  }
+
+  .issue-feed__state {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    margin-top: 2px;
+    color: var(--success);
+    font-size: 16px;
+  }
+
+  .issue-feed__body {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .issue-feed__title {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    .issue-feed__title:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  .issue-feed__meta {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .issue-feed__comments {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  .issue-feed__comments .icon {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+  }
+
+  /* ── Project list ───────────────────────────────────────────────────────── */
+
+  .project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .project-list__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    margin-inline: -8px;
+    padding-inline: 8px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    text-decoration: none;
+    transition: background 150ms var(--ease), color 150ms var(--ease);
+  }
+
+  .project-list__row .icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  @media (hover: hover) {
+    .project-list__row:hover {
+      background: var(--wash-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  .project-list__title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-list__state {
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 8px;
+    color: var(--text-dim);
+    font-size: 0.6875rem;
+    text-transform: lowercase;
+  }
+
+  /* ── Rail ───────────────────────────────────────────────────────────────── */
+
+  .repo-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md, 8px);
+    padding: 10px 12px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: border-color 150ms var(--ease);
+  }
+
+  .repo-card .icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  .repo-card__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (hover: hover) {
+    .repo-card:hover {
+      border-color: var(--line-strong);
+    }
+  }
+
+  .stat-pairs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+  }
+
+  .stat-pairs dt {
+    color: var(--text-dim);
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .stat-pairs dd {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  .changelog-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .changelog-rail__when {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .changelog-rail__summary {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+}

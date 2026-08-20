@@ -22,13 +22,16 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     refute html =~ "Account menu"
   end
 
-  test "an authenticated account sees the OpenAgents home", %{conn: conn} do
+  test "an authenticated account sees the dashboard, not the pitch", %{conn: conn} do
     conn = log_in_github_user(conn, "authenticated-home-user")
-    response = get(conn, ~p"/")
+    html = html_response(get(conn, ~p"/"), 200)
 
-    # The owner chose to keep authenticated users on the marketing home page
-    # rather than immediately redirecting into chat. This differs from Sarah.
-    assert html_response(response, 200) =~ "The Agent Forge"
+    # Someone who has signed in has already been sold. The same route shows the
+    # state of the work instead: open issues, projects, and what shipped.
+    refute html =~ "The Agent Forge"
+    assert html =~ "Open issues"
+    assert html =~ "Latest from the changelog"
+    assert html =~ ~s(class="dashboard")
   end
 
   test "the browser policy permits only the narrow GitHub avatar origin", %{conn: conn} do

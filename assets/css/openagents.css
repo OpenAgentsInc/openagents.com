@@ -1657,6 +1657,86 @@
     background: transparent;
   }
 
+  /* Menu rows are sidebar rows. Both are a 32px line with an icon, muted until
+     hovered, and there is no reason for the account menu to invent a second
+     set of metrics for the same shape. */
+  .menu__identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    padding: 12px;
+  }
+
+  .menu__identity span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .menu__identity strong {
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+  }
+
+  .menu__identity small {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
+  .menu__form {
+    margin: 0;
+  }
+
+  .menu__item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    margin: 4px;
+    padding-inline: 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    text-align: start;
+    text-decoration: none;
+    transition: color 150ms var(--ease), background 150ms var(--ease);
+  }
+
+  /* The margin above would double between adjacent rows. */
+  .menu__form + .menu__form .menu__item,
+  .menu__item + .menu__item {
+    margin-block-start: 0;
+  }
+
+  .menu__item .icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    font-size: 16px;
+  }
+
+  @media (hover: hover) {
+    .menu__item:hover {
+      background: var(--wash-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  .menu__item:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
   /* Menus ride the quick token (100ms), not the fast one: a picker should feel
      closer to instant than a state change. Progressive enhancement — guarded
      so a browser without :popover-open never inherits a stranded opacity: 0,
@@ -2143,6 +2223,13 @@
     height: 12px;
     flex: none;
     font-size: 12px;
+  }
+
+  /* The caret animates only when a reader turned it. Navigation re-renders
+     `open` from the server, and an unconditional transition made every move
+     between pages play a rotation nobody asked for. The hook sets this
+     attribute for the length of one click and no longer. */
+  .sidebar-section[data-animate] .sidebar-section__caret {
     transition: transform 150ms var(--ease);
   }
 

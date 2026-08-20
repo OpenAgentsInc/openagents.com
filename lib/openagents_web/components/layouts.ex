@@ -258,14 +258,26 @@ defmodule OpenAgentsWeb.Layouts do
             state[this.el.id] = this.el.open
             write(state)
           }
+          // The caret rotates only for a turn the reader made. Navigation
+          // re-renders `open`, so an always-on transition played an animation
+          // on every move between pages. The attribute lives for one click.
+          this.onClick = () => {
+            this.el.dataset.animate = "true"
+            clearTimeout(this.animateTimer)
+            this.animateTimer = setTimeout(() => delete this.el.dataset.animate, 200)
+          }
+          this.summary = this.el.querySelector("summary")
           this.el.addEventListener("toggle", this.onToggle)
+          if (this.summary) this.summary.addEventListener("click", this.onClick)
           this.restore()
         },
         updated() {
           this.restore()
         },
         destroyed() {
+          clearTimeout(this.animateTimer)
           this.el.removeEventListener("toggle", this.onToggle)
+          if (this.summary) this.summary.removeEventListener("click", this.onClick)
         },
         restore() {
           // A section holding the active page opens regardless of what the
@@ -395,7 +407,7 @@ defmodule OpenAgentsWeb.Layouts do
     </UI.button>
 
     <UI.menu id="account-menu" class="account-menu">
-      <div class="account-menu__identity">
+      <div class="menu__identity">
         <UI.avatar
           src={@current_user.github_avatar_url}
           alt={"GitHub avatar for @#{@current_user.github_login}"}
@@ -406,96 +418,65 @@ defmodule OpenAgentsWeb.Layouts do
           <small :if={@current_user.github_name}>@{@current_user.github_login}</small>
         </span>
       </div>
-      <.form for={%{}} id="logout-form" action={~p"/logout"} method="delete">
-        <UI.button
-          id="logout"
-          variant={:ghost}
-          type="submit"
-          role="menuitem"
-          class="account-menu__logout"
-        >
-          <UI.icon name="logout" /> Log out
-        </UI.button>
-      </.form>
-      <.link navigate={~p"/settings/api-tokens"} role="menuitem" class="account-menu__logout">
-        API tokens
+      <.link navigate={~p"/settings/api-tokens"} role="menuitem" class="menu__item">
+        <UI.icon name="key" /> API tokens
       </.link>
-      <.form
-        :if={github_tools_connected?(@current_user)}
-        for={%{}}
-        id="github-disconnect-form"
-        action={~p"/github/connection"}
-        method="delete"
-      >
-        <UI.button
-          id="github-disconnect"
-          variant={:ghost}
-          type="submit"
-          role="menuitem"
-          class="account-menu__logout"
-        >
-          Disconnect GitHub tools
-        </UI.button>
+      <.form for={%{}} id="logout-form" action={~p"/logout"} method="delete" class="menu__form">
+        <button id="logout" type="submit" role="menuitem" class="menu__item">
+          <UI.icon name="logout" /> Log out
+        </button>
       </.form>
     </UI.menu>
     """
   end
 
+  # The command bar's identity control. Renders the same panel and the same
+  # rows as `account_control/1`. There were two account menus with two
+  # different sets of markup -- one on Tailwind utilities against
+  # `bg-popover`, one on the design system -- so the menu the chat surface
+  # showed and the menu the command bar showed did not look like the same
+  # application. There is one now.
+  attr :current_scope, :map, required: true
+
   defp account_dropdown(assigns) do
     ~H"""
-    <%!-- A native <details> disclosure rather than a JavaScript dropdown, for
-    the same reason `UI.menu/1` uses the popover API: the account control
-    has to work before any client script has run. --%>
-    <details class="relative">
-      <summary class="btn list-none cursor-pointer !p-1" data-variant="ghost">
-        <img
+    <UI.button
+      id="account-bar-trigger"
+      variant={:ghost}
+      size={:sm}
+      class="account-menu-trigger"
+      popovertarget="account-bar-menu"
+      popovertargetaction="toggle"
+      aria-label={"Account menu for @#{@current_scope.github_login}"}
+    >
+      <UI.avatar
+        src={@current_scope.github_avatar_url}
+        alt={"GitHub avatar for @#{@current_scope.github_login}"}
+        size={:sm}
+      />
+    </UI.button>
+
+    <UI.menu id="account-bar-menu" class="account-menu">
+      <div class="menu__identity">
+        <UI.avatar
           src={@current_scope.github_avatar_url}
           alt={"GitHub avatar for @#{@current_scope.github_login}"}
-          class="w-8 h-8 rounded-full"
+          size={:lg}
         />
-      </summary>
-      <ul class="absolute end-0 z-10 mt-2 w-56 rounded-lg border border-border bg-popover p-2 shadow-lg">
-        <li class="flex flex-col p-2">
-          <span class="font-semibold">{account_display_name(@current_scope)}</span>
-          <span :if={@current_scope.github_name} class="text-sm text-muted-foreground">
-            @{@current_scope.github_login}
-          </span>
-        </li>
-        <li>
-          <.link
-            navigate={~p"/settings/api-tokens"}
-            class="btn w-full justify-start"
-            data-variant="ghost"
-          >
-            API tokens
-          </.link>
-        </li>
-        <li>
-          <.form
-            :if={github_tools_connected?(@current_scope)}
-            for={%{}}
-            action={~p"/github/connection"}
-            method="delete"
-            class="m-0 w-full"
-          >
-            <.button type="submit" variant={:ghost} class="w-full justify-start">
-              Disconnect GitHub tools
-            </.button>
-          </.form>
-        </li>
-        <li>
-          <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0 w-full">
-            <input type="hidden" name="_method" value="delete" />
-            <button
-              type="submit"
-              class="w-full rounded-md px-2 py-1.5 text-left flex items-center gap-2 hover:bg-muted"
-            >
-              <.icon name="logout" class="size-4" /> Log out
-            </button>
-          </.form>
-        </li>
-      </ul>
-    </details>
+        <span>
+          <strong>{account_display_name(@current_scope)}</strong>
+          <small :if={@current_scope.github_name}>@{@current_scope.github_login}</small>
+        </span>
+      </div>
+      <.link navigate={~p"/settings/api-tokens"} role="menuitem" class="menu__item">
+        <UI.icon name="key" /> API tokens
+      </.link>
+      <.form for={%{}} as={:logout} action={~p"/logout"} method="delete" class="menu__form">
+        <button type="submit" role="menuitem" class="menu__item">
+          <UI.icon name="logout" /> Log out
+        </button>
+      </.form>
+    </UI.menu>
     """
   end
 
@@ -654,11 +635,6 @@ defmodule OpenAgentsWeb.Layouts do
          "opacity-100 translate-y-0"}
     )
   end
-
-  defp github_tools_connected?(user) when is_map(user),
-    do: is_binary(Map.get(user, :github_token_ciphertext))
-
-  defp github_tools_connected?(_user), do: false
 
   defp hide(js \\ %JS{}, selector) do
     JS.hide(js,

@@ -10,9 +10,12 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     assert html =~ "The Agent Forge"
     assert html =~ ~s(action="/auth/github?github_tools=enabled")
     assert html =~ "Sign in and enable GitHub tools"
-    assert html =~ ~s(id="github-tools-disclosure")
-    assert html =~ "retain an encrypted GitHub grant"
-    assert html =~ "read/write"
+
+    # The scope disclosure was removed from the hero at the owner's direction.
+    # GitHub's own consent screen still states the scope before the grant is
+    # made, so this asserts the paragraph is gone rather than that it is there.
+    refute html =~ ~s(id="github-tools-disclosure")
+    refute html =~ "retain an encrypted GitHub grant"
 
     refute html =~ "One continuing conversation"
     refute html =~ ~s(href="/chat")

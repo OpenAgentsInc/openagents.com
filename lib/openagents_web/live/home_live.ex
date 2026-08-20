@@ -38,14 +38,8 @@ defmodule OpenAgentsWeb.HomeLive do
                   as={:auth}
                   action={~p"/auth/github?github_tools=enabled"}
                   method="post"
-                  class="m-0 max-w-xl space-y-3"
+                  class="m-0"
                 >
-                  <p id="github-tools-disclosure" class="text-sm text-muted-foreground">
-                    OpenAgents will retain an encrypted GitHub grant with the <code>repo</code>
-                    scope. GitHub makes that scope read/write even though OpenAgents currently
-                    exposes it only to bounded repository-reading tools. You can revoke the
-                    grant from the account menu at any time.
-                  </p>
                   <.button type="submit" variant={:primary} id="home-cta-signin">
                     Sign in and enable GitHub tools
                   </.button>

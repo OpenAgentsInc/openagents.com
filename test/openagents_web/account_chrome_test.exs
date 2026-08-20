@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.AccountChromeTest do
       refute html =~ "<strong></strong>"
 
       identity =
-        Regex.run(~r|account-menu__identity.{0,900}|s, html)
+        Regex.run(~r|menu__identity.{0,900}|s, html)
         |> List.first()
 
       assert identity =~ "@#{user.github_login}"

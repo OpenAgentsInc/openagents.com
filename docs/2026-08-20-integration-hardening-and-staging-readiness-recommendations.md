@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–3 complete, amended with measured findings
+Status: In progress; Gates 0–5 complete, Gate 6 application controls locally verified
 
 ## Outcome
 
@@ -590,6 +590,56 @@ inventory test.
 **Exit criteria:** Every mutation has an explicit principal and scope, GitHub
 token behavior matches its documentation, and staging logs contain no secret or
 private-content fields.
+
+### Gate 6 implementation status
+
+Application controls were completed and locally verified on 2026-08-20:
+
+- Chose the identity-and-GitHub-tools model. The consent UI now says that the
+  retained, encrypted `repo` grant carries GitHub-side read/write authority
+  even though OpenAgents exposes it only to bounded repository-read tools.
+  Public profile identity needs no scope, so the redundant `read:user` request
+  was removed. Missing, reduced, or broadened granted scopes fail closed.
+- Added a versioned AES-256-GCM envelope with an environment-specific active
+  key ID, a bounded same-environment prior-key map, transactional rewrap, and
+  an executable release rotation command. Explicit disconnect revokes the
+  GitHub grant before a compare-and-clear operation, so provider failure or a
+  concurrent reconnection cannot silently discard the wrong grant.
+- Added non-secret GitHub connection and first-party API credential metadata to
+  account export. Product-data deletion and the UI now state that credentials
+  remain until their independent disconnect or revoke action.
+- Added an executable inventory for every HTTP route and endpoint socket across
+  public-read, authenticated-browser, authenticated-API, operator, machine,
+  internal-service, and Git-transport authority classes. New or misclassified
+  mutations fail the test gate.
+- Split public `/api/v3` reads from writes. Writes now require an expiring,
+  revocable, digest-only `oa_pat_` bearer with exact `forge:write` scope;
+  missing, malformed, unknown, expired, revoked, and wrong-scope credentials
+  receive the same refusal. Browser token management remains session-bound and
+  CSRF-protected.
+- Made machine credentials expire, disconnect active channels at expiry, and
+  moved pairing claim to a row-locked one-time transition with a concurrent
+  winner test. Existing inference grants remain scoped, expiring, budgeted,
+  revocable, and generation-fenced.
+- Added a staging secret and runtime-identity inventory, environment-fenced
+  vault keys, credential-free builder and mirror URLs, bounded operational
+  error codes, global sensitive-parameter filtering, OAuth callback log
+  suppression, build-output redaction, and a log scanner that reports finding
+  classes and line numbers without echoing private values.
+- Rehearsed all three Gate 6 migrations down and back up on disposable
+  PostgreSQL. Exact implementation commit
+  `04b2faf47080aa7b5bce43b4319fa0276eb3da05` then passed the owned baseline in
+  80 seconds with 1,267 default Elixir tests, all 9 distributed tests, 17
+  browser tests, 83.29% merged coverage, the packaged production release
+  startup, and zero automatic retries. See the
+  [Gate 6 local evidence](evidence/gate-6/04b2faf47080aa7b5bce43b4319fa0276eb3da05/README.md).
+
+Gate 6 is not operationally closed. No staging deployment occurred. Before
+Gate 15 admission, rotate every pre-gate staging credential, revoke and
+reauthorize any legacy `read:user,repo` grant, configure the load balancer to
+omit OAuth callback query strings, export logs from every named source for the
+complete test window, and pass the private-log scanner plus manual plaintext
+review. That exact-SHA staging record is the remaining Gate 6 exit criterion.
 
 ## Gate 7: Add real repository and tenant scoping
 
@@ -1186,8 +1236,10 @@ each handoff.
       two-tier icon policy.
 - [x] The dark-only palette has no nonfunctional theme control.
 - [x] Runtime configuration is typed, redacted, and staging-specific.
-- [ ] Every route has an explicit authority class.
-- [ ] GitHub token behavior matches code, UI disclosure, and data rights.
+- [x] Every route has an explicit authority class.
+- [x] GitHub token behavior matches code, UI disclosure, and data rights.
+- [ ] Gate 6 staging credentials are rotated and the complete staging log
+      window passes automated and manual private-content review.
 - [ ] Issues and Projects are scoped by repository in code and PostgreSQL.
 - [ ] Every asynchronous recovery path has direct tests.
 - [ ] Browser-side voice, recording, and hook tests run in the owned gate.

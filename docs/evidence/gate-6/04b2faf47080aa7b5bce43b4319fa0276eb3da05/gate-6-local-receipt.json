@@ -1,0 +1,25 @@
+{
+  "schema": "openagents.gate-6-local-evidence.v1",
+  "git_sha": "04b2faf47080aa7b5bce43b4319fa0276eb3da05",
+  "status": "local_controls_passed_staging_proof_pending",
+  "migration_rehearsal": {
+    "github_token_lifecycle": "down_up_passed",
+    "api_tokens": "down_up_passed",
+    "machine_token_expiry": "down_up_passed"
+  },
+  "controls": {
+    "github_consent_scope_storage_rotation_disconnect": "passed",
+    "route_authority_inventory": "passed",
+    "browser_csrf_and_api_bearer_split": "passed",
+    "machine_expiry_and_pairing_replay": "passed",
+    "bounded_log_and_receipt_handling": "passed"
+  },
+  "staging": {
+    "deployment_performed": false,
+    "credentials_rotated": false,
+    "oauth_query_suppression_verified": false,
+    "complete_log_window_scanned": false,
+    "manual_plaintext_reviewed": false
+  },
+  "production_action_performed": false
+}

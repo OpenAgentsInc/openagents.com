@@ -132,17 +132,74 @@ the port can be blamed for or expected to have fixed.
 
 ## 5. Actions
 
-In progress at the time of writing, in response to this audit. This section states intent,
-not completed work — check the commits following `dcbe8a4` for what actually landed:
+Completed. Measured after the work landed:
 
-1. Tests written for the six untested `/api/v3` controllers and three JSON views, against
-   `docs/github-api-issues-projects-assessment.md` as the contract — including error paths
-   (404, 422), since status codes are part of a compatibility promise.
-2. Tests written for all eight issues/projects LiveViews: mount, seeded records, empty
-   state, and at least one interaction each. Assertions target ids, `aria-*`, and visible
-   text rather than CSS classes, since this repo just migrated off DaisyUI onto basecoat.
-3. `ProjectFields` and `ProjectItems` contexts and schemas covered; `Projects` and `Issues`
-   raised from 30.6% and 37.8%. The two never-executed fixtures verified rather than assumed.
+| | before | after |
+|---|---|---|
+| issues/projects layer, mean coverage | 33.0% | **98.1%** |
+| issues/projects modules at 0% | 23 | **0** |
+| repo total | 79.14% | **83.14%** |
+| suite | 939 passing | **1218 passing** (+9 cluster) |
+
+279 tests added across three parallel efforts:
+
+1. **`/api/v3` steps 6–9** — 81 tests. All six untested controllers and three JSON views went
+   from 0% to 89–100%, written against `docs/github-api-issues-projects-assessment.md`,
+   including 404/422 error paths since status codes are part of a compatibility promise.
+2. **The eight LiveViews** — 57 tests, all from 0% to 97–100%. Mount, seeded records, empty
+   state, and every interaction each view has. Assertions target ids, `aria-*`, `role`, and
+   visible text rather than CSS classes, since this repo just migrated off DaisyUI.
+3. **Domain contexts** — 141 tests. `ProjectFields`, `ProjectItems`, `Projects`, `Milestones`,
+   `Labels` to 100%; `Issues` from 37.8% to 96.9%. Both never-executed fixtures verified.
+
+### What writing the tests found
+
+Coverage was not the point; this was. Five defects, three of them user-visible:
+
+- **`ProjectShowLive` was completely broken in production.** `@statuses` is a module
+  attribute, but line 109 uses it *inside* `~H`, where `@statuses` means `assigns.statuses` —
+  which `mount/3` never assigned (it assigns `:status_options`). Every request to
+  `/:owner/:repo/projects/:number` raised `KeyError`. The project board had never rendered
+  for anyone. This is the clearest argument for the audit: a 0%-coverage page was 100% broken
+  and nothing said so.
+- **Two 500s in `ProjectController`:** a missing or non-numeric `issue_number` reached
+  `Repo.get_by!(Issue, number: nil)` (`ArgumentError`), and a non-map `values` reached
+  `Map.merge` (`BadMapError`). Both now 422. Notably the *create* path already returned a
+  correct 422 for the same input — the two paths disagreed.
+- **Values silently dropped** in `Projects.create_project_item/2`: an atom-key clause read
+  `attrs["values"]`, always `nil` for an atom-keyed map, so values were discarded on insert.
+  The clause had no caller and was a strictly worse duplicate of the one below it.
+
+### Findings reported rather than silently encoded
+
+These are GitHub-compatibility gaps a real `gh`/Octokit client would hit. They were pinned as
+current behaviour in tests, not "fixed" unilaterally:
+
+- **`ProjectController` ignores `:username`** in `show`, `items`, `create_item`,
+  `update_item`, and `fields` — verified, all five destructure it as `_username`; only
+  `index` filters by owner. A project owned by `alice` is readable *and writable* at
+  `/users/bob/projectsV2/:n`. Consistent across all five, so it reads as deliberate
+  simplification, but it is an authorization gap rather than a shape mismatch.
+- **`AssigneeController` is a hardcoded stub** — `index` always returns `%{assignees: []}`,
+  `show` always 404s, so no user is ever reported assignable, while
+  `POST .../issues/:n/assignees` accepts any login.
+- `PATCH /repos/:owner/:repo/labels/:name` cannot rename a label (GitHub uses `new_name`;
+  the path's `name` always wins and `new_name` is silently ignored).
+- `POST .../issues/:n/labels` 404s for a label that does not exist yet, where GitHub creates
+  it on the fly — and that 404 is indistinguishable from "issue not found".
+- `DELETE .../issues/:n/labels/:name` is a silent no-op when the label is not on the issue;
+  GitHub returns 404.
+- `LabelJSON` renders `url` with `URI.encode_www_form/1` (spaces → `+`) while lookup decodes
+  with `URI.decode/1`, so a label named `good first issue` renders a URL its own `show`
+  endpoint cannot resolve.
+
+### Dead code identified
+
+`OpenAgents.ProjectItems` and `OpenAgents.ProjectFields` (the *context* modules, not the
+schemas) have **zero callers in `lib/`** — generator scaffolding. The live paths go through
+`Projects.*` instead. They are duplication with divergent semantics:
+`ProjectItems.update_project_item/2` replaces `values` where `Projects.update_project_item/2`
+merges them. Candidates for deletion. `Projects.create_project_field/1` also has no caller.
 
 Left open, deliberately:
 

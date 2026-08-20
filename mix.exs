@@ -105,6 +105,7 @@ defmodule OpenAgents.MixProject do
       "assets.build": ["compile", "tailwind openagents", "esbuild openagents"],
       "assets.test": ["cmd --cd assets npm test"],
       "assets.deploy": [
+        "compile",
         "tailwind openagents --minify",
         "esbuild openagents --minify",
         "phx.digest"

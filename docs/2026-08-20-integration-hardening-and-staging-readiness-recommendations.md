@@ -104,9 +104,16 @@ Completed on 2026-08-20:
   coverage node before a test stops the peer.
 - Added direct `RaBootstrap` decision tests for healthy, phantom, join, form,
   and wait outcomes instead of treating cluster execution as indirect proof.
+- Added `ops/ci/release-smoke.sh`. It requires an explicitly acknowledged
+  disposable PostgreSQL URL, generates throwaway runtime secrets, builds the
+  production assets and release, starts the real release, waits for the bounded
+  `/healthz` response, and terminates the release cleanly.
+- Fixed `mix assets.deploy` to compile Phoenix's colocated assets before
+  Tailwind resolves them. The release smoke exposed this production-only build
+  failure and now passes against a fresh PostgreSQL 18 container.
 
-Gate 0 still requires release startup proof against a disposable database and
-an exact-SHA gate receipt.
+Gate 0 still requires an exact-SHA gate receipt that runs and records these
+completed stages from one clean commit.
 
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it

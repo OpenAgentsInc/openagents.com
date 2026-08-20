@@ -100,4 +100,23 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
     assert has_element?(view, ~s{[role="status"]}, "No projects yet")
     assert Projects.list_projects() == []
   end
+
+  test "closing a project from its row uses the state GitHub already has", %{conn: conn} do
+    # Projects V2 carries `state`, so this changes a real field rather than an
+    # invented one. Delete stays a separate control beside the row.
+    project = project_fixture(%{title: "Closeable", owner: "OpenAgentsInc", state: "open"})
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
+
+    view
+    |> element(~s{#project-state-#{project.id} button}, "Closed")
+    |> render_click()
+
+    assert Projects.get_project!(project.id).state == "closed"
+
+    assert has_element?(
+             view,
+             ~s{#project-state-#{project.id} button[aria-current="true"]},
+             "Closed"
+           )
+  end
 end

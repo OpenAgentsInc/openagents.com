@@ -46,14 +46,28 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "anonymous"
   end
 
-  test "the sidebar only renders sections the issue actually has", %{conn: conn} do
+  # This used to assert that an empty section was hidden, which was right while
+  # the rail was read-only. The rail is editable now, and a field you cannot
+  # see is a field you cannot set: hiding "Labels" until an issue has one means
+  # an issue can never get its first label. So the group is always present and
+  # states its own emptiness instead.
+  test "an empty property group says so rather than disappearing", %{conn: conn} do
     repository_user_fixture("grace-show")
     bare = issue!(%{"title" => "Bare"})
-    {:ok, _view, html} = live(conn, path(bare))
+    {:ok, view, html} = live(conn, path(bare))
 
-    refute html =~ "Labels"
-    refute html =~ "Assignees"
-    refute html =~ "Milestone"
+    assert html =~ "Labels"
+    assert html =~ "Assignees"
+    assert html =~ "Milestone"
+    assert html =~ "None yet"
+    assert html =~ "No one assigned"
+    assert html =~ "No milestone"
+
+    # And each one offers the control that fills it.
+    for id <- ~w(issue-label-menu issue-assignee-menu issue-milestone-menu issue-state-menu) do
+      assert has_element?(view, ~s{button[popovertarget="#{id}"]}),
+             "the #{id} property is stated but cannot be changed"
+    end
 
     label_fixture(%{name: "bug", color: "d73a4a"})
     milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
@@ -63,12 +77,107 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
 
     {:ok, view, html} = live(conn, path(rich))
 
-    assert html =~ "Labels"
     assert html =~ "bug"
-    assert html =~ "Assignees"
+    refute html =~ "None yet"
     assert has_element?(view, ~s{[title="grace-show"]})
     assert has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/milestones"]}, "v1.0")
   end
+
+  test "the rail changes state, labels, assignees, and the milestone", %{conn: conn} do
+    repository_user_fixture("hopper-show")
+    label_fixture(%{name: "bug", color: "d73a4a"})
+    milestone = milestone_fixture(%{title: "v2.0", due_on: nil})
+    issue = issue!(%{"title" => "Editable"})
+
+    {:ok, view, _html} = live(conn, path(issue))
+
+    view
+    |> element(~s{#issue-label-menu button}, "bug")
+    |> render_click()
+
+    assert Issues.get_issue!(issue.id).labels |> Enum.map(& &1["name"]) == ["bug"]
+
+    view
+    |> element(~s{#issue-assignee-menu button}, "hopper-show")
+    |> render_click()
+
+    assert Issues.get_issue!(issue.id).assignees |> Enum.map(& &1["login"]) == ["hopper-show"]
+
+    view
+    |> element(~s{#issue-milestone-menu button}, "v2.0")
+    |> render_click()
+
+    assert Issues.get_issue!(issue.id).milestone["number"] == milestone.number
+
+    # The rail can pick a close reason the header's two buttons cannot.
+    view
+    |> element(~s{#issue-state-menu button}, "Closed as not planned")
+    |> render_click()
+
+    closed = Issues.get_issue!(issue.id)
+    assert closed.state == "closed"
+    assert closed.state_reason == "not_planned"
+
+    # Clicking the same option again unsets it, because a set is a toggle.
+    view
+    |> element(~s{#issue-label-menu button}, "bug")
+    |> render_click()
+
+    assert Issues.get_issue!(issue.id).labels == []
+  end
+
+  test "the history is one feed of comments and state changes", %{conn: conn} do
+    issue = issue!(%{"title" => "Threaded"})
+    {:ok, view, html} = live(conn, path(issue))
+
+    assert html =~ "opened this issue"
+
+    view
+    |> form("#comment-form", comment: %{body: "First"})
+    |> render_submit()
+
+    html = view |> element(~s{button[phx-click="close"]}) |> render_click()
+
+    assert html =~ "First"
+    assert html =~ "closed this as completed"
+
+    # The close has no actor. This schema records when an issue was closed but
+    # not by whom, and a sentence with an invented subject would be worse than
+    # one without a subject at all.
+    refute html =~ "issue-show closed this"
+  end
+
+  test "a comment from the issue's own author is marked as such", %{conn: conn} do
+    # GitHub derives the Author badge by comparing the commenter to the issue's
+    # author rather than storing it, so this asserts the comparison, not a field.
+    issue = issue!(%{"title" => "Self-answered", "user" => %{"login" => "ada"}})
+
+    {:ok, _} =
+      Issues.create_comment(%{
+        "issue_id" => issue.id,
+        "body" => "Answering my own question",
+        "user" => %{"login" => "ada"}
+      })
+
+    {:ok, _} =
+      Issues.create_comment(%{
+        "issue_id" => issue.id,
+        "body" => "So am I",
+        "user" => %{"login" => "grace"}
+      })
+
+    {:ok, view, _html} = live(conn, path(issue))
+
+    assert has_element?(view, ".timeline-comment__badge", "Author")
+
+    assert length(
+             LazyHTML.query(document(view), ".timeline-comment__badge")
+             |> LazyHTML.to_tree()
+           ) ==
+             1
+  end
+
+  defp document(view), do: view |> render() |> LazyHTML.from_fragment()
 
   test "a missing issue number raises rather than rendering an empty page", %{conn: conn} do
     assert_raise Ecto.NoResultsError, fn ->

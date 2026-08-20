@@ -402,6 +402,69 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Six category shapes, one of them a filled arc read from a number."
         },
         %{
+          slug: "issue-state",
+          title: "Issue state",
+          icon: "check-circle",
+          source: "OpenAgentsWeb.UI.Circle.issue_state/1",
+          summary: "GitHub's two states and the one close reason that reads differently."
+        },
+        %{
+          slug: "issue-detail",
+          title: "Issue detail",
+          icon: "document",
+          source: "OpenAgentsWeb.UI.Circle.issue_detail/1",
+          summary: "Heading, the work, and a rail that moves rather than hiding."
+        },
+        %{
+          slug: "properties-panel",
+          title: "Properties panel",
+          icon: "settings-slider",
+          source: "OpenAgentsWeb.UI.Circle.properties_panel/1",
+          summary: "Labelled groups of editable properties, present even when empty."
+        },
+        %{
+          slug: "timeline",
+          title: "Timeline",
+          icon: "history",
+          source: "OpenAgentsWeb.UI.Circle.timeline/1",
+          summary: "Everything that happened to an issue, threaded oldest first."
+        },
+        %{
+          slug: "timeline-event",
+          title: "Timeline event",
+          icon: "dot",
+          source: "OpenAgentsWeb.UI.Circle.timeline_event/1",
+          summary: "One fact about an issue, deliberately quieter than a comment."
+        },
+        %{
+          slug: "timeline-comment",
+          title: "Timeline comment",
+          icon: "comment",
+          source: "OpenAgentsWeb.UI.Circle.timeline_comment/1",
+          summary: "Authored prose in a card, so the thread stays scannable."
+        },
+        %{
+          slug: "comment-composer",
+          title: "Comment composer",
+          icon: "chat-compose",
+          source: "OpenAgentsWeb.UI.Circle.comment_composer/1",
+          summary: "A well that is the control, rather than a labelled box and a loose button."
+        },
+        %{
+          slug: "field-menu",
+          title: "Field menu",
+          icon: "dropdown",
+          source: "OpenAgentsWeb.UI.Circle.field_menu/1",
+          summary: "A property you can change, as a native popover over its own value."
+        },
+        %{
+          slug: "field-menu-item",
+          title: "Field menu item",
+          icon: "check",
+          source: "OpenAgentsWeb.UI.Circle.field_menu_item/1",
+          summary: "One option: a toggle in a set, or one choice out of several."
+        },
+        %{
           slug: "issue-priority",
           title: "Issue priority",
           icon: "bar-chart",

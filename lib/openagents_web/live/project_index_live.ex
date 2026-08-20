@@ -40,6 +40,16 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
     end
   end
 
+  # Projects V2 has `state`, so closing one is a GitHub field rather than an
+  # invented concept -- and it is the only property of a project this schema
+  # carries that is worth changing without opening the board.
+  def handle_event("set_state", %{"id" => id, "state" => state}, socket) do
+    project = Projects.get_project!(socket.assigns.repository, id)
+    {:ok, _updated} = Projects.update_project(project, %{"state" => state})
+
+    {:noreply, assign(socket, :projects, Projects.list_projects(socket.assigns.repository))}
+  end
+
   def handle_event("delete", %{"id" => id}, socket) do
     project = Projects.get_project!(socket.assigns.repository, String.to_integer(id))
     {:ok, _} = Projects.delete_project(project)
@@ -77,7 +87,27 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
             navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
             status_category={if project.state == "closed", do: :completed, else: :unstarted}
             status_label={String.capitalize(project.state)}
-          />
+          >
+            <:state>
+              <Circle.field_menu
+                id={"project-state-#{project.id}"}
+                label={"Change the state of #{project.title}"}
+                align={:end}
+              >
+                <:trigger><Circle.issue_state state={project.state} /></:trigger>
+                <Circle.field_menu_item
+                  :for={state <- ~w(open closed)}
+                  label={String.capitalize(state)}
+                  mode={:choice}
+                  selected={project.state == state}
+                  closes={"project-state-#{project.id}"}
+                  on_select={JS.push("set_state", value: %{id: project.id, state: state})}
+                >
+                  <:glyph><Circle.issue_state state={state} /></:glyph>
+                </Circle.field_menu_item>
+              </Circle.field_menu>
+            </:state>
+          </Circle.project_row>
           <%!-- Deletion stays a control of its own rather than something the
           row grew: the row is a link to a board, and a destructive action
           inside a link target is how people delete things by accident. --%>

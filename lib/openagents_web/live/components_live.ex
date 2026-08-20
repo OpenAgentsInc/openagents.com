@@ -2123,6 +2123,294 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "issue-state"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        <code>issue_status/1</code>
+        renders six categories because Circle has six. GitHub has two, and the ruling in
+        <code>docs/2026-08-20-linear-design-github-shape.md</code>
+        is that we have what GitHub has. This is the narrower component every
+        GitHub-shaped surface reaches for: it takes the payload's own <code>state</code>
+        and <code>state_reason</code>
+        and maps them once, here, so two pages cannot disagree about what closed looks
+        like.
+      </p>
+      <div class="flex flex-wrap gap-x-6 gap-y-3">
+        <Circle.issue_state state="open" show_label />
+        <Circle.issue_state state="closed" reason="completed" show_label />
+        <Circle.issue_state state="closed" reason="not_planned" show_label />
+        <Circle.issue_state state="closed" reason="duplicate" show_label />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-detail"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A heading band, the work, and a properties rail. Circle hides the rail below <code>lg</code>; state, labels and assignees are not decoration and a phone is
+        where an issue is most often read, so here the rail moves under the heading on a
+        narrow screen and to the side when there is room. Resize to see it.
+      </p>
+      <div class="demo-frame">
+        <Circle.issue_detail>
+          <:heading>
+            <h2 class="text-2xl font-semibold">Wire the issue list to the ported row component</h2>
+            <p class="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+              <Circle.issue_state state="open" show_label /> · opened 2d ago by ada
+            </p>
+          </:heading>
+          <:rail>
+            <Circle.properties_panel>
+              <:group heading="Assignees">
+                <Circle.assignee name="Mason Carter" show_name size={:sm} />
+              </:group>
+              <:group heading="Labels">
+                <Circle.issue_label name="Design" tone={:primary} />
+              </:group>
+            </Circle.properties_panel>
+          </:rail>
+          <p class="text-sm text-muted-foreground">
+            The description, then the timeline, held to a measure rather than the window.
+          </p>
+        </Circle.issue_detail>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "properties-panel"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The source's panel carries status, priority, cycle, project, relations and linked
+        diffs. All but state, labels, assignees and milestone are dropped: GitHub has no
+        field for them. A group renders even when empty, which is the one departure from
+        what this page used to do — a field you cannot see is a field you cannot set, and
+        these are editable now.
+      </p>
+      <div class="max-w-xs rounded-lg border border-border p-4">
+        <Circle.properties_panel>
+          <:group heading="State">
+            <Circle.issue_state state="open" show_label />
+          </:group>
+          <:group heading="Assignees">
+            <Circle.assignee name="Priya Raman" show_name size={:sm} />
+          </:group>
+          <:group heading="Labels">
+            <Circle.issue_label name="Bug" tone={:danger} />
+            <Circle.issue_label name="Cloud" tone={:info} />
+          </:group>
+          <:group heading="Milestone">
+            <span class="properties-panel__none">No milestone</span>
+          </:group>
+        </Circle.properties_panel>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "timeline"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        An ordered list, because the sequence is the meaning. A hairline runs behind the
+        glyph column: Circle draws no line and its feed reads as loose rows, and the line
+        is what turns a run of facts into one history.
+      </p>
+      <Circle.timeline>
+        <Circle.timeline_event actor="ada" text="opened this issue" icon="plus-circle" at="2d ago" />
+        <Circle.timeline_event actor="ada" text="added the" icon="tag" at="2d ago">
+          <Circle.issue_label name="Bug" tone={:danger} /> label
+        </Circle.timeline_event>
+        <Circle.timeline_comment
+          id="demo-timeline-comment"
+          author="Mason Carter"
+          at="1d ago"
+          badge="Author"
+        >
+          <p>Reproduced on staging. The row renders but the state glyph is inert.</p>
+        </Circle.timeline_comment>
+        <Circle.timeline_event
+          actor="mason"
+          text="closed this as completed"
+          icon="check-circle-filled"
+          tone={:success}
+          at="4h ago"
+        />
+      </Circle.timeline>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "timeline-event"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        An event is deliberately quieter than a comment: it is a fact about the issue
+        rather than something a person wrote, and giving them the same weight makes a
+        thread of six label changes and one real comment look like seven comments. The
+        text is the predicate only — the actor is already the subject, and repeating the
+        name inside the sentence reads as a template nobody filled in.
+      </p>
+      <Circle.timeline>
+        <Circle.timeline_event actor="ada" text="opened this issue" icon="plus-circle" at="2d ago" />
+        <Circle.timeline_event
+          actor="ada"
+          text="assigned this to mason"
+          icon="user-add"
+          tone={:info}
+          at="2d ago"
+        />
+        <Circle.timeline_event
+          actor="mason"
+          text="closed this as completed"
+          icon="check-circle-filled"
+          tone={:success}
+          at="4h ago"
+        />
+        <Circle.timeline_event
+          actor="mason"
+          text="closed this as not planned"
+          icon="x-circle-filled"
+          tone={:danger}
+          at="4h ago"
+        />
+      </Circle.timeline>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "timeline-comment"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A card against the events' single lines; the contrast is what keeps a long thread
+        scannable. <code>badge</code>
+        is what GitHub prints beside a name — <strong>Author</strong>, <strong>Member</strong>,
+        <strong>Owner</strong>
+        — which GitHub derives by comparing the commenter to the issue's author rather
+        than storing it, so this takes a string the caller worked out.
+      </p>
+      <Circle.timeline>
+        <Circle.timeline_comment id="demo-comment-author" author="ada" at="2d ago" badge="Author">
+          <p>The list renders but nothing in the row responds to a click.</p>
+        </Circle.timeline_comment>
+        <Circle.timeline_comment id="demo-comment-plain" author="Mason Carter" at="1d ago">
+          <p>
+            Fixed by making the state glyph a <code>field_menu/1</code> trigger.
+          </p>
+        </Circle.timeline_comment>
+      </Circle.timeline>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "comment-composer"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        What makes it deliberate rather than a bare textarea is that the whole well is the
+        control: the border, the writer's face, and the footer are one surface that takes
+        focus as a unit. The text control and the submit action are slots, because this
+        lives inside the caller's form — the composer owns the shape, the form owns the
+        data.
+      </p>
+      <.form for={@form} id="demo-composer-form" phx-submit="save">
+        <Circle.comment_composer id="demo-composer" author="Demo Account">
+          <.input field={@form[:body]} type="textarea" label="Comment" placeholder="Leave a comment" />
+          <:hint>Markdown is supported.</:hint>
+          <:actions>
+            <UI.button type="submit" variant={:primary} size={:sm}>Comment</UI.button>
+          </:actions>
+        </Circle.comment_composer>
+      </.form>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "field-menu"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        This is what Circle's rows have that ours did not: the value is the control.
+        Circle wraps a Radix dropdown around a <code>cmdk</code>
+        list; a native popover gives the same behaviour — click out to dismiss,
+        <UI.kbd>Esc</UI.kbd>
+        to close, the trigger as the anchor — with no script, and the trigger is a real
+        button so the keyboard reaches it for free. The trigger is a slot, so what you
+        click is the glyph itself rather than a control beside it.
+      </p>
+      <div class="flex items-center gap-6">
+        <Circle.field_menu id="demo-state-menu" label="Change state">
+          <:trigger><Circle.issue_state state="open" /></:trigger>
+          <Circle.field_menu_item label="Open" mode={:choice} selected closes="demo-state-menu">
+            <:glyph><Circle.issue_state state="open" /></:glyph>
+          </Circle.field_menu_item>
+          <Circle.field_menu_item label="Closed as completed" mode={:choice} closes="demo-state-menu">
+            <:glyph><Circle.issue_state state="closed" reason="completed" /></:glyph>
+          </Circle.field_menu_item>
+          <Circle.field_menu_item
+            label="Closed as not planned"
+            mode={:choice}
+            closes="demo-state-menu"
+          >
+            <:glyph><Circle.issue_state state="closed" reason="not_planned" /></:glyph>
+          </Circle.field_menu_item>
+        </Circle.field_menu>
+
+        <Circle.field_menu id="demo-assignee-menu" label="Assign this issue">
+          <:trigger><Circle.assignee name="Mason Carter" /></:trigger>
+          <Circle.field_menu_item
+            :for={person <- @demo_people}
+            label={person.name}
+            selected={person.name == "Mason Carter"}
+          >
+            <:glyph><Circle.assignee name={person.name} size={:sm} /></:glyph>
+          </Circle.field_menu_item>
+        </Circle.field_menu>
+
+        <Circle.field_menu id="demo-label-menu" label="Change labels" align={:end}>
+          <:trigger><UI.icon name="tag" class="size-4" /></:trigger>
+          <Circle.field_menu_item label="Bug" selected>
+            <:glyph><span class="issue-label__dot" data-tone="danger" /></:glyph>
+          </Circle.field_menu_item>
+          <Circle.field_menu_item label="Cloud">
+            <:glyph><span class="issue-label__dot" data-tone="info" /></:glyph>
+          </Circle.field_menu_item>
+        </Circle.field_menu>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "field-menu-item"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        <code>mode</code>
+        decides what the option claims. Labels and assignees are a set, so each option is
+        a toggle and says <code>aria-pressed</code>; state and milestone are one choice
+        out of several, so the selected one says <code>aria-current</code>. Both draw the
+        same tick, because it means the same thing to a reader either way. The tick keeps
+        its column when absent, so words do not shift.
+      </p>
+      <div class="menu !static max-w-xs p-1">
+        <Circle.field_menu_item label="Bug" selected />
+        <Circle.field_menu_item label="Documentation" icon="book" />
+        <Circle.field_menu_item label="Closed as completed" mode={:choice} selected>
+          <:glyph><Circle.issue_state state="closed" reason="completed" /></:glyph>
+        </Circle.field_menu_item>
+        <Circle.field_menu_item label="Closed as not planned" mode={:choice}>
+          <:glyph><Circle.issue_state state="closed" reason="not_planned" /></:glyph>
+        </Circle.field_menu_item>
+      </div>
+    </div>
+    """
+  end
+
   # The breadcrumb names the section a component lives in, so the trail matches
   # the sidebar the reader navigated through.
   defp section_title_for(slug) do

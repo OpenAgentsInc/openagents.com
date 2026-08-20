@@ -207,6 +207,163 @@ defmodule OpenAgentsWeb.UI.CircleTest do
     end
   end
 
+  describe "issue_state/1" do
+    # The ruling in docs/2026-08-20-linear-design-github-shape.md: GitHub has
+    # two states and we have what GitHub has. This is the one place that maps
+    # them, so a page cannot quietly disagree with another about what closed
+    # looks like.
+    test "GitHub's two states, plus the one close reason that reads differently" do
+      for {state, reason, category, label} <- [
+            {"open", nil, "unstarted", "Open"},
+            {"closed", "completed", "completed", "Closed"},
+            {"closed", nil, "completed", "Closed"},
+            {"closed", "not_planned", "canceled", "Closed as not planned"},
+            {"closed", "duplicate", "canceled", "Closed as duplicate"}
+          ] do
+        rendered = render_component(&Circle.issue_state/1, state: state, reason: reason)
+
+        assert query(rendered, ~s{.issue-status[data-category="#{category}"]}) != [],
+               "#{state}/#{reason || "nil"} did not take the #{category} shape"
+
+        assert query(rendered, ~s{[aria-label="#{label}"]}) != []
+      end
+    end
+
+    test "a duplicate is cancelled rather than completed" do
+      # It is the one reason where GitHub's own glyph differs from a plain
+      # close, and reading it as completed would claim work that never happened.
+      completed = render_component(&Circle.issue_state/1, state: "closed", reason: "completed")
+      duplicate = render_component(&Circle.issue_state/1, state: "closed", reason: "duplicate")
+
+      assert query(completed, ~s{[data-category="completed"]}) != []
+      assert query(duplicate, ~s{[data-category="canceled"]}) != []
+    end
+  end
+
+  describe "field_menu/1" do
+    test "the trigger names itself, because what it shows is a picture" do
+      rendered =
+        render_component(&Circle.field_menu/1,
+          id: "state-menu",
+          label: "Change the state",
+          trigger: [%{__slot__: :trigger, inner_block: fn _, _ -> "glyph" end}],
+          inner_block: [%{__slot__: :inner_block, inner_block: fn _, _ -> "options" end}]
+        )
+
+      assert query(rendered, ~s{button[aria-label="Change the state"]}) != []
+    end
+
+    test "the trigger points at the panel it opens, and the panel exists" do
+      rendered =
+        render_component(&Circle.field_menu/1,
+          id: "state-menu",
+          label: "Change the state",
+          trigger: [%{__slot__: :trigger, inner_block: fn _, _ -> "glyph" end}],
+          inner_block: [%{__slot__: :inner_block, inner_block: fn _, _ -> "options" end}]
+        )
+
+      assert query(rendered, ~s{button[popovertarget="state-menu"]}) != []
+      assert query(rendered, ~s{[popover]#state-menu}) != []
+    end
+  end
+
+  describe "field_menu_item/1" do
+    # A set and a single choice claim different things, and a screen reader
+    # cannot tell them apart from a tick.
+    test "a toggle presses, a choice becomes current" do
+      toggled = render_component(&Circle.field_menu_item/1, label: "Bug", selected: true)
+      unset = render_component(&Circle.field_menu_item/1, label: "Bug")
+
+      assert query(toggled, ~s{button[aria-pressed="true"]}) != []
+      assert query(unset, ~s{button[aria-pressed="false"]}) != []
+
+      chosen =
+        render_component(&Circle.field_menu_item/1,
+          label: "Closed",
+          mode: :choice,
+          selected: true
+        )
+
+      assert query(chosen, ~s{button[aria-current="true"]}) != []
+      assert query(chosen, "button[aria-pressed]") == []
+    end
+
+    test "dismissing the panel is opt-in, because a set stays open" do
+      # Ticking three labels in a row only works if the menu survives the first
+      # tick, so `closes` is asked for rather than assumed.
+      staying = render_component(&Circle.field_menu_item/1, label: "Bug")
+      closing = render_component(&Circle.field_menu_item/1, label: "Open", closes: "state-menu")
+
+      assert query(staying, "button[popovertarget]") == []
+
+      assert query(closing, ~s{button[popovertarget="state-menu"][popovertargetaction="hide"]}) !=
+               []
+    end
+  end
+
+  describe "timeline_event/1" do
+    test "an event with no known actor states the fact without inventing a subject" do
+      rendered = render_component(&Circle.timeline_event/1, text: "closed this as completed")
+
+      assert query(rendered, ".timeline-event__actor") == []
+      assert rendered =~ "closed this as completed"
+    end
+
+    test "the glyph is decorative, because the sentence beside it says the same thing" do
+      rendered =
+        render_component(&Circle.timeline_event/1, actor: "ada", text: "opened this issue")
+
+      assert query(rendered, ".timeline-event__glyph[aria-hidden]") != []
+      assert query(rendered, ".timeline-event svg[aria-label]") == []
+    end
+  end
+
+  describe "issue_row/1 controls" do
+    # The row stays presentational; a caller with somewhere to send a change
+    # replaces the cell. The static rendering has to get out of the way when it
+    # does, or the row shows the value twice.
+    test "a state slot replaces the static glyph rather than joining it" do
+      rendered =
+        render_component(&Circle.issue_row/1,
+          identifier: "#1",
+          title: "A title",
+          status_category: :unstarted,
+          status_label: "Open",
+          state: [%{__slot__: :state, inner_block: fn _, _ -> "CONTROL" end}]
+        )
+
+      assert rendered =~ "CONTROL"
+      assert query(rendered, ".issue-row__scan .issue-status") == []
+    end
+
+    test "an assignee slot replaces the static face" do
+      rendered =
+        render_component(&Circle.issue_row/1,
+          identifier: "#1",
+          title: "A title",
+          status_category: :unstarted,
+          status_label: "Open",
+          people: [%{__slot__: :people, inner_block: fn _, _ -> "CONTROL" end}]
+        )
+
+      assert rendered =~ "CONTROL"
+      assert query(rendered, ".assignee") == []
+    end
+
+    test "with no slots the row renders exactly what it did before" do
+      rendered =
+        render_component(&Circle.issue_row/1,
+          identifier: "#1",
+          title: "A title",
+          status_category: :unstarted,
+          status_label: "Open"
+        )
+
+      assert query(rendered, ".issue-row__scan .issue-status") != []
+      assert query(rendered, ".assignee") != []
+    end
+  end
+
   describe "the stylesheet" do
     setup do
       section =

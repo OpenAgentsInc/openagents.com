@@ -147,6 +147,66 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     end
   end
 
+  # In Circle the row's parts are selectors. Only two of them survive here:
+  # state and assignee are the facts worth changing without opening the issue,
+  # and both are GitHub fields. Labels and milestone need option lists longer
+  # than a row can explain, so they are edited from the issue page's rail.
+  test "closing an issue from its row drops it out of the open filter", %{conn: conn} do
+    {:ok, issue} = Issues.create_issue(%{"title" => "Closeable"})
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+
+    assert has_element?(view, ~s{#row-state-#{issue.id}})
+
+    view
+    |> element(~s{#row-state-#{issue.id} button}, "Closed as not planned")
+    |> render_click()
+
+    closed = Issues.get_issue!(issue.id)
+    assert closed.state == "closed"
+    assert closed.state_reason == "not_planned"
+
+    # The list is filtered to open issues, so a closed one has to leave it --
+    # a row that stays visible after being closed is worse than a reload.
+    refute has_element?(view, ~s{#row-state-#{issue.id}})
+
+    assert has_element?(
+             view,
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=closed"]},
+             "1 Closed"
+           )
+  end
+
+  test "assigning from a row keeps the row and updates the face", %{conn: conn} do
+    repository_user_fixture("hopper-index")
+    {:ok, issue} = Issues.create_issue(%{"title" => "Assignable"})
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+
+    view
+    |> element(~s{#row-assignee-#{issue.id} button}, "hopper-index")
+    |> render_click()
+
+    assert Issues.get_issue!(issue.id).assignees |> Enum.map(& &1["login"]) == ["hopper-index"]
+    assert has_element?(view, ~s{#row-assignee-#{issue.id}})
+    assert has_element?(view, ~s{[title="hopper-index"]})
+  end
+
+  test "the row's controls sit outside the link to the issue", %{conn: conn} do
+    # A state-changing control inside a link target is how people mis-click.
+    {:ok, issue} = Issues.create_issue(%{"title" => "Separate hit areas"})
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+
+    title_link =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("a.issue-row__title")
+      |> LazyHTML.to_tree()
+
+    assert title_link != []
+    refute inspect(title_link) =~ "row-state-#{issue.id}"
+    refute inspect(title_link) =~ "row-assignee-#{issue.id}"
+  end
+
   test "an anonymous visitor is redirected away from the issue list" do
     assert {:error, {:redirect, %{to: to}}} =
              live(build_conn(), ~p"/OpenAgentsInc/openagents.com/issues")

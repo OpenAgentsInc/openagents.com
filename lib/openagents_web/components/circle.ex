@@ -284,13 +284,25 @@ defmodule OpenAgentsWeb.UI.Circle do
   attr :class, :any, default: nil
   attr :rest, :global
 
+  # In Circle every one of these cells is a selector. Here the row stays
+  # presentational and a caller who has somewhere to send a change replaces the
+  # cell with a control -- usually a `field_menu/1` whose trigger is the same
+  # glyph or face the static version drew, so the row looks identical until it
+  # is clicked. The controls sit outside the title link on purpose: a
+  # state-changing control inside a link target is how people mis-click.
+  slot :state, doc: "replaces the state glyph with a control that changes it"
+  slot :people, doc: "replaces the assignee face with a control that changes it"
+  slot :actions, doc: "controls at the trailing edge, after the assignee"
+
   def issue_row(assigns) do
     ~H"""
     <div class={["issue-row", @class]} data-selected={@selected} {@rest}>
       <span class="issue-row__scan">
         <.issue_priority level={@priority} />
         <span class="issue-row__identifier">{@identifier}</span>
+        {render_slot(@state)}
         <.issue_status
+          :if={@state == []}
           category={@status_category}
           label={@status_label}
           progress={@progress}
@@ -316,11 +328,14 @@ defmodule OpenAgentsWeb.UI.Circle do
         <span :if={@comments && @comments > 0} class="issue-row__comments">
           <UI.icon name="comment" /> {@comments}
         </span>
+        {render_slot(@people)}
         <.assignee
+          :if={@people == []}
           name={@assignee && @assignee[:name]}
           src={@assignee && @assignee[:src]}
           presence={(@assignee && @assignee[:presence]) || :none}
         />
+        <span :if={@actions != []} class="issue-row__actions">{render_slot(@actions)}</span>
       </span>
     </div>
     """
@@ -786,6 +801,11 @@ defmodule OpenAgentsWeb.UI.Circle do
   attr :class, :any, default: nil
   attr :rest, :global
 
+  # Same bargain as `issue_row/1`: the state cell becomes a control when the
+  # caller has somewhere to send the change, and it sits outside the link to
+  # the board rather than inside it.
+  slot :state, doc: "replaces the state glyph with a control that changes it"
+
   def project_row(assigns) do
     ~H"""
     <div class={["project-row", @class]} {@rest}>
@@ -806,7 +826,9 @@ defmodule OpenAgentsWeb.UI.Circle do
       <span :if={@target} class="project-row__target">{@target}</span>
       <span :if={@issues} class="project-row__issues">{@issues}</span>
       <span class="project-row__status">
+        {render_slot(@state)}
         <.issue_status
+          :if={@state == []}
           category={@status_category}
           label={@status_label}
           progress={@percent}
@@ -905,7 +927,337 @@ defmodule OpenAgentsWeb.UI.Circle do
     """
   end
 
+  @doc """
+  GitHub's issue state as a glyph: open, closed, or closed as not planned.
+
+  `issue_status/1` renders six categories because Circle has six. GitHub has
+  two, and `docs/2026-08-20-linear-design-github-shape.md` rules that we have
+  what GitHub has. This is the narrower component every GitHub-shaped surface
+  should reach for: it takes the payload's own `state` and `state_reason` and
+  maps them once, here, instead of in each page.
+
+  Two close reasons read as "not done" rather than "done": `not_planned`, where
+  the work was decided against, and `duplicate`, where it is being tracked
+  somewhere else. Both take the cancelled glyph. A bare close and `completed`
+  take the tick.
+  """
+  attr :state, :string, values: ["open", "closed"], required: true
+  attr :reason, :string, default: nil, doc: "GitHub's `state_reason`"
+  attr :show_label, :boolean, default: false
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def issue_state(assigns) do
+    ~H"""
+    <.issue_status
+      category={state_category(@state, @reason)}
+      label={state_label(@state, @reason)}
+      show_label={@show_label}
+      class={@class}
+      {@rest}
+    />
+    """
+  end
+
+  @doc """
+  The frame of one issue's page: a heading band, the work, and a properties rail.
+
+  Adapted from `issue-details.tsx`. Two decisions from the source are kept and
+  one is reversed.
+
+  Kept: the properties live in a rail rather than above the body, so the thing
+  a reader came for starts at the top of the page; and the main column is held
+  to a measure, because a description read at full window width is unreadable
+  on a wide screen.
+
+  Reversed: the source hides the rail below `lg`. State, labels, assignees, and
+  milestone are not decoration, and a phone is where an issue is most often
+  read. Here the rail moves under the heading on a narrow screen — directly
+  where those facts are most useful — and to the side when there is room.
+  """
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :heading, required: true, doc: "title, number, state, and the actions on them"
+  slot :rail, doc: "the properties panel"
+  slot :inner_block, required: true, doc: "body, then the timeline"
+
+  def issue_detail(assigns) do
+    ~H"""
+    <article class={["issue-detail", @class]} {@rest}>
+      <header class="issue-detail__head">{render_slot(@heading)}</header>
+      <div :if={@rail != []} class="issue-detail__rail">{render_slot(@rail)}</div>
+      <div class="issue-detail__main">{render_slot(@inner_block)}</div>
+    </article>
+    """
+  end
+
+  @doc """
+  The rail beside an issue: labelled groups of properties.
+
+  Adapted from `issue-properties-panel.tsx`, minus every group GitHub has no
+  field for. The source's groups are status, priority, assignee, cycle, labels,
+  project, blocked-by, related, and linked diffs; of those, priority and cycle
+  are dropped by the ruling and the relation groups need issue links this
+  schema does not store.
+
+  A group renders even when its value is empty, which is the one place this
+  departs from what the page did before. An empty section used to be hidden,
+  and that was right while the rail was read-only — but a field you cannot see
+  is a field you cannot set, and these are editable now. So the group states
+  that it is empty rather than vanishing.
+  """
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  slot :group, required: true do
+    attr :heading, :string, required: true
+  end
+
+  def properties_panel(assigns) do
+    ~H"""
+    <div class={["properties-panel", @class]} {@rest}>
+      <section :for={group <- @group} class="properties-panel__group">
+        <h3 class="properties-panel__heading">{group.heading}</h3>
+        <div class="properties-panel__body">{render_slot(group)}</div>
+      </section>
+    </div>
+    """
+  end
+
+  @doc """
+  Everything that happened to an issue, oldest first.
+
+  An ordered list, because that is what it is: the sequence is the meaning, and
+  a reader arriving at the bottom of a long thread needs to know they are at
+  the end rather than at an arbitrary point in a pile.
+
+  A hairline runs behind the glyph column. Circle does not draw one and the
+  feed reads as loose rows because of it; the line is what turns a sequence of
+  events into a thread.
+  """
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  def timeline(assigns) do
+    ~H"""
+    <ol class={["timeline", @class]} {@rest}>{render_slot(@inner_block)}</ol>
+    """
+  end
+
+  @doc """
+  One thing that happened, stated in a line.
+
+  Adapted from `activity-feed.tsx`'s event row. An event is deliberately
+  quieter than a comment: it is a fact about the issue rather than something a
+  person wrote, and giving the two the same weight makes a thread of six label
+  changes and one real comment look like seven comments.
+
+  `text` is the predicate — "closed this as completed" — because the actor is
+  already the subject and repeating the name inside the sentence reads as a
+  template that was never filled in.
+
+  `actor` is optional because it is sometimes genuinely unknown. This schema
+  records that an issue was closed and when, but not by whom, and inventing a
+  name for the sentence would be worse than a sentence without a subject.
+  """
+  attr :actor, :string, default: nil
+  attr :text, :string, required: true, doc: "what they did, without the name"
+  attr :icon, :string, default: "circle"
+  attr :tone, :atom, values: [:neutral, :info, :success, :warning, :danger], default: :neutral
+  attr :at, :string, default: nil, doc: "already formatted"
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :inner_block, doc: "what the event acted on, such as the label that was added"
+
+  def timeline_event(assigns) do
+    ~H"""
+    <li class={["timeline-event", @class]} data-tone={@tone} {@rest}>
+      <span class="timeline-event__glyph" aria-hidden="true"><UI.icon name={@icon} /></span>
+      <span class="timeline-event__text">
+        <span :if={@actor} class="timeline-event__actor">{@actor}</span>
+        {@text}{render_slot(@inner_block)}
+      </span>
+      <span :if={@at} class="timeline-event__at">{@at}</span>
+    </li>
+    """
+  end
+
+  @doc """
+  One comment in the thread.
+
+  A card rather than a row, because a comment is authored prose and it needs an
+  edge to sit inside; the events around it are single lines and the contrast is
+  what makes the thread scannable.
+
+  `badge` is for what GitHub prints beside a name — `Author`, `Member`,
+  `Owner`. GitHub derives the first of those by comparing the commenter to the
+  issue's author rather than storing it, which is why this takes a string the
+  caller worked out instead of a field.
+  """
+  attr :id, :string, required: true
+  attr :author, :string, required: true
+  attr :src, :string, default: nil
+  attr :at, :string, default: nil, doc: "already formatted"
+  attr :badge, :string, default: nil, doc: "the commenter's relationship to the issue"
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :actions, doc: "controls on this comment"
+  slot :inner_block, required: true, doc: "the rendered body"
+
+  def timeline_comment(assigns) do
+    ~H"""
+    <li id={@id} class={["timeline-comment", @class]} {@rest}>
+      <header class="timeline-comment__head">
+        <.assignee name={@author} src={@src} size={:sm} />
+        <span class="timeline-comment__author">{@author}</span>
+        <span :if={@badge} class="timeline-comment__badge">{@badge}</span>
+        <span :if={@at} class="timeline-comment__at">{@at}</span>
+        <span :if={@actions != []} class="timeline-comment__actions">{render_slot(@actions)}</span>
+      </header>
+      <div class="timeline-comment__body">{render_slot(@inner_block)}</div>
+    </li>
+    """
+  end
+
+  @doc """
+  The well a comment is written in.
+
+  Adapted from `activity-feed.tsx`'s composer. What makes it deliberate rather
+  than a bare textarea is that the whole well is the control: the border, the
+  writer's own face, and the footer belong to one surface that takes focus as a
+  unit, instead of a labelled box with a button loose underneath it.
+
+  The control and the submit action are slots because this has to live inside
+  the caller's `<.form>` — the composer owns the shape, the form owns the data.
+  """
+  attr :id, :string, required: true
+  attr :author, :string, default: nil, doc: "the writer, shown as a face"
+  attr :src, :string, default: nil
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :hint, doc: "what the writer should know, at the foot"
+  slot :actions, required: true, doc: "the submit control"
+  slot :inner_block, required: true, doc: "the text control"
+
+  def comment_composer(assigns) do
+    ~H"""
+    <div id={@id} class={["comment-composer", @class]} {@rest}>
+      <.assignee :if={@author} name={@author} src={@src} size={:sm} class="comment-composer__face" />
+      <div class="comment-composer__well">
+        <div class="comment-composer__field">{render_slot(@inner_block)}</div>
+        <footer class="comment-composer__foot">
+          <span class="comment-composer__hint">{render_slot(@hint)}</span>
+          {render_slot(@actions)}
+        </footer>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  A property you can change, as a native popover over its own value.
+
+  This is what Circle's row and rail have that ours did not: the value is the
+  control. Circle reaches for a Radix dropdown wrapping a `cmdk` list; a native
+  `popover` gives the same behaviour — click out to dismiss, `Escape` to close,
+  the trigger as the anchor — with no script, and the trigger is a real button
+  so it is reachable by keyboard for free.
+
+  The trigger is a slot rather than a label, so the thing you click is the
+  glyph or the face itself rather than a control beside it. `label` is the
+  trigger's accessible name, which matters precisely because its visible
+  content is usually a picture.
+  """
+  attr :id, :string, required: true
+  attr :label, :string, required: true, doc: "the accessible name of the trigger"
+  attr :align, :atom, values: [:start, :end], default: :start
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :trigger, required: true, doc: "the value, which is what gets clicked"
+  slot :inner_block, required: true, doc: "`field_menu_item/1` options"
+
+  def field_menu(assigns) do
+    ~H"""
+    <span class={["field-menu", @class]} {@rest}>
+      <button
+        type="button"
+        class="field-menu__trigger"
+        popovertarget={@id}
+        popovertargetaction="toggle"
+        aria-label={@label}
+      >
+        {render_slot(@trigger)}
+      </button>
+      <div id={@id} popover class="menu field-menu__panel" data-align={@align}>
+        {render_slot(@inner_block)}
+      </div>
+    </span>
+    """
+  end
+
+  @doc """
+  One option inside a `field_menu/1`.
+
+  `mode` decides what the option claims about itself. Labels and assignees are
+  a set, so each option is a toggle and says `aria-pressed`; state and
+  milestone are one choice out of several, so the selected one says
+  `aria-current`. Both draw the same tick, because the tick means the same
+  thing to a reader either way.
+
+  `closes` names the panel to dismiss. A native popover does not close when
+  something inside it is clicked, and for a single choice a menu that stays
+  open reads as a choice that did not register. For a set it is the opposite —
+  leaving it open is what lets you tick three labels — so this is opt-in
+  rather than automatic.
+  """
+  attr :label, :string, required: true
+  attr :icon, :string, default: nil
+  attr :mode, :atom, values: [:toggle, :choice], default: :toggle
+  attr :selected, :boolean, default: false
+  attr :closes, :string, default: nil, doc: "the `field_menu/1` id this dismisses"
+  attr :on_select, JS, default: nil
+  attr :class, :any, default: nil
+  attr :rest, :global
+  slot :glyph, doc: "a dot, a face, or a state marker before the word"
+
+  def field_menu_item(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class={["field-menu__item", @class]}
+      phx-click={@on_select}
+      popovertarget={@closes}
+      popovertargetaction={@closes && "hide"}
+      aria-pressed={@mode == :toggle && to_string(@selected)}
+      aria-current={@mode == :choice && @selected && "true"}
+      {@rest}
+    >
+      <span class="field-menu__mark">
+        <UI.icon :if={@selected} name="check" />
+      </span>
+      {render_slot(@glyph)}
+      <UI.icon :if={@icon} name={@icon} class="field-menu__glyph" />
+      <span class="field-menu__label">{@label}</span>
+    </button>
+    """
+  end
+
   # ── the fixed vocabularies ─────────────────────────────────────────────────
+
+  # GitHub's two states and the one close reason that reads differently. This
+  # lives here rather than in each page so a surface cannot quietly disagree
+  # with another about what "closed" looks like.
+  defp state_category("closed", reason) when reason in ["not_planned", "duplicate"],
+    do: :canceled
+
+  defp state_category("closed", _reason), do: :completed
+  defp state_category(_state, _reason), do: :unstarted
+
+  defp state_label("closed", "not_planned"), do: "Closed as not planned"
+  defp state_label("closed", "duplicate"), do: "Closed as duplicate"
+  defp state_label("closed", _reason), do: "Closed"
+  defp state_label(_state, _reason), do: "Open"
 
   # Five of the source's six status shapes exist in the vendored set. Triage is
   # opposing arrows in a disc, which `compare-arrows` says exactly; the dashed

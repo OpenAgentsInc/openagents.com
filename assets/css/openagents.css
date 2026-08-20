@@ -6231,3 +6231,530 @@
     flex: none;
   }
 }
+
+/* ── Issue detail ─────────────────────────────────────────────────────────── */
+
+/* The issue page and its editable properties, adapted from Circle's
+ * `details/` directory (MIT, © 2025 lndev-ui). The source's properties panel
+ * carries status, priority, cycle, project, relations and linked diffs; all
+ * but state, labels, assignees and milestone are dropped, because GitHub has
+ * no field for them and this application does not invent fields. See
+ * docs/2026-08-20-linear-design-github-shape.md. */
+
+@layer components {
+  /* Areas rather than columns, because the rail changes position rather than
+     disappearing: under the heading on a narrow screen, where state and
+     assignee are the first things worth knowing, and beside the body when
+     there is room. Circle hides it below `lg`; a phone is where an issue is
+     most often read, so hiding it there is the wrong trade. */
+  .issue-detail {
+    display: grid;
+    grid-template-areas:
+      "head"
+      "rail"
+      "main";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .issue-detail__head {
+    grid-area: head;
+    min-width: 0;
+  }
+
+  .issue-detail__main {
+    grid-area: main;
+    min-width: 0;
+    /* A measure, not the window. Prose read edge to edge on a wide screen
+       loses its place between lines. */
+    max-width: 68ch;
+  }
+
+  .issue-detail__rail {
+    grid-area: rail;
+    min-width: 0;
+  }
+
+  @media (width >= 64rem) {
+    .issue-detail {
+      grid-template-areas:
+        "head head"
+        "main rail";
+      grid-template-columns: minmax(0, 1fr) 280px;
+      column-gap: 40px;
+    }
+
+    .issue-detail__rail {
+      padding-inline-start: 24px;
+      border-inline-start: 1px solid var(--line);
+    }
+  }
+
+  .properties-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .properties-panel__heading {
+    padding-block-end: 6px;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .properties-panel__body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-body);
+    font-size: 0.8125rem;
+  }
+
+  /* The words a group says when it holds nothing. Muted enough to read as an
+     absence rather than a value, but present, because the group is now a
+     control and a control you cannot see is one you cannot use. */
+  .properties-panel__none {
+    color: var(--text-dim);
+    font-size: 0.8125rem;
+  }
+
+  /* ── timeline ──────────────────────────────────────────────────────────── */
+
+  .timeline {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-block: 4px;
+    list-style: none;
+  }
+
+  /* The thread. Circle draws no line and its feed reads as loose rows; this is
+     what turns a sequence of facts into one history. It stops short at both
+     ends so it does not appear to continue past the first and last events. */
+  .timeline::before {
+    content: "";
+    position: absolute;
+    inset-block: 14px;
+    inset-inline-start: 11px;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .timeline-event {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-block: 6px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .timeline-event__glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    /* Painted, not transparent: the glyph has to cover the thread behind it
+       or the line runs through the middle of every marker. */
+    border-radius: 50%;
+    background: var(--ink-surface);
+    box-shadow: 0 0 0 3px var(--ink-surface);
+    color: var(--icon-tertiary);
+    font-size: 13px;
+  }
+
+  .timeline-event[data-tone="info"] .timeline-event__glyph { color: var(--info); }
+  .timeline-event[data-tone="success"] .timeline-event__glyph { color: var(--success); }
+  .timeline-event[data-tone="warning"] .timeline-event__glyph { color: var(--warning); }
+  .timeline-event[data-tone="danger"] .timeline-event__glyph { color: var(--danger); }
+
+  .timeline-event__text {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .timeline-event__actor {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .timeline-event__at {
+    flex: none;
+    margin-inline-start: auto;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  /* A card against the events' single lines. The contrast is what makes a
+     thread of six label changes and one real comment scannable. */
+  .timeline-comment {
+    position: relative;
+    margin-block: 8px;
+    margin-inline-start: 32px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--ink-raised);
+  }
+
+  .timeline-comment__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-block-end: 1px solid var(--line);
+    background: var(--wash-hover);
+    border-start-start-radius: var(--radius-md);
+    border-start-end-radius: var(--radius-md);
+  }
+
+  .timeline-comment__author {
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .timeline-comment__badge {
+    padding: 1px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 0.6875rem;
+  }
+
+  .timeline-comment__at {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  .timeline-comment__actions {
+    margin-inline-start: auto;
+  }
+
+  .timeline-comment__body {
+    padding: 14px;
+    color: var(--text-body);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+
+  .timeline-comment__body > :is(p, ul, ol, pre, blockquote, table) + * {
+    margin-block-start: 0.75em;
+  }
+
+  .timeline-comment__body :is(ul, ol) {
+    padding-inline-start: 1.25em;
+    list-style: revert;
+  }
+
+  .timeline-comment__body code {
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+    background: var(--wash-strong);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  .timeline-comment__body pre {
+    padding: 10px 12px;
+    overflow-x: auto;
+    border-radius: var(--radius-sm);
+    background: var(--ink-void);
+  }
+
+  .timeline-comment__body pre code {
+    padding: 0;
+    background: none;
+  }
+
+  .timeline-comment__body a {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ── composer ──────────────────────────────────────────────────────────── */
+
+  .comment-composer {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-block-start: 16px;
+  }
+
+  .comment-composer__face {
+    padding-block-start: 8px;
+  }
+
+  /* The whole well is the control. A labelled box with a button loose
+     underneath is what made the old composer read as a form field that
+     happened to be on an issue page rather than as somewhere to write. */
+  .comment-composer__well {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--ink-raised);
+    transition: border-color var(--motion-fast) var(--ease);
+  }
+
+  .comment-composer__well:focus-within {
+    border-color: var(--line-strong);
+  }
+
+  .comment-composer__field {
+    padding: 4px 4px 0;
+  }
+
+  /* The control inside comes from the caller, so it is stripped here rather
+     than restyled: the well already draws the edge, and a second border inside
+     it is the thing that made this look unfinished. */
+  .comment-composer__field :is(textarea, input) {
+    width: 100%;
+    min-height: 84px;
+    border: 0;
+    background: transparent;
+    resize: vertical;
+  }
+
+  .comment-composer__field :is(textarea, input):focus,
+  .comment-composer__field :is(textarea, input):focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  .comment-composer__field label {
+    /* The label is the placeholder's job here; keeping both stacks two
+       prompts over one empty box. It stays in the markup for the control's
+       accessible name. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .comment-composer__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border-block-start: 1px solid var(--line);
+  }
+
+  .comment-composer__hint {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  /* ── field menus ───────────────────────────────────────────────────────── */
+
+  .field-menu {
+    display: inline-flex;
+  }
+
+  /* The trigger is the value: no chrome until it is hovered, so a row of them
+     reads as facts rather than as a row of buttons. */
+  .field-menu__trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    transition: background var(--motion-quick) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .field-menu__trigger:hover {
+      background: var(--wash-hover);
+    }
+  }
+
+  .field-menu__panel {
+    width: max-content;
+    min-width: 200px;
+    max-width: 280px;
+    max-height: 320px;
+    padding: 4px;
+    overflow-y: auto;
+  }
+
+  @supports (position-area: bottom span-right) {
+    .field-menu__panel[data-align="end"] {
+      position-area: bottom span-left;
+    }
+  }
+
+  .field-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-body);
+    font-size: 0.8125rem;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  @media (hover: hover) {
+    .field-menu__item:hover {
+      background: var(--wash-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  .field-menu__item:focus-visible {
+    background: var(--wash-selected);
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  /* The tick keeps its column whether or not it is drawn, so the words below a
+     selected option do not shift left. */
+  .field-menu__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    flex: none;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .field-menu__glyph {
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 15px;
+  }
+
+  .field-menu__label {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .issue-row__actions {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+  }
+
+  /* A bare dot outside a label pill -- in a menu, beside the option it stands
+     for. The pill's own rule cannot reach it, so the tone is read from the dot
+     itself. */
+  .issue-label__dot[data-tone="primary"] { background: var(--text-primary); }
+  .issue-label__dot[data-tone="info"] { background: var(--info); }
+  .issue-label__dot[data-tone="success"] { background: var(--success); }
+  .issue-label__dot[data-tone="warning"] { background: var(--warning); }
+  .issue-label__dot[data-tone="danger"] { background: var(--danger); }
+
+  /* ── the issue page's own heading ──────────────────────────────────────── */
+
+  .issue-heading__title {
+    color: var(--text-primary);
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  /* The number is part of the title, not a separate fact: it is how the issue
+     is referred to out loud and in a commit message. Lighter, not smaller than
+     the words it belongs to. */
+  .issue-heading__number {
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  .issue-heading__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-block-start: 10px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .issue-heading__dot {
+    color: var(--text-dim);
+  }
+
+  .issue-heading__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-block-start: 16px;
+  }
+
+  .issue-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .issue-editor__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .issue-body {
+    padding-block-end: 8px;
+    border-block-end: 1px solid var(--line);
+  }
+
+  /* The control that opens a property's menu. Faint until hovered, because in
+     a rail of four groups four bright plus signs read as the point of the
+     panel rather than as a way to change what it says. */
+  .properties-panel__add {
+    width: 16px;
+    height: 16px;
+    color: var(--icon-faint);
+    font-size: 16px;
+    transition: color var(--motion-fast) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .field-menu__trigger:hover .properties-panel__add {
+      color: var(--icon-primary);
+    }
+  }
+
+  .properties-panel__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    .properties-panel__link:hover {
+      color: var(--text-primary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+}

@@ -175,15 +175,18 @@ Stated so nobody re-litigates it later:
 
 ## What this port does not yet do
 
-- **Nothing renders these on a real page.** The existing issue LiveViews at
-  `/:owner/:repo/issues` still compose generic controls directly. Wiring them up
-  is a separate change against a real schema, and it should be done deliberately
-  rather than as a side effect of adding components. Until it happens, the
-  component library is the only place these appear.
 - **Grouping, filtering, and display options are not implemented.** The
-  components render a grouped view; deciding what the groups are is the caller's
-  job and nothing here does it yet.
+  components render a grouped view; deciding what the groups are is the
+  caller's job and nothing here does it yet.
 - **The board is display-only,** as above.
+- **The timeline is derived, not recorded.** GitHub's issue timeline is an
+  endpoint backed by an event log. This schema has no `issue_events` table, so
+  the feed on the issue page is assembled from the columns that do exist:
+  opened from `inserted_at` and `user`, closed from `closed_at` and
+  `state_reason`, plus the comments. The result is honest but partial — a label
+  added and removed leaves no trace, and a close records when but not who,
+  which is why a close event has no actor. An `issue_events` table is what
+  would complete it, and it is a schema change rather than a component one.
 - **The demos hold invented data.** Six issues, eight people, four projects.
   They span every status category, every priority, assigned and unassigned,
   because a demo that shows one happy row hides the cases the component exists
@@ -224,32 +227,134 @@ Status is one of **done**, **next**, or **planned**.
 `project_row/1`, `team_row/1`, `member_row/1`. Catalogued at
 `/components/project-row`, `/components/team-row`, `/components/member-row`.
 
-### 6. Compose the issue LiveViews from these — **next**
+### 6. Compose the issue LiveViews from these — **done**
 
-`OpenAgentsWeb.IssueIndexLive` should render `issue_row/1` and `issue_group/1`
-against real issues, the way `OpenAgentsWeb.HomeLive` is built from catalogued
-landing components. That is what stops the library and the product drifting
-apart: changing a component changes the page, and the library demonstrates the
-same thing a user sees.
+`OpenAgentsWeb.IssueIndexLive` renders `issue_row/1`, `issue_toolbar/1` and
+`view_tabs/1`; `OpenAgentsWeb.ProjectIndexLive` renders `project_row/1`; and
+`OpenAgentsWeb.IssueShowLive` is built from `issue_detail/1`,
+`properties_panel/1`, `timeline/1` and `comment_composer/1`. Changing a
+component now changes the product, which is what stops the library and the
+pages drifting apart.
 
-This needs a decision first. The application's issues have `state` (open,
-closed) where these components have six categories, and no priority column at
-all. Either the schema grows to carry what the components render, or the
-components render less. Guessing at that in a component port would have been
-the wrong place to decide it.
+The schema decision this item was waiting on turned out not to exist. The
+ruling in `docs/2026-08-20-linear-design-github-shape.md` is that we have what
+GitHub has, and the components take GitHub's fields and leave the rest of their
+attributes at their defaults, which is what those defaults are for.
 
-### 7. Grouping and filtering on the server — **planned**
+### 7. The issue page — **done**
 
-Group by status, assignee, priority, or project; filter by the same. Both are
-server concerns — a query and a `GROUP BY` — and the components already accept
-the result. The filter chips need somewhere to send their changes, which is the
-same decision as item 6.
+Adapted from `components/common/issues/details/`, GitHub-shaped:
 
-### 8. Display options — **planned**
+| Ours | Source | Slug |
+| --- | --- | --- |
+| `issue_state/1` | — | `/components/issue-state` |
+| `issue_detail/1` | `issue-details.tsx` | `/components/issue-detail` |
+| `properties_panel/1` | `issue-properties-panel.tsx` | `/components/properties-panel` |
+| `timeline/1` | `activity-feed.tsx` | `/components/timeline` |
+| `timeline_event/1` | `activity-feed.tsx` | `/components/timeline-event` |
+| `timeline_comment/1` | `activity-feed.tsx` | `/components/timeline-comment` |
+| `comment_composer/1` | `activity-feed.tsx` | `/components/comment-composer` |
+
+`issue_state/1` has no counterpart in Circle. It exists because
+`issue_status/1` renders six categories and GitHub has two, and every page was
+writing its own three-clause mapping from `state` and `state_reason` to a
+glyph. One place now owns it, so two surfaces cannot disagree about what closed
+looks like. `not_planned` and `duplicate` both take the cancelled glyph,
+because both mean the work was not done.
+
+Three departures from the source on this page:
+
+- **The rail moves rather than hiding.** Circle hides its properties panel
+  below `lg`. State, labels and assignees are not decoration and a phone is
+  where an issue is most often read, so the rail sits under the heading on a
+  narrow screen and beside the body when there is room.
+- **A property group renders even when empty.** The page used to hide
+  `Labels`, `Assignees` and `Milestone` until the issue had one, which was
+  right while the rail was read-only. It is editable now, and hiding `Labels`
+  until an issue has a label means an issue can never get its first one. The
+  test that asserted the old behaviour was rewritten to assert the new intent
+  rather than deleted.
+- **The body and comments render as Markdown.** `OpenAgents.Markdown.to_html/2`
+  already exists, sanitized and bounded, and was not being used on this page.
+  GitHub renders issue bodies as Markdown, so this is parity rather than a
+  new idea.
+
+Circle's `content-blocks.tsx` (243 lines) is **not** ported. It is a mock
+rich-text model — paragraphs, checklists, image and video placeholders —
+standing in for a real document. We have a real one.
+
+### 8. Make the rows' parts controls — **done**
+
+In Circle every cell of a row is a selector. Two new components carry that:
+
+| Ours | Source | Slug |
+| --- | --- | --- |
+| `field_menu/1` | `status-selector.tsx`, `assignee-user.tsx` | `/components/field-menu` |
+| `field_menu_item/1` | the `cmdk` rows inside them | `/components/field-menu-item` |
+
+Circle wraps a Radix dropdown around a `cmdk` list. A native `popover` gives
+the same behaviour — click out to dismiss, `Escape` to close, the trigger as
+the anchor — with no script, and the trigger is a real button so the keyboard
+reaches it for free. `mode` decides whether an option is a toggle in a set
+(`aria-pressed`, for labels and assignees) or one choice out of several
+(`aria-current`, for state and milestone).
+
+`issue_row/1` and `project_row/1` grew slots (`:state`, `:people`, `:actions`)
+that replace a static cell with a control. The row stays presentational; a
+caller with somewhere to send a change supplies the menu. Every control sits
+**outside** the title link, because a state-changing control inside a link
+target is how people mis-click.
+
+What is interactive where, and why:
+
+- **Issue list row** — state and assignee. They are the two facts worth
+  changing without opening the issue. Labels and milestone need option lists
+  longer than a row has room to explain.
+- **Issue page rail** — state (including the close reason, which the header's
+  two buttons cannot express), assignees, labels, milestone.
+- **Project list row** — state. Projects V2 carries `state`, and it is the only
+  property of a project this schema holds that is worth changing from a list.
+  Delete stays a separate control beside the row rather than inside it.
+
+### 9. Re-checked against the GitHub ruling
+
+`docs/2026-08-20-linear-design-github-shape.md` changed what is portable.
+Re-reading the earlier "not porting" list against it:
+
+- **Priority selector — now clearly out.** It was skipped for scope; it is
+  dropped on principle. GitHub has no priority field and the `priority: high`
+  label convention is a convention, not a contract. `issue_priority/1` stays in
+  the library unused.
+- **Cycles — out.** GitHub has milestones. The UI calls them milestones.
+- **Sub-issues, blocked-by, related, linked diffs — out for now.** The strategy
+  doc lists `sub_issues_summary` and `issue_dependencies_summary` as fields we
+  have. We do not: neither appears anywhere in this schema. So Circle's
+  `IssueRefRow` was left unported rather than being built against a field that
+  does not exist. When those columns land, the arc in `issue_status/1` is
+  already the renderer for `percent_completed`.
+- **Reactions — out.** GitHub has a reactions API and Circle's comment card has
+  reaction pills. This schema stores none, so per the ruling we do not have the
+  concept.
+- **`author_association` — out as a field, in as a derivation.**
+  `timeline_comment/1` takes a `badge`, and the issue page passes `Author` when
+  the commenter's login matches the issue's. GitHub derives that same badge by
+  comparing rather than storing, so this is parity, not invention.
+- **`locked` / `locked_reason` — in, and now used.** Both are GitHub fields
+  this schema already carried and nothing rendered. A locked issue's page now
+  says so and does not offer a composer.
+
+### 10. Grouping and filtering on the server — **planned**
+
+Group by state, assignee, label, or milestone; filter by the same. Both are
+server concerns — a query and a `GROUP BY` — and `issue_group/1` already
+accepts the result. The filter chips need somewhere to send their changes.
+
+### 11. Display options — **planned**
 
 Circle's `DisplayOptions` popover switches list and board, picks the grouping
 and ordering, and toggles nine per-property visibility flags. The toggles are
-worth having and they need somewhere to persist; a native popover over
-`OpenAgentsWeb.UI.menu/1` plus a per-user preference would do it without script.
+worth having and they need somewhere to persist; `field_menu/1` is now the
+control they would be built from, and a per-user preference is the missing
+half.
 
 [circle]: https://github.com/ln-dev7/circle

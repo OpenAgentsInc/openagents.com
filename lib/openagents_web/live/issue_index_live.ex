@@ -15,9 +15,6 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   def handle_params(%{"owner" => owner, "repo" => repo} = params, _url, socket) do
     state = params["state"] || "open"
     repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
-    issues = Issues.list_issues(repository, state: state)
-    open_count = Issues.list_issues(repository, state: "open") |> length()
-    closed_count = Issues.list_issues(repository, state: "closed") |> length()
 
     socket =
       socket
@@ -25,12 +22,60 @@ defmodule OpenAgentsWeb.IssueIndexLive do
       |> assign(:repo, repo)
       |> assign(:repository, repository)
       |> assign(:state, state)
-      |> assign(:open_count, open_count)
-      |> assign(:closed_count, closed_count)
-      |> assign(:issues_count, length(issues))
-      |> stream(:issues, issues, reset: true)
+      |> assign(:assignable, Repositories.list_assignable_users(repository))
+      |> load()
 
     {:noreply, socket}
+  end
+
+  # The row's own controls, which is what Circle has that a static list does
+  # not. Only state and assignee: they are the two facts worth changing without
+  # opening the issue, and labels and milestone need option lists longer than a
+  # row has room to explain. Both live in the rail on the issue page instead.
+  def handle_event("set_state", %{"id" => id, "state" => "open"}, socket),
+    do: write(socket, id, %{"state" => "open", "state_reason" => nil})
+
+  def handle_event("set_state", %{"id" => id, "state" => "closed"} = params, socket),
+    do: write(socket, id, %{"state" => "closed", "state_reason" => params["reason"]})
+
+  def handle_event("toggle_assignee", %{"id" => id, "login" => login}, socket) do
+    issue = issue!(socket, id)
+
+    {:ok, _updated} =
+      if Enum.any?(issue.assignees || [], &(&1["login"] == login)) do
+        Issues.remove_assignees(issue, [login])
+      else
+        Issues.add_assignees(issue, [login])
+      end
+
+    {:noreply, load(socket)}
+  end
+
+  defp write(socket, id, attrs) do
+    {:ok, _updated} = Issues.update_issue(issue!(socket, id), attrs)
+    {:noreply, load(socket)}
+  end
+
+  # `JS.push` sends the id as a number; a `phx-value-` attribute would send a
+  # string. The handler takes whichever arrives.
+  defp issue!(socket, id) when is_integer(id),
+    do: Issues.get_issue!(socket.assigns.repository, id)
+
+  defp issue!(socket, id) when is_binary(id),
+    do: Issues.get_issue!(socket.assigns.repository, String.to_integer(id))
+
+  # Reloading rather than patching one row: closing an issue while the Open tab
+  # is showing has to remove it from the list and change both tab counts, and a
+  # row that stays visible after being closed is worse than a reload.
+  defp load(socket) do
+    repository = socket.assigns.repository
+    issues = Issues.list_issues(repository, state: socket.assigns.state)
+
+    socket
+    |> assign(:open_count, length(Issues.list_issues(repository, state: "open")))
+    |> assign(:closed_count, length(Issues.list_issues(repository, state: "closed")))
+    |> assign(:issues_count, length(issues))
+    |> stream(:issues, issues, reset: true)
   end
 
   def render(assigns) do
@@ -102,15 +147,60 @@ defmodule OpenAgentsWeb.IssueIndexLive do
           created={"opened #{relative(issue.inserted_at)} ago"}
           author={author(issue)}
           comments={issue.comments}
-        />
+        >
+          <:state>
+            <Circle.field_menu
+              id={"row-state-#{issue.id}"}
+              label={"Change the state of issue ##{issue.number}"}
+            >
+              <:trigger>
+                <Circle.issue_state state={issue.state} reason={issue.state_reason} />
+              </:trigger>
+              <Circle.field_menu_item
+                :for={{label, state, reason} <- state_options()}
+                label={label}
+                mode={:choice}
+                selected={issue.state == state and close_reason(issue) == reason}
+                closes={"row-state-#{issue.id}"}
+                on_select={JS.push("set_state", value: %{id: issue.id, state: state, reason: reason})}
+              >
+                <:glyph><Circle.issue_state state={state} reason={reason} /></:glyph>
+              </Circle.field_menu_item>
+            </Circle.field_menu>
+          </:state>
+          <:people>
+            <Circle.field_menu
+              id={"row-assignee-#{issue.id}"}
+              label={"Assign issue ##{issue.number}"}
+              align={:end}
+            >
+              <:trigger>
+                <Circle.assignee
+                  name={assignee(issue) && assignee(issue)[:name]}
+                  src={assignee(issue) && assignee(issue)[:src]}
+                />
+              </:trigger>
+              <Circle.field_menu_item
+                :for={user <- @assignable}
+                label={user.github_login}
+                selected={assigned?(issue, user.github_login)}
+                on_select={
+                  JS.push("toggle_assignee", value: %{id: issue.id, login: user.github_login})
+                }
+              >
+                <:glyph><Circle.assignee name={user.github_login} size={:sm} /></:glyph>
+              </Circle.field_menu_item>
+            </Circle.field_menu>
+          </:people>
+        </Circle.issue_row>
       </div>
     </Layouts.app>
     """
   end
 
-  # GitHub's two states, and nothing invented on top of them. `not_planned` is
-  # the one close reason with a distinct reading, so it takes the cancelled
-  # glyph; every other close is a completion.
+  # The row's own state cell is a control now, so the static category and label
+  # it would otherwise draw come from `Circle.issue_state/1` instead. They stay
+  # as the row's defaults for a caller with nowhere to send a change.
   defp category(%{state: "closed", state_reason: "not_planned"}), do: :canceled
   defp category(%{state: "closed"}), do: :completed
   defp category(_issue), do: :unstarted
@@ -118,6 +208,22 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   defp status_label(%{state: "closed", state_reason: "not_planned"}), do: "Closed as not planned"
   defp status_label(%{state: "closed"}), do: "Closed"
   defp status_label(_issue), do: "Open"
+
+  # `duplicate` is rendered when it arrives from the API but is not offered:
+  # the menu has nowhere to record which issue it duplicates, and a duplicate
+  # that does not say of what is worse than a plain close.
+  defp state_options do
+    [
+      {"Open", "open", nil},
+      {"Closed as completed", "closed", "completed"},
+      {"Closed as not planned", "closed", "not_planned"}
+    ]
+  end
+
+  defp close_reason(%{state: "closed", state_reason: reason}), do: reason || "completed"
+  defp close_reason(_issue), do: nil
+
+  defp assigned?(issue, login), do: Enum.any?(issue.assignees || [], &(&1["login"] == login))
 
   # A label carries a colour on GitHub; the row takes a tone from our ladder
   # rather than that hex, so the list stays in one palette.

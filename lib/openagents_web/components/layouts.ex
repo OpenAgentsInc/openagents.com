@@ -546,7 +546,6 @@ defmodule OpenAgentsWeb.Layouts do
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
         <Layouts.sidebar_link path={~p"/"} label="Home" icon="home" patchable={false} />
-        <Layouts.sidebar_link path={~p"/chat"} label="Chat" icon="chat" patchable={false} />
         <Layouts.sidebar_link
           path={~p"/OpenAgentsInc/openagents.com/issues"}
           label="Issues"
@@ -559,6 +558,15 @@ defmodule OpenAgentsWeb.Layouts do
           icon="folder"
           patchable={false}
         />
+      </nav>
+
+      <%!-- The agent's own surfaces, grouped under her name. Chat, computers
+      and memory are one thing from the reader's side -- the conversation and
+      the two things it can reach -- and reading as a group says that in a way
+      six flat rows cannot. Open by default: grouping is for orientation here,
+      not for hiding. --%>
+      <Layouts.sidebar_section title="Sarah" open>
+        <Layouts.sidebar_link path={~p"/chat"} label="Chat" icon="chat" patchable={false} />
         <Layouts.sidebar_link
           path={~p"/computers"}
           label="Computers"
@@ -571,7 +579,7 @@ defmodule OpenAgentsWeb.Layouts do
           icon="brain"
           patchable={false}
         />
-      </nav>
+      </Layouts.sidebar_section>
 
       <%!-- Rows the current page contributes. Chat's destinations, work
       projections and admin actions arrive here instead of in a second rail. --%>

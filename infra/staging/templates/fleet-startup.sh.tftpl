@@ -139,6 +139,9 @@ RELEASE_DISTRIBUTION=name
 RELEASE_NODE=openagents@$instance_name.staging.internal
 EOF
 
+export DOCKER_CONFIG=/run/openagents/docker-config
+mkdir -p "$DOCKER_CONFIG"
+chmod 0700 "$DOCKER_CONFIG"
 docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
 docker pull "$image"
 docker rm --force openagents 2>/dev/null || true

@@ -59,6 +59,9 @@ printf 'RELEASE_COOKIE=%s\n' "$release_cookie" >/run/openagents/deployer.env
 unset release_cookie
 
 chmod 0600 /run/openagents/deployer.env
+export DOCKER_CONFIG=/run/openagents/docker-config
+mkdir -p "$DOCKER_CONFIG"
+chmod 0700 "$DOCKER_CONFIG"
 docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
 docker pull "$image"
 docker rm --force openagents-deployer 2>/dev/null || true

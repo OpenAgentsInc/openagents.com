@@ -232,7 +232,7 @@
   min-height: 0;
   flex: none;
   flex-direction: column;
-  width: 280px;
+  width: 240px;
   height: 100%;
   overflow: hidden;
   border-right: 1px solid var(--line);
@@ -273,7 +273,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   /* 32px rows sitting 1px apart. The previous 36px row with 6px of block
      padding and 4px between rows spent roughly half the sidebar's height on
      space between things rather than on the things. */
@@ -350,13 +350,16 @@
   pointer-events: none;
 }
 
+/* Smaller than the row's type and held further from it. A 20px glyph beside
+   14px text reads as the larger of the two, which inverts what the row is
+   about: the word is the destination and the glyph is a hint. */
 .sidebar-row__icon {
   display: inline-flex;
-  width: 20px;
+  width: 16px;
   flex: none;
   justify-content: center;
   color: currentColor;
-  font-size: 1.25rem;
+  font-size: 16px;
 }
 
 .sidebar-row__label {
@@ -381,6 +384,16 @@
    that were already just rows, which is most of why it read loose. */
 .sidebar-section[open] {
   padding-block-end: 6px;
+}
+
+/* Declared here, not in the style pack. `.sidebar-section-label` is unlayered
+   and sets `color`, so the layered `.sidebar-section__summary:hover` could
+   never win and the heading was the one sidebar row that did not respond to a
+   pointer. */
+@media (hover: hover) {
+  .sidebar-section-label:hover {
+    color: var(--text-primary);
+  }
 }
 
 .sidebar-section-label {

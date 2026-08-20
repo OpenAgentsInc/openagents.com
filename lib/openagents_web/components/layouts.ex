@@ -108,7 +108,7 @@ defmodule OpenAgentsWeb.Layouts do
 
   defp openagents_command_bar(assigns) do
     ~H"""
-    <header class="flex items-center gap-2 bg-background border-b border-border px-4 h-16 shrink-0">
+    <header class="flex items-center gap-2 bg-background border-b border-border px-4 h-[52px] shrink-0">
       <div class="flex flex-1 min-w-0 items-center gap-2">
         <%= if !@current_scope do %>
           <.link navigate={~p"/"} class="btn text-xl text-foreground" data-variant="ghost">

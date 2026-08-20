@@ -2274,7 +2274,10 @@
 
   .docs-prose {
     min-width: 0;
-    max-width: 68ch;
+    /* Fills its column. The measure was capped at 68ch, which left a wide
+       screen with a narrow ribbon of text beside a large empty margin; the
+       column itself is what bounds the line now. */
+    max-width: none;
     flex: 1;
     color: var(--text-body);
   }
@@ -2546,7 +2549,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 12px;
     min-height: 32px;
     margin-inline: 12px;
     padding-inline: 8px;
@@ -3265,6 +3268,12 @@
 @layer components {
   .landing-section {
     position: relative;
+    /* Glows are scaled well past their own box -- 2.5x on the wash -- and a
+       scaled element paints outside it. Unclipped, the hero's glow widened the
+       page and left a band of empty scroll to the right of every section.
+       `clip` rather than `hidden`: it does not make the section a scroll
+       container, so sticky and anchor behaviour inside it are unaffected. */
+    overflow-x: clip;
     border-bottom: 1px solid var(--line-faint);
     padding: 64px 24px;
   }
@@ -4103,6 +4112,10 @@
     min-height: 0;
     flex: 1;
     overflow-y: auto;
+    /* The scroll container is the last place horizontal overflow can surface,
+       so it refuses it outright: a decorative element must never be able to
+       give the page a horizontal scrollbar. */
+    overflow-x: hidden;
     overscroll-behavior: none;
   }
 

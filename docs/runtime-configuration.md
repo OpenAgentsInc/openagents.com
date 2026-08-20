@@ -76,6 +76,30 @@ general cloud credentials into this role. A provider key is a temporary
 qualification mechanism; replace it with a run-scoped inference grant before
 admitting repository writes.
 
+## Operator Codex account settings
+
+The web role can enable a restricted operator surface for connecting individual
+Codex accounts. This surface starts a temporary Codex app-server only for the
+device ceremony, verifies the admitted model and reasoning efforts, and writes
+the resulting managed credential to a configured credential slot. It never
+stores the credential value in PostgreSQL.
+
+| Environment setting | Requirement |
+| --- | --- |
+| `OPENAGENTS_FEATURE_SCV_CODEX` | `true` to enable the operator connection surface; otherwise `false` or empty |
+| `OPENAGENTS_SCV_CODEX_CREDENTIAL_STORE` | `gcp_secret_manager` in staging; `file` is allowed only for local development and tests |
+| `OPENAGENTS_SCV_CODEX_CREDENTIAL_REFS` | Comma-separated, preallocated credential-slot references; required when the feature is enabled |
+| `OPENAGENTS_SCV_CODEX_BIN` | Absolute path to the pinned Codex executable; the release image uses `/usr/local/bin/codex` |
+| `OPENAGENTS_SCV_CODEX_FILE_ROOT` | Local credential directory used only with the `file` store |
+
+Each successful connection creates an immutable secret version and records only
+its reference and numeric version. Grant the web identity version-add and
+exact-version-read access only to the configured slots. Do not grant the web
+identity access to unrelated SCV, Forge, or deployment credentials.
+
+Implement ChatGPT service accounts after this individual operator flow passes
+qualification. Service accounts are available only for pay-as-you-go plans.
+
 ## Required release settings
 
 All settings in this section are mandatory in a production release unless

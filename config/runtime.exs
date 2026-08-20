@@ -159,6 +159,46 @@ if config_env() == :prod and runtime_role == :web do
   boot_convergence_enabled = feature.("BOOT_CONVERGENCE")
   ra_enabled = feature.("RA")
   horde_enabled = feature.("HORDE")
+  scv_codex_enabled = parse_optional_boolean.("OPENAGENTS_FEATURE_SCV_CODEX")
+
+  scv_codex_credential_store =
+    case optional_text.("OPENAGENTS_SCV_CODEX_CREDENTIAL_STORE") do
+      nil ->
+        OpenAgents.SCV.CodexCredentialStore.File
+
+      "file" ->
+        OpenAgents.SCV.CodexCredentialStore.File
+
+      "gcp_secret_manager" ->
+        OpenAgents.SCV.CodexCredentialStore.GcpSecretManager
+
+      _invalid ->
+        raise "environment variable OPENAGENTS_SCV_CODEX_CREDENTIAL_STORE is not admitted"
+    end
+
+  scv_codex_credential_refs =
+    case optional_text.("OPENAGENTS_SCV_CODEX_CREDENTIAL_REFS") do
+      nil -> []
+      _configured -> parse_csv.("OPENAGENTS_SCV_CODEX_CREDENTIAL_REFS")
+    end
+
+  if scv_codex_enabled and scv_codex_credential_refs == [] do
+    raise "environment variable OPENAGENTS_SCV_CODEX_CREDENTIAL_REFS is required when Codex SCV accounts are enabled"
+  end
+
+  scv_codex = [
+    enabled: scv_codex_enabled,
+    executable:
+      optional_text.("OPENAGENTS_SCV_CODEX_BIN") ||
+        Application.fetch_env!(:openagents, :scv_codex)[:executable],
+    credential_store: scv_codex_credential_store,
+    credential_refs: scv_codex_credential_refs,
+    file_root:
+      optional_text.("OPENAGENTS_SCV_CODEX_FILE_ROOT") ||
+        Application.fetch_env!(:openagents, :scv_codex)[:file_root],
+    temporary_root: System.tmp_dir!(),
+    client_options: []
+  ]
 
   voice =
     :openagents
@@ -286,6 +326,7 @@ if config_env() == :prod and runtime_role == :web do
     voice_retention_enabled: voice_retention_enabled,
     work: work,
     work_workers_enabled: work_enabled,
+    scv_codex: scv_codex,
     semantic_index: semantic_index,
     experience_memory: experience_memory,
     graph_memory: graph_memory,

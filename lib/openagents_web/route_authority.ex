@@ -113,6 +113,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/admin/forge"}),
     do: declaration(:operator, "configured operator GitHub ID", "forge:promote", true)
 
+  defp policy(%{path: "/admin/scv/accounts"}),
+    do: declaration(:operator, "configured operator GitHub ID", "scv:account:connect", true)
+
   defp policy(%{path: "/admin"}),
     do: declaration(:operator, "configured operator GitHub ID", "voice:metadata:read", false)
 

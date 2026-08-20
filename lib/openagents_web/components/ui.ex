@@ -62,7 +62,7 @@ defmodule OpenAgentsWeb.UI do
 
   attr :rest, :global,
     include:
-      ~w(disabled form name value popovertarget popovertargetaction download href navigate patch)
+      ~w(disabled form name value popovertarget popovertargetaction download href navigate patch rel target)
 
   slot :inner_block, required: true
 

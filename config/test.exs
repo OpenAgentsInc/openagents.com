@@ -77,6 +77,15 @@ config :openagents, :ra_enabled, false
 
 config :openagents, :computer_controller_enabled, true
 
+config :openagents, :scv_codex,
+  enabled: true,
+  executable: Path.expand("../test/support/fake_codex_app_server.sh", __DIR__),
+  credential_store: OpenAgents.SCV.CodexCredentialStore.File,
+  credential_refs: ["file:test-operator-1", "file:test-operator-2"],
+  file_root: Path.join(System.tmp_dir!(), "openagents-codex-test-credentials"),
+  temporary_root: System.tmp_dir!(),
+  client_options: []
+
 config :openagents, :voice_recording_encryption_key, Base.encode64(:crypto.strong_rand_bytes(32))
 
 config :openagents, :voice_recording,

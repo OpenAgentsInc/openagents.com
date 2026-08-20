@@ -50,6 +50,15 @@ config :openagents,
   coding_jobs_dir: "/var/lib/openagents/coding-jobs",
   work_workers_enabled: false,
   work: [enabled: false],
+  scv_codex: [
+    enabled: false,
+    executable: "/usr/local/bin/codex",
+    credential_store: OpenAgents.SCV.CodexCredentialStore.File,
+    credential_refs: ["file:operator-1"],
+    file_root: "/var/lib/openagents/scv/codex-accounts",
+    temporary_root: System.tmp_dir!(),
+    client_options: []
+  ],
   tools_enabled: true,
   voice: [
     enabled: false,

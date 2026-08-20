@@ -16,6 +16,7 @@ ARG TAILWIND_VERSION=4.3.0
 ARG TAILWIND_SHA256=73f0e5459054e5cfaa8ab6f3b940f3fbe0f13cc7fd83bc24e7c655033c203400
 ARG ESBUILD_VERSION=0.25.4
 ARG ESBUILD_SHA256=93433b456cac3a454ee27403d3de9adce88d83e5439ba37e1471af54730c9ca7
+ARG CODEX_VERSION=0.147.0
 
 ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}@sha256:ae38be7cb19bffa78adedb04732d9e6ba83a507b4cfb06983cbe711edb49da54"
 ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258"
@@ -109,6 +110,8 @@ CMD ["mix", "run", "--no-compile", "--no-start", "ops/forge/build-worker.exs"]
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
+ARG TARGETARCH
+ARG CODEX_VERSION
 ARG DEBIAN_SNAPSHOT
 ARG SOURCE_DATE_EPOCH=0
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
@@ -121,8 +124,23 @@ RUN sed -i \
       /etc/apt/sources.list.d/debian.sources \
   && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
   && apt-get update \
-  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates git \
+  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates curl git \
   && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+  case "${TARGETARCH}" in \
+    amd64) codex_arch=x86_64; checksum=0246e2e773834e07f0fb5249ed6ebad12e4591e608f8c7bb97dd6a9690544c36 ;; \
+    arm64) codex_arch=aarch64; checksum=eb677c80f666b1ab8b4b1d083b66e8d614b1281d960bb6f9fd8ca98f58b38b90 ;; \
+    *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+  esac; \
+  archive="codex-${codex_arch}-unknown-linux-musl.tar.gz"; \
+  curl -fsSL --retry 3 -o "/tmp/${archive}" \
+    "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/${archive}"; \
+  echo "${checksum}  /tmp/${archive}" | sha256sum --check --strict; \
+  tar -xzf "/tmp/${archive}" -C /tmp; \
+  install -D -m 0755 "/tmp/codex-${codex_arch}-unknown-linux-musl" /usr/local/bin/codex; \
+  rm "/tmp/${archive}" "/tmp/codex-${codex_arch}-unknown-linux-musl"; \
+  codex --version
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \

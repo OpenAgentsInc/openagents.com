@@ -112,6 +112,7 @@ defmodule OpenAgentsWeb.Router do
       live "/settings/api-tokens", ApiTokensLive, :index
       live "/admin", AdminLive, :index
       live "/admin/forge", AdminForgeLive, :index
+      live "/admin/scv/accounts", AdminScvAccountsLive, :index
 
       live "/:owner/:repo/issues/new", IssueNewLive, :new
       live "/:owner/:repo/issues/:number", IssueShowLive, :show

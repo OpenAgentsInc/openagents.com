@@ -33,6 +33,8 @@ defmodule OpenAgents.RuntimeSupervisor do
         {Registry, keys: :unique, name: OpenAgents.VoiceSessionRegistry},
         {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.VoiceSessionSupervisor},
         OpenAgents.SCV.Activity,
+        {Registry, keys: :unique, name: OpenAgents.SCV.CodexLoginRegistry},
+        OpenAgents.SCV.CodexLoginSupervisor,
         OpenAgents.Leaderboard.Server,
         {Task.Supervisor, name: OpenAgents.ProviderTaskSupervisor},
         {Task.Supervisor, name: OpenAgents.ToolTaskSupervisor},

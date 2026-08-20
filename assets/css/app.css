@@ -370,6 +370,12 @@
 
 .sidebar-section {
   position: relative;
+}
+
+/* Only an open section needs holding off the next one. Paying that gap while
+   collapsed made a rail of collapsed sections carry a separator between rows
+   that were already just rows, which is most of why it read loose. */
+.sidebar-section[open] {
   padding-block-end: 6px;
 }
 
@@ -379,10 +385,13 @@
   top: 0;
   display: flex;
   align-items: center;
-  /* A section heading is a row you can click, so it is sized like one: same
-     height, same type, sentence case. Uppercasing it with tracking made it
-     shout a word the reader already scanned past. */
-  min-height: 36px;
+  /* A section heading is a row you can click, so it is sized like one: the
+     SAME height as `.sidebar-row`, not a taller near-match. At 36px against a
+     20px line it carried 8px of air per side while the row beside it carried
+     6px, and the mismatch is what made the column look airier vertically than
+     it is horizontally. Uppercasing it with tracking made it shout a word the
+     reader already scanned past. */
+  min-height: 32px;
   margin-inline: 12px;
   padding-inline: 8px;
   /* Sticky, so it needs an opaque fill for rows to scroll under -- but it must

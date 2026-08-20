@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: design only; no implementation or deployment changes
+Status: operator account connection first; staging implementation in progress
 
 ## Outcome
 
@@ -19,12 +19,13 @@ turn, approval, rate-limit, and live event operations that an SCV needs.
 
 Support these credential paths:
 
-- Prefer a ChatGPT service-account access token for production SCVs when the
-  workspace and plan support one.
-- Support ChatGPT device-code login for an operator-linked pilot and for
-  workspaces that explicitly allow device login.
+- Implement ChatGPT device-code login first so an authenticated OpenAgents
+  operator can connect an individual Codex account.
+- Add ChatGPT service-account access tokens second, and only for a workspace
+  on a pay-as-you-go plan. OpenAI does not make service accounts available on
+  other plans.
 - Support a personal Codex access token when an operator needs ChatGPT
-  workspace attribution but a non-human service account is unavailable.
+  workspace attribution and device login is unavailable.
 - Keep API-key authentication available for usage-based automation that does
   not need ChatGPT workspace entitlements.
 - Do not use experimental `chatgptAuthTokens` in the first version.
@@ -168,9 +169,9 @@ deployment, SCV-policy, account-management, or credential-management tools.
 
 | Credential | Appropriate use | Persistence | Initial status |
 | --- | --- | --- | --- |
-| ChatGPT service-account access token | Production Business or Enterprise automation that needs a non-human ChatGPT workspace identity, governance, and attribution | Store the token in the platform secret manager and rotate it. Do not persist a login in the worker. | Preferred production path when available. |
+| Managed ChatGPT device login | An authenticated operator connects an individual ChatGPT account and lets Codex own refresh and persistence | Preserve the account's updated `auth.json` across restarts under a single-writer lease. | Implement first. |
+| ChatGPT service-account access token | Headless workspace automation that needs a non-human ChatGPT identity, governance, and attribution | Store the token in the platform secret manager and rotate it. Do not persist a login in the worker. | Implement second. Available only on pay-as-you-go plans. |
 | Personal Codex access token | Trusted automation attributed to one workspace member | Store and rotate it like any other automation secret. | Allowed for a bounded pilot; prefer a service account for shared production work. |
-| Managed ChatGPT device login | An authenticated operator explicitly connects a ChatGPT account and lets Codex own refresh and persistence | Preserve the account's updated `auth.json` across restarts under a single-writer lease. | Preferred operator-linked pilot path. |
 | Platform API key | Usage-based Codex work that does not need ChatGPT plan limits or workspace identity | Use a scoped secret or existing inference grant. | Supported fallback. |
 | Browser callback login | Interactive local clients where the browser can return to a localhost callback | Requires the app-server callback listener. | Do not use for the hosted admin interface; the device flow is less brittle. |
 | Experimental external ChatGPT tokens | A host that already owns the complete ChatGPT token lifecycle | Host-managed access-token refresh. | Refused for the first implementation. |
@@ -182,11 +183,20 @@ automation. [Service accounts](https://learn.chatgpt.com/docs/enterprise/service
 provide non-human workspace identities on eligible pay-as-you-go plans and
 require Codex CLI `0.142.0` or later.
 
-If a Platform API key meets the requirement, prefer it over connecting a human
-ChatGPT account. Use a ChatGPT credential only when the SCV needs ChatGPT
-workspace attribution, entitlements, limits, or governance.
+The first product path deliberately connects an individual operator account.
+This order proves the account ceremony, app-server lifecycle, credential-home
+persistence, rate-limit visibility, and account isolation before OpenAgents
+adds non-human credentials. A Platform API key remains the right path for
+usage-based work that does not need ChatGPT workspace attribution,
+entitlements, limits, or governance.
 
-### Production preference
+### Second implementation: pay-as-you-go service accounts
+
+Do not implement service accounts as an alternative first-login button. Add
+them only after the individual operator flow passes staging qualification.
+OpenAI states that service accounts are available only on pay-as-you-go plans.
+OpenAgents must fail closed when the selected workspace does not meet that
+requirement.
 
 Use one ChatGPT service account per distinct SCV authority domain, not one
 service account per short run and not one employee credential for the entire
@@ -649,10 +659,10 @@ incompatible account.
 
 ## Implementation phases
 
-### Phase 0: Support and policy confirmation
+### Phase 0: Runtime and policy confirmation
 
-- Confirm the eligible ChatGPT plan, service-account availability, token
-  expiration policy, and Codex Local permissions.
+- Confirm device login is enabled for the individual operator account and
+  record the admitted Codex runtime and protocol schema.
 - Contact OpenAI about the `openagents_scv` client identifier and the supported
   app-server or SDK path.
 - Decide which repositories may use ChatGPT credentials instead of Platform
@@ -669,16 +679,26 @@ incompatible account.
   `openagents.scv.report.v1` terminal result.
 - Compare behavior with the stable Python SDK and capture protocol fixtures.
 
-### Phase 2: Operator account connection
+### Phase 2: Individual operator account connection
 
 - Add restricted account and login-attempt records.
 - Implement the device-code ceremony with one temporary process per attempt.
 - Add account read, model, rate-limit, health, drain, disconnect, and audit
   operations.
-- Add service-account and personal access-token secret references without
-  showing saved token values after entry.
 
-### Phase 3: Account runtime scheduler
+### Phase 3: Pay-as-you-go service accounts
+
+- Confirm the selected ChatGPT workspace uses a pay-as-you-go plan before
+  presenting or accepting a service-account credential.
+- Add service-account access-token secret references without showing saved
+  token values after entry.
+- Prove rotation by draining the old account runtime, starting a new runtime
+  generation, and revoking the old token after the replacement passes a
+  bounded smoke test.
+- Keep personal access tokens as a separate operator-attributed fallback, not
+  as a service-account substitute.
+
+### Phase 4: Account runtime scheduler
 
 - Add one runtime generation and one capacity lease per account.
 - Bind every SCV execution to one account, credential revision, Codex version,
@@ -687,14 +707,14 @@ incompatible account.
   state.
 - Add live public SCV projection and restricted driver diagnostics.
 
-### Phase 4: Propose-only SCV qualification
+### Phase 5: Propose-only SCV qualification
 
 - Run bounded read-only investigation and candidate proposal tasks.
 - Prove cancellation, report durability, event continuity, exact-SHA binding,
   resource collection, and restart behavior.
 - Keep repository writes, pushes, Forge promotion, and deployment disabled.
 
-### Phase 5: Credential-free effect execution
+### Phase 6: Credential-free effect execution
 
 - Separate app-server credentials from candidate command and file effects.
 - Add a durable pre-effect receipt and idempotency boundary.
@@ -702,7 +722,7 @@ incompatible account.
   filesystem, process metadata, sockets, logs, or artifacts.
 - Run adversarial repository instructions and build scripts with network denied.
 
-### Phase 6: Bounded write admission
+### Phase 7: Bounded write admission
 
 - Enable only a repository-scoped propose branch and admitted path and command
   policy.
@@ -741,8 +761,8 @@ Do not call the Codex-backed driver ready until it proves all of these items:
 
 - Will OpenAI support `openagents_scv` as a direct app-server client, or should
   production use the stable Python SDK bridge?
-- Which ChatGPT workspace and pay-as-you-go plan will own the production SCV
-  service account?
+- After the individual operator path passes qualification, which ChatGPT
+  workspace and pay-as-you-go plan will own the first SCV service account?
 - Should staging and production use separate service accounts, separate
   workspaces, or both?
 - Which encrypted persistent store will hold managed device-login homes with a

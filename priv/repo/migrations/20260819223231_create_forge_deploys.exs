@@ -2,24 +2,23 @@ defmodule OpenAgents.Repo.Migrations.CreateForgeDeploys do
   use Ecto.Migration
 
   def change do
-    create table(:forge_deploys) do
-      add :target_id, references(:forge_fleet_targets, on_delete: :delete_all), null: false
-      add :source_sha, :string, null: false
-      add :strategy, :string
-      add :modules, {:array, :string}, default: "{}"
-      add :expected_nodes, {:array, :string}, default: "{}"
-      add :per_node_results, :map, null: false, default: "{}"
-      add :canary_result, :map
-      add :artifact_digest, :string
+    create table(:forge_deploys, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+      add :repo, :string, null: false
+      add :sha, :string, null: false
+      add :target_id, :binary_id, null: false
+      add :modules, {:array, :string}, null: false, default: []
+      add :nodes, {:array, :string}, null: false, default: []
+      add :result, :string, null: false
+      add :canary, :string
       add :push_to_live_ms, :integer
-      add :terminal_result, :string
-      add :duration_ms, :integer
-      add :details, :map, null: false, default: "{}"
-
-      timestamps()
+      timestamps(type: :utc_datetime_usec, updated_at: false)
     end
 
-    create index(:forge_deploys, [:target_id])
-    create index(:forge_deploys, [:source_sha])
+    create index(:forge_deploys, [:repo, :inserted_at])
+
+    create constraint(:forge_deploys, :forge_deploys_result,
+             check: "result IN ('live','reverted','needs_rolling_replace','failed')"
+           )
   end
 end

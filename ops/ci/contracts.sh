@@ -8,6 +8,7 @@ cd "$repo_root"
 
 ops/ci/reference-check.sh
 sh -n rel/overlays/bin/migration-lineage
+sh -n ops/production/preflight.sh
 sh -n ops/staging/cleanup-run.sh
 sh -n ops/staging/finalize-report.sh
 sh -n ops/staging/new-report.sh

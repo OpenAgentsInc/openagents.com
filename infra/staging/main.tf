@@ -495,6 +495,7 @@ resource "google_sql_database_instance" "staging" {
   deletion_protection = true
 
   settings {
+    edition                     = "ENTERPRISE"
     tier                        = var.database_tier
     availability_type           = "ZONAL"
     disk_type                   = "PD_SSD"
@@ -567,6 +568,8 @@ resource "google_compute_disk" "fleet_state" {
   zone   = var.zone
   size   = var.fleet_state_disk_gib
   labels = local.labels
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_instance" "fleet" {

@@ -363,7 +363,13 @@
 }
 
 .sidebar-row__label {
+  /* `overflow: hidden` is what makes the ellipsis work, and it also makes this
+     span a block whose height is exactly its line box. At the row's 20px line
+     height that box ends on the baseline's shoulder, so the tails of g, j, p,
+     q and y were sliced off. The line box gets 4px more to sit in; the row's
+     own height is set by `min-height`, so nothing moves. */
   overflow: hidden;
+  line-height: 1.5rem;
   white-space: nowrap;
   text-overflow: ellipsis;
 }

@@ -6,7 +6,6 @@ defmodule OpenAgents.Tools.RepositoryToolsTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
 
   alias OpenAgents.Tools.{
     CodeCheck,

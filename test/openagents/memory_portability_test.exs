@@ -1,6 +1,5 @@
 defmodule OpenAgents.MemoryPortabilityTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   import ExUnit.CaptureLog
 
   alias OpenAgents.{Conversations, ProfileMemory}

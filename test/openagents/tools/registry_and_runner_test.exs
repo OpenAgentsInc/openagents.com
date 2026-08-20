@@ -1,6 +1,5 @@
 defmodule OpenAgents.Tools.RegistryAndRunnerTest do
   use ExUnit.Case
-  @moduletag :skip
 
   alias OpenAgents.Modules.Metadata
   alias OpenAgents.Tools.{ExecutionContext, ExecutionResult, Registry, Runner, Tool}

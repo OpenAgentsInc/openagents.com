@@ -1,6 +1,5 @@
 defmodule OpenAgents.Tools.GitHubRepoToolsTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}

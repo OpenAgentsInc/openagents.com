@@ -6,7 +6,6 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.Forge.{MirrorWatch, Pushes, Repos}

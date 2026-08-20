@@ -1,6 +1,5 @@
 defmodule OpenAgents.ShadowProgramsTest do
   use OpenAgents.SarahDataCase, async: true
-  @moduletag :skip
   alias OpenAgents.{Conversations, ProgramArtifacts, ShadowPrograms}
   alias OpenAgents.Context.Composer
   alias OpenAgents.ProfileMemory.Record

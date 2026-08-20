@@ -7,7 +7,6 @@ defmodule OpenAgents.Forge.BrowseTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.{Browse, Repos}
 
   @second_message """

@@ -52,3 +52,31 @@ config :phoenix,
 
 config :openagents, :migrate_on_boot, false
 config :openagents, :ra_enabled, false
+
+config :openagents, :tools, [
+  OpenAgents.Tools.ModuleDiscover,
+  OpenAgents.Tools.GitHubRepoList,
+  OpenAgents.Tools.GitHubRepoRead,
+  OpenAgents.Tools.ConversationSearch,
+  OpenAgents.Tools.ConversationRead,
+  OpenAgents.Tools.MemoryList,
+  OpenAgents.Tools.MemorySearch,
+  OpenAgents.Tools.MemoryRemember,
+  OpenAgents.Tools.MemoryCorrect,
+  OpenAgents.Tools.MemoryForget,
+  OpenAgents.Tools.ComputerList,
+  OpenAgents.Tools.ComputerProbe,
+  OpenAgents.Tools.ComputerRun,
+  OpenAgents.Tools.ComputerDevin,
+  OpenAgents.Tools.ComputerAgent,
+  OpenAgents.Tools.DeepWork,
+  OpenAgents.Tools.IncidentLookup,
+  OpenAgents.Tools.RepoRead,
+  OpenAgents.Tools.RepoGrep,
+  OpenAgents.Tools.RepoList,
+  OpenAgents.Tools.CodeCheck,
+  OpenAgents.Tools.RepoEdit,
+  OpenAgents.Tools.RepoWrite,
+  OpenAgents.Tools.RepoCommitPush,
+  OpenAgents.Tools.TestRecall
+]

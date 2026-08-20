@@ -16,7 +16,6 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
   defmodule TestPipeline do
     @moduledoc false
     use Plug.Builder
-    @moduletag :skip
 
     plug OpenAgentsWeb.Plugs.ForgeGitAuth
     plug OpenAgents.Forge.GitHTTP

@@ -1,6 +1,5 @@
 defmodule OpenAgents.Providers.OpenAI.RequestPayloadTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Providers.{OpenAI, Request, ToolDefinition, ToolOutput}
 

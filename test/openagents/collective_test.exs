@@ -1,6 +1,5 @@
 defmodule OpenAgents.CollectiveTest do
   use OpenAgents.SarahDataCase, async: true
-  @moduletag :skip
   alias OpenAgents.Collective
   alias OpenAgents.Collective.{Candidate, ConsentReceipt}
   alias OpenAgents.Conversations

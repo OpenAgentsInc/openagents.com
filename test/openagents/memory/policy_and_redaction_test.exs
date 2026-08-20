@@ -1,6 +1,5 @@
 defmodule OpenAgents.Memory.PolicyAndRedactionTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   import ExUnit.CaptureLog
 

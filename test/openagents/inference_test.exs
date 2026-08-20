@@ -1,6 +1,5 @@
 defmodule OpenAgents.InferenceTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   import OpenAgentsWeb.SarahConnCase, only: [github_user: 1]
 
   alias OpenAgents.Inference

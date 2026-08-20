@@ -1,6 +1,5 @@
 defmodule OpenAgents.Tools.IncidentLookupTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   alias OpenAgents.Incidents
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}

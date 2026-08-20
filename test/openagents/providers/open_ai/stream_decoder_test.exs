@@ -1,6 +1,5 @@
 defmodule OpenAgents.Providers.OpenAI.StreamDecoderTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Providers.OpenAI.StreamDecoder
   alias OpenAgents.Providers.ProviderEvent.ToolCall

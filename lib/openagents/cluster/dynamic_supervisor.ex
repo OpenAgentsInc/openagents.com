@@ -1,11 +1,11 @@
 defmodule OpenAgents.Cluster.DynamicSupervisor do
   @moduledoc """
-  Local-only replacement for Horde.DynamicSupervisor.
+  Cluster-aware wrapper around `Horde.DynamicSupervisor`.
   """
 
   @name OpenAgents.HordeSupervisor
 
-  def start_link(opts), do: DynamicSupervisor.start_link(opts)
+  def start_link(opts), do: Horde.DynamicSupervisor.start_link(opts)
 
   @spec start_child(atom() | pid(), {module(), term()} | map()) ::
           DynamicSupervisor.on_start_child()
@@ -17,6 +17,6 @@ defmodule OpenAgents.Cluster.DynamicSupervisor do
         _ when is_tuple(spec) -> spec
       end
 
-    DynamicSupervisor.start_child(name, spec)
+    Horde.DynamicSupervisor.start_child(name, spec)
   end
 end

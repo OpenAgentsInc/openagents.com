@@ -51,3 +51,4 @@ config :phoenix,
   sort_verified_routes_query_params: true
 
 config :openagents, :migrate_on_boot, false
+config :openagents, :ra_enabled, false

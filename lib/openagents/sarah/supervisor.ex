@@ -17,8 +17,17 @@ defmodule OpenAgents.Sarah.Supervisor do
   def init(_init_arg) do
     children =
       [
-        {Registry, keys: :unique, name: OpenAgents.HordeRegistry},
-        {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.HordeSupervisor},
+        {Horde.Registry,
+         name: OpenAgents.HordeRegistry,
+         keys: :unique,
+         members: :auto,
+         delta_crdt_options: [sync_interval: 150]},
+        {Horde.DynamicSupervisor,
+         name: OpenAgents.HordeSupervisor,
+         strategy: :one_for_one,
+         members: :auto,
+         process_redistribution: :passive,
+         delta_crdt_options: [sync_interval: 150]},
         {Registry, keys: :unique, name: OpenAgents.TurnRegistry},
         {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.TurnSupervisor},
         {Registry, keys: :unique, name: OpenAgents.VoiceSessionRegistry},

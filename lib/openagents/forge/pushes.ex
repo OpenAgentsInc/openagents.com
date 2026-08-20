@@ -29,11 +29,11 @@ defmodule OpenAgents.Forge.Pushes do
   """
   def handle_receive_pack(repo, body, principal, git_protocol) do
     :global.trans({{:forge_push, repo}, self()}, fn ->
-      do_handle(repo, body, principal, git_protocol)
+      do_handle(repo, body, principal, git_protocol, false)
     end)
   end
 
-  defp do_handle(repo, body, principal, git_protocol) do
+  defp do_handle(repo, body, principal, git_protocol, retried?) do
     started_at = System.monotonic_time(:millisecond)
     Sync.ensure_fresh(repo)
     path = Repos.ensure_repo!(repo)
@@ -61,6 +61,10 @@ defmodule OpenAgents.Forge.Pushes do
             mirror_async(repo)
             {:ok, output}
 
+          {:error, :cas_conflict} when not retried? ->
+            Sync.ensure_fresh(repo)
+            do_handle(repo, body, principal, git_protocol, true)
+
           {:error, reason} ->
             Logger.error(
               "forge_push_wal_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
@@ -74,7 +78,7 @@ defmodule OpenAgents.Forge.Pushes do
 
   # ── WAL persist (ack barrier) ───────────────────────────────────────────
 
-  defp persist(repo, body, refs_after, principal, retried? \\ false) do
+  defp persist(repo, body, refs_after, principal) do
     {expected, index} =
       case WAL.read_index(repo) do
         {:ok, generation, index} -> {generation, index}
@@ -88,6 +92,7 @@ defmodule OpenAgents.Forge.Pushes do
          entry = %{
            "seq" => seq,
            "object" => object,
+           "format" => "receive_pack",
            "refs" => refs_after,
            "principal" => principal,
            "pushed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
@@ -95,13 +100,6 @@ defmodule OpenAgents.Forge.Pushes do
          {:ok, _generation} <- WAL.cas_index(repo, expected, WAL.append_entry(index, entry)) do
       {:ok, seq}
     else
-      {:error, :cas_conflict} when not retried? ->
-        # Someone else advanced the WAL. Re-sync the cache (their entries
-        # replay on top of ours only if compatible; converge_refs settles it)
-        # and try once more from the new head.
-        Sync.ensure_fresh(repo)
-        persist(repo, body, Repos.refs(repo), principal, true)
-
       {:error, reason} ->
         {:error, reason}
     end

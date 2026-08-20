@@ -187,16 +187,68 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       browsable()
       # The GitHub-identical URL works...
       {:ok, _view, _html} = live(conn, "/OpenAgentsInc/openagents.com")
-      # ...and no other account segment is even routed (no wildcard owner), so
-      # a two-segment path that is not ours 404s without reaching a LiveView.
-      assert conn |> get("/someoneelse/demo") |> Map.fetch!(:status) == 404
-      # The old /code/* shape is gone.
-      assert conn |> get("/code/demo") |> Map.fetch!(:status) == 404
+      # ...and a different namespace reaches the database-backed resolver but
+      # remains concealed as the same public not-found result.
+      assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+        live(conn, "/someoneelse/demo")
+      end
+
+      # The old /code/* shape resolves as an unknown namespace and stays hidden.
+      assert_raise OpenAgentsWeb.PublicNotFoundError, fn -> live(conn, "/code/demo") end
     end
 
     test "a dark repo and an unknown repo 404 indistinguishably", %{conn: conn} do
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn -> live(conn, "/OpenAgentsInc/demo") end
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn -> live(conn, "/OpenAgentsInc/nope") end
+    end
+  end
+
+  describe "database-backed hosted repository pages" do
+    test "an empty ready public repository renders clone instructions", %{conn: conn} do
+      user = github_user("empty-hosted-repository", "hosted-owner")
+
+      assert {:ok, repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 user,
+                 %{name: "empty-repository", visibility: "public", default_branch: "trunk"},
+                 "empty-hosted-repository"
+               )
+
+      repository
+      |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+      |> Repo.update!()
+
+      Repos.ensure_repo!(repository.storage_key, "trunk")
+
+      {:ok, view, _html} = live(conn, "/hosted-owner/empty-repository")
+
+      assert has_element?(view, "#repo-empty")
+      assert has_element?(view, "#repo-clone")
+      refute has_element?(view, "#repo-commits")
+    end
+
+    test "a private repository is visible only to a member session", %{conn: conn} do
+      owner = github_user("private-hosted-owner", "private-hosted-owner")
+      outsider = github_user("private-hosted-outsider", "private-hosted-outsider")
+
+      assert {:ok, repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "private-repository", visibility: "private"},
+                 "private-hosted-repository"
+               )
+
+      member_conn = Plug.Test.init_test_session(conn, %{"user_id" => owner.id})
+      {:ok, view, _html} = live(member_conn, "/private-hosted-owner/private-repository")
+      assert has_element?(view, "#repo-provisioning")
+
+      outsider_conn = Plug.Test.init_test_session(recycle(conn), %{"user_id" => outsider.id})
+
+      assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+        live(outsider_conn, "/private-hosted-owner/private-repository")
+      end
+
+      assert repository.lifecycle_state == "provisioning"
     end
   end
 

@@ -1,7 +1,7 @@
 defmodule OpenAgents.ApiTokensTest do
   use OpenAgents.DataCase, async: true
 
-  alias OpenAgents.{Accounts, ApiTokens, Repo}
+  alias OpenAgents.{Accounts, ApiTokens, AuditEvent, Repo}
 
   test "tokens are stored as digests, require scope, expire, and revoke" do
     {:ok, user} = Accounts.upsert_github_user(profile(801, "api-owner"))
@@ -14,6 +14,11 @@ defmodule OpenAgents.ApiTokensTest do
              })
 
     refute token.token_digest =~ plaintext
+
+    assert %AuditEvent{actor_id: actor_id, metadata: %{"scopes" => ["forge:write"]}} =
+             Repo.get_by!(AuditEvent, event_type: "api_token.created", subject_id: token.id)
+
+    assert actor_id == user.id
     assert {:ok, authenticated, used} = ApiTokens.authenticate(plaintext, "forge:write")
     assert authenticated.id == user.id
     assert used.last_used_at

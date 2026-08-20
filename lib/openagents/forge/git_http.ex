@@ -21,8 +21,10 @@ defmodule OpenAgents.Forge.GitHTTP do
 
   @behaviour Plug
 
+  import Ecto.Query
   import Plug.Conn
 
+  alias OpenAgents.{Audit, Repositories}
   alias OpenAgents.Forge.{Pushes, Repos, Sync}
 
   @max_body_bytes 512 * 1024 * 1024
@@ -34,14 +36,14 @@ defmodule OpenAgents.Forge.GitHTTP do
   @impl true
   def call(conn, _opts) do
     case {conn.method, split_repo(conn.path_info)} do
-      {"GET", {:ok, repo, ["info", "refs"]}} ->
-        advertise(conn, repo, first_query(conn, "service"))
+      {"GET", {:ok, owner, name, ["info", "refs"]}} ->
+        advertise(conn, owner, name, first_query(conn, "service"))
 
-      {"POST", {:ok, repo, ["git-upload-pack"]}} ->
-        upload_pack(conn, repo)
+      {"POST", {:ok, owner, name, ["git-upload-pack"]}} ->
+        upload_pack(conn, owner, name)
 
-      {"POST", {:ok, repo, ["git-receive-pack"]}} ->
-        receive_pack(conn, repo)
+      {"POST", {:ok, owner, name, ["git-receive-pack"]}} ->
+        receive_pack(conn, owner, name)
 
       _other ->
         send_resp(conn, 404, "not found") |> halt()
@@ -50,11 +52,15 @@ defmodule OpenAgents.Forge.GitHTTP do
 
   # ── routes ──────────────────────────────────────────────────────────────
 
-  defp advertise(conn, repo, service) when service in ["git-upload-pack", "git-receive-pack"] do
-    with :ok <- check_repo(repo) do
-      Sync.ensure_fresh(repo)
+  defp advertise(conn, owner, name, service)
+       when service in ["git-upload-pack", "git-receive-pack"] do
+    operation = if service == "git-upload-pack", do: :read, else: :write
+
+    with {:ok, repository} <- resolve_repository(conn, owner, name),
+         :ok <- authorize(conn, repository, operation) do
+      Sync.ensure_fresh(repository.storage_key, repository.default_branch)
       command = String.trim_leading(service, "git-")
-      path = Repos.ensure_repo!(repo)
+      path = Repos.ensure_repo!(repository.storage_key, repository.default_branch)
 
       {output, 0} =
         run_git_service(command, ["--advertise-refs", path], "", git_protocol(conn))
@@ -67,18 +73,19 @@ defmodule OpenAgents.Forge.GitHTTP do
       |> send_resp(200, header <> output)
       |> halt()
     else
-      {:error, status, message} -> send_resp(conn, status, message) |> halt()
+      error -> send_git_error(conn, error)
     end
   end
 
-  defp advertise(conn, _repo, _service),
+  defp advertise(conn, _owner, _name, _service),
     do: send_resp(conn, 400, "dumb http protocol is not supported") |> halt()
 
-  defp upload_pack(conn, repo) do
-    with :ok <- check_repo(repo),
+  defp upload_pack(conn, owner, name) do
+    with {:ok, repository} <- resolve_repository(conn, owner, name),
+         :ok <- authorize(conn, repository, :read),
          {:ok, body, conn} <- read_git_body(conn) do
-      Sync.ensure_fresh(repo)
-      path = Repos.ensure_repo!(repo)
+      Sync.ensure_fresh(repository.storage_key, repository.default_branch)
+      path = Repos.ensure_repo!(repository.storage_key, repository.default_branch)
       {output, _status} = run_git_service("upload-pack", [path], body, git_protocol(conn))
 
       conn
@@ -87,16 +94,30 @@ defmodule OpenAgents.Forge.GitHTTP do
       |> send_resp(200, output)
       |> halt()
     else
-      {:error, status, message} -> send_resp(conn, status, message) |> halt()
+      error -> send_git_error(conn, error)
     end
   end
 
-  defp receive_pack(conn, repo) do
-    with :ok <- check_repo(repo),
-         :ok <- check_push_allowed(conn),
+  defp receive_pack(conn, owner, name) do
+    with {:ok, repository} <- resolve_repository(conn, owner, name),
+         :ok <- authorize(conn, repository, :write),
          {:ok, body, conn} <- read_git_body(conn) do
-      case Pushes.handle_receive_pack(repo, body, principal(conn), git_protocol(conn)) do
+      case Pushes.handle_receive_pack(
+             repository.storage_key,
+             body,
+             principal(conn),
+             git_protocol(conn)
+           ) do
         {:ok, output} ->
+          Audit.record!(
+            "repository.git.write",
+            audit_actor(conn),
+            "repository",
+            repository.id || repository.storage_key,
+            repository_id: repository.id,
+            metadata: %{"operation" => "receive_pack"}
+          )
+
           conn
           |> put_resp_content_type("application/x-git-receive-pack-result")
           |> put_resp_header("cache-control", "no-cache")
@@ -110,32 +131,158 @@ defmodule OpenAgents.Forge.GitHTTP do
           send_resp(conn, 500, "push failed") |> halt()
       end
     else
-      {:error, status, message} -> send_resp(conn, status, message) |> halt()
+      error -> send_git_error(conn, error)
     end
   end
 
   # ── helpers ─────────────────────────────────────────────────────────────
 
   defp split_repo([segment | rest]) do
-    case String.split(segment, ".git") do
-      [name, ""] -> {:ok, name, rest}
-      _ -> {:ok, segment, rest}
+    case strip_git_suffix(segment) do
+      {:ok, "openagents.com"} -> {:ok, "OpenAgentsInc", "openagents.com", rest}
+      {:ok, name} -> {:ok, nil, name, rest}
+      :error -> split_namespaced_repo(segment, rest)
     end
   end
 
   defp split_repo(_), do: :error
 
-  defp check_repo(repo) do
-    if Repos.valid_name?(repo), do: :ok, else: {:error, 404, "unknown repository"}
+  defp split_namespaced_repo(owner, [segment | rest]) do
+    case strip_git_suffix(segment) do
+      {:ok, name} -> {:ok, owner, name, rest}
+      :error -> :error
+    end
   end
 
-  # Pushes require an authenticated principal (set by the router auth plug);
-  # a missing principal here means a misconfigured pipeline — refuse.
-  defp check_push_allowed(conn) do
-    case conn.assigns[:forge_principal] do
-      %{} -> :ok
-      _ -> {:error, 401, "authentication required"}
+  defp split_namespaced_repo(_owner, _rest), do: :error
+
+  defp strip_git_suffix(segment) do
+    if String.ends_with?(segment, ".git") and byte_size(segment) > 4 do
+      {:ok, String.trim_trailing(segment, ".git")}
+    else
+      :error
     end
+  end
+
+  defp resolve_repository(conn, owner, name) when is_binary(owner) do
+    case OpenAgents.Repo.one(repository_query(owner, name)) do
+      nil -> repository_not_found(conn)
+      repository -> {:ok, repository}
+    end
+  end
+
+  defp resolve_repository(conn, nil, name) do
+    case conn.assigns[:forge_principal] do
+      %{kind: kind} when kind in [:operator, :machine] ->
+        if Repos.valid_name?(name) do
+          {:ok,
+           %OpenAgents.Repositories.Repository{
+             owner: name,
+             name: name,
+             storage_key: name,
+             default_branch: "main",
+             visibility: "private",
+             lifecycle_state: "ready"
+           }}
+        else
+          repository_not_found(conn)
+        end
+
+      _principal ->
+        repository_not_found(conn)
+    end
+  end
+
+  defp repository_query(owner, name) do
+    owner_key = String.downcase(owner)
+    name_key = String.downcase(name)
+
+    from repository in OpenAgents.Repositories.Repository,
+      join: namespace in assoc(repository, :namespace),
+      left_join: namespace_alias in OpenAgents.Repositories.NamespaceAlias,
+      on: namespace_alias.namespace_id == namespace.id and namespace_alias.slug_key == ^owner_key,
+      where:
+        repository.name_key == ^name_key and repository.lifecycle_state == "ready" and
+          namespace.state == "active" and
+          (namespace.slug_key == ^owner_key or not is_nil(namespace_alias.id)),
+      preload: [namespace: namespace]
+  end
+
+  defp authorize(_conn, %{visibility: "public"}, :read), do: :ok
+
+  defp authorize(conn, repository, :read) do
+    case conn.assigns[:forge_principal] do
+      nil -> authentication_required()
+      %{kind: :user, user: user} -> member_read(repository, user)
+      %{kind: :operator} -> operational_access(repository)
+      %{kind: :machine, id: machine_id} -> machine_access(repository, machine_id, "read")
+    end
+  end
+
+  defp authorize(conn, repository, :write) do
+    case conn.assigns[:forge_principal] do
+      nil ->
+        authentication_required()
+
+      %{kind: :user, user: user} ->
+        if Repositories.writable?(repository, user) do
+          :ok
+        else
+          case Repositories.membership_role(repository, user) do
+            nil -> {:error, 404, "unknown repository"}
+            _read_only -> {:error, 403, "repository is read only"}
+          end
+        end
+
+      %{kind: :operator} ->
+        operational_access(repository)
+
+      %{kind: :machine, id: machine_id} ->
+        machine_access(repository, machine_id, "write")
+    end
+  end
+
+  defp member_read(repository, user) do
+    if Repositories.membership_role(repository, user),
+      do: :ok,
+      else: {:error, 404, "unknown repository"}
+  end
+
+  defp operational_access(repository) do
+    if repository.storage_key in Repos.allowed_repos(),
+      do: :ok,
+      else: {:error, 404, "unknown repository"}
+  end
+
+  defp machine_access(%{id: nil}, _machine_id, _operation),
+    do: {:error, 404, "unknown repository"}
+
+  defp machine_access(repository, machine_id, operation) do
+    if Repositories.machine_access?(repository, machine_id, operation),
+      do: :ok,
+      else: {:error, 404, "unknown repository"}
+  end
+
+  defp repository_not_found(conn) do
+    if conn.assigns[:forge_principal],
+      do: {:error, 404, "unknown repository"},
+      else: authentication_required()
+  end
+
+  defp authentication_required,
+    do:
+      {:error, 401, "authentication required",
+       [{"www-authenticate", ~s(Basic realm="openagents-forge")}]}
+
+  defp send_git_error(conn, {:error, status, message}) do
+    conn |> send_resp(status, message) |> halt()
+  end
+
+  defp send_git_error(conn, {:error, status, message, headers}) do
+    conn =
+      Enum.reduce(headers, conn, fn {name, value}, acc -> put_resp_header(acc, name, value) end)
+
+    conn |> send_resp(status, message) |> halt()
   end
 
   defp principal(conn) do
@@ -143,6 +290,13 @@ defmodule OpenAgents.Forge.GitHTTP do
       %{kind: kind, id: id} -> "#{kind}:#{id}"
       %{kind: kind} -> to_string(kind)
       _ -> "unauthenticated"
+    end
+  end
+
+  defp audit_actor(conn) do
+    case conn.assigns[:forge_principal] do
+      %{kind: kind, id: id} when kind in [:user, :machine, :operator] -> {kind, id}
+      _principal -> :system
     end
   end
 

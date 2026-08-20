@@ -18,6 +18,8 @@ defmodule OpenAgents.Forge.Janitor do
 
   use GenServer
 
+  import Ecto.Query
+
   require Logger
 
   alias OpenAgents.Forge.Repos
@@ -49,7 +51,7 @@ defmodule OpenAgents.Forge.Janitor do
     # F1 (#124): the WAL→receipt replayer rides the same slow tick — any
     # push receipt lost to a crash or restore is re-derived, exactly once
     # by WAL index position.
-    Enum.each(Repos.allowed_repos(), fn repo ->
+    Enum.each(receipt_repository_keys(), fn repo ->
       safely(fn -> OpenAgents.Forge.Pushes.reconcile_receipts(repo) end)
     end)
 
@@ -115,6 +117,20 @@ defmodule OpenAgents.Forge.Janitor do
     end
   rescue
     _error -> nil
+  end
+
+  defp receipt_repository_keys do
+    hosted =
+      OpenAgents.Repositories.Repository
+      |> where([repository], repository.lifecycle_state == "ready")
+      |> order_by([repository], asc: repository.id)
+      |> limit(1_000)
+      |> select([repository], repository.storage_key)
+      |> OpenAgents.Repo.all()
+
+    Enum.uniq(Repos.allowed_repos() ++ hosted)
+  rescue
+    _error -> Repos.allowed_repos()
   end
 
   defp stale?(path, now_ms) do

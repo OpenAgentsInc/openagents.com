@@ -3,9 +3,6 @@ defmodule OpenAgentsWeb.Router do
 
   import OpenAgentsWeb.UserAuth
 
-  # The account segment public forge URLs live under, mirroring GitHub.
-  @forge_url_owner Application.compile_env(:openagents, :forge_url_owner, "OpenAgentsInc")
-
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -38,6 +35,11 @@ defmodule OpenAgentsWeb.Router do
   pipeline :forge_write_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
+  end
+
+  pipeline :optional_forge_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.OptionalApiTokenAuth, scope: "forge:write"
   end
 
   pipeline :forge_git do
@@ -90,25 +92,6 @@ defmodule OpenAgentsWeb.Router do
     delete "/logout", AuthController, :logout
   end
 
-  # The public forge web UI (TRANSPARENCY-001), addressed exactly the way the
-  # GitHub URL it replaces is:
-  # openagents.com/OpenAgentsInc/openagents.com/blob/main/README.md.
-  #
-  # The owner is a LITERAL scope segment, not a `:owner` pattern: a wildcard
-  # first segment would match every two-segment path on the domain (/dev/ui,
-  # a future /foo/bar) and shadow it. Scoping to the owning account keeps the
-  # GitHub-identical URL while touching nothing else.
-  scope "/#{@forge_url_owner}", OpenAgentsWeb do
-    pipe_through :browser
-
-    live_session :public_code,
-      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
-      live "/:repo", CodeRepoLive, :index
-      live "/:repo/commit/:sha", CodeCommitLive, :index
-      live "/:repo/blob/:ref/*path", CodeBlobLive, :index
-    end
-  end
-
   scope "/", OpenAgentsWeb do
     pipe_through [:browser, :authenticated]
 
@@ -118,6 +101,10 @@ defmodule OpenAgentsWeb.Router do
       live "/memory", MemoryLive, :index
       live "/computers", ComputersLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
+      live "/device", DeviceAuthorizationLive, :show
+      live "/repositories", RepositoryIndexLive, :index
+      live "/repositories/new", RepositoryNewLive, :new
+      live "/repositories/import/github", RepositoryImportLive, :new
       live "/:owner/:repo/issues/new", IssueNewLive, :new
       live "/:owner/:repo/issues/:number", IssueShowLive, :show
       live "/:owner/:repo/issues", IssueIndexLive, :index
@@ -195,6 +182,7 @@ defmodule OpenAgentsWeb.Router do
     get "/healthz", HealthController, :show
     get "/api/status", NetworkStatusController, :show
     get "/api/changelog", ChangelogController, :show
+    get "/api/contracts/repositories-v1.json", ApiContractController, :repositories_v1
 
     post "/controller/pairings", ControllerPairingController, :create
     get "/controller/pairings/:id", ControllerPairingController, :show
@@ -203,6 +191,9 @@ defmodule OpenAgentsWeb.Router do
 
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :api
+
+    post "/device/authorizations", DeviceAuthorizationController, :create
+    post "/device/authorizations/token", DeviceAuthorizationController, :token
 
     get "/repos/:owner/:repo/issues", IssueController, :index
     get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
@@ -223,7 +214,21 @@ defmodule OpenAgentsWeb.Router do
   end
 
   scope "/api/v3", OpenAgentsWeb do
+    pipe_through :optional_forge_api
+
+    get "/repos/:owner/:repo", RepositoryController, :show
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
     pipe_through :forge_write_api
+
+    get "/user", ForgeUserController, :show
+    get "/user/repos", RepositoryController, :index
+    post "/user/repos", RepositoryController, :create_user
+    post "/orgs/:org/repos", RepositoryController, :create_organization
+    post "/user/repos/imports", RepositoryImportController, :create_user
+    post "/orgs/:org/repos/imports", RepositoryImportController, :create_organization
+    get "/repository-imports/:id", RepositoryImportController, :show
 
     post "/repos/:owner/:repo/issues", IssueController, :create
     put "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
@@ -266,6 +271,28 @@ defmodule OpenAgentsWeb.Router do
 
       live_dashboard "/dashboard", metrics: OpenAgentsWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
+    end
+  end
+
+  # Keep repository-shaped routes last. Every fixed product, API, operator,
+  # Git, and development route above wins before a GitHub-backed namespace can
+  # be interpreted from the first path segment.
+  scope "/", OpenAgentsWeb do
+    pipe_through :browser
+
+    for reserved <- OpenAgents.Repositories.Namespace.reserved_slugs() do
+      get "/#{reserved}/*path", NotFoundController, :show
+    end
+  end
+
+  scope "/", OpenAgentsWeb do
+    pipe_through :browser
+
+    live_session :repository_code,
+      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/:owner/:repo", CodeRepoLive, :index
+      live "/:owner/:repo/commit/:sha", CodeCommitLive, :index
+      live "/:owner/:repo/blob/:ref/*path", CodeBlobLive, :index
     end
   end
 end

@@ -15,31 +15,33 @@ defmodule OpenAgentsWeb.CodeCommitLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forge
-  alias OpenAgents.Forge.{Browse, Visibility}
+  alias OpenAgents.Forge.Browse
+  alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
-  def mount(%{"repo" => repo, "sha" => sha}, _session, socket) do
-    base = Visibility.repo_path(repo)
+  def mount(%{"owner" => owner, "repo" => name, "sha" => sha}, _session, socket) do
+    repository = RepositoryAccess.get_visible!(owner, name, socket.assigns.current_user)
+    base = RepositoryAccess.base(repository)
 
-    unless Visibility.allows?(repo, :ledger) and Forge.enabled?() and base do
+    unless RepositoryAccess.ledger?(repository, socket.assigns.current_user) and Forge.enabled?() do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
     commit =
-      case Browse.commit(repo, sha) do
+      case Browse.commit(repository, sha) do
         {:ok, commit} -> commit
         _ -> raise OpenAgentsWeb.PublicNotFoundError
       end
 
     files =
-      case Browse.changed_files(repo, commit.sha) do
+      case Browse.changed_files(repository, commit.sha) do
         {:ok, files} -> files
         _ -> []
       end
 
     {diff, diff_truncated} =
-      if Visibility.allows?(repo, :diffs) do
-        case Browse.diff(repo, commit.sha) do
+      if RepositoryAccess.full_source?(repository, socket.assigns.current_user) do
+        case Browse.diff(repository, commit.sha) do
           {:ok, diff, truncated} -> {diff, truncated}
           _ -> {nil, false}
         end
@@ -58,9 +60,11 @@ defmodule OpenAgentsWeb.CodeCommitLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "#{short(commit.sha)} · #{repo}")
-     |> assign(:repo, repo)
-     |> assign(:owner, Visibility.owner(repo))
+     |> assign(:page_title, "#{short(commit.sha)} · #{repository.name}")
+     |> assign(:repository, repository)
+     |> assign(:repo, repository.storage_key)
+     |> assign(:name, repository.name)
+     |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
      |> assign(:commit, commit)
      |> assign(:files, files)
@@ -68,7 +72,9 @@ defmodule OpenAgentsWeb.CodeCommitLive do
      |> assign(:diff_truncated, diff_truncated)
      |> assign(:diff_files, diff_files)
      |> assign(:diff_totals, OpenAgents.Diff.totals(diff_files))
-     |> assign(:receipts, Forge.receipts_for(repo, commit.sha))}
+     |> assign(:receipts, Forge.receipts_for(repository.storage_key, commit.sha))}
+  rescue
+    Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
   end
 
   @impl true

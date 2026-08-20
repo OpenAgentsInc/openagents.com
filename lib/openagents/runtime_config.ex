@@ -281,9 +281,9 @@ defmodule OpenAgents.RuntimeConfig do
          :ok <- validate_redirect(redirect_uri, environment),
          :ok <-
            ensure(
-             scopes == ["repo"],
+             scopes == ["repo", "read:org"],
              :github_oauth_scopes,
-             "must match the retained-token tool model"
+             "must include repository and organization membership access"
            ),
          :ok <-
            ensure(

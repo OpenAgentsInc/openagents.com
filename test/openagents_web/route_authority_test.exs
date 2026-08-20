@@ -49,6 +49,43 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:forge_write_api]
   end
 
+  test "repository identity, list, and import status reads require bearer authentication" do
+    forge_user = route!(:get, "/api/v3/user")
+    repository_list = route!(:get, "/api/v3/user/repos")
+    import_status = route!(:get, "/api/v3/repository-imports/:id")
+    repository_view = route!(:get, "/api/v3/repos/:owner/:repo")
+
+    assert forge_user.class == :authenticated_api
+    assert forge_user.scope == "forge:read"
+    assert repository_list.class == :authenticated_api
+    assert repository_list.scope == "forge:read"
+    assert import_status.class == :authenticated_api
+    assert import_status.scope == "forge:read"
+    assert repository_view.class == :public_read
+    assert repository_view.principal == "anonymous or first-party bearer token"
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "GET",
+             "/api/v3/user",
+             "stage.openagents.com"
+           ).pipe_through == [:forge_write_api]
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "GET",
+             "/api/v3/user/repos",
+             "stage.openagents.com"
+           ).pipe_through == [:forge_write_api]
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "GET",
+             "/api/v3/repos/octavia/project",
+             "stage.openagents.com"
+           ).pipe_through == [:optional_forge_api]
+  end
+
   test "operator and machine surfaces cannot drift into browser or public classes" do
     assert route!(:get, "/admin").class == :operator
     assert route!(:get, "/admin/forge").scope == "forge:promote"

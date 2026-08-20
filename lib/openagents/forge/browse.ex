@@ -14,6 +14,7 @@ defmodule OpenAgents.Forge.Browse do
   require Logger
 
   alias OpenAgents.Forge.{Repos, Sync}
+  alias OpenAgents.Repositories.Repository
 
   @ref_pattern ~r|^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$|
   @path_pattern ~r|^[^\x00]{1,512}$|
@@ -54,18 +55,18 @@ defmodule OpenAgents.Forge.Browse do
   # node-local cache fault, not a reason to fail a public read: serve what
   # this node already has, and let the operator repair path fix the cache.
   defp freshen(repo) do
-    Sync.ensure_fresh(repo)
+    Sync.ensure_fresh(storage_key(repo), default_branch(repo))
   rescue
     error ->
       Logger.warning(
-        "forge_browse_sync_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(error)}"
+        "forge_browse_sync_failed repo=#{storage_key(repo)} code=#{OpenAgents.OperationalLog.code(error)}"
       )
 
       :ok
   catch
     :exit, reason ->
       Logger.warning(
-        "forge_browse_sync_exited repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
+        "forge_browse_sync_exited repo=#{storage_key(repo)} code=#{OpenAgents.OperationalLog.code(reason)}"
       )
 
       :ok
@@ -73,9 +74,11 @@ defmodule OpenAgents.Forge.Browse do
 
   @doc "The default branch head, if the repo has one."
   def head(repo) do
-    case Repos.refs(repo) do
-      %{"refs/heads/main" => sha} -> {:ok, sha}
-      refs when map_size(refs) > 0 -> {:ok, refs |> Map.values() |> List.first()}
+    refs = Repos.refs(storage_key(repo))
+
+    case Map.fetch(refs, "refs/heads/#{default_branch(repo)}") do
+      {:ok, sha} -> {:ok, sha}
+      :error when map_size(refs) > 0 -> {:ok, refs |> Enum.sort() |> hd() |> elem(1)}
       _ -> {:error, :empty}
     end
   end
@@ -83,6 +86,7 @@ defmodule OpenAgents.Forge.Browse do
   @doc "Branches and tags as `[%{name, sha, kind}]`, bounded."
   def refs(repo) do
     repo
+    |> storage_key()
     |> Repos.refs()
     |> Enum.flat_map(fn {name, sha} ->
       case name do
@@ -292,7 +296,7 @@ defmodule OpenAgents.Forge.Browse do
 
   defp check(repo, ref) do
     cond do
-      not Repos.valid_name?(repo) -> {:error, :not_found}
+      not Repos.valid_storage_key?(storage_key(repo)) -> {:error, :not_found}
       not valid_ref?(ref) -> {:error, :not_found}
       true -> :ok
     end
@@ -306,7 +310,13 @@ defmodule OpenAgents.Forge.Browse do
     end
   end
 
-  defp git(repo, args), do: Repos.git(Repos.bare_path(repo), args)
+  defp git(repo, args), do: Repos.git(Repos.bare_path(storage_key(repo)), args)
+
+  defp storage_key(%Repository{storage_key: storage_key}), do: storage_key
+  defp storage_key(storage_key) when is_binary(storage_key), do: storage_key
+
+  defp default_branch(%Repository{default_branch: default_branch}), do: default_branch
+  defp default_branch(_storage_key), do: "main"
 
   defp truncate(binary, cap) when byte_size(binary) > cap,
     do: binary |> binary_part(0, cap) |> trim_to_valid_utf8()

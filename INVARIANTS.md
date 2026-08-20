@@ -1765,6 +1765,32 @@ Evidence: `OpenAgents.Forge.Visibility`, `OpenAgents.Forge.Browse`, `OpenAgents.
 `OpenAgentsWeb.CodeCommitLive`, `OpenAgentsWeb.CodeBlobLive`,
 `OpenAgentsWeb.ChangelogController`, and their tests.
 
+### REPOSITORY-001 — GitHub identity names repositories; OpenAgents owns stored snapshots
+
+Status: Current
+
+Every hosted namespace retains one immutable GitHub user or organization ID.
+GitHub slugs are projections and old slugs remain aliases after a rename.
+Reserved product-route segments cannot become namespaces. A database repository
+row resolves every browser, API, and Git request to one opaque storage key; the
+initial `OpenAgentsInc/openagents.com` repository keeps the historical
+`openagents.com` key so existing WAL and object storage remain authoritative.
+
+Repository creation atomically records the repository, owner membership,
+idempotency receipt, and durable provisioning work. A GitHub import freezes an
+authorized branch-and-tag ref map, stores no GitHub credential, persists the
+accepted objects through the forge WAL, and schedules no later synchronization.
+OpenAgents becomes the source of truth for the imported snapshot. Public ready
+repositories permit anonymous Git reads. Private reads and every write require
+an admitted repository principal, and read-only members cannot push.
+
+Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
+`OpenAgents.Repositories.Importer`, `OpenAgents.Forge.GitHTTP`,
+`test/openagents/repository_lifecycle_test.exs`,
+`test/openagents/repositories/provisioner_test.exs`,
+`test/openagents_web/controllers/repository_controller_test.exs`, and
+`test/openagents/forge/git_http_test.exs`.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -1847,3 +1873,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
+| REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/forge/git_http_test.exs` |

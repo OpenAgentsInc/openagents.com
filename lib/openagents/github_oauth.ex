@@ -11,6 +11,7 @@ defmodule OpenAgents.GitHubOAuth do
   @default_attempt_ttl_seconds 600
   @github_api_version "2022-11-28"
   @user_agent "OpenAgents"
+  @required_scopes ["repo", "read:org"]
 
   @type attempt :: %{required(String.t()) => String.t() | integer()}
 
@@ -80,13 +81,13 @@ defmodule OpenAgents.GitHubOAuth do
     with {:ok, config} <- config() do
       request_options =
         [
-          auth: {:basic, config.client_id <> ":" <> config.client_secret},
-          json: %{"access_token" => access_token},
           headers: api_headers(),
           receive_timeout: 10_000,
           retry: false
         ]
         |> Keyword.merge(config.request_options)
+        |> Keyword.put(:auth, {:basic, config.client_id <> ":" <> config.client_secret})
+        |> Keyword.put(:json, %{"access_token" => access_token})
 
       case Req.delete(config.revoke_url, request_options) do
         {:ok, %Req.Response{status: 204}} ->
@@ -108,23 +109,27 @@ defmodule OpenAgents.GitHubOAuth do
 
   @doc "The exact OAuth scopes retained with each connected GitHub grant."
   @spec requested_scopes() :: [String.t()]
-  def requested_scopes, do: Application.fetch_env!(:openagents, :github_oauth_scopes)
+  def requested_scopes, do: @required_scopes
+
+  @doc "The only OAuth scopes admitted by the GitHub-backed namespace and import model."
+  @spec required_scopes() :: [String.t()]
+  def required_scopes, do: @required_scopes
 
   defp exchange_code(config, code, verifier) do
     request_options =
       [
-        form: [
-          client_id: config.client_id,
-          client_secret: config.client_secret,
-          code: code,
-          redirect_uri: config.redirect_uri,
-          code_verifier: verifier
-        ],
         headers: oauth_headers(),
         receive_timeout: 10_000,
         retry: false
       ]
       |> Keyword.merge(config.request_options)
+      |> Keyword.put(:form,
+        client_id: config.client_id,
+        client_secret: config.client_secret,
+        code: code,
+        redirect_uri: config.redirect_uri,
+        code_verifier: verifier
+      )
 
     case Req.post(config.token_url, request_options) do
       {:ok,
@@ -150,12 +155,12 @@ defmodule OpenAgents.GitHubOAuth do
   defp fetch_profile(config, access_token) do
     request_options =
       [
-        auth: {:bearer, access_token},
         headers: api_headers(),
         receive_timeout: 10_000,
         retry: false
       ]
       |> Keyword.merge(config.request_options)
+      |> Keyword.put(:auth, {:bearer, access_token})
 
     case Req.get(config.user_url, request_options) do
       {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
@@ -209,7 +214,8 @@ defmodule OpenAgents.GitHubOAuth do
   defp config do
     settings = Application.get_env(:openagents, :github_oauth, [])
 
-    with client_id when is_binary(client_id) and client_id != "" <- settings[:client_id],
+    with :ok <- validate_scope_configuration(),
+         client_id when is_binary(client_id) and client_id != "" <- settings[:client_id],
          client_secret when is_binary(client_secret) and client_secret != "" <-
            settings[:client_secret],
          redirect_uri when is_binary(redirect_uri) and redirect_uri != "" <-
@@ -243,6 +249,12 @@ defmodule OpenAgents.GitHubOAuth do
     if code != "" and byte_size(code) <= 1_024 and byte_size(verifier) in 43..128,
       do: :ok,
       else: {:error, :invalid_oauth_callback}
+  end
+
+  defp validate_scope_configuration do
+    if Application.get_env(:openagents, :github_oauth_scopes) == @required_scopes,
+      do: :ok,
+      else: {:error, :github_oauth_scope_configuration_invalid}
   end
 
   defp oauth_headers do

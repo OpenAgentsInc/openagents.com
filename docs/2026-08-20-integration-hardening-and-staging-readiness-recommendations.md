@@ -936,3 +936,210 @@ each handoff.
 - [ ] Failure injection and the 48-hour soak pass.
 - [ ] The staging evidence report contains no secrets or private content.
 - [ ] No production action has occurred.
+
+---
+
+# Addendum: measured state and three unnamed blockers
+
+Date: 2026-08-20
+Author: the agent that ran the DaisyUI consolidation, the port-gap fan-out, and
+the coverage audit
+Status: notes on the plan above, not a revision of it
+
+The plan above is sound and I am not proposing changes to its gate structure.
+This addendum supplies measured values for Gate 0, records three blockers the
+plan does not name, and flags four places where the plan and a prior owner
+decision disagree. Everything here was verified directly at the SHA given, not
+inferred.
+
+## A1. Gate 0 baseline, already measured
+
+Gate 0 asks for a reproducible baseline. Most of it exists as of `d5679e8`:
+
+| measurement | value |
+| --- | --- |
+| `mix test` | 1218 passed, 0 failed, 9 excluded |
+| `mix test --only cluster` | 9 passed |
+| `mix precommit` | exit 0 |
+| `mix compile --warnings-as-errors` | exit 0, 0 warnings |
+| `mix test --cover` total | 83.14% (415 modules) |
+| hidden test filters | none — every `@moduletag :skip` was deleted and `:skip` removed from `test_helper.exs`; only `:cluster` is excluded |
+
+Two qualifiers on that coverage number, both already in the coverage audit:
+
+- `Cluster.Drain` and `Cluster.RaBootstrap` read as 0% **only** because the
+  coverage run excludes `:cluster`. The plan's instruction to merge the two runs
+  is not a nicety; without it those two modules are misreported as untested.
+- Line coverage maps where nothing is looking. It is not a quality score.
+
+**Gate 0 cannot pass as written.** Item 4 asks to "run the JavaScript tests for
+voice state, recording, and browser hooks." **There are no JavaScript tests in
+this repository.** `assets/` contains no test files and `assets/package.json`
+declares no test script. Sarah has two Node test files (~329 lines) covering
+voice state and recording; they were not carried across in the port. That is a
+porting gap, not a step someone forgot to run, and Gate 0 should name it as work
+rather than as a checkbox.
+
+## A2. Blocker: staging is not isolated from production today
+
+Gate 12 lists staging isolation as a requirement and Gate 15 calls for failure
+injection and a 48-hour soak against staging. **Both are unsafe as currently
+provisioned**, and the reason is not a missing control — it is the existing
+topology:
+
+```
+Cloud SQL instance  openagentsgemini:us-central1:sarah-postgres
+  tier              db-f1-micro   (shared core, ~25 max connections)
+  availability      ZONAL         (no HA)
+  databases         sarah              <- PRODUCTION
+                    sarah_staging
+                    openagents_staging <- STAGING
+```
+
+Verified: Cloud Run service `sarah` (`DB_NAME=sarah`, `POOL_SIZE=5`) and service
+`openagents-staging` (`DB_NAME=openagents_staging`, `POOL_SIZE=5`) both mount
+`/cloudsql/openagentsgemini:us-central1:sarah-postgres`. The 3-node fleet
+connects to the same instance as well.
+
+Consequences the plan should state explicitly:
+
+- Staging and production share one shared-core instance with a small connection
+  budget. Staging load consumes production's connection headroom.
+- Running Gate 15 failure injection or a 48-hour soak against staging is
+  therefore **a load test against production's database instance.**
+- A single-zone instance means one zonal event takes staging and production
+  together, so staging cannot serve as evidence of production resilience.
+
+This does not require solving production HA. It requires staging to get its own
+instance before Gate 12 is claimed, and Gate 15 must not run until it does.
+
+## A3. Blocker: openagents.com migrations cannot replay onto a Sarah database
+
+The ground rule "preserve historical migrations, correct live schema problems
+with new migrations" is right, but there is a specific landmine underneath it
+that Gate 13 (deploy to staging reproducibly) will hit again on any real data.
+
+On 2026-08-19, migrate-on-boot was enabled and immediately crash-looped the
+staging container:
+
+```
+== Running 20260816214000 OpenAgents.Repo.Migrations.CreateUsers.change/0 forward
+   create table users
+** (Postgrex.Error) ERROR 42P07 (duplicate_table) relation "users" already exists
+```
+
+The service pointed at `sarah_staging`, which already held Sarah's tables, while
+openagents.com's `schema_migrations` had no record of its own versions — its
+migration history is a **different lineage** (Sarah's 57 files versus this
+repo's, with 18 of Sarah's consolidated into one). Staging was unblocked by
+pointing it at a brand-new empty `openagents_staging` database.
+
+That fix works for staging precisely because staging has no data worth keeping.
+**It does not generalise.** Any future cutover onto a database Sarah created
+needs a written lineage plan first: which of this repo's migrations are already
+satisfied by the existing schema, how `schema_migrations` gets baselined so those
+are marked run rather than replayed, and which are genuinely new. Treat the
+staging crash as the cheap rehearsal it was.
+
+## A4. Four places the plan disagrees with a prior decision or current state
+
+These are flagged for a deliberate choice, not corrected unilaterally.
+
+**Heroicons.** Gate 4 says "Remove Heroicons and its dependency after the
+remaining issue and layout surfaces use vendored icons." The owner's ruling on
+2026-08-19 was Apps SDK icons **preferred, heroicons as backup** — i.e. retained
+deliberately. `{:heroicons, ...}` is still in `mix.exs`. One of the two should
+move; the plan should not quietly overwrite a stated decision.
+
+**The palette is dark-only, today.** Gate 4's UI consolidation does not mention
+it, but removing DaisyUI removed the only light theme in the application. Sarah's
+palette has no light variant. `data-theme` still runs and the toggle still
+switches, but it no longer repaints anything. This is a live user-visible state,
+not a pending task, and `theme_toggle/1`'s docstring now says so. Inventing a
+light Sarah palette is a design decision that needs an owner.
+
+**Basecoat is load-bearing for the palette, not just components.** Gate 4 says to
+"rename the style pack after generic application components no longer depend on
+the Sarah name." Worth knowing before that rename: `sarah.css` now defines the
+palette *primitives* (`--accent`, `--ink-void`, `--text-primary`, `--line-strong`,
+…), not merely aliases. Prior to the DaisyUI removal it only aliased them and
+nothing defined them — the entire Sarah palette silently resolved to nothing and
+DaisyUI's theme was carrying every colour. Renaming that file is therefore a
+palette migration, not a cosmetic rename.
+
+**Why DaisyUI had to be removed rather than layered under.** Recording this so a
+similar library is not reintroduced under a different name: DaisyUI emits
+component styles — a flat `.btn` setting `background-color`, `color`, and
+`border-color` — into `@layer utilities`. That layer must remain last or every
+Tailwind utility breaks. A later-declared layer beats an earlier one *regardless
+of specificity*, so DaisyUI's `.btn` outranked every `.btn[data-variant=…]` rule
+in `sarah.css` and all eight button variants rendered identically on staging.
+There is no layer ordering that fixes this. **Any component library that emits
+into `utilities` cannot coexist beneath a design system** — that is the
+acceptance test for Gate 4's "one component system", not merely counting the
+libraries in `mix.exs`.
+
+## A5. Evidence for Gate 5, from failures already observed
+
+Gate 5's "fail closed" requirement is correct and this is what its absence
+actually looked like in this codebase. Four config reads survived the
+re-namespacing and kept reading the `:sarah` OTP app:
+
+| module | effect |
+| --- | --- |
+| `inference_proxy_controller.ex:104` | raised — the only one that was visible |
+| `plugs/forge_git_auth.ex:52` | **silent** — operator token always `nil`, every forge push 401'd |
+| `tools/selector.ex:153` | **silent** — returned config default |
+| `tools/embeddings.ex:127` | **silent** — returned config default |
+
+Separately, `Tools.Registry.install!` reads
+`Application.get_env(:openagents, :tools, [])` — note the `[]` default where the
+upstream uses `fetch_env!`. With the key unset the node booted with an **empty
+tool catalog**: 5,874 lines of tool code compiled and unreachable, no error.
+
+Three of four failures were invisible. That is the argument for Gate 5, and it
+suggests one addition to it: **prefer `fetch_env!` to `get_env/3` for any setting
+whose absence changes behaviour.** A default that silently degrades is worse than
+a crash at boot, and `DEGRADE-001` already forbids undeclared degradation.
+
+The same class of bug hid a fourth: `forge_hot_load_allowlist` was configured
+with repo *paths* (`"lib/openagents"`, `"config"`, `"mix.exs"`) while
+`HotLoader.allowlisted?/2` matches *module names*. Every hot-load was refused as
+`needs_rolling_replace` and nothing could reach `live`. **Hot loading did not
+work at all in this repository** and no error said so. Gate 11 should require a
+functional push→live proof, not a configuration review — a well-formed config
+value of the wrong *kind* passes review and fails silently.
+
+## A6. Gate 7 has a concrete existing violation
+
+Gate 7 asks for repository and tenant scoping. One instance is already known and
+is pinned in tests as current behaviour rather than fixed, because changing
+authorization semantics needs an owner:
+
+`OpenAgentsWeb.ProjectController` destructures `"username" => _username` in
+`show`, `items`, `create_item`, `update_item`, and `fields` — all five ignore it.
+Only `index` filters by owner. **A project owned by `alice` is readable and
+writable at `/users/bob/projectsV2/:n`.** It is consistent across all five
+actions, so it reads as deliberate simplification rather than oversight, but it
+is an authorization gap and not merely a GitHub-shape mismatch.
+
+Also relevant to Gate 7: `AssigneeController` is a hardcoded stub whose `index`
+always returns `%{assignees: []}` and whose `show` always 404s, while
+`POST .../issues/:n/assignees` accepts any login. No user is ever reported
+assignable, yet anyone can be assigned.
+
+## A7. The recovery-worker gap is inherited, not created by the port
+
+Gate 8 correctly requires direct tests for `TurnRecovery`, `VoiceRecovery`,
+`WorkRecovery`, and `Memory.SemanticWorker`, and the production hold conditions
+correctly block on it. One fact changes who can answer the design questions:
+
+**Sarah has no tests for any of those four modules either.** Verified directly.
+The port faithfully carried across a gap that already existed upstream.
+
+Two implications. First, this is a longer-standing risk than the Issues and
+Projects gap was, not a lesser one — it predates the merge. Second, there is no
+upstream test suite to port or consult, so writing these means deriving intended
+behaviour from the invariants (`TURN-005`, `WORK-001`, and `VOICE-009` all
+describe recovery behaviour that should be assertable) rather than translating
+existing assertions. Budget accordingly; this is design work, not porting.

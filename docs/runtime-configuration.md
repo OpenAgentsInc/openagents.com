@@ -56,8 +56,8 @@ URLs, receipts, or checked-in environment files.
 | Release | `OPENAGENTS_STAGING_CLEANUP_ENABLED` | `true` only at staging Gate 12 or later; always `false` elsewhere |
 | Release | `OPENAGENTS_PRODUCTION_DEPLOY_ENABLED` | `false` until a later production decision |
 | Release | `OPENAGENTS_IMAGE_DIGEST` | Exact `sha256:` image digest at staging Gate 12 and later; empty before that gate |
-| Endpoint | `PHX_HOST` | Exactly `stage.openagents.com` in staging |
-| Endpoint | `OPENAGENTS_ALLOWED_ORIGINS` | Comma-separated exact HTTPS origins including `https://stage.openagents.com` |
+| Endpoint | `PHX_HOST` | Exactly `staging.openagents.com` in staging |
+| Endpoint | `OPENAGENTS_ALLOWED_ORIGINS` | Comma-separated exact HTTPS origins including `https://staging.openagents.com` |
 | Endpoint | `OPENAGENTS_HTTPS_ALIASES` | Comma-separated hostnames; empty means no aliases |
 | Endpoint | `OPENAGENTS_SECURE_COOKIES` | `true` in staging and production |
 | Endpoint | `SECRET_KEY_BASE` | Staging-only secret |

@@ -16,22 +16,22 @@
     prefers-color-scheme fallback governs; an explicit choice sets the
     attribute, which always wins. --%>
     <script phx-no-format>(() => {
-      const stored = localStorage.getItem("phx:theme");
-      const apply = (choice) => {
-        if (choice === "system" || choice === null) {
-          localStorage.removeItem("phx:theme");
-          document.documentElement.removeAttribute("data-theme");
-          document.documentElement.setAttribute("data-theme-choice", "system");
-        } else {
-          localStorage.setItem("phx:theme", choice);
-          document.documentElement.setAttribute("data-theme", choice);
-          document.documentElement.setAttribute("data-theme-choice", choice);
-        }
-      };
-      apply(stored);
-      window.addEventListener("phx:set-theme", (e) => apply(e.detail?.theme ?? e.target?.dataset?.theme));
-      window.addEventListener("storage", (e) => e.key === "phx:theme" && apply(e.newValue));
-    })();</script>
+          const stored = localStorage.getItem("phx:theme");
+          const apply = (choice) => {
+            if (choice === "system" || choice === null) {
+              localStorage.removeItem("phx:theme");
+              document.documentElement.removeAttribute("data-theme");
+              document.documentElement.setAttribute("data-theme-choice", "system");
+            } else {
+              localStorage.setItem("phx:theme", choice);
+              document.documentElement.setAttribute("data-theme", choice);
+              document.documentElement.setAttribute("data-theme-choice", choice);
+            }
+          };
+          apply(stored);
+          window.addEventListener("phx:set-theme", (e) => apply(e.detail?.theme ?? e.target?.dataset?.theme));
+          window.addEventListener("storage", (e) => e.key === "phx:theme" && apply(e.newValue));
+        })();</script>
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
   </head>

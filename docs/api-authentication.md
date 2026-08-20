@@ -17,7 +17,7 @@ curl \
   --header "Authorization: Bearer $OPENAGENTS_API_TOKEN" \
   --header "Content-Type: application/json" \
   --data '{"title":"Example"}' \
-  https://stage.openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/issues
+  https://staging.openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/issues
 ```
 
 Do not put the token in a URL, command history, checked-in environment file, or

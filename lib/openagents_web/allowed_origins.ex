@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.AllowedOrigins do
   @doc """
   Returns a list of allowed origins for production.
 
-  `primary_host` is the canonical host (e.g. `stage.openagents.com`); it is
+  `primary_host` is the canonical host (e.g. `staging.openagents.com`); it is
   always returned as `https://` first. `aliases` is a comma-separated string
   of `https://` origins. Each alias is validated: it must use `https` and
   must not contain a path.

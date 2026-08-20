@@ -160,7 +160,7 @@ harness before you apply cleanup so it cannot create new run data concurrently.
 Gate 12 remains incomplete until the cloud apply, isolation validator, and a
 live execution of the manifest-scoped disposable-run cleanup command are
 proven. Do not populate
-secrets, push an image, change DNS for `stage.openagents.com`, or deploy a
+secrets, push an image, change DNS for `staging.openagents.com`, or deploy a
 candidate as part of the infrastructure apply. Gate 13 performs those steps on
 one exact, locally gated SHA after a separate review.
 

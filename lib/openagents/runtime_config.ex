@@ -214,7 +214,7 @@ defmodule OpenAgents.RuntimeConfig do
       environment in [:staging, :production] and secure_cookies != true ->
         error(:secure_cookies, "must be true")
 
-      environment == :staging and host != "stage.openagents.com" ->
+      environment == :staging and host != "staging.openagents.com" ->
         error(:endpoint_host, "must be the staging hostname")
 
       environment in [:staging, :production] and

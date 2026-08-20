@@ -41,7 +41,7 @@ defmodule OpenAgents.RuntimeConfigTest do
     assert config.staging_gate == 5
     refute encoded =~ secret
     refute encoded =~ oauth_secret
-    refute encoded =~ "stage.openagents.com"
+    refute encoded =~ "staging.openagents.com"
     refute encoded =~ "ecto://"
   end
 
@@ -287,10 +287,10 @@ defmodule OpenAgents.RuntimeConfigTest do
       pool_size: 10
     )
     |> Map.put(OpenAgentsWeb.Endpoint,
-      url: [host: "stage.openagents.com", port: 443, scheme: "https"],
-      check_origin: ["https://stage.openagents.com"]
+      url: [host: "staging.openagents.com", port: 443, scheme: "https"],
+      check_origin: ["https://staging.openagents.com"]
     )
-    |> update_oauth(:redirect_uri, "https://stage.openagents.com/auth/github/callback")
+    |> update_oauth(:redirect_uri, "https://staging.openagents.com/auth/github/callback")
     |> put_nested(:voice, :enabled, false)
     |> put_nested(:voice_recording, :enabled, false)
     |> put_nested(:work, :enabled, false)

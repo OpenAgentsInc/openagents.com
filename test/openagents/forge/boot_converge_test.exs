@@ -282,6 +282,69 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     end)
   end
 
+  test "the supervised worker refreshes a ready image state" do
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    previous_min = Application.get_env(:openagents, :forge_boot_retry_min_ms)
+    previous_max = Application.get_env(:openagents, :forge_boot_retry_max_ms)
+
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+    Application.put_env(:openagents, :forge_boot_retry_min_ms, 10)
+    Application.put_env(:openagents, :forge_boot_retry_max_ms, 20)
+
+    name = Module.concat(__MODULE__, "Ready#{System.unique_integer([:positive])}")
+
+    start_supervised!(
+      Supervisor.child_spec(
+        {BootConverge, name: name, repo: @repo},
+        id: name
+      )
+    )
+
+    assert %{"state" => "image", "ready" => true} = BootConverge.state()
+    assert :sys.get_state(name).retry_ms == 10
+
+    send(name, :retry_convergence)
+    assert :sys.get_state(name).retry_ms == 10
+
+    send(name, :irrelevant_message)
+    assert :sys.get_state(name).retry_ms == 10
+
+    on_exit(fn ->
+      restore_env(:forge_boot_converge_enabled, previous_enabled)
+      restore_env(:forge_boot_retry_min_ms, previous_min)
+      restore_env(:forge_boot_retry_max_ms, previous_max)
+    end)
+  end
+
+  test "image-matching legacy target remains ready without artifact metadata" do
+    target = insert_target!("live", %{})
+
+    target
+    |> Ecto.Changeset.change(%{sha: OpenAgents.BuildInfo.revision()})
+    |> Repo.update!()
+
+    assert %{
+             "state" => "image",
+             "ready" => true,
+             "reason" => "image_matches_live",
+             "sha" => "image"
+           } = BootConverge.converge(@repo)
+  end
+
+  test "an unreadable cache entry degrades with a bounded reason" do
+    {module, binary} = scratch_beam(OpenAgents.Scratch.BootConvergeUnreadable)
+    artifact = artifact(module, binary)
+    artifact_abs = Path.join(Repos.data_dir(), artifact.details["artifact"])
+    File.mkdir_p!(artifact_abs)
+    insert_target!("live", artifact.details)
+
+    assert %{
+             "state" => "degraded",
+             "ready" => false,
+             "reason" => "artifact_cache_read_failed"
+           } = BootConverge.converge(@repo)
+  end
+
   defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
   defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
 

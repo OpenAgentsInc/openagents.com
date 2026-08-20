@@ -105,7 +105,8 @@ defmodule OpenAgents.Forge.Deployment do
                node_results: health_results(results)
            }}
         else
-          {:error, reason} -> {:error, reason, session_with_results(session, results)}
+          {:error, reason} ->
+            {:error, reason, %{session | node_results: health_results(results)}}
         end
     end
   end
@@ -232,11 +233,13 @@ defmodule OpenAgents.Forge.Deployment do
     results = token_fanout(session, :rollback, opts)
     restored? = all_restored?(results)
 
-    node_results =
+    rollback_results =
       Map.new(results, fn
         {node, {:ok, {:ok, %{"restored" => true}}}} -> {to_string(node), "restored"}
         {node, result} -> {to_string(node), "rollback_failed:" <> result_code(result)}
       end)
+
+    node_results = Map.merge(session.node_results, rollback_results)
 
     {:error, failure_outcome(session, reason, restored?, node_results)}
   end
@@ -286,7 +289,13 @@ defmodule OpenAgents.Forge.Deployment do
   end
 
   defp token_fanout(session, phase, opts) do
-    nodes = Map.get(session, :internal_nodes, session.expected_nodes)
+    nodes =
+      Map.get(
+        session,
+        :internal_nodes,
+        Enum.filter(session.expected_nodes, &Map.has_key?(session.tokens, &1))
+      )
+
     fanout_tokens(session, nodes, phase, opts)
   end
 
@@ -391,9 +400,6 @@ defmodule OpenAgents.Forge.Deployment do
       {node, result}, acc -> Map.put(acc, to_string(node), result_code(result))
     end)
   end
-
-  defp session_with_results(session, results),
-    do: %{session | node_results: merge_results(session, results, "ok")}
 
   defp membership_delta(expected, current) do
     %{

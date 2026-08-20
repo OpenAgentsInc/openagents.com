@@ -219,8 +219,10 @@ discovery, node identity, cookie, and bounded distribution ports.
 
 Ra and fleet deployment additionally require a stable `RELEASE_NODE`, a
 `RELEASE_COOKIE` of at least 32 bytes, and `RELEASE_DISTRIBUTION=name` or
-`longnames`. The readiness report records only whether those settings passed;
-it never prints their values.
+`longnames`. In staging, each fleet node uses its reserved private IP in
+`RELEASE_NODE` because `DNSCluster` constructs peer identities from the A
+records returned by `DNS_CLUSTER_QUERY`. The readiness report records only
+whether those settings passed; it never prints their values.
 
 ## Local defaults
 

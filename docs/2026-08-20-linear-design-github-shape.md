@@ -10,7 +10,7 @@ The principle, stated by the owner:
 This doc says how those two survive each other. It is a strategy note, not a
 plan of record: the tracker for the component work is
 `docs/2026-08-20-circle-ui-port.md`, and the URL/API compatibility target is
-`~/work/sarah/docs/audits/2026-08-19-github-clone-harvest-candidates.md`.
+`docs/github-api-issues-projects-assessment.md`.
 
 ## The two commitments are about different layers
 

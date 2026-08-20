@@ -44,6 +44,17 @@ defmodule OpenAgents.StagingCandidateContractTest do
     assert runtime_config =~ ~s("builder" -> :builder)
   end
 
+  test "fleet discovery and release identities use the same stable private addresses" do
+    startup = File.read!("infra/staging/templates/fleet-startup.sh.tftpl")
+    outputs = File.read!("infra/staging/outputs.tf")
+
+    assert startup =~ "instance_ip=$(metadata instance/network-interfaces/0/ip)"
+    assert startup =~ "DNS_CLUSTER_QUERY=openagents-fleet.staging.internal"
+    assert startup =~ "RELEASE_NODE=openagents@$instance_ip"
+    refute startup =~ "RELEASE_NODE=openagents@$instance_name.staging.internal"
+    assert outputs =~ ~s("openagents@${instance_ip}" => instance_name)
+  end
+
   test "candidate publication binds exact immutable registry and artifact identities" do
     publisher = File.read!("ops/staging/publish-candidate.sh")
     sbom = File.read!("ops/staging/generate-sbom.sh")

@@ -31,8 +31,8 @@ output "builder_image_repository" {
 output "fleet_nodes" {
   description = "Exact BEAM node-to-instance map for runtime configuration."
   value = {
-    for instance_name in sort(keys(local.nodes)) :
-    "openagents@${instance_name}.staging.internal" => instance_name
+    for instance_name, instance_ip in local.nodes :
+    "openagents@${instance_ip}" => instance_name
   }
 }
 

@@ -39,7 +39,7 @@ builder_digest=$(metadata_attribute openagents-builder-digest)
 source_sha=$(metadata_attribute openagents-sha)
 runtime_secret=$(metadata_attribute openagents-runtime-secret)
 builder_secret=$(metadata_attribute openagents-builder-secret)
-instance_name=$(metadata instance/name)
+instance_ip=$(metadata instance/network-interfaces/0/ip)
 
 if [ -z "$image" ] || [ -z "$image_digest" ] || [ -z "$source_sha" ]; then
   echo "No staging candidate is assigned; leaving the node fenced."
@@ -137,7 +137,7 @@ cat >>/run/openagents/runtime.env <<EOF
 DNS_CLUSTER_QUERY=openagents-fleet.staging.internal
 OPENAGENTS_IMAGE_DIGEST=$image_digest
 RELEASE_DISTRIBUTION=name
-RELEASE_NODE=openagents@$instance_name.staging.internal
+RELEASE_NODE=openagents@$instance_ip
 EOF
 
 export DOCKER_CONFIG=/run/openagents/docker-config

@@ -588,21 +588,37 @@
 
 /* Theme toggle.
  *
- * The active rung cannot be rendered server-side: the choice lives in
- * localStorage, so the head script records it on the root element and the
- * selection is expressed here. `button-group` supplies the shrink-wrap
- * (inline-flex w-fit) and the joined borders; without a width the segments
- * would stretch to whatever container they land in.
+ * The glyph names the destination, not the current state: this is an action,
+ * not a status readout. Both glyphs stay in the layout so the control does not
+ * resize as it flips and shove the breadcrumb beside it.
+ *
+ * `data-theme-effective` is set by the head script rather than derived here,
+ * because with nothing stored the answer lives in the OS, and CSS cannot ask a
+ * media query whether a preference was *stored*.
  */
 @layer components {
-  .theme-toggle .btn[data-theme-option] {
+  .theme-toggle {
     color: var(--icon-tertiary);
   }
 
-  :root[data-theme-choice="system"] .theme-toggle .btn[data-theme-option="system"],
-  :root[data-theme-choice="light"] .theme-toggle .btn[data-theme-option="light"],
-  :root[data-theme-choice="dark"] .theme-toggle .btn[data-theme-option="dark"] {
-    background: var(--wash-selected);
-    color: var(--icon-primary);
+  @media (hover: hover) {
+    .theme-toggle:hover {
+      color: var(--icon-primary);
+    }
+  }
+
+  .theme-toggle__sun,
+  .theme-toggle__moon {
+    display: none;
+  }
+
+  /* Dark now, so the control offers light. */
+  :root[data-theme-effective="dark"] .theme-toggle__sun {
+    display: inline-flex;
+  }
+
+  /* Light now, so the control offers dark. */
+  :root[data-theme-effective="light"] .theme-toggle__moon {
+    display: inline-flex;
   }
 }

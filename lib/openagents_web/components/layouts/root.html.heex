@@ -12,27 +12,45 @@
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <%!-- Runs before first paint, and deliberately not deferred: resolving the
     theme after the stylesheet has painted produces a flash of the wrong theme.
-    "system" stores nothing and leaves data-theme unset so the CSS
-    prefers-color-scheme fallback governs; an explicit choice sets the
-    attribute, which always wins. --%>
+
+    Storing nothing IS "system", so an untouched visitor gets their OS setting
+    through the prefers-color-scheme fallback and `data-theme` stays unset. The
+    script also records the EFFECTIVE theme, because the toggle needs to know
+    which way to flip and the CSS needs to know which glyph to show -- and when
+    nothing is stored, only the browser knows the answer. --%>
     <script nonce={assigns[:csp_nonce]} phx-no-curly-interpolation>
       (() => {
-        const stored = localStorage.getItem("phx:theme");
-        const apply = (choice) => {
-          if (choice === "system" || choice === null) {
-            localStorage.removeItem("phx:theme");
-            document.documentElement.removeAttribute("data-theme");
-            document.documentElement.setAttribute("data-theme-choice", "system");
-          } else {
-            localStorage.setItem("phx:theme", choice);
-            document.documentElement.setAttribute("data-theme", choice);
-            document.documentElement.setAttribute("data-theme-choice", choice);
-          }
-        };
-        apply(stored);
-        window.addEventListener("phx:set-theme", (e) => apply(e.detail?.theme ?? e.target?.dataset?.theme));
-        window.addEventListener("storage", (e) => e.key === "phx:theme" && apply(e.newValue));
-      })();
+            const media = window.matchMedia("(prefers-color-scheme: dark)");
+            const effective = () => {
+              const stored = localStorage.getItem("phx:theme");
+              if (stored === "light" || stored === "dark") return stored;
+              return media.matches ? "dark" : "light";
+            };
+            const paint = () => {
+              const stored = localStorage.getItem("phx:theme");
+              const root = document.documentElement;
+              if (stored === "light" || stored === "dark") {
+                root.setAttribute("data-theme", stored);
+              } else {
+                root.removeAttribute("data-theme");
+              }
+              root.setAttribute("data-theme-effective", effective());
+            };
+            paint();
+            window.addEventListener("phx:toggle-theme", () => {
+              localStorage.setItem("phx:theme", effective() === "dark" ? "light" : "dark");
+              paint();
+            });
+            window.addEventListener("phx:set-theme", (e) => {
+              const next = e.detail?.theme ?? e.target?.dataset?.theme;
+              if (next === "system") localStorage.removeItem("phx:theme");
+              else if (next) localStorage.setItem("phx:theme", next);
+              paint();
+            });
+            // Following the OS only matters while nothing is stored.
+            media.addEventListener("change", () => localStorage.getItem("phx:theme") || paint());
+            window.addEventListener("storage", (e) => e.key === "phx:theme" && paint());
+          })();
     </script>
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>

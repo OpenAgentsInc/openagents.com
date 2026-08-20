@@ -79,33 +79,31 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
     refute has_element?(view, ~s{a[href="/components/theme-toggle"]})
   end
 
-  test "the command bar exposes exactly the governed theme preferences" do
+  test "the theme control is one action, not a three-rung picker" do
+    # This previously asserted three buttons -- system, light, dark. The owner
+    # replaced that with a single toggle: storing nothing IS system, and it is
+    # the default until someone chooses, so a third button made the common case
+    # (never touching this) look like an unmade decision.
     document =
       OpenAgentsWeb.Layouts.theme_toggle(%{})
       |> rendered_to_string()
       |> LazyHTML.from_fragment()
 
-    assert document
-           |> LazyHTML.query(~s{.theme-toggle[role="group"][aria-label="Color theme"]})
-           |> LazyHTML.to_tree() != []
+    buttons = document |> LazyHTML.query(~s{button.theme-toggle}) |> LazyHTML.to_tree()
+    assert length(buttons) == 1
 
     assert document
-           |> LazyHTML.query(
-             ~s{button[data-theme-option="system"][aria-label="Match system theme"]}
-           )
+           |> LazyHTML.query(~s{button.theme-toggle[aria-label="Toggle theme"]})
            |> LazyHTML.to_tree() != []
 
-    assert document
-           |> LazyHTML.query(~s{button[data-theme-option="light"][aria-label="Light theme"]})
-           |> LazyHTML.to_tree() != []
+    # Both glyphs ship; which one shows is decided at runtime from the effective
+    # theme, because with nothing stored only the browser knows it.
+    for glyph <- ~w(theme-toggle__sun theme-toggle__moon) do
+      assert document |> LazyHTML.query(~s{.#{glyph}}) |> LazyHTML.to_tree() != [],
+             "the #{glyph} glyph is missing, so the control cannot name its destination"
+    end
 
-    assert document
-           |> LazyHTML.query(~s{button[data-theme-option="dark"][aria-label="Dark theme"]})
-           |> LazyHTML.to_tree() != []
-
-    assert document
-           |> LazyHTML.query(~s{button[data-theme-option]})
-           |> LazyHTML.to_tree()
-           |> length() == 3
+    # No rung survives from the old picker.
+    assert document |> LazyHTML.query(~s{[data-theme-option]}) |> LazyHTML.to_tree() == []
   end
 end

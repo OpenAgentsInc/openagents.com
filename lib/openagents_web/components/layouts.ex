@@ -136,38 +136,33 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
-  System / light / dark, as a three-rung segmented control.
+  One control that flips between light and dark.
 
-  The active rung is not rendered here. The choice lives in `localStorage`, so
-  the head script in `root.html.heex` records it as `data-theme-choice` on the
-  root element and `app.css` expresses the selection from that. Rendering it
-  server-side would be wrong twice over: the server does not know the visitor's
-  choice, and a LiveView re-render would fight the script.
+  There is no explicit "system" rung. Storing nothing IS system, and that is the
+  default until someone chooses: the head script leaves `data-theme` unset and
+  the `prefers-color-scheme` fallback in `app.css` governs. A third button would
+  make the common case — never touching this at all — look like an unmade
+  decision.
 
-  "System" stores nothing and clears `data-theme`, which lets the
-  `prefers-color-scheme` fallback in `app.css` govern.
+  The glyph shows the theme you would move to, not the one you are in, because
+  the control is an action rather than a status. Which glyph is visible cannot
+  be decided here: the effective theme depends on the visitor's OS when nothing
+  is stored, so the head script resolves it and the CSS picks the glyph.
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="button-group theme-toggle" role="group" aria-label="Color theme">
-      <UI.button
-        :for={
-          {choice, icon, label} <- [
-            {"system", "desktop", "Match system theme"},
-            {"light", "sun", "Light theme"},
-            {"dark", "moon", "Dark theme"}
-          ]
-        }
-        variant={:secondary}
-        size={:sm}
-        data-theme-option={choice}
-        aria-label={label}
-        title={label}
-        phx-click={JS.dispatch("phx:set-theme", detail: %{theme: choice})}
-      >
-        <UI.icon name={icon} />
-      </UI.button>
-    </div>
+    <button
+      type="button"
+      class="btn theme-toggle"
+      data-variant="ghost"
+      data-size="sm"
+      aria-label="Toggle theme"
+      title="Toggle theme"
+      phx-click={JS.dispatch("phx:toggle-theme")}
+    >
+      <UI.icon name="sun" class="theme-toggle__sun" />
+      <UI.icon name="moon" class="theme-toggle__moon" />
+    </button>
     """
   end
 

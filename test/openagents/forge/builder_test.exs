@@ -1,6 +1,5 @@
 defmodule OpenAgents.Forge.BuilderTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.BuildExecutor
   alias OpenAgents.Forge.BuildExecutor.Sidecar
   alias OpenAgents.Forge.BuildReceipt

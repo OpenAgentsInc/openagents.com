@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.VoiceCallControllerTest do
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   setup do
     previous_voice = Application.fetch_env!(:openagents, :voice)
     previous_provider = Application.fetch_env!(:openagents, :voice_call_provider)

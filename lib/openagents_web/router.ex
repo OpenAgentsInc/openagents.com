@@ -103,7 +103,6 @@ defmodule OpenAgentsWeb.Router do
     get "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :show
     delete "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
 
-    get "/api/changelog", ChangelogController, :show
     get "/memory/export", MemoryExportController, :show
   end
 
@@ -113,6 +112,7 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :api
 
     get "/api/status", NetworkStatusController, :show
+    get "/api/changelog", ChangelogController, :show
 
     post "/controller/pairings", ControllerPairingController, :create
     get "/controller/pairings/:id", ControllerPairingController, :show

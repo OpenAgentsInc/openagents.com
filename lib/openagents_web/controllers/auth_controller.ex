@@ -33,7 +33,7 @@ defmodule OpenAgentsWeb.AuthController do
       |> configure_session(renew: true)
       |> put_session("user_id", active_user.id)
       |> put_resp_header("cache-control", "no-store")
-      |> redirect(to: ~p"/")
+      |> redirect(to: ~p"/chat")
     else
       {:error, :banned} -> auth_failure(conn, "banned")
       {:error, _reason} -> auth_failure(conn, "failed")

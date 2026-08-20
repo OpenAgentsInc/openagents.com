@@ -1,6 +1,5 @@
 defmodule OpenAgents.VoiceSessionsTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.{Conversations, Voice, VoiceSessions}
   alias OpenAgents.Voice.ProviderEvent
 

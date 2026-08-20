@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.ComputerChannelTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
 
   import Phoenix.ChannelTest
   import OpenAgentsWeb.SarahConnCase, only: [github_user: 1]

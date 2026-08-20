@@ -22,6 +22,7 @@ defmodule OpenAgentsWeb.VoiceCallController do
       conn
       |> put_resp_content_type("application/sdp")
       |> put_resp_header("cache-control", "no-store")
+      |> put_resp_header("permissions-policy", "microphone=(self)")
       |> send_resp(:created, admission.answer_sdp)
     else
       %Config{enabled?: false} ->

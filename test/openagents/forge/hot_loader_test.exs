@@ -1,6 +1,5 @@
 defmodule OpenAgents.Forge.HotLoaderTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   @moduletag :capture_log
 
   alias OpenAgents.Forge.DeployReceipt

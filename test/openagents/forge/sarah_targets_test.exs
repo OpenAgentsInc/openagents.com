@@ -1,6 +1,5 @@
 defmodule OpenAgents.Forge.SarahTargetsTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.{Repos, Targets}
 
   setup do

@@ -1,6 +1,5 @@
 defmodule OpenAgents.DeepWorkToolLoopTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Turns, Work}

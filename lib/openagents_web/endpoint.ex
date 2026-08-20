@@ -8,8 +8,10 @@ defmodule OpenAgentsWeb.Endpoint do
     store: :cookie,
     key: "_openagents_key",
     signing_salt: "fq1woUNS",
+    encryption_salt: "R+WiqpwL",
     same_site: "Lax",
     secure: Application.compile_env(:openagents, :secure_cookies, false),
+    http_only: true,
     max_age: 60 * 60 * 24 * 365
   ]
 

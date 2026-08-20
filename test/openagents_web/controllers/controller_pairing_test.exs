@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.ControllerPairingTest do
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   alias OpenAgents.Machines
 
   @create_params %{

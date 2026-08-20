@@ -7,7 +7,6 @@ defmodule OpenAgents.Forge.BootConvergeTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.BootConverge
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target

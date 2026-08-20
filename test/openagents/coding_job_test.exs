@@ -10,7 +10,6 @@ defmodule OpenAgents.CodingJobTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Work}

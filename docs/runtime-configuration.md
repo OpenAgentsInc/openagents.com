@@ -134,6 +134,8 @@ discovery, node identity, cookie, and bounded distribution ports.
 | `OPENAGENTS_FORGE_BUILD_DIR` | Absolute durable path outside `/tmp` |
 | `OPENAGENTS_FORGE_BUILD_QUEUE_DIR` | Absolute durable path outside `/tmp` |
 | `OPENAGENTS_FORGE_ARTIFACT_DIR` | Absolute durable path outside `/tmp` |
+| `OPENAGENTS_FORGE_BUILD_TIMEOUT_MS` | `300000`; admitted range 30 seconds to 30 minutes |
+| `OPENAGENTS_FORGE_BUILD_OUTPUT_RETENTION_MS` | `604800000` (seven days); admitted range one to 30 days |
 | `OPENAGENTS_CODING_JOBS_DIR` | Absolute durable path outside `/tmp` when work or computers are enabled |
 | `OPENAGENTS_RA_DATA_DIR` | Absolute durable path outside `/tmp` when Ra is enabled |
 | `OPENAGENTS_RA_EXPECTED_SIZE` | At least `3` when Ra is enabled |

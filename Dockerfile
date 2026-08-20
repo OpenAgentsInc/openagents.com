@@ -46,6 +46,7 @@ RUN mix assets.setup
 COPY priv priv
 
 COPY lib lib
+COPY rel rel
 
 # Compile the release
 RUN mix compile
@@ -58,8 +59,16 @@ RUN mix assets.deploy
 # Changes to config/runtime.exs don't require recompiling the code
 COPY config/runtime.exs config/
 
-COPY rel rel
 RUN mix release
+
+# Isolated compiler target. Deploy this target as the forge builder sidecar;
+# it retains the pinned production Elixir/OTP toolchain and source for the
+# versioned queue worker, but is never used as the public web image.
+FROM builder AS forge-builder
+
+COPY ops/forge ops/forge
+
+CMD ["mix", "run", "--no-compile", "--no-start", "ops/forge/build-worker.exs"]
 
 # start a new build stage so that the final image will only contain
 # the compiled release and other runtime necessities

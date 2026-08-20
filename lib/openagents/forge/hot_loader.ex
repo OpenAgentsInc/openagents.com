@@ -19,6 +19,7 @@ defmodule OpenAgents.Forge.HotLoader do
 
   require Logger
 
+  alias OpenAgents.Forge.BuildArtifact
   alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Forge.PushReceipt
   alias OpenAgents.Forge.Targets
@@ -96,31 +97,22 @@ defmodule OpenAgents.Forge.HotLoader do
   # ── deploy lane ──────────────────────────────────────────────────────────
 
   defp handle_build(%{repo: repo, sha: sha, target_id: target_id, modules: modules} = build) do
-    allowlist = Application.get_env(:openagents, :forge_hot_load_allowlist, @default_allowlist)
-    offending = Enum.reject(modules, &allowlisted?(&1, allowlist))
-
-    cond do
-      not File.exists?(build.artifact) ->
-        # The artifact tar is node-local; the builder node's hot-loader is
-        # the one that can actually deploy (it ships beams to the rest of
-        # the fleet as erpc arguments). Every other node skips.
-        :ok
-
-      offending == [] ->
-        deploy(build)
-
-      true ->
-        # Never a partial load: one off-allowlist module refuses the whole
-        # artifact, honestly, with the offender names. (Only the winner of
-        # the transition records it; racing nodes get invalid_transition.)
-        case advance(target_id, "needs_rolling_replace", %{"modules" => offending}) do
-          :ok ->
-            insert_receipt(repo, sha, target_id, modules, [], "needs_rolling_replace", nil, nil)
-            broadcast_deploy(repo, sha, "needs_rolling_replace")
-
-          :error ->
-            :ok
-        end
+    if File.exists?(build.artifact) do
+      with {:ok, verified} <-
+             BuildArtifact.verify_file(build.artifact,
+               digest: Map.get(build, :artifact_digest),
+               repo: repo,
+               source_sha: sha,
+               build_id: Map.get(build, :build_id)
+             ),
+           true <- verified.modules == modules or {:error, :declared_modules_mismatch},
+           true <-
+             is_nil(Map.get(build, :manifest)) or Map.get(build, :manifest) == verified.manifest or
+               {:error, :declared_manifest_mismatch} do
+        route_verified(build, verified)
+      else
+        {:error, reason} -> fail_verified_build(build, reason)
+      end
     end
   rescue
     error ->
@@ -133,30 +125,59 @@ defmodule OpenAgents.Forge.HotLoader do
     :refused -> :ok
   end
 
-  defp deploy(%{repo: repo, sha: sha, target_id: target_id, artifact: artifact, modules: modules}) do
+  defp route_verified(build, verified) do
+    allowlist = Application.get_env(:openagents, :forge_hot_load_allowlist, @default_allowlist)
+    offending = Enum.reject(verified.modules, &allowlisted?(&1, allowlist))
+
+    cond do
+      verified.manifest["classification"] != "direct_candidate" ->
+        route_rolling(build, verified.manifest["structural_reasons"])
+
+      offending != [] ->
+        route_rolling(build, Enum.map(offending, &"off_allowlist:#{&1}"))
+
+      true ->
+        deploy(build, verified)
+    end
+  end
+
+  defp route_rolling(%{repo: repo, sha: sha, target_id: target_id, modules: modules}, reasons) do
+    case advance(target_id, "needs_rolling_replace", %{
+           "modules" => modules,
+           "reasons" => reasons
+         }) do
+      :ok ->
+        insert_receipt(repo, sha, target_id, modules, [], "needs_rolling_replace", nil, nil)
+        broadcast_deploy(repo, sha, "needs_rolling_replace")
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp fail_verified_build(
+         %{repo: repo, sha: sha, target_id: target_id, modules: modules},
+         reason
+       ) do
+    message = "artifact_verification_failed code=" <> OpenAgents.OperationalLog.code(reason)
+    Logger.error(message)
+    advance(target_id, "failed", %{"error" => message})
+    insert_receipt(repo, sha, target_id, modules, [], "failed", nil, nil)
+    broadcast_deploy(repo, sha, "failed")
+  end
+
+  defp deploy(%{repo: repo, sha: sha, target_id: target_id, modules: modules}, verified) do
     case advance(target_id, "deploying") do
       :ok -> :ok
       :error -> throw(:refused)
     end
 
-    beams = extract!(artifact)
-
-    # Defense in depth: the declared module list was allowlist-checked, but
-    # the artifact's actual entries are what get loaded — re-check them so a
-    # tar that disagrees with its declaration can never smuggle a module.
-    allowlist = Application.get_env(:openagents, :forge_hot_load_allowlist, @default_allowlist)
-
-    extracted_offenders =
-      beams
-      |> Enum.map(fn {mod, _binary} -> to_string(mod) end)
-      |> Enum.reject(&allowlisted?(&1, allowlist))
-
-    if extracted_offenders != [] do
-      advance(target_id, "needs_rolling_replace", %{"modules" => extracted_offenders})
-      insert_receipt(repo, sha, target_id, modules, [], "needs_rolling_replace", nil, nil)
-      broadcast_deploy(repo, sha, "needs_rolling_replace")
-      throw(:refused)
-    end
+    # Atom creation happens only here, after the full tar and manifest have
+    # passed every bounded identity and classification check.
+    beams =
+      Enum.map(verified.beams, fn %{module: module, binary: binary} ->
+        {BuildArtifact.module_atom(module), binary}
+      end)
 
     case canary_load(beams) do
       :ok ->
@@ -183,22 +204,16 @@ defmodule OpenAgents.Forge.HotLoader do
     )
   end
 
-  @doc "Extract a beam artifact tar into {module, binary} pairs (also used by BootConverge)."
+  @doc "Verify an artifact completely, then return `{module_atom, binary}` pairs."
   def extract!(artifact) do
-    case :erl_tar.extract(String.to_charlist(artifact), [:memory]) do
-      {:ok, entries} ->
-        Enum.map(entries, fn {name, binary} ->
-          mod =
-            name
-            |> List.to_string()
-            |> Path.basename(".beam")
-            |> String.to_atom()
-
-          {mod, binary}
+    case BuildArtifact.verify_file(artifact) do
+      {:ok, verified} ->
+        Enum.map(verified.beams, fn %{module: module, binary: binary} ->
+          {BuildArtifact.module_atom(module), binary}
         end)
 
       {:error, reason} ->
-        raise "artifact extract failed for #{artifact}: #{inspect(reason)}"
+        raise "artifact verification failed for #{artifact}: #{inspect(reason)}"
     end
   end
 

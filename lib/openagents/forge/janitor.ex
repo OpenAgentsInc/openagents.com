@@ -8,7 +8,7 @@ defmodule OpenAgents.Forge.Janitor do
     removes it) or unknown, and whose mtime is older than the retention
     window, is pruned. Covers workers that died between mutation and
     cleanup.
-  - **Stale beam artifacts**: `beams/<sha>.tar` files older than the window
+  - **Stale beam artifacts**: `beams/<artifact-sha256>.tar` files older than the window
     that are NOT the current live target's artifact are pruned — the WAL and
     receipts remain the durable record; the tars are cache.
 

@@ -218,6 +218,11 @@ The build coordinator processes one target at a time. Every node may hear the pr
 
 **Exit criteria:** tests cover successful builds, empty diffs, additions, deletions, compiler failure, bounded output, stale and cold manifests, artifact digest verification, worker recovery, and duplicate delivery.
 
+Implementation status: Gate 9 completed this phase on 2026-08-20. See the
+[forge build lane runbook](operations/forge-build-lane.md) for the deployed
+contract. Fleet application remains disabled pending the transactional work in
+Phase 5 and Gate 10.
+
 ## Phase 5: Add direct BEAM classification and local canary loading
 
 Implement `OpenAgents.Forge.HotLoader` behind a disabled-by-default runtime flag.
@@ -445,6 +450,7 @@ Use runtime configuration for policy and deployment environment values. Use safe
 | `forge_build_dir` | Sidecar checkout and build cache | Deployment-specific data path |
 | `forge_artifact_dir` | Node-local BEAM and relup cache | Deployment-specific data path |
 | `forge_build_timeout_ms` | Bounds compilation | Five minutes |
+| `forge_build_output_retention_ms` | Expires operator-only full compiler logs | Seven days |
 | `forge_fleet_rpc_timeout_ms` | Bounds each fleet operation | Fifteen seconds |
 | `forge_target_repo` | Selects the deployed repository | Explicit production value |
 | `forge_internal_git_url` | Gives the sidecar a canonical clone URL | Loopback or private network |

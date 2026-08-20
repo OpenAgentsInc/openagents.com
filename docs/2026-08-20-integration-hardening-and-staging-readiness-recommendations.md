@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–5 and 7–8 complete, Gate 6 application controls locally verified
+Status: In progress; Gates 0–5 and 7–9 complete, Gate 6 application controls locally verified
 
 ## Outcome
 
@@ -870,6 +870,61 @@ can accept partial fleet success.
 **Exit criteria:** A build can be reproduced and independently verified from
 its pushed commit and immutable receipt, and malformed artifacts fail before
 loading any module.
+
+### Gate 9 implementation status
+
+Completed locally on 2026-08-20:
+
+- Replaced SHA-keyed, line-oriented queue files with strict canonical JSON
+  requests and responses keyed by a unique UUID build attempt. Unknown fields,
+  abbreviated SHAs, oversized bodies, malformed identities, and URLs containing
+  credentials fail before the compiler boundary.
+- Added atomic temporary-file publication, claim-by-rename, request expiry, and
+  durable `running`, `complete`, `failed`, and `expired` attempt receipts. A
+  recovered attempt always gets a new build ID, and a database constraint
+  permits only one running attempt per target.
+- Added the isolated `forge-builder` Docker target and
+  `OpenAgents.Forge.BuildWorker`. It fetches and checks out the exact pushed SHA
+  detached, uses fixed Git and Mix arguments without a shell, requires the
+  production dependency lock, compiles with warnings as errors, and removes
+  its disposable workspace.
+- Kept builder credentials out of the queue, repository URL, and serving
+  release. The worker accepts only an absolute mounted askpass-helper path and
+  disables terminal prompting.
+- Added deterministic BEAM normalization and canonical artifact manifests with
+  source, baseline, Elixir, OTP, ERTS, application version/spec, and dependency
+  lock identities plus complete added, changed, and deleted module sets.
+- Addressed artifacts by the full tar SHA-256 in both the local cache and
+  durable WAL store. A target cannot become `built` until independent
+  verification, local publication, durable storage, and receipt completion all
+  succeed.
+- Added one shared atom-free verifier for the builder, hot loader, and boot
+  convergence. It bounds tar, manifest, module count, BEAM size, paths, and
+  names; checks every declared size and digest; parses `Atom` and OTP 28 `AtU8`
+  module identity as bytes; and validates the exact change set before any
+  module atom can be created.
+- Routed missing baselines, deletions, NIF/native changes, dependency and
+  application changes, assets, configuration, migrations, releases, runtime
+  images, and toolchain drift to rolling replacement rather than direct load.
+- Bounded the redacted compiler excerpt at 8 KiB. Full output remains a mode
+  `0600` builder/operator artifact with a digest, reference, and seven-day
+  default retention; the serving release does not read the full file.
+- Added focused protocol, artifact, worker, coordinator recovery, WAL, hot-load,
+  and boot-convergence coverage. The forge suite passes 93 tests, and the full
+  precommit gate passes 1,302 default Elixir tests and 17 browser tests with no
+  failures.
+- Built the dedicated `forge-builder` Docker target with the pinned Elixir
+  1.20.3 and OTP 29.0.5 production toolchain. The image build completed without
+  application warnings; it also exposed and closed bitstring-size warnings that
+  were invisible under the local Elixir 1.19 toolchain.
+- Documented the deployment contract, permissions, exact build order,
+  classification, verification, recovery, retention, and staging proof in the
+  [forge build lane runbook](operations/forge-build-lane.md).
+
+Gate 9 is complete. Keep the staging deploy lane disabled until Gate 10 makes
+fleet application transactional. Gates 12–15 must still exercise the real
+builder image against the exact staging SHA and retain the image, build,
+artifact, and output-proof identities; local success is not staging admission.
 
 ## Gate 10: Make fleet deployment transactional
 

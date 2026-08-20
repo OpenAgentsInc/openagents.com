@@ -7,6 +7,7 @@ defmodule OpenAgents.Forge.BootConvergeTest do
   """
 
   use OpenAgents.DataCase, async: false
+  alias OpenAgents.Forge.ArtifactFixtures
   alias OpenAgents.Forge.BootConverge
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target
@@ -67,17 +68,28 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     {module, binary}
   end
 
+  defp artifact(module, binary) do
+    sha = String.duplicate("d", 40)
+    built = ArtifactFixtures.create!(@repo, sha, [{to_string(module), binary}])
+
+    %{
+      built: built,
+      details: %{
+        "artifact" => "beams/#{built.digest}.tar",
+        "artifact_digest" => built.digest,
+        "build_id" => built.build_id,
+        "modules" => Enum.map(built.beams, & &1.module)
+      }
+    }
+  end
+
   test "converges to the live target's artifact and reports it" do
     {module, binary} = scratch_beam(OpenAgents.Scratch.BootConvergeProbe)
 
-    artifact_abs = Path.join(Repos.data_dir(), "beams/boot-test.tar")
-    entry_name = String.to_charlist(to_string(module) <> ".beam")
-    :ok = :erl_tar.create(String.to_charlist(artifact_abs), [{entry_name, binary}])
-
-    insert_target!("live", %{
-      "artifact" => "beams/boot-test.tar",
-      "modules" => [to_string(module)]
-    })
+    artifact = artifact(module, binary)
+    artifact_abs = Path.join(Repos.data_dir(), artifact.details["artifact"])
+    File.write!(artifact_abs, artifact.built.bytes)
+    insert_target!("live", artifact.details)
 
     outcome = BootConverge.converge(@repo)
     assert %{"state" => "converged", "modules" => 1} = outcome
@@ -99,41 +111,40 @@ defmodule OpenAgents.Forge.BootConvergeTest do
              BootConverge.converge(@repo)
 
     # A live target whose artifact this node does not have (replaced node).
-    insert_target!("live", %{"artifact" => "beams/not-here.tar"})
+    {missing_module, missing_binary} = scratch_beam(OpenAgents.Scratch.BootConvergeMissing)
+    missing = artifact(missing_module, missing_binary)
+    insert_target!("live", missing.details)
     assert %{"state" => "image", "reason" => "artifact_missing"} = BootConverge.converge(@repo)
 
     # A live target with an off-allowlist module in the tar.
-    {module, binary} = scratch_beam(BootConvergeOffLimits)
-    artifact_abs = Path.join(Repos.data_dir(), "beams/off-allowlist.tar")
-    entry_name = String.to_charlist(to_string(module) <> ".beam")
-    :ok = :erl_tar.create(String.to_charlist(artifact_abs), [{entry_name, binary}])
-    insert_target!("live", %{"artifact" => "beams/off-allowlist.tar"})
+    {module, binary} = scratch_beam(OpenAgents.NotAllowed.BootConvergeOffLimits)
+    off_limit = artifact(module, binary)
+    artifact_abs = Path.join(Repos.data_dir(), off_limit.details["artifact"])
+    File.write!(artifact_abs, off_limit.built.bytes)
+    insert_target!("live", off_limit.details)
 
     assert %{"state" => "image", "reason" => "off_allowlist:" <> _rest} =
              BootConverge.converge(@repo)
 
-    refute Code.ensure_loaded?(BootConvergeOffLimits)
+    refute Code.ensure_loaded?(OpenAgents.NotAllowed.BootConvergeOffLimits)
   end
 
   test "a replaced node converges by fetching the artifact blob from the WAL store" do
     {module, binary} = scratch_beam(OpenAgents.Scratch.BootConvergeWalFetch)
 
-    entry_name = String.to_charlist(to_string(module) <> ".beam")
-    tar_path = Path.join(System.tmp_dir!(), "walfetch-#{System.unique_integer([:positive])}.tar")
-    :ok = :erl_tar.create(String.to_charlist(tar_path), [{entry_name, binary}])
+    artifact = artifact(module, binary)
 
-    sha = String.duplicate("d", 40)
-    {:ok, _key} = OpenAgents.Forge.WAL.put_artifact(@repo, sha, File.read!(tar_path))
-    File.rm!(tar_path)
+    {:ok, _key} =
+      OpenAgents.Forge.WAL.put_artifact(@repo, artifact.built.digest, artifact.built.bytes)
 
     # The target names an artifact path that does NOT exist locally — the
     # blob store is the only copy, exactly a replaced node's situation.
-    insert_target!("live", %{"artifact" => "beams/#{sha}.tar"})
+    insert_target!("live", artifact.details)
 
     assert %{"state" => "converged", "modules" => 1} = BootConverge.converge(@repo)
     assert module.marker() == :boot_converged
     # The fetched blob is now local cache for next boot.
-    assert File.exists?(Path.join(Repos.data_dir(), "beams/#{sha}.tar"))
+    assert File.exists?(Path.join(Repos.data_dir(), artifact.details["artifact"]))
 
     :code.purge(module)
     :code.delete(module)

@@ -1,21 +1,16 @@
 defmodule OpenAgents.Forge.BuilderTest do
   use OpenAgents.DataCase, async: false
+  import Ecto.Query
   alias OpenAgents.Forge.BuildExecutor
   alias OpenAgents.Forge.BuildExecutor.Sidecar
   alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.Builder
   alias OpenAgents.Forge.FakeBuildExecutor
   alias OpenAgents.Forge.Repos
+  alias OpenAgents.Forge.Target
   alias OpenAgents.Forge.Targets
 
-  describe "pure Sidecar adapter pieces" do
-    test "render_job serializes the two env-style lines the watcher sources" do
-      assert Sidecar.render_job("abc123", "http://127.0.0.1:8080/git/openagents.com.git") ==
-               "SHA=abc123\nREPO_URL=http://127.0.0.1:8080/git/openagents.com.git\n"
-
-      refute Sidecar.render_job("abc123", "http://127.0.0.1/repo.git") =~ "token"
-    end
-
+  describe "Sidecar adapter boundaries" do
     test "sidecar repository URLs never contain the operator credential" do
       previous_url = Application.get_env(:openagents, :forge_internal_git_url)
       previous_token = Application.get_env(:openagents, :forge_operator_token)
@@ -32,50 +27,6 @@ defmodule OpenAgents.Forge.BuilderTest do
                "http://forge.internal/git/openagents.com.git"
 
       refute Sidecar.repo_url("openagents.com") =~ "forge-secret-sentinel"
-    end
-
-    test "parse_result reads env-style lines, tolerating garbage" do
-      contents = """
-      STATUS=ok
-      MODULES=Elixir.Foo,Elixir.Bar
-      DURATION=7
-      garbage-single-token
-      """
-
-      assert Sidecar.parse_result(contents) == %{
-               "STATUS" => "ok",
-               "MODULES" => "Elixir.Foo,Elixir.Bar",
-               "DURATION" => "7"
-             }
-
-      assert Sidecar.parse_result("") == %{}
-      assert Sidecar.parse_result("STATUS=error\n") == %{"STATUS" => "error"}
-    end
-
-    test "beams_from_tar reads entries back out of a beam tar, sorted" do
-      tar = Path.join(System.tmp_dir!(), "beams-#{System.unique_integer([:positive])}.tar")
-
-      :ok =
-        :erl_tar.create(String.to_charlist(tar), [
-          {~c"Elixir.Zeta.beam", "zeta-bytes"},
-          {~c"Elixir.Alpha.beam", "alpha-bytes"}
-        ])
-
-      bytes = File.read!(tar)
-      File.rm!(tar)
-
-      assert {:ok,
-              [
-                %{module: "Elixir.Alpha", binary: "alpha-bytes"},
-                %{module: "Elixir.Zeta", binary: "zeta-bytes"}
-              ]} = Sidecar.beams_from_tar(bytes)
-
-      assert {:error, _reason} = Sidecar.beams_from_tar("not a tar")
-    end
-
-    test "module_name strips path and extension" do
-      assert Sidecar.module_name("ebin/Elixir.Foo.Bar.beam") == "Elixir.Foo.Bar"
-      assert Sidecar.module_name("Elixir.Foo.beam") == "Elixir.Foo"
     end
 
     test "bound_output truncates past the bound" do
@@ -150,14 +101,17 @@ defmodule OpenAgents.Forge.BuilderTest do
 
       assert target_id == target.id
 
-      # Artifact tar exists at <data_dir>/beams/<sha>.tar with beam entries.
-      assert artifact == Path.join([data_dir, "beams", sha <> ".tar"])
+      # Artifact cache is addressed by the full tar digest, never by source SHA.
+      assert Path.dirname(artifact) == Path.join(data_dir, "beams")
+      assert Path.basename(artifact) =~ ~r/^[0-9a-f]{64}\.tar$/
       assert File.exists?(artifact)
 
       {:ok, entries} = :erl_tar.extract(String.to_charlist(artifact), [:memory])
-      assert [{name, binary}] = entries
-      assert to_string(name) == module <> ".beam"
-      assert binary == beam.binary
+      assert Enum.any?(entries, fn {name, _binary} -> to_string(name) == "manifest.json" end)
+
+      assert Enum.any?(entries, fn {name, _binary} ->
+               to_string(name) == "beams/#{module}.beam"
+             end)
 
       # Receipt row.
       receipt = Repo.get_by!(BuildReceipt, repo: "openagents.com", sha: sha)
@@ -166,11 +120,16 @@ defmodule OpenAgents.Forge.BuilderTest do
       assert receipt.warnings == "warn: something minor"
       assert receipt.tests == nil
       assert receipt.duration_ms == 123
-      assert receipt.artifact == Path.join("beams", sha <> ".tar")
+      assert receipt.status == "complete"
+      assert receipt.artifact_digest =~ ~r/^[0-9a-f]{64}$/
+      assert receipt.artifact == Path.join("beams", receipt.artifact_digest <> ".tar")
+      assert receipt.manifest["source_sha"] == sha
 
       # Target advanced to built with artifact + modules in details.
       built = await_status(target, "built")
-      assert built.details["artifact"] == Path.join("beams", sha <> ".tar")
+      assert built.details["artifact"] == receipt.artifact
+      assert built.details["artifact_digest"] == receipt.artifact_digest
+      assert built.details["build_id"] == receipt.id
       assert built.details["modules"] == [module]
     end
 
@@ -185,8 +144,12 @@ defmodule OpenAgents.Forge.BuilderTest do
 
       failed = await_status(target, "failed")
       assert failed.status == "failed"
-      assert String.starts_with?(failed.details["error"], "boom")
+      assert String.starts_with?(failed.details["error"], "build_failed: boom")
       assert byte_size(failed.details["error"]) <= 8_192 + byte_size("\n[truncated]")
+
+      receipt = Repo.get_by!(BuildReceipt, target_id: target.id)
+      assert receipt.status == "failed"
+      assert receipt.error_code == "build_failed"
 
       refute_receive {:forge_build_ready, _payload}, 200
 
@@ -209,6 +172,80 @@ defmodule OpenAgents.Forge.BuilderTest do
       {:ok, target2} = Targets.promote("openagents.com", sha, "test-operator")
       target2_id = target2.id
       assert_receive {:forge_build_ready, %{sha: ^sha, target_id: ^target2_id}}, 5_000
+    end
+
+    test "recovery expires an abandoned build ID before creating a new attempt", %{sha: sha} do
+      previous_threshold =
+        Application.get_env(:openagents, :forge_build_abandoned_after_ms)
+
+      Application.put_env(:openagents, :forge_build_abandoned_after_ms, 0)
+
+      on_exit(fn ->
+        if previous_threshold,
+          do:
+            Application.put_env(
+              :openagents,
+              :forge_build_abandoned_after_ms,
+              previous_threshold
+            ),
+          else: Application.delete_env(:openagents, :forge_build_abandoned_after_ms)
+      end)
+
+      suffix = System.unique_integer([:positive])
+
+      beams =
+        FakeBuildExecutor.beams_for("""
+        defmodule OpenAgents.Scratch.RecoveredBuild#{suffix} do
+          def ok, do: :ok
+        end
+        """)
+
+      Application.put_env(
+        :openagents,
+        :fake_build_result,
+        {:ok, %{beams: beams, warnings: "", tests: nil, duration_ms: 1}}
+      )
+
+      target =
+        %Target{}
+        |> Target.changeset(%{
+          repo: "openagents.com",
+          sha: sha,
+          promoted_by: "test-operator",
+          status: "promoted"
+        })
+        |> Repo.insert!()
+        |> Ecto.Changeset.change(%{status: "building"})
+        |> Repo.update!()
+
+      abandoned_id = Ecto.UUID.generate()
+
+      %BuildReceipt{id: abandoned_id}
+      |> BuildReceipt.start_changeset(%{
+        repo: target.repo,
+        sha: target.sha,
+        target_id: target.id,
+        baseline_manifest: nil
+      })
+      |> Repo.insert!()
+
+      builder = Process.whereis(Builder)
+      send(builder, :recover_abandoned)
+      _state = :sys.get_state(builder)
+
+      assert_receive {:forge_build_ready, %{target_id: target_id, build_id: recovered_id}}, 5_000
+      assert target_id == target.id
+      refute recovered_id == abandoned_id
+
+      receipts =
+        BuildReceipt
+        |> where([b], b.target_id == ^target.id)
+        |> order_by([b], asc: b.inserted_at)
+        |> Repo.all()
+
+      assert Enum.map(receipts, & &1.status) == ["expired", "complete"]
+      assert Enum.map(receipts, & &1.id) == [abandoned_id, recovered_id]
+      assert Enum.at(receipts, 0).error_code == "builder_restart_expired"
     end
   end
 

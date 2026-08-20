@@ -77,6 +77,15 @@ defmodule OpenAgents.Forge.Targets do
     |> Repo.one()
   end
 
+  @doc "The newest immutable live target for `repo`, or nil."
+  def live(repo) do
+    Target
+    |> where([t], t.repo == ^repo and t.status == "live")
+    |> order_by([t], desc: t.inserted_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
   @doc "Recent targets for a repo, newest first, bounded."
   def recent(repo, limit \\ 10) do
     Target
@@ -146,7 +155,7 @@ defmodule OpenAgents.Forge.Targets do
   end
 
   defp validate_sha_format(sha) do
-    if Regex.match?(~r/^[0-9a-f]{7,40}$/, sha), do: :ok, else: {:error, :invalid_sha}
+    if Regex.match?(~r/^[0-9a-f]{40}$/, sha), do: :ok, else: {:error, :invalid_sha}
   end
 
   # The promotable set is exactly what the WAL-backed repo contains.

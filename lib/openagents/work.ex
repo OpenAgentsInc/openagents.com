@@ -506,6 +506,9 @@ defmodule OpenAgents.Work do
         )
         |> repo.update()
       end)
+      |> Multi.run(:coding_grant, fn _repo, %{job: job} ->
+        OpenAgents.Work.Coding.settle_grant(job)
+      end)
       |> Repo.transaction()
 
     case result do

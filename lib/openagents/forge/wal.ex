@@ -50,7 +50,7 @@ defmodule OpenAgents.Forge.WAL do
 
   @repo_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9]))*$/
   @entry_key_pattern ~r/^entries\/[0-9]{8}-[0-9a-f]{12}$/
-  @artifact_key_pattern ~r/^artifacts\/[0-9a-f]{7,40}\.tar$/
+  @artifact_key_pattern ~r/^artifacts\/[0-9a-f]{64}\.tar$/
 
   ## Dispatcher
 
@@ -109,19 +109,20 @@ defmodule OpenAgents.Forge.WAL do
   same content is re-buildable from the pushed commit.
   """
   @spec put_artifact(repo, String.t(), binary()) :: {:ok, String.t()} | {:error, term}
-  def put_artifact(repo, sha, payload) when is_binary(sha) and is_binary(payload) do
-    key = artifact_key(sha)
+  def put_artifact(repo, digest, payload) when is_binary(digest) and is_binary(payload) do
+    key = artifact_key(digest)
 
     with :ok <- validate_repo(repo),
-         :ok <- validate_artifact_key(key) do
+         :ok <- validate_artifact_key(key),
+         true <- artifact_digest(payload) == digest or {:error, :artifact_digest_mismatch} do
       adapter().put_object(repo, key, payload)
     end
   end
 
-  @doc "Fetch an artifact blob by sha (see `put_artifact/3`)."
+  @doc "Fetch an artifact blob by SHA-256 digest (see `put_artifact/3`)."
   @spec get_artifact(repo, String.t()) :: {:ok, binary()} | {:error, term}
-  def get_artifact(repo, sha) when is_binary(sha) do
-    key = artifact_key(sha)
+  def get_artifact(repo, digest) when is_binary(digest) do
+    key = artifact_key(digest)
 
     with :ok <- validate_repo(repo),
          :ok <- validate_artifact_key(key) do
@@ -130,7 +131,7 @@ defmodule OpenAgents.Forge.WAL do
   end
 
   @doc false
-  def artifact_key(sha), do: "artifacts/" <> sha <> ".tar"
+  def artifact_key(digest), do: "artifacts/" <> digest <> ".tar"
 
   ## Pure helpers
 
@@ -227,6 +228,12 @@ defmodule OpenAgents.Forge.WAL do
     else
       {:error, :invalid_object_key}
     end
+  end
+
+  defp artifact_digest(payload) do
+    :sha256
+    |> :crypto.hash(payload)
+    |> Base.encode16(case: :lower)
   end
 
   defp adapter do

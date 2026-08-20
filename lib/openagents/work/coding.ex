@@ -85,44 +85,40 @@ defmodule OpenAgents.Work.Coding do
   def on_start(job), do: {:ok, job}
 
   @doc """
-  Terminal cleanup, called from `Work.finish_job/3` post-commit (the one
-  path that runs even when the worker died): remove the per-job clone and
-  record the job's total usage against its grant in the inference ledger.
+  Terminal filesystem cleanup, called from `Work.finish_job/3` post-commit (the
+  one path that runs even when the worker died). Grant settlement happens
+  inside the same transaction as the terminal job row through
+  `settle_grant/1`.
   """
   def on_terminal(%Job{kind: @kind} = job) do
     Repository.cleanup_workspace("work-job:#{job.id}")
-    record_grant_usage(job)
     :ok
   end
 
   def on_terminal(_job), do: :ok
 
-  defp record_grant_usage(%Job{delegation: %{"inference_grant_id" => grant_id}} = job)
-       when is_binary(grant_id) do
+  @doc "Settle a coding job's metered grant inside the terminal job transaction."
+  def settle_grant(%Job{kind: @kind, delegation: %{"inference_grant_id" => grant_id}} = job)
+      when is_binary(grant_id) do
     case Repo.get(OpenAgents.Inference.Grant, grant_id) do
       nil ->
-        :ok
+        {:error, :coding_grant_missing}
 
       grant ->
         usage = job.usage || %{}
 
-        Inference.record_usage(grant, %{
-          "input_tokens" => Map.get(usage, "input_tokens", 0),
-          "output_tokens" => Map.get(usage, "output_tokens", 0),
-          "total_tokens" => Map.get(usage, "total_tokens", 0)
-        })
-
-        Inference.revoke(grant)
-        :ok
+        with {:ok, metered} <-
+               Inference.record_usage(grant, %{
+                 "input_tokens" => Map.get(usage, "input_tokens", 0),
+                 "output_tokens" => Map.get(usage, "output_tokens", 0),
+                 "total_tokens" => Map.get(usage, "total_tokens", 0)
+               }),
+             {:ok, settled} <- Inference.revoke(metered) do
+          {:ok, settled}
+        end
     end
-  rescue
-    error ->
-      Logger.warning(
-        "coding_job_grant_usage_failed code=#{OpenAgents.OperationalLog.code(error)}"
-      )
-
-      :ok
   end
 
-  defp record_grant_usage(_job), do: :ok
+  def settle_grant(%Job{kind: @kind}), do: {:ok, :no_grant}
+  def settle_grant(_job), do: {:ok, :not_coding}
 end

@@ -113,6 +113,27 @@ defmodule OpenAgents.Forge.WALTest do
     end
   end
 
+  describe "digest-addressed artifacts" do
+    test "round trips only under the payload's full SHA-256" do
+      payload = :crypto.strong_rand_bytes(512)
+
+      digest =
+        :sha256
+        |> :crypto.hash(payload)
+        |> Base.encode16(case: :lower)
+
+      assert {:ok, "artifacts/" <> ^digest <> ".tar"} =
+               WAL.put_artifact(@repo, digest, payload)
+
+      assert {:ok, ^payload} = WAL.get_artifact(@repo, digest)
+
+      assert {:error, :artifact_digest_mismatch} =
+               WAL.put_artifact(@repo, String.duplicate("0", 64), payload)
+
+      assert {:error, :invalid_object_key} = WAL.get_artifact(@repo, String.duplicate("a", 40))
+    end
+  end
+
   describe "repo validation" do
     test "rejects invalid repo names on every dispatcher function" do
       for bad <- ["Uppercase", "a/b", "", "-lead", "bad..git", :openagents] do

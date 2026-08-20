@@ -22,6 +22,8 @@ defmodule OpenAgents.Forge.BootConverge do
 
   require Logger
 
+  alias OpenAgents.Forge.BuildArtifact
+  alias OpenAgents.Forge.BuildProtocol
   alias OpenAgents.Forge.HotLoader
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Targets
@@ -73,8 +75,20 @@ defmodule OpenAgents.Forge.BootConverge do
 
   defp attempt(repo) do
     case Targets.current(repo) do
-      %{status: "live", sha: sha, details: %{"artifact" => relative}} when is_binary(relative) ->
-        load_artifact(repo, sha, Path.join(Repos.data_dir(), relative))
+      %{
+        status: "live",
+        sha: sha,
+        details: %{
+          "artifact" => relative,
+          "artifact_digest" => digest,
+          "build_id" => build_id
+        }
+      }
+      when is_binary(relative) and is_binary(digest) and is_binary(build_id) ->
+        load_artifact(repo, sha, digest, build_id, Path.join(Repos.data_dir(), relative))
+
+      %{status: "live", details: %{"artifact" => _relative}} ->
+        %{"state" => "image", "reason" => "artifact_identity_missing"}
 
       %{status: "live", sha: sha} ->
         # A live target with no artifact recorded (a no-op deploy): the
@@ -89,68 +103,80 @@ defmodule OpenAgents.Forge.BootConverge do
     end
   end
 
-  defp load_artifact(repo, sha, artifact) do
+  defp load_artifact(repo, sha, digest, build_id, artifact) do
     cond do
       not File.exists?(artifact) ->
         # The local cache misses on a replaced node — fetch the blob the
         # builder uploaded next to the WAL, then converge from it. Only if
         # the store misses too does the node boot on image code.
-        case OpenAgents.Forge.WAL.get_artifact(repo, sha) do
+        case OpenAgents.Forge.WAL.get_artifact(repo, digest) do
           {:ok, payload} ->
-            # Cache the blob locally best-effort (the dir may be root-owned
-            # on a degraded node) — convergence must not depend on it: load
-            # straight from the fetched binary either way.
-            with :ok <- File.mkdir_p(Path.dirname(artifact)),
-                 :ok <- File.write(artifact, payload) do
-              :ok
+            with {:ok, verified} <-
+                   BuildArtifact.verify(payload,
+                     digest: digest,
+                     repo: repo,
+                     source_sha: sha,
+                     build_id: build_id
+                   ) do
+              # Cache only bytes that passed the immutable identity check.
+              _cache_result = BuildProtocol.atomic_write(artifact, payload)
+              load_beams_from(sha, verified)
             else
-              _cache_miss -> :ok
+              {:error, _reason} ->
+                %{"state" => "image", "reason" => "artifact_verification_failed"}
             end
-
-            load_beams_from(sha, extract_binary!(payload))
 
           {:error, _reason} ->
             %{"state" => "image", "reason" => "artifact_missing"}
         end
 
       true ->
-        load_beams_from(sha, HotLoader.extract!(artifact))
+        case BuildArtifact.verify_file(artifact,
+               digest: digest,
+               repo: repo,
+               source_sha: sha,
+               build_id: build_id
+             ) do
+          {:ok, verified} ->
+            load_beams_from(sha, verified)
+
+          {:error, _reason} ->
+            %{"state" => "image", "reason" => "artifact_verification_failed"}
+        end
     end
   end
 
-  defp load_beams_from(sha, beams) do
+  defp load_beams_from(sha, verified) do
     allowlist = Application.get_env(:openagents, :forge_hot_load_allowlist, default_allowlist())
 
     offenders =
-      beams
-      |> Enum.map(fn {mod, _binary} -> to_string(mod) end)
+      verified.modules
       |> Enum.reject(&HotLoader.allowlisted?(&1, allowlist))
 
-    if offenders != [] do
-      %{"state" => "image", "reason" => "off_allowlist:#{Enum.join(offenders, ",")}"}
-    else
-      failures =
-        beams
-        |> HotLoader.load_beams()
-        |> Enum.reject(fn {_mod, result} -> result == :ok end)
+    cond do
+      verified.manifest["classification"] != "direct_candidate" ->
+        %{"state" => "image", "reason" => "artifact_not_direct"}
 
-      if failures == [] do
-        %{"state" => "converged", "sha" => sha, "modules" => length(beams)}
-      else
-        %{"state" => "image", "reason" => "load_failed"}
-      end
-    end
-  end
+      offenders != [] ->
+        %{"state" => "image", "reason" => "off_allowlist:#{Enum.join(offenders, ",")}"}
 
-  defp extract_binary!(payload) do
-    case :erl_tar.extract({:binary, payload}, [:memory]) do
-      {:ok, entries} ->
-        Enum.map(entries, fn {name, binary} ->
-          {name |> List.to_string() |> Path.basename(".beam") |> String.to_atom(), binary}
-        end)
+      true ->
+        # Atom creation follows complete verification and policy checks.
+        beams =
+          Enum.map(verified.beams, fn %{module: module, binary: binary} ->
+            {BuildArtifact.module_atom(module), binary}
+          end)
 
-      {:error, reason} ->
-        raise "artifact blob extract failed: #{inspect(reason)}"
+        failures =
+          beams
+          |> HotLoader.load_beams()
+          |> Enum.reject(fn {_mod, result} -> result == :ok end)
+
+        if failures == [] do
+          %{"state" => "converged", "sha" => sha, "modules" => length(beams)}
+        else
+          %{"state" => "image", "reason" => "load_failed"}
+        end
     end
   end
 

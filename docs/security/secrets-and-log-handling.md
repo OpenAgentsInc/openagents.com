@@ -51,7 +51,9 @@ credentials, never deployment configuration and never Secret Manager values.
   repository files, release receipts, command arguments, or repository URLs.
 - The build queue contains an uncredentialed internal repository URL. The
   builder reads its forge secret through its workload identity and supplies it
-  through `GIT_ASKPASS` with terminal prompting disabled.
+  through the absolute helper path in `OPENAGENTS_FORGE_GIT_ASKPASS`, with
+  terminal prompting disabled. That environment value is a path, never the
+  secret itself.
 - Keep the OAuth callback route's Phoenix dispatch logging disabled. Configure
   the external HTTPS load balancer to omit query strings for
   `/auth/github/callback`; a path and status are sufficient.

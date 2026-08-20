@@ -280,6 +280,10 @@ if config_env() == :prod do
     forge_build_dir: required_text.("OPENAGENTS_FORGE_BUILD_DIR"),
     forge_build_queue_dir: required_text.("OPENAGENTS_FORGE_BUILD_QUEUE_DIR"),
     forge_artifact_dir: required_text.("OPENAGENTS_FORGE_ARTIFACT_DIR"),
+    forge_build_timeout_ms:
+      parse_integer.("OPENAGENTS_FORGE_BUILD_TIMEOUT_MS", 30_000..1_800_000),
+    forge_build_output_retention_ms:
+      parse_integer.("OPENAGENTS_FORGE_BUILD_OUTPUT_RETENTION_MS", 86_400_000..2_592_000_000),
     forge_artifact_store: forge_artifact_store,
     forge_build_executor: forge_build_executor,
     forge_expected_fleet_size: parse_integer.("OPENAGENTS_FORGE_EXPECTED_FLEET_SIZE", 1..100),

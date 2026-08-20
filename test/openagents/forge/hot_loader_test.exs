@@ -2,6 +2,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
   use OpenAgents.DataCase, async: false
   @moduletag :capture_log
 
+  alias OpenAgents.Forge.ArtifactFixtures
   alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Forge.HotLoader
   alias OpenAgents.Forge.PushReceipt
@@ -31,7 +32,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
   # itself is what brings it into the running system.
   defp compiled_scratch_module do
     n = System.unique_integer([:positive])
-    name = "OpenAgents.Scratch.HotDemo#{n}"
+    name = "Elixir.OpenAgents.Scratch.HotDemo#{n}"
     revision = "v#{n}"
 
     [{mod, binary}] =
@@ -48,18 +49,36 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     :code.purge(mod)
   end
 
-  defp tar_artifact(entries) do
-    dir = System.tmp_dir!()
-    path = Path.join(dir, "forge-hot-#{System.unique_integer([:positive])}.tar")
+  defp artifact(entries, sha) do
+    built = ArtifactFixtures.create!("openagents.com", sha, entries)
+    path = ArtifactFixtures.write!(built)
+    on_exit(fn -> File.rm(path) end)
+
+    %{
+      artifact: path,
+      artifact_digest: built.digest,
+      build_id: built.build_id,
+      manifest: built.manifest,
+      modules: Enum.map(built.beams, & &1.module)
+    }
+  end
+
+  defp malformed_artifact(entries) do
+    path =
+      Path.join(System.tmp_dir!(), "forge-malformed-#{System.unique_integer([:positive])}.tar")
 
     tar_entries =
       Enum.map(entries, fn {module_name, binary} ->
-        {String.to_charlist("Elixir.#{module_name}.beam"), binary}
+        {String.to_charlist("beams/#{module_name}.beam"), binary}
       end)
 
     :ok = :erl_tar.create(String.to_charlist(path), tar_entries)
     on_exit(fn -> File.rm(path) end)
     path
+  end
+
+  defp build_payload(target, sha, artifact) do
+    Map.merge(artifact, %{repo: "openagents.com", sha: sha, target_id: target.id})
   end
 
   defp insert_target(sha, status) do
@@ -97,17 +116,11 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     sha = unique_sha()
     target = insert_target(sha, "built")
-    artifact = tar_artifact([{name, binary}])
+    artifact = artifact([{name, binary}], sha)
 
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
 
-    broadcast_build_ready(loader, %{
-      repo: "openagents.com",
-      sha: sha,
-      target_id: target.id,
-      artifact: artifact,
-      modules: [name]
-    })
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
 
     assert Code.ensure_loaded?(mod)
     assert mod.revision() == revision
@@ -132,17 +145,14 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     sha = unique_sha()
     target = insert_target(sha, "built")
-    artifact = tar_artifact([{name, binary}, {"OpenAgents.Turns.Whatever", <<0>>}])
+    off_name = "Elixir.OpenAgents.Turns.Whatever#{System.unique_integer([:positive])}"
+    [{off_mod, off_binary}] = Code.compile_string("defmodule #{off_name} do\nend")
+    unload(off_mod)
+    artifact = artifact([{name, binary}, {off_name, off_binary}], sha)
 
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
 
-    broadcast_build_ready(loader, %{
-      repo: "openagents.com",
-      sha: sha,
-      target_id: target.id,
-      artifact: artifact,
-      modules: [name, "OpenAgents.Turns.Whatever"]
-    })
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
 
     # Never a partial load: even the allowlisted module stays unloaded.
     refute Code.ensure_loaded?(mod)
@@ -152,21 +162,19 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     receipt = deploy_receipt(sha)
     assert receipt.result == "needs_rolling_replace"
 
-    offenders = Repo.get!(Target, target.id).details["modules"]
-    assert offenders == ["OpenAgents.Turns.Whatever"]
+    assert Repo.get!(Target, target.id).details["reasons"] == ["off_allowlist:#{off_name}"]
 
     assert_receive {:forge_deploy,
                     %{repo: "openagents.com", sha: ^sha, result: "needs_rolling_replace"}}
   end
 
-  test "canary revert: a corrupt beam reverts the whole artifact", %{loader: loader} do
+  test "a corrupt artifact fails verification before creating module atoms", %{loader: loader} do
     %{mod: mod, name: name, binary: binary} = compiled_scratch_module()
-    corrupt_name = "OpenAgents.Scratch.Corrupt#{System.unique_integer([:positive])}"
-    corrupt_mod = String.to_atom("Elixir.#{corrupt_name}")
+    corrupt_name = "Elixir.OpenAgents.Scratch.Corrupt#{System.unique_integer([:positive])}"
 
     sha = unique_sha()
     target = insert_target(sha, "built")
-    artifact = tar_artifact([{name, binary}, {corrupt_name, <<1, 2, 3>>}])
+    artifact = malformed_artifact([{name, binary}, {corrupt_name, <<1, 2, 3>>}])
 
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
 
@@ -180,12 +188,10 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     # The good module loaded first must have been reverted (purged) too.
     refute Code.ensure_loaded?(mod)
-    refute Code.ensure_loaded?(corrupt_mod)
+    assert Repo.get!(Target, target.id).status == "failed"
+    assert deploy_receipt(sha).result == "failed"
 
-    assert Repo.get!(Target, target.id).status == "reverted"
-    assert deploy_receipt(sha).result == "reverted"
-
-    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "reverted"}}
+    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "failed"}}
   end
 
   test "push_to_live_ms is measured from the matching push receipt", %{loader: loader} do
@@ -193,7 +199,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     sha = unique_sha()
     target = insert_target(sha, "built")
-    artifact = tar_artifact([{name, binary}])
+    artifact = artifact([{name, binary}], sha)
 
     {:ok, _push} =
       %PushReceipt{}
@@ -205,13 +211,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
       })
       |> Repo.insert()
 
-    broadcast_build_ready(loader, %{
-      repo: "openagents.com",
-      sha: sha,
-      target_id: target.id,
-      artifact: artifact,
-      modules: [name]
-    })
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
 
     receipt = deploy_receipt(sha)
     assert receipt.result == "live"
@@ -224,15 +224,9 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     sha = unique_sha()
     target = insert_target(sha, "built")
-    artifact = tar_artifact([{name, binary}])
+    artifact = artifact([{name, binary}], sha)
 
-    broadcast_build_ready(loader, %{
-      repo: "openagents.com",
-      sha: sha,
-      target_id: target.id,
-      artifact: artifact,
-      modules: [name]
-    })
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
 
     receipt = deploy_receipt(sha)
     assert receipt.result == "live"

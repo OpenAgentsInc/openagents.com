@@ -39,7 +39,7 @@ defmodule OpenAgents.Accounts.TokenVault do
   @spec open(binary()) :: {:ok, String.t()} | {:error, atom()}
   def open(<<@version, key_id_size, rest::binary>>)
       when key_id_size in 1..@maximum_key_id_bytes do
-    with <<key_id::binary-size(key_id_size), nonce::binary-size(@nonce_bytes),
+    with <<key_id::binary-size(^key_id_size), nonce::binary-size(@nonce_bytes),
            tag::binary-size(@tag_bytes), ciphertext::binary>> <- rest,
          {:ok, key} <- key_for(key_id) do
       decrypt(key, nonce, ciphertext, @aad_prefix <> key_id, tag)
@@ -76,7 +76,7 @@ defmodule OpenAgents.Accounts.TokenVault do
   def key_id(<<@version, key_id_size, rest::binary>>)
       when key_id_size in 1..@maximum_key_id_bytes do
     case rest do
-      <<key_id::binary-size(key_id_size), _rest::binary>> -> {:ok, key_id}
+      <<key_id::binary-size(^key_id_size), _rest::binary>> -> {:ok, key_id}
       _malformed -> {:error, :token_unsealable}
     end
   end

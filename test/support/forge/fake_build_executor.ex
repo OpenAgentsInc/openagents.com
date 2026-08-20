@@ -8,9 +8,42 @@ defmodule OpenAgents.Forge.FakeBuildExecutor do
   hot-load) get genuine loadable beams.
   """
 
-  def build(_repo, _sha, _opts) do
-    Application.get_env(:openagents, :fake_build_result) ||
-      {:error, "no :fake_build_result configured"}
+  alias OpenAgents.Forge.BuildArtifact
+
+  def build(repo, sha, opts) do
+    case Application.get_env(:openagents, :fake_build_result) do
+      {:ok, %{artifact_bytes: _bytes} = result} ->
+        {:ok, result}
+
+      {:ok, %{beams: beams} = scripted} ->
+        toolchain = BuildArtifact.current_toolchain()
+        baseline = Keyword.get(opts, :baseline_manifest) || synthetic_baseline(repo, toolchain)
+
+        with {:ok, artifact} <-
+               BuildArtifact.pack(repo, sha, Keyword.fetch!(opts, :build_id), beams,
+                 baseline_manifest: baseline,
+                 toolchain: toolchain
+               ) do
+          {:ok,
+           %{
+             artifact_bytes: artifact.bytes,
+             artifact_digest: artifact.digest,
+             manifest: artifact.manifest,
+             beams: artifact.beams,
+             warnings: Map.get(scripted, :warnings, ""),
+             tests: Map.get(scripted, :tests),
+             duration_ms: Map.get(scripted, :duration_ms, 1),
+             output_digest: nil,
+             output_ref: nil
+           }}
+        end
+
+      {:error, _output} = error ->
+        error
+
+      nil ->
+        {:error, "no :fake_build_result configured"}
+    end
   end
 
   @doc "A full scripted `{:ok, build_result}` for `source` (compiled for real)."
@@ -27,5 +60,18 @@ defmodule OpenAgents.Forge.FakeBuildExecutor do
     |> Enum.map(fn {module, binary} ->
       %{module: Atom.to_string(module), binary: binary}
     end)
+  end
+
+  defp synthetic_baseline(repo, toolchain) do
+    {:ok, artifact} =
+      BuildArtifact.pack(
+        repo,
+        String.duplicate("0", 40),
+        Ecto.UUID.generate(),
+        [],
+        toolchain: toolchain
+      )
+
+    artifact.manifest
   end
 end

@@ -1,9 +1,7 @@
 defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
   @moduledoc """
-  HTTP basic auth for the forge's git endpoints. The password is the
-  credential (the username is ignored, as git clients vary): a paired
-  machine token (`smct_…`, verified through `OpenAgents.Machines`) or the
-  operator forge token from runtime configuration. No anonymous access.
+  Optional HTTP Basic authentication for Git endpoints. Repository policy is
+  evaluated after path resolution by `OpenAgents.Forge.GitHTTP`.
   """
 
   import Plug.Conn
@@ -19,15 +17,18 @@ defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
   end
 
   defp authenticate(conn) do
-    with {_user, password} <- basic_credentials(conn),
-         {:ok, principal} <- principal_for(password) do
-      assign(conn, :forge_principal, principal)
-    else
-      _ ->
-        conn
-        |> put_resp_header("www-authenticate", ~s(Basic realm="openagents-forge"))
-        |> send_resp(401, "authentication required")
-        |> halt()
+    case basic_credentials(conn) do
+      :missing ->
+        assign(conn, :forge_principal, nil)
+
+      {:ok, {_user, password}} ->
+        case principal_for(password) do
+          {:ok, principal} -> assign(conn, :forge_principal, principal)
+          :error -> refuse(conn)
+        end
+
+      :error ->
+        refuse(conn)
     end
   end
 
@@ -35,9 +36,20 @@ defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
     with ["Basic " <> encoded | _] <- get_req_header(conn, "authorization"),
          {:ok, decoded} <- Base.decode64(encoded),
          [user, password] <- String.split(decoded, ":", parts: 2) do
-      {user, password}
+      {:ok, {user, password}}
     else
+      [] -> :missing
       _ -> :error
+    end
+  end
+
+  defp principal_for("oa_pat_" <> _ = token) do
+    case OpenAgents.ApiTokens.authenticate(token, "forge:write") do
+      {:ok, user, api_token} ->
+        {:ok, %{kind: :user, id: user.id, user: user, api_token_id: api_token.id}}
+
+      {:error, :invalid_api_token} ->
+        :error
     end
   end
 
@@ -60,4 +72,11 @@ defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
   end
 
   defp principal_for(_), do: :error
+
+  defp refuse(conn) do
+    conn
+    |> put_resp_header("www-authenticate", ~s(Basic realm="openagents-forge"))
+    |> send_resp(401, "authentication required")
+    |> halt()
+  end
 end

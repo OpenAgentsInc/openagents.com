@@ -10,9 +10,19 @@ defmodule OpenAgents.Forge.Supervisor do
   @impl true
   def init(_init_arg) do
     children =
-      [{Task.Supervisor, name: OpenAgents.Forge.TaskSupervisor}] ++ deploy_lane_children()
+      [
+        {Task.Supervisor, name: OpenAgents.Forge.TaskSupervisor}
+      ] ++ repository_children() ++ deploy_lane_children()
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp repository_children do
+    if Application.get_env(:openagents, :repository_provisioner_enabled, true) do
+      [{OpenAgents.Repositories.Provisioner, []}]
+    else
+      []
+    end
   end
 
   # The deploy lane (builder + hot loader) runs in the release; tests start

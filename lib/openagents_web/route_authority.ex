@@ -40,6 +40,8 @@ defmodule OpenAgentsWeb.RouteAuthority do
     # No trailing slash: the memory page is "/memory" itself, and its export
     # lives under it.
     "/memory",
+    "/device",
+    "/repositories",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",
@@ -101,9 +103,6 @@ defmodule OpenAgentsWeb.RouteAuthority do
        when path in @public_browser_paths and verb in [:get, :head],
        do: declaration(:public_read, "anonymous", "published:web", false)
 
-  defp policy(%{path: "/OpenAgentsInc/" <> _path, verb: verb}) when verb in [:get, :head],
-    do: declaration(:public_read, "anonymous", "published:source", false)
-
   defp policy(%{path: "/auth/github", verb: :post}),
     do: declaration(:authenticated_browser, "explicit OAuth applicant", "identity:connect", true)
 
@@ -143,6 +142,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/changelog", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:changelog", false)
 
+  defp policy(%{path: "/api/contracts/repositories-v1.json", verb: verb})
+       when verb in [:get, :head],
+       do: declaration(:public_read, "anonymous", "published:api-contract", false)
+
   defp policy(%{path: "/controller/pairings", verb: :post}),
     do: declaration(:machine, "unpaired machine", "machine:pairing:create", true)
 
@@ -151,6 +154,29 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: "/api/inference/proxy"}),
     do: declaration(:internal_service, "scoped inference grant", "inference:invoke", true)
+
+  defp policy(%{path: "/api/v3/device/authorizations" <> _path, verb: :post}),
+    do:
+      declaration(
+        :authenticated_api,
+        "expiring one-time device secret",
+        "device:authorize",
+        true
+      )
+
+  defp policy(%{path: path, verb: verb})
+       when path in ["/api/v3/user/repos", "/api/v3/repository-imports/:id"] and
+              verb in [:get, :head],
+       do: declaration(:authenticated_api, "first-party bearer token", "forge:read", false)
+
+  defp policy(%{path: "/api/v3/repos/:owner/:repo", verb: verb}) when verb in [:get, :head],
+    do:
+      declaration(
+        :public_read,
+        "anonymous or first-party bearer token",
+        "forge:repository:read",
+        false
+      )
 
   defp policy(%{path: "/api/v3/" <> _path, verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:forge", false)
@@ -161,6 +187,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/dev/" <> _path}),
     do:
       declaration(:internal_service, "development-only browser", "development:diagnostics", false)
+
+  defp policy(%{plug: OpenAgentsWeb.NotFoundController, verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:not-found", false)
 
   defp policy(%{path: path, verb: verb}) do
     cond do
@@ -174,6 +203,14 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
       tracker_browser_path?(path) ->
         declaration(:authenticated_browser, "active encrypted browser session", "forge:web", true)
+
+      repository_browser_path?(path) and verb in [:get, :head] ->
+        declaration(
+          :public_read,
+          "anonymous or active repository member session",
+          "forge:repository:web",
+          false
+        )
 
       true ->
         %{class: :unclassified, principal: nil, scope: nil, mutation: mutation_verb?(path)}
@@ -201,6 +238,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp tracker_browser_path?(path) do
     String.match?(path, ~r{\A/:owner/:repo/(issues|labels|milestones|assignees|projects)})
+  end
+
+  defp repository_browser_path?(path) do
+    path == "/:owner/:repo" or
+      String.starts_with?(path, ["/:owner/:repo/commit/", "/:owner/:repo/blob/"])
   end
 
   defp mutation_verb?(_path), do: true

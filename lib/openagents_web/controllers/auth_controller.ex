@@ -31,6 +31,7 @@ defmodule OpenAgentsWeb.AuthController do
          {:ok, user} <- Accounts.upsert_github_user(profile),
          {:ok, active_user} <- Accounts.get_active_user(user.id),
          {:ok, _membership} <- Repositories.ensure_initial_membership(active_user),
+         {:ok, _namespace} <- Repositories.ensure_user_namespace(active_user),
          {:ok, _stored} <-
            Accounts.store_github_token(active_user, access_token, granted_scopes) do
       conn

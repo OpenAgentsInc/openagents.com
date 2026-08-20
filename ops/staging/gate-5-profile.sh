@@ -11,7 +11,7 @@ set -eu
 : "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
 : "${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}"
 
-export GITHUB_OAUTH_SCOPES="repo"
+export GITHUB_OAUTH_SCOPES="repo,read:org"
 export GITHUB_REDIRECT_URI="https://staging.openagents.com/auth/github/callback"
 export GITHUB_TOKEN_DECRYPTION_KEYS_JSON="${GITHUB_TOKEN_DECRYPTION_KEYS_JSON:-{}}"
 export OPENAGENTS_ALLOWED_ORIGINS="https://staging.openagents.com"

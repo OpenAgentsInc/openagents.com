@@ -10,44 +10,51 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forge
-  alias OpenAgents.Forge.{Browse, Visibility}
+  alias OpenAgents.Forge.Browse
+  alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
-  def mount(%{"repo" => repo}, _session, socket) do
-    base = Visibility.repo_path(repo)
+  def mount(%{"owner" => owner, "repo" => name}, _session, socket) do
+    repository = RepositoryAccess.get_visible!(owner, name, socket.assigns.current_user)
+    base = RepositoryAccess.base(repository)
+    source? = RepositoryAccess.full_source?(repository, socket.assigns.current_user)
 
-    unless Visibility.allows?(repo, :files) and Forge.enabled?() and base do
+    unless Forge.enabled?() and (source? or repository.lifecycle_state != "ready") do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
     head =
-      case Browse.head(repo) do
+      case Browse.head(repository) do
         {:ok, sha} -> sha
-        _ -> raise OpenAgentsWeb.PublicNotFoundError
+        _ -> nil
       end
 
     readme =
-      case Browse.readme(repo, head) do
+      case head && Browse.readme(repository, head) do
         {:ok, name, blob} -> %{name: name, blob: blob}
         _ -> nil
       end
 
     commits =
-      case Browse.log(repo, head, 20) do
+      case head && Browse.log(repository, head, 20) do
         {:ok, commits} -> commits
         _ -> []
       end
 
     {:ok,
      socket
-     |> assign(:page_title, "#{repo} · code")
-     |> assign(:repo, repo)
-     |> assign(:owner, Visibility.owner(repo))
+     |> assign(:page_title, "#{repository.name} · code")
+     |> assign(:repository, repository)
+     |> assign(:repo, repository.name)
+     |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
      |> assign(:head, head)
      |> assign(:readme, readme)
      |> assign(:commits, commits)
-     |> assign(:refs, Browse.refs(repo))}
+     |> assign(:refs, if(head, do: Browse.refs(repository), else: []))
+     |> assign(:clone_url, RepositoryAccess.clone_url(repository))}
+  rescue
+    Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
   end
 
   defp short(sha), do: String.slice(sha, 0, 12)
@@ -62,14 +69,54 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             <div>
               <h1>{@owner}/{@repo}</h1>
               <p class="code-meta">
-                head <code>{short(@head)}</code>
-                · <.text_button navigate="/changelog">changelog</.text_button>
-                · read-only mirror for anonymous clones: <code>github.com/OpenAgentsInc/{@repo}</code>
+                <.badge variant={if(@repository.visibility == "public", do: :success, else: :dim)}>
+                  {@repository.visibility}
+                </.badge>
+                <span :if={@head}>head <code>{short(@head)}</code></span>
+                <span :if={@repository.description}>{@repository.description}</span>
               </p>
+            </div>
+            <div class="code-actions">
+              <.button navigate={"#{@base}/issues"} variant={:secondary} size={:sm}>Issues</.button>
+              <.button navigate={"#{@base}/projects"} variant={:secondary} size={:sm}>
+                Projects
+              </.button>
             </div>
           </header>
 
-          <.card id="repo-commits">
+          <.alert
+            :if={@repository.lifecycle_state == "provisioning"}
+            id="repo-provisioning"
+            variant={:info}
+            title="Repository provisioning is in progress"
+          >
+            Refresh this page after the repository becomes ready for Git operations.
+          </.alert>
+
+          <.alert
+            :if={@repository.lifecycle_state == "failed"}
+            id="repo-provisioning-failed"
+            variant={:danger}
+            title="Repository provisioning failed"
+          >
+            Error code: <code>{@repository.provision_error_code || "provisioning_failed"}</code>
+          </.alert>
+
+          <.card :if={@repository.lifecycle_state == "ready"} id="repo-clone">
+            <h2>Clone</h2>
+            <code class="block break-all">git clone {@clone_url}</code>
+          </.card>
+
+          <.empty
+            :if={@repository.lifecycle_state == "ready" and is_nil(@head)}
+            id="repo-empty"
+            title="This repository is empty"
+          >
+            Push the first commit to <code>{@repository.default_branch}</code>
+            with the clone URL above.
+          </.empty>
+
+          <.card :if={@head} id="repo-commits">
             <h2>Recent commits</h2>
             <ol class="code-commits">
               <li :for={commit <- @commits}>
@@ -82,7 +129,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             </ol>
           </.card>
 
-          <.card id="repo-refs">
+          <.card :if={@head} id="repo-refs">
             <h2>Refs</h2>
             <ul class="code-refs">
               <li :for={ref <- @refs}>

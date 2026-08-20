@@ -9,6 +9,7 @@ defmodule OpenAgents.Forge.Repos do
   """
 
   @name_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9])){0,63}$/
+  @storage_key_pattern ~r/\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\z/
 
   @doc "The forge data directory (bare repos + WAL cache + beam artifacts)."
   def data_dir do
@@ -27,19 +28,33 @@ defmodule OpenAgents.Forge.Repos do
 
   def valid_name?(_), do: false
 
+  @doc "Whether an opaque repository storage key is safe as one path segment."
+  def valid_storage_key?(storage_key) when is_binary(storage_key),
+    do: Regex.match?(@storage_key_pattern, storage_key)
+
+  def valid_storage_key?(_storage_key), do: false
+
   @doc "Absolute path of the bare repository for `repo`."
   def bare_path(repo), do: Path.join([data_dir(), "repos", repo <> ".git"])
 
   @doc "Initialize the bare repository if absent. Returns the path."
-  def ensure_repo!(repo) do
+  def ensure_repo!(repo, default_branch \\ "main") do
     path = bare_path(repo)
 
     unless File.exists?(Path.join(path, "HEAD")) do
       File.mkdir_p!(path)
-      {_, 0} = git(path, ["init", "--bare", "--initial-branch=main", path])
+      {_, 0} = git(path, ["init", "--bare", "--initial-branch=#{default_branch}", path])
     end
 
+    set_default_branch!(repo, default_branch)
+
     path
+  end
+
+  def set_default_branch!(repo, default_branch) do
+    path = bare_path(repo)
+    {_, 0} = git(path, ["symbolic-ref", "HEAD", "refs/heads/#{default_branch}"])
+    :ok
   end
 
   @doc "Current refs of the bare repo as a `%{name => sha}` map."

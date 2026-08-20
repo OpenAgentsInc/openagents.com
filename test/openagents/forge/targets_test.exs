@@ -17,6 +17,16 @@ defmodule OpenAgents.Forge.TargetsTest do
   alias OpenAgents.Forge.Target
   alias OpenAgents.Forge.Targets
 
+  test "a hosted user repository is not deployable" do
+    assert {:error, :repository_not_deployable} =
+             Targets.promote(
+               Ecto.UUID.generate(),
+               String.duplicate("a", 40),
+               "operator:test",
+               commit_store: fn _repo, _sha -> :ok end
+             )
+  end
+
   @repo "OpenAgentsInc/openagents.com"
 
   # A SHA that is well-formed but not in any repo, so only the injected

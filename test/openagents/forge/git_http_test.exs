@@ -7,6 +7,9 @@ defmodule OpenAgents.Forge.GitHTTPTest do
   """
 
   use OpenAgents.DataCase, async: false
+
+  import OpenAgents.AccountsFixtures
+
   alias OpenAgents.Forge
   alias OpenAgents.Forge.{Repos, WAL}
 
@@ -18,8 +21,6 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     plug OpenAgents.Forge.GitHTTP
   end
 
-  @operator_token "forge_test_operator_token_0123456789"
-
   setup do
     Ecto.Adapters.SQL.Sandbox.mode(OpenAgents.Repo, {:shared, self()})
 
@@ -30,6 +31,23 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     Application.put_env(:openagents, :forge_data_dir, Path.join(base, "data"))
     Application.put_env(:openagents, :forge_wal_dir, Path.join(base, "wal"))
 
+    user = repository_user_fixture("git-http-owner")
+
+    {:ok, repository, :created} =
+      OpenAgents.Repositories.create_user_repository(user, %{name: "demo"}, "git-http-demo")
+
+    repository =
+      repository
+      |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+      |> OpenAgents.Repo.update!()
+
+    {:ok, _api_token, plaintext} =
+      OpenAgents.ApiTokens.create(user, %{
+        name: "Git HTTP test",
+        scopes: ["forge:write"],
+        lifetime_days: 1
+      })
+
     port = free_port()
     start_supervised!({Bandit, plug: TestPipeline, port: port, ip: {127, 0, 0, 1}})
 
@@ -39,7 +57,14 @@ defmodule OpenAgents.Forge.GitHTTPTest do
       File.rm_rf(base)
     end)
 
-    %{base: base, port: port, url: "http://x:#{@operator_token}@127.0.0.1:#{port}/demo.git"}
+    %{
+      base: base,
+      port: port,
+      repository: repository,
+      token: plaintext,
+      url: "http://x:#{plaintext}@127.0.0.1:#{port}/git-http-owner/demo.git",
+      user: user
+    }
   end
 
   defp free_port do
@@ -75,68 +100,87 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     sh!(work, "git", ["push", "origin", "HEAD:main"])
   end
 
-  test "clone, push, WAL persist, receipt, and PubSub — the ack chain", %{base: base, url: url} do
+  test "clone, push, WAL persist, receipt, and PubSub — the ack chain", %{
+    base: base,
+    repository: repository,
+    url: url,
+    user: user
+  } do
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, "forge:pushes")
 
     work = seed_clone!(base, url)
     commit_and_push!(work, "hello.txt", "hello forge\n", "first commit")
 
     # WAL is the authority: index has the entry and the ref.
-    assert {:ok, _generation, index} = WAL.read_index("demo")
+    assert {:ok, _generation, index} = WAL.read_index(repository.storage_key)
     assert [entry] = WAL.entries(index)
     assert entry["seq"] == 0
-    assert entry["principal"] == "operator:forge-token"
+    assert entry["principal"] == "user:#{user.id}"
     assert %{"refs/heads/main" => sha} = WAL.refs(index)
     assert byte_size(sha) == 40
 
     # Derived receipt exists, idempotent by (repo, wal_seq).
-    assert [receipt] = Forge.recent_pushes("demo")
+    assert [receipt] = Forge.recent_pushes(repository.storage_key)
     assert receipt.wal_seq == 0
     assert receipt.refs["refs/heads/main"]["new"] == sha
     assert receipt.refs["refs/heads/main"]["old"] == nil
 
     # Deploy signal fired.
-    assert_receive {:forge_push, %{repo: "demo", wal_seq: 0}}, 2_000
+    assert_receive {:forge_push, %{repo: storage_key, wal_seq: 0}}, 2_000
+    assert storage_key == repository.storage_key
 
     # A second clone sees the commit.
     verify = seed_clone!(base, url)
     assert File.read!(Path.join(verify, "hello.txt")) == "hello forge\n"
   end
 
-  test "a second push appends to the WAL and receipts stay ordered", %{base: base, url: url} do
+  test "a second push appends to the WAL and receipts stay ordered", %{
+    base: base,
+    repository: repository,
+    url: url
+  } do
     work = seed_clone!(base, url)
     commit_and_push!(work, "a.txt", "one\n", "one")
     commit_and_push!(work, "b.txt", "two\n", "two")
 
-    assert {:ok, _generation, index} = WAL.read_index("demo")
+    assert {:ok, _generation, index} = WAL.read_index(repository.storage_key)
     assert length(WAL.entries(index)) == 2
-    assert [%{wal_seq: 1}, %{wal_seq: 0}] = Forge.recent_pushes("demo")
+    assert [%{wal_seq: 1}, %{wal_seq: 0}] = Forge.recent_pushes(repository.storage_key)
   end
 
-  test "cache loss: the bare repo re-materializes from the WAL", %{base: base, url: url} do
+  test "cache loss: the bare repo re-materializes from the WAL", %{
+    base: base,
+    repository: repository,
+    url: url
+  } do
     work = seed_clone!(base, url)
     commit_and_push!(work, "keep.txt", "durable\n", "durable commit")
-    refs_before = Repos.refs("demo")
+    refs_before = Repos.refs(repository.storage_key)
 
     # Kill the cache entirely.
-    File.rm_rf!(Repos.bare_path("demo"))
-    refute File.exists?(Repos.bare_path("demo"))
+    File.rm_rf!(Repos.bare_path(repository.storage_key))
+    refute File.exists?(Repos.bare_path(repository.storage_key))
 
     # A fresh clone triggers materialization and sees identical state.
     verify = seed_clone!(base, url)
     assert File.read!(Path.join(verify, "keep.txt")) == "durable\n"
-    assert Repos.refs("demo") == refs_before
+    assert Repos.refs(repository.storage_key) == refs_before
   end
 
-  test "unauthenticated and wrong-token pushes are refused", %{base: base, port: port, url: url} do
+  test "unauthenticated and wrong-token pushes are refused", %{
+    base: base,
+    port: port,
+    repository: repository,
+    url: url
+  } do
     work = seed_clone!(base, url)
     File.write!(Path.join(work, "no.txt"), "no\n")
     sh!(work, "git", ["add", "."])
     sh!(work, "git", ["commit", "-m", "unauthorized"])
 
     for bad_url <- [
-          "http://127.0.0.1:#{port}/demo.git",
-          "http://x:wrong-token@127.0.0.1:#{port}/demo.git"
+          "http://127.0.0.1:#{port}/git-http-owner/demo.git",
+          "http://x:wrong-token@127.0.0.1:#{port}/git-http-owner/demo.git"
         ] do
       {output, status} =
         System.cmd("git", ["-c", "credential.helper=", "push", bad_url, "HEAD:main"],
@@ -152,13 +196,13 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     end
 
     # Nothing leaked into the WAL.
-    case WAL.read_index("demo") do
+    case WAL.read_index(repository.storage_key) do
       {:error, :not_found} -> :ok
       {:ok, _generation, index} -> assert WAL.entries(index) == []
     end
   end
 
-  test "unknown repositories are refused", %{port: port} do
+  test "unknown repositories are refused", %{port: port, token: token} do
     {output, status} =
       System.cmd(
         "git",
@@ -166,7 +210,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
           "-c",
           "credential.helper=",
           "clone",
-          "http://x:#{@operator_token}@127.0.0.1:#{port}/not-allowed.git"
+          "http://x:#{token}@127.0.0.1:#{port}/git-http-owner/not-allowed.git"
         ],
         cd: System.tmp_dir!(),
         stderr_to_stdout: true
@@ -176,14 +220,93 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert output =~ "404" or output =~ "not found" or output =~ "unknown"
   end
 
-  test "a failed WAL persist rolls refs back and the push is not acked", %{base: base, url: url} do
+  test "public repositories clone anonymously and private repositories issue a challenge", %{
+    base: base,
+    port: port,
+    repository: repository
+  } do
+    anonymous_url = "http://127.0.0.1:#{port}/git-http-owner/demo.git"
+
+    {private_output, private_status} =
+      System.cmd(
+        "git",
+        ["-c", "credential.helper=", "clone", anonymous_url, Path.join(base, "private")],
+        stderr_to_stdout: true,
+        env: [{"GIT_TERMINAL_PROMPT", "0"}]
+      )
+
+    assert private_status != 0
+    assert private_output =~ "Authentication" or private_output =~ "terminal prompts disabled"
+
+    repository
+    |> Ecto.Changeset.change(visibility: "public")
+    |> OpenAgents.Repo.update!()
+
+    public_clone = Path.join(base, "public")
+    sh!(base, "git", ["clone", anonymous_url, public_clone])
+    assert File.dir?(Path.join(public_clone, ".git"))
+  end
+
+  test "a viewer can clone a private repository but cannot push", %{
+    base: base,
+    port: port,
+    repository: repository,
+    url: owner_url
+  } do
+    owner_clone = seed_clone!(base, owner_url)
+    commit_and_push!(owner_clone, "owner.txt", "owner\n", "Owner commit")
+
+    viewer = repository_user_fixture("git-http-viewer")
+    {:ok, _membership} = OpenAgents.Repositories.add_member(repository, viewer, "viewer")
+
+    {:ok, _api_token, viewer_token} =
+      OpenAgents.ApiTokens.create(viewer, %{
+        name: "Viewer Git HTTP test",
+        scopes: ["forge:write"],
+        lifetime_days: 1
+      })
+
+    viewer_url =
+      "http://x:#{viewer_token}@127.0.0.1:#{port}/git-http-owner/demo.git"
+
+    viewer_clone = seed_clone!(base, viewer_url)
+    File.write!(Path.join(viewer_clone, "viewer.txt"), "viewer\n")
+    sh!(viewer_clone, "git", ["add", "viewer.txt"])
+    sh!(viewer_clone, "git", ["commit", "-m", "Viewer commit"])
+
+    {output, status} =
+      System.cmd("git", ["-c", "credential.helper=", "push", "origin", "HEAD:main"],
+        cd: viewer_clone,
+        stderr_to_stdout: true
+      )
+
+    assert status != 0
+    assert output =~ "403" or output =~ "read only" or output =~ "unable to access"
+  end
+
+  test "the legacy initial repository path remains available", %{
+    base: base,
+    port: port,
+    token: token
+  } do
+    legacy_url = "http://x:#{token}@127.0.0.1:#{port}/openagents.com.git"
+    legacy_clone = Path.join(base, "legacy")
+    sh!(base, "git", ["clone", legacy_url, legacy_clone])
+    assert File.dir?(Path.join(legacy_clone, ".git"))
+  end
+
+  test "a failed WAL persist rolls refs back and the push is not acked", %{
+    base: base,
+    repository: repository,
+    url: url
+  } do
     work = seed_clone!(base, url)
     commit_and_push!(work, "ok.txt", "fine\n", "fine")
-    refs_before = Repos.refs("demo")
+    refs_before = Repos.refs(repository.storage_key)
 
     # Break the WAL (unwritable dir) — the next push must not ack.
     wal_dir = Application.get_env(:openagents, :forge_wal_dir)
-    File.chmod!(Path.join(wal_dir, "demo"), 0o500)
+    File.chmod!(Path.join(wal_dir, repository.storage_key), 0o500)
 
     File.write!(Path.join(work, "lost.txt"), "must not land\n")
     sh!(work, "git", ["add", "."])
@@ -195,12 +318,12 @@ defmodule OpenAgents.Forge.GitHTTPTest do
         stderr_to_stdout: true
       )
 
-    File.chmod!(Path.join(wal_dir, "demo"), 0o700)
+    File.chmod!(Path.join(wal_dir, repository.storage_key), 0o700)
 
     assert status != 0, "push must fail when the WAL cannot persist: #{output}"
     # Local refs rolled back — cache never ahead of authority.
-    assert Repos.refs("demo") == refs_before
-    assert {:ok, _generation, index} = WAL.read_index("demo")
+    assert Repos.refs(repository.storage_key) == refs_before
+    assert {:ok, _generation, index} = WAL.read_index(repository.storage_key)
     assert length(WAL.entries(index)) == 1
   end
 end

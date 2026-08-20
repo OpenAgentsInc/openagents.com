@@ -41,6 +41,7 @@ defmodule OpenAgentsWeb.HomeLive do
   defp assign_dashboard(socket) do
     repository = Repositories.initial_repository!()
     {owner, name} = Repositories.initial_path()
+    repositories = Repositories.list_visible_repositories(socket.assigns.current_user)
 
     open_issues = Issues.list_issues(repository, state: "open")
     closed_issues = Issues.list_issues(repository, state: "closed")
@@ -55,6 +56,7 @@ defmodule OpenAgentsWeb.HomeLive do
     |> assign(:issues, Enum.take(open_issues, @feed_limit))
     |> assign(:projects, Enum.take(projects, 6))
     |> assign(:changelog, changelog_entries())
+    |> stream(:repositories, repositories)
   end
 
   # The ledger is a bounded public projection and can legitimately refuse. An
@@ -133,18 +135,31 @@ defmodule OpenAgentsWeb.HomeLive do
         </div>
 
         <aside class="dashboard__rail">
-          <section class="panel" aria-labelledby="dashboard-repo">
+          <section class="panel" aria-labelledby="dashboard-repositories">
             <header class="panel__header">
-              <h2 id="dashboard-repo" class="panel__title">Repository</h2>
+              <h2 id="dashboard-repositories" class="panel__title">Repositories</h2>
+              <.link navigate={~p"/repositories"} class="panel__more">
+                View all <.icon name="arrow-right" />
+              </.link>
             </header>
 
-            <%!-- The code browser's owner segment is a literal in the router
-            (a wildcard first segment would shadow every two-segment path), so
-            the route is written the way the router declares it. --%>
-            <.link navigate={~p"/OpenAgentsInc/#{@name}"} class="repo-card">
-              <.icon name="folder" />
-              <span class="repo-card__name">{@owner}/{@name}</span>
-            </.link>
+            <div id="dashboard-repository-list" phx-update="stream" class="space-y-2">
+              <p class="panel__empty hidden only:block">No repositories yet.</p>
+              <.link
+                :for={{id, repository} <- @streams.repositories}
+                id={id}
+                navigate={~p"/#{repository.namespace.slug}/#{repository.name}"}
+                class="repo-card"
+              >
+                <.icon name="folder" />
+                <span class="repo-card__name">
+                  {repository.namespace.slug}/{repository.name}
+                </span>
+                <.badge variant={if(repository.lifecycle_state == "ready", do: :success, else: :info)}>
+                  {repository.lifecycle_state}
+                </.badge>
+              </.link>
+            </div>
 
             <dl class="stat-pairs">
               <div>

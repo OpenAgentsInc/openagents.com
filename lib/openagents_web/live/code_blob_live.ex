@@ -15,19 +15,21 @@ defmodule OpenAgentsWeb.CodeBlobLive do
 
   use OpenAgentsWeb, :live_view
 
-  alias OpenAgents.Forge.{Browse, Visibility}
+  alias OpenAgents.Forge.Browse
+  alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
-  def mount(%{"repo" => repo, "ref" => ref} = params, _session, socket) do
+  def mount(%{"owner" => owner, "repo" => name, "ref" => ref} = params, _session, socket) do
     path = params |> Map.get("path", []) |> Enum.join("/")
-    base = Visibility.repo_path(repo)
+    repository = RepositoryAccess.get_visible!(owner, name, socket.assigns.current_user)
+    base = RepositoryAccess.base(repository)
 
-    unless OpenAgents.Forge.enabled?() and base do
+    unless OpenAgents.Forge.enabled?() and repository.lifecycle_state == "ready" do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
     sha =
-      case Browse.resolve_commit(repo, ref) do
+      case Browse.resolve_commit(repository, ref) do
         {:ok, sha} -> sha
         _ -> raise OpenAgentsWeb.PublicNotFoundError
       end
@@ -35,14 +37,20 @@ defmodule OpenAgentsWeb.CodeBlobLive do
     # Either the whole repo is browsable (:l3), or this is a published
     # document at the current head. A published path at an older ref is a
     # 404: publishing one document must not publish its history.
-    head = with {:ok, head} <- Browse.head(repo), do: head
+    head = with {:ok, head} <- Browse.head(repository), do: head
 
-    unless Visibility.allows_file?(repo, path, sha, head) do
+    unless RepositoryAccess.allows_file?(
+             repository,
+             socket.assigns.current_user,
+             path,
+             sha,
+             head
+           ) do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
     blob =
-      case Browse.blob(repo, sha, path) do
+      case Browse.blob(repository, sha, path) do
         {:ok, blob} -> blob
         _ -> raise OpenAgentsWeb.PublicNotFoundError
       end
@@ -51,16 +59,19 @@ defmodule OpenAgentsWeb.CodeBlobLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "#{Path.basename(path)} · #{repo}")
-     |> assign(:repo, repo)
-     |> assign(:owner, Visibility.owner(repo))
+     |> assign(:page_title, "#{Path.basename(path)} · #{repository.name}")
+     |> assign(:repository, repository)
+     |> assign(:repo, repository.name)
+     |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
      |> assign(:ref, ref)
      |> assign(:sha, sha)
      |> assign(:path, path)
      |> assign(:blob, blob)
-     |> assign(:browsable, Visibility.allows?(repo, :files))
+     |> assign(:browsable, RepositoryAccess.full_source?(repository, socket.assigns.current_user))
      |> assign(:markdown?, markdown?(path) and not plain and not blob.binary)}
+  rescue
+    Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
   end
 
   defp markdown?(path), do: String.ends_with?(String.downcase(path), [".md", ".markdown"])

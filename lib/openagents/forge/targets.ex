@@ -41,7 +41,8 @@ defmodule OpenAgents.Forge.Targets do
     commit_store = Keyword.get(opts, :commit_store, &commit_exists_store/2)
     details = Keyword.get(opts, :details, %{}) || %{}
 
-    with :ok <- validate_sha_format(sha),
+    with :ok <- validate_deployable_repo(repo),
+         :ok <- validate_sha_format(sha),
          :ok <- with_commit_store(repo, sha, commit_store) do
       %Target{}
       |> Target.changeset(%{
@@ -265,6 +266,19 @@ defmodule OpenAgents.Forge.Targets do
 
   defp validate_sha_format(sha) do
     if Regex.match?(~r/^[0-9a-f]{40}$/, sha), do: :ok, else: {:error, :invalid_sha}
+  end
+
+  defp validate_deployable_repo(repo) do
+    owner = Application.get_env(:openagents, :forge_url_owner, "OpenAgentsInc")
+
+    deployable? =
+      Enum.any?(OpenAgents.Forge.Repos.allowed_repos(), fn allowed ->
+        repo == allowed or repo == "#{owner}/#{allowed}"
+      end)
+
+    if deployable?,
+      do: :ok,
+      else: {:error, :repository_not_deployable}
   end
 
   # The promotable set is exactly what the WAL-backed repo contains.

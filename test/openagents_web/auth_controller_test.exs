@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     refute user.github_token_ciphertext =~ "ephemeral-github-token"
     assert {:ok, "ephemeral-github-token"} = Accounts.github_token(user)
     assert user.github_token_key_id == "test-2026-08"
-    assert user.github_token_scopes == ["repo"]
+    assert user.github_token_scopes == ["repo", "read:org"]
     assert user.github_token_connected_at
 
     cookie = authenticated |> get_resp_header("set-cookie") |> Enum.join(";")
@@ -203,7 +203,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     Req.Test.expect(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
         "access_token" => "ephemeral-github-token",
-        "scope" => "repo"
+        "scope" => "repo,read:org"
       })
     end)
 

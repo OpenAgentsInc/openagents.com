@@ -16,13 +16,13 @@ defmodule OpenAgents.Forge.Sync do
   or nothing pushed yet) — read paths degrade to serving the local cache if
   the WAL is unreachable, logging honestly, rather than failing reads.
   """
-  def ensure_fresh(repo) do
+  def ensure_fresh(repo, default_branch \\ "main") do
     case WAL.read_index(repo) do
       {:error, :not_found} ->
         :ok
 
       {:ok, _generation, index} ->
-        replay_missing(repo, index)
+        replay_missing(repo, index, default_branch)
 
       {:error, reason} ->
         Logger.warning(
@@ -34,8 +34,8 @@ defmodule OpenAgents.Forge.Sync do
   end
 
   @doc "Replay WAL entries the local repo has not applied. Used by reads and boot."
-  def replay_missing(repo, index) do
-    Repos.ensure_repo!(repo)
+  def replay_missing(repo, index, default_branch \\ "main") do
+    Repos.ensure_repo!(repo, default_branch)
     applied = Repos.applied_seq(repo)
 
     index
@@ -44,13 +44,25 @@ defmodule OpenAgents.Forge.Sync do
     |> Enum.each(fn entry -> apply_entry!(repo, entry) end)
 
     converge_refs(repo, index)
+    Repos.set_default_branch!(repo, default_branch)
     :ok
   end
 
-  defp apply_entry!(repo, %{"seq" => seq, "object" => object}) do
+  defp apply_entry!(repo, %{"seq" => seq, "object" => object} = entry) do
     {:ok, payload} = WAL.get_entry(repo, object)
     path = Repos.bare_path(repo)
-    {_output, 0} = run_receive_pack(path, payload)
+
+    case entry["format"] || "receive_pack" do
+      "receive_pack" ->
+        {_output, 0} = run_receive_pack(path, payload)
+
+      "git_bundle" ->
+        :ok = unbundle(path, payload)
+
+      "empty_import" ->
+        :ok
+    end
+
     Repos.record_applied_seq!(repo, seq)
   end
 
@@ -60,8 +72,28 @@ defmodule OpenAgents.Forge.Sync do
   defp converge_refs(repo, index) do
     target = WAL.refs(index)
 
-    if target != %{} and Repos.refs(repo) != target do
+    if Repos.refs(repo) != target do
       Repos.set_refs!(repo, target)
+    end
+  end
+
+  defp unbundle(path, payload) do
+    temporary_path =
+      Path.join(
+        System.tmp_dir!(),
+        "openagents-import-#{System.unique_integer([:positive, :monotonic])}.bundle"
+      )
+
+    try do
+      File.write!(temporary_path, payload, [:binary, :exclusive])
+      File.chmod!(temporary_path, 0o600)
+
+      case Repos.git(path, ["bundle", "unbundle", temporary_path]) do
+        {_output, 0} -> :ok
+        {_output, _status} -> raise "repository bundle could not be materialized"
+      end
+    after
+      File.rm(temporary_path)
     end
   end
 

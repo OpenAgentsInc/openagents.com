@@ -1,5 +1,7 @@
 import Config
 
+config :openagents, :repository_provisioner_enabled, false
+
 config :openagents, :runtime_environment, :test
 
 # Configure your database

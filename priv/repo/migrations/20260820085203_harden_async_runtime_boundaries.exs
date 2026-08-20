@@ -36,11 +36,17 @@ defmodule OpenAgents.Repo.Migrations.HardenAsyncRuntimeBoundaries do
 
     execute("""
     UPDATE work_jobs AS job
-    SET machine_id = machine.id,
+    SET delegation = jsonb_set(
+          job.delegation,
+          '{cwd}',
+          to_jsonb(COALESCE(NULLIF(job.delegation->>'cwd', ''), machine.roots[1])),
+          true
+        ),
+        machine_id = machine.id,
         authority_snapshot = jsonb_build_object(
           'machine_tier', machine.tier,
           'roots', machine.roots,
-          'cwd', COALESCE(job.delegation->>'cwd', ''),
+          'cwd', COALESCE(NULLIF(job.delegation->>'cwd', ''), machine.roots[1]),
           'agent_id', COALESCE(job.delegation->>'agent_id', ''),
           'machine_name', COALESCE(job.delegation->>'machine_name', machine.name)
         ),

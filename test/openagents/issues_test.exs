@@ -1,0 +1,611 @@
+defmodule OpenAgents.IssuesTest do
+  use OpenAgents.DataCase
+
+  alias OpenAgents.Issues
+  alias OpenAgents.Issues.Comment
+  alias OpenAgents.Issues.Issue
+
+  import OpenAgents.IssuesFixtures
+  import OpenAgents.LabelsFixtures
+  import OpenAgents.MilestonesFixtures
+
+  defp backdate!(%Issue{} = issue, seconds_ago) do
+    at = DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:second)
+
+    {1, nil} =
+      Repo.update_all(from(i in Issue, where: i.id == ^issue.id), set: [inserted_at: at])
+
+    Issues.get_issue!(issue.id)
+  end
+
+  describe "list_issues/1" do
+    test "returns only open issues by default" do
+      open = issue_fixture(title: "open one")
+      closed = issue_fixture(title: "closed one")
+      {:ok, closed} = Issues.update_issue(closed, %{"state" => "closed"})
+
+      numbers = Issues.list_issues() |> Enum.map(& &1.number)
+
+      assert open.number in numbers
+      refute closed.number in numbers
+    end
+
+    test "filters by an explicit state" do
+      _open = issue_fixture(title: "open one")
+      closed = issue_fixture(title: "closed one")
+      {:ok, closed} = Issues.update_issue(closed, %{"state" => "closed"})
+
+      assert Issues.list_issues(state: "closed") |> Enum.map(& &1.number) == [closed.number]
+    end
+
+    test "state: \"all\" skips the filter" do
+      open = issue_fixture(title: "open one")
+      closed = issue_fixture(title: "closed one")
+      {:ok, _} = Issues.update_issue(closed, %{"state" => "closed"})
+
+      numbers = Issues.list_issues(state: "all") |> Enum.map(& &1.number) |> Enum.sort()
+      assert numbers == Enum.sort([open.number, closed.number])
+    end
+
+    test "returns an empty list when nothing matches" do
+      assert Issues.list_issues() == []
+      assert Issues.list_issues(state: "all") == []
+    end
+
+    test "orders newest first" do
+      oldest = issue_fixture(title: "oldest") |> backdate!(300)
+      middle = issue_fixture(title: "middle") |> backdate!(200)
+      newest = issue_fixture(title: "newest") |> backdate!(100)
+
+      assert Issues.list_issues() |> Enum.map(& &1.id) == [newest.id, middle.id, oldest.id]
+    end
+  end
+
+  describe "get_issue!/1 and get_issue_by_number!/1" do
+    test "get_issue!/1 returns the issue with the given id" do
+      issue = issue_fixture()
+      assert Issues.get_issue!(issue.id) == issue
+    end
+
+    test "get_issue!/1 raises for an unknown id" do
+      issue = issue_fixture()
+      assert_raise Ecto.NoResultsError, fn -> Issues.get_issue!(issue.id + 1) end
+    end
+
+    test "get_issue_by_number!/1 returns the issue with the given number" do
+      issue = issue_fixture()
+      assert Issues.get_issue_by_number!(issue.number) == issue
+    end
+
+    test "get_issue_by_number!/1 raises for an unknown number" do
+      issue = issue_fixture()
+      assert_raise Ecto.NoResultsError, fn -> Issues.get_issue_by_number!(issue.number + 1) end
+    end
+  end
+
+  describe "create_issue/1" do
+    test "assigns numbers from one upwards" do
+      assert {:ok, %Issue{number: 1}} = Issues.create_issue(%{title: "one"})
+      assert {:ok, %Issue{number: 2}} = Issues.create_issue(%{title: "two"})
+      assert {:ok, %Issue{number: 3}} = Issues.create_issue(%{title: "three"})
+    end
+
+    test "ignores a caller-supplied number" do
+      assert {:ok, %Issue{number: 1}} = Issues.create_issue(%{title: "one", number: 99})
+    end
+
+    test "sets the documented defaults" do
+      assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "defaults"})
+
+      assert issue.state == "open"
+      assert issue.locked == false
+      assert issue.comments == 0
+      assert issue.labels == []
+      assert issue.assignees == []
+      assert is_nil(issue.milestone)
+      assert is_nil(issue.closed_at)
+    end
+
+    test "accepts string keys" do
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(%{"title" => "strings", "body" => "hello"})
+
+      assert issue.title == "strings"
+      assert issue.body == "hello"
+    end
+
+    test "requires a title" do
+      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_issue(%{body: "no title"})
+      assert %{title: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "called with no attrs at all it still refuses" do
+      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_issue()
+      assert %{title: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "expands known label names into label maps" do
+      label = label_fixture(name: "bug", color: "d73a4a", description: "Something broken")
+
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(%{title: "labelled", labels: ["bug"]})
+
+      assert issue.labels == [
+               %{
+                 "id" => label.id,
+                 "name" => "bug",
+                 "color" => "d73a4a",
+                 "description" => "Something broken"
+               }
+             ]
+    end
+
+    test "invents a white label for an unknown name" do
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(%{title: "labelled", labels: ["nope"]})
+
+      assert issue.labels == [%{"name" => "nope", "color" => "ffffff"}]
+    end
+
+    test "passes label maps through untouched" do
+      given = [%{"name" => "bug", "color" => "abcdef"}]
+
+      assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "labelled", labels: given})
+      assert issue.labels == given
+    end
+
+    test "accepts an empty label list" do
+      assert {:ok, %Issue{labels: []}} = Issues.create_issue(%{title: "none", labels: []})
+    end
+
+    test "expands assignee logins into assignee maps" do
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(%{title: "assigned", assignees: ["alice", "bob"]})
+
+      assert issue.assignees == [%{"login" => "alice"}, %{"login" => "bob"}]
+    end
+
+    test "passes assignee maps through untouched" do
+      given = [%{"login" => "alice", "id" => 7}]
+
+      assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "assigned", assignees: given})
+      assert issue.assignees == given
+    end
+
+    test "expands a milestone number into a milestone map" do
+      milestone = milestone_fixture(title: "v1", state: "open", due_on: "2026-01-01")
+
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(%{title: "planned", milestone: milestone.number})
+
+      assert issue.milestone == %{
+               "number" => milestone.number,
+               "title" => "v1",
+               "state" => "open",
+               "description" => milestone.description,
+               "due_on" => "2026-01-01"
+             }
+    end
+
+    test "raises for an unknown milestone number" do
+      assert_raise Ecto.NoResultsError, fn ->
+        Issues.create_issue(%{title: "planned", milestone: 404})
+      end
+    end
+
+    test "accepts an explicit nil milestone" do
+      assert {:ok, %Issue{milestone: nil}} =
+               Issues.create_issue(%{title: "unplanned", milestone: nil})
+    end
+  end
+
+  describe "update_issue/2" do
+    test "updates plain fields" do
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = updated} =
+               Issues.update_issue(issue, %{"title" => "new title", "body" => "new body"})
+
+      assert updated.title == "new title"
+      assert updated.body == "new body"
+    end
+
+    test "returns an error changeset for invalid data" do
+      issue = issue_fixture()
+
+      assert {:error, %Ecto.Changeset{}} = Issues.update_issue(issue, %{"title" => nil})
+      assert issue == Issues.get_issue!(issue.id)
+    end
+
+    test "closing stamps closed_at and defaults the state reason" do
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = closed} = Issues.update_issue(issue, %{"state" => "closed"})
+
+      assert closed.state == "closed"
+      assert closed.state_reason == "completed"
+      refute is_nil(closed.closed_at)
+    end
+
+    test "closing keeps an explicit state reason" do
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = closed} =
+               Issues.update_issue(issue, %{
+                 "state" => "closed",
+                 "state_reason" => "not_planned"
+               })
+
+      assert closed.state_reason == "not_planned"
+    end
+
+    test "closing an already-closed issue does not re-stamp closed_at" do
+      issue = issue_fixture()
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"})
+
+      assert {:ok, %Issue{} = again} =
+               Issues.update_issue(closed, %{"state" => "closed", "title" => "still closed"})
+
+      assert again.closed_at == closed.closed_at
+      assert again.title == "still closed"
+    end
+
+    test "reopening clears closed_at and the state reason" do
+      issue = issue_fixture()
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"})
+
+      assert {:ok, %Issue{} = reopened} = Issues.update_issue(closed, %{"state" => "open"})
+
+      assert reopened.state == "open"
+      assert is_nil(reopened.closed_at)
+      assert is_nil(reopened.state_reason)
+    end
+
+    test "closing works with atom keys too" do
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = closed} = Issues.update_issue(issue, %{state: "closed"})
+
+      assert closed.state == "closed"
+      assert closed.state_reason == "completed"
+      refute is_nil(closed.closed_at)
+    end
+
+    test "closing with atom keys keeps a caller-supplied closed_at" do
+      issue = issue_fixture()
+      at = ~U[2026-01-01 00:00:00Z]
+
+      assert {:ok, %Issue{} = closed} =
+               Issues.update_issue(issue, %{state: "closed", closed_at: at})
+
+      assert closed.closed_at == at
+    end
+
+    test "reopening works with atom keys too" do
+      issue = issue_fixture()
+      {:ok, closed} = Issues.update_issue(issue, %{state: "closed"})
+
+      assert {:ok, %Issue{} = reopened} = Issues.update_issue(closed, %{state: "open"})
+
+      assert is_nil(reopened.closed_at)
+      assert is_nil(reopened.state_reason)
+    end
+
+    test "locking an issue is a plain field update" do
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = locked} =
+               Issues.update_issue(issue, %{"locked" => true, "locked_reason" => "spam"})
+
+      assert locked.locked
+      assert locked.locked_reason == "spam"
+    end
+  end
+
+  describe "change_issue/2" do
+    test "returns a changeset" do
+      issue = issue_fixture()
+      assert %Ecto.Changeset{} = Issues.change_issue(issue)
+    end
+
+    test "applies attrs and surfaces validation errors" do
+      issue = issue_fixture()
+
+      assert Issues.change_issue(issue, %{title: "Renamed"}).valid?
+
+      changeset = Issues.change_issue(issue, %{title: nil})
+      refute changeset.valid?
+      assert %{title: ["can't be blank"]} = errors_on(changeset)
+    end
+  end
+
+  describe "labels on an issue" do
+    test "add_labels/2 appends known labels" do
+      label_fixture(name: "bug", color: "d73a4a")
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = updated} = Issues.add_labels(issue, ["bug"])
+      assert Enum.map(updated.labels, & &1["name"]) == ["bug"]
+      assert hd(updated.labels)["color"] == "d73a4a"
+    end
+
+    test "add_labels/2 does not duplicate an existing label" do
+      label_fixture(name: "bug", color: "d73a4a")
+      issue = issue_fixture()
+
+      {:ok, issue} = Issues.add_labels(issue, ["bug"])
+      assert {:ok, %Issue{} = updated} = Issues.add_labels(issue, ["bug"])
+
+      assert Enum.map(updated.labels, & &1["name"]) == ["bug"]
+    end
+
+    test "add_labels/2 accepts several names at once" do
+      label_fixture(name: "bug", color: "d73a4a")
+      label_fixture(name: "docs", color: "0075ca")
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = updated} = Issues.add_labels(issue, ["bug", "docs"])
+      assert Enum.map(updated.labels, & &1["name"]) == ["bug", "docs"]
+    end
+
+    test "add_labels/2 raises for an unknown label" do
+      issue = issue_fixture()
+      assert_raise Ecto.NoResultsError, fn -> Issues.add_labels(issue, ["nope"]) end
+    end
+
+    test "add_labels/2 with an empty list is a no-op" do
+      issue = issue_fixture()
+      assert {:ok, %Issue{labels: []}} = Issues.add_labels(issue, [])
+    end
+
+    test "remove_label/2 drops the named label" do
+      label_fixture(name: "bug", color: "d73a4a")
+      label_fixture(name: "docs", color: "0075ca")
+      issue = issue_fixture()
+      {:ok, issue} = Issues.add_labels(issue, ["bug", "docs"])
+
+      assert {:ok, %Issue{} = updated} = Issues.remove_label(issue, "bug")
+      assert Enum.map(updated.labels, & &1["name"]) == ["docs"]
+    end
+
+    test "remove_label/2 decodes a percent-encoded name" do
+      label_fixture(name: "help wanted", color: "008672")
+      issue = issue_fixture()
+      {:ok, issue} = Issues.add_labels(issue, ["help wanted"])
+
+      assert {:ok, %Issue{labels: []}} = Issues.remove_label(issue, "help%20wanted")
+    end
+
+    test "remove_label/2 is a no-op for a label the issue does not carry" do
+      label_fixture(name: "bug", color: "d73a4a")
+      issue = issue_fixture()
+      {:ok, issue} = Issues.add_labels(issue, ["bug"])
+
+      assert {:ok, %Issue{} = updated} = Issues.remove_label(issue, "docs")
+      assert Enum.map(updated.labels, & &1["name"]) == ["bug"]
+    end
+
+    test "remove_label/2 tolerates an issue with no labels" do
+      issue = issue_fixture()
+      assert {:ok, %Issue{labels: []}} = Issues.remove_label(issue, "bug")
+    end
+  end
+
+  describe "assignees on an issue" do
+    test "add_assignees/2 appends logins" do
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = updated} = Issues.add_assignees(issue, ["alice", "bob"])
+      assert updated.assignees == [%{"login" => "alice"}, %{"login" => "bob"}]
+    end
+
+    test "add_assignees/2 does not duplicate an existing login" do
+      issue = issue_fixture()
+      {:ok, issue} = Issues.add_assignees(issue, ["alice"])
+
+      assert {:ok, %Issue{} = updated} = Issues.add_assignees(issue, ["alice", "bob"])
+      assert updated.assignees == [%{"login" => "alice"}, %{"login" => "bob"}]
+    end
+
+    test "remove_assignees/2 drops the named logins" do
+      issue = issue_fixture()
+      {:ok, issue} = Issues.add_assignees(issue, ["alice", "bob", "carol"])
+
+      assert {:ok, %Issue{} = updated} = Issues.remove_assignees(issue, ["alice", "carol"])
+      assert updated.assignees == [%{"login" => "bob"}]
+    end
+
+    test "remove_assignees/2 ignores logins the issue does not carry" do
+      issue = issue_fixture()
+      {:ok, issue} = Issues.add_assignees(issue, ["alice"])
+
+      assert {:ok, %Issue{} = updated} = Issues.remove_assignees(issue, ["bob"])
+      assert updated.assignees == [%{"login" => "alice"}]
+    end
+
+    test "remove_assignees/2 tolerates an issue with no assignees" do
+      issue = issue_fixture()
+      assert {:ok, %Issue{assignees: []}} = Issues.remove_assignees(issue, ["alice"])
+    end
+  end
+
+  describe "set_milestone/2" do
+    test "attaches the milestone by number" do
+      milestone = milestone_fixture(title: "v1", state: "open")
+      issue = issue_fixture()
+
+      assert {:ok, %Issue{} = updated} = Issues.set_milestone(issue, milestone.number)
+      assert updated.milestone["number"] == milestone.number
+      assert updated.milestone["title"] == "v1"
+    end
+
+    test "clears the milestone with nil" do
+      milestone = milestone_fixture(title: "v1")
+      issue = issue_fixture()
+      {:ok, issue} = Issues.set_milestone(issue, milestone.number)
+
+      assert {:ok, %Issue{milestone: nil}} = Issues.set_milestone(issue, nil)
+    end
+
+    test "raises for an unknown milestone number" do
+      issue = issue_fixture()
+      assert_raise Ecto.NoResultsError, fn -> Issues.set_milestone(issue, 404) end
+    end
+  end
+
+  describe "comments" do
+    test "create_comment/1 stores the comment and bumps the issue counter" do
+      issue = issue_fixture()
+
+      assert {:ok, %Comment{} = comment} =
+               Issues.create_comment(%{body: "hello", issue_id: issue.id})
+
+      assert comment.body == "hello"
+      assert comment.issue_id == issue.id
+      refute is_nil(comment.created_at)
+      refute is_nil(comment.updated_at)
+
+      assert Issues.get_issue!(issue.id).comments == 1
+    end
+
+    test "create_comment/1 keeps explicit timestamps" do
+      issue = issue_fixture()
+      at = ~U[2026-01-01 00:00:00Z]
+
+      assert {:ok, %Comment{} = comment} =
+               Issues.create_comment(%{
+                 "body" => "hello",
+                 "issue_id" => issue.id,
+                 "created_at" => at,
+                 "updated_at" => at
+               })
+
+      assert comment.created_at == at
+      assert comment.updated_at == at
+    end
+
+    test "create_comment/1 stores the author payload" do
+      issue = issue_fixture()
+
+      assert {:ok, %Comment{} = comment} =
+               Issues.create_comment(%{
+                 body: "hello",
+                 issue_id: issue.id,
+                 user: %{"login" => "alice"}
+               })
+
+      assert comment.user == %{"login" => "alice"}
+    end
+
+    test "create_comment/1 rejects a blank body and leaves the counter alone" do
+      issue = issue_fixture()
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Issues.create_comment(%{body: nil, issue_id: issue.id})
+
+      assert %{body: ["can't be blank"]} = errors_on(changeset)
+      assert Issues.get_issue!(issue.id).comments == 0
+    end
+
+    test "create_comment/1 requires an issue_id" do
+      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_comment(%{body: "orphan"})
+      assert %{issue_id: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "create_comment/0 refuses an empty comment" do
+      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_comment()
+      assert %{body: ["can't be blank"], issue_id: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "get_comment!/1 returns the comment" do
+      issue = issue_fixture()
+      {:ok, comment} = Issues.create_comment(%{body: "hello", issue_id: issue.id})
+
+      assert Issues.get_comment!(comment.id) == comment
+    end
+
+    test "get_comment!/1 raises for an unknown id" do
+      issue = issue_fixture()
+      {:ok, comment} = Issues.create_comment(%{body: "hello", issue_id: issue.id})
+
+      assert_raise Ecto.NoResultsError, fn -> Issues.get_comment!(comment.id + 1) end
+    end
+
+    test "list_comments/1 is scoped to one issue and ordered by creation time" do
+      issue = issue_fixture(title: "mine")
+      other = issue_fixture(title: "theirs")
+
+      {:ok, second} =
+        Issues.create_comment(%{
+          body: "second",
+          issue_id: issue.id,
+          created_at: ~U[2026-01-02 00:00:00Z],
+          updated_at: ~U[2026-01-02 00:00:00Z]
+        })
+
+      {:ok, first} =
+        Issues.create_comment(%{
+          body: "first",
+          issue_id: issue.id,
+          created_at: ~U[2026-01-01 00:00:00Z],
+          updated_at: ~U[2026-01-01 00:00:00Z]
+        })
+
+      {:ok, _elsewhere} = Issues.create_comment(%{body: "elsewhere", issue_id: other.id})
+
+      assert Issues.list_comments(issue.id) |> Enum.map(& &1.id) == [first.id, second.id]
+    end
+
+    test "list_comments/1 returns an empty list for an issue with no comments" do
+      issue = issue_fixture()
+      assert Issues.list_comments(issue.id) == []
+    end
+
+    test "update_comment/2 edits the body and bumps updated_at" do
+      issue = issue_fixture()
+
+      {:ok, comment} =
+        Issues.create_comment(%{
+          body: "before",
+          issue_id: issue.id,
+          created_at: ~U[2026-01-01 00:00:00Z],
+          updated_at: ~U[2026-01-01 00:00:00Z]
+        })
+
+      assert {:ok, %Comment{} = updated} = Issues.update_comment(comment, %{body: "after"})
+
+      assert updated.body == "after"
+      assert updated.created_at == comment.created_at
+      assert DateTime.after?(updated.updated_at, comment.updated_at)
+    end
+
+    test "update_comment/2 rejects a blank body" do
+      issue = issue_fixture()
+      {:ok, comment} = Issues.create_comment(%{body: "before", issue_id: issue.id})
+
+      assert {:error, %Ecto.Changeset{}} = Issues.update_comment(comment, %{body: nil})
+      assert Issues.get_comment!(comment.id).body == "before"
+    end
+
+    test "delete_comment/1 removes it and decrements the issue counter" do
+      issue = issue_fixture()
+      {:ok, comment} = Issues.create_comment(%{body: "hello", issue_id: issue.id})
+      assert Issues.get_issue!(issue.id).comments == 1
+
+      assert {:ok, :ok} = Issues.delete_comment(comment)
+
+      assert_raise Ecto.NoResultsError, fn -> Issues.get_comment!(comment.id) end
+      assert Issues.get_issue!(issue.id).comments == 0
+    end
+
+    test "the counter tracks several comments" do
+      issue = issue_fixture()
+      {:ok, a} = Issues.create_comment(%{body: "a", issue_id: issue.id})
+      {:ok, _b} = Issues.create_comment(%{body: "b", issue_id: issue.id})
+      assert Issues.get_issue!(issue.id).comments == 2
+
+      {:ok, :ok} = Issues.delete_comment(a)
+      assert Issues.get_issue!(issue.id).comments == 1
+    end
+  end
+end

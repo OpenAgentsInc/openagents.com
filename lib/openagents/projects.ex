@@ -72,35 +72,34 @@ defmodule OpenAgents.Projects do
 
   def get_project_item!(id), do: Repo.get!(ProjectItem, id)
 
-  def create_project_item(%{issue_number: issue_number} = attrs, project_id) do
-    issue = Repo.get_by!(Issue, number: issue_number)
-    values = attrs["values"] || %{}
-
-    %ProjectItem{}
-    |> ProjectItem.changeset(%{
-      "project_id" => project_id,
-      "issue_id" => issue.id,
-      "values" => values
-    })
-    |> Repo.insert()
-  end
-
   def create_project_item(attrs, project_id) do
     attrs =
       for {k, v} <- attrs, into: %{} do
         {to_string(k), v}
       end
 
-    issue_number = Map.get(attrs, "issue_number")
-    issue = Repo.get_by!(Issue, number: issue_number)
+    values = Map.get(attrs, "values", %{})
 
-    %ProjectItem{}
-    |> ProjectItem.changeset(%{
-      "project_id" => project_id,
-      "issue_id" => issue.id,
-      "values" => Map.get(attrs, "values", %{})
-    })
-    |> Repo.insert()
+    case Map.get(attrs, "issue_number") do
+      nil ->
+        # Feeding a nil straight into `get_by!` raises ArgumentError ("comparison
+        # with nil is forbidden"), which callers do not expect from a create.
+        # A missing issue number is a bad request, so answer with a changeset.
+        %ProjectItem{}
+        |> ProjectItem.changeset(%{"project_id" => project_id, "values" => values})
+        |> Ecto.Changeset.apply_action(:insert)
+
+      issue_number ->
+        issue = Repo.get_by!(Issue, number: issue_number)
+
+        %ProjectItem{}
+        |> ProjectItem.changeset(%{
+          "project_id" => project_id,
+          "issue_id" => issue.id,
+          "values" => values
+        })
+        |> Repo.insert()
+    end
   end
 
   def update_project_item(%ProjectItem{} = item, attrs) do

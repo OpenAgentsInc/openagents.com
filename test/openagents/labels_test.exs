@@ -64,5 +64,30 @@ defmodule OpenAgents.LabelsTest do
       label = label_fixture()
       assert %Ecto.Changeset{} = Labels.change_label(label)
     end
+
+    test "change_label/2 applies attrs and surfaces validation errors" do
+      label = label_fixture()
+
+      assert Labels.change_label(label, %{name: "renamed"}).valid?
+
+      changeset = Labels.change_label(label, %{name: nil})
+      refute changeset.valid?
+      assert %{name: ["can't be blank"]} = errors_on(changeset)
+    end
+
+    test "get_label_by_name!/1 returns the label with the given name" do
+      label = label_fixture(name: "bug")
+      assert Labels.get_label_by_name!("bug") == label
+    end
+
+    test "get_label_by_name!/1 decodes a percent-encoded name" do
+      label = label_fixture(name: "help wanted")
+      assert Labels.get_label_by_name!("help%20wanted") == label
+    end
+
+    test "get_label_by_name!/1 raises for an unknown name" do
+      label_fixture(name: "bug")
+      assert_raise Ecto.NoResultsError, fn -> Labels.get_label_by_name!("nope") end
+    end
   end
 end

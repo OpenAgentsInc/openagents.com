@@ -226,6 +226,12 @@ defmodule OpenAgentsWeb.HomeLive do
             <% end %>
           </:actions>
 
+          <%!-- Commented out rather than deleted: the frame is right, what goes
+          in it is not. An empty browser chrome captioned with the domain shows
+          a reader nothing about the product and reads as a placeholder that
+          was forgotten. Restore this when there is a real surface to put in
+          it -- a screenshot, or a live view of the application.
+
           <:figure>
             <Landing.mockup>
               <div class="landing-figure">
@@ -236,6 +242,7 @@ defmodule OpenAgentsWeb.HomeLive do
               </div>
             </Landing.mockup>
           </:figure>
+          --%>
         </Landing.hero>
 
         <Landing.logo_wall title="Built with">

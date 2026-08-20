@@ -1,0 +1,42 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - ops/scv/images/opencode-core/Dockerfile
+      - --tag
+      - ${_IMAGE}
+      - --build-arg
+      - RUNTIME_IMAGE=${_RUNTIME_IMAGE}
+      - --build-arg
+      - ELIXIR_IMAGE=${_ELIXIR_IMAGE}
+      - --build-arg
+      - DEBIAN_SNAPSHOT=${_DEBIAN_SNAPSHOT}
+      - --build-arg
+      - HEX_VERSION=${_HEX_VERSION}
+      - --build-arg
+      - REBAR3_VERSION=${_REBAR3_VERSION}
+      - --build-arg
+      - REBAR3_SHA512=${_REBAR3_SHA512}
+      - --build-arg
+      - NODE_VERSION=${_NODE_VERSION}
+      - --build-arg
+      - BUN_VERSION=${_BUN_VERSION}
+      - --build-arg
+      - OPENCODE_VERSION=${_OPENCODE_VERSION}
+      - --build-arg
+      - OPENAGENTS_BUILD_REVISION=${_BUILD_REVISION}
+      - --build-arg
+      - SOURCE_DATE_EPOCH=${_SOURCE_DATE_EPOCH}
+      - --label
+      - com.openagents.scv.image=opencode-core
+      - --label
+      - com.openagents.scv.opencode.version=${_OPENCODE_VERSION}
+      - --label
+      - org.opencontainers.image.revision=${_BUILD_REVISION}
+      - .
+images:
+  - ${_IMAGE}
+options:
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

@@ -198,6 +198,11 @@ Run `ops/scv/images/build-opencode-core.sh` to build the native architecture as
 digests, Debian snapshot, Hex, Rebar3, Node.js, Bun, and OpenCode. It produces a
 self-contained Elixir release and the OpenCode toolchain in one image.
 
+Use `ops/scv/images/build-opencode-core-cloud.sh` to build a clean committed
+source tree on native `linux/amd64` Cloud Build infrastructure and publish it to
+the immutable staging repository. Do not use an emulated cross-build as staging
+evidence when the language runtime fails under the emulation layer.
+
 On 2026-08-20, the complete ARM64 image ran as UID and GID `10001` through the
 Elixir SCV process role. The SCV selected the `opencode` driver and
 `opencode-core` environment, inspected the source baked into the image, and

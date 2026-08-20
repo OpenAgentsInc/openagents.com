@@ -32,8 +32,10 @@ to Cloud Logging, writes one terminal result, and exits.
 ## Build and deploy
 
 1. Commit and push the candidate. Record the exact Git SHA.
-2. Build `ops/scv/images/opencode-core/Dockerfile` for `linux/amd64` with that
-   SHA as `SCV_SOURCE_REVISION`.
+2. Run `ops/scv/images/build-opencode-core-cloud.sh` against the clean commit.
+   The script builds `ops/scv/images/opencode-core/Dockerfile` on native
+   `linux/amd64` infrastructure with the SHA as
+   `OPENAGENTS_BUILD_REVISION`.
 3. Push the image to the dedicated immutable Artifact Registry repository and
    resolve its manifest digest.
 4. Deploy or update the dedicated Cloud Run job by digest. Configure these

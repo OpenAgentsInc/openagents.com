@@ -15,8 +15,15 @@ defmodule OpenAgents.Application do
     end
 
     # Install immutable release artifacts before any traffic can reach them.
-    OpenAgents.Persona.install!(OpenAgents.Persona.SourceManifest.load!())
-    OpenAgents.ProgramArtifacts.install!()
+    source_manifest = OpenAgents.Persona.SourceManifest.load!()
+    _persona = OpenAgents.Persona.install!(source_manifest)
+    _program_catalog = OpenAgents.ProgramArtifacts.install!()
+    :ok = OpenAgents.Voice.Config.validate_boot!()
+
+    # Build and install the tool catalog; this snapshot is passed to the
+    # embedding warmer and the turn supervisor below.
+    tool_snapshot =
+      OpenAgents.Tools.Registry.install!(Application.fetch_env!(:openagents, :tools))
 
     children = [
       OpenAgentsWeb.Telemetry,
@@ -33,7 +40,24 @@ defmodule OpenAgents.Application do
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: OpenAgents.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    # Warm the tool-embedding index off the boot path: the HTTP client is up by
+    # now, and if embeddings are disabled this is an immediate no-op. Tool
+    # selection falls back to lexical until (and if) the index is warm, so a
+    # cold or failed warm never blocks or breaks a turn.
+    #
+    # Changelog backfill is likewise idempotent and non-blocking.
+    case result do
+      {:ok, _pid} ->
+        Task.start(fn -> OpenAgents.Tools.Embeddings.warm(tool_snapshot) end)
+        Task.start(fn -> OpenAgents.Changelog.Backfill.boot() end)
+
+      _error ->
+        :ok
+    end
+
+    result
   end
 
   # Tell Phoenix to update the endpoint configuration

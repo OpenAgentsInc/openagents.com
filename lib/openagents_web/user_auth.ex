@@ -47,6 +47,16 @@ defmodule OpenAgentsWeb.UserAuth do
     end
   end
 
+  # Which sections the reader has collapsed, so the first paint already agrees
+  # with them. See `OpenAgentsWeb.Plugs.SidebarSections`.
+  defp assign_sidebar_sections(socket, session) do
+    Phoenix.Component.assign(
+      socket,
+      :sidebar_sections,
+      OpenAgentsWeb.Plugs.SidebarSections.from_session(session)
+    )
+  end
+
   # The scope is the user, plus the answers the layout needs on every render
   # and must not re-ask for. Resolved once here, at mount.
   defp scope(user) do
@@ -54,6 +64,8 @@ defmodule OpenAgentsWeb.UserAuth do
   end
 
   def on_mount(:mount_current_user, _params, session, socket) do
+    socket = assign_sidebar_sections(socket, session)
+
     with user_id when is_binary(user_id) <- session[@session_key],
          {:ok, user} <- Accounts.get_active_user(user_id) do
       {:cont,
@@ -70,6 +82,8 @@ defmodule OpenAgentsWeb.UserAuth do
   end
 
   def on_mount(:ensure_authenticated, _params, session, socket) do
+    socket = assign_sidebar_sections(socket, session)
+
     with user_id when is_binary(user_id) <- session[@session_key],
          {:ok, user} <- Accounts.get_active_user(user_id) do
       {:cont,

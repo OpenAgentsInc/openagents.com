@@ -37,7 +37,12 @@ defmodule OpenAgentsWeb.LeaderboardLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={assigns[:current_scope]} title="Leaderboard">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={assigns[:current_scope]}
+      title="Leaderboard"
+    >
       <main id="leaderboard-page" class="app-shell leaderboard-shell">
         <section class="leaderboard" aria-label="Token leaderboard">
           <header class="leaderboard-heading">

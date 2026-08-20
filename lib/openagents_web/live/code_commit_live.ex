@@ -127,7 +127,12 @@ defmodule OpenAgentsWeb.CodeCommitLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Commit">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Commit"
+    >
       <main id="code-commit-page" class="app-shell code-shell">
         <section class="code" aria-label="Commit view">
           <header class="code-heading">

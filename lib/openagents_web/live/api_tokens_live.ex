@@ -46,7 +46,11 @@ defmodule OpenAgentsWeb.ApiTokensLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+    >
       <main id="api-token-settings" class="mx-auto w-full max-w-4xl space-y-8 px-4 py-10">
         <header class="space-y-2">
           <h1 class="text-3xl font-semibold tracking-tight">API tokens</h1>

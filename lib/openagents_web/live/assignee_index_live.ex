@@ -27,7 +27,11 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+    >
       <h1 class="text-2xl font-bold mb-4">Assignees</h1>
 
       <%= if @assignees == [] do %>

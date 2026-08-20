@@ -69,7 +69,13 @@ defmodule OpenAgentsWeb.AdminRecordingsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Voice recordings" wide>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Voice recordings"
+      wide
+    >
       <section id="admin-recordings-page" class="panel" aria-label="Voice call recordings">
         <header class="panel__header">
           <div>

@@ -6,6 +6,7 @@
       <Layouts.sidebar_section
         :for={section <- OpenAgentsWeb.DocsCatalog.sections()}
         title={section.title}
+        state={assigns[:sidebar_sections] || %{}}
         open={Enum.any?(section.items, &(&1.slug == @active_page))}
       >
         <Layouts.sidebar_link
@@ -19,7 +20,7 @@
       </Layouts.sidebar_section>
     </nav>
 
-    <Layouts.sidebar_footer />
+    <Layouts.sidebar_footer current_user={@current_scope} />
   </aside>
 
   <div class="docs-column">

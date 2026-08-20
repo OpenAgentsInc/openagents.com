@@ -55,7 +55,12 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Code">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Code"
+    >
       <main id="code-repo-page" class="app-shell code-shell">
         <section class="code" aria-label="Repository">
           <header class="code-heading">

@@ -162,7 +162,12 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} wide>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      wide
+    >
       <Circle.issue_detail>
         <:heading>
           <.form

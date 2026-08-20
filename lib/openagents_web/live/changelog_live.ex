@@ -90,7 +90,12 @@ defmodule OpenAgentsWeb.ChangelogLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Changelog">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Changelog"
+    >
       <main id="changelog-page" class="app-shell changelog-shell">
         <section class="changelog" aria-label="Changelog">
           <header class="changelog-heading">

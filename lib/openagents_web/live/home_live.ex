@@ -69,7 +69,13 @@ defmodule OpenAgentsWeb.HomeLive do
   @impl true
   def render(%{current_user: user} = assigns) when not is_nil(user) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Home" wide>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Home"
+      wide
+    >
       <div class="dashboard">
         <div class="dashboard__main">
           <section class="panel" aria-labelledby="dashboard-issues">
@@ -188,7 +194,12 @@ defmodule OpenAgentsWeb.HomeLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} flush>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      flush
+    >
       <div class="landing-page">
         <Landing.layout_lines />
 

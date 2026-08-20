@@ -626,7 +626,13 @@ defmodule OpenAgentsWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} title="Chat" current_scope={@current_scope} flush>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      title="Chat"
+      current_scope={@current_scope}
+      flush
+    >
       <%!-- Export is the conversation's action, so it belongs beside the
       conversation's name rather than as a permanent sidebar row competing with
       the places you can go. --%>

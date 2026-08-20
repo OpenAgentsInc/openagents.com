@@ -104,7 +104,12 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="SCV Codex accounts">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="SCV Codex accounts"
+    >
       <main id="admin-scv-accounts-page" class="app-shell admin-shell">
         <section class="admin space-y-8" aria-labelledby="scv-codex-heading">
           <header class="admin-heading">

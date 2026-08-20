@@ -7,6 +7,7 @@
       <Layouts.sidebar_section
         :for={section <- OpenAgentsWeb.ComponentCatalog.sections()}
         title={section.title}
+        state={assigns[:sidebar_sections] || %{}}
         open={Enum.any?(section.items, &(&1.slug == @active_component))}
       >
         <Layouts.sidebar_link
@@ -19,7 +20,11 @@
         />
       </Layouts.sidebar_section>
 
-      <Layouts.sidebar_section title="Reference" open={@active_component == :icons}>
+      <Layouts.sidebar_section
+        title="Reference"
+        state={assigns[:sidebar_sections] || %{}}
+        open={@active_component == :icons}
+      >
         <Layouts.sidebar_link
           path={~p"/components/icons"}
           label="Icons"
@@ -30,7 +35,7 @@
       </Layouts.sidebar_section>
     </nav>
 
-    <Layouts.sidebar_footer />
+    <Layouts.sidebar_footer current_user={@current_scope} />
   </aside>
 
   <div class="docs-column">

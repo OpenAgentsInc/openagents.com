@@ -43,19 +43,19 @@ defmodule OpenAgentsWeb.AdminForgeLive do
 
       socket =
         case Targets.promote(socket.assigns.repo, sha, operator, commit_store: &git_store/2) do
-        {:ok, _target} ->
-          put_flash(socket, :info, "Promoted #{String.slice(sha, 0, 12)} as the fleet target.")
+          {:ok, _target} ->
+            put_flash(socket, :info, "Promoted #{String.slice(sha, 0, 12)} as the fleet target.")
 
-        {:error, :unknown_sha} ->
-          put_flash(
-            socket,
-            :error,
-            "That commit is not in the forge — only pushed commits are promotable."
-          )
+          {:error, :unknown_sha} ->
+            put_flash(
+              socket,
+              :error,
+              "That commit is not in the forge — only pushed commits are promotable."
+            )
 
-        {:error, _reason} ->
-          put_flash(socket, :error, "Promotion failed.")
-      end
+          {:error, _reason} ->
+            put_flash(socket, :error, "Promotion failed.")
+        end
 
       {:noreply, load(socket)}
     end

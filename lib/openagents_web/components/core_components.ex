@@ -86,7 +86,15 @@ defmodule OpenAgentsWeb.CoreComponents do
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </section>
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
+        <%!-- The control is icon-only, so its accessible name is the only name it
+        has. "close" describes the gesture; "Dismiss notice" describes what the
+        user is acting on, which is what a screen reader needs when the button
+        is announced out of context. IconAffordancesTest guards this. --%>
+        <button
+          type="button"
+          class="group self-start cursor-pointer"
+          aria-label={gettext("Dismiss notice")}
+        >
           <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
         </button>
       </div>

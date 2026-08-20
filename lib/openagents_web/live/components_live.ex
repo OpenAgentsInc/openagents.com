@@ -109,7 +109,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <p class="text-base-content/70 mb-8 text-pretty max-w-[68ch]">
         Live examples of every reusable function component in this repository, drawn from
         <code>OpenAgentsWeb.CoreComponents</code>
-        (the Phoenix set, styled with DaisyUI), <code>OpenAgentsWeb.SarahUI</code>
+        (the Phoenix set, restyled onto basecoat), <code>OpenAgentsWeb.SarahUI</code>
         (the Sarah interface primitives), and <code>OpenAgentsWeb.Layouts</code>. <code>button</code>, <code>input</code>, and
         <code>icon</code>
         exist in both component sets, so the SarahUI entries are listed separately.
@@ -222,7 +222,9 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <:col :let={row} label="Repository">{row.repo}</:col>
       <:col :let={row} label="State">{row.state}</:col>
       <:action :let={row}>
-        <.link navigate={~p"/"} class="link link-hover">View {row.repo}</.link>
+        <.link navigate={~p"/"} class="underline underline-offset-2 hover:no-underline">
+          View {row.repo}
+        </.link>
       </:action>
     </.table>
     """

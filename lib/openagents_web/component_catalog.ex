@@ -12,8 +12,8 @@ defmodule OpenAgentsWeb.ComponentCatalog do
 
   Two component sets ship in this repo and they are catalogued separately:
 
-    * `OpenAgentsWeb.CoreComponents` — the Phoenix-generated set, styled with
-      DaisyUI. Imported by `use OpenAgentsWeb, :live_view`.
+    * `OpenAgentsWeb.CoreComponents` — the Phoenix-generated set, restyled onto
+      basecoat. Imported by `use OpenAgentsWeb, :live_view`.
     * `OpenAgentsWeb.SarahUI` — the Sarah interface primitives, imported
       separately via `sarah_html_helpers`. `button`, `input`, and `icon` exist
       in both sets, which is why the SarahUI slugs are prefixed `sarah-`.

@@ -9,6 +9,7 @@ defmodule OpenAgents.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
+      test_coverage: [summary: [threshold: 83.0], local_only: false],
       deps: deps(),
       compilers: [:appup, :phoenix_live_view] ++ Mix.compilers(),
       appup: "rel/openagents.appup.exs",

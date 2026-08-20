@@ -236,6 +236,7 @@ defmodule OpenAgents.Cluster.RaClusterTest do
     base = %{
       name: unique_peer_name(name),
       host: ~c"127.0.0.1",
+      shutdown: OpenAgents.Test.RemoteCover.shutdown(),
       args: [~c"-setcookie", Atom.to_charlist(cookie)]
     }
 

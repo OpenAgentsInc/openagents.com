@@ -94,11 +94,19 @@ Completed on 2026-08-20:
 - Replaced Ra's captured session-query functions with stable
   module-function-argument descriptors. The cluster suite now runs under
   coverage without a peer crashing on an instrumented function identity.
-- Merged the default and cluster coverage exports locally. The combined result
-  is 83.37%; the exact-SHA receipt and enforced floor remain pending.
+- Merged the default and cluster coverage exports locally. The current combined
+  result is 83.58% from 1,222 default tests and all 9 cluster tests.
+- Added `ops/ci/coverage.sh` to discard stale exports, run both suites with
+  warnings as errors, collect execution from distributed peers, merge both
+  exports, and enforce an initial 83% floor. Raise the floor as direct recovery
+  and release-path tests land. Do not lower it to admit a candidate.
+- Added coverage-aware peer shutdown so peer execution flushes back to the main
+  coverage node before a test stops the peer.
+- Added direct `RaBootstrap` decision tests for healthy, phantom, join, form,
+  and wait outcomes instead of treating cluster execution as indirect proof.
 
-Gate 0 still requires an enforced coverage floor, release startup proof against
-a disposable database, and an exact-SHA gate receipt.
+Gate 0 still requires release startup proof against a disposable database and
+an exact-SHA gate receipt.
 
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it
@@ -1082,7 +1090,9 @@ through `mix assets.test`.
 The first merged coverage attempt also exposed an instrumented anonymous Ra
 query that crashed on a peer with `badfun`. Session-registry queries now use
 stable module-function-argument descriptors, and all 9 cluster tests complete
-under coverage. The merged default and cluster result is 83.37%.
+under coverage. Coverage-aware peer shutdown now collects remote execution, and
+direct `RaBootstrap` decision tests cover the previously untested worker. The
+merged default and cluster result is 83.58% and passes the enforced 83% floor.
 
 ## A2. Blocker: staging is not isolated from production today
 

@@ -109,6 +109,7 @@ defmodule OpenAgents.ClusterTest do
           name: short_name,
           host: ~c"127.0.0.1",
           user: %{},
+          shutdown: OpenAgents.Test.RemoteCover.shutdown(),
           args:
             [
               ~c"-setcookie",

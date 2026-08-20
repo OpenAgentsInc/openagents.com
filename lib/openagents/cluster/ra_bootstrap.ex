@@ -78,25 +78,22 @@ defmodule OpenAgents.Cluster.RaBootstrap do
     # The cluster's member set as seen by a peer (survives our local server
     # being down — the phantom-member case after an ungraceful restart).
     peer_members = discover_members(connected -- [node()])
-    members = if local_members != [], do: local_members, else: peer_members
 
-    cond do
-      # Healthy: our local server is up and we are a member.
-      node() in local_members ->
+    case convergence_action(node(), connected, local_members, peer_members, expected) do
+      # Healthy: the local server is up and is a member.
+      :healthy ->
         :ok
 
       # Phantom: peers still list us as a member but our local Raft server is
       # not running (ungraceful restart lost the tmpfs data dir). Restart it so
       # it rejoins and catches up, instead of sitting as a dead config entry.
-      node() in peer_members ->
-        _ = Ra.ensure_local_server(peer_members)
+      {:restart_local, known_members} ->
+        _ = Ra.ensure_local_server(known_members)
         Logger.info("ra_bootstrap: restarted phantom local server (#{node()})")
 
       # Cluster is formed elsewhere but we are not in it yet: join through an
       # existing member (add_member + start our local server).
-      members != [] ->
-        via = Enum.find(members, &(&1 in connected)) || hd(members)
-
+      {:join, via} ->
         case Ra.join(via) do
           {:ok, _, _} -> Logger.info("ra_bootstrap: joined cluster via #{via} (#{node()})")
           :ok -> Logger.info("ra_bootstrap: joined cluster via #{via} (#{node()})")
@@ -104,8 +101,8 @@ defmodule OpenAgents.Cluster.RaBootstrap do
         end
 
       # No cluster yet. The coordinator forms it once a majority is present.
-      coordinator?(connected) and majority?(length(connected), expected) ->
-        case Ra.start_cluster(connected) do
+      {:form, formation_nodes} ->
+        case Ra.start_cluster(formation_nodes) do
           {:ok, started} ->
             Logger.info("ra_bootstrap: formed cluster across #{inspect(started)}")
 
@@ -113,7 +110,7 @@ defmodule OpenAgents.Cluster.RaBootstrap do
             :ok
         end
 
-      true ->
+      :wait ->
         :ok
     end
   rescue
@@ -122,9 +119,32 @@ defmodule OpenAgents.Cluster.RaBootstrap do
       :ok
   end
 
+  @doc false
+  def convergence_action(local_node, connected, local_members, peer_members, expected) do
+    members = if local_members != [], do: local_members, else: peer_members
+
+    cond do
+      local_node in local_members ->
+        :healthy
+
+      local_node in peer_members ->
+        {:restart_local, peer_members}
+
+      members != [] ->
+        via = Enum.find(members, &(&1 in connected)) || hd(members)
+        {:join, via}
+
+      coordinator?(local_node, connected) and majority?(length(connected), expected) ->
+        {:form, connected}
+
+      true ->
+        :wait
+    end
+  end
+
   # We are the coordinator iff we are the lowest-named connected node — a stable,
   # coordinator-free way to pick exactly one former.
-  defp coordinator?(connected), do: node() == Enum.min(connected)
+  defp coordinator?(local_node, connected), do: local_node == Enum.min(connected)
 
   defp majority?(present, expected), do: present * 2 > expected
 

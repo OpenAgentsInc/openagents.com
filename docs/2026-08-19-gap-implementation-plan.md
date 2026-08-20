@@ -64,8 +64,32 @@ the production cutover. The first job is to make `mix test` honest again.
 12. Fleet cutover, WAL continuity, DNS/MirrorWatch repoint, and Sarah
     deprecation.
 
+## Progress
+
+- `visitors` unique index fixed and migration order corrected so the test
+  database can build cleanly.
+- `priv/sarah/` persona and program artifacts copied; `Application.get_env`
+  / `fetch_env!` references re-pointed from `:sarah` to `:openagents`.
+- `config/config.exs` now carries the tool catalog, provider, model, voice,
+  memory, and GitHub API configuration.
+- `OpenAgents.Application` installs the persona and program-artifact catalogs at
+  boot; the tool catalog uses `fetch_env!` instead of a silent empty default.
+- `OpenAgentsWeb.ChatToolActivity` renamed to `OpenAgentsWeb.ToolActivity` to
+  match the test suite; `conversation_page_size` and `maximum_message_bytes`
+  corrected to the Sarah values.
+
+## Current test signal
+
+`mix precommit` is green (54 passing, 893 skipped).  
+`mix test --include skip` is now **575/947 passed**, down from the starting
+301/947. 372 failures remain, dominated by missing routes/LiveViews, the
+`OpenAgentsWeb.AllowedOrigins` module, the `computer_controller_enabled` flag
+being `false` in tests, and the `voice_call_provider` configuration still
+pointing at the wrong `voice/` module.
+
 ## Current cycle
 
-Phase A is active. The first commit is the one-line `visitors` index fix; the
-first validation is `mix test` with all 893 previously skipped Sarah tests
-un-excluded.
+Phase A is complete; Phase B (runtime commissioning) is mostly done. The next
+commits are routing and LiveViews (Phase C), starting with the 7 orphaned
+controllers, `OpenAgentsWeb.AllowedOrigins`, and the `/git`, `/admin`,
+`/computers`, `/memory/export`, and `/data/export` routes.

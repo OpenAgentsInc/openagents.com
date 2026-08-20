@@ -131,6 +131,11 @@ defmodule OpenAgentsWeb.UI.Landing do
   def hero(assigns) do
     ~H"""
     <.section class={["hero", @class]} rule={false}>
+      <%!-- The lede's own light. This used to live inside the figure block, so
+      commenting the figure out took the glow with it and left the headline
+      sitting on flat ink. It belongs to the words. --%>
+      <.glow variant={:center} class="hero__glow appear-zoom appear--delay-2" />
+
       <div class="hero__lede">
         <div :if={@eyebrow != []} class="hero__eyebrow appear">{render_slot(@eyebrow)}</div>
         <h1 class="hero__title appear">{@title}</h1>
@@ -337,7 +342,8 @@ defmodule OpenAgentsWeb.UI.Landing do
   """
   attr :name, :string, default: "OpenAgents"
   attr :tagline, :string, default: nil
-  attr :note, :string, default: nil
+  attr :note, :string, default: nil, doc: "shown at the trailing edge of the footer bar"
+  attr :copyright, :string, default: nil, doc: "shown at the leading edge"
   attr :class, :any, default: nil
 
   slot :column, doc: "one column of links" do
@@ -358,7 +364,13 @@ defmodule OpenAgentsWeb.UI.Landing do
           {render_slot(column)}
         </nav>
       </div>
-      <p :if={@note} class="landing-footer__note">{@note}</p>
+      <%!-- Two edges of one bar rather than a single centred line: the
+      copyright is who owns this, the note is how it is licensed, and reading
+      them as one sentence makes neither clear. --%>
+      <div :if={@copyright || @note} class="landing-footer__bar">
+        <p :if={@copyright} class="landing-footer__note">{@copyright}</p>
+        <p :if={@note} class="landing-footer__note">{@note}</p>
+      </div>
     </footer>
     """
   end

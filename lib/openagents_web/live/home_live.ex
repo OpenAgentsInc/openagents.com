@@ -245,13 +245,6 @@ defmodule OpenAgentsWeb.HomeLive do
           --%>
         </Landing.hero>
 
-        <Landing.logo_wall title="Built with">
-          <:logo>Elixir</:logo>
-          <:logo>Phoenix</:logo>
-          <:logo>LiveView</:logo>
-          <:logo>PostgreSQL</:logo>
-        </Landing.logo_wall>
-
         <Landing.feature_grid title="Everything the work needs. Nothing it doesn't.">
           <:item title="Issues" icon="file-document">
             Plan, assign, label and close, over an API shaped after the one you already
@@ -303,7 +296,7 @@ defmodule OpenAgentsWeb.HomeLive do
         </Landing.faq>
 
         <Landing.cta
-          title="Start shipping"
+          title="Start shipping."
           description="Open an issue and let an agent pick it up."
         >
           <:actions>
@@ -315,6 +308,7 @@ defmodule OpenAgentsWeb.HomeLive do
 
         <Landing.landing_footer
           tagline="Purpose-built for planning and shipping issues."
+          copyright="© 2026 OpenAgents, Inc."
           note="AGPL-3.0. Every surface here is in the repository."
         >
           <:column title="Product">

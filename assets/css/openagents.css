@@ -619,10 +619,28 @@
 
   /* Variants */
   .btn:not([data-variant]),
+  /* Inverted, not accented. Measured from the reference: its primary control
+     is `#e5e5e6` with `#08090a` text -- the page's own background colour used
+     as ink -- and no hue at all. `--control-inverse-bg` and
+     `--control-inverse-fg` already resolve to that pair, so this is the token
+     ladder finally being used where it was always meant to apply. The indigo
+     fill was the last saturated element on a monochrome surface. */
+  /* A press the finger can feel. Taken from the reference, which scales its
+     buttons to .97 on :active. */
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn:active:not(:disabled) {
+      transform: none;
+    }
+  }
+
   .btn[data-variant="primary"] {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: var(--text-primary);
+    border-color: var(--control-inverse-bg);
+    background: var(--control-inverse-bg);
+    color: var(--control-inverse-fg);
   }
 
   /* Hover states are gated behind (hover: hover) throughout this pack: on
@@ -631,11 +649,13 @@
      visible at rest — so the fallback is simply the resting state, and
      :focus-visible and :active stay ungated. */
   @media (hover: hover) {
+    /* Hover brightens toward white rather than shifting hue, which is what the
+       reference does (`#e5e5e6` to `#fff`). No halo: a glow around a already
+       high-contrast control reads as a focus ring that is not one. */
     .btn:is(:not([data-variant]), [data-variant="primary"]):hover:not(:disabled) {
-      border-color: var(--accent-bright);
-      background: var(--accent-bright);
-      box-shadow: var(--halo);
-      color: var(--ink-void);
+      border-color: var(--text-ink);
+      background: var(--text-ink);
+      color: var(--control-inverse-fg);
     }
   }
 
@@ -1630,6 +1650,8 @@
    * and pins the menu open. Declare no `display` here so the user agent keeps
    * control of open and closed state. Position is app-shell layout. */
   .menu {
+    /* Sized by its widest row rather than by its narrowest. */
+    min-width: max-content;
     /* A native popover is centred by the user agent's `margin: auto`. Setting
        `margin: 0` defeated that and pinned every menu to the viewport's
        top-left corner -- the account menu included, not just this demo. Keep
@@ -1668,6 +1690,8 @@
     gap: 10px;
     border-bottom: 1px solid var(--line);
     padding: 12px;
+    /* Long names still have a ceiling: the menu is a menu, not a card. */
+    max-width: 20rem;
   }
 
   .menu__identity span {
@@ -1676,11 +1700,19 @@
     flex-direction: column;
   }
 
+  /* One line. The panel sizes to its content, and its other rows are short, so
+     a two-word name wrapped mid-name and made the identity look like two
+     fields. The name is what sets the panel's width now; an unusually long one
+     truncates rather than wrapping, since the handle beneath it already
+     identifies the account. */
   .menu__identity strong {
+    overflow: hidden;
     color: var(--text-primary);
     font-size: 0.8125rem;
     font-weight: 600;
     line-height: 1.25rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .menu__identity small {
@@ -4857,5 +4889,33 @@
     color: var(--danger);
     font-family: var(--font-mono, ui-monospace, monospace);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* The hero's own light, behind the words rather than behind a figure. Placed
+     under the lede and pushed back, so it lifts the headline without washing
+     it: the text sits above it at z-index 1 through `.landing-section__inner`. */
+  .hero__glow {
+    top: 38%;
+    z-index: 0;
+  }
+
+  /* Two edges of one line. The copyright says who owns this and the note says
+     how it is licensed; centring them together reads as one run-on sentence. */
+  .landing-footer__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 24px;
+    max-width: 1104px;
+    margin-inline: auto;
+    padding-block-start: 32px;
+  }
+
+  .landing-footer__bar .landing-footer__note {
+    padding-block-start: 0;
+    margin: 0;
   }
 }

@@ -213,18 +213,24 @@ defmodule OpenAgents.Forge.RollingReplacement do
 
   defp do_poll(function, attempts, interval) do
     case function.() do
-      :ok -> :ok
-      :retry -> wait(interval) && do_poll(function, attempts - 1, interval)
-      {:error, _reason} = error -> error
+      :ok ->
+        :ok
+
+      :retry ->
+        wait(interval)
+        do_poll(function, attempts - 1, interval)
+
+      {:error, _reason} = error ->
+        error
     end
   end
 
-  defp wait(0), do: true
+  defp wait(0), do: :ok
 
   defp wait(milliseconds) do
     receive do
     after
-      milliseconds -> true
+      milliseconds -> :ok
     end
   end
 

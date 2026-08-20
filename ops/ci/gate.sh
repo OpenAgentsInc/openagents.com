@@ -4,7 +4,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 receipt_root="$repo_root/.git/openagents/release-gate-receipts"
-required_stages='compile precommit cluster javascript direct_transaction relup version_chain interrupted_install rolling_replacement contracts release_smoke'
+required_stages='compile production_compile precommit cluster javascript direct_transaction relup version_chain interrupted_install rolling_replacement contracts release_smoke'
 mode=${1:-run}
 
 if [ ! -d "$repo_root/.git" ]; then
@@ -111,6 +111,7 @@ run_stage() {
 cd "$repo_root"
 
 run_stage compile env MIX_ENV=test mix compile --warnings-as-errors
+run_stage production_compile env MIX_ENV=prod mix compile --warnings-as-errors
 run_stage precommit env MIX_ENV=test mix precommit
 run_stage cluster env MIX_ENV=test mix test --warnings-as-errors --only cluster
 run_stage javascript npm --prefix assets test
@@ -162,6 +163,7 @@ cat >"$receipt_temp" <<EOF
   "automatic_retries": 0,
   "stages": {
     "compile": {"status": "passed", "duration_seconds": $compile_duration_seconds},
+    "production_compile": {"status": "passed", "duration_seconds": $production_compile_duration_seconds},
     "precommit": {"status": "passed", "duration_seconds": $precommit_duration_seconds},
     "cluster": {"status": "passed", "duration_seconds": $cluster_duration_seconds},
     "javascript": {"status": "passed", "duration_seconds": $javascript_duration_seconds},

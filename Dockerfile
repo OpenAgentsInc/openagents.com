@@ -49,7 +49,7 @@ COPY lib lib
 COPY rel rel
 
 # Compile the release
-RUN mix compile
+RUN mix compile --warnings-as-errors
 
 COPY assets assets
 

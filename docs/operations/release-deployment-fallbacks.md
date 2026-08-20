@@ -36,8 +36,8 @@ OPENAGENTS_RELEASE_SMOKE_DATABASE_URL='ecto://USER:PASSWORD@HOST/DATABASE' \
 ops/ci/gate.sh
 ```
 
-The gate requires a clean worktree. It runs warning-free compilation,
-`mix precommit`, distributed tests, browser tests, the direct transaction,
+The gate requires a clean worktree. It runs warning-free test and production
+compilation, `mix precommit`, distributed tests, browser tests, the direct transaction,
 forward and reverse relup proofs, interrupted-install recovery, rolling
 replacement tests, repository contracts, and packaged release startup. It
 writes a content-free receipt to

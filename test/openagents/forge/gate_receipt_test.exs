@@ -6,6 +6,7 @@ defmodule OpenAgents.Forge.GateReceiptTest do
   @sha String.duplicate("a", 40)
   @stages ~w(
     compile
+    production_compile
     precommit
     cluster
     javascript

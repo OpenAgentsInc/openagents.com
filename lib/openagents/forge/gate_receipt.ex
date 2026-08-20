@@ -14,6 +14,7 @@ defmodule OpenAgents.Forge.GateReceipt do
   @maximum_bytes 65_536
   @required_stages ~w(
     compile
+    production_compile
     precommit
     cluster
     javascript

@@ -26,6 +26,7 @@
  * exact structure consumed by `OpenAgentsWeb.UI`. */
 @import "../vendor/basecoat/base/base.css";
 @import "../vendor/basecoat/components/button.css";
+@import "../vendor/basecoat/components/button-group.css";
 @import "../vendor/basecoat/components/input.css";
 @import "../vendor/basecoat/components/textarea.css";
 @import "../vendor/basecoat/components/label.css";
@@ -69,31 +70,50 @@
  * (--ink-surface), elevated components another step up (--ink-raised). New
  * surfaces take a rung; they do not invent a fourth.
  *
- * The palette is dark-only, as OpenAgents is (`color-scheme: dark`). A light
- * palette requires a separate owner-approved design project.
+ * Two themes. `:root` carries dark; `:root[data-theme="light"]` overrides only
+ * the primitives and the few literal exceptions. Everything else in the ladder
+ * is `color-mix(... var(--text-ink) N% ...)`, so the icon tiers, washes, hover
+ * surface and inverse control invert on their own when the ink flips — that is
+ * the whole point of deriving them rather than listing them twice.
+ *
+ * Values are Linear's, taken from a saved copy of their docs: neutral to
+ * faintly cool, never blue. The previous palette was tinted (chroma ~.03-.07
+ * around hue 263) which read as blue on every surface.
  */
 :root {
   color-scheme: dark;
 
-  /* PRIMITIVES — the Aiur palette, verbatim. */
-  --ink-void: oklch(12.901% 0.01498 266.378); /* darkest: page, sidebar */
-  --ink-surface: oklch(18.311% 0.03089 263.383); /* +1: canvas, chrome */
-  --ink-raised: oklch(24.185% 0.04699 263.85); /* +2: elevated components */
-  --text-ink: oklch(96.386% 0.01695 267.792); /* the one text/icon/wash ink */
-  --accent: oklch(62.308% 0.18801 259.815);
-  --accent-bright: oklch(71.374% 0.14338 254.624);
-  --info: oklch(75.351% 0.13899 232.661);
-  --success: oklch(72.275% 0.19201 149.579);
-  --warning: oklch(76.859% 0.16466 70.08);
-  --danger: oklch(71.063% 0.16615 22.216);
+  /* PRIMITIVES — Linear's dark ramp, verbatim.
+     void #08090a is their --color-bg-primary, surface #0f1011 their level-1
+     panel, raised #141516 their level-2. Raised is LIGHTER than void; light
+     mode keeps that direction rather than flipping it. */
+  --ink-void: #08090a; /* darkest: page, sidebar */
+  --ink-surface: #0f1011; /* +1: canvas, chrome */
+  --ink-raised: #141516; /* +2: elevated components */
+  --text-ink: #f7f8f8; /* the one text/icon/wash ink (their --color-fg-primary) */
 
-  /* DERIVATIONS — text tiers as alpha steps of the ink. The literals are the
-     Aiur values; the percentages beside them are the measured best-fit alpha
-     steps, recorded so a later theme can choose the ladder deliberately. */
+  /* The single accent. Linear's brand indigo, used only for the primary action
+     and links; every other surface is neutral.
+     NAME COLLISION, deliberate: Basecoat's base.css also defines --accent, but
+     as shadcn does — a subtle hover background paired with --accent-foreground,
+     not a brand color. Ours is defined later at equal specificity so it wins.
+     Only combobox.css, dropdown-menu.css and select.css consume Basecoat's
+     meaning and none of the three is imported; importing one would give it an
+     indigo hover surface. Rename ours before importing them. */
+  --accent: #5e6ad2;
+  --accent-bright: #828fff;
+  --info: #4ea7fc;
+  --success: #27a644;
+  --warning: #d4b144;
+  --danger: #eb5757;
+
+  /* DERIVATIONS — text tiers. Literals are Linear's fg ramp; the percentages
+     beside them are the equivalent alpha step, kept so the ladder stays legible
+     if a later theme wants to derive rather than list. */
   --text-primary: color-mix(in oklab, var(--text-ink) 100%, transparent); /* 100% */
-  --text-body: oklch(90.551% 0.0307 265.325); /* exception; best fit 91% */
-  --text-muted: oklch(71.613% 0.04926 262.439); /* exception; best fit 65% */
-  --text-dim: oklch(65.775% 0.04389 274.477); /* exception; best fit 57% */
+  --text-body: #d0d6e0; /* their fg-secondary */
+  --text-muted: #8a8f98; /* their fg-tertiary */
+  --text-dim: #62666d; /* their fg-quaternary */
 
   /* Icon tiers. Glyphs read lighter than text at the same alpha, so they get
      their own ladder rather than borrowing the text one. */
@@ -114,18 +134,71 @@
   --ink-hover: color-mix(in oklab, var(--text-ink) 4%, var(--ink-raised)); /* 4% over raised */
 
   /* The one inverted control: the strongest ink as ground, the darkest rung as
-     glyph. State changes ride opacity so the fill never shifts hue. */
+     glyph. Flips by itself in light mode — dark fill, light glyph. */
   --control-inverse-bg: var(--text-primary);
   --control-inverse-fg: var(--ink-void);
 
-  /* Borders. --line and --line-strong are the 12% and 20% rungs by role but
-     keep their literals (same chroma accounting as the text exceptions); the
-     soft and faint rungs are true ladder steps. */
-  --line: oklch(29.154% 0.0506 264.607); /* exception; best fit 11% */
+  /* Borders. Linear's border ramp. */
+  --line: #23252a; /* their --color-border-primary */
   --line-soft: color-mix(in oklab, var(--text-ink) 8%, transparent); /* 8% */
   --line-faint: color-mix(in oklab, var(--text-ink) 4%, transparent); /* 4% */
-  --line-strong: oklch(36.455% 0.0696 264.888); /* exception; best fit 20% */
+  --line-strong: #34343a; /* their --color-border-secondary */
 }
+
+/* LIGHT.
+ *
+ * Linear publishes no light palette (their site is dark-only), so this is
+ * derived in the same language rather than copied: the same neutral hue
+ * discipline, the same surface-ladder direction (raised is lighter than void),
+ * and the same ink flipped to their darkest value.
+ *
+ * Only the primitives and the four literal exceptions are restated. The icon
+ * tiers, washes, hover surface and inverse control are all derived from
+ * --text-ink above and invert without being repeated here.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ink-void: #f7f8f8; /* page, sidebar — the most recessive surface */
+  --ink-surface: #fbfbfc; /* +1: canvas */
+  --ink-raised: #ffffff; /* +2: elevated components read as paper */
+  --text-ink: #08090a; /* the ink is now their darkest value */
+
+  /* Indigo darkens for contrast against white; the bright rung becomes the
+     hover/visited state rather than the resting one. */
+  --accent: #5e6ad2;
+  --accent-bright: #4a55b8;
+
+  --text-body: #3c4149;
+  --text-muted: #62666d;
+  --text-dim: #8a8f98;
+
+  --line: #e6e7e9;
+  --line-strong: #d0d2d6;
+}
+
+/* No-JS / no-stored-preference fallback. The head script sets data-theme
+ * before first paint, so this only governs the window before it runs and the
+ * case where scripting is off. It is scoped :not([data-theme]) so an explicit
+ * choice always wins over the OS preference. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+
+    --ink-void: #f7f8f8;
+    --ink-surface: #fbfbfc;
+    --ink-raised: #ffffff;
+    --text-ink: #08090a;
+    --accent: #5e6ad2;
+    --accent-bright: #4a55b8;
+    --text-body: #3c4149;
+    --text-muted: #62666d;
+    --text-dim: #8a8f98;
+    --line: #e6e7e9;
+    --line-strong: #d0d2d6;
+  }
+}
+
 
 /* The semantic four are OpenAgents, not DaisyUI's, and have no Basecoat
  * equivalent — `--color-destructive` covers danger, but there is no success,
@@ -510,4 +583,25 @@
 
 .send-action:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+/* Theme toggle.
+ *
+ * The active rung cannot be rendered server-side: the choice lives in
+ * localStorage, so the head script records it on the root element and the
+ * selection is expressed here. `button-group` supplies the shrink-wrap
+ * (inline-flex w-fit) and the joined borders; without a width the segments
+ * would stretch to whatever container they land in.
+ */
+@layer components {
+  .theme-toggle .btn[data-theme-option] {
+    color: var(--icon-tertiary);
+  }
+
+  :root[data-theme-choice="system"] .theme-toggle .btn[data-theme-option="system"],
+  :root[data-theme-choice="light"] .theme-toggle .btn[data-theme-option="light"],
+  :root[data-theme-choice="dark"] .theme-toggle .btn[data-theme-option="dark"] {
+    background: var(--wash-selected);
+    color: var(--icon-primary);
+  }
 }

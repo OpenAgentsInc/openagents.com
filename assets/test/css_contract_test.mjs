@@ -43,7 +43,17 @@ test("the compiled cascade preserves every governed button variant", () => {
 
     assert.doesNotMatch(css, /\.btn-(primary|secondary|ghost|error|success|warning|info)\b/)
     assert.doesNotMatch(css, /--color-base-(100|200|300|content)\b/)
-    assert.doesNotMatch(css, /data-theme|prefers-color-scheme/)
+
+    // This previously asserted the cascade contained no `data-theme` or
+    // `prefers-color-scheme` at all. That was the right guard for its moment --
+    // it proved DaisyUI's theme plugin was gone -- but it forbade ALL theming,
+    // including ours. The owner has since asked for a light mode, so the
+    // prohibition is replaced by a positive contract: the app ships exactly two
+    // themes, keyed off data-theme with a prefers-color-scheme fallback, and
+    // neither may reintroduce a third-party theme plugin's tokens.
+    assert.match(css, /\[data-theme=["']?light["']?\]/, "the light theme must be compiled")
+    assert.match(css, /prefers-color-scheme:\s*light/, "the no-JS light fallback must be compiled")
+    assert.doesNotMatch(css, /\[data-theme=["']?(?!light|dark)[a-z]+["']?\]/, "only light and dark are governed themes")
   } finally {
     rmSync(output, {force: true})
   }

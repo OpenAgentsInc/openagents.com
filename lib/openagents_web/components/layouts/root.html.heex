@@ -10,6 +10,28 @@
     <link rel="apple-touch-icon" href={~p"/apple-touch-icon.png"} sizes="180x180" />
     <.live_title default="OpenAgents" suffix=" · OpenAgents" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <%!-- Runs before first paint, and deliberately not deferred: resolving the
+    theme after the stylesheet has painted produces a flash of the wrong theme.
+    "system" stores nothing and leaves data-theme unset so the CSS
+    prefers-color-scheme fallback governs; an explicit choice sets the
+    attribute, which always wins. --%>
+    <script phx-no-format>(() => {
+      const stored = localStorage.getItem("phx:theme");
+      const apply = (choice) => {
+        if (choice === "system" || choice === null) {
+          localStorage.removeItem("phx:theme");
+          document.documentElement.removeAttribute("data-theme");
+          document.documentElement.setAttribute("data-theme-choice", "system");
+        } else {
+          localStorage.setItem("phx:theme", choice);
+          document.documentElement.setAttribute("data-theme", choice);
+          document.documentElement.setAttribute("data-theme-choice", choice);
+        }
+      };
+      apply(stored);
+      window.addEventListener("phx:set-theme", (e) => apply(e.detail?.theme ?? e.target?.dataset?.theme));
+      window.addEventListener("storage", (e) => e.key === "phx:theme" && apply(e.newValue));
+    })();</script>
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
   </head>

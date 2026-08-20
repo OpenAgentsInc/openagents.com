@@ -1603,7 +1603,10 @@
     height: 34px;
     border-radius: var(--radius);
     background: var(--ink-raised);
-    color-scheme: dark;
+    /* Follow the document theme so the native control chrome matches the
+       surface it sits on. Forcing dark here left light mode with a dark
+       scrubber on a white card. */
+    color-scheme: inherit;
   }
 
   .audio-player:focus-visible {

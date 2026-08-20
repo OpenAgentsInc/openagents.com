@@ -96,6 +96,7 @@ defmodule OpenAgentsWeb.Layouts do
       </div>
 
       <div class="flex items-center gap-2">
+        <.theme_toggle />
         <%= if @current_scope do %>
           <.account_dropdown current_scope={@current_scope} />
         <% else %>
@@ -127,9 +128,46 @@ defmodule OpenAgentsWeb.Layouts do
       <div class="command-controls">
         {render_slot(@controls)}
 
+        <.theme_toggle />
         <.account_control :if={@current_user} current_user={@current_user} />
       </div>
     </header>
+    """
+  end
+
+  @doc """
+  System / light / dark, as a three-rung segmented control.
+
+  The active rung is not rendered here. The choice lives in `localStorage`, so
+  the head script in `root.html.heex` records it as `data-theme-choice` on the
+  root element and `app.css` expresses the selection from that. Rendering it
+  server-side would be wrong twice over: the server does not know the visitor's
+  choice, and a LiveView re-render would fight the script.
+
+  "System" stores nothing and clears `data-theme`, which lets the
+  `prefers-color-scheme` fallback in `app.css` govern.
+  """
+  def theme_toggle(assigns) do
+    ~H"""
+    <div class="button-group theme-toggle" role="group" aria-label="Color theme">
+      <UI.button
+        :for={
+          {choice, icon, label} <- [
+            {"system", "desktop", "Match system theme"},
+            {"light", "sun", "Light theme"},
+            {"dark", "moon", "Dark theme"}
+          ]
+        }
+        variant={:secondary}
+        size={:sm}
+        data-theme-option={choice}
+        aria-label={label}
+        title={label}
+        phx-click={JS.dispatch("phx:set-theme", detail: %{theme: choice})}
+      >
+        <UI.icon name={icon} />
+      </UI.button>
+    </div>
     """
   end
 

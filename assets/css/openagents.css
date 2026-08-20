@@ -250,9 +250,10 @@
     padding: clamp(24px, 4vw, 44px) clamp(16px, 4vw, 36px) 56px;
     overflow-x: hidden;
     overflow-y: auto;
-    background:
-      radial-gradient(circle at 18% 0%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 34%),
-      var(--ink-surface);
+    /* Flat. The indigo radial wash in this corner was the only place in the
+       application where a page tinted itself, and it read as a rendering
+       artefact rather than as design once the palette went monochrome. */
+    background: var(--ink-surface);
     scrollbar-color: var(--icon-faint) transparent;
     scrollbar-width: thin;
   }
@@ -2529,27 +2530,32 @@
     align-items: stretch;
     margin-top: auto;
     border-top: 1px solid var(--line);
-    /* Block padding only. The inline inset comes from the link, so a footer
-       link lines up with the nav rows above it instead of sitting at its own
-       indent. */
-    padding: 12px 0;
+    /* Block padding only -- the inline inset comes from the link, so a footer
+       link lines up with the nav rows above it. The 2px matches
+       `.sidebar-nav`'s padding-block so both columns breathe identically. */
+    padding: 8px 0 10px;
   }
 
+  /* A footer link is a sidebar row. Same height, same insets, same gap, same
+     type -- the only difference is that these are secondary destinations, so
+     they sit under a rule. Matching .sidebar-row by hand had drifted: 36px
+     against the row's 32px, which read as looser spacing in the footer than in
+     the nav above it. */
   .sidebar-footer__link {
     display: flex;
     align-items: center;
     justify-content: flex-start;
     gap: 8px;
-    min-height: 36px;
-    /* Same 12px + 8px as .sidebar-row, so the two columns share one left edge. */
+    min-height: 32px;
     margin-inline: 12px;
     padding-inline: 8px;
+    border-radius: 6px;
     color: var(--text-muted);
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 500;
     line-height: 1.25rem;
     text-decoration: none;
-    transition: color 150ms var(--ease);
+    transition: color 150ms var(--ease), background 150ms var(--ease);
   }
 
   .sidebar-footer__link .icon {
@@ -2792,9 +2798,11 @@
 
   .composer-region {
     flex: none;
-    border-top: 1px solid var(--line);
     background: var(--ink-void);
-    padding: 16px 24px 20px;
+    /* No rule and no space above it. The composer already reads as its own
+       control against the transcript, and a border plus 16px stacked a second
+       edge under the one the card draws. */
+    padding: 0 24px 20px;
   }
 
   .composer-eyebrow {

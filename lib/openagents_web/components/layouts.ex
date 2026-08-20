@@ -211,6 +211,9 @@ defmodule OpenAgentsWeb.Layouts do
 
     ~H"""
     <footer class="sidebar-footer">
+      <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
+        <UI.icon name="trophy-top" /> Leaderboard
+      </.link>
       <.link
         :if={@admin_link?}
         id="open-admin"
@@ -562,12 +565,6 @@ defmodule OpenAgentsWeb.Layouts do
           path={~p"/chat?panel=memory"}
           label="Memory"
           icon="brain"
-          patchable={false}
-        />
-        <Layouts.sidebar_link
-          path={~p"/leaderboard"}
-          label="Leaderboard"
-          icon="trophy-top"
           patchable={false}
         />
       </nav>

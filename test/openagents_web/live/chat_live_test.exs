@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
            end)
   end
 
-  test "the sidebar carries Computers, Memory and Leaderboard for everyone", %{conn: conn} do
+  test "the sidebar carries the shared destinations for everyone", %{conn: conn} do
     conn = log_in_github_user(conn, "computers-nav-browser")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
@@ -60,7 +60,9 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     # sit in the application sidebar rather than appearing only on chat.
     assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/computers"]))
     assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat?panel=memory"]))
-    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/leaderboard"]))
+    # Leaderboard is a secondary destination, so it sits in the footer with the
+    # docs and the component library rather than in the working nav.
+    assert has_element?(view, ~s(#sidebar .sidebar-footer a[href="/leaderboard"]))
   end
 
   test "chat contributes its rows to the one application sidebar", %{conn: conn} do

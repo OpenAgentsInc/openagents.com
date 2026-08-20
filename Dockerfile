@@ -110,6 +110,10 @@ CMD ["mix", "run", "--no-compile", "--no-start", "ops/forge/build-worker.exs"]
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
+# BuildKit sets TARGETARCH automatically; Cloud Build's classic docker builder
+# does not, and the `set -eu` below turns an unset value into a failed build.
+# The consumer falls back to the builder's own architecture, so both paths
+# resolve and the checksum still guards the result.
 ARG TARGETARCH
 ARG CODEX_VERSION
 ARG DEBIAN_SNAPSHOT
@@ -128,7 +132,7 @@ RUN sed -i \
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -eu; \
-  case "${TARGETARCH}" in \
+  case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
     amd64) codex_arch=x86_64; checksum=0246e2e773834e07f0fb5249ed6ebad12e4591e608f8c7bb97dd6a9690544c36 ;; \
     arm64) codex_arch=aarch64; checksum=eb677c80f666b1ab8b4b1d083b66e8d614b1281d960bb6f9fd8ca98f58b38b90 ;; \
     *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \

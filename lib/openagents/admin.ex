@@ -18,7 +18,9 @@ defmodule OpenAgents.Admin do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Admin.Call
   alias OpenAgents.Conversations.Conversation
+  alias OpenAgents.Conversations.Message
   alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
   alias OpenAgents.Voice.Recording
   alias OpenAgents.Voice.Session
@@ -26,6 +28,61 @@ defmodule OpenAgents.Admin do
 
   @default_limit 50
   @maximum_limit 200
+
+  @doc """
+  Every account, newest first, with the activity each has on the site.
+
+  One query, not one per account: a list of N accounts that costs N+1 queries
+  is the kind of thing that is fine with three accounts and unusable with
+  three thousand. Counts come from left joins so an account with no activity
+  is listed with zeroes rather than dropped.
+
+  `joined_at` is the account row's own creation, not the GitHub account's; it
+  is when this site first saw them.
+  """
+  @spec list_accounts(keyword()) :: [map()]
+  def list_accounts(options \\ []) do
+    limit = options |> Keyword.get(:limit) |> bound_limit()
+    offset = max(Keyword.get(options, :offset, 0), 0)
+
+    messages =
+      from(m in Message,
+        join: c in Conversation,
+        on: c.id == m.conversation_id,
+        group_by: c.visitor_id,
+        select: %{visitor_id: c.visitor_id, count: count(m.id), last_at: max(m.inserted_at)}
+      )
+
+    from(u in User,
+      left_join: v in Visitor,
+      on: v.user_id == u.id,
+      left_join: m in subquery(messages),
+      on: m.visitor_id == v.id,
+      left_join: i in Issue,
+      on: i.author_user_id == u.id,
+      group_by: [u.id, m.count, m.last_at],
+      order_by: [desc: u.inserted_at],
+      limit: ^limit,
+      offset: ^offset,
+      select: %{
+        id: u.id,
+        github_login: u.github_login,
+        github_name: u.github_name,
+        github_avatar_url: u.github_avatar_url,
+        status: u.status,
+        joined_at: u.inserted_at,
+        last_authenticated_at: u.last_authenticated_at,
+        message_count: coalesce(m.count, 0),
+        last_message_at: m.last_at,
+        issue_count: count(i.id, :distinct)
+      }
+    )
+    |> Repo.all()
+  end
+
+  @doc "How many accounts exist."
+  @spec count_accounts() :: non_neg_integer()
+  def count_accounts, do: Repo.aggregate(User, :count, :id)
 
   @doc """
   Voice calls newest first, across every account.

@@ -3,17 +3,16 @@ defmodule OpenAgentsWeb.AdminLiveTest do
   `/admin` is the only surface that reads across accounts for one person, so the
   gate matters more than the layout: who reaches it, who is told nothing, and
   what the page is allowed to show once it renders.
+
+  It lists accounts and activity counts. It does not list content, and the
+  assertions below hold that line: knowing someone sent forty messages is an
+  operational fact, reading them is a different decision entirely.
   """
 
   use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Conversations
-  alias OpenAgents.Voice
-  alias OpenAgents.Voice.Config
-  alias OpenAgents.Voice.Recordings
-
-  @webm "audio/webm;codecs=opus"
 
   describe "access" do
     test "the operator reaches the panel", %{conn: conn} do
@@ -21,7 +20,7 @@ defmodule OpenAgentsWeb.AdminLiveTest do
 
       {:ok, _view, html} = live(conn, ~p"/admin")
 
-      assert html =~ "Voice calls"
+      assert html =~ "Accounts"
     end
 
     test "an ordinary authenticated account is redirected and told nothing", %{conn: conn} do
@@ -81,144 +80,71 @@ defmodule OpenAgentsWeb.AdminLiveTest do
   end
 
   describe "the panel" do
-    test "lists recording metadata without exposing a playback route", %{conn: conn} do
-      caller = github_user("admin-recorded-caller")
-      session = recorded_call(caller)
+    test "lists every account with when it joined and what it has done", %{conn: conn} do
+      subject = github_user("admin-listed-account")
+      {:ok, conversation} = Conversations.ensure_conversation(subject)
 
-      conn = log_in_admin_user(conn, "admin-listener")
+      {:ok, _records} =
+        Conversations.create_turn(conversation, "a message the operator must not read")
+
+      conn = log_in_admin_user(conn, "admin-lister")
       {:ok, view, html} = live(conn, ~p"/admin")
 
-      assert html =~ "@#{caller.github_login}"
-      assert has_element?(view, "#admin-call-#{session.id}")
-      refute has_element?(view, "audio")
-      refute html =~ "/admin/recordings/"
-      assert html =~ "Complete upload"
+      assert html =~ "@#{subject.github_login}"
+      assert has_element?(view, "#admin-account-#{subject.id}")
+      assert has_element?(view, "#admin-accounts")
     end
 
-    test "lists calls with no audio and says why, instead of hiding them", %{conn: conn} do
-      caller = github_user("admin-silent-caller")
-      {:ok, conversation} = Conversations.ensure_conversation(caller)
-      {:ok, session} = Voice.admit_session(conversation, enabled_config())
-      {:ok, _ended} = Voice.end_session(session, session.generation, "user_ended")
+    test "counts activity without exposing any of its content", %{conn: conn} do
+      subject = github_user("admin-content-account")
+      {:ok, conversation} = Conversations.ensure_conversation(subject)
+      {:ok, _records} = Conversations.create_turn(conversation, "the private text of a message")
 
-      conn = log_in_admin_user(conn, "admin-silent-listener")
-      {:ok, view, html} = live(conn, ~p"/admin")
-
-      assert has_element?(view, "#admin-call-#{session.id}")
-      assert html =~ "No audio uploaded"
-      refute has_element?(view, "#admin-audio-#{session.id}")
-    end
-
-    test "renders transcript counts but never transcript content", %{conn: conn} do
-      caller = github_user("admin-transcript-caller")
-      session = recorded_call(caller)
-
-      {:ok, session} = Voice.attach_provider(session, session.generation, "rtc_admin_transcript")
-
-      {:ok, session, _event, :created} =
-        Voice.record_provider_event(
-          session,
-          session.generation,
-          %OpenAgents.Voice.ProviderEvent{
-            kind: :session_ready,
-            provider_event_id: "evt-admin-ready",
-            payload: %{}
-          }
-        )
-
-      {:ok, _session, _event, :created} =
-        Voice.record_provider_event(
-          session,
-          session.generation,
-          %OpenAgents.Voice.ProviderEvent{
-            kind: :user_transcript_final,
-            provider_event_id: "evt-admin-user",
-            payload: %{
-              "item_id" => "item-admin-user",
-              "response_id" => nil,
-              "content" => "my private banking password is hunter2"
-            }
-          }
-        )
-
-      conn = log_in_admin_user(conn, "admin-transcript-listener")
+      conn = log_in_admin_user(conn, "admin-content-reader")
       {:ok, _view, html} = live(conn, ~p"/admin")
 
-      assert html =~ "1 items"
-      refute html =~ "hunter2"
+      refute html =~ "the private text of a message"
+    end
+
+    test "carries no recording surface at all", %{conn: conn} do
+      conn = log_in_admin_user(conn, "admin-no-recording")
+      {:ok, view, html} = live(conn, ~p"/admin")
+
+      # The product does not capture call audio, and an operator panel whose
+      # only view is of a capability that does not run describes the system
+      # inaccurately to the person who most needs an accurate picture.
+      refute has_element?(view, "audio")
+      refute html =~ "/admin/recordings/"
+      refute html =~ "Voice calls"
+      refute html =~ "RECORDING"
+    end
+
+    test "an account with no activity is listed with zeroes rather than dropped",
+         %{conn: conn} do
+      quiet = github_user("admin-quiet-account")
+
+      conn = log_in_admin_user(conn, "admin-quiet-reader")
+      {:ok, view, _html} = live(conn, ~p"/admin")
+
+      assert has_element?(view, "#admin-account-#{quiet.id}")
     end
 
     test "renders no composed instructions, tool catalog, or provider call identity",
          %{conn: conn} do
-      caller = github_user("admin-secrets-caller")
-      session = recorded_call(caller)
-      {:ok, attached} = Voice.attach_provider(session, session.generation, "rtc_admin_secret")
-
-      conn = log_in_admin_user(conn, "admin-secrets-listener")
+      conn = log_in_admin_user(conn, "admin-no-internals")
       {:ok, _view, html} = live(conn, ~p"/admin")
 
-      refute html =~ attached.provider_session_id
-      refute html =~ attached.instruction_digest
-      refute html =~ "sarah.realtime_tool_catalog"
+      refute html =~ "system_prompt"
+      refute html =~ "tool_catalog"
+      refute html =~ "gpt-realtime"
     end
 
-    test "states the retention window, because listenable forever is a different promise",
-         %{conn: conn} do
-      conn = log_in_admin_user(conn, "admin-retention-listener")
-      {:ok, _view, html} = live(conn, ~p"/admin")
-
-      assert html =~ "#{Recordings.config().retention_days} days after a call ends"
-    end
-
-    test "the browser policy admits same-origin audio without loosening anything", %{conn: conn} do
-      conn = log_in_admin_user(conn, "admin-csp-operator")
-      response = get(conn, ~p"/admin")
-
-      [policy] = get_resp_header(response, "content-security-policy")
-
-      # No `media-src` directive, so audio falls back to `default-src 'self'`.
-      # Asserted rather than assumed: a later directive added for another reason
-      # would silently break playback.
-      assert policy =~ "default-src 'self'"
-      refute policy =~ "media-src"
-    end
-
-    test "shows an empty state before anyone has called", %{conn: conn} do
-      conn = log_in_admin_user(conn, "admin-empty-listener")
-      {:ok, view, _html} = live(conn, ~p"/admin")
-
-      assert has_element?(view, "#admin-empty")
-    end
-
-    test "renders the shared command bar with only the way back", %{conn: conn} do
-      conn = log_in_admin_user(conn, "admin-chrome-operator")
+    test "the shell supplies the chrome; the panel builds none of its own", %{conn: conn} do
+      conn = log_in_admin_user(conn, "admin-chrome")
       {:ok, view, _html} = live(conn, ~p"/admin")
 
       refute has_element?(view, "header.command-bar")
-      assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
-      assert has_element?(view, "#account-bar-trigger")
-      # Nothing navigates onward from here, and nothing in the product links in.
-      refute has_element?(view, "#open-leaderboard")
+      assert has_element?(view, "#sidebar")
     end
-  end
-
-  defp recorded_call(user) do
-    {:ok, conversation} = Conversations.ensure_conversation(user)
-    {:ok, session} = Voice.admit_session(conversation, enabled_config())
-    {:ok, _chunk} = Recordings.append_chunk(session, session.generation, 1, "opus-bytes", @webm)
-    {:ok, _recording} = Recordings.finalize(session, session.generation, "complete", 3_000)
-    session
-  end
-
-  defp enabled_config do
-    Config.build!(
-      enabled: true,
-      architecture: :openai_realtime,
-      provider: "openai",
-      model: "gpt-realtime-2.1",
-      voice: "marin",
-      reasoning_effort: "low",
-      maximum_session_seconds: 3_000
-    )
   end
 end

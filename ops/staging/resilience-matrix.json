@@ -1,0 +1,30 @@
+{
+  "schema": "openagents.staging-resilience-matrix.v1",
+  "revision": 1,
+  "failure_injections": [
+    {"id": "failure-001", "title": "Provider timeout, malformed event, and premature stream closure recover without a false completion"},
+    {"id": "failure-002", "title": "PostgreSQL restart and temporary connection exhaustion recover without data loss"},
+    {"id": "failure-003", "title": "PubSub interruption preserves durable truth and LiveView reconnects"},
+    {"id": "failure-004", "title": "Turn, voice, work, semantic, builder, and deployer process termination follows each recovery contract"},
+    {"id": "failure-005", "title": "Machine disconnect during a job preserves committed evidence and permits bounded recovery"},
+    {"id": "failure-006", "title": "Artifact-store unavailability and corrupt cache fail closed and reconverge"},
+    {"id": "failure-007", "title": "One unreachable fleet node does not expand authority or produce a partial live deployment"},
+    {"id": "failure-008", "title": "Node membership change during deployment preserves transaction and readiness invariants"},
+    {"id": "failure-009", "title": "Build sidecar crash and stale response cannot publish an invalid artifact"},
+    {"id": "failure-010", "title": "Browser navigation and tab destruction release microphone and voice resources"},
+    {"id": "failure-011", "title": "Recording upload failure and late final chunk remain generation-fenced and recoverable"}
+  ],
+  "soak": {
+    "required_duration_seconds": 172800,
+    "metric_sample_cadence_seconds": 300,
+    "minimum_metric_samples": 576,
+    "canaries": [
+      {"id": "status", "cadence_seconds": 300, "minimum_passes": 576},
+      {"id": "typed", "cadence_seconds": 1800, "minimum_passes": 96},
+      {"id": "memory", "cadence_seconds": 1800, "minimum_passes": 96},
+      {"id": "tracker", "cadence_seconds": 1800, "minimum_passes": 96},
+      {"id": "git", "cadence_seconds": 1800, "minimum_passes": 96},
+      {"id": "voice", "cadence_seconds": 7200, "minimum_passes": 24}
+    ]
+  }
+}

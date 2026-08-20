@@ -311,8 +311,10 @@ complete, seal the regression result:
 ops/staging/finalize-report.sh --regression "$report"
 ```
 
-Do not edit a regression-passed report. Gate 15 adds failure-injection timeline,
-soak, and known-issue evidence to a reviewed copy, then seals it with:
+Do not edit a regression-passed report until Gate 15 produces one complete,
+self-contained report through the
+[staging resilience runbook](staging-resilience.md). Attach that report as both
+the failure-injection timeline and soak receipt, then seal the main report with:
 
 ```sh
 ops/staging/finalize-report.sh --final "$report"

@@ -39,7 +39,9 @@ to publish the exact application image, builder image, release archive, SBOM,
 and candidate manifest for Gate 13. Use the
 [staging regression runbook](../../docs/operations/staging-regression.md) only
 after the candidate and selected migration path are proven on this isolated
-target.
+target. The later
+[controlled-failure and soak runbook](../../docs/operations/staging-resilience.md)
+must use the same boundary and must not begin before the regression passes.
 
 ## Prerequisites
 

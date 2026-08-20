@@ -3,7 +3,7 @@
 Date: 2026-08-20
 
 Status: In progress; Gates 0–11 complete locally, Gate 12 cloud proof pending,
-Gate 13 live deployment pending, and the Gate 14 harness complete locally
+Gate 13 live deployment pending, and the Gate 14–15 harnesses complete locally
 
 ## Outcome
 
@@ -1562,6 +1562,35 @@ After failure injection, run a staging soak:
 data loss, authority expansion, fleet divergence, secret leakage, or unexplained
 error accumulation.
 
+### Gate 15 implementation status
+
+Implemented locally on 2026-08-20:
+
+- Added a versioned resilience matrix covering all 11 controlled-failure
+  scenarios and six required soak canaries.
+- Added an exact-candidate resilience report generator. A real report requires
+  the same candidate manifest and a fully passed Gate 14 report before it can
+  be created.
+- Extended the attempt recorder and atomic finalizer to handle both regression
+  and resilience reports while retaining failed attempts and refusing
+  not-applicable controlled failures.
+- Added a strict resilience validator. Completion requires all controlled
+  failures passed, at least 172,800 measured seconds without a redeploy, stable
+  candidate identity, 576 metric samples, the versioned status, typed, memory,
+  tracker, Git, and voice canary minimums, a post-soak smoke, and zero
+  unexplained harm counts.
+- Bound the main staging report's final state to one nested, complete resilience
+  report with the same candidate SHA and application image digest. The nested
+  evidence tree is checksum-, path-, permission-, and content-scan validated.
+- Added the [controlled-failure and soak runbook](operations/staging-resilience.md)
+  and [resilience evidence contract](operations/staging-resilience-report-template.md).
+  The network-free dry run proves the 11-case and 48-hour contracts fail closed.
+
+The local Gate 15 harness and contract tests pass. Live controlled failures and
+the measured 48-hour soak remain blocked until Gates 12–14 complete on the
+isolated staging target. No cloud or production resource changed while adding
+the harness.
+
 ## Required staging evidence
 
 Store one staging report per candidate. Include:
@@ -1661,6 +1690,8 @@ each handoff.
 - [x] Owned local gates produce exact-SHA receipts.
 - [x] The versioned staging matrix, private evidence report, scanner, recorder,
       validator, and network-free harness dry run exist.
+- [x] The versioned controlled-failure matrix and fail-closed 48-hour soak
+      evidence contract exist.
 - [ ] Web and distributed staging are isolated from production.
 - [ ] Staging has a separate database instance and failure domain.
 - [ ] The migration lineage is mapped and rehearsed for every nonempty target.

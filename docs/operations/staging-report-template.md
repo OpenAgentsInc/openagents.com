@@ -77,11 +77,18 @@ under `scan-evidence.sh`.
 
 ## Gate 15 evidence
 
-Final completion adds:
+Final completion nests one complete report produced by the
+[staging resilience runbook](staging-resilience.md). Add the same
+`resilience-report` evidence reference to the failure-injection timeline and
+soak receipt. The main validator reruns the nested final validator and compares
+its candidate SHA and image digest with Gate 14.
 
-- One or more evidence references in `failure_injection_timeline`.
-- A 48-hour `soak_receipt` that includes candidate identity, start, end,
-  scheduled canary counts, bounded resource summaries, and post-soak smoke.
+The resilience report proves:
+
+- All 11 controlled-failure cases and their retry histories.
+- At least 48 hours without a redeploy.
+- Scheduled typed, memory, voice, tracker, Git, and status canaries.
+- Five-minute resource samples and a post-soak smoke.
 - Every known issue with ID, owner, severity, and disposition.
 
 An empty known-issue list is valid only when review found no issues. A failure,

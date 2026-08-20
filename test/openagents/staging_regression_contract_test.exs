@@ -100,7 +100,9 @@ defmodule OpenAgents.StagingRegressionContractTest do
     refute output =~ credential
   end
 
-  test "regression and final states require their complete evidence sets", %{test_root: test_root} do
+  test "regression passes with common evidence but final requires a resilience report", %{
+    test_root: test_root
+  } do
     report = Path.join(test_root, "report.json")
     evidence_dir = Path.join(test_root, "evidence")
     evidence = Path.join(evidence_dir, "bounded-receipt.json")
@@ -174,19 +176,9 @@ defmodule OpenAgents.StagingRegressionContractTest do
     assert {_, 0} = command("finalize-report.sh", ["--regression", report])
     assert Jason.decode!(File.read!(report))["state"] == "regression_passed"
 
-    decoded = Jason.decode!(File.read!(report))
-
-    staging_evidence =
-      decoded["staging_evidence"]
-      |> Map.put("failure_injection_timeline", [reference])
-      |> Map.put("soak_receipt", reference)
-
-    decoded = Map.put(decoded, "staging_evidence", staging_evidence)
-    File.write!(report, Jason.encode!(decoded))
-    File.chmod!(report, 0o600)
-
-    assert {_, 0} = command("finalize-report.sh", ["--final", report])
-    assert Jason.decode!(File.read!(report))["state"] == "complete"
+    assert {output, 1} = command("finalize-report.sh", ["--final", report])
+    assert output =~ "report remains unchanged"
+    assert Jason.decode!(File.read!(report))["state"] == "regression_passed"
 
     [checksum, "report.json"] =
       test_root |> Path.join("report.sha256") |> File.read!() |> String.split()

@@ -141,6 +141,11 @@ jq -e \
      common_staging_evidence_complete and
      (.staging_evidence.failure_injection_timeline | type == "array" and length > 0 and all(.[]; evidence_ref)) and
      (.staging_evidence.soak_receipt | evidence_ref) and
+     .staging_evidence.soak_receipt.kind == "resilience-report" and
+     any(.staging_evidence.failure_injection_timeline[];
+       .path == $report.staging_evidence.soak_receipt.path and
+       .sha256 == $report.staging_evidence.soak_receipt.sha256 and
+       .kind == "resilience-report") and
      (.staging_evidence.known_issues | type == "array" and all(.[];
        (.id | nonempty) and (.owner | nonempty) and
        (.severity | IN("low", "medium", "high", "critical")) and
@@ -206,5 +211,22 @@ while IFS="$tab" read -r relative_path expected_sha256; do
 
   "$script_dir/scan-evidence.sh" "$evidence_path" >/dev/null
 done <"$refs"
+
+if [ "$mode" = --final ]; then
+  resilience_relative=$(jq -r '.staging_evidence.soak_receipt.path' "$report")
+  resilience_report="$report_dir/$resilience_relative"
+  "$script_dir/validate-resilience-report.sh" --final "$resilience_report" >/dev/null
+
+  main_candidate_sha=$(jq -r '.candidate.git_sha' "$report")
+  resilience_candidate_sha=$(jq -r '.candidate.git_sha' "$resilience_report")
+  main_image_digest=$(jq -r '.candidate.application_manifest_digest' "$report")
+  resilience_image_digest=$(jq -r '.candidate.application_manifest_digest' "$resilience_report")
+
+  if [ "$main_candidate_sha" != "$resilience_candidate_sha" ] ||
+     [ "$main_image_digest" != "$resilience_image_digest" ]; then
+    echo "resilience report does not identify the Gate 14 candidate" >&2
+    exit 1
+  fi
+fi
 
 echo "Staging report $mode validation passed."

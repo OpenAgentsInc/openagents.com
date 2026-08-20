@@ -28,6 +28,24 @@ for command_name in jq sha256sum; do
   fi
 done
 
+report_schema=$(jq -r '.schema // empty' "$report")
+case "$report_schema" in
+  openagents.staging-report.v1)
+    validator="$script_dir/validate-report.sh"
+    result_field=results
+    matrix_name="staging regression matrix"
+    ;;
+  openagents.staging-resilience-report.v1)
+    validator="$script_dir/validate-resilience-report.sh"
+    result_field=failure_injections
+    matrix_name="staging resilience matrix"
+    ;;
+  *)
+    echo "REPORT has an unsupported schema" >&2
+    exit 1
+    ;;
+esac
+
 case "$case_id" in
   [a-z]*-[0-9][0-9][0-9]) ;;
   *) echo "CASE_ID has an invalid shape" >&2; exit 1 ;;
@@ -56,20 +74,26 @@ case "$outcome" in
   *) usage ;;
 esac
 
+if [ "$report_schema" = openagents.staging-resilience-report.v1 ] &&
+   [ "$outcome" = not_applicable ]; then
+  echo "every controlled-failure case is applicable to the staging resilience gate" >&2
+  exit 1
+fi
+
 report_state=$(jq -r '.state // empty' "$report")
 case "$report_state" in
-  draft) "$script_dir/validate-report.sh" --draft "$report" >/dev/null ;;
-  recorded) "$script_dir/validate-report.sh" --recorded "$report" >/dev/null ;;
+  draft) "$validator" --draft "$report" >/dev/null ;;
+  recorded) "$validator" --recorded "$report" >/dev/null ;;
   *)
     echo "only draft or recorded reports accept result changes" >&2
     exit 1
     ;;
 esac
 
-if ! jq -e --arg case_id "$case_id" '
-  any(.results[]; .id == $case_id)
+if ! jq -e --arg case_id "$case_id" --arg result_field "$result_field" '
+  any(.[$result_field][]; .id == $case_id)
 ' "$report" >/dev/null; then
-  echo "CASE_ID is not present in the staging matrix" >&2
+  echo "CASE_ID is not present in the $matrix_name" >&2
   exit 1
 fi
 
@@ -110,8 +134,8 @@ trap cleanup EXIT INT TERM
 umask 077
 mkdir -p "$evidence_dir"
 
-ordinal=$(jq -r --arg case_id "$case_id" '
-  (.results[] | select(.id == $case_id) | .attempts | length) + 1
+ordinal=$(jq -r --arg case_id "$case_id" --arg result_field "$result_field" '
+  (.[$result_field][] | select(.id == $case_id) | .attempts | length) + 1
 ' "$report")
 started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 completed_at=$started_at
@@ -160,11 +184,12 @@ jq \
   --arg evidence_kind "$evidence_kind" \
   --arg evidence_relative "$evidence_relative" \
   --arg evidence_sha256 "$evidence_sha256" \
+  --arg result_field "$result_field" \
   --rawfile reason "$reason_file" '
   ($reason | rtrimstr("\n")) as $reason |
   .state = "draft" |
   .completed_at = null |
-  .results |= map(
+  .[$result_field] |= map(
     if .id != $case_id then .
     elif $outcome == "not_applicable" then
       .status = "not_applicable" |
@@ -188,7 +213,7 @@ jq \
 ' "$report" >"$report_temp"
 chmod 600 "$report_temp"
 
-"$script_dir/validate-report.sh" --draft "$report_temp" >/dev/null
+"$validator" --draft "$report_temp" >/dev/null
 mv "$report_temp" "$report"
 report_temp=
 

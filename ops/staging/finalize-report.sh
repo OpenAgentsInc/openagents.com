@@ -27,6 +27,24 @@ for command_name in jq sha256sum; do
   fi
 done
 
+report_schema=$(jq -r '.schema // empty' "$report")
+case "$report_schema" in
+  openagents.staging-report.v1)
+    validator="$script_dir/validate-report.sh"
+    ;;
+  openagents.staging-resilience-report.v1)
+    validator="$script_dir/validate-resilience-report.sh"
+    if [ "$mode" = --regression ]; then
+      echo "a resilience report supports only --recorded and --final" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "REPORT has an unsupported schema" >&2
+    exit 1
+    ;;
+esac
+
 report_dir=$(CDPATH= cd -- "$(dirname -- "$report")" && pwd)
 report_temp=$(mktemp "$report_dir/.report.XXXXXX")
 cleanup() {
@@ -41,7 +59,7 @@ jq --arg state "$state" --arg completed_at "$completed_at" '
 ' "$report" >"$report_temp"
 chmod 600 "$report_temp"
 
-"$script_dir/validate-report.sh" "$mode" "$report_temp" >/dev/null || {
+"$validator" "$mode" "$report_temp" >/dev/null || {
   echo "report remains unchanged because $mode validation failed" >&2
   exit 1
 }

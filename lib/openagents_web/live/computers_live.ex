@@ -192,7 +192,12 @@ defmodule OpenAgentsWeb.ComputersLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={assigns[:current_scope]} title="Computers">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={assigns[:current_scope]}
+      title="Computers"
+    >
       <main id="computers-page" class="app-shell computers-shell">
         <section id="computers-manager" class="computers" aria-label="Paired computers">
           <div class="computers__inner">

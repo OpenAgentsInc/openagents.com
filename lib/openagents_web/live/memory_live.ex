@@ -47,7 +47,13 @@ defmodule OpenAgentsWeb.MemoryLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Memory" wide>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Memory"
+      wide
+    >
       <.memory_manager
         memory_records={@memory_records}
         memory_status={@memory_status}

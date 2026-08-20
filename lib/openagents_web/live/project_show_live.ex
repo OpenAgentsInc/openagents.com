@@ -71,7 +71,11 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+    >
       <div class="flex items-center justify-between mb-4">
         <h1 class="text-2xl font-bold">{@project.title}</h1>
         <.link

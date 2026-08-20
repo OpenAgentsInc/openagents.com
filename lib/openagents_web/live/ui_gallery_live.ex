@@ -39,7 +39,11 @@ defmodule OpenAgentsWeb.UIGalleryLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={assigns[:current_scope]}>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={assigns[:current_scope]}
+    >
       <main
         id="ui-gallery"
         class="mx-auto flex h-dvh w-full max-w-[1040px] flex-col overflow-y-auto border-x border-[var(--line)] bg-[var(--ink-surface)]"

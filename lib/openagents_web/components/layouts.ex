@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.Layouts do
 
   ## Examples
 
-      <Layouts.app flash={@flash}>
+      <Layouts.app flash={@flash} sidebar_sections={assigns[:sidebar_sections]}>
         <h1>Content</h1>
       </Layouts.app>
 
@@ -32,6 +32,15 @@ defmodule OpenAgentsWeb.Layouts do
   attr :current_scope, :map,
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
+
+  attr :sidebar_sections, :any,
+    default: %{},
+    doc: """
+    Which sidebar sections the reader has collapsed, from their cookie. Passed
+    down rather than read ambiently so a page that renders a sidebar cannot
+    quietly lose it -- `test/openagents_web/sidebar_state_test.exs` fails on a
+    call site that omits it.
+    """
 
   attr :wide, :boolean,
     default: false,
@@ -67,7 +76,11 @@ defmodule OpenAgentsWeb.Layouts do
   def app(assigns) do
     ~H"""
     <div class="h-screen flex overflow-hidden bg-background">
-      <.sidebar :if={@current_scope} current_scope={@current_scope}>
+      <.sidebar
+        :if={@current_scope}
+        current_scope={@current_scope}
+        sidebar_sections={@sidebar_sections || %{}}
+      >
         <:extra>{render_slot(@sidebar_extra)}</:extra>
       </.sidebar>
 
@@ -208,7 +221,14 @@ defmodule OpenAgentsWeb.Layouts do
   The component library is advertised outside production only. It documents
   the parts a page is built from rather than anything a visitor came for.
   """
-  attr :current_user, :map, default: nil, doc: "used only to decide whether admin shows"
+  # Required, with no default. Defaulting to nil made a forgotten attribute
+  # look exactly like a signed-out visitor, and the docs and component-library
+  # layouts both forgot it -- so an operator browsing either surface silently
+  # lost the Admin row. `nil` is still a fine thing to pass; it just has to be
+  # said.
+  attr :current_user, :any,
+    required: true,
+    doc: "the scope whose access decides the admin row; nil for a visitor"
 
   def sidebar_footer(assigns) do
     assigns =
@@ -252,7 +272,19 @@ defmodule OpenAgentsWeb.Layouts do
   the section you are reading would hide your own location.
   """
   attr :title, :string, required: true
-  attr :open, :boolean, default: false, doc: "first paint only; the reader's choice wins after"
+
+  attr :open, :boolean,
+    default: false,
+    doc: "the seed, used until the reader has said otherwise for this section"
+
+  attr :state, :map,
+    default: %{},
+    doc: """
+    The reader's collapsed/expanded sections, keyed by element id, as carried
+    from their cookie by `OpenAgentsWeb.Plugs.SidebarSections`. Applied here,
+    on the server, so a full page load paints what they chose rather than
+    painting the seed and having a hook correct it a frame later.
+    """
 
   attr :id, :string, default: nil, doc: "defaults to a slug of the title"
   slot :inner_block, required: true
@@ -262,7 +294,11 @@ defmodule OpenAgentsWeb.Layouts do
     # assigns as nil, so `assign_new` would consider it present and never
     # compute. A hook without a DOM id silently does not run.
     assigns =
-      assign(assigns, :id, assigns.id || "sidebar-section-" <> section_slug(assigns.title))
+      assigns
+      |> assign(:id, assigns.id || "sidebar-section-" <> section_slug(assigns.title))
+      |> then(fn assigns ->
+        assign(assigns, :open, Map.get(assigns.state, assigns.id, assigns.open))
+      end)
 
     ~H"""
     <details
@@ -288,23 +324,31 @@ defmodule OpenAgentsWeb.Layouts do
     a section the reader had closed. With no JavaScript the seed governs and
     the sidebar still works. --%>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".SidebarSection">
-      const KEY = "sidebar-sections"
+      // A cookie rather than sessionStorage, because the server has to know.
+      // Several sidebar destinations live in different live sessions, so
+      // moving between them is a full page load; state the server cannot read
+      // arrives too late, and the reader watches a section they collapsed
+      // paint open and then shut. See `OpenAgentsWeb.Plugs.SidebarSections`.
+      const KEY = "sidebar_sections"
 
       const read = () => {
+        const entry = document.cookie
+          .split("; ")
+          .find((part) => part.startsWith(KEY + "="))
+        if (!entry) return {}
         try {
-          return JSON.parse(sessionStorage.getItem(KEY)) || {}
+          return JSON.parse(decodeURIComponent(entry.slice(KEY.length + 1))) || {}
         } catch (_error) {
           return {}
         }
       }
 
       const write = (state) => {
-        try {
-          sessionStorage.setItem(KEY, JSON.stringify(state))
-        } catch (_error) {
-          // A full or unavailable store costs the reader their open sections
-          // on the next navigation, which is the behaviour without the hook.
-        }
+        const value = encodeURIComponent(JSON.stringify(state))
+        // Session-scoped, same-site, and readable by script because script is
+        // what maintains it. It holds which sidebar sections are open, so it
+        // is not worth protecting and must not be sent cross-site.
+        document.cookie = KEY + "=" + value + "; path=/; samesite=lax"
       }
 
       export default {
@@ -542,11 +586,14 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   attr :current_scope, :map, required: true
+  attr :sidebar_sections, :map, required: true
 
   slot :extra, doc: "rows contributed by the current page"
 
   defp sidebar(assigns) do
-    assigns = assign(assigns, :agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
+    assigns =
+      assigns
+      |> assign(:agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
 
     ~H"""
     <aside id="sidebar" class="sidebar hidden lg:flex">
@@ -573,7 +620,12 @@ defmodule OpenAgentsWeb.Layouts do
       the two things it can reach -- and reading as a group says that in a way
       six flat rows cannot. Open by default: grouping is for orientation here,
       not for hiding. --%>
-      <Layouts.sidebar_section :if={@agent_surfaces?} title="Sarah" open>
+      <Layouts.sidebar_section
+        :if={@agent_surfaces?}
+        title="Sarah"
+        open
+        state={@sidebar_sections}
+      >
         <Layouts.sidebar_link path={~p"/chat"} label="Chat" icon="chat" patchable={false} />
         <Layouts.sidebar_link
           path={~p"/computers"}

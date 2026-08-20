@@ -17,6 +17,7 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ContentSecurityPolicy
 
     plug :fetch_current_user
+    plug OpenAgentsWeb.Plugs.SidebarSections
   end
 
   pipeline :api do

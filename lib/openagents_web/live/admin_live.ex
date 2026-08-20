@@ -70,7 +70,13 @@ defmodule OpenAgentsWeb.AdminLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Admin" wide>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Admin"
+      wide
+    >
       <section class="panel" aria-label="Accounts">
         <header class="panel__header">
           <h1 class="panel__title">Accounts</h1>

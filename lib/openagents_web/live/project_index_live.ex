@@ -62,7 +62,13 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Projects" wide>
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Projects"
+      wide
+    >
       <.form
         for={@form}
         id="new-project-form"

@@ -274,7 +274,12 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Status">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+      title="Status"
+    >
       <main id="network-status-page" class="app-shell status-shell">
         <section class="status" aria-label="Network status">
           <header class="status-heading">

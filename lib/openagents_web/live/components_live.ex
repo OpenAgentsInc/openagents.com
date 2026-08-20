@@ -1127,7 +1127,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
         visitor sees.
       </p>
       <div class="demo-frame">
-        <Layouts.sidebar_footer />
+        <Layouts.sidebar_footer current_user={nil} />
       </div>
     </div>
     """

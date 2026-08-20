@@ -86,7 +86,12 @@ defmodule OpenAgentsWeb.CodeBlobLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={assigns[:current_scope]} title="Code">
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={assigns[:current_scope]}
+      title="Code"
+    >
       <main id="code-blob-page" class="app-shell code-shell">
         <section class="code" aria-label="File view">
           <header class="code-heading">

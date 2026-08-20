@@ -1375,12 +1375,12 @@ each handoff.
 - [x] GitHub token behavior matches code, UI disclosure, and data rights.
 - [ ] Gate 6 staging credentials are rotated and the complete staging log
       window passes automated and manual private-content review.
-- [ ] Issues and Projects are scoped by repository in code and PostgreSQL.
-- [ ] Every asynchronous recovery path has direct tests.
-- [ ] Browser-side voice, recording, and hook tests run in the owned gate.
-- [ ] Voice recording starts only after generation admission.
-- [ ] Build requests are structured, unique, bounded, and non-executable.
-- [ ] Artifacts are immutable, digested, manifest-checked, and durably stored.
+- [x] Issues and Projects are scoped by repository in code and PostgreSQL.
+- [x] Every asynchronous recovery path has direct tests.
+- [x] Browser-side voice, recording, and hook tests run in the owned gate.
+- [x] Voice recording starts only after generation admission.
+- [x] Build requests are structured, unique, bounded, and non-executable.
+- [x] Artifacts are immutable, digested, manifest-checked, and durably stored.
 - [ ] Fleet deployment is transactional and rolls back every affected node.
 - [ ] Boot convergence controls readiness.
 - [ ] Relup and rolling replacement pass their staging drills.
@@ -1409,6 +1409,27 @@ It also adopts the owner's two-tier icon decision, makes the current dark-only
 palette explicit, and treats the style-pack rename as a palette migration.
 This addendum remains as the measurement record. Everything here was verified
 directly at the SHA given, not inferred.
+
+## Current disposition
+
+The implementation gates resolved the addendum's code-level findings after the
+original measurement. Preserve the sections below as historical evidence; use
+this disposition for the current plan:
+
+| Finding | Current disposition |
+| --- | --- |
+| A1, missing browser tests and incomplete baseline | Resolved by Gate 0. The owned baseline now runs the Node suites, merged Elixir coverage, and release smoke against an exact SHA. |
+| A2, staging shares a production database failure domain | Open and blocking Gates 12 and 15. Provision a separate staging database instance before any failure injection or soak. |
+| A3, incompatible migration lineage on a nonempty prior database | Open and blocking Gate 13 for every prior-lineage target. Map and rehearse that lineage before deployment. |
+| A4, component, icon, and palette conflicts | Resolved by Gate 4 and its compiled CSS contract tests. |
+| A5, silent runtime configuration failures | Resolved by Gate 5 and its fail-closed runtime readiness checks. |
+| A6, repository authorization violations | Resolved by Gate 7 in code, PostgreSQL constraints, and the populated migration rehearsal. |
+| A7, missing recovery-worker tests | Resolved by Gate 8 with direct supervised-process recovery tests. |
+
+Gate 9 also resolves the later build-lane requirements that the addendum helped
+make measurable. It does not resolve transactional fleet deployment, isolated
+staging, migration-lineage rehearsal for an inherited database, or staging
+proof. Keep those items open until their named gates pass.
 
 ## A1. Gate 0 baseline, already measured
 

@@ -117,7 +117,61 @@ config :openagents,
     retention_days: 30
   ],
   leaderboard_limit: 100,
-  leaderboard_refresh_interval_ms: 1_000
+  leaderboard_refresh_interval_ms: 1_000,
+  leaderboard_auto_refresh_enabled: true,
+  voice_recovery_worker_enabled: true,
+  voice_retention_worker_enabled: true,
+  turn_recovery_enabled: false,
+  voice_retention_enabled: false,
+  ra_enabled: false,
+  incident_fixer_enabled: false,
+  github_oauth: [
+    client_id: nil,
+    client_secret: nil,
+    redirect_uri: "http://127.0.0.1:4000/auth/github/callback",
+    attempt_ttl_seconds: 600,
+    request_options: []
+  ],
+  github_token_encryption_key: nil,
+  voice_recording_encryption_key: nil,
+  inference_proxy_url: nil,
+  inference_grant_max_total_tokens: 2_000_000,
+  inference_grant_max_calls: 64,
+  inference_grant_max_cost_microusd: 5_000_000,
+  inference_grant_ttl_seconds: 900,
+  inference_input_price_microusd_per_ktoken: 1_250,
+  inference_output_price_microusd_per_ktoken: 10_000,
+  forge_enabled: false,
+  forge_boot_converge_enabled: false,
+  forge_deploy_lane_enabled: true,
+  forge_data_dir: nil,
+  forge_build_dir: "/var/lib/sarah/workspace/build",
+  forge_repos: ["sarah"],
+  forge_internal_git_url: "http://127.0.0.1:8080/git",
+  forge_operator_token: nil,
+  forge_mirror_urls: %{},
+  forge_wal_adapter: OpenAgents.Forge.WAL.Local,
+  forge_wal_dir: nil,
+  forge_wal_bucket: nil,
+  forge_gcs_token_provider: nil,
+  forge_hot_load_allowlist: [
+    "lib/openagents",
+    "lib/openagents_web",
+    "priv/sarah",
+    "config",
+    "mix.exs"
+  ],
+  forge_public_visibility: %{"sarah" => :l2},
+  forge_repo_owners: %{"sarah" => "OpenAgentsInc"},
+  forge_public_paths: %{
+    "sarah" => [
+      "README.md",
+      "CHANGELOG.md",
+      "docs/audits/2026-08-19-public-changelog-transparency-audit.md",
+      "docs/plans/2026-08-19-transparency-spec-and-roadmap.md"
+    ]
+  },
+  dns_cluster_query: nil
 
 # Configure the endpoint
 config :openagents, OpenAgentsWeb.Endpoint,

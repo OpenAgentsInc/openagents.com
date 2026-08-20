@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Proposed
+Status: Proposed, amended with measured findings
 
 ## Outcome
 
@@ -65,11 +65,20 @@ Create a reliable starting point before changing architecture or infrastructure.
 1. Record the current Git SHA and confirm the worktree is clean.
 2. Run `mix precommit` on an owned test machine.
 3. Run `mix test --only cluster` as a separate stage.
-4. Run the JavaScript tests for voice state, recording, and browser hooks.
-5. Run `mix test --cover` and merge its result with the separate cluster stage.
-6. Record compile warnings, test exclusions, flaky tests, and test duration.
-7. Build a release and run its startup path against a disposable database.
-8. Save the result as a local, content-free gate receipt tied to the SHA.
+4. Port or recreate the missing Node tests for voice state, recording, and
+   browser hooks, and add an explicit package test command.
+5. Run those JavaScript tests as a required stage.
+6. Run `mix test --cover` and merge its result with the separate cluster stage.
+7. Record compile warnings, test exclusions, flaky tests, and test duration.
+8. Build a release and run its startup path against a disposable database.
+9. Save the result as a local, content-free gate receipt tied to the SHA.
+
+The baseline at `d5679e8` recorded 1,218 default tests passing with 9 cluster
+tests excluded, all 9 cluster tests passing separately, no compile warnings, no
+hidden skips, and 83.14% line coverage before merging cluster coverage. Keep
+that result as historical evidence, but rerun the complete gate for each
+candidate. Gate 0 remains blocked until the missing JavaScript suite exists and
+runs.
 
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it
@@ -255,11 +264,20 @@ Remove the unused parser and update every related document in the same commit.
   removal list.
 - Remove DaisyUI aliases and compatibility tokens after every surface has
   migrated.
-- Use one application icon path. Remove Heroicons and its dependency after the
-  remaining issue and layout surfaces use vendored icons.
+- Use one documented icon policy: Apps SDK icons are preferred, and Heroicons
+  remains the deliberate fallback when the preferred set has no suitable
+  glyph. Do not add a third source. Inventory fallback uses so they stay
+  exceptional rather than becoming the default.
 - Keep Basecoat imports per component and do not load Basecoat JavaScript.
-- Rename the style pack after generic application components no longer depend on
-  the Sarah name.
+- Reject any component library that emits generic component selectors into the
+  Tailwind utilities layer or otherwise outranks the application component
+  layer. Verify cascade behavior, not only dependency names.
+- Keep the product deliberately dark-only for staging. Hide or remove the theme
+  toggle while it has no visual effect; treat a light palette as a separate,
+  owner-approved design project.
+- Treat any style-pack rename as a controlled palette migration. Preserve the
+  primitive token contract, run visual regression checks, and do not mistake a
+  load-bearing palette file for a cosmetic filename.
 - Make the component catalog the executable inventory of supported primitives.
 
 ### Audit dependencies and licenses
@@ -272,7 +290,8 @@ Remove the unused parser and update every related document in the same commit.
 - Build an SBOM for the staging image and retain it with the staging evidence.
 
 **Exit criteria:** The application has one Markdown parser, one component
-system, one icon path, no unexplained dependency, and complete license records.
+system, one documented two-tier icon policy, no nonfunctional theme control, no
+unexplained dependency, and complete license records.
 
 ## Gate 5: Make runtime configuration explicit and fail closed
 
@@ -293,6 +312,10 @@ Validate these groups at boot:
 
 Apply these rules:
 
+- Prefer `Application.fetch_env!/2` for required settings whose absence changes
+  behavior. Permit a default only for a documented, sanctioned degraded mode.
+- Validate value kinds and domains, not only presence. Repository paths are not
+  module names, and a structurally valid allowlist can still be unusable.
 - Use explicit staging values instead of relying on development defaults.
 - Refuse invalid or incomplete feature combinations. For example, refuse an
   enabled recording feature without a recording key.
@@ -309,6 +332,11 @@ Apply these rules:
 Add a command that prints a content-free configuration readiness report. It
 should show enabled features and validation status without printing secrets,
 URLs with credentials, internal node names, or tokens.
+
+Add startup self-tests for behavior-changing registries and policies. At a
+minimum, prove the tool catalog is nonempty when tools are enabled and prove
+that configured hot-load examples classify as intended. A node that silently
+boots without its tools or rejects every direct load is not ready.
 
 **Exit criteria:** A staging release either starts with a valid, reviewed
 configuration or exits before serving traffic with a redacted diagnostic.
@@ -392,6 +420,17 @@ Build on the completed controller, LiveView, and domain coverage. Add
 multi-repository isolation cases without duplicating the existing mount,
 interaction, and JSON-contract cases.
 
+Treat these measured behaviors as known blockers, not hypothetical risks:
+
+- `OpenAgentsWeb.ProjectController` ignores the requested username in five
+  project actions, allowing a project to be read or changed through another
+  user's path.
+- `AssigneeController` reports no assignable users while issue mutations accept
+  an arbitrary login.
+
+Replace both behaviors with explicit repository and user authorization rules,
+then update the tests that currently pin them as existing behavior.
+
 **Exit criteria:** An owner or repository path can never read or mutate a row
 owned by another repository, and PostgreSQL enforces the boundary.
 
@@ -424,6 +463,11 @@ owned by another repository, and PostgreSQL enforces the boundary.
   destructive export and deletion tests.
 
 ### Recovery workers
+
+Write a behavior specification from the durable-state and recovery invariants
+before writing tests. There is no inherited recovery-worker suite to translate,
+so this work must resolve intended behavior rather than guess from the current
+implementation.
 
 Add direct tests for:
 
@@ -551,6 +595,11 @@ fallbacks before broadening the direct-load allowlist.
 - Prove that a stateful process keeps its PID and data through upgrade,
   downgrade, and re-upgrade.
 
+Before broadening the direct-load allowlist, prove one complete
+push-to-build-to-canary-to-fleet-to-live path with an allowlisted module. A
+configuration review alone cannot detect an allowlist whose values are the
+wrong kind.
+
 ### Rolling replacement lane
 
 - Build an immutable image identified by digest.
@@ -586,6 +635,11 @@ The existing Cloud Run staging service can validate the web application, OAuth,
 LiveView, chat, memory, provider, and voice behavior. It cannot by itself prove
 three-node BEAM hot loading, stable node identity, relup installation, or
 node-by-node rolling replacement.
+
+The current staging service and three-node fleet share the production Cloud SQL
+instance. Provision a staging-only database instance before claiming this gate
+or running load, restart, connection-exhaustion, destructive, or soak tests.
+A separate database on the same instance is not an isolation boundary.
 
 Use two staging lanes until the intended fleet replaces the web-only lane:
 
@@ -628,8 +682,8 @@ as evidence for an OTP relup.
 
 - Use a separate Google Cloud project or a strictly isolated staging boundary.
 - Use staging-specific service accounts with minimum permissions.
-- Use separate Secret Manager secrets, database, buckets, DNS records, OAuth
-  client, and machine tokens.
+- Use a separate database instance and role, Secret Manager secrets, buckets,
+  DNS records, OAuth client, and machine tokens.
 - Deny access to production secrets and production databases.
 - Mark every staging banner, status response, log entry, and receipt as staging.
 - Take a database snapshot before migration and destructive data-rights drills.
@@ -637,7 +691,8 @@ as evidence for an OTP relup.
   and test accounts after the run.
 
 **Exit criteria:** Staging can test both the user-facing product and the complete
-distributed deployment mechanism without touching production state.
+distributed deployment mechanism without touching production state or sharing
+production's database capacity and failure domain.
 
 ## Gate 13: Deploy to staging reproducibly
 
@@ -647,23 +702,28 @@ Use this sequence for every staging candidate:
 2. Require its local gate receipt.
 3. Build and retain the image, release, SBOM, build manifest, and artifact
    digests.
-4. Restore a recent sanitized staging snapshot into a disposable rehearsal
-   database and run every migration.
-5. Run startup, rollback-compatible schema, and data-integrity checks against
-   the rehearsal database.
-6. Snapshot the actual staging database.
-7. Deploy the candidate to the web acceptance lane with high-risk features
+4. Classify the target as an empty current-lineage database or an existing
+   database created by the prior migration lineage.
+5. For an empty current-lineage database, run every current migration. For an
+   existing prior-lineage database, first produce a schema diff and a written
+   baseline map that identifies already-satisfied versions, required
+   `schema_migrations` entries, and genuinely new changes. Never replay the
+   consolidated create migrations onto existing tables.
+6. Rehearse the selected migration path on a disposable copy and run startup,
+   rollback-compatible schema, and data-integrity checks.
+7. Snapshot the actual staging database.
+8. Deploy the candidate to the web acceptance lane with high-risk features
    disabled.
-8. Confirm migration completion, `/healthz`, `/status`, database connectivity,
+9. Confirm migration completion, `/healthz`, `/status`, database connectivity,
    LiveView connection, and revision identity.
-9. Hard-reload persistent browser sessions so they connect to the new revision.
-10. Enable one gated subsystem at a time and run its regression group.
-11. Deploy the same candidate to the distributed lane.
-12. Run direct-load, rollback, boot-convergence, relup, and rolling-replacement
+10. Hard-reload persistent browser sessions so they connect to the new revision.
+11. Enable one gated subsystem at a time and run its regression group.
+12. Deploy the same candidate to the distributed lane.
+13. Run direct-load, rollback, boot-convergence, relup, and rolling-replacement
    drills.
-13. Collect sanitized logs, database truth checks, receipts, screenshots, and
+14. Collect sanitized logs, database truth checks, receipts, screenshots, and
    timing evidence.
-14. Roll back staging if any blocking check fails.
+15. Roll back staging if any blocking check fails.
 
 Do not combine an application change, schema contraction, infrastructure
 change, and first-time feature enablement in one staging candidate.
@@ -816,6 +876,8 @@ verification.
 ## Gate 15: Run failure injection and soak staging
 
 After functional regression passes, test the system under controlled failure.
+Do not begin this gate while staging shares a database instance, connection
+budget, or failure domain with production.
 
 Inject these failures one at a time:
 
@@ -872,6 +934,8 @@ Production remains blocked while any of these conditions is true:
 - Documentation and `INVARIANTS.md` disagree with the implementation.
 - A current invariant points to missing evidence.
 - Any test is silently skipped or a cluster test is not run.
+- The browser-side voice, recording, and hook suite does not exist or is not
+  part of the owned release gate.
 - A critical route lacks an explicit authority class.
 - Repository data is not scoped and constrained by repository ID.
 - GitHub token retention is undocumented or cannot be rotated and revoked.
@@ -879,7 +943,10 @@ Production remains blocked while any of these conditions is true:
 - The forge can mark a partial fleet deployment live.
 - Artifact identity, digest, rollback, boot convergence, relup, or rolling
   replacement lacks staging proof.
-- Staging depends on production credentials or data.
+- Staging depends on production credentials, data, database capacity, or a
+  shared database failure domain.
+- The migration lineage for any existing database has not been mapped and
+  rehearsed on a disposable copy.
 - A staging regression, failure-injection case, or soak issue remains
   unexplained.
 - Logs contain secrets or private product content.
@@ -900,15 +967,15 @@ each handoff.
 | 2 | Reconcile plans, component docs, and invariant evidence | No broken evidence links or duplicate invariant IDs |
 | 3 | Rename generic Sarah infrastructure and configure `openagents.com` targets | Allowed-reference check passes |
 | 4 | Centralize and validate runtime configuration | Invalid staging configurations fail before traffic |
-| 5 | Resolve Markdown, UI, icon, dependency, and license consolidation | Parser security and component contract tests pass |
+| 5 | Resolve Markdown, UI, icon-policy, palette, dependency, and license consolidation | Parser security, cascade, theme, and component contract tests pass |
 | 6 | Resolve GitHub token policy and classify route authority | Auth, CSRF, replay, and secret-redaction tests pass |
 | 7 | Add repository entities and tenant-scoped tracker data | Cross-repository isolation tests pass |
 | 8 | Close chat, recovery, memory, voice, work, and machine hardening gaps | Async failure and recovery tests pass |
 | 9 | Replace the forge build queue and add immutable artifact manifests | Build reproducibility and corruption tests pass |
 | 10 | Add transactional fleet deployment and readiness-bound boot convergence | Three-node rollback and cold-boot tests pass |
 | 11 | Complete relup, reverse-relup, and rolling replacement | Upgrade and replacement drills pass |
-| 12 | Add the owned release gate and content-free receipts | Exact-SHA refusal and full local gate pass |
-| 13 | Provision isolated web and distributed staging lanes | Isolation and configuration review pass |
+| 12 | Add missing JavaScript coverage, the owned release gate, and content-free receipts | Exact-SHA refusal and full local gate pass |
+| 13 | Provision isolated web and distributed staging lanes, including a separate database instance | Isolation and configuration review pass |
 | 14 | Add staging harnesses and the evidence report template | Regression harness dry run passes |
 | 15 | Deploy one staging candidate and complete the full matrix | Staging report is complete |
 | 16 | Complete failure injection and the 48-hour soak | No unexplained blocking issues remain |
@@ -918,12 +985,15 @@ each handoff.
 - [ ] The repository has one accurate architecture narrative.
 - [ ] Every remaining Sarah reference is intentional and specific.
 - [ ] All documentation links and invariant evidence resolve.
-- [ ] The application has one Markdown parser, component system, and icon path.
+- [ ] The application has one Markdown parser, component system, and documented
+      two-tier icon policy.
+- [ ] The dark-only palette has no nonfunctional theme control.
 - [ ] Runtime configuration is typed, redacted, and staging-specific.
 - [ ] Every route has an explicit authority class.
 - [ ] GitHub token behavior matches code, UI disclosure, and data rights.
 - [ ] Issues and Projects are scoped by repository in code and PostgreSQL.
 - [ ] Every asynchronous recovery path has direct tests.
+- [ ] Browser-side voice, recording, and hook tests run in the owned gate.
 - [ ] Voice recording starts only after generation admission.
 - [ ] Build requests are structured, unique, bounded, and non-executable.
 - [ ] Artifacts are immutable, digested, manifest-checked, and durably stored.
@@ -932,6 +1002,8 @@ each handoff.
 - [ ] Relup and rolling replacement pass their staging drills.
 - [ ] Owned local gates produce exact-SHA receipts.
 - [ ] Web and distributed staging are isolated from production.
+- [ ] Staging has a separate database instance and failure domain.
+- [ ] The migration lineage is mapped and rehearsed for every nonempty target.
 - [ ] The complete regression matrix passes on one SHA.
 - [ ] Failure injection and the 48-hour soak pass.
 - [ ] The staging evidence report contains no secrets or private content.
@@ -939,18 +1011,20 @@ each handoff.
 
 ---
 
-# Addendum: measured state and three unnamed blockers
+# Addendum: measured state and blocker evidence
 
 Date: 2026-08-20
 Author: the agent that ran the DaisyUI consolidation, the port-gap fan-out, and
 the coverage audit
-Status: notes on the plan above, not a revision of it
+Status: accepted and incorporated into the plan above
 
-The plan above is sound and I am not proposing changes to its gate structure.
-This addendum supplies measured values for Gate 0, records three blockers the
-plan does not name, and flags four places where the plan and a prior owner
-decision disagree. Everything here was verified directly at the SHA given, not
-inferred.
+The gate structure remains intact. The main plan now incorporates the measured
+Gate 0 baseline, the missing JavaScript suite, database isolation, migration
+lineage, configuration and authorization evidence, and recovery-test scope.
+It also adopts the owner's two-tier icon decision, makes the current dark-only
+palette explicit, and treats the style-pack rename as a palette migration.
+This addendum remains as the measurement record. Everything here was verified
+directly at the SHA given, not inferred.
 
 ## A1. Gate 0 baseline, already measured
 
@@ -972,13 +1046,13 @@ Two qualifiers on that coverage number, both already in the coverage audit:
   is not a nicety; without it those two modules are misreported as untested.
 - Line coverage maps where nothing is looking. It is not a quality score.
 
-**Gate 0 cannot pass as written.** Item 4 asks to "run the JavaScript tests for
-voice state, recording, and browser hooks." **There are no JavaScript tests in
-this repository.** `assets/` contains no test files and `assets/package.json`
-declares no test script. Sarah has two Node test files (~329 lines) covering
-voice state and recording; they were not carried across in the port. That is a
-porting gap, not a step someone forgot to run, and Gate 0 should name it as work
-rather than as a checkbox.
+**Gate 0 could not pass when this was measured.** Its item 4 asked to "run the
+JavaScript tests for voice state, recording, and browser hooks," but **there are
+no JavaScript tests in this repository.** `assets/` contains no test files and
+`assets/package.json` declares no test script. Sarah has two Node test files
+(~329 lines) covering voice state and recording; they were not carried across
+in the port. That is a porting gap, not a step someone forgot to run. Gate 0 now
+names creation of the missing suite as blocking work.
 
 ## A2. Blocker: staging is not isolated from production today
 
@@ -1012,6 +1086,7 @@ Consequences the plan should state explicitly:
 
 This does not require solving production HA. It requires staging to get its own
 instance before Gate 12 is claimed, and Gate 15 must not run until it does.
+Gates 12 and 15 now state that hold explicitly.
 
 ## A3. Blocker: openagents.com migrations cannot replay onto a Sarah database
 
@@ -1039,11 +1114,16 @@ That fix works for staging precisely because staging has no data worth keeping.
 needs a written lineage plan first: which of this repo's migrations are already
 satisfied by the existing schema, how `schema_migrations` gets baselined so those
 are marked run rather than replayed, and which are genuinely new. Treat the
-staging crash as the cheap rehearsal it was.
+staging crash as the cheap rehearsal it was. Gate 13 now separates empty
+current-lineage targets from nonempty prior-lineage targets and requires the
+baseline map and rehearsal before deployment.
 
 ## A4. Four places the plan disagrees with a prior decision or current state
 
-These are flagged for a deliberate choice, not corrected unilaterally.
+These were originally flagged for deliberate choices. Gate 4 now records their
+disposition: retain the owner-approved Heroicons fallback, keep staging
+deliberately dark-only without a nonfunctional toggle, control the palette-file
+rename as a visual migration, and reject conflicting cascade-layer behavior.
 
 **Heroicons.** Gate 4 says "Remove Heroicons and its dependency after the
 remaining issue and layout surfaces use vendored icons." The owner's ruling on
@@ -1097,10 +1177,10 @@ Separately, `Tools.Registry.install!` reads
 upstream uses `fetch_env!`. With the key unset the node booted with an **empty
 tool catalog**: 5,874 lines of tool code compiled and unreachable, no error.
 
-Three of four failures were invisible. That is the argument for Gate 5, and it
-suggests one addition to it: **prefer `fetch_env!` to `get_env/3` for any setting
-whose absence changes behaviour.** A default that silently degrades is worse than
-a crash at boot, and `DEGRADE-001` already forbids undeclared degradation.
+Three of four failures were invisible. That is the argument for Gate 5. It now
+requires `fetch_env!` instead of `get_env/3` for settings whose absence changes
+behavior. A default that silently degrades is worse than a crash at boot, and
+`DEGRADE-001` already forbids undeclared degradation.
 
 The same class of bug hid a fourth: `forge_hot_load_allowlist` was configured
 with repo *paths* (`"lib/openagents"`, `"config"`, `"mix.exs"`) while
@@ -1108,7 +1188,8 @@ with repo *paths* (`"lib/openagents"`, `"config"`, `"mix.exs"`) while
 `needs_rolling_replace` and nothing could reach `live`. **Hot loading did not
 work at all in this repository** and no error said so. Gate 11 should require a
 functional push→live proof, not a configuration review — a well-formed config
-value of the wrong *kind* passes review and fails silently.
+value of the wrong *kind* passes review and fails silently. Gate 11 now requires
+that functional proof.
 
 ## A6. Gate 7 has a concrete existing violation
 
@@ -1126,7 +1207,8 @@ is an authorization gap and not merely a GitHub-shape mismatch.
 Also relevant to Gate 7: `AssigneeController` is a hardcoded stub whose `index`
 always returns `%{assignees: []}` and whose `show` always 404s, while
 `POST .../issues/:n/assignees` accepts any login. No user is ever reported
-assignable, yet anyone can be assigned.
+assignable, yet anyone can be assigned. Gate 7 now names both behaviors as
+blocking authorization work.
 
 ## A7. The recovery-worker gap is inherited, not created by the port
 

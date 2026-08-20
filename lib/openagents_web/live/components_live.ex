@@ -616,6 +616,31 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   # --- Layout ---------------------------------------------------------------
 
+  defp component_demo(%{item: %{slug: "sidebar-section"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A native <code>&lt;details&gt;</code>, so it needs no JavaScript and no ARIA
+        kept in sync by hand. Click a heading to collapse it.
+      </p>
+      <div class="docs-sidebar__nav max-w-xs">
+        <Layouts.sidebar_section title="Open by default" open>
+          <Layouts.sidebar_link path="#" label="First" icon="book" patchable={false} />
+          <Layouts.sidebar_link path="#" label="Second" icon="cube" selected patchable={false} />
+        </Layouts.sidebar_section>
+        <Layouts.sidebar_section title="Collapsed by default">
+          <Layouts.sidebar_link path="#" label="Hidden until opened" icon="grid" patchable={false} />
+        </Layouts.sidebar_section>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The section holding the current page opens itself: collapsing the section you
+        are reading would hide your own location. Because the sidebar patches rather
+        than remounts, whatever you collapse stays collapsed as you move between pages.
+      </p>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "sidebar-link"}} = assigns) do
     ~H"""
     <div class="space-y-3">

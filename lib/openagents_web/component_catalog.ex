@@ -190,6 +190,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       title: "Layout",
       items: [
         %{
+          slug: "sidebar-section",
+          title: "Sidebar section",
+          icon: "chevron-down",
+          source: "OpenAgentsWeb.Layouts.sidebar_section/1",
+          summary: "A collapsible group of sidebar rows, built on native details."
+        },
+        %{
           slug: "sidebar-link",
           title: "Sidebar link",
           icon: "menu",

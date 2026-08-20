@@ -23,11 +23,11 @@
         />
       </section>
 
-      <section
+      <Layouts.sidebar_section
         :for={section <- OpenAgentsWeb.ComponentCatalog.sections()}
-        class="docs-sidebar__section"
+        title={section.title}
+        open={Enum.any?(section.items, &(&1.slug == @active_component))}
       >
-        <h3 class="sidebar-section-label">{section.title}</h3>
         <Layouts.sidebar_link
           :for={item <- section.items}
           path={~p"/components/#{item.slug}"}
@@ -36,10 +36,9 @@
           selected={@active_component == item.slug}
           patchable={patchable?}
         />
-      </section>
+      </Layouts.sidebar_section>
 
-      <section class="docs-sidebar__section">
-        <h3 class="sidebar-section-label">Reference</h3>
+      <Layouts.sidebar_section title="Reference" open={@active_component == :icons}>
         <Layouts.sidebar_link
           path={~p"/components/icons"}
           label="Icons"
@@ -47,7 +46,7 @@
           selected={@active_component == :icons}
           patchable={false}
         />
-      </section>
+      </Layouts.sidebar_section>
     </nav>
   </aside>
 

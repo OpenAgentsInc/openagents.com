@@ -136,6 +136,35 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
+  A collapsible sidebar section.
+
+  A native `<details>`, so it needs no JavaScript, is keyboard operable, and
+  reports its own state to assistive technology. Because the sidebar now
+  patches rather than remounts, the element survives navigation and so does
+  whatever the reader collapsed.
+
+  `open` should be true for the section holding the current page: collapsing
+  the section you are reading would hide your own location.
+  """
+  attr :title, :string, required: true
+  attr :open, :boolean, default: false
+  slot :inner_block, required: true
+
+  def sidebar_section(assigns) do
+    ~H"""
+    <details class="docs-sidebar__section sidebar-section" open={@open}>
+      <summary class="sidebar-section-label sidebar-section__summary">
+        <UI.icon name="chevron-right" class="sidebar-section__caret" />
+        <span>{@title}</span>
+      </summary>
+      <div class="sidebar-section__items">
+        {render_slot(@inner_block)}
+      </div>
+    </details>
+    """
+  end
+
+  @doc """
   A sidebar row that navigates without throwing the sidebar away.
 
   `/components` and `/components/:slug` are the same LiveView, so moving

@@ -610,12 +610,31 @@
  * media query whether a preference was *stored*.
  */
 @layer components {
+  /* A circle, not a rounded square: this is an icon-only control, so the
+     target should be the same shape as the glyph it holds. Width is pinned to
+     the height so the box is square before the radius rounds it -- padding
+     alone would make it an oval the moment the glyph changed size. */
   .theme-toggle {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
     color: var(--icon-tertiary);
+  }
+
+  .theme-toggle .icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
   }
 
   @media (hover: hover) {
     .theme-toggle:hover {
+      background: var(--wash-hover);
       color: var(--icon-primary);
     }
   }

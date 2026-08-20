@@ -3,6 +3,9 @@ defmodule OpenAgentsWeb.Router do
 
   import OpenAgentsWeb.UserAuth
 
+  # The account segment public forge URLs live under, mirroring GitHub.
+  @forge_url_owner Application.compile_env(:openagents, :forge_url_owner, "OpenAgentsInc")
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -48,9 +51,6 @@ defmodule OpenAgentsWeb.Router do
       live "/status", NetworkStatusLive, :index
       live "/changelog", ChangelogLive, :index
       live "/leaderboard", LeaderboardLive, :index
-      live "/code/:owner/:repo", CodeRepoLive, :index
-      live "/code/:owner/:repo/blob/*path", CodeBlobLive, :index
-      live "/code/:owner/:repo/commit/:sha", CodeCommitLive, :index
     end
 
     # `/components/icons` must stay ahead of `/components/:slug` so the literal
@@ -73,6 +73,25 @@ defmodule OpenAgentsWeb.Router do
     get "/auth/github/callback", AuthController, :callback
     delete "/logout", AuthController, :logout
     get "/healthz", HealthController, :show
+  end
+
+  # The public forge web UI (TRANSPARENCY-001), addressed exactly the way the
+  # GitHub URL it replaces is:
+  # openagents.com/OpenAgentsInc/sarah/blob/main/README.md.
+  #
+  # The owner is a LITERAL scope segment, not a `:owner` pattern: a wildcard
+  # first segment would match every two-segment path on the domain (/dev/ui,
+  # a future /foo/bar) and shadow it. Scoping to the owning account keeps the
+  # GitHub-identical URL while touching nothing else.
+  scope "/#{@forge_url_owner}", OpenAgentsWeb do
+    pipe_through :browser
+
+    live_session :public_code,
+      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/:repo", CodeRepoLive, :index
+      live "/:repo/commit/:sha", CodeCommitLive, :index
+      live "/:repo/blob/:ref/*path", CodeBlobLive, :index
+    end
   end
 
   scope "/", OpenAgentsWeb do
@@ -109,7 +128,10 @@ defmodule OpenAgentsWeb.Router do
     delete "/data", DataController, :delete
     delete "/data/reset", DataController, :reset
 
-    get "/machines", ComputersController, :index
+    # The legacy Computers path is a permanent-ish redirect, not a second
+    # render of the surface: it must drop its query (an OAuth `code=` must
+    # never survive into the canonical URL).
+    get "/machines", LegacyMachinesController, :show
 
     get "/memory/export", MemoryExportController, :show
   end

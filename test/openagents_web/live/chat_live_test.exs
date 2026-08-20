@@ -117,7 +117,10 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   end
 
   test "plain message text is flush with its tags so pre-wrap renders nothing extra" do
-    template = File.read!("lib/sarah_web/live/chat_live.ex")
+    # Ported from Sarah: the file this reads was `lib/sarah_web/live/chat_live.ex`
+    # there. Only the path changed with the re-namespacing — the assertion below
+    # is unchanged and still guards the same markup.
+    template = File.read!("lib/openagents_web/live/chat_live.ex")
 
     # `.message-content` is `white-space: pre-wrap`, which is what preserves the
     # line breaks a person actually typed. Any newline or indentation the

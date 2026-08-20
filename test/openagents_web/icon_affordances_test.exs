@@ -67,19 +67,34 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
     test "no surface hand-writes an svg outside the vendored set" do
       # Every glyph must come from `priv/icons` through `icon/1`. A pasted
       # `<svg>` in a template is how a second, unmanaged icon set starts.
-      # The landing grid is a documented exception: it is a background pattern,
-      # not an icon, and it has to be a DOM SVG so its stroke can read `--line`
-      # rather than being baked into an opaque data URI. See DESIGN.md.
-      grid = "lib/sarah_web/controllers/home_html/show.html.heex"
+      #
+      # Ported from Sarah, where this globbed `lib/sarah_web/**` and carried a
+      # documented exemption for Sarah's landing template
+      # (`lib/sarah_web/controllers/home_html/show.html.heex`), whose
+      # `landing-grid` is a background pattern rather than an icon. That
+      # exemption is dropped rather than repointed: the OpenAgents home is
+      # `OpenAgentsWeb.HomeLive` ("The Agent Forge"), it renders no background
+      # SVG, and Sarah's landing template is deliberately not part of this app.
+      # If a background pattern is ever added here, re-add the exemption WITH
+      # the staleness assertion that guarded it.
+      #
+      # The exempt files are the ones that IMPLEMENT the vendored set:
+      # `icons.ex` holds it, and `icon/1` is defined in both `sarah_ui.ex` (which
+      # matches the `ui.ex` suffix Sarah used) and `core_components.ex`. The
+      # assertions below fail loudly if either stops being icon plumbing, so the
+      # exemption cannot silently become a hole.
+      renderers = ["lib/openagents_web/components/core_components.ex"]
 
-      assert File.read!(grid) =~ "landing-grid",
-             "the inline-SVG exemption for #{grid} is stale; it no longer holds the grid"
+      for renderer <- renderers do
+        assert File.read!(renderer) =~ "OpenAgentsWeb.Icons.fetch!",
+               "the inline-SVG exemption for #{renderer} is stale; it no longer renders the vendored set"
+      end
 
       offenders =
-        "lib/sarah_web/**/*.{ex,heex}"
+        "lib/openagents_web/**/*.{ex,heex}"
         |> Path.wildcard()
         |> Enum.reject(&String.ends_with?(&1, ["ui.ex", "icons.ex"]))
-        |> Enum.reject(&(&1 == grid))
+        |> Enum.reject(&(&1 in renderers))
         |> Enum.filter(fn path -> path |> File.read!() |> String.contains?("<svg") end)
 
       assert offenders == [],

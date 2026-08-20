@@ -54,7 +54,12 @@ defmodule OpenAgents.Providers.Test do
 
       "[inspect-persona]" ->
         result =
-          if String.contains?(request.instructions, "You are OpenAgents.") and
+          # The re-namespacing port rewrote this literal to "You are OpenAgents.",
+          # but it is not a module name — it is a quote from the installed
+          # persona document (`priv/sarah/persona/sarah.v1.md`, which still reads
+          # "You are Sarah. You are an OpenAgent built by OpenAgents."). Asserting
+          # the shipped persona text is the whole point of this branch.
+          if String.contains?(request.instructions, "You are Sarah.") and
                String.contains?(request.instructions, "You are an OpenAgent") and
                String.contains?(request.instructions, "sarah.role.general_collaborator.v1") do
             "Sarah persona and role received."

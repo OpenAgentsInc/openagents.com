@@ -10,8 +10,28 @@ defmodule OpenAgents.Forge.BuilderTest do
 
   describe "pure Sidecar adapter pieces" do
     test "render_job serializes the two env-style lines the watcher sources" do
-      assert Sidecar.render_job("abc123", "http://x:tok@127.0.0.1:8080/git/openagents.com.git") ==
-               "SHA=abc123\nREPO_URL=http://x:tok@127.0.0.1:8080/git/openagents.com.git\n"
+      assert Sidecar.render_job("abc123", "http://127.0.0.1:8080/git/openagents.com.git") ==
+               "SHA=abc123\nREPO_URL=http://127.0.0.1:8080/git/openagents.com.git\n"
+
+      refute Sidecar.render_job("abc123", "http://127.0.0.1/repo.git") =~ "token"
+    end
+
+    test "sidecar repository URLs never contain the operator credential" do
+      previous_url = Application.get_env(:openagents, :forge_internal_git_url)
+      previous_token = Application.get_env(:openagents, :forge_operator_token)
+
+      on_exit(fn ->
+        Application.put_env(:openagents, :forge_internal_git_url, previous_url)
+        Application.put_env(:openagents, :forge_operator_token, previous_token)
+      end)
+
+      Application.put_env(:openagents, :forge_internal_git_url, "http://forge.internal/git")
+      Application.put_env(:openagents, :forge_operator_token, "forge-secret-sentinel")
+
+      assert Sidecar.repo_url("openagents.com") ==
+               "http://forge.internal/git/openagents.com.git"
+
+      refute Sidecar.repo_url("openagents.com") =~ "forge-secret-sentinel"
     end
 
     test "parse_result reads env-style lines, tolerating garbage" do

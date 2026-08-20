@@ -45,7 +45,7 @@ defmodule OpenAgents.Incidents do
     end
   rescue
     error ->
-      Logger.error("incident_report_failed error=#{Exception.message(error)}")
+      Logger.error("incident_report_failed code=#{OpenAgents.OperationalLog.code(error)}")
       {:error, :incident_report_failed}
   end
 
@@ -73,7 +73,7 @@ defmodule OpenAgents.Incidents do
     |> Repo.insert()
   rescue
     error ->
-      Logger.error("incident_record_failed error=#{Exception.message(error)}")
+      Logger.error("incident_record_failed code=#{OpenAgents.OperationalLog.code(error)}")
       {:error, :incident_record_failed}
   end
 

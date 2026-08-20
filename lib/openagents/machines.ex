@@ -80,6 +80,9 @@ defmodule OpenAgents.Machines do
         token = "smct_" <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
         {:ok, sealed} = TokenVault.seal(token)
 
+        token_expires_at =
+          DateTime.add(DateTime.utc_now(), machine_token_ttl_seconds(), :second)
+
         machine =
           %Machine{user_id: user_id}
           |> Machine.create_changeset(%{
@@ -89,7 +92,10 @@ defmodule OpenAgents.Machines do
             "agent_version" => pairing.agent_version,
             "roots" => pairing.roots
           })
-          |> Ecto.Changeset.change(token_digest: digest(token))
+          |> Ecto.Changeset.change(
+            token_digest: digest(token),
+            token_expires_at: token_expires_at
+          )
           |> Repo.insert!()
 
         pairing
@@ -113,28 +119,22 @@ defmodule OpenAgents.Machines do
           | {:error, atom()}
   def claim_pairing(pairing_id, poll_secret)
       when is_binary(pairing_id) and is_binary(poll_secret) do
-    with {:ok, _cast} <- Ecto.UUID.cast(pairing_id),
-         %Pairing{} = pairing <- Repo.get(Pairing, pairing_id),
-         true <- Plug.Crypto.secure_compare(pairing.poll_secret_digest, digest(poll_secret)) do
-      case pairing do
-        %Pairing{status: "pending"} ->
-          if expired?(pairing), do: {:error, :pairing_expired}, else: {:error, :pairing_pending}
+    result =
+      Repo.transaction(fn ->
+        with {:ok, pairing_id} <- Ecto.UUID.cast(pairing_id),
+             %Pairing{} = pairing <-
+               Repo.one(from(p in Pairing, where: p.id == ^pairing_id, lock: "FOR UPDATE")),
+             true <-
+               Plug.Crypto.secure_compare(pairing.poll_secret_digest, digest(poll_secret)) do
+          claim_locked_pairing(pairing)
+        else
+          _missing -> {:error, :pairing_not_found}
+        end
+      end)
 
-        %Pairing{status: "approved", token_ciphertext: sealed, machine_id: machine_id}
-        when is_binary(sealed) ->
-          with {:ok, token} <- TokenVault.open(sealed) do
-            pairing
-            |> Ecto.Changeset.change(status: "claimed", token_ciphertext: nil)
-            |> Repo.update!()
-
-            {:ok, %{token: token, machine_id: machine_id, name: pairing.name}}
-          end
-
-        %Pairing{} ->
-          {:error, :pairing_consumed}
-      end
-    else
-      _missing -> {:error, :pairing_not_found}
+    case result do
+      {:ok, claim_result} -> claim_result
+      {:error, _transaction_failure} -> {:error, :pairing_not_found}
     end
   end
 
@@ -143,9 +143,16 @@ defmodule OpenAgents.Machines do
   @spec authenticate_token(String.t()) :: {:ok, Machine.t()} | {:error, atom()}
   def authenticate_token("smct_" <> _rest = token) when byte_size(token) < 128 do
     case Repo.get_by(Machine, token_digest: digest(token)) do
-      %Machine{status: "active"} = machine -> {:ok, machine}
-      %Machine{} -> {:error, :machine_revoked}
-      nil -> {:error, :machine_not_found}
+      %Machine{status: "active"} = machine ->
+        if DateTime.compare(DateTime.utc_now(), machine.token_expires_at) == :lt,
+          do: {:ok, machine},
+          else: {:error, :machine_expired}
+
+      %Machine{} ->
+        {:error, :machine_revoked}
+
+      nil ->
+        {:error, :machine_not_found}
     end
   end
 
@@ -158,7 +165,12 @@ defmodule OpenAgents.Machines do
 
   @spec active_machine?(String.t() | nil) :: boolean()
   def active_machine?(user_id) when is_binary(user_id) do
-    Repo.exists?(from m in Machine, where: m.user_id == ^user_id and m.status == "active")
+    now = DateTime.utc_now()
+
+    Repo.exists?(
+      from m in Machine,
+        where: m.user_id == ^user_id and m.status == "active" and m.token_expires_at > ^now
+    )
   end
 
   def active_machine?(_user_id), do: false
@@ -190,8 +202,11 @@ defmodule OpenAgents.Machines do
   """
   @spec approval_receipts(String.t() | nil, String.t()) :: [map()]
   def approval_receipts(user_id, scope_ref) when is_binary(user_id) and is_binary(scope_ref) do
+    now = DateTime.utc_now()
+
     for machine <- list_machines(user_id),
         machine.status == "active",
+        DateTime.compare(machine.token_expires_at, now) == :gt,
         {module_id, version} <- @external_effect_modules do
       %{
         "schema" => "sarah.module_approval.v1",
@@ -263,9 +278,13 @@ defmodule OpenAgents.Machines do
   end
 
   defp verify_capacity(user_id) do
+    now = DateTime.utc_now()
+
     active =
       Repo.aggregate(
-        from(m in Machine, where: m.user_id == ^user_id and m.status == "active"),
+        from(m in Machine,
+          where: m.user_id == ^user_id and m.status == "active" and m.token_expires_at > ^now
+        ),
         :count
       )
 
@@ -298,8 +317,48 @@ defmodule OpenAgents.Machines do
 
   defp verify_pairing_id(%Pairing{}, _pairing_id), do: {:error, :pairing_not_found}
 
+  defp claim_locked_pairing(%Pairing{} = pairing) do
+    cond do
+      expired?(pairing) ->
+        expire_locked_pairing(pairing)
+        {:error, :pairing_expired}
+
+      pairing.status == "pending" ->
+        {:error, :pairing_pending}
+
+      pairing.status == "approved" and is_binary(pairing.token_ciphertext) ->
+        with {:ok, token} <- TokenVault.open(pairing.token_ciphertext) do
+          pairing
+          |> Ecto.Changeset.change(status: "claimed", token_ciphertext: nil)
+          |> Repo.update!()
+
+          {:ok, %{token: token, machine_id: pairing.machine_id, name: pairing.name}}
+        end
+
+      true ->
+        {:error, :pairing_consumed}
+    end
+  end
+
+  defp expire_locked_pairing(pairing) do
+    now = DateTime.utc_now()
+
+    pairing
+    |> Ecto.Changeset.change(status: "expired", token_ciphertext: nil)
+    |> Repo.update!()
+
+    if pairing.machine_id do
+      from(machine in Machine,
+        where: machine.id == ^pairing.machine_id and machine.status == "active"
+      )
+      |> Repo.update_all(set: [status: "revoked", revoked_at: now, updated_at: now])
+    end
+
+    :ok
+  end
+
   defp expired?(%Pairing{expires_at: expires_at}),
-    do: DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+    do: DateTime.compare(DateTime.utc_now(), expires_at) != :lt
 
   defp normalize_code(code) do
     code |> String.upcase() |> String.replace(~r/[^A-Z0-9]/, "")
@@ -320,4 +379,7 @@ defmodule OpenAgents.Machines do
   end
 
   defp digest(value), do: :crypto.hash(:sha256, value)
+
+  defp machine_token_ttl_seconds,
+    do: Application.fetch_env!(:openagents, :machine_token_ttl_seconds)
 end

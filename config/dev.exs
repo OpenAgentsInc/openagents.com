@@ -22,6 +22,9 @@ config :openagents,
        :github_token_encryption_key,
        Base.encode64("openagents-dev-token-vault-key32")
 
+config :openagents, :github_token_encryption_key_id, "development-2026-08"
+config :openagents, :github_token_decryption_keys, %{}
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

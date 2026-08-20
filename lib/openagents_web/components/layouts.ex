@@ -99,9 +99,9 @@ defmodule OpenAgentsWeb.Layouts do
         <%= if @current_scope do %>
           <.account_dropdown current_scope={@current_scope} />
         <% else %>
-          <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
-            <.button type="submit" variant={:primary} size={:sm}>Sign in with GitHub</.button>
-          </.form>
+          <.button navigate={~p"/#github-tools"} variant={:primary} size={:sm}>
+            Sign in with GitHub
+          </.button>
         <% end %>
       </div>
     </header>
@@ -183,6 +183,26 @@ defmodule OpenAgentsWeb.Layouts do
           <UI.icon name="logout" /> Log out
         </UI.button>
       </.form>
+      <.link navigate={~p"/settings/api-tokens"} role="menuitem" class="account-menu__logout">
+        API tokens
+      </.link>
+      <.form
+        :if={github_tools_connected?(@current_user)}
+        for={%{}}
+        id="github-disconnect-form"
+        action={~p"/github/connection"}
+        method="delete"
+      >
+        <UI.button
+          id="github-disconnect"
+          variant={:ghost}
+          type="submit"
+          role="menuitem"
+          class="account-menu__logout"
+        >
+          Disconnect GitHub tools
+        </UI.button>
+      </.form>
     </UI.menu>
     """
   end
@@ -206,6 +226,28 @@ defmodule OpenAgentsWeb.Layouts do
           <span :if={@current_scope.github_name} class="text-sm text-muted-foreground">
             @{@current_scope.github_login}
           </span>
+        </li>
+        <li>
+          <.link
+            navigate={~p"/settings/api-tokens"}
+            class="btn w-full justify-start"
+            data-variant="ghost"
+          >
+            API tokens
+          </.link>
+        </li>
+        <li>
+          <.form
+            :if={github_tools_connected?(@current_scope)}
+            for={%{}}
+            action={~p"/github/connection"}
+            method="delete"
+            class="m-0 w-full"
+          >
+            <.button type="submit" variant={:ghost} class="w-full justify-start">
+              Disconnect GitHub tools
+            </.button>
+          </.form>
         </li>
         <li>
           <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0 w-full">
@@ -420,6 +462,11 @@ defmodule OpenAgentsWeb.Layouts do
          "opacity-100 translate-y-0"}
     )
   end
+
+  defp github_tools_connected?(user) when is_map(user),
+    do: is_binary(Map.get(user, :github_token_ciphertext))
+
+  defp github_tools_connected?(_user), do: false
 
   defp hide(js \\ %JS{}, selector) do
     JS.hide(js,

@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
   use OpenAgentsWeb.ConnCase
 
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-assignees")}
+
   alias OpenAgents.Issues
 
   setup do

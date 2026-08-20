@@ -19,6 +19,7 @@ defmodule OpenAgentsWeb.DataControllerTest do
   alias OpenAgents.Provenance.Canonical
 
   alias OpenAgents.{
+    ApiTokens,
     Conversations,
     ExperienceMemory,
     GraphMemory,
@@ -37,6 +38,15 @@ defmodule OpenAgentsWeb.DataControllerTest do
   test "account owner can export conversation, memory, and voice disclosure", %{conn: conn} do
     token = "data-export-browser-credential-00000000000000000"
     user = github_user(token)
+    assert {:ok, user} = OpenAgents.Accounts.store_github_token(user, "gho_export_sentinel")
+
+    assert {:ok, api_credential, api_plaintext} =
+             ApiTokens.create(user, %{
+               name: "export metadata",
+               scopes: ["forge:write"],
+               lifetime_days: 7
+             })
+
     {:ok, conversation} = Conversations.ensure_conversation(user)
     owner = Conversations.get_conversation_owner!(conversation)
 
@@ -72,6 +82,23 @@ defmodule OpenAgentsWeb.DataControllerTest do
     assert Enum.any?(export["messages"], &(&1["role"] == "assistant"))
     assert [%{"claim" => "Keep export tests bounded."}] = export["profile_memory"]["records"]
     assert export["voice_sessions"] == []
+    assert [exported_api_credential] = export["api_credentials"]
+    assert exported_api_credential["id"] == api_credential.id
+    assert exported_api_credential["name"] == "export metadata"
+    assert exported_api_credential["scopes"] == ["forge:write"]
+    assert exported_api_credential["credential_exported"] == false
+
+    assert export["github_connection"] == %{
+             "connected" => true,
+             "connected_at" => DateTime.to_iso8601(user.github_token_connected_at),
+             "credential_exported" => false,
+             "product_data_deletion" => "retained_until_explicit_disconnect",
+             "rotated_at" => nil,
+             "scopes" => ["repo"]
+           }
+
+    refute inspect(export) =~ "gho_export_sentinel"
+    refute inspect(export) =~ api_plaintext
     refute inspect(export) =~ user.id
   end
 

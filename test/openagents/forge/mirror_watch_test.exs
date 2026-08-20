@@ -140,6 +140,17 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
     assert incident_count() == 0
   end
 
+  test "credential-bearing and scp-style mirror remotes fail closed" do
+    for url <- [
+          "https://operator:secret@mirror.example/openagents.com.git",
+          "ssh://operator:secret@mirror.example/openagents.com.git",
+          "operator:secret@mirror.example:openagents.com.git"
+        ] do
+      Application.put_env(:openagents, :forge_mirror_urls, %{"openagents.com" => url})
+      assert OpenAgents.Forge.Pushes.mirror_url("openagents.com") == nil
+    end
+  end
+
   defp incident_count do
     Repo.aggregate(
       from(i in OpenAgents.Incidents.Incident, where: i.code == "forge_mirror_lagging"),

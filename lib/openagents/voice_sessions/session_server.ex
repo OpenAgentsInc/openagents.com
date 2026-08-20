@@ -284,7 +284,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
       {:error, reason} ->
         Logger.error(
           "voice event persistence failed session=#{state.session.id} " <>
-            "kind=#{provider_event.kind} reason=#{inspect(reason)}"
+            "kind=#{provider_event.kind} code=#{OpenAgents.OperationalLog.code(reason)}"
         )
 
         fail_and_stop(state, :event_persistence_failed)
@@ -543,7 +543,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
       {:error, reason} ->
         Logger.warning(
           "voice compaction summary persistence failed session=#{state.session.id} " <>
-            "reason=#{inspect(reason)}"
+            "code=#{OpenAgents.OperationalLog.code(reason)}"
         )
 
         {:noreply,

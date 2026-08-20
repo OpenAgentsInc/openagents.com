@@ -74,12 +74,12 @@ defmodule OpenAgents.Forge.Builder do
         end
 
       {:error, reason} ->
-        Logger.debug("forge build: not this node's build (#{inspect(reason)})")
+        Logger.debug("forge_build_not_owner code=#{OpenAgents.OperationalLog.code(reason)}")
         :ok
     end
   rescue
     error ->
-      fail(target_id, "builder crashed: " <> Exception.message(error))
+      fail(target_id, "builder_crashed code=" <> OpenAgents.OperationalLog.code(error))
   end
 
   defp finish(repo, sha, target_id, result) do
@@ -98,7 +98,9 @@ defmodule OpenAgents.Forge.Builder do
         )
 
       {:error, reason} ->
-        Logger.warning("forge build: advance to built failed: #{inspect(reason)}")
+        Logger.warning(
+          "forge_build_advance_failed status=built code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
     end
   end
 
@@ -108,7 +110,9 @@ defmodule OpenAgents.Forge.Builder do
         :ok
 
       {:error, reason} ->
-        Logger.warning("forge build: advance to failed failed: #{inspect(reason)}")
+        Logger.warning(
+          "forge_build_advance_failed status=failed code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
     end
   end
 
@@ -143,15 +147,25 @@ defmodule OpenAgents.Forge.Builder do
     case File.read(artifact_abs) do
       {:ok, payload} ->
         case OpenAgents.Forge.WAL.put_artifact(repo, sha, payload) do
-          {:ok, _key} -> :ok
-          {:error, reason} -> Logger.warning("forge artifact upload failed: #{inspect(reason)}")
+          {:ok, _key} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "forge_artifact_upload_failed code=#{OpenAgents.OperationalLog.code(reason)}"
+            )
         end
 
       {:error, reason} ->
-        Logger.warning("forge artifact read for upload failed: #{inspect(reason)}")
+        Logger.warning(
+          "forge_artifact_read_failed code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
     end
   rescue
-    error -> Logger.warning("forge artifact upload crashed: #{Exception.message(error)}")
+    error ->
+      Logger.warning(
+        "forge_artifact_upload_crashed code=#{OpenAgents.OperationalLog.code(error)}"
+      )
   end
 
   defp record_receipt(repo, sha, target_id, modules, artifact_rel, result) do

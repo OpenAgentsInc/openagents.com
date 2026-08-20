@@ -67,6 +67,7 @@ readiness_report=$(env \
   GITHUB_CLIENT_ID="release-smoke-client" \
   GITHUB_CLIENT_SECRET="release-smoke-secret" \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
+  GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-release-smoke-2026-08" \
   OPENAI_API_KEY="release-smoke-openai-key" \
   POOL_SIZE="2" \
   PORT="$port" \
@@ -86,6 +87,7 @@ env \
   GITHUB_CLIENT_ID="release-smoke-client" \
   GITHUB_CLIENT_SECRET="release-smoke-secret" \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
+  GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-release-smoke-2026-08" \
   OPENAI_API_KEY="release-smoke-openai-key" \
   PHX_SERVER="true" \
   POOL_SIZE="2" \

@@ -61,7 +61,7 @@ defmodule OpenAgents.Forge.MirrorWatch do
     end
   rescue
     error ->
-      Logger.warning("mirror watch failed: #{Exception.message(error)}")
+      Logger.warning("forge_mirror_watch_failed code=#{OpenAgents.OperationalLog.code(error)}")
       state
   end
 

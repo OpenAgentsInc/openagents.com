@@ -74,7 +74,10 @@ defmodule OpenAgents.Work.Coding do
         |> Repo.update()
 
       {:error, reason} ->
-        Logger.warning("coding job grant mint failed: #{inspect(reason)}")
+        Logger.warning(
+          "coding_job_grant_mint_failed code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
+
         {:ok, job}
     end
   end
@@ -114,7 +117,10 @@ defmodule OpenAgents.Work.Coding do
     end
   rescue
     error ->
-      Logger.warning("coding job grant usage record failed: #{Exception.message(error)}")
+      Logger.warning(
+        "coding_job_grant_usage_failed code=#{OpenAgents.OperationalLog.code(error)}"
+      )
+
       :ok
   end
 

@@ -15,7 +15,7 @@ defmodule OpenAgents.DataRights do
   }
 
   alias OpenAgents.Memory.SemanticDerivativeReceipt
-  alias OpenAgents.{Conversations, ProfileMemory, Repo}
+  alias OpenAgents.{Accounts, ApiTokens, Conversations, ProfileMemory, Repo}
   alias OpenAgents.Voice.{ResponseContext, ResponseReceipt, Session, TranscriptItem}
 
   @maximum_export_messages 10_000
@@ -30,7 +30,7 @@ defmodule OpenAgents.DataRights do
 
   @spec export(User.t(), Visitor.t(), Conversation.t()) :: {:ok, map()} | {:error, term()}
   def export(
-        %User{id: user_id},
+        %User{id: user_id} = user,
         %Visitor{id: visitor_id, user_id: user_id} = owner,
         %Conversation{visitor_id: visitor_id} = conversation
       ) do
@@ -61,6 +61,8 @@ defmodule OpenAgents.DataRights do
          "schema" => "sarah.account_data_export.v1",
          "exported_at" => DateTime.to_iso8601(DateTime.utc_now()),
          "scope" => "authenticated_github_user",
+         "github_connection" => github_connection_export(user),
+         "api_credentials" => Enum.map(ApiTokens.metadata(user), &api_credential_export/1),
          "messages" =>
            messages |> Enum.take(@maximum_export_messages) |> Enum.map(&message_export/1),
          "messages_truncated" => length(messages) > @maximum_export_messages,
@@ -270,4 +272,31 @@ defmodule OpenAgents.DataRights do
 
   defp iso8601(nil), do: nil
   defp iso8601(timestamp), do: DateTime.to_iso8601(timestamp)
+
+  defp github_connection_export(user) do
+    connection = Accounts.github_connection(user)
+
+    %{
+      "connected" => connection.connected,
+      "scopes" => connection.scopes,
+      "connected_at" => iso8601(connection.connected_at),
+      "rotated_at" => iso8601(connection.rotated_at),
+      "credential_exported" => false,
+      "product_data_deletion" => "retained_until_explicit_disconnect"
+    }
+  end
+
+  defp api_credential_export(credential) do
+    %{
+      "id" => credential.id,
+      "name" => credential.name,
+      "scopes" => credential.scopes,
+      "created_at" => iso8601(credential.inserted_at),
+      "expires_at" => iso8601(credential.expires_at),
+      "last_used_at" => iso8601(credential.last_used_at),
+      "revoked_at" => iso8601(credential.revoked_at),
+      "credential_exported" => false,
+      "product_data_deletion" => "retained_until_explicit_revocation"
+    }
+  end
 end

@@ -18,6 +18,10 @@ defmodule OpenAgents.Accounts.User do
     field :ban_reason_code, :string
     field :last_authenticated_at, :utc_datetime_usec
     field :github_token_ciphertext, :binary, redact: true
+    field :github_token_key_id, :string
+    field :github_token_scopes, {:array, :string}, default: []
+    field :github_token_connected_at, :utc_datetime_usec
+    field :github_token_rotated_at, :utc_datetime_usec
     field :public_leaderboard_opted_out, :boolean, default: false
     field :browser_key_hash, :binary
 
@@ -37,6 +41,10 @@ defmodule OpenAgents.Accounts.User do
           ban_reason_code: String.t() | nil,
           last_authenticated_at: DateTime.t() | nil,
           github_token_ciphertext: binary() | nil,
+          github_token_key_id: String.t() | nil,
+          github_token_scopes: [String.t()],
+          github_token_connected_at: DateTime.t() | nil,
+          github_token_rotated_at: DateTime.t() | nil,
           public_leaderboard_opted_out: boolean(),
           browser_key_hash: binary() | nil,
           inserted_at: DateTime.t(),

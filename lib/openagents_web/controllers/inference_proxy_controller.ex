@@ -124,7 +124,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         # sees a provider error, never raw provider detail.
         usage = usage_of(events)
         if usage != %{}, do: meter(grant, usage)
-        Logger.warning("inference proxy provider failure: #{inspect(reason)}")
+        Logger.warning("inference_proxy_failed code=#{OpenAgents.OperationalLog.code(reason)}")
         refuse(conn, :provider_failed)
     end
   end
@@ -236,6 +236,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
     conn
     |> put_resp_content_type("application/json")
+    |> put_resp_header("cache-control", "no-store")
     |> send_resp(status, Jason.encode!(%{"error" => %{"code" => code}}))
   end
 

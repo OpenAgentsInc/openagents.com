@@ -7,6 +7,7 @@ defmodule OpenAgents.GitHubOAuth do
   @default_authorize_url "https://github.com/login/oauth/authorize"
   @default_token_url "https://github.com/login/oauth/access_token"
   @default_user_url "https://api.github.com/user"
+  @default_api_url "https://api.github.com"
   @default_attempt_ttl_seconds 600
   @github_api_version "2022-11-28"
   @user_agent "OpenAgents"
@@ -64,13 +65,50 @@ defmodule OpenAgents.GitHubOAuth do
   def exchange_and_fetch(code, verifier) when is_binary(code) and is_binary(verifier) do
     with :ok <- validate_code_and_verifier(code, verifier),
          {:ok, config} <- config(),
-         {:ok, access_token} <- exchange_code(config, code, verifier),
+         {:ok, access_token, scopes} <- exchange_code(config, code, verifier),
          {:ok, profile} <- fetch_profile(config, access_token) do
-      {:ok, profile, access_token}
+      {:ok, profile, access_token, scopes}
     end
   end
 
   def exchange_and_fetch(_code, _verifier), do: {:error, :invalid_oauth_callback}
+
+  @doc "Revokes one OAuth grant using the OAuth application's own credentials."
+  @spec revoke(String.t()) :: :ok | {:error, atom()}
+  def revoke(access_token)
+      when is_binary(access_token) and byte_size(access_token) in 1..512 do
+    with {:ok, config} <- config() do
+      request_options =
+        [
+          auth: {:basic, config.client_id <> ":" <> config.client_secret},
+          json: %{"access_token" => access_token},
+          headers: api_headers(),
+          receive_timeout: 10_000,
+          retry: false
+        ]
+        |> Keyword.merge(config.request_options)
+
+      case Req.delete(config.revoke_url, request_options) do
+        {:ok, %Req.Response{status: 204}} ->
+          :ok
+
+        {:ok, %Req.Response{status: status}} when status in 400..599 ->
+          {:error, :revocation_rejected}
+
+        {:ok, %Req.Response{}} ->
+          {:error, :invalid_revocation_response}
+
+        {:error, _transport_error} ->
+          {:error, :github_unavailable}
+      end
+    end
+  end
+
+  def revoke(_access_token), do: {:error, :invalid_token}
+
+  @doc "The exact OAuth scopes retained with each connected GitHub grant."
+  @spec requested_scopes() :: [String.t()]
+  def requested_scopes, do: Application.fetch_env!(:openagents, :github_oauth_scopes)
 
   defp exchange_code(config, code, verifier) do
     request_options =
@@ -89,9 +127,14 @@ defmodule OpenAgents.GitHubOAuth do
       |> Keyword.merge(config.request_options)
 
     case Req.post(config.token_url, request_options) do
-      {:ok, %Req.Response{status: status, body: %{"access_token" => token}}}
-      when status in 200..299 and is_binary(token) and byte_size(token) > 0 ->
-        {:ok, token}
+      {:ok,
+       %Req.Response{
+         status: status,
+         body: %{"access_token" => token, "scope" => granted_scope}
+       }}
+      when status in 200..299 and is_binary(token) and byte_size(token) > 0 and
+             is_binary(granted_scope) ->
+        with {:ok, scopes} <- validate_granted_scopes(granted_scope), do: {:ok, token, scopes}
 
       {:ok, %Req.Response{status: status}} when status in 400..599 ->
         {:error, :oauth_code_exchange_rejected}
@@ -183,6 +226,10 @@ defmodule OpenAgents.GitHubOAuth do
          authorize_url: settings[:authorize_url] || @default_authorize_url,
          token_url: settings[:token_url] || @default_token_url,
          user_url: settings[:user_url] || @default_user_url,
+         revoke_url:
+           settings[:revoke_url] ||
+             @default_api_url <>
+               "/applications/" <> URI.encode_www_form(config_value(client_id)) <> "/token",
          attempt_ttl_seconds: attempt_ttl_seconds,
          request_options: request_options
        }}
@@ -206,10 +253,24 @@ defmodule OpenAgents.GitHubOAuth do
   end
 
   defp oauth_scope do
-    :openagents
-    |> Application.fetch_env!(:github_oauth_scopes)
+    requested_scopes()
     |> Enum.join(" ")
   end
+
+  defp validate_granted_scopes(granted_scope) do
+    granted =
+      granted_scope
+      |> String.split([",", " "], trim: true)
+      |> Enum.uniq()
+
+    requested = requested_scopes()
+
+    if MapSet.new(granted) == MapSet.new(requested),
+      do: {:ok, requested},
+      else: {:error, :oauth_scope_mismatch}
+  end
+
+  defp config_value(value), do: to_string(value)
 
   defp api_headers do
     [

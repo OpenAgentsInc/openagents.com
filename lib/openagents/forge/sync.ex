@@ -25,7 +25,10 @@ defmodule OpenAgents.Forge.Sync do
         replay_missing(repo, index)
 
       {:error, reason} ->
-        Logger.warning("forge sync: WAL unreachable for #{repo}: #{inspect(reason)}")
+        Logger.warning(
+          "forge_sync_wal_unreachable repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
+
         :ok
     end
   end

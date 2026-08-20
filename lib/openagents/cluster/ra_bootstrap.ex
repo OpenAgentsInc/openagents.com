@@ -115,7 +115,7 @@ defmodule OpenAgents.Cluster.RaBootstrap do
     end
   rescue
     error ->
-      Logger.warning("ra_bootstrap: converge error #{inspect(error)}")
+      Logger.warning("ra_bootstrap_converge_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :ok
   end
 

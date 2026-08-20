@@ -13,6 +13,7 @@ defmodule OpenAgentsWeb.ControllerPairingController do
   alias OpenAgents.Machines
 
   plug :verify_enabled
+  plug :put_no_store
 
   def create(conn, params) do
     attributes = %{
@@ -72,6 +73,8 @@ defmodule OpenAgentsWeb.ControllerPairingController do
       |> halt()
     end
   end
+
+  defp put_no_store(conn, _options), do: put_resp_header(conn, "cache-control", "no-store")
 
   defp bounded(value) when is_binary(value), do: String.slice(value, 0, 40)
   defp bounded(_value), do: nil

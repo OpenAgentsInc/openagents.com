@@ -32,6 +32,8 @@ defmodule OpenAgents.Forge.BuildExecutor do
   """
   @spec bound_output(String.t(), pos_integer()) :: String.t()
   def bound_output(output, max_bytes \\ @max_output_bytes) when is_binary(output) do
+    output = OpenAgents.LogSafety.redact(output)
+
     if byte_size(output) <= max_bytes do
       output
     else
@@ -50,8 +52,9 @@ defmodule OpenAgents.Forge.BuildExecutor.Sidecar do
 
     * write `<sha>.job.tmp` then rename to `<sha>.job`, containing
       env-style `SHA=` and `REPO_URL=` lines; the URL points at the
-      *local* forge (never GitHub) with the operator token embedded as
-      userinfo
+      *local* forge (never GitHub) and never contains credentials. The sidecar
+      receives its forge credential from its own runtime identity and uses an
+      askpass helper, so no token reaches a URL, argv, or build output
     * the watcher clones/fetches, checks out the SHA, compiles with
       `MIX_ENV=prod`, diffs beams against its manifest, writes the
       changed-beam tar to `<data_dir>/beams/<sha>.tar`, and answers with
@@ -211,16 +214,9 @@ defmodule OpenAgents.Forge.BuildExecutor.Sidecar do
     )
   end
 
-  defp repo_url(repo) do
+  @doc false
+  def repo_url(repo) do
     base = Application.get_env(:openagents, :forge_internal_git_url, "http://127.0.0.1:8080/git")
-    uri = URI.parse(base)
-
-    uri =
-      case Application.get_env(:openagents, :forge_operator_token) do
-        nil -> uri
-        token -> %{uri | userinfo: "x:" <> token}
-      end
-
-    URI.to_string(uri) <> "/" <> repo <> ".git"
+    URI.to_string(URI.parse(base)) <> "/" <> repo <> ".git"
   end
 end

@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.IssueLabelControllerTest do
   use OpenAgentsWeb.ConnCase
 
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-labels")}
+
   import OpenAgents.LabelsFixtures
 
   alias OpenAgents.Issues

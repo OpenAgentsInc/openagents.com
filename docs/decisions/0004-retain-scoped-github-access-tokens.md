@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Accepted model; lifecycle hardening required before staging
+Status: Accepted and implemented
 
 ## Context
 
@@ -19,12 +19,14 @@ operator-managed key, associate it with one active user, and never expose it to
 LiveView assigns, browser payloads, logs, receipts, or telemetry.
 
 Keep OpenAgents issue and project data in PostgreSQL; do not use a retained
-GitHub token as authority for OpenAgents-owned records. The current callback
-stores encrypted ciphertext and logout clears only the browser session. Gate 6
-must add explicit disconnect/revocation behavior, define token removal during
-product-data deletion or account restriction, and verify scopes, rotation,
-failure behavior, redaction, and user disclosures. Those lifecycle actions are
-requirements, not claims about the current implementation.
+GitHub token as authority for OpenAgents-owned records. Logout clears only the
+browser session. Explicit disconnect revokes the GitHub token before clearing
+the local envelope. Product-data deletion retains the grant and says so;
+disconnect is the independent credential-deletion action.
+
+Use a versioned envelope with an active key ID and a temporary prior-key map.
+Rewrap all retained grants transactionally before retiring an old key. Export
+connection metadata but never ciphertext or plaintext.
 
 ## Consequences
 
@@ -32,3 +34,8 @@ requirements, not claims about the current implementation.
 - Token retention becomes an explicit data-handling obligation.
 - Sign-in identity and repository authorization remain separate decisions.
 - Documentation and deletion paths must describe the retained credential.
+- OAuth App `repo` is broader than the read tools need because GitHub offers no
+  read-only private-source OAuth scope. Migrate to a fine-grained GitHub App
+  before expanding the GitHub-backed tool surface.
+- Public profile identity needs no scope, so do not add `read:user` to the
+  retained-tools authorization request.

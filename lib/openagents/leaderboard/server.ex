@@ -88,7 +88,7 @@ defmodule OpenAgents.Leaderboard.Server do
     error ->
       # The board is a projection. A failed recompute keeps serving the last
       # good ranking rather than taking a public page down.
-      Logger.warning("leaderboard recompute failed: #{Exception.message(error)}")
+      Logger.warning("leaderboard_recompute_failed code=#{OpenAgents.OperationalLog.code(error)}")
       Map.put(state, :changed?, false)
   end
 

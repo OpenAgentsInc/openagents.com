@@ -68,10 +68,13 @@ URLs, receipts, or checked-in environment files.
 | Database | `OPENAGENTS_MIGRATE_ON_BOOT` | `true` in staging and production |
 | GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Staging OAuth application credentials |
 | GitHub | `GITHUB_REDIRECT_URI` | Exact HTTPS callback on `PHX_HOST` |
-| GitHub | `GITHUB_OAUTH_SCOPES` | Exactly `read:user,repo` for the retained-token tool model |
+| GitHub | `GITHUB_OAUTH_SCOPES` | Exactly `repo`; profile identity needs no additional scope |
 | GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte staging key |
+| GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY_ID` | Bounded active-key identifier prefixed with `development-`, `test-`, `staging-`, or `production-` to match the runtime |
+| GitHub | `GITHUB_TOKEN_DECRYPTION_KEYS_JSON` | Optional map of at most 16 same-environment prior keys used only during rewrap; omit the active ID |
 | Providers | `OPENAI_API_KEY` | Staging-only provider secret; required by the current text provider |
 | Providers | `OPENAGENTS_INFERENCE_PROXY_URL` | HTTPS URL without credentials when computers are enabled; empty disables |
+| Computers | `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS` | `300` through `2592000`; Gate 5 uses the 30-day maximum |
 | Recording | `VOICE_RECORDING_ENCRYPTION_KEY` | Base64-encoded 32-byte key when recording is enabled; empty disables recording storage |
 
 `PHX_SERVER` is optional for evaluation commands. If set, it must be exactly

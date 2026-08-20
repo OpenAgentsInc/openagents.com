@@ -217,13 +217,15 @@ defmodule OpenAgents.RuntimeConfig do
     redirect_uri = keyword_value(oauth, :redirect_uri)
     scopes = Map.get(settings, :github_oauth_scopes)
     token_key = Map.get(settings, :github_token_encryption_key)
+    token_key_id = Map.get(settings, :github_token_encryption_key_id)
+    decryption_keys = Map.get(settings, :github_token_decryption_keys)
 
     with :ok <- ensure(present?(client_id), :github_oauth_client_id, "is required"),
          :ok <- ensure(present?(client_secret), :github_oauth_client_secret, "is required"),
          :ok <- validate_redirect(redirect_uri, environment),
          :ok <-
            ensure(
-             scopes == ["read:user", "repo"],
+             scopes == ["repo"],
              :github_oauth_scopes,
              "must match the retained-token tool model"
            ),
@@ -232,10 +234,40 @@ defmodule OpenAgents.RuntimeConfig do
              encryption_key?(token_key),
              :github_token_encryption_key,
              "must be a base64-encoded 32-byte key"
+           ),
+         :ok <-
+           ensure(
+             token_key_id_for_environment?(token_key_id, environment),
+             :github_token_encryption_key_id,
+             "must be a bounded key identifier prefixed for the runtime environment"
+           ),
+         :ok <-
+           ensure(
+             decryption_keyring?(decryption_keys, token_key_id, environment),
+             :github_token_decryption_keys,
+             "must contain only bounded identifiers and base64-encoded 32-byte keys"
            ) do
       :ok
     end
   end
+
+  defp token_key_id?(key_id) when is_binary(key_id),
+    do: String.match?(key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/)
+
+  defp token_key_id?(_key_id), do: false
+
+  defp token_key_id_for_environment?(key_id, environment) do
+    token_key_id?(key_id) and String.starts_with?(key_id, Atom.to_string(environment) <> "-")
+  end
+
+  defp decryption_keyring?(keys, active_key_id, environment) when is_map(keys) do
+    map_size(keys) <= 16 and not Map.has_key?(keys, active_key_id) and
+      Enum.all?(keys, fn {key_id, key} ->
+        token_key_id_for_environment?(key_id, environment) and encryption_key?(key)
+      end)
+  end
+
+  defp decryption_keyring?(_keys, _active_key_id, _environment), do: false
 
   defp validate_features(settings, environment, staging_gate) do
     with {:ok, tools?} <- required_boolean(settings, :tools_enabled),
@@ -418,6 +450,7 @@ defmodule OpenAgents.RuntimeConfig do
     artifact_store = Map.get(settings, :forge_artifact_store)
     build_executor = Map.get(settings, :forge_build_executor)
     operator_token = Map.get(settings, :forge_operator_token)
+    mirror_urls = Map.get(settings, :forge_mirror_urls)
     durable_required? = environment in [:staging, :production] and features.forge
 
     with :ok <-
@@ -433,6 +466,12 @@ defmodule OpenAgents.RuntimeConfig do
              clean_internal_url?(internal_url),
              :forge_internal_git_url,
              "must be an HTTP URL without credentials"
+           ),
+         :ok <-
+           ensure(
+             clean_mirror_urls?(mirror_urls),
+             :forge_mirror_urls,
+             "must contain only credential-free git remote URLs or paths"
            ),
          :ok <-
            ensure(
@@ -725,7 +764,8 @@ defmodule OpenAgents.RuntimeConfig do
       integer_setting_in?(settings, :inference_grant_max_total_tokens, 1..100_000_000) and
       integer_setting_in?(settings, :inference_grant_max_calls, 1..10_000) and
       integer_setting_in?(settings, :inference_grant_max_cost_microusd, 1..1_000_000_000) and
-      integer_setting_in?(settings, :inference_grant_ttl_seconds, 1..86_400)
+      integer_setting_in?(settings, :inference_grant_ttl_seconds, 1..86_400) and
+      integer_setting_in?(settings, :machine_token_ttl_seconds, 300..2_592_000)
   end
 
   defp keyword_integer_in?(settings, key, range) do
@@ -763,6 +803,33 @@ defmodule OpenAgents.RuntimeConfig do
         false
     end
   end
+
+  defp clean_mirror_urls?(urls) when is_map(urls) do
+    Enum.all?(urls, fn {repo, url} ->
+      is_binary(repo) and clean_mirror_url?(url)
+    end)
+  end
+
+  defp clean_mirror_urls?(_urls), do: false
+
+  defp clean_mirror_url?(url) when is_binary(url) and byte_size(url) in 1..2_048 do
+    cond do
+      String.contains?(url, ["\n", "\r", "\0"]) ->
+        false
+
+      Path.type(url) == :absolute ->
+        true
+
+      true ->
+        match?(
+          {:ok, %URI{scheme: scheme, host: host, userinfo: nil}}
+          when scheme in ["http", "https", "git", "ssh"] and is_binary(host),
+          URI.new(url)
+        )
+    end
+  end
+
+  defp clean_mirror_url?(_url), do: false
 
   defp clean_service_url?(url) do
     case URI.new(url) do

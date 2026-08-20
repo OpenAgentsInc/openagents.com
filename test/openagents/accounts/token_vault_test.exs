@@ -43,4 +43,30 @@ defmodule OpenAgents.Accounts.TokenVaultTest do
     assert {:error, :token_vault_not_configured} = TokenVault.seal("gho_whatever")
     assert {:error, :token_vault_not_configured} = TokenVault.open(sealed)
   end
+
+  test "a versioned keyring opens old envelopes while new seals use the active key" do
+    original_key = Application.fetch_env!(:openagents, :github_token_encryption_key)
+    original_id = Application.fetch_env!(:openagents, :github_token_encryption_key_id)
+    original_previous = Application.fetch_env!(:openagents, :github_token_decryption_keys)
+    old_key = Base.encode64(:crypto.strong_rand_bytes(32))
+    new_key = Base.encode64(:crypto.strong_rand_bytes(32))
+
+    on_exit(fn ->
+      Application.put_env(:openagents, :github_token_encryption_key, original_key)
+      Application.put_env(:openagents, :github_token_encryption_key_id, original_id)
+      Application.put_env(:openagents, :github_token_decryption_keys, original_previous)
+    end)
+
+    Application.put_env(:openagents, :github_token_encryption_key, old_key)
+    Application.put_env(:openagents, :github_token_encryption_key_id, "staging-old")
+    assert {:ok, old_envelope} = TokenVault.seal("gho_rotate_me")
+
+    Application.put_env(:openagents, :github_token_encryption_key, new_key)
+    Application.put_env(:openagents, :github_token_encryption_key_id, "staging-current")
+    Application.put_env(:openagents, :github_token_decryption_keys, %{"staging-old" => old_key})
+
+    assert {:ok, "gho_rotate_me"} = TokenVault.open(old_envelope)
+    assert {:ok, new_envelope} = TokenVault.seal("gho_new")
+    assert {:ok, "staging-current"} = TokenVault.key_id(new_envelope)
+  end
 end

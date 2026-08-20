@@ -21,7 +21,8 @@ defmodule OpenAgentsWeb.ControllerSocket do
       {:ok,
        socket
        |> assign(:machine_id, machine.id)
-       |> assign(:user_id, machine.user_id)}
+       |> assign(:user_id, machine.user_id)
+       |> assign(:token_expires_at, machine.token_expires_at)}
     else
       _denied -> :error
     end

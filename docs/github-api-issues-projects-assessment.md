@@ -48,8 +48,10 @@ ordering, draft items, and organization projects remain unimplemented.
 
 These are current measured behaviors, not hypothetical future concerns:
 
-- `/api/v3` uses the generic API pipeline and does not yet have a deliberate
-  bearer/PAT authorization model for CLI clients.
+- `/api/v3` public reads and authenticated writes use separate pipelines.
+  Writes require an expiring digest-only `oa_pat_…` bearer with exact
+  `forge:write` scope. An authenticated person creates and revokes credentials
+  at `/settings/api-tokens`; plaintext is shown once.
 - The route's owner/repository values are not backed by a canonical repository
   foreign key across the issue/project schema.
 - Project show, item, update-item, and field actions do not consistently enforce

@@ -41,7 +41,7 @@ defmodule OpenAgents.Tools.Embeddings do
     end
   rescue
     error ->
-      Logger.warning("tool_embeddings_warm_failed error=#{Exception.message(error)}")
+      Logger.warning("tool_embeddings_warm_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :error
   end
 

@@ -40,7 +40,7 @@ defmodule OpenAgents.Incidents.Fixer do
     end
   rescue
     error ->
-      Logger.error("incident_fixer_failed error=#{Exception.message(error)}")
+      Logger.error("incident_fixer_failed code=#{OpenAgents.OperationalLog.code(error)}")
       {:error, :incident_fixer_failed}
   end
 

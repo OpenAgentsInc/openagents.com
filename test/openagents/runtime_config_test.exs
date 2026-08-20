@@ -103,6 +103,59 @@ defmodule OpenAgents.RuntimeConfigTest do
     refute error.message =~ sentinel
   end
 
+  test "GitHub keyring metadata and prior keys fail closed without entering readiness" do
+    sentinel = Base.encode64(:crypto.strong_rand_bytes(32))
+
+    settings =
+      staging_settings()
+      |> Map.put(:github_token_decryption_keys, %{"staging-prior-key" => sentinel})
+
+    encoded =
+      settings |> RuntimeConfig.load!() |> RuntimeConfig.readiness_report() |> Jason.encode!()
+
+    refute encoded =~ sentinel
+    refute encoded =~ "staging-prior-key"
+
+    assert {:error, %{setting: :github_token_encryption_key_id}} =
+             settings
+             |> Map.put(:github_token_encryption_key_id, "production-wrong-environment")
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :github_token_decryption_keys}} =
+             settings
+             |> Map.put(:github_token_decryption_keys, %{"prior" => "not-base64"})
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :github_token_decryption_keys}} =
+             settings
+             |> Map.put(:github_token_decryption_keys, %{"production-prior" => sentinel})
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :github_token_decryption_keys}} =
+             settings
+             |> Map.put(:github_token_decryption_keys, %{"staging-2026-08" => sentinel})
+             |> RuntimeConfig.validate()
+  end
+
+  test "forge mirror remotes refuse credential-bearing URLs" do
+    for url <- [
+          "https://operator:secret@mirror.example/openagents.com.git",
+          "ssh://operator:secret@mirror.example/openagents.com.git",
+          "operator:secret@mirror.example:openagents.com.git"
+        ] do
+      settings =
+        staging_settings()
+        |> Map.put(:forge_mirror_urls, %{"openagents.com" => url})
+
+      assert {:error, %{setting: :forge_mirror_urls}} = RuntimeConfig.validate(settings)
+    end
+
+    assert {:ok, _config} =
+             staging_settings()
+             |> Map.put(:forge_mirror_urls, %{"openagents.com" => "/var/lib/openagents/mirror"})
+             |> RuntimeConfig.validate()
+  end
+
   test "startup refuses an empty tool catalog when tools are enabled" do
     config = RuntimeConfig.load!(staging_settings())
 
@@ -144,6 +197,7 @@ defmodule OpenAgents.RuntimeConfigTest do
       forge_public_visibility: %{"openagents.com" => :l3},
       forge_public_paths: %{"openagents.com" => []},
       forge_operator_token: nil,
+      github_token_encryption_key_id: "staging-2026-08",
       dns_cluster_query: nil,
       distribution: [
         enabled: false,

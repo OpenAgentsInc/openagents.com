@@ -58,13 +58,16 @@ defmodule OpenAgents.Forge.Browse do
   rescue
     error ->
       Logger.warning(
-        "forge browse: sync failed for #{repo}, serving local cache: #{Exception.message(error)}"
+        "forge_browse_sync_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(error)}"
       )
 
       :ok
   catch
     :exit, reason ->
-      Logger.warning("forge browse: sync exited for #{repo}: #{inspect(reason)}")
+      Logger.warning(
+        "forge_browse_sync_exited repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
+      )
+
       :ok
   end
 

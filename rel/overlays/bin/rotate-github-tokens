@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+cd -P -- "$(dirname -- "$0")"
+./prepare-config >/dev/null
+exec ./openagents eval OpenAgents.Release.rotate_github_tokens

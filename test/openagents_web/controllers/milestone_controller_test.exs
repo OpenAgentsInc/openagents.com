@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.MilestoneControllerTest do
   use OpenAgentsWeb.ConnCase
 
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "milestones")}
+
   import OpenAgents.MilestonesFixtures
 
   alias OpenAgents.Milestones

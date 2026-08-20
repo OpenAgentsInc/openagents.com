@@ -7,6 +7,26 @@
 # General application configuration
 import Config
 
+config :phoenix,
+  filter_parameters: [
+    "authorization",
+    "code",
+    "content",
+    "credential",
+    "memory",
+    "messages",
+    "password",
+    "poll_secret",
+    "prompt",
+    "raw_arguments",
+    "sdp",
+    "secret",
+    "state",
+    "token",
+    "transcript",
+    "verifier"
+  ]
+
 config :openagents,
   namespace: OpenAgents,
   ecto_repos: [OpenAgents.Repo],
@@ -22,6 +42,7 @@ config :openagents,
   turn_rate_limit: 50,
   admin_github_ids: [],
   computer_controller_enabled: false,
+  machine_token_ttl_seconds: 2_592_000,
   coding_jobs_dir: "/var/lib/openagents/coding-jobs",
   work_workers_enabled: false,
   work: [enabled: false],
@@ -115,7 +136,7 @@ config :openagents,
     base_url: "https://api.github.com",
     request_options: []
   ],
-  github_oauth_scopes: ["read:user", "repo"],
+  github_oauth_scopes: ["repo"],
   voice_recording: [
     enabled: false,
     timeslice_ms: 5_000,
@@ -152,6 +173,8 @@ config :openagents,
     request_options: []
   ],
   github_token_encryption_key: nil,
+  github_token_encryption_key_id: nil,
+  github_token_decryption_keys: %{},
   voice_recording_encryption_key: nil,
   inference_proxy_url: nil,
   inference_grant_max_total_tokens: 2_000_000,

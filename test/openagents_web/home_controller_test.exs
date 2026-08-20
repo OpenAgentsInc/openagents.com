@@ -8,8 +8,11 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     # OpenAgents deliberately ships its own landing page ("The Agent Forge"),
     # not Sarah's. These assertions match the current product identity.
     assert html =~ "The Agent Forge"
-    assert html =~ ~s(action="/auth/github")
-    assert html =~ "Sign in with GitHub"
+    assert html =~ ~s(action="/auth/github?github_tools=enabled")
+    assert html =~ "Sign in and enable GitHub tools"
+    assert html =~ ~s(id="github-tools-disclosure")
+    assert html =~ "retain an encrypted GitHub grant"
+    assert html =~ "read/write"
 
     refute html =~ "One continuing conversation"
     refute html =~ ~s(href="/chat")

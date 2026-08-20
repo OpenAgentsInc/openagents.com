@@ -56,7 +56,7 @@ defmodule OpenAgents.Forge.Janitor do
     {sweep_clones(now_ms), sweep_artifacts(now_ms)}
   rescue
     error ->
-      Logger.warning("forge janitor sweep failed: #{Exception.message(error)}")
+      Logger.warning("forge_janitor_sweep_failed code=#{OpenAgents.OperationalLog.code(error)}")
       {0, 0}
   end
 

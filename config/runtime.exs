@@ -258,6 +258,8 @@ if config_env() == :prod do
     shadow_programs: shadow_programs,
     tool_discovery: tool_discovery,
     computer_controller_enabled: computers_enabled,
+    machine_token_ttl_seconds:
+      parse_integer.("OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS", 300..2_592_000),
     coding_jobs_dir: required_text.("OPENAGENTS_CODING_JOBS_DIR"),
     conversation_reset_enabled: conversation_reset_enabled,
     incident_fixer_enabled: incident_fixer_enabled,
@@ -316,17 +318,50 @@ github_oauth =
 config :openagents, :github_oauth, github_oauth
 
 token_encryption_key = optional_text.("GITHUB_TOKEN_ENCRYPTION_KEY")
+token_encryption_key_id = optional_text.("GITHUB_TOKEN_ENCRYPTION_KEY_ID")
+
+token_decryption_keys =
+  case optional_text.("GITHUB_TOKEN_DECRYPTION_KEYS_JSON") do
+    nil ->
+      %{}
+
+    encoded ->
+      case Jason.decode(encoded) do
+        {:ok, keys} when is_map(keys) ->
+          keys
+
+        _invalid ->
+          raise "environment variable GITHUB_TOKEN_DECRYPTION_KEYS_JSON must be a JSON object"
+      end
+  end
 
 valid_token_key? =
   is_binary(token_encryption_key) and
     match?({:ok, key} when byte_size(key) == 32, Base.decode64(token_encryption_key))
 
-if config_env() == :prod and not valid_token_key? do
-  raise "environment variable GITHUB_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key"
+valid_token_key_id? =
+  is_binary(token_encryption_key_id) and
+    String.match?(token_encryption_key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/)
+
+valid_decryption_keys? =
+  map_size(token_decryption_keys) <= 16 and
+    not Map.has_key?(token_decryption_keys, token_encryption_key_id) and
+    Enum.all?(token_decryption_keys, fn {key_id, encoded_key} ->
+      is_binary(key_id) and String.match?(key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/) and
+        is_binary(encoded_key) and
+        match?({:ok, key} when byte_size(key) == 32, Base.decode64(encoded_key))
+    end)
+
+if config_env() == :prod and
+     not (valid_token_key? and valid_token_key_id? and valid_decryption_keys?) do
+  raise "GitHub token keyring environment variables are invalid"
 end
 
-if valid_token_key? do
-  config :openagents, :github_token_encryption_key, token_encryption_key
+if valid_token_key? and valid_token_key_id? and valid_decryption_keys? do
+  config :openagents,
+    github_token_encryption_key: token_encryption_key,
+    github_token_encryption_key_id: token_encryption_key_id,
+    github_token_decryption_keys: token_decryption_keys
 end
 
 if parse_optional_boolean.("PHX_SERVER") do

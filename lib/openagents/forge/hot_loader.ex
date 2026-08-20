@@ -124,8 +124,8 @@ defmodule OpenAgents.Forge.HotLoader do
     end
   rescue
     error ->
-      message = bounded(Exception.message(error))
-      Logger.error("forge hot-load failed for #{inspect(build)}: #{message}")
+      message = "hot_load_failed code=" <> OpenAgents.OperationalLog.code(error)
+      Logger.error("forge_hot_load_failed code=#{OpenAgents.OperationalLog.code(error)}")
       advance(target_id, "failed", %{"error" => message})
       insert_receipt(repo, sha, target_id, modules, [], "failed", nil, nil)
       broadcast_deploy(repo, sha, "failed")
@@ -326,7 +326,7 @@ defmodule OpenAgents.Forge.HotLoader do
     |> Repo.insert()
   rescue
     error ->
-      Logger.error("forge deploy receipt insert failed: #{inspect(error)}")
+      Logger.error("forge_deploy_receipt_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :error
   end
 
@@ -337,17 +337,20 @@ defmodule OpenAgents.Forge.HotLoader do
 
       {:error, reason} ->
         Logger.warning(
-          "forge hot-load: target #{target_id} advance to #{status} refused: #{inspect(reason)}"
+          "forge_hot_load_advance_refused target=#{target_id} status=#{status} " <>
+            "code=#{OpenAgents.OperationalLog.code(reason)}"
         )
 
         :error
     end
   rescue
     error ->
-      Logger.error("forge hot-load: target advance raised: #{inspect(error)}")
+      Logger.error("forge_hot_load_advance_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :error
   end
 
-  defp bounded(text) when is_binary(text), do: String.slice(text, 0, 500)
-  defp bounded(other), do: other |> inspect() |> String.slice(0, 500)
+  defp bounded(text) when is_binary(text),
+    do: text |> OpenAgents.LogSafety.redact() |> String.slice(0, 500)
+
+  defp bounded(other), do: OpenAgents.OperationalLog.code(other)
 end

@@ -9,6 +9,8 @@ defmodule OpenAgentsWeb.UserAuth do
 
   @session_key "user_id"
 
+  def put_no_store(conn, _options), do: put_resp_header(conn, "cache-control", "no-store")
+
   def fetch_current_user(conn, _options) do
     with user_id when is_binary(user_id) <- get_session(conn, @session_key),
          {:ok, user} <- Accounts.get_active_user(user_id) do

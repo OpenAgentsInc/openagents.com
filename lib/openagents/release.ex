@@ -20,6 +20,18 @@ defmodule OpenAgents.Release do
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
   end
 
+  @doc "Rewrap retained GitHub grants with the configured active vault key."
+  def rotate_github_tokens do
+    load_app()
+
+    for repo <- repos() do
+      {:ok, rotated, _apps} =
+        Ecto.Migrator.with_repo(repo, fn _repo -> OpenAgents.Accounts.rotate_github_tokens!() end)
+
+      IO.puts("github_tokens_rotated=#{rotated}")
+    end
+  end
+
   defp run_migrations(repo) do
     # Acquire a session-level advisory lock so only one release migrates at a
     # time, then run the standard Ecto migration set.

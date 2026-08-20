@@ -25,6 +25,9 @@ config :openagents,
        :github_token_encryption_key,
        Base.encode64("openagents-test-token-vault-key3")
 
+config :openagents, :github_token_encryption_key_id, "test-2026-08"
+config :openagents, :github_token_decryption_keys, %{}
+
 # Test fakes for providers and voice sideband so the suite never reaches the network.
 config :openagents, :provider, OpenAgents.Providers.Test
 config :openagents, :voice_call_provider, OpenAgents.Voice.TestCallProvider

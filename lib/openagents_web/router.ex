@@ -30,8 +30,14 @@ defmodule OpenAgentsWeb.Router do
     plug :accepts, ["json"]
     plug :fetch_session
     plug :fetch_current_user
+    plug :put_no_store
     plug :protect_from_forgery
     plug :require_authenticated_api_user
+  end
+
+  pipeline :forge_write_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
   end
 
   pipeline :status_probe_compat do
@@ -39,6 +45,7 @@ defmodule OpenAgentsWeb.Router do
   end
 
   pipeline :authenticated do
+    plug :put_no_store
     plug :require_authenticated_user
   end
 
@@ -70,7 +77,7 @@ defmodule OpenAgentsWeb.Router do
     end
 
     post "/auth/github", AuthController, :start
-    get "/auth/github/callback", AuthController, :callback
+    get "/auth/github/callback", AuthController, :callback, log: false
     delete "/logout", AuthController, :logout
     get "/healthz", HealthController, :show
   end
@@ -101,6 +108,7 @@ defmodule OpenAgentsWeb.Router do
       on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
       live "/chat", ChatLive, :index
       live "/computers", ComputersLive, :index
+      live "/settings/api-tokens", ApiTokensLive, :index
       live "/admin", AdminLive, :index
       live "/admin/forge", AdminForgeLive, :index
 
@@ -134,10 +142,15 @@ defmodule OpenAgentsWeb.Router do
     get "/machines", LegacyMachinesController, :show
 
     get "/memory/export", MemoryExportController, :show
+    delete "/github/connection", AuthController, :disconnect
   end
 
   scope "/api", OpenAgentsWeb do
     pipe_through :authenticated_api
+
+    get "/tokens", ApiTokenController, :index
+    post "/tokens", ApiTokenController, :create
+    delete "/tokens/:id", ApiTokenController, :delete
 
     get "/computers", ComputersController, :index
     post "/computers/pairings/:id/approve", ComputersController, :approve_pairing
@@ -163,52 +176,52 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :api
 
-    resources "/repos/:owner/:repo/issues", IssueController,
-      only: [:index, :create, :show, :update],
-      param: "issue_number"
-
-    resources "/repos/:owner/:repo/issues/:issue_number/comments", CommentController,
-      only: [:index, :create]
-
-    resources "/repos/:owner/:repo/issues/comments", CommentController,
-      only: [:show, :update, :delete]
-
-    resources "/repos/:owner/:repo/issues/:issue_number/labels", IssueLabelController,
-      only: [:index, :create]
-
-    delete "/repos/:owner/:repo/issues/:issue_number/labels/:name",
-           IssueLabelController,
-           :delete
-
-    resources "/repos/:owner/:repo/issues/:issue_number/assignees", IssueAssigneeController,
-      only: [:index, :create]
-
-    delete "/repos/:owner/:repo/issues/:issue_number/assignees",
-           IssueAssigneeController,
-           :delete
-
-    resources "/repos/:owner/:repo/labels", LabelController,
-      only: [:index, :create, :show, :update, :delete],
-      param: "name"
-
-    resources "/repos/:owner/:repo/milestones", MilestoneController,
-      only: [:index, :create, :show, :update, :delete],
-      param: "milestone_number"
-
+    get "/repos/:owner/:repo/issues", IssueController, :index
+    get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
+    get "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :index
+    get "/repos/:owner/:repo/issues/comments/:id", CommentController, :show
+    get "/repos/:owner/:repo/issues/:issue_number/labels", IssueLabelController, :index
+    get "/repos/:owner/:repo/issues/:issue_number/assignees", IssueAssigneeController, :index
+    get "/repos/:owner/:repo/labels", LabelController, :index
+    get "/repos/:owner/:repo/labels/:name", LabelController, :show
+    get "/repos/:owner/:repo/milestones", MilestoneController, :index
+    get "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :show
     get "/repos/:owner/:repo/assignees", AssigneeController, :index
     get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
-
     get "/users/:username/projectsV2", ProjectController, :index
-    post "/:owner/projectsV2", ProjectController, :create
     get "/users/:username/projectsV2/:project_number", ProjectController, :show
     get "/users/:username/projectsV2/:project_number/items", ProjectController, :items
+    get "/users/:username/projectsV2/:project_number/fields", ProjectController, :fields
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :forge_write_api
+
+    post "/repos/:owner/:repo/issues", IssueController, :create
+    put "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
+    patch "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
+    post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
+    put "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
+    patch "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
+    delete "/repos/:owner/:repo/issues/comments/:id", CommentController, :delete
+    post "/repos/:owner/:repo/issues/:issue_number/labels", IssueLabelController, :create
+    delete "/repos/:owner/:repo/issues/:issue_number/labels/:name", IssueLabelController, :delete
+    post "/repos/:owner/:repo/issues/:issue_number/assignees", IssueAssigneeController, :create
+    delete "/repos/:owner/:repo/issues/:issue_number/assignees", IssueAssigneeController, :delete
+    post "/repos/:owner/:repo/labels", LabelController, :create
+    put "/repos/:owner/:repo/labels/:name", LabelController, :update
+    patch "/repos/:owner/:repo/labels/:name", LabelController, :update
+    delete "/repos/:owner/:repo/labels/:name", LabelController, :delete
+    post "/repos/:owner/:repo/milestones", MilestoneController, :create
+    put "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :update
+    patch "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :update
+    delete "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :delete
+    post "/:owner/projectsV2", ProjectController, :create
     post "/users/:username/projectsV2/:project_number/items", ProjectController, :create_item
 
     patch "/users/:username/projectsV2/:project_number/items/:item_id",
           ProjectController,
           :update_item
-
-    get "/users/:username/projectsV2/:project_number/fields", ProjectController, :fields
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

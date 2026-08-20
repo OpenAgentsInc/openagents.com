@@ -1,0 +1,194 @@
+defmodule OpenAgentsWeb.RouteAuthority do
+  @moduledoc """
+  Executable authority inventory for every Phoenix route and endpoint socket.
+
+  The classifier intentionally has no catch-all policy. A route outside one of
+  these bounded surfaces is `:unclassified`, which fails the inventory test
+  until its principal and scope are chosen deliberately.
+  """
+
+  @classes [
+    :public_read,
+    :authenticated_browser,
+    :authenticated_api,
+    :operator,
+    :machine,
+    :internal_service,
+    :git_transport
+  ]
+
+  @public_browser_paths [
+    "/",
+    "/status",
+    "/changelog",
+    "/leaderboard",
+    "/components",
+    "/components/icons",
+    "/components/:slug",
+    "/docs",
+    "/healthz"
+  ]
+
+  @authenticated_browser_prefixes [
+    "/chat",
+    "/computers",
+    "/voice/",
+    "/data",
+    "/machines",
+    "/memory/",
+    "/settings/api-tokens",
+    "/github/connection",
+    "/api/tokens",
+    "/api/computers",
+    "/api/computer-agent-jobs/"
+  ]
+
+  @spec classes() :: [atom()]
+  def classes, do: @classes
+
+  @spec inventory() :: [map()]
+  def inventory do
+    routes = Enum.map(OpenAgentsWeb.Router.__routes__(), &classify/1)
+    routes ++ socket_inventory()
+  end
+
+  @spec classify(map()) :: map()
+  def classify(route) do
+    base = %{
+      transport: :http,
+      verb: to_string(route.verb),
+      path: route.path,
+      handler: inspect(route.plug),
+      action: inspect(route.plug_opts)
+    }
+
+    Map.merge(base, policy(route))
+  end
+
+  @spec socket_inventory() :: [map()]
+  def socket_inventory do
+    [
+      %{
+        transport: :websocket,
+        verb: "connect",
+        path: "/live",
+        handler: "Phoenix.LiveView.Socket",
+        action: "connect",
+        class: :authenticated_browser,
+        principal: "encrypted browser session",
+        scope: "liveview:session",
+        mutation: true
+      },
+      %{
+        transport: :websocket,
+        verb: "connect",
+        path: "/controller",
+        handler: "OpenAgentsWeb.ControllerSocket",
+        action: "connect",
+        class: :machine,
+        principal: "active paired-machine bearer",
+        scope: "machine:channel",
+        mutation: true
+      }
+    ]
+  end
+
+  defp policy(%{path: path, verb: verb})
+       when path in @public_browser_paths and verb in [:get, :head],
+       do: declaration(:public_read, "anonymous", "published:web", false)
+
+  defp policy(%{path: "/OpenAgentsInc/" <> _path, verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:source", false)
+
+  defp policy(%{path: "/auth/github", verb: :post}),
+    do: declaration(:authenticated_browser, "explicit OAuth applicant", "identity:connect", true)
+
+  defp policy(%{path: "/auth/github/callback"}),
+    do: declaration(:authenticated_browser, "one-time OAuth attempt", "identity:connect", true)
+
+  defp policy(%{path: "/logout"}),
+    do: declaration(:authenticated_browser, "encrypted browser session", "session:delete", true)
+
+  defp policy(%{path: "/admin/forge"}),
+    do: declaration(:operator, "configured operator GitHub ID", "forge:promote", true)
+
+  defp policy(%{path: "/admin"}),
+    do: declaration(:operator, "configured operator GitHub ID", "voice:metadata:read", false)
+
+  defp policy(%{path: "/git"}),
+    do:
+      declaration(
+        :git_transport,
+        "operator or active paired-machine HTTP credential",
+        "git:repository",
+        true
+      )
+
+  defp policy(%{path: "/api/status", verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:status", false)
+
+  defp policy(%{path: "/api/changelog", verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:changelog", false)
+
+  defp policy(%{path: "/controller/pairings", verb: :post}),
+    do: declaration(:machine, "unpaired machine", "machine:pairing:create", true)
+
+  defp policy(%{path: "/controller/pairings/:id"}),
+    do: declaration(:machine, "expiring one-time poll secret", "machine:pairing:claim", true)
+
+  defp policy(%{path: "/api/inference/proxy"}),
+    do: declaration(:internal_service, "scoped inference grant", "inference:invoke", true)
+
+  defp policy(%{path: "/api/v3/" <> _path, verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:forge", false)
+
+  defp policy(%{path: "/api/v3/" <> _path}),
+    do: declaration(:authenticated_api, "first-party bearer token", "forge:write", true)
+
+  defp policy(%{path: "/dev/" <> _path}),
+    do:
+      declaration(:internal_service, "development-only browser", "development:diagnostics", false)
+
+  defp policy(%{path: path, verb: verb}) do
+    cond do
+      Enum.any?(@authenticated_browser_prefixes, &String.starts_with?(path, &1)) ->
+        declaration(
+          :authenticated_browser,
+          "active encrypted browser session",
+          browser_scope(path),
+          browser_mutation?(path, verb)
+        )
+
+      tracker_browser_path?(path) ->
+        declaration(:authenticated_browser, "active encrypted browser session", "forge:web", true)
+
+      true ->
+        %{class: :unclassified, principal: nil, scope: nil, mutation: mutation_verb?(path)}
+    end
+  end
+
+  defp declaration(class, principal, scope, mutation) do
+    %{class: class, principal: principal, scope: scope, mutation: mutation}
+  end
+
+  defp browser_scope("/api/tokens" <> _path), do: "api-token:self"
+  defp browser_scope("/api/computers" <> _path), do: "computer:self"
+  defp browser_scope("/api/computer-agent-jobs/" <> _path), do: "computer-job:self"
+  defp browser_scope("/voice/" <> _path), do: "voice:self"
+  defp browser_scope("/data" <> _path), do: "data:self"
+  defp browser_scope("/memory/" <> _path), do: "memory:self"
+  defp browser_scope("/github/connection"), do: "github-tools:self"
+  defp browser_scope("/settings/api-tokens"), do: "api-token:self"
+  defp browser_scope(_path), do: "product:self"
+
+  defp browser_mutation?(path, :get),
+    do: path in ["/chat", "/computers", "/settings/api-tokens"]
+
+  defp browser_mutation?(_path, _verb), do: true
+
+  defp tracker_browser_path?(path) do
+    String.match?(path, ~r{\A/:owner/:repo/(issues|labels|milestones|assignees|projects)})
+  end
+
+  defp mutation_verb?(_path), do: true
+end

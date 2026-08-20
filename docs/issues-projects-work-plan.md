@@ -26,8 +26,8 @@ the paired LiveViews are covered separately. The dated
 The implementation tasks are no longer the readiness bottleneck. The resource
 model must now be hardened rather than expanded from this checklist:
 
-- `/api/v3` currently lacks a deliberate CLI authentication and authorization
-  model.
+- `/api/v3` now has a deliberate CLI model: public reads are separate and every
+  write requires an expiring first-party bearer with `forge:write` scope.
 - Owner/repository URL parameters do not yet map to a canonical repository row
   enforced throughout PostgreSQL.
 - Some project actions ignore the username in the route.

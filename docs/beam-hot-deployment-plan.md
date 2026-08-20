@@ -448,7 +448,7 @@ Use runtime configuration for policy and deployment environment values. Use safe
 | `forge_fleet_rpc_timeout_ms` | Bounds each fleet operation | Fifteen seconds |
 | `forge_target_repo` | Selects the deployed repository | Explicit production value |
 | `forge_internal_git_url` | Gives the sidecar a canonical clone URL | Loopback or private network |
-| `forge_operator_token` | Authenticates promotion and local clone | Required at runtime, never logged |
+| `forge_operator_token` | Authenticates forge writes; the builder receives it from its runtime identity and uses askpass | Required at runtime, never placed in URLs, argv, or logs |
 | `forge_expected_fleet_size` | Defines revision consistency and readiness | Explicit production value |
 | `forge_artifact_store` | Selects durable artifact storage | Local adapter in development |
 

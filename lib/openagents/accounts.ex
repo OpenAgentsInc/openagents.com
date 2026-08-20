@@ -37,17 +37,34 @@ defmodule OpenAgents.Accounts do
     )
   end
 
-  @doc "Seals and stores the user's GitHub OAuth access token for server-side API calls."
-  @spec store_github_token(User.t(), String.t()) :: {:ok, User.t()} | {:error, atom()}
-  def store_github_token(%User{} = user, token) when is_binary(token) do
-    with {:ok, sealed} <- TokenVault.seal(token) do
+  @doc "Seals and stores an explicitly authorized GitHub token and its non-secret metadata."
+  @spec store_github_token(User.t(), String.t(), [String.t()]) ::
+          {:ok, User.t()} | {:error, atom()}
+  def store_github_token(%User{} = user, token, scopes \\ configured_github_scopes())
+      when is_binary(token) and is_list(scopes) do
+    with true <- valid_scopes?(scopes),
+         {:ok, sealed, key_id} <- TokenVault.seal_with_metadata(token) do
+      now = DateTime.utc_now()
+
       user
-      |> Ecto.Changeset.change(github_token_ciphertext: sealed)
+      |> Ecto.Changeset.change(
+        github_token_ciphertext: sealed,
+        github_token_key_id: key_id,
+        github_token_scopes: scopes,
+        github_token_connected_at: now,
+        github_token_rotated_at: nil
+      )
+      |> Ecto.Changeset.check_constraint(:github_token_ciphertext,
+        name: :users_github_token_connection_state_check
+      )
       |> Repo.update()
       |> case do
         {:ok, updated} -> {:ok, updated}
         {:error, _changeset} -> {:error, :token_storage_failed}
       end
+    else
+      false -> {:error, :invalid_token_scopes}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -57,6 +74,66 @@ defmodule OpenAgents.Accounts do
     do: TokenVault.open(sealed)
 
   def github_token(%User{}), do: {:error, :github_token_missing}
+
+  @doc "Rewraps one retained token with the active key without exposing plaintext."
+  @spec rotate_github_token(User.t()) :: {:ok, User.t()} | {:error, atom()}
+  def rotate_github_token(%User{} = user) do
+    with {:ok, token} <- github_token(user),
+         {:ok, sealed, key_id} <- TokenVault.seal_with_metadata(token) do
+      replace_github_envelope(user, sealed, key_id)
+    end
+  end
+
+  @doc "Revokes the provider grant, then removes all local token material and metadata."
+  @spec disconnect_github(User.t(), (String.t() -> :ok | {:error, atom()})) ::
+          {:ok, User.t()} | {:error, atom()}
+  def disconnect_github(%User{} = user, revoker \\ &OpenAgents.GitHubOAuth.revoke/1)
+      when is_function(revoker, 1) do
+    case github_token(user) do
+      {:ok, token} ->
+        with :ok <- revoker.(token), do: clear_github_token(user)
+
+      {:error, :github_token_missing} ->
+        clear_github_token(user)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "Non-secret GitHub connection metadata for UI and data-rights projections."
+  @spec github_connection(User.t()) :: map()
+  def github_connection(%User{} = user) do
+    %{
+      connected: is_binary(user.github_token_ciphertext),
+      scopes: user.github_token_scopes,
+      connected_at: user.github_token_connected_at,
+      rotated_at: user.github_token_rotated_at
+    }
+  end
+
+  @doc "Rewraps every retained GitHub token atomically; returns only the rotated count."
+  @spec rotate_github_tokens!() :: non_neg_integer()
+  def rotate_github_tokens! do
+    Repo.transaction(fn ->
+      from(user in User,
+        where: not is_nil(user.github_token_ciphertext),
+        order_by: [asc: user.id],
+        lock: "FOR UPDATE"
+      )
+      |> Repo.stream(max_rows: 100)
+      |> Enum.reduce(0, fn user, count ->
+        case rotate_github_token(user) do
+          {:ok, _rotated} -> count + 1
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    end)
+    |> case do
+      {:ok, count} -> count
+      {:error, reason} -> raise "GitHub token rotation failed: #{reason}"
+    end
+  end
 
   def get_user(id) when is_binary(id) do
     case Ecto.UUID.cast(id) do
@@ -151,4 +228,65 @@ defmodule OpenAgents.Accounts do
   end
 
   defp state_digest(state), do: :crypto.hash(:sha256, state)
+
+  defp clear_github_token(%User{} = user) do
+    now = DateTime.utc_now()
+
+    {updated, _rows} =
+      user
+      |> matching_github_token_query()
+      |> Repo.update_all(
+        set: [
+          github_token_ciphertext: nil,
+          github_token_key_id: nil,
+          github_token_scopes: [],
+          github_token_connected_at: nil,
+          github_token_rotated_at: nil,
+          updated_at: now
+        ]
+      )
+
+    if updated == 1 do
+      {:ok, Repo.get!(User, user.id)}
+    else
+      {:error, :github_connection_changed}
+    end
+  end
+
+  defp replace_github_envelope(user, sealed, key_id) do
+    now = DateTime.utc_now()
+
+    {updated, _rows} =
+      user
+      |> matching_github_token_query()
+      |> Repo.update_all(
+        set: [
+          github_token_ciphertext: sealed,
+          github_token_key_id: key_id,
+          github_token_rotated_at: now,
+          updated_at: now
+        ]
+      )
+
+    if updated == 1 do
+      {:ok, Repo.get!(User, user.id)}
+    else
+      {:error, :github_connection_changed}
+    end
+  end
+
+  defp matching_github_token_query(%User{id: id, github_token_ciphertext: nil}) do
+    from(user in User, where: user.id == ^id and is_nil(user.github_token_ciphertext))
+  end
+
+  defp matching_github_token_query(%User{id: id, github_token_ciphertext: ciphertext}) do
+    from(user in User, where: user.id == ^id and user.github_token_ciphertext == ^ciphertext)
+  end
+
+  defp configured_github_scopes,
+    do: Application.fetch_env!(:openagents, :github_oauth_scopes)
+
+  defp valid_scopes?(scopes) do
+    scopes == configured_github_scopes()
+  end
 end

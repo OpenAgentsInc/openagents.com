@@ -50,6 +50,7 @@ defmodule OpenAgents.MachinesTest do
     assert {:ok, machine} = Machines.approve_pairing(owner, code)
     assert machine.user_id == owner.id
     assert machine.tier == "probe"
+    assert DateTime.compare(machine.token_expires_at, DateTime.utc_now()) == :gt
 
     assert {:ok, %{token: "smct_" <> _rest = token, machine_id: machine_id}} =
              Machines.claim_pairing(pairing.id, poll_secret)
@@ -60,6 +61,34 @@ defmodule OpenAgents.MachinesTest do
 
     assert {:ok, authenticated} = Machines.authenticate_token(token)
     assert authenticated.id == machine.id
+  end
+
+  test "concurrent claims have exactly one winner" do
+    %{pairing: pairing, code: code, poll_secret: poll_secret} = start_pairing()
+    assert {:ok, _machine} = Machines.approve_pairing(user("concurrent-claim"), code)
+    parent = self()
+
+    tasks =
+      for _attempt <- 1..2 do
+        Task.async(fn ->
+          send(parent, {:claim_ready, self()})
+
+          receive do
+            :claim -> Machines.claim_pairing(pairing.id, poll_secret)
+          end
+        end)
+      end
+
+    Enum.each(tasks, fn %{pid: pid} ->
+      assert_receive {:claim_ready, ^pid}
+      Ecto.Adapters.SQL.Sandbox.allow(Repo, self(), pid)
+    end)
+
+    Enum.each(tasks, &send(&1.pid, :claim))
+    results = Enum.map(tasks, &Task.await/1)
+
+    assert Enum.count(results, &match?({:ok, %{token: "smct_" <> _rest}}, &1)) == 1
+    assert Enum.count(results, &(&1 == {:error, :pairing_consumed})) == 1
   end
 
   test "claim requires the correct poll secret" do
@@ -102,6 +131,41 @@ defmodule OpenAgents.MachinesTest do
     assert {:error, :machine_revoked} = Machines.authenticate_token(token)
     assert {:error, :machine_not_found} = Machines.authenticate_token("smct_unknown")
     assert {:error, :machine_not_found} = Machines.authenticate_token("other_prefix")
+  end
+
+  test "expired machine tokens fail closed" do
+    %{pairing: pairing, code: code, poll_secret: poll_secret} = start_pairing()
+    owner = user("expired-token")
+    {:ok, machine} = Machines.approve_pairing(owner, code)
+    {:ok, %{token: token}} = Machines.claim_pairing(pairing.id, poll_secret)
+
+    backdated = DateTime.add(DateTime.utc_now(), -31, :day)
+
+    Repo.update_all(from(m in OpenAgents.Machines.Machine, where: m.id == ^machine.id),
+      set: [inserted_at: backdated]
+    )
+
+    Repo.get!(OpenAgents.Machines.Machine, machine.id)
+    |> Ecto.Changeset.change(token_expires_at: DateTime.add(DateTime.utc_now(), -1, :second))
+    |> Repo.update!()
+
+    assert {:error, :machine_expired} = Machines.authenticate_token(token)
+    refute Machines.active_machine?(owner.id)
+    assert Machines.approval_receipts(owner.id, "conversation:test") == []
+  end
+
+  test "an approved pairing cannot be claimed after its one-time window" do
+    %{pairing: pairing, code: code, poll_secret: poll_secret} = start_pairing()
+    owner = user("expired-approved-pairing")
+    assert {:ok, machine} = Machines.approve_pairing(owner, code)
+
+    pairing
+    |> Ecto.Changeset.change(expires_at: DateTime.add(DateTime.utc_now(), -1, :second))
+    |> Repo.update!()
+
+    assert {:error, :pairing_expired} = Machines.claim_pairing(pairing.id, poll_secret)
+    assert %{status: "expired", token_ciphertext: nil} = Repo.get!(Pairing, pairing.id)
+    assert %{status: "revoked"} = Repo.get!(OpenAgents.Machines.Machine, machine.id)
   end
 
   test "machines are scoped to their owner" do

@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.CommentControllerTest do
   use OpenAgentsWeb.ConnCase
 
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "comments")}
+
   alias OpenAgents.Issues
 
   setup do

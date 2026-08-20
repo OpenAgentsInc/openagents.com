@@ -73,6 +73,47 @@ defmodule OpenAgents.AccountsTest do
     assert Conversations.get_conversation_for_browser("legacy-browser-credential").id == legacy.id
   end
 
+  test "retained GitHub grants can be rewrapped and disconnected without deleting identity" do
+    assert {:ok, user} = Accounts.upsert_github_user(profile(501, "token-owner"))
+
+    assert {:error, :invalid_token_scopes} =
+             Accounts.store_github_token(user, "gho_too_broad", ["read:user", "repo"])
+
+    assert {:ok, connected} = Accounts.store_github_token(user, "gho_retained")
+    assert connected.github_token_key_id == "test-2026-08"
+
+    assert {:ok, rotated} = Accounts.rotate_github_token(connected)
+    assert rotated.github_token_rotated_at
+    assert {:ok, "gho_retained"} = Accounts.github_token(rotated)
+
+    assert {:ok, disconnected} =
+             Accounts.disconnect_github(rotated, fn token ->
+               assert token == "gho_retained"
+               :ok
+             end)
+
+    assert disconnected.id == user.id
+    assert disconnected.github_token_ciphertext == nil
+    assert disconnected.github_token_scopes == []
+    assert {:error, :github_token_missing} = Accounts.github_token(disconnected)
+  end
+
+  test "disconnecting a stale envelope never clears a concurrently replaced grant" do
+    assert {:ok, user} = Accounts.upsert_github_user(profile(502, "token-race-owner"))
+    assert {:ok, old_connection} = Accounts.store_github_token(user, "gho_old")
+    assert {:ok, new_connection} = Accounts.store_github_token(old_connection, "gho_new")
+
+    assert {:error, :github_connection_changed} =
+             Accounts.disconnect_github(old_connection, fn token ->
+               assert token == "gho_old"
+               :ok
+             end)
+
+    retained = Accounts.get_user(user.id)
+    assert retained.github_token_ciphertext == new_connection.github_token_ciphertext
+    assert {:ok, "gho_new"} = Accounts.github_token(retained)
+  end
+
   defp profile(id, login, avatar_url \\ nil) do
     %{
       github_id: id,

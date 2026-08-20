@@ -56,6 +56,19 @@ defmodule OpenAgentsWeb.ConnCase do
     Plug.Test.init_test_session(conn, %{"user_id" => user.id})
   end
 
+  def put_forge_api_token(conn, key) when is_binary(key) do
+    user = github_user("api-token-" <> key)
+
+    {:ok, _credential, plaintext} =
+      OpenAgents.ApiTokens.create(user, %{
+        name: "test forge client",
+        scopes: ["forge:write"],
+        lifetime_days: 1
+      })
+
+    Plug.Conn.put_req_header(conn, "authorization", "Bearer " <> plaintext)
+  end
+
   @doc """
   Logs in an account and grants it operator access for the duration of the test.
   """

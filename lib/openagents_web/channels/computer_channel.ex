@@ -27,6 +27,7 @@ defmodule OpenAgentsWeb.ComputerChannel do
             {:ok, _owner} ->
               Phoenix.PubSub.subscribe(OpenAgents.PubSub, "machine:#{machine.id}")
               Machines.record_seen(machine)
+              schedule_token_expiry(socket.assigns.token_expires_at, machine.id)
               {:ok, %{"protocol" => "openagents.computer.v1"}, assign(socket, :machine, machine)}
 
             # A prior registration (usually from a node that just died) hasn't
@@ -155,6 +156,13 @@ defmodule OpenAgentsWeb.ComputerChannel do
     {:stop, :normal, socket}
   end
 
+  def handle_info(
+        {:machine_token_expired, machine_id},
+        %{assigns: %{machine_id: machine_id}} = socket
+      ) do
+    {:stop, :normal, socket}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
@@ -218,6 +226,11 @@ defmodule OpenAgentsWeb.ComputerChannel do
     do: String.slice(value, 0, maximum)
 
   defp bounded_text(_value, _maximum, fallback), do: fallback
+
+  defp schedule_token_expiry(expires_at, machine_id) do
+    delay_ms = max(DateTime.diff(expires_at, DateTime.utc_now(), :millisecond), 0)
+    Process.send_after(self(), {:machine_token_expired, machine_id}, delay_ms)
+  end
 
   defp store_report(socket, report) when is_map(report),
     do: Machines.store_probe(socket.assigns.machine, report)

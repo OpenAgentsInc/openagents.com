@@ -24,9 +24,11 @@ defmodule OpenAgents.Changelog.Backfill do
 
     :ok
   rescue
-    error -> Logger.warning("changelog backfill failed: #{Exception.message(error)}")
+    error ->
+      Logger.warning("changelog_backfill_failed code=#{OpenAgents.OperationalLog.code(error)}")
   catch
-    :exit, reason -> Logger.warning("changelog backfill exited: #{inspect(reason)}")
+    :exit, reason ->
+      Logger.warning("changelog_backfill_exited code=#{OpenAgents.OperationalLog.code(reason)}")
   end
 
   @doc "Insert every seed entry idempotently. Returns the inserted count."

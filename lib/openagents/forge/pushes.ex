@@ -62,7 +62,10 @@ defmodule OpenAgents.Forge.Pushes do
             {:ok, output}
 
           {:error, reason} ->
-            Logger.error("forge push: WAL persist failed for #{repo}: #{inspect(reason)}")
+            Logger.error(
+              "forge_push_wal_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
+            )
+
             Repos.set_refs!(repo, refs_before)
             {:error, :wal_persist_failed}
         end
@@ -176,7 +179,7 @@ defmodule OpenAgents.Forge.Pushes do
     |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :wal_seq])
   rescue
     error ->
-      Logger.error("forge push: receipt insert failed: #{inspect(error)}")
+      Logger.error("forge_push_receipt_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :error
   end
 
@@ -204,7 +207,8 @@ defmodule OpenAgents.Forge.Pushes do
   Push the bare repo to its configured mirror, synchronously (#127). One-way,
   best-effort, never load-bearing: a failure logs and returns an error for
   the drift watcher to count — it never blocks or fails a forge push. The
-  mirror URL may embed a credential and is never included in logs or output.
+  mirror URL must not embed a credential; authentication belongs to the git
+  credential helper or workload identity and output is never logged.
   """
   def mirror_now(repo) do
     case mirror_url(repo) do
@@ -218,8 +222,8 @@ defmodule OpenAgents.Forge.Pushes do
           {_, 0} ->
             :ok
 
-          {output, _} ->
-            Logger.warning("forge mirror failed for #{repo}: #{bounded(redact(output, url))}")
+          {_output, _} ->
+            Logger.warning("forge_mirror_failed repo=#{repo} code=mirror_push_failed")
             {:error, :mirror_push_failed}
         end
     end
@@ -228,13 +232,32 @@ defmodule OpenAgents.Forge.Pushes do
   @doc "The configured mirror URL for a repo, or nil (config `:forge_mirror_urls`)."
   def mirror_url(repo) do
     case Application.get_env(:openagents, :forge_mirror_urls, %{}) do
-      %{} = urls -> urls[repo]
+      %{} = urls -> clean_mirror_url(urls[repo])
       _ -> nil
     end
   end
 
-  # git sometimes prints the remote URL (with credential) in errors.
-  defp redact(output, url), do: String.replace(output, url, "[mirror]")
+  defp clean_mirror_url(nil), do: nil
 
-  defp bounded(text), do: String.slice(text, 0, 500)
+  defp clean_mirror_url(url) when is_binary(url) do
+    cond do
+      String.contains?(url, ["\n", "\r", "\0"]) ->
+        nil
+
+      Path.type(url) == :absolute ->
+        url
+
+      true ->
+        case URI.new(url) do
+          {:ok, %URI{scheme: scheme, host: host, userinfo: nil}}
+          when scheme in ["http", "https", "git", "ssh"] and is_binary(host) ->
+            url
+
+          _credentialed_or_invalid ->
+            nil
+        end
+    end
+  end
+
+  defp clean_mirror_url(_invalid), do: nil
 end

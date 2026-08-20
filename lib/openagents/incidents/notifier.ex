@@ -24,7 +24,7 @@ defmodule OpenAgents.Incidents.Notifier do
     :ok
   rescue
     error ->
-      Logger.error("incident_notify_failed error=#{Exception.message(error)}")
+      Logger.error("incident_notify_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :ok
   end
 

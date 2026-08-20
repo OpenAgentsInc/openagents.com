@@ -51,7 +51,7 @@ defmodule OpenAgents.Cluster.Drain do
           :ok
 
         other ->
-          Logger.warning("drain: leave_ra returned #{inspect(other)}")
+          Logger.warning("drain_leave_ra_refused code=#{OpenAgents.OperationalLog.code(other)}")
           :ok
       end
     else
@@ -59,7 +59,7 @@ defmodule OpenAgents.Cluster.Drain do
     end
   rescue
     error ->
-      Logger.warning("drain: leave_ra error #{inspect(error)}")
+      Logger.warning("drain_leave_ra_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :ok
   end
 

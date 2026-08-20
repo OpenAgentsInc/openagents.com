@@ -42,6 +42,9 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     assert is_binary(user.github_token_ciphertext)
     refute user.github_token_ciphertext =~ "ephemeral-github-token"
     assert {:ok, "ephemeral-github-token"} = Accounts.github_token(user)
+    assert user.github_token_key_id == "test-2026-08"
+    assert user.github_token_scopes == ["repo"]
+    assert user.github_token_connected_at
 
     cookie = authenticated |> get_resp_header("set-cookie") |> Enum.join(";")
     refute cookie =~ "ephemeral-github-token"
@@ -77,6 +80,59 @@ defmodule OpenAgentsWeb.AuthControllerTest do
 
     assert redirected_to(callback) == ~p"/?auth_error=failed"
     assert get_session(callback, "user_id") == nil
+  end
+
+  test "GitHub tools require an explicit retained-token choice", %{conn: conn} do
+    refused =
+      conn
+      |> init_test_session(%{})
+      |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
+      |> post(~p"/auth/github")
+
+    assert redirected_to(refused) == ~p"/?auth_error=consent_required"
+    assert get_session(refused, "github_oauth_attempt") == nil
+  end
+
+  test "disconnect revokes the GitHub grant and clears local token metadata", %{conn: conn} do
+    user = github_user("disconnect-github-tools")
+    assert {:ok, user} = Accounts.store_github_token(user, "ephemeral-github-token")
+    expect_revoke()
+
+    disconnected =
+      conn
+      |> init_test_session(%{"user_id" => user.id})
+      |> delete(~p"/github/connection")
+
+    assert redirected_to(disconnected) == ~p"/chat"
+    retained_identity = Accounts.get_user(user.id)
+    assert retained_identity.github_token_ciphertext == nil
+    assert retained_identity.github_token_key_id == nil
+    assert retained_identity.github_token_scopes == []
+    assert retained_identity.github_token_connected_at == nil
+    assert get_session(disconnected, "user_id") == user.id
+  end
+
+  test "a provider revocation failure preserves the retained grant for a safe retry", %{
+    conn: conn
+  } do
+    user = github_user("disconnect-provider-failure")
+    assert {:ok, user} = Accounts.store_github_token(user, "ephemeral-github-token")
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      assert conn.method == "DELETE"
+      Plug.Conn.send_resp(conn, 503, ~s|{"message":"provider failure"}|)
+    end)
+
+    refused =
+      conn
+      |> init_test_session(%{"user_id" => user.id})
+      |> delete(~p"/github/connection")
+
+    assert redirected_to(refused) == ~p"/chat"
+    assert get_resp_header(refused, "cache-control") == ["no-store"]
+    retained = Accounts.get_user(user.id)
+    assert retained.github_token_ciphertext == user.github_token_ciphertext
+    assert {:ok, "ephemeral-github-token"} = Accounts.github_token(retained)
   end
 
   test "banned GitHub identities cannot establish a Sarah session", %{conn: conn} do
@@ -130,7 +186,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     conn
     |> init_test_session(%{})
     |> put_req_header("x-csrf-token", csrf_token)
-    |> post(~p"/auth/github")
+    |> post(~p"/auth/github?github_tools=enabled")
   end
 
   defp attempt_and_state(conn) do
@@ -143,7 +199,10 @@ defmodule OpenAgentsWeb.AuthControllerTest do
 
   defp expect_github(github_id, login) do
     Req.Test.expect(__MODULE__, fn conn ->
-      Req.Test.json(conn, %{"access_token" => "ephemeral-github-token"})
+      Req.Test.json(conn, %{
+        "access_token" => "ephemeral-github-token",
+        "scope" => "repo"
+      })
     end)
 
     Req.Test.expect(__MODULE__, fn conn ->
@@ -152,6 +211,16 @@ defmodule OpenAgentsWeb.AuthControllerTest do
         "login" => login,
         "avatar_url" => "https://avatars.githubusercontent.com/u/#{github_id}?v=4"
       })
+    end)
+  end
+
+  defp expect_revoke do
+    Req.Test.expect(__MODULE__, fn conn ->
+      assert conn.method == "DELETE"
+      assert conn.request_path == "/applications/test-github-client-id/token"
+      assert ["Basic " <> _credential] = Plug.Conn.get_req_header(conn, "authorization")
+      refute Req.Test.raw_body(conn) == ""
+      Plug.Conn.send_resp(conn, 204, "")
     end)
   end
 

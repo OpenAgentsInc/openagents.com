@@ -2370,7 +2370,10 @@ defmodule OpenAgentsWeb.ChatLive do
               <.label for={@privacy_delete_form[:confirmation].id}>
                 Type DELETE MY SARAH DATA to delete this account's Sarah conversation,
                 transcripts, memory, receipts, and voice records. Minimal GitHub identity and
-                access-status data remains so bans and access controls cannot be bypassed.
+                access-status data remains so bans and access controls cannot be bypassed. A
+                retained GitHub tools grant remains until you use Disconnect GitHub tools in
+                the account menu. API tokens remain until you revoke them from API token
+                settings.
               </.label>
               <div class="control-row">
                 <.input

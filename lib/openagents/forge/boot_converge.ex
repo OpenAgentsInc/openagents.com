@@ -51,9 +51,11 @@ defmodule OpenAgents.Forge.BootConverge do
       try do
         attempt(repo)
       rescue
-        error -> %{"state" => "image", "reason" => bounded(Exception.message(error))}
+        error ->
+          %{"state" => "image", "reason" => OpenAgents.OperationalLog.code(error)}
       catch
-        _kind, reason -> %{"state" => "image", "reason" => bounded(inspect(reason))}
+        _kind, reason ->
+          %{"state" => "image", "reason" => OpenAgents.OperationalLog.code(reason)}
       end
 
     :persistent_term.put(@state_key, outcome)
@@ -135,7 +137,7 @@ defmodule OpenAgents.Forge.BootConverge do
       if failures == [] do
         %{"state" => "converged", "sha" => sha, "modules" => length(beams)}
       else
-        %{"state" => "image", "reason" => bounded("load_failed: #{inspect(failures)}")}
+        %{"state" => "image", "reason" => "load_failed"}
       end
     end
   end
@@ -153,6 +155,4 @@ defmodule OpenAgents.Forge.BootConverge do
   end
 
   defp default_allowlist, do: ["OpenAgents.Scratch.", "OpenAgents.BuildInfo"]
-
-  defp bounded(text), do: String.slice(to_string(text), 0, 500)
 end

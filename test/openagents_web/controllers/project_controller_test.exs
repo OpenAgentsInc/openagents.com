@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.ProjectControllerTest do
   use OpenAgentsWeb.ConnCase
 
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "projects")}
+
   import OpenAgents.ProjectFieldsFixtures
   import OpenAgents.ProjectItemsFixtures
   import OpenAgents.ProjectsFixtures

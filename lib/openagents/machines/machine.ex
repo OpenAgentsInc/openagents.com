@@ -18,6 +18,7 @@ defmodule OpenAgents.Machines.Machine do
     field :agent_version, :string
     field :roots, {:array, :string}, default: []
     field :token_digest, :binary, redact: true
+    field :token_expires_at, :utc_datetime_usec
     field :status, :string, default: "active"
     field :revoked_at, :utc_datetime_usec
     field :last_seen_at, :utc_datetime_usec
@@ -35,6 +36,7 @@ defmodule OpenAgents.Machines.Machine do
           agent_version: String.t() | nil,
           roots: [String.t()],
           token_digest: binary(),
+          token_expires_at: DateTime.t(),
           status: String.t(),
           revoked_at: DateTime.t() | nil,
           last_seen_at: DateTime.t() | nil,

@@ -11,7 +11,7 @@ defmodule OpenAgents.GitHubOAuthTest do
 
     assert query["client_id"] == "test-github-client-id"
     assert query["redirect_uri"] == "http://127.0.0.1:4002/auth/github/callback"
-    assert query["scope"] == "read:user repo"
+    assert query["scope"] == "repo"
     assert query["state"] == attempt["state"]
     assert query["code_challenge_method"] == "S256"
     assert byte_size(query["code_challenge"]) == 43
@@ -50,7 +50,12 @@ defmodule OpenAgents.GitHubOAuthTest do
       assert body =~ "client_secret=test-github-client-secret"
       assert body =~ "code=github-code"
       assert body =~ "code_verifier="
-      Req.Test.json(conn, %{"access_token" => "short-lived-token", "token_type" => "bearer"})
+
+      Req.Test.json(conn, %{
+        "access_token" => "short-lived-token",
+        "token_type" => "bearer",
+        "scope" => "repo"
+      })
     end)
 
     Req.Test.expect(__MODULE__, fn conn ->
@@ -68,7 +73,9 @@ defmodule OpenAgents.GitHubOAuthTest do
 
     verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
 
-    assert {:ok, profile, access_token} = GitHubOAuth.exchange_and_fetch("github-code", verifier)
+    assert {:ok, profile, access_token, ["repo"]} =
+             GitHubOAuth.exchange_and_fetch("github-code", verifier)
+
     assert access_token == "short-lived-token"
     assert profile.github_id == 7_654
     assert profile.github_login == "octo-user"
@@ -87,7 +94,10 @@ defmodule OpenAgents.GitHubOAuthTest do
       setup_req_test()
 
       Req.Test.expect(__MODULE__, fn conn ->
-        Req.Test.json(conn, %{"access_token" => "short-lived-token"})
+        Req.Test.json(conn, %{
+          "access_token" => "short-lived-token",
+          "scope" => "repo"
+        })
       end)
 
       Req.Test.expect(__MODULE__, fn conn ->
@@ -105,7 +115,7 @@ defmodule OpenAgents.GitHubOAuthTest do
 
       # GitHub leaves `name` null far more often than not, so an unusable value
       # must degrade to no name rather than fail the login.
-      assert {:ok, profile, _access_token} =
+      assert {:ok, profile, _access_token, _scopes} =
                GitHubOAuth.exchange_and_fetch("github-code", verifier)
 
       assert profile.github_name == expected
@@ -117,7 +127,7 @@ defmodule OpenAgents.GitHubOAuthTest do
     setup_req_test()
 
     Req.Test.expect(__MODULE__, fn conn ->
-      Req.Test.json(conn, %{"access_token" => "provider-token"})
+      Req.Test.json(conn, %{"access_token" => "provider-token", "scope" => "repo"})
     end)
 
     Req.Test.expect(__MODULE__, fn conn ->
@@ -130,6 +140,22 @@ defmodule OpenAgents.GitHubOAuthTest do
 
     verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
     assert {:error, :invalid_github_profile} = GitHubOAuth.exchange_and_fetch("code", verifier)
+  end
+
+  test "a missing or broadened granted scope fails before profile lookup" do
+    for scope <- [nil, "", "read:user", "repo,admin:org"] do
+      setup_req_test()
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        body = %{"access_token" => "provider-token"}
+        Req.Test.json(conn, if(scope, do: Map.put(body, "scope", scope), else: body))
+      end)
+
+      verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+
+      expected = if scope, do: :oauth_scope_mismatch, else: :invalid_oauth_token_response
+      assert {:error, ^expected} = GitHubOAuth.exchange_and_fetch("code", verifier)
+    end
   end
 
   defp setup_req_test do

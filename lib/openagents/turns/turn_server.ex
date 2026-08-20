@@ -76,7 +76,7 @@ defmodule OpenAgents.Turns.TurnServer do
          tool_snapshot
        ) do
     messages = Conversations.provider_messages(turn.conversation_id)
-    provider = Application.fetch_env!(:sarah, :provider)
+    provider = Application.fetch_env!(:openagents, :provider)
     provider_capabilities = provider.capabilities()
     tools_enabled = :tool_calls in provider_capabilities
 
@@ -101,7 +101,7 @@ defmodule OpenAgents.Turns.TurnServer do
              preferences: preference_projection.applied,
              experiences: experience_capture.projections
            ),
-         model_id <- Application.fetch_env!(:sarah, :openai_model),
+         model_id <- Application.fetch_env!(:openagents, :openai_model),
          request <- %Request{
            model_id: model_id,
            instructions: context.instructions,

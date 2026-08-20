@@ -1,59 +1,56 @@
 defmodule OpenAgents.Forge.Target do
   @moduledoc """
-  Ecto schema for `forge_fleet_targets`.
+  One fleet-target promotion (`forge_fleet_targets`): the operator-approved
+  commit the fleet should converge to, with its deploy-lane status and
+  bounded per-step details. Append-only per repo; newest row = current.
   """
 
   use Ecto.Schema
   import Ecto.Changeset
 
-  @statuses ~w(promoted building built deploying live reverted needs_relup needs_rolling_replace failed)
+  @timestamps_opts [type: :utc_datetime_usec]
 
   schema "forge_fleet_targets" do
     field :repo, :string
     field :sha, :string
     field :promoted_by, :string
-    field :strategy, :string
     field :status, :string, default: "promoted"
     field :details, :map, default: %{}
-
     timestamps()
   end
 
   def changeset(target, attrs) do
     target
-    |> cast(attrs, [:repo, :sha, :promoted_by, :strategy, :status, :details])
+    |> cast(attrs, [:repo, :sha, :promoted_by, :status, :details])
     |> validate_required([:repo, :sha, :promoted_by, :status])
-    |> validate_inclusion(:status, @statuses)
-    |> validate_length(:repo, max: 500)
-    |> validate_length(:sha, max: 64)
-    |> validate_length(:promoted_by, max: 200)
-    |> validate_length(:strategy, max: 64)
     |> validate_details()
+    |> check_constraint(:status, name: :forge_fleet_target_status)
   end
 
   defp validate_details(changeset) do
     validate_change(changeset, :details, fn :details, details ->
-      cond do
-        not is_map(details) ->
-          [details: "must be a map"]
+      details = details || %{}
+      errors = []
 
-        map_size(details) > 100 ->
-          [details: "exceeds the 100-key bound"]
+      errors =
+        if map_size(details) > 100,
+          do: [{:details, {"exceeds the 100-key bound", []}} | errors],
+          else: errors
 
-        string_size(details) > 32_000 ->
-          [details: "exceeds the 32KB bound"]
+      errors =
+        if Enum.any?(details, fn {_k, v} -> is_binary(v) and byte_size(v) > 32_768 end) do
+          [{:details, {"exceeds the 32KB bound", []}} | errors]
+        else
+          errors
+        end
 
-        true ->
-          []
-      end
+      errors
     end)
   end
 
-  defp string_size(value) when is_binary(value), do: byte_size(value)
-  defp string_size(value) when is_list(value), do: length(value)
-
-  defp string_size(value) when is_map(value),
-    do: Enum.reduce(value, 0, fn {k, v}, acc -> acc + string_size(k) + string_size(v) end)
-
-  defp string_size(_), do: 0
+  def status_changeset(target, status, details) do
+    target
+    |> change(%{status: status, details: Map.merge(target.details || %{}, details)})
+    |> check_constraint(:status, name: :forge_fleet_target_status)
+  end
 end

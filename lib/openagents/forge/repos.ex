@@ -1,7 +1,111 @@
 defmodule OpenAgents.Forge.Repos do
-  @moduledoc false
+  @moduledoc """
+  Bare git repositories on the node's stateful partition — the warm cache
+  side of the forge. Ref truth is the WAL (`OpenAgents.Forge.WAL`); everything
+  here can be deleted and re-materialized from it (`OpenAgents.Forge.Sync`).
 
-  def bare_path(_repo) do
-    Path.join(System.tmp_dir!(), "openagents-forge-bare")
+  All git invocations are argv-only against `--git-dir`; no shell strings
+  ever carry request data.
+  """
+
+  @name_pattern ~r/^[a-z0-9][a-z0-9_-]{0,63}$/
+
+  @doc "The forge data directory (bare repos + WAL cache + beam artifacts)."
+  def data_dir do
+    Application.get_env(:openagents, :forge_data_dir) ||
+      Path.join(System.tmp_dir!(), "sarah_forge_data")
+  end
+
+  @doc "Repositories this forge serves. Bounded, config-owned."
+  def allowed_repos do
+    Application.get_env(:openagents, :forge_repos, ["sarah"])
+  end
+
+  def valid_name?(name) when is_binary(name) do
+    Regex.match?(@name_pattern, name) and name in allowed_repos()
+  end
+
+  def valid_name?(_), do: false
+
+  @doc "Absolute path of the bare repository for `repo`."
+  def bare_path(repo), do: Path.join([data_dir(), "repos", repo <> ".git"])
+
+  @doc "Initialize the bare repository if absent. Returns the path."
+  def ensure_repo!(repo) do
+    path = bare_path(repo)
+
+    unless File.exists?(Path.join(path, "HEAD")) do
+      File.mkdir_p!(path)
+      {_, 0} = git(path, ["init", "--bare", "--initial-branch=main", path])
+    end
+
+    path
+  end
+
+  @doc "Current refs of the bare repo as a `%{name => sha}` map."
+  def refs(repo) do
+    path = bare_path(repo)
+
+    case git(path, ["for-each-ref", "--format=%(objectname) %(refname)"]) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Map.new(fn line ->
+          [sha, name] = String.split(line, " ", parts: 2)
+          {name, sha}
+        end)
+
+      _error ->
+        %{}
+    end
+  end
+
+  @doc """
+  Force the repo's refs to exactly `target_refs` (used for post-failure
+  rollback and WAL materialization convergence). Deletes refs not present
+  in the target.
+  """
+  def set_refs!(repo, target_refs) when is_map(target_refs) do
+    path = bare_path(repo)
+    current = refs(repo)
+
+    Enum.each(current, fn {name, _sha} ->
+      unless Map.has_key?(target_refs, name) do
+        {_, 0} = git(path, ["update-ref", "-d", name])
+      end
+    end)
+
+    Enum.each(target_refs, fn {name, sha} ->
+      {_, 0} = git(path, ["update-ref", name, sha])
+    end)
+
+    :ok
+  end
+
+  @doc "The WAL sequence this bare repo has applied (cache freshness marker)."
+  def applied_seq(repo) do
+    case File.read(Path.join(bare_path(repo), "sarah-wal-seq")) do
+      {:ok, contents} ->
+        case Integer.parse(String.trim(contents)) do
+          {seq, _} -> seq
+          :error -> -1
+        end
+
+      {:error, _} ->
+        -1
+    end
+  end
+
+  def record_applied_seq!(repo, seq) when is_integer(seq) do
+    File.write!(Path.join(bare_path(repo), "sarah-wal-seq"), Integer.to_string(seq))
+  end
+
+  @doc "Run git with `--git-dir` pinned to the bare repo. Returns {output, status}."
+  def git(git_dir, args, opts \\ []) do
+    System.cmd(
+      "git",
+      ["--git-dir", git_dir | args],
+      [stderr_to_stdout: true] ++ opts
+    )
   end
 end

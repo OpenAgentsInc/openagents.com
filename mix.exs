@@ -82,6 +82,8 @@ defmodule OpenAgents.MixProject do
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
       {:mdex, "~> 0.3"},
+      {:horde, "~> 0.9.0"},
+      {:ra, "~> 2.16"},
       {:websockex, "~> 0.5.1"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},

@@ -5850,7 +5850,13 @@
   .command-palette {
     width: min(640px, calc(100vw - 32px));
     max-width: none;
-    margin-block-start: 12vh;
+    /* A modal dialog is centred by the user agent's `margin: auto`, and the
+       reset zeroes margin on every element -- so setting only the block-start
+       left the inline margins at 0 and the palette opened against the left
+       edge. Both axes are stated: `auto` inline to centre, 12vh above so it
+       sits under the eye's resting point rather than in the middle. This is
+       the same trap `.menu` hit with `margin: 0`. */
+    margin: 12vh auto auto;
     padding: 0;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-xl);

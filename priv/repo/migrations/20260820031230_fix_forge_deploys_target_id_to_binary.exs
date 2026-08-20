@@ -10,11 +10,20 @@ defmodule OpenAgents.Repo.Migrations.FixForgeDeploysTargetIdToBinary do
     execute("TRUNCATE TABLE forge_fleet_targets RESTART IDENTITY CASCADE")
 
     execute("ALTER TABLE forge_fleet_targets DROP COLUMN IF EXISTS id CASCADE")
-    execute("ALTER TABLE forge_fleet_targets ADD COLUMN id uuid DEFAULT gen_random_uuid() PRIMARY KEY")
+
+    execute(
+      "ALTER TABLE forge_fleet_targets ADD COLUMN id uuid DEFAULT gen_random_uuid() PRIMARY KEY"
+    )
 
     execute("ALTER TABLE forge_deploys DROP CONSTRAINT IF EXISTS forge_deploys_target_id_fkey")
-    execute("ALTER TABLE forge_deploys ALTER COLUMN target_id TYPE uuid USING target_id::text::uuid")
-    execute("ALTER TABLE forge_builds ALTER COLUMN target_id TYPE uuid USING target_id::text::uuid")
+
+    execute(
+      "ALTER TABLE forge_deploys ALTER COLUMN target_id TYPE uuid USING target_id::text::uuid"
+    )
+
+    execute(
+      "ALTER TABLE forge_builds ALTER COLUMN target_id TYPE uuid USING target_id::text::uuid"
+    )
 
     execute("""
     ALTER TABLE forge_deploys
@@ -37,7 +46,10 @@ defmodule OpenAgents.Repo.Migrations.FixForgeDeploysTargetIdToBinary do
     execute("ALTER TABLE forge_fleet_targets ADD COLUMN id bigserial PRIMARY KEY")
 
     execute("ALTER TABLE forge_deploys DROP CONSTRAINT IF EXISTS forge_deploys_target_id_fkey")
-    execute("ALTER TABLE forge_deploys ALTER COLUMN target_id TYPE bigint USING target_id::text::bigint")
+
+    execute(
+      "ALTER TABLE forge_deploys ALTER COLUMN target_id TYPE bigint USING target_id::text::bigint"
+    )
 
     execute("""
     ALTER TABLE forge_deploys

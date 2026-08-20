@@ -18,22 +18,35 @@ defmodule OpenAgentsWeb.AdminLive do
 
   use OpenAgentsWeb, :sarah_live_view
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Admin
   alias OpenAgents.Admin.Call
   alias OpenAgents.Voice.Recordings
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok,
-     socket
-     |> assign(:page_title, "Operator · Sarah")
-     |> assign(:offset, 0)
-     |> assign(:recording_config, Recordings.config())
-     |> load_page()}
+    if Accounts.admin?(socket.assigns.current_user) do
+      {:ok,
+       socket
+       |> assign(:page_title, "Operator · OpenAgents")
+       |> assign(:offset, 0)
+       |> assign(:recording_config, Recordings.config())
+       |> load_page()}
+    else
+      {:ok, redirect(socket, to: ~p"/")}
+    end
   end
 
   @impl true
-  def handle_event("next_page", _params, socket) do
+  def handle_event(event, _params, socket) when event in ["next_page", "previous_page"] do
+    if Accounts.admin?(socket.assigns.current_user) do
+      do_handle_event(event, socket)
+    else
+      {:noreply, redirect(socket, to: ~p"/")}
+    end
+  end
+
+  def do_handle_event("next_page", socket) do
     offset = socket.assigns.offset + page_size()
 
     if offset < socket.assigns.totals.calls,
@@ -41,7 +54,7 @@ defmodule OpenAgentsWeb.AdminLive do
       else: {:noreply, socket}
   end
 
-  def handle_event("previous_page", _params, socket) do
+  def do_handle_event("previous_page", socket) do
     offset = max(socket.assigns.offset - page_size(), 0)
     {:noreply, socket |> assign(:offset, offset) |> load_page()}
   end
@@ -61,7 +74,7 @@ defmodule OpenAgentsWeb.AdminLive do
               reads as one application. The lockup carries only the way back:
               nothing in the product links here, and this is not a place to
               navigate onward from. --%>
-        <Layouts.command_bar aria_label="Sarah operator panel" current_user={@current_user}>
+        <Layouts.command_bar aria_label="OpenAgents operator panel" current_user={@current_user}>
           <:lockup>
             <.button
               id="return-to-conversation"
@@ -155,7 +168,7 @@ defmodule OpenAgentsWeb.AdminLive do
                   <.audio_player
                     :if={Call.playable?(call)}
                     id={"admin-audio-#{call.session_id}"}
-                    src="#"
+                    src={"/admin/recordings/#{call.recording.id}/audio"}
                     label={"Call with @#{call.github_login} on #{format_timestamp(call.started_at)}"}
                   />
 

@@ -1,6 +1,5 @@
 defmodule OpenAgents.ToolStepPersistenceTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.{Context.Composer, Conversations}

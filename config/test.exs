@@ -60,8 +60,7 @@ config :openagents, :ra_enabled, false
 
 config :openagents, :computer_controller_enabled, true
 
-config :openagents, :voice_recording_encryption_key,
-       Base.encode64(:crypto.strong_rand_bytes(32))
+config :openagents, :voice_recording_encryption_key, Base.encode64(:crypto.strong_rand_bytes(32))
 
 config :openagents, :tools, [
   OpenAgents.Tools.ModuleDiscover,

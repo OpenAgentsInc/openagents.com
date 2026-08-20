@@ -41,6 +41,7 @@ defmodule OpenAgentsWeb.Router do
     get "/auth/github/callback", AuthController, :callback
     delete "/logout", AuthController, :logout
     get "/healthz", HealthController, :show
+    get "/status", NetworkStatusController, :show
   end
 
   scope "/", OpenAgentsWeb do
@@ -74,6 +75,8 @@ defmodule OpenAgentsWeb.Router do
     delete "/data", DataController, :delete
     delete "/data/reset", DataController, :reset
 
+    get "/computers", ComputersController, :index
+    get "/machines", ComputersController, :index
     get "/api/computers", ComputersController, :index
     post "/api/computers/pairings/:id/approve", ComputersController, :approve_pairing
     delete "/api/computers/:id", ComputersController, :delete

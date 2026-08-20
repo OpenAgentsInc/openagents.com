@@ -2509,7 +2509,9 @@
     display: flex;
     flex: none;
     align-items: center;
-    gap: 10px;
+    /* No gap here: the divider owns the spacing on both of its sides, because
+       the two sides are not equal -- see `.sidebar-brand__divider`. */
+    gap: 0;
     min-height: 52px;
     padding-inline: 20px;
   }
@@ -2528,6 +2530,11 @@
     width: 1px;
     height: 16px;
     flex: none;
+    /* Not a symmetric gap. The mark is a PNG carrying about 16% transparent
+       padding, so a gap measured from the image's box reads ~4px wider on that
+       side than on the word's -- the eye measures from the glyph, not the box.
+       6px plus that padding is the 10px on the right. */
+    margin-inline: 6px 10px;
     background: var(--line-strong);
   }
 

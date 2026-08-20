@@ -102,12 +102,19 @@ defmodule OpenAgents.MixProject do
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind openagents", "esbuild openagents"],
+      "assets.test": ["cmd --cd assets npm test"],
       "assets.deploy": [
         "tailwind openagents --minify",
         "esbuild openagents --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "assets.test",
+        "test"
+      ]
     ]
   end
 end

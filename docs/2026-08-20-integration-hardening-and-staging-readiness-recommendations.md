@@ -80,6 +80,20 @@ that result as historical evidence, but rerun the complete gate for each
 candidate. Gate 0 remains blocked until the missing JavaScript suite exists and
 runs.
 
+### Gate 0 implementation status
+
+Completed on 2026-08-20:
+
+- Added Node suites for the voice admission state, media-resource cleanup,
+  recording admission, upload ordering, finalization, failure containment, and
+  generation fencing.
+- Added `npm test` in `assets/package.json` and the `mix assets.test` alias.
+- Added `mix assets.test` to `mix precommit`, so the standard repository gate
+  fails when browser-side voice behavior regresses.
+
+Gate 0 still requires the merged default and cluster coverage report, release
+startup proof against a disposable database, and an exact-SHA gate receipt.
+
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it
 found. Recovery workers and release-only entry points still need direct
@@ -1053,6 +1067,11 @@ no JavaScript tests in this repository.** `assets/` contains no test files and
 (~329 lines) covering voice state and recording; they were not carried across
 in the port. That is a porting gap, not a step someone forgot to run. Gate 0 now
 names creation of the missing suite as blocking work.
+
+**Resolved after this measurement:** `assets/test/voice_state_test.mjs` and
+`assets/test/voice_recording_test.mjs` now cover these behaviors,
+`assets/package.json` provides `npm test`, and `mix precommit` runs the suite
+through `mix assets.test`.
 
 ## A2. Blocker: staging is not isolated from production today
 

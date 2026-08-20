@@ -222,6 +222,7 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :forge_write_api
 
+    get "/user", ForgeUserController, :show
     get "/user/repos", RepositoryController, :index
     post "/user/repos", RepositoryController, :create_user
     post "/orgs/:org/repos", RepositoryController, :create_organization

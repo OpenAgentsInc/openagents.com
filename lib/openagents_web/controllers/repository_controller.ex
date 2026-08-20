@@ -38,12 +38,14 @@ defmodule OpenAgentsWeb.RepositoryController do
 
   def index(conn, params) do
     with {:ok, per_page} <- per_page(params),
-         {:ok, after_cursor} <- decode_cursor(params["after"]) do
+         {:ok, after_cursor} <- decode_cursor(params["after"]),
+         {:ok, namespace_key} <- namespace_key(params["namespace"]) do
       {repositories, more?} =
         Repositories.list_visible_repositories_page(
           conn.assigns.current_user,
           per_page,
-          after_cursor
+          after_cursor,
+          namespace_key
         )
 
       next_cursor = if more?, do: encode_cursor(List.last(repositories)), else: nil
@@ -119,6 +121,16 @@ defmodule OpenAgentsWeb.RepositoryController do
   end
 
   defp per_page(_params), do: {:ok, 30}
+
+  defp namespace_key(nil), do: {:ok, nil}
+
+  defp namespace_key(namespace) when is_binary(namespace) do
+    if Regex.match?(~r/\A[A-Za-z0-9][A-Za-z0-9-]{0,38}\z/, namespace),
+      do: {:ok, String.downcase(namespace)},
+      else: {:error, :invalid_pagination}
+  end
+
+  defp namespace_key(_namespace), do: {:error, :invalid_pagination}
 
   defp decode_cursor(nil), do: {:ok, nil}
 

@@ -942,7 +942,7 @@ when the server supplies one.
 Create the CLI in the `openagents` monorepo at
 `packages/openagents-cli/` with:
 
-- Package name `@openagentsinc/openagents-cli`.
+- Package name `@openagentsinc/cli`.
 - Binary name `openagents`.
 - Node 24, pnpm, and Vite Plus, matching the monorepo contract.
 - Effect and Effect Schema for services, configuration, response decoding,

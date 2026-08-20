@@ -2,8 +2,8 @@
 
 Date: 2026-08-20
 
-Status: Implementation complete; local end-to-end and staging verification
-remain
+Status: Implementation complete; the cross-repository loopback suite passes.
+Exact `localhost:4000` and staging receipts remain gated
 
 ## Outcome
 
@@ -465,9 +465,9 @@ result. Do not store tokens, local absolute paths, or repository content.
 | 7. CLI device authorization | Complete | One-time device-code context, API, browser approval, and polling tests |
 | 8. Repository browser interface | Complete | List, create, import, empty, failed, private, and code-route LiveView tests |
 | 9. CLI package scaffold | Complete | `@openagentsinc/cli`, Effect 4 command graph, build, and package inspection |
-| 10. CLI configuration and authentication | Complete | Profiles, custom origins, OS credential store, and Git helper tests |
-| 11. CLI repository commands | Complete | Create, import, list, view, clone, source remote, inference, and refusal tests |
-| 12. Local cross-repository verification | In progress | Contract digests and focused suites pass; disposable CLI-to-server create, push, clone, and import proof remains |
+| 10. CLI configuration and authentication | Complete | Profiles, persisted configuration precedence, custom origins, OS credential store, headless refusal, stable errors, and origin-isolated Git helper tests |
+| 11. CLI repository commands | Complete | Create, matching-namespace import, cursor list, view, clone, source remote, inference, and refusal tests |
+| 12. Local cross-repository verification | In progress | The default-`4000` disposable suite passes on an alternate loopback port for create, push, clone, anonymous read, private concealment, viewer push refusal, cache reconstruction, exact import refs, and no later sync. Record the exact `localhost:4000` receipt when that port is available. |
 | 13. Staging and release | Not started | — |
 
 ## Completion audit

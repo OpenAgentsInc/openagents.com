@@ -148,6 +148,33 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
            )
   end
 
+  test "GET /api/v3/user/repos filters by GitHub namespace", %{conn: conn} do
+    user = github_user("repository-api-list-namespace", "repo-list-filter")
+
+    assert {:ok, _repository, :created} =
+             Repositories.create_user_repository(
+               user,
+               %{name: "matching-project"},
+               "list-namespace-key"
+             )
+
+    response =
+      conn
+      |> authorize(user)
+      |> get(~p"/api/v3/user/repos?namespace=repo-list-filter&per_page=10")
+      |> json_response(200)
+
+    assert Enum.map(response["repositories"], & &1["full_name"]) == [
+             "repo-list-filter/matching-project"
+           ]
+
+    assert %{"repositories" => []} =
+             conn
+             |> authorize(user)
+             |> get(~p"/api/v3/user/repos?namespace=another-owner&per_page=10")
+             |> json_response(200)
+  end
+
   defp authorize(conn, user) do
     {:ok, _credential, plaintext} =
       ApiTokens.create(user, %{name: "repository API test", scopes: ["forge:write"]})

@@ -252,7 +252,12 @@ defmodule OpenAgents.Repositories do
     )
   end
 
-  def list_visible_repositories_page(%User{id: user_id}, per_page, after_cursor)
+  def list_visible_repositories_page(
+        %User{id: user_id},
+        per_page,
+        after_cursor,
+        namespace_key \\ nil
+      )
       when per_page in 1..100 do
     query =
       from repository in Repository,
@@ -266,9 +271,20 @@ defmodule OpenAgents.Repositories do
         order_by: [asc: namespace.slug_key, asc: repository.name_key, asc: repository.id],
         preload: [namespace: namespace]
 
-    query = apply_repository_cursor(query, after_cursor)
+    query =
+      query
+      |> apply_namespace_filter(namespace_key)
+      |> apply_repository_cursor(after_cursor)
+
     rows = Repo.all(from row in query, limit: ^(per_page + 1))
     {Enum.take(rows, per_page), length(rows) > per_page}
+  end
+
+  defp apply_namespace_filter(query, nil), do: query
+
+  defp apply_namespace_filter(query, namespace_key) when is_binary(namespace_key) do
+    from [repository, namespace, membership] in query,
+      where: namespace.slug_key == ^namespace_key
   end
 
   def get_import_for_user!(id, %User{id: user_id}) do

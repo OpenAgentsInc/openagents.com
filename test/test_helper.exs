@@ -5,7 +5,7 @@
 # (`mix test --only cluster`); this excludes them here for the same reason.
 # The :skip tag is gone entirely: every lifted test now runs by default, so the
 # suite is green because it passes, not because it is filtered.
-ExUnit.start(exclude: [:cluster])
+ExUnit.start(exclude: [:cluster, :cross_repo])
 
 # The cluster stage needs the Erlang port mapper up before its first peer node.
 # Leaving that to whichever module happened to run first made the stage

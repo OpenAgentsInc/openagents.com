@@ -165,7 +165,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
       )
 
   defp policy(%{path: path, verb: verb})
-       when path in ["/api/v3/user/repos", "/api/v3/repository-imports/:id"] and
+       when path in ["/api/v3/user", "/api/v3/user/repos", "/api/v3/repository-imports/:id"] and
               verb in [:get, :head],
        do: declaration(:authenticated_api, "first-party bearer token", "forge:read", false)
 

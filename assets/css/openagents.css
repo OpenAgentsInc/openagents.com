@@ -2651,31 +2651,6 @@
     flex-direction: column;
   }
 
-  /* A status line, not a header: it carries the socket's truth and nothing
-     else, because the page's name is already in the command bar above it. */
-  .chat-status {
-    display: flex;
-    flex: none;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 8px 24px;
-  }
-
-  .connection-state {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .connection-label {
-    color: var(--text-muted);
-    font-size: 0.6875rem;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    line-height: 1rem;
-    text-transform: uppercase;
-  }
 
   /* ── Transcript ─────────────────────────────────────────────────────────── */
 

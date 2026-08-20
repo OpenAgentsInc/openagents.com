@@ -648,10 +648,6 @@ defmodule OpenAgentsWeb.ChatLive do
 
       <div id="openagents-app" class="chat-shell">
         <main class="app-main">
-          <header class="chat-status">
-            <.connection_state id_prefix="chat-connection" />
-          </header>
-
           <section
             id="transcript"
             class="transcript"
@@ -1266,46 +1262,6 @@ defmodule OpenAgentsWeb.ChatLive do
     do: "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
 
   defp duration_label(seconds), do: "#{div(seconds, 3600)}h #{seconds |> rem(3600) |> div(60)}m"
-
-  # Below 768px the sidebar hides behind this slim row: wordmark, connection
-  # state, and the menu button that reveals the sidebar as an overlay.
-  attr :id_prefix, :string, required: true
-
-  # Connection state is driven by the LiveView socket through element-level
-  # connect/disconnect bindings, not by a stylesheet class, so RECONNECTING is
-  # real rather than decorative (DESIGN.md, Sarah shell). Rendered twice —
-  # sidebar header and mobile header — so the ids take a prefix.
-  defp connection_state(assigns) do
-    ~H"""
-    <span class="connection-state">
-      <.status_indicator
-        id={"#{@id_prefix}-indicator"}
-        state="connected"
-        label="Connection to Sarah"
-        decorative
-        phx-connected={JS.set_attribute({"data-state", "connected"})}
-        phx-disconnected={JS.set_attribute({"data-state", "reconnecting"})}
-      />
-      <span
-        id={"#{@id_prefix}-connected"}
-        class="connection-label"
-        phx-connected={JS.show()}
-        phx-disconnected={JS.hide()}
-      >
-        CONNECTED
-      </span>
-      <span
-        id={"#{@id_prefix}-reconnecting"}
-        class="connection-label"
-        hidden
-        phx-connected={JS.hide()}
-        phx-disconnected={JS.show()}
-      >
-        RECONNECTING
-      </span>
-    </span>
-    """
-  end
 
   attr :delegation, :map, default: nil
   attr :summaries, :list, required: true

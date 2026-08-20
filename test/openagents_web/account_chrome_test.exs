@@ -57,18 +57,17 @@ defmodule OpenAgentsWeb.AccountChromeTest do
   end
 
   describe "connection chrome" do
-    test "the chat status line states the socket's truth through element-level bindings", %{
-      conn: conn
-    } do
+    test "the conversation states no connection status at all", %{conn: conn} do
       conn = log_in_github_user(conn, "connection-user")
-      {:ok, view, _html} = live(conn, ~p"/chat")
+      {:ok, view, html} = live(conn, ~p"/chat")
 
-      # Chat's status line carries the socket's truth under its own ids. It
-      # replaced a mobile header whose other job -- a menu button and a second
-      # brand mark -- belonged to a rail chat no longer renders.
-      assert has_element?(view, "#chat-connection-indicator[phx-connected][phx-disconnected]")
-      assert has_element?(view, "#chat-connection-connected", "CONNECTED")
-      assert has_element?(view, "#chat-connection-reconnecting[hidden]", "RECONNECTING")
+      # Removed at the owner's direction. A bar that reads CONNECTED whenever
+      # the page is working spends permanent space to say nothing: the only
+      # state worth reporting is the one where it is not, and LiveView already
+      # shows that through the disconnect overlay.
+      refute has_element?(view, ".chat-status")
+      refute html =~ "CONNECTED"
+      refute html =~ "chat-connection"
     end
   end
 

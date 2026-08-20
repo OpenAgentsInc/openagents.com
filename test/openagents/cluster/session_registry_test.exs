@@ -5,7 +5,6 @@ defmodule OpenAgents.Cluster.SessionRegistryTest do
   command + prior state.
   """
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Cluster.SessionRegistry, as: Reg
 

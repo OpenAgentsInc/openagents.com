@@ -1,6 +1,5 @@
 defmodule OpenAgents.Modules.RouterTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Modules.{Router, RoutingPolicy, SurfacePolicy}
   alias OpenAgents.Provenance.Canonical

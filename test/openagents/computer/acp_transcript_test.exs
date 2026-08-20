@@ -1,6 +1,5 @@
 defmodule OpenAgents.Computer.AcpTranscriptTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Computer.AcpTranscript
 

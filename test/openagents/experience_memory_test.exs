@@ -1,6 +1,5 @@
 defmodule OpenAgents.ExperienceMemoryTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.{Context.Composer, Conversations, ExperienceMemory}
   alias OpenAgents.ExperienceMemory.{Bank, BankItem, DeletionReceipt, EvidenceRef, Pattern}
   alias OpenAgents.Providers.Request

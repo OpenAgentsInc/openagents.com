@@ -9,7 +9,6 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
   """
 
   use OpenAgentsWeb.SarahConnCase
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   describe "icon-only controls" do

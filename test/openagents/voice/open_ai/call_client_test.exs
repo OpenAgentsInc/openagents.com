@@ -1,6 +1,5 @@
 defmodule OpenAgents.Voice.OpenAI.CallClientTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Voice.Config
   alias OpenAgents.Voice.OpenAI.CallClient

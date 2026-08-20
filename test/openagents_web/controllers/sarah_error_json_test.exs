@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.SarahErrorJSONTest do
   use OpenAgentsWeb.SarahConnCase, async: true
-  @moduletag :skip
   test "renders 404" do
     assert OpenAgentsWeb.ErrorJSON.render("404.json", %{}) == %{errors: %{detail: "Not Found"}}
   end

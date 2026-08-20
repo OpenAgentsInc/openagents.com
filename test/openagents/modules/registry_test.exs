@@ -1,6 +1,5 @@
 defmodule OpenAgents.Modules.RegistryTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Modules.{Artifact, Metadata, Registry}
   alias OpenAgents.Tools.Tool

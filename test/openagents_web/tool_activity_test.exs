@@ -6,7 +6,6 @@ defmodule OpenAgentsWeb.ToolActivityTest do
   """
 
   use ExUnit.Case, async: true
-  @moduletag :skip
   alias OpenAgentsWeb.ToolActivity
 
   defp activity(tool_name, arguments, status \\ "succeeded") do

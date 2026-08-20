@@ -6,7 +6,6 @@ defmodule OpenAgentsWeb.VoiceRecordingControllerTest do
   """
 
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   alias OpenAgents.Conversations
   alias OpenAgents.Voice
   alias OpenAgents.Voice.Config

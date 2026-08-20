@@ -6,7 +6,6 @@ defmodule OpenAgents.Voice.RecordingsTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
 
   alias OpenAgents.Conversations
   alias OpenAgents.Repo

@@ -1,6 +1,5 @@
 defmodule OpenAgents.Voice.UsageTest do
   use ExUnit.Case, async: false
-  @moduletag :skip
 
   alias OpenAgents.Voice.Usage
 

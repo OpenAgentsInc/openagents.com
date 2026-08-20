@@ -1,6 +1,5 @@
 defmodule OpenAgents.Modules.LifecycleTest do
   use OpenAgents.SarahDataCase, async: true
-  @moduletag :skip
 
   alias OpenAgents.Modules.{Discovery, Lifecycle, LifecycleReceipt, Metadata}
   alias OpenAgents.Tools.{Registry, Tool}

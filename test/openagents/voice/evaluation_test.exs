@@ -1,6 +1,5 @@
 defmodule OpenAgents.Voice.EvaluationTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Voice.Evaluation.{ContractGate, Corpus}
 

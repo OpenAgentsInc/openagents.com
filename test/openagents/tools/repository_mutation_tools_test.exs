@@ -7,7 +7,6 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Repos

@@ -9,7 +9,6 @@ defmodule OpenAgents.Cluster.SessionRegistryPropertyTest do
   Deterministic (a fixed `:rand` seed), so a failure reproduces exactly.
   """
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Cluster.SessionRegistry, as: Reg
 

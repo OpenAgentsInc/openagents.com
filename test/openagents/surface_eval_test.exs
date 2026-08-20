@@ -1,6 +1,5 @@
 defmodule OpenAgents.SurfaceEvalTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
   alias OpenAgents.Context.Composer
 
   test "cross-surface corpus is versioned and text and voice retain one Sarah identity" do

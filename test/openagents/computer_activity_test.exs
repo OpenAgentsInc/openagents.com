@@ -1,6 +1,5 @@
 defmodule OpenAgents.ComputerActivityTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.{Accounts, Computer, ComputerActivity, Conversations, Machines}
   alias OpenAgents.Support.FakeController
 

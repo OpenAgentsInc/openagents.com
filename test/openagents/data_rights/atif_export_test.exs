@@ -1,6 +1,5 @@
 defmodule OpenAgents.DataRights.AtifExportTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
 
   alias OpenAgents.DataRights.AtifExport
   alias OpenAgents.Voice.ProviderEvent

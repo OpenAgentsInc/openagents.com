@@ -1,6 +1,5 @@
 defmodule OpenAgents.Voice.ReleaseOperationsTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
 
   import ExUnit.CaptureLog
 

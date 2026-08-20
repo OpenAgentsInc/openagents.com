@@ -1,6 +1,5 @@
 defmodule OpenAgents.CollectivePublicationTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Collective
 
   alias OpenAgents.Collective.{

@@ -8,7 +8,6 @@ defmodule OpenAgentsWeb.IconsTest do
   """
 
   use ExUnit.Case, async: true
-  @moduletag :skip
   import Phoenix.Component
   import Phoenix.LiveViewTest
   import OpenAgentsWeb.SarahUI

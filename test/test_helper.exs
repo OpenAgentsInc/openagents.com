@@ -3,9 +3,9 @@
 # the rest of the suite — a module that expects an undistributed node sees
 # net_kernel already running. Upstream runs them as their own gate stage
 # (`mix test --only cluster`); this excludes them here for the same reason.
-# Note the exclusion is unconditional: `--include skip` must not drag them back
-# in, so a :cluster module carries the :cluster tag only, never :skip too.
-ExUnit.start(exclude: [:skip, :cluster])
+# The :skip tag is gone entirely: every lifted test now runs by default, so the
+# suite is green because it passes, not because it is filtered.
+ExUnit.start(exclude: [:cluster])
 
 # The cluster stage needs the Erlang port mapper up before its first peer node.
 # Leaving that to whichever module happened to run first made the stage

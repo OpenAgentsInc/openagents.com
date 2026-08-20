@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.ChatLiveTest do
   use OpenAgentsWeb.SarahConnCase
-  @moduletag :skip
   import Phoenix.LiveViewTest
   import Ecto.Query
 

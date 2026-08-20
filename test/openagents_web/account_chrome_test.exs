@@ -8,7 +8,6 @@ defmodule OpenAgentsWeb.AccountChromeTest do
   """
 
   use OpenAgentsWeb.SarahConnCase
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Accounts

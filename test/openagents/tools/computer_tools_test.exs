@@ -1,6 +1,5 @@
 defmodule OpenAgents.Tools.ComputerToolsTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Incidents

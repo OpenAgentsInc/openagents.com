@@ -1,6 +1,5 @@
 defmodule OpenAgents.CollectiveGeneralizerTest do
   use OpenAgents.SarahDataCase, async: true
-  @moduletag :skip
   alias OpenAgents.Collective
   alias OpenAgents.Collective.Generalizer
   alias OpenAgents.Conversations

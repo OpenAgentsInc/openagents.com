@@ -1,6 +1,5 @@
 defmodule OpenAgents.Voice.OpenAI.EventDecoderTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Voice.OpenAI.EventDecoder
 

@@ -8,7 +8,6 @@ defmodule OpenAgents.Forge.LoopV0Test do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.{FakeBuildExecutor, Targets}
 
   defmodule TestPipeline do

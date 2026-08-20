@@ -7,7 +7,6 @@ defmodule OpenAgents.Forge.ReceiptReplayerTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.Forge

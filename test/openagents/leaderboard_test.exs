@@ -6,7 +6,6 @@ defmodule OpenAgents.LeaderboardTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Accounts
   alias OpenAgents.Context.Composer
   alias OpenAgents.Conversations

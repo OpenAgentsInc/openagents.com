@@ -7,7 +7,6 @@ defmodule OpenAgentsWeb.UIGalleryLiveTest do
   """
 
   use OpenAgentsWeb.SarahConnCase, async: true
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   test "renders every component variant without raising", %{conn: conn} do

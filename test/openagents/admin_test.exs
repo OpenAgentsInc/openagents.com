@@ -6,7 +6,6 @@ defmodule OpenAgents.AdminTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Accounts
   alias OpenAgents.Admin
   alias OpenAgents.Admin.Call

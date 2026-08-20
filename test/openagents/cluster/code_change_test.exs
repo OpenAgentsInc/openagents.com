@@ -6,7 +6,6 @@ defmodule OpenAgents.Cluster.CodeChangeTest do
   under running turns/jobs/voice instead of dropping them.
   """
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Test.UpgradableCounter, as: Counter
 

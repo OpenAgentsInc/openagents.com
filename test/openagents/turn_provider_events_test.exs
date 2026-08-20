@@ -1,6 +1,5 @@
 defmodule OpenAgents.TurnProviderEventsTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   alias OpenAgents.{Conversations, Turns}
   alias OpenAgents.Conversations.ProviderStep
   alias OpenAgents.Incidents.Incident

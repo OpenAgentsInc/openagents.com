@@ -1,6 +1,5 @@
 defmodule OpenAgents.WorkJobTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   alias OpenAgents.{Conversations, Work}
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Work.{Job, JobServer}

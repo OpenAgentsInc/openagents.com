@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.VoiceTelemetryControllerTest do
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Repo, Voice}

@@ -8,7 +8,6 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   """
 
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Forge.{DeployReceipt, Repos}

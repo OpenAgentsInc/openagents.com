@@ -1,6 +1,5 @@
 defmodule OpenAgents.CompensationTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.{Compensation, Context.Composer, Conversations}
   alias OpenAgents.Compensation.{Event, Statement}
   alias OpenAgents.Providers.Request

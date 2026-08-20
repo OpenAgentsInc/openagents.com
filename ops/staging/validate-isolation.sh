@@ -57,6 +57,11 @@ gcloud compute networks list --project="$staging_project" --format=json >"$run_r
 gcloud projects get-iam-policy "$staging_project" --format=json >"$run_root/staging-iam.json"
 gcloud iam service-accounts list --project="$production_project" --format=json >"$run_root/production-accounts.json"
 
+for slot in openagents-staging-scv-codex-operator-1 openagents-staging-scv-codex-operator-2; do
+  gcloud secrets get-iam-policy "$slot" --project="$staging_project" --format=json \
+    >"$run_root/$slot-iam.json"
+done
+
 jq -e '
   length == 1 and
   .[0].name == "openagents-staging-postgres" and
@@ -118,11 +123,22 @@ jq -e '
     "openagents-staging-github-vault-previous",
     "openagents-staging-openai-api-key",
     "openagents-staging-release-cookie",
+    "openagents-staging-scv-codex-operator-1",
+    "openagents-staging-scv-codex-operator-2",
     "openagents-staging-secret-key-base",
     "openagents-staging-voice-recording-key",
     "openagents-staging-web-config"
   ][]; . as $required | $names | index($required))
 ' "$run_root/secrets.json" >/dev/null
+
+web_member="serviceAccount:openagents-staging-web@$staging_project.iam.gserviceaccount.com"
+
+for slot in openagents-staging-scv-codex-operator-1 openagents-staging-scv-codex-operator-2; do
+  jq -e --arg member "$web_member" '
+    any(.bindings[]?; .role == "roles/secretmanager.secretVersionAdder" and (.members | index($member))) and
+    any(.bindings[]?; .role == "roles/secretmanager.secretAccessor" and (.members | index($member)))
+  ' "$run_root/$slot-iam.json" >/dev/null
+done
 
 jq -e '
   [.[].email | split("@") | first] as $names |
@@ -168,6 +184,7 @@ jq -n \
       three_private_fleet_nodes: "passed",
       staging_buckets: "passed",
       staging_secrets: "passed",
+      scv_codex_credential_slots: "passed",
       split_service_accounts: "passed",
       private_dns_and_network: "passed",
       no_production_service_accounts: "passed"

@@ -53,8 +53,24 @@ run "isolated_topology" {
   }
 
   assert {
-    condition     = length(google_secret_manager_secret.runtime) == 13
+    condition     = length(google_secret_manager_secret.runtime) == 15
     error_message = "Every named staging credential and lane configuration needs its own secret resource."
+  }
+
+  assert {
+    condition = alltrue([
+      for binding in values(google_secret_manager_secret_iam_member.scv_codex_credential_add) :
+      binding.role == "roles/secretmanager.secretVersionAdder"
+    ])
+    error_message = "The staging web identity may add versions only to the preallocated SCV Codex credential slots."
+  }
+
+  assert {
+    condition = alltrue([
+      for binding in values(google_secret_manager_secret_iam_member.scv_codex_credential_read) :
+      binding.role == "roles/secretmanager.secretAccessor"
+    ])
+    error_message = "The staging web identity may read exact versions only from the preallocated SCV Codex credential slots."
   }
 
   assert {

@@ -67,6 +67,23 @@ defmodule OpenAgents.StagingCandidateContractTest do
              ~s(target_tags   = ["openagents-staging-fleet", "openagents-staging-controller"])
   end
 
+  test "SCV Codex credentials use preallocated least-privilege staging slots" do
+    terraform = File.read!("infra/staging/main.tf")
+    isolation_validator = File.read!("ops/staging/validate-isolation.sh")
+
+    for slot <- [
+          "openagents-staging-scv-codex-operator-1",
+          "openagents-staging-scv-codex-operator-2"
+        ] do
+      assert terraform =~ slot
+      assert isolation_validator =~ slot
+    end
+
+    assert terraform =~ "roles/secretmanager.secretVersionAdder"
+    assert terraform =~ "roles/secretmanager.secretAccessor"
+    assert isolation_validator =~ "scv_codex_credential_slots"
+  end
+
   test "production preflight preserves a pinned candidate across later commits" do
     preflight = File.read!("ops/production/preflight.sh")
 

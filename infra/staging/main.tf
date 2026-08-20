@@ -38,7 +38,14 @@ locals {
     "openagents-staging-openai-api-key",
     "openagents-staging-voice-recording-key",
     "openagents-staging-forge-operator-token",
-    "openagents-staging-release-cookie"
+    "openagents-staging-release-cookie",
+    "openagents-staging-scv-codex-operator-1",
+    "openagents-staging-scv-codex-operator-2"
+  ])
+
+  scv_codex_credential_secrets = toset([
+    "openagents-staging-scv-codex-operator-1",
+    "openagents-staging-scv-codex-operator-2"
   ])
 
   application_secrets = toset([
@@ -366,6 +373,22 @@ resource "google_secret_manager_secret_iam_member" "deployer_cookie" {
   secret_id = google_secret_manager_secret.runtime["openagents-staging-release-cookie"].id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.deployer.member
+}
+
+resource "google_secret_manager_secret_iam_member" "scv_codex_credential_add" {
+  for_each = local.scv_codex_credential_secrets
+
+  secret_id = google_secret_manager_secret.runtime[each.value].id
+  role      = "roles/secretmanager.secretVersionAdder"
+  member    = google_service_account.web.member
+}
+
+resource "google_secret_manager_secret_iam_member" "scv_codex_credential_read" {
+  for_each = local.scv_codex_credential_secrets
+
+  secret_id = google_secret_manager_secret.runtime[each.value].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.web.member
 }
 
 resource "google_artifact_registry_repository" "openagents" {

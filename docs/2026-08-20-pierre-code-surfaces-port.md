@@ -11,9 +11,8 @@ it in the same change that lands the work, not afterwards.
 
 [`pierrecomputer/pierre`][pierre] is the open-source part of Pierre's stack.
 Code.Storage, their product, stays proprietary; what is published are the UI
-libraries behind it, under **Apache 2.0**. Read at `ba7d51d2` (2026-08-19),
-synced through `~/work/projects/manifest.txt` to
-`~/work/projects/repos/pierre`.
+libraries behind it, under **Apache 2.0**. This assessment uses revision
+`ba7d51d2` from August 19, 2026, as synced to the local Pierre checkout.
 
 The packages that matter to us:
 

@@ -6,7 +6,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
   test "every HTTP route and endpoint socket declares one authority, principal, and scope" do
     inventory = RouteAuthority.inventory()
 
-    assert inventory != []
+    assert [_ | _] = inventory
 
     Enum.each(inventory, fn entry ->
       assert entry.class in RouteAuthority.classes(), inspect(entry)

@@ -452,7 +452,7 @@ defmodule OpenAgents.Forge.BuildWorker do
   defp digest_file!(path) do
     context =
       path
-      |> File.stream!([], 64 * 1_024)
+      |> File.stream!(64 * 1_024, [])
       |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
 
     context |> :crypto.hash_final() |> Base.encode16(case: :lower)

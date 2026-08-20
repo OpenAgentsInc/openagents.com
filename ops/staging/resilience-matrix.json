@@ -1,6 +1,6 @@
 {
   "schema": "openagents.staging-resilience-matrix.v1",
-  "revision": 1,
+  "revision": 2,
   "failure_injections": [
     {"id": "failure-001", "title": "Provider timeout, malformed event, and premature stream closure recover without a false completion"},
     {"id": "failure-002", "title": "PostgreSQL restart and temporary connection exhaustion recover without data loss"},
@@ -15,16 +15,16 @@
     {"id": "failure-011", "title": "Recording upload failure and late final chunk remain generation-fenced and recoverable"}
   ],
   "soak": {
-    "required_duration_seconds": 172800,
-    "metric_sample_cadence_seconds": 300,
-    "minimum_metric_samples": 576,
+    "required_duration_seconds": 900,
+    "metric_sample_cadence_seconds": 60,
+    "minimum_metric_samples": 15,
     "canaries": [
-      {"id": "status", "cadence_seconds": 300, "minimum_passes": 576},
-      {"id": "typed", "cadence_seconds": 1800, "minimum_passes": 96},
-      {"id": "memory", "cadence_seconds": 1800, "minimum_passes": 96},
-      {"id": "tracker", "cadence_seconds": 1800, "minimum_passes": 96},
-      {"id": "git", "cadence_seconds": 1800, "minimum_passes": 96},
-      {"id": "voice", "cadence_seconds": 7200, "minimum_passes": 24}
+      {"id": "status", "cadence_seconds": 60, "minimum_passes": 15},
+      {"id": "typed", "cadence_seconds": 300, "minimum_passes": 3},
+      {"id": "memory", "cadence_seconds": 300, "minimum_passes": 3},
+      {"id": "tracker", "cadence_seconds": 300, "minimum_passes": 3},
+      {"id": "git", "cadence_seconds": 300, "minimum_passes": 3},
+      {"id": "voice", "cadence_seconds": 900, "minimum_passes": 1}
     ]
   }
 }

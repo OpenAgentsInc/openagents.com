@@ -87,6 +87,8 @@ jq -e \
   (.completed_at == null or (.completed_at | timestamp)) and
   .target.environment == "staging" and
   .target.base_url == "https://staging.openagents.com" and
+  .target.track == "release-candidate" and
+  .target.service == "openagents-staging-release" and
   (.target.project | type == "string" and test("stag"; "i")) and
   (.target.region | nonempty) and
   (.candidate.git_sha | type == "string" and test("^[0-9a-f]{40}$")) and

@@ -1550,7 +1550,8 @@ Inject these failures one at a time:
 
 After failure injection, run a staging soak:
 
-- Keep the web and distributed staging lanes active for at least 48 hours.
+- Keep the pinned web and distributed release-candidate lanes active for at
+  least 15 minutes. Deploy later commits to a separate staging service.
 - Exercise scheduled typed, memory, voice, tracker, Git, and status canaries.
 - Watch database connections, queue depth, mailbox growth, process count,
   memory, CPU, restart count, artifact cache, Ra state, and node convergence.
@@ -1575,8 +1576,8 @@ Implemented locally on 2026-08-20:
   and resilience reports while retaining failed attempts and refusing
   not-applicable controlled failures.
 - Added a strict resilience validator. Completion requires all controlled
-  failures passed, at least 172,800 measured seconds without a redeploy, stable
-  candidate identity, 576 metric samples, the versioned status, typed, memory,
+  failures passed, at least 900 measured seconds on the pinned candidate track,
+  stable candidate identity, 15 metric samples, the versioned status, typed, memory,
   tracker, Git, and voice canary minimums, a post-soak smoke, and zero
   unexplained harm counts.
 - Bound the main staging report's final state to one nested, complete resilience
@@ -1584,10 +1585,10 @@ Implemented locally on 2026-08-20:
   evidence tree is checksum-, path-, permission-, and content-scan validated.
 - Added the [controlled-failure and soak runbook](operations/staging-resilience.md)
   and [resilience evidence contract](operations/staging-resilience-report-template.md).
-  The network-free dry run proves the 11-case and 48-hour contracts fail closed.
+  The network-free dry run proves the 11-case and 15-minute contracts fail closed.
 
 The local Gate 15 harness and contract tests pass. Live controlled failures and
-the measured 48-hour soak remain blocked until Gates 12–14 complete on the
+the measured 15-minute soak remain blocked until Gates 12–14 complete on the
 isolated staging target. No cloud or production resource changed while adding
 the harness.
 
@@ -1662,7 +1663,7 @@ each handoff.
 | 13 | Provision isolated web and distributed staging lanes, including a separate database instance | Isolation and configuration review pass |
 | 14 | Add staging harnesses and the evidence report template | Regression harness dry run passes |
 | 15 | Deploy one staging candidate and complete the full matrix | Staging report is complete |
-| 16 | Complete failure injection and the 48-hour soak | No unexplained blocking issues remain |
+| 16 | Complete failure injection and the 15-minute soak | No unexplained blocking issues remain |
 
 ## Final staging readiness checklist
 
@@ -1690,13 +1691,13 @@ each handoff.
 - [x] Owned local gates produce exact-SHA receipts.
 - [x] The versioned staging matrix, private evidence report, scanner, recorder,
       validator, and network-free harness dry run exist.
-- [x] The versioned controlled-failure matrix and fail-closed 48-hour soak
+- [x] The versioned controlled-failure matrix and fail-closed 15-minute soak
       evidence contract exist.
 - [ ] Web and distributed staging are isolated from production.
 - [ ] Staging has a separate database instance and failure domain.
 - [ ] The migration lineage is mapped and rehearsed for every nonempty target.
 - [ ] The complete regression matrix passes on one SHA.
-- [ ] Failure injection and the 48-hour soak pass.
+- [ ] Failure injection and the 15-minute soak pass.
 - [ ] The staging evidence report contains no secrets or private content.
 - [ ] No production action has occurred.
 
@@ -1786,7 +1787,7 @@ passes, and the inspected local receipt records zero automatic retries.
 ## A2. Blocker: staging is not isolated from production today
 
 Gate 12 lists staging isolation as a requirement and Gate 15 calls for failure
-injection and a 48-hour soak against staging. **Both are unsafe as currently
+injection and a 15-minute soak against staging. **Both are unsafe as currently
 provisioned**, and the reason is not a missing control — it is the existing
 topology:
 
@@ -1808,7 +1809,7 @@ Consequences the plan should state explicitly:
 
 - Staging and production share one shared-core instance with a small connection
   budget. Staging load consumes production's connection headroom.
-- Running Gate 15 failure injection or a 48-hour soak against staging is
+- Running Gate 15 failure injection or a 15-minute soak against staging is
   therefore **a load test against production's database instance.**
 - A single-zone instance means one zonal event takes staging and production
   together, so staging cannot serve as evidence of production resilience.

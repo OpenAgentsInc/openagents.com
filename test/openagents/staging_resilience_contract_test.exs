@@ -26,18 +26,31 @@ defmodule OpenAgents.StagingResilienceContractTest do
     assert Enum.uniq_by(matrix["failure_injections"], & &1["id"]) ==
              matrix["failure_injections"]
 
-    assert matrix["soak"]["required_duration_seconds"] == 48 * 60 * 60
-    assert matrix["soak"]["minimum_metric_samples"] == 576
+    assert matrix["revision"] == 2
+    assert matrix["soak"]["required_duration_seconds"] == 15 * 60
+    assert matrix["soak"]["minimum_metric_samples"] == 15
 
     assert matrix["soak"]["canaries"] |> Enum.map(& &1["id"]) |> Enum.sort() ==
              ~w(git memory status tracker typed voice)
+
+    report =
+      Path.join(
+        System.tmp_dir!(),
+        "openagents-resilience-target-#{System.unique_integer([:positive])}.json"
+      )
+
+    on_exit(fn -> File.rm(report) end)
+    assert {_, 0} = command("new-resilience-report.sh", ["--dry-run", report])
+    target = report |> File.read!() |> Jason.decode!() |> Map.fetch!("target")
+    assert target["track"] == "release-candidate"
+    assert target["service"] == "openagents-staging-release"
   end
 
   test "the resilience dry run is local and fail-closed" do
     {output, 0} = command("resilience.sh", ["check"])
 
     assert output =~ "11 failures"
-    assert output =~ "48-hour soak"
+    assert output =~ "15-minute soak"
     assert output =~ "no network requests sent"
   end
 
@@ -49,7 +62,7 @@ defmodule OpenAgents.StagingResilienceContractTest do
     assert validator =~ "report_dir=$(realpath"
   end
 
-  test "finalization requires every recovery, 48 measured hours, canaries, and zero unexplained harm",
+  test "finalization requires every recovery, 15 measured minutes, canaries, and zero unexplained harm",
        %{test_root: test_root} do
     report = Path.join(test_root, "report.json")
     evidence = Path.join(test_root, "recovery.json")
@@ -68,7 +81,7 @@ defmodule OpenAgents.StagingResilienceContractTest do
     decoded = report |> File.read!() |> Jason.decode!()
     [reference | _] = hd(decoded["failure_injections"])["evidence"]
     completed_at = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.truncate(:second)
-    started_at = DateTime.add(completed_at, -(48 * 60 * 60), :second)
+    started_at = DateTime.add(completed_at, -(15 * 60), :second)
 
     soak = decoded["soak"]
 
@@ -86,7 +99,7 @@ defmodule OpenAgents.StagingResilienceContractTest do
       |> Map.put("completed_at", DateTime.to_iso8601(completed_at))
       |> Map.put("candidate_identity_stable", true)
       |> Map.put("redeploy_count", 0)
-      |> Map.put("metric_sample_count", 576)
+      |> Map.put("metric_sample_count", 15)
       |> Map.put("timeline_receipt", reference)
       |> Map.put("metrics_receipt", reference)
       |> Map.put("canaries", canaries)

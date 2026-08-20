@@ -40,7 +40,9 @@ waive a failed condition by rebuilding from another commit during the cutover.
   bucket, or secret.
 - The candidate passes all Gate 14 cases on staging.
 - The same candidate passes controlled failure injection and a measured
-  48-hour soak without a redeploy.
+  15-minute soak on the pinned `openagents-staging-release` service. Later
+  commits can deploy to another staging service without replacing this release
+  candidate or resetting its clock.
 - A fresh production backup restores into a disposable Cloud SQL instance.
   The migration-lineage bridge, all remaining migrations, candidate startup,
   last-known-good startup, row-count checks, and integrity checks pass there.

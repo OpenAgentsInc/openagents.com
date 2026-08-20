@@ -197,7 +197,7 @@ The accepted target has two isolated staging lanes:
 Both lanes use staging-only hosts, credentials, buckets, repositories, service
 accounts, and a PostgreSQL instance that does not share a production failure
 domain. Production is out of scope until all hardening gates, the complete
-staging matrix, failure injection, and the 48-hour soak pass.
+staging matrix, failure injection, and the 15-minute pinned-candidate soak pass.
 
 `OpenAgents.RuntimeConfig` validates the complete behavior-changing settings
 boundary before migrations or traffic. The

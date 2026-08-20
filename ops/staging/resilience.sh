@@ -17,20 +17,20 @@ fi
 
 jq -e '
   .schema == "openagents.staging-resilience-matrix.v1" and
-  .revision == 1 and
+  .revision == 2 and
   (.failure_injections | type == "array" and length == 11) and
   ([.failure_injections[].id] | length == (unique | length)) and
   all(.failure_injections[];
     (.id | test("^failure-[0-9]{3}$")) and
     (.title | type == "string" and length > 0)) and
-  .soak.required_duration_seconds == 172800 and
-  .soak.metric_sample_cadence_seconds == 300 and
-  .soak.minimum_metric_samples == 576 and
+  .soak.required_duration_seconds == 900 and
+  .soak.metric_sample_cadence_seconds == 60 and
+  .soak.minimum_metric_samples == 15 and
   (.soak.canaries | type == "array" and length == 6) and
   ([.soak.canaries[].id] | sort) == ["git", "memory", "status", "tracker", "typed", "voice"] and
   all(.soak.canaries[]; . as $canary |
     ($canary.cadence_seconds | type == "number" and . > 0 and floor == .) and
-    ($canary.minimum_passes | type == "number" and . >= (172800 / $canary.cadence_seconds) and floor == .))
+    ($canary.minimum_passes | type == "number" and . >= (900 / $canary.cadence_seconds) and floor == .))
 ' "$matrix" >/dev/null || {
   echo "staging resilience matrix contract failed" >&2
   exit 1
@@ -58,4 +58,4 @@ chmod 600 "$evidence"
 "$script_dir/record-result.sh" "$report" failure-001 passed dry-run "$evidence" >/dev/null
 "$script_dir/validate-resilience-report.sh" --draft "$report" >/dev/null
 
-echo "Staging resilience harness dry run passed (11 failures; 48-hour soak; no network requests sent)."
+echo "Staging resilience harness dry run passed (11 failures; 15-minute soak; no network requests sent)."

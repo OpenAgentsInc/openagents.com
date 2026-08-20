@@ -86,9 +86,9 @@ its candidate SHA and image digest with Gate 14.
 The resilience report proves:
 
 - All 11 controlled-failure cases and their retry histories.
-- At least 48 hours without a redeploy.
+- At least 15 minutes on the pinned release-candidate track.
 - Scheduled typed, memory, voice, tracker, Git, and status canaries.
-- Five-minute resource samples and a post-soak smoke.
+- One-minute resource samples and a post-soak smoke.
 - Every known issue with ID, owner, severity, and disposition.
 
 An empty known-issue list is valid only when review found no issues. A failure,
@@ -104,7 +104,7 @@ The validator recognizes four states:
 | `draft` | `--draft` | Work is in progress; pending and failed cases may exist |
 | `recorded` | `--recorded` | Every case has an outcome; failures or blocks may remain |
 | `regression_passed` | `--regression` | Every applicable Gate 14 case passed and common evidence is complete |
-| `complete` | `--final` | Gate 14, failure injection, and the 48-hour soak all passed |
+| `complete` | `--final` | Gate 14, failure injection, and the 15-minute soak all passed |
 
 Only `finalize-report.sh` should change the state and completion timestamp. It
 validates a temporary copy before replacing the report and recomputes

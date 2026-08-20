@@ -51,6 +51,8 @@ write_report() {
       target: {
         environment: "staging",
         base_url: "https://staging.openagents.com",
+        track: "release-candidate",
+        service: "openagents-staging-release",
         project: $candidate.target.project,
         region: $candidate.target.region
       },

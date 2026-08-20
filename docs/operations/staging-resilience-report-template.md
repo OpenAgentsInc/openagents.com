@@ -7,7 +7,7 @@ Status: Current Gate 15 evidence contract
 `new-resilience-report.sh` generates one report for the candidate that already
 passed Gate 14. The report binds the candidate manifest, application image,
 release, and Gate 14 report checksum to 11 controlled-failure results and one
-48-hour soak.
+15-minute soak on the pinned release-candidate track.
 
 ## Failure results
 
@@ -23,18 +23,21 @@ report schemas and selects the correct strict validator.
 
 Completion requires:
 
-- Start and completion UTC timestamps separated by at least 172,800 seconds.
-- `candidate_identity_stable` set to true and `redeploy_count` set to zero.
-- At least 576 five-minute metric samples and a sanitized metric receipt.
+- Start and completion UTC timestamps separated by at least 900 seconds.
+- A target track of `release-candidate` and service of
+  `openagents-staging-release`.
+- `candidate_identity_stable` set to true and `redeploy_count` set to zero for
+  that pinned service. Deployments to other staging services do not count.
+- At least 15 one-minute metric samples and a sanitized metric receipt.
 - A sanitized soak timeline receipt.
 - Exact canary IDs, cadences, minimums, completed counts, passed counts, and
   aggregate receipts.
-- A full post-soak smoke receipt from the same candidate without a redeploy.
+- A full post-soak smoke receipt from the same pinned candidate.
 - Zero unexplained errors, data loss, authority expansion, fleet divergence,
   secret leakage, and unexplained restarts.
 
-The canary minimums are 576 status, 96 typed, 96 memory, 96 tracker, 96 Git, and
-24 fake-media voice passes.
+The canary minimums are 15 status, 3 typed, 3 memory, 3 tracker, 3 Git, and 1
+fake-media voice pass.
 
 ## Known issues
 

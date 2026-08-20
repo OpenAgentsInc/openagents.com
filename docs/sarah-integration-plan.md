@@ -69,4 +69,4 @@ The source migration being complete does not make the application production
 ready. Documentation reconciliation, dependency and component consolidation,
 route authority, token lifecycle, tenant scoping, recovery, build isolation,
 transactional fleet deployment, staging isolation, failure injection, and the
-48-hour soak remain governed by the current hardening plan.
+15-minute pinned-candidate soak remain governed by the current hardening plan.

@@ -23,7 +23,7 @@ Provision two staging lanes:
 Give both lanes staging-only hosts, secrets, service accounts, buckets,
 repositories, and a PostgreSQL instance that is separate from production.
 Disable production promotion until both lanes pass the complete matrix,
-failure injection, and a 48-hour soak on one exact candidate.
+failure injection, and a 15-minute soak on one pinned exact candidate.
 
 ## Consequences
 

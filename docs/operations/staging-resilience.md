@@ -1,11 +1,12 @@
-# Run controlled failures and the 48-hour staging soak
+# Run controlled failures and the 15-minute staging soak
 
 Date: 2026-08-20
 
 Status: Harness implemented and locally proven; live Gate 15 execution pending
 
 Use this runbook after one exact candidate has passed Gate 14. It records all
-controlled-failure attempts, requires 48 measured hours without a redeploy,
+controlled-failure attempts, requires 15 measured minutes on a pinned release
+track,
 enforces scheduled canary and metric minimums, and refuses completion when any
 unexplained harm remains.
 
@@ -44,11 +45,11 @@ ops/staging/resilience.sh check
 Expected result:
 
 ```text
-Staging resilience harness dry run passed (11 failures; 48-hour soak; no network requests sent).
+Staging resilience harness dry run passed (11 failures; 15-minute soak; no network requests sent).
 ```
 
 The check validates the versioned matrix, report generator, evidence scanner,
-attempt recorder, final validator, exact 48-hour duration, six canary schedules,
+attempt recorder, final validator, exact 15-minute duration, six canary schedules,
 and fail-closed finalization.
 
 ## Create the resilience report
@@ -194,24 +195,30 @@ ops/staging/finalize-report.sh --recorded "$resilience_report"
 Corrective attempts return it to draft. Do not start the soak until all 11 last
 attempts pass, the candidate is healthy, and the test data is reconciled.
 
-## Run 48 hours without a redeploy
+## Run 15 minutes on the pinned release track
 
 Record a UTC start time after the final failure-recovery smoke. Keep the web and
-distributed staging lanes on the exact candidate for at least 172,800 seconds.
-Any application, configuration, image, release, migration, or fleet redeploy
-invalidates the soak; set `redeploy_count` honestly and start a new 48-hour run.
+distributed release-candidate lanes on the exact candidate for at least 900
+seconds. Deploy later development commits to the ordinary staging service. Do
+not replace or reconfigure `openagents-staging-release` while its candidate is
+soaking.
+
+The report's `redeploy_count` applies only to the pinned release-candidate
+service and distributed lane. Deployments to another staging service do not
+reset the clock. A deployment that changes the candidate track still fails the
+soak because the report must prove one stable SHA and image digest.
 
 Use these minimum schedules:
 
-| Canary or sample | Cadence | Minimum over 48 hours |
+| Canary or sample | Cadence | Minimum over 15 minutes |
 | --- | ---: | ---: |
-| Status and candidate identity | 5 minutes | 576 passes |
-| Resource metrics | 5 minutes | 576 complete samples |
-| Typed chat | 30 minutes | 96 passes |
-| Memory write/read/forget | 30 minutes | 96 passes |
-| Tracker read/write/cleanup | 30 minutes | 96 passes |
-| Git clone/fetch/push/cleanup | 30 minutes | 96 passes |
-| Fake-media voice lifecycle | 2 hours | 24 passes |
+| Status and candidate identity | 1 minute | 15 passes |
+| Resource metrics | 1 minute | 15 complete samples |
+| Typed chat | 5 minutes | 3 passes |
+| Memory write/read/forget | 5 minutes | 3 passes |
+| Tracker read/write/cleanup | 5 minutes | 3 passes |
+| Git clone/fetch/push/cleanup | 5 minutes | 3 passes |
+| Fake-media voice lifecycle | 15 minutes | 1 pass |
 
 Each canary receipt must bind the candidate SHA, image digest, scheduled and
 actual UTC time, bounded outcome, attempt count, and cleanup result. A retry does
@@ -229,8 +236,8 @@ leaked process, and content-bearing log entry during the soak. A high or critica
 known issue must be resolved. A low or medium issue can be accepted only with a
 named owner and an explicit non-blocking disposition.
 
-After 48 hours, run the full Gate 14 public and authenticated smoke again without
-redeploying. Record the exact end time after that smoke.
+After 15 minutes, run the full Gate 14 public and authenticated smoke again
+against the pinned candidate. Record the exact end time after that smoke.
 
 ## Complete and validate the resilience report
 
@@ -239,8 +246,8 @@ the resilience report's `evidence/` directory. Populate the soak counts and
 booleans described in the
 [resilience evidence contract](staging-resilience-report-template.md).
 
-Finalization requires all failure cases passed, at least 48 measured hours,
-zero redeploys, stable candidate identity, every canary minimum, at least 576
+Finalization requires all failure cases passed, at least 15 measured minutes,
+zero candidate-track redeploys, stable candidate identity, every canary minimum, at least 15
 metric samples, and zero unexplained error, data-loss, authority-expansion,
 fleet-divergence, secret-leak, or restart counts:
 

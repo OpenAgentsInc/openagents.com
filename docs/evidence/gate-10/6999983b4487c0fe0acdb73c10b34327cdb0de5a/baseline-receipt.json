@@ -1,0 +1,21 @@
+{
+  "schema": "openagents.baseline-gate.v1",
+  "git_sha": "6999983b4487c0fe0acdb73c10b34327cdb0de5a",
+  "status": "passed",
+  "started_at": "2026-08-20T10:53:22Z",
+  "completed_at": "2026-08-20T10:55:02Z",
+  "total_duration_seconds": 100,
+  "automatic_retries": 0,
+  "stages": {
+    "precommit": {"status": "passed", "duration_seconds": 22},
+    "coverage": {"status": "passed", "duration_seconds": 68},
+    "release_smoke": {"status": "passed", "duration_seconds": 10}
+  },
+  "tests": {
+    "javascript": 17,
+    "default": 1339,
+    "cluster": 14,
+    "excluded_from_default": 14
+  },
+  "coverage_percent": 83.15
+}

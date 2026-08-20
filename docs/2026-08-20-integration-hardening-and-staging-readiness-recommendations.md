@@ -995,6 +995,10 @@ Completed locally on 2026-08-20:
   BEAM identity. Only a fully verified fleet restoration records `reverted`;
   an unreachable or divergent node records `failed` and remains out of
   readiness.
+- Made pre-token and partial-prepare failures rollback only participants that
+  actually issued tokens. These failures now return bounded outcomes instead
+  of raising on a missing token, and failed fleet snapshots retain their
+  per-node health diagnostics.
 - Added a database transaction that advances the target to `live` only in the
   same commit that inserts its terminal deployment receipt. The receipt binds
   deployment, artifact, manifest, expected membership, bounded per-node
@@ -1026,18 +1030,20 @@ Completed locally on 2026-08-20:
   immutability; boot tests for cold-cache fetch, cache retention, stale-target
   refusal, and degraded retry; and real three-node tests for success, remote
   failure with exact rollback, rollback refusal, timeout, and membership loss.
-- Passed 107 default forge tests and five real three-node deployment tests.
-  The full precommit gate passed 17 browser tests and 1,318 default Elixir
-  tests, with 14 distributed tests excluded from the default lane. The pinned
-  Elixir 1.20.3 and OTP 29.0.5 `forge-builder` target also built the production
+- Passed the exact-SHA baseline with 17 browser tests, 1,339 default Elixir
+  tests, 14 distributed tests, 83.15% merged coverage, and packaged release
+  startup against a disposable PostgreSQL database. The distributed lane
+  includes five real three-node deployment scenarios. See the
+  [Gate 10 evidence](evidence/gate-10/6999983b4487c0fe0acdb73c10b34327cdb0de5a/README.md).
+- Built the pinned Elixir 1.20.3 and OTP 29.0.5 `forge-builder` production
   release without application warnings.
 - Documented the operator contract in the
   [transactional deployment runbook](operations/forge-transactional-deployment.md).
 
-Gate 10 is complete locally. Keep the deploy and boot-convergence features
-disabled until Gate 11 supplies relup and rolling-replacement fallbacks and
-Gate 12 provides an isolated distributed staging lane. No staging or
-production environment was changed.
+Gate 10 is complete locally with exact-commit evidence. Keep the deploy and
+boot-convergence features disabled until Gate 11 supplies relup and
+rolling-replacement fallbacks and Gate 12 provides an isolated distributed
+staging lane. No staging or production environment was changed.
 
 ## Gate 11: Complete relup and rolling replacement
 

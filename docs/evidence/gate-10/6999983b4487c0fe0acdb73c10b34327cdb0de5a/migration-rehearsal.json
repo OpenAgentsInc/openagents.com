@@ -1,0 +1,25 @@
+{
+  "schema": "openagents.migration-rehearsal.v1",
+  "git_sha": "6999983b4487c0fe0acdb73c10b34327cdb0de5a",
+  "status": "passed",
+  "migration": "20260820140000_harden_forge_deployment_transactions",
+  "starting_version": 20260820130000,
+  "fixture_counts": {
+    "forge_fleet_targets": 1,
+    "legacy_forge_deploys": 1
+  },
+  "checks": {
+    "forward_identity_backfill": "passed",
+    "expected_membership_backfill": "passed",
+    "bounded_node_results_backfill": "passed",
+    "timestamp_backfill": "passed",
+    "immutable_update_refusal": "passed",
+    "reverse_data_preservation": "passed",
+    "second_forward_backfill": "passed"
+  },
+  "automatic_retries_in_successful_run": 0,
+  "database_class": "disposable",
+  "database_removed_after_run": true,
+  "staging_changed": false,
+  "production_changed": false
+}

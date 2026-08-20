@@ -1,0 +1,17 @@
+{
+  "schema": "openagents.forge.transactional-fleet-proof.v1",
+  "git_sha": "6999983b4487c0fe0acdb73c10b34327cdb0de5a",
+  "status": "passed",
+  "expected_nodes": 3,
+  "real_three_node_scenarios": [
+    "prepare_canary_verify_commit_finalize",
+    "remote_apply_failure_exact_rollback",
+    "unverified_rollback_fences_readiness",
+    "participant_timeout_blocks_live",
+    "membership_loss_aborts_commit"
+  ],
+  "distributed_tests_in_exact_sha_baseline": 14,
+  "automatic_retries_in_successful_run": 0,
+  "staging_changed": false,
+  "production_changed": false
+}

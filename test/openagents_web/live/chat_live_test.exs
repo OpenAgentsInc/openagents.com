@@ -61,7 +61,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     assert has_element?(
              view,
-             "#sidebar[data-state] #sidebar-nav > .sidebar-row:first-child #open-computers"
+             "#sidebar #sidebar-nav > .sidebar-row:first-child #open-computers"
            )
 
     assert has_element?(
@@ -72,28 +72,30 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     assert has_element?(view, ~s(#sidebar-nav #open-leaderboard[aria-label="Leaderboard"]))
   end
 
-  test "the sidebar replaces the command bar on the conversation", %{conn: conn} do
+  test "chat contributes its rows to the one application sidebar", %{conn: conn} do
     conn = log_in_github_user(conn, "sidebar-shell-browser")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
-    # The conversation's chrome is the sidebar (the 2026-08-17 reversal); the
-    # command bar remains the leaderboard's and the operator panel's frame.
-    refute has_element?(view, "header.command-bar")
-    assert has_element?(view, "#sidebar[data-state]")
+    # Chat used to render a second, complete application shell inside the
+    # first: its own brand, rail and account footer, nested in the padded main
+    # of a layout that already had all three. It now contributes rows to the
+    # sidebar the layout owns, so there is exactly one of each.
+    assert has_element?(view, "#sidebar")
+    assert view |> render() |> String.split("<aside") |> length() == 2
+    refute has_element?(view, "#sidebar-scrim")
+    refute has_element?(view, "#mobile-menu")
+    refute has_element?(view, "#sidebar-toggle")
 
-    # Every control the command bar used to carry is reachable, with an
-    # accessible name on each stretched hit target.
+    # Every destination chat used to carry in its own rail is still reachable,
+    # with an accessible name on each stretched hit target.
     assert has_element?(view, ~s(#sidebar #toggle-memory[aria-label="Memory"]))
     assert has_element?(view, "#sidebar a#export-atif[href='/data/export/atif'][download]")
-    assert has_element?(view, "#sidebar footer.sidebar-footer #account-menu-trigger")
+    assert has_element?(view, "#sidebar #sidebar-sections")
 
-    # The collapse toggle and the mobile menu button are icon-only, so both
-    # must carry their names on the control.
-    assert has_element?(view, "#sidebar-toggle[aria-label][aria-controls=sidebar]")
-    assert has_element?(view, "#mobile-menu[aria-label][aria-controls=sidebar]")
-
-    # The empty section area exists for Phase E4; it holds no fake content.
-    assert has_element?(view, "#sidebar-sections")
+    # Identity is the command bar's, once, rather than a second account
+    # control in a second footer.
+    assert has_element?(view, "#account-bar-trigger")
+    refute has_element?(view, "#sidebar #account-menu-trigger")
   end
 
   test "the admin row renders only for an operator", %{conn: conn} do
@@ -141,7 +143,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     conn = log_in_github_user(conn, "live-browser")
     assert {:ok, view, html} = live(conn, ~p"/chat")
 
-    assert html =~ "SIMPLY SARAH" or html =~ "SARAH"
+    assert html =~ "OpenAgents"
     assert html =~ "Message Sarah"
     assert html =~ "Hello. I&#39;m Sarah—an OpenAgent. What are we working on?"
     assert html =~ ~s(href="/favicon.ico")
@@ -155,11 +157,16 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     assert has_element?(
              view,
-             "#account-menu-trigger[popovertarget='account-menu'] img[src='#{user.github_avatar_url}']"
+             "#account-bar-trigger[popovertarget='account-bar-menu'] img[src='#{user.github_avatar_url}']"
            )
 
-    assert has_element?(view, "#account-menu[popover=auto][role=menu]")
-    assert has_element?(view, "#logout-form[action='/logout'] #logout[role=menuitem]")
+    assert has_element?(view, "#account-bar-menu[popover=auto][role=menu]")
+
+    assert has_element?(
+             view,
+             "#account-bar-menu form[action='/logout'] button[role=menuitem]"
+           )
+
     refute html =~ "CONNECTED / THIS BROWSER"
   end
 

@@ -57,16 +57,18 @@ defmodule OpenAgentsWeb.AccountChromeTest do
   end
 
   describe "connection chrome" do
-    test "the mobile header states the socket's truth through element-level bindings", %{
+    test "the chat status line states the socket's truth through element-level bindings", %{
       conn: conn
     } do
       conn = log_in_github_user(conn, "connection-user")
       {:ok, view, _html} = live(conn, ~p"/chat")
 
-      # The slim mobile header carries the socket's truth under its own ids.
-      assert has_element?(view, "#mobile-connection-indicator[phx-connected][phx-disconnected]")
-      assert has_element?(view, "#mobile-connection-connected", "CONNECTED")
-      assert has_element?(view, "#mobile-connection-reconnecting[hidden]", "RECONNECTING")
+      # Chat's status line carries the socket's truth under its own ids. It
+      # replaced a mobile header whose other job -- a menu button and a second
+      # brand mark -- belonged to a rail chat no longer renders.
+      assert has_element?(view, "#chat-connection-indicator[phx-connected][phx-disconnected]")
+      assert has_element?(view, "#chat-connection-connected", "CONNECTED")
+      assert has_element?(view, "#chat-connection-reconnecting[hidden]", "RECONNECTING")
     end
   end
 

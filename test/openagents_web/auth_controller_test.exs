@@ -50,7 +50,9 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     refute cookie =~ "ephemeral-github-token"
 
     first_browser = authenticated |> recycle() |> get(~p"/chat")
-    assert html_response(first_browser, 200) =~ "SARAH"
+    # The brand mark is the application's, once, in the sidebar. Chat used to
+    # render a second "SARAH" mark in a header belonging to its own rail.
+    assert html_response(first_browser, 200) =~ "OpenAgents"
     conversation = Conversations.get_conversation_for_user(user)
 
     second_browser =

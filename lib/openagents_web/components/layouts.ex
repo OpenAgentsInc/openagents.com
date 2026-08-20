@@ -41,20 +41,36 @@ defmodule OpenAgentsWeb.Layouts do
 
   attr :subtitle, :string, default: nil, doc: "the page subtitle to display in the command bar"
 
+  attr :flush, :boolean,
+    default: false,
+    doc: "surface owns the full main area: no padding, no scroll of its own"
+
   slot :inner_block, required: true
+
+  slot :sidebar_extra,
+    doc: """
+    Rows this page contributes to the application sidebar.
+
+    A page with its own destinations adds them to the one sidebar rather than
+    rendering a second one inside the content area. Chat did the latter, which
+    put a whole nested application shell -- brand, rail, account footer --
+    inside the padded main of the shell that already had one.
+    """
 
   def app(assigns) do
     ~H"""
     <div class="h-screen flex overflow-hidden bg-background">
-      <%= if @current_scope do %>
-        <.sidebar current_scope={@current_scope} />
-      <% end %>
+      <.sidebar :if={@current_scope} current_scope={@current_scope}>
+        <:extra>{render_slot(@sidebar_extra)}</:extra>
+      </.sidebar>
 
       <div class="flex-1 min-w-0 flex flex-col h-screen">
         <.openagents_command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle} />
 
         <main class={[
-          "flex-1 min-w-0 overflow-y-auto overscroll-none p-4",
+          "flex-1 min-w-0",
+          @flush && "flex min-h-0 flex-col overflow-hidden",
+          !@flush && "overflow-y-auto overscroll-none p-4",
           @current_scope && "bg-background"
         ]}>
           <%= if @current_scope do %>
@@ -480,9 +496,13 @@ defmodule OpenAgentsWeb.Layouts do
     """
   end
 
+  attr :current_scope, :map, required: true
+
+  slot :extra, doc: "rows contributed by the current page"
+
   defp sidebar(assigns) do
     ~H"""
-    <aside class="sidebar hidden lg:flex">
+    <aside id="sidebar" class="sidebar hidden lg:flex">
       <Layouts.sidebar_brand />
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
@@ -502,31 +522,9 @@ defmodule OpenAgentsWeb.Layouts do
         />
       </nav>
 
-      <%!--
-      <div class="sidebar-sections">
-        <section class="sidebar-section" aria-label="Work">
-          <h2 class="sidebar-section-label">WORK</h2>
-          <div class="sidebar-row sidebar-row--static">
-            <span class="sidebar-row__content">
-              <span class="sidebar-row__icon"><.icon name="bolt" /></span>
-              <span class="sidebar-row__label">Explore repo</span>
-            </span>
-          </div>
-          <div class="sidebar-row sidebar-row--static">
-            <span class="sidebar-row__content">
-              <span class="sidebar-row__icon"><.icon name="bolt" /></span>
-              <span class="sidebar-row__label">Plan change</span>
-            </span>
-          </div>
-          <div class="sidebar-row sidebar-row--static">
-            <span class="sidebar-row__content">
-              <span class="sidebar-row__icon"><.icon name="bolt" /></span>
-              <span class="sidebar-row__label">Run tests</span>
-            </span>
-          </div>
-        </section>
-      </div>
-      --%>
+      <%!-- Rows the current page contributes. Chat's destinations, work
+      projections and admin actions arrive here instead of in a second rail. --%>
+      {render_slot(@extra)}
 
       <Layouts.sidebar_footer />
     </aside>

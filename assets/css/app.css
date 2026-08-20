@@ -554,8 +554,7 @@
 }
 
 .composer-card:focus-within {
-  border-color: var(--accent-bright);
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent-bright) 22%, transparent);
+  border-color: var(--text-dim);
 }
 
 .composer-grid {
@@ -602,8 +601,11 @@
   justify-content: center;
   border: 0;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--text-primary);
+  /* The inverse control pair, not `--accent`. The theme went monochrome; this
+     button kept an indigo fill and was the one saturated element on the
+     surface. */
+  background: var(--control-inverse-bg);
+  color: var(--control-inverse-fg);
   cursor: pointer;
   transition: filter 150ms ease, transform 150ms ease;
 }

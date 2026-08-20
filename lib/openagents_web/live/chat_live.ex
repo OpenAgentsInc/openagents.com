@@ -800,26 +800,21 @@ defmodule OpenAgentsWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} title="Chat" current_scope={@current_scope}>
-      <div
-        id="openagents-app"
-        class="app-shell chat-shell"
-        data-mobile-open="false"
-        phx-hook=".SidebarShell"
-      >
-        <.sidebar
+    <Layouts.app flash={@flash} title="Chat" current_scope={@current_scope} flush>
+      <:sidebar_extra>
+        <.chat_sidebar_rows
           current_user={@current_user}
           memory_open?={@memory_open?}
           reset_enabled?={@reset_enabled?}
           recent_jobs={@recent_jobs}
         />
+      </:sidebar_extra>
 
-        <%!-- Mobile only: closes the overlay on tap. The menu button remains the
-              accessible toggle; this is a pointer convenience, not a control. --%>
-        <div id="sidebar-scrim" class="sidebar-scrim" aria-hidden="true"></div>
-
+      <div id="openagents-app" class="chat-shell">
         <main class="app-main">
-          <.mobile_header />
+          <header class="chat-status">
+            <.connection_state id_prefix="chat-connection" />
+          </header>
 
           <section
             :if={!@memory_open?}
@@ -947,80 +942,6 @@ defmodule OpenAgentsWeb.ChatLive do
           collapsed={@delegation_collapsed}
         />
       </div>
-
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".SidebarShell">
-        export default {
-          storageKey: "sarah:sidebar",
-          mounted() {
-            this.collapsed = localStorage.getItem(this.storageKey) === "collapsed"
-            this.mobileOpen = false
-            this.apply()
-            // Delegated so the listeners survive any LiveView patch inside the
-            // shell. Collapse and the mobile overlay are pure client state; the
-            // server never needs to know.
-            this.el.addEventListener("click", event => {
-              if (event.target.closest("#sidebar-toggle")) {
-                this.collapsed = !this.collapsed
-                localStorage.setItem(this.storageKey, this.collapsed ? "collapsed" : "expanded")
-                this.apply()
-              } else if (event.target.closest("#mobile-menu")) {
-                this.mobileOpen = !this.mobileOpen
-                this.apply()
-              } else if (
-                event.target.closest("#sidebar-scrim") ||
-                  (this.mobileOpen && event.target.closest(".sidebar-row__hit"))
-              ) {
-                this.mobileOpen = false
-                this.apply()
-              }
-            })
-            this.onKeydown = event => {
-              if (event.key === "Escape" && this.mobileOpen) {
-                this.mobileOpen = false
-                this.apply()
-              }
-            }
-            window.addEventListener("keydown", this.onKeydown)
-            // Scroll does not bubble, so the section area's scrolling is
-            // observed with a capturing listener on the shell; it survives
-            // LiveView patches the same way the click delegation does.
-            this.el.addEventListener("scroll", event => {
-              if (event.target.id === "sidebar-sections") this.applyScrollEdges()
-            }, { capture: true, passive: true })
-            this.applyScrollEdges()
-          },
-          updated() {
-            this.apply()
-            this.applyScrollEdges()
-          },
-          destroyed() { window.removeEventListener("keydown", this.onKeydown) },
-          // A sticky section label earns its hairline only after rows have
-          // actually scrolled beneath it (DESIGN.md, scroll-edge hairline).
-          applyScrollEdges() {
-            const container = this.el.querySelector("#sidebar-sections")
-            if (!container) return
-            const top = container.getBoundingClientRect().top
-            container.querySelectorAll(".sidebar-section").forEach(section => {
-              const label = section.querySelector(".sidebar-section-label")
-              if (!label) return
-              if (section.getBoundingClientRect().top < top - 0.5) {
-                label.setAttribute("data-scroll-edge", "stuck")
-              } else {
-                label.removeAttribute("data-scroll-edge")
-              }
-            })
-          },
-          apply() {
-            const sidebar = this.el.querySelector("#sidebar")
-            if (sidebar) sidebar.setAttribute("data-state", this.collapsed ? "collapsed" : "expanded")
-            this.el.setAttribute("data-mobile-open", this.mobileOpen ? "true" : "false")
-            const toggle = this.el.querySelector("#sidebar-toggle")
-            if (toggle) toggle.setAttribute("aria-expanded", this.collapsed ? "false" : "true")
-            const menu = this.el.querySelector("#mobile-menu")
-            if (menu) menu.setAttribute("aria-expanded", this.mobileOpen ? "true" : "false")
-          }
-        }
-      </script>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".TranscriptScroll">
         export default {
@@ -1366,149 +1287,127 @@ defmodule OpenAgentsWeb.ChatLive do
   # stretched-anchor pattern: the hit control owns the whole row and the
   # accessible name, the visible content beneath is pointer-transparent, and
   # any future trailing control floats back above it at its own z-index.
-  defp sidebar(assigns) do
+  defp chat_sidebar_rows(assigns) do
     ~H"""
-    <aside id="sidebar" class="sidebar" data-state="expanded" aria-label="OpenAgents surfaces">
-      <header class="sidebar-header">
-        <span class="brand-name">OpenAgents</span>
-        <.button
-          id="sidebar-toggle"
-          variant={:ghost}
-          size={:sm}
-          class="sidebar-toggle !size-9 !min-h-0 !min-w-0 !p-0"
-          aria-label="Toggle sidebar"
-          aria-expanded="true"
-          aria-controls="sidebar"
-        >
-          <.icon name="sidebar" class="sidebar-toggle__collapse !text-[1.25rem]" />
-          <.icon name="sidebar" class="sidebar-toggle__expand !text-[1.25rem]" />
-        </.button>
-      </header>
+    <nav id="sidebar-nav" class="sidebar-nav" aria-label="Chat">
+      <div class="sidebar-row">
+        <.link
+          id="open-computers"
+          navigate="/computers"
+          class="sidebar-row__hit"
+          aria-label="Computers"
+        ></.link>
+        <span class="sidebar-row__content">
+          <span class="sidebar-row__icon"><.icon name="desktop" /></span>
+          <span class="sidebar-row__label">Computers</span>
+        </span>
+      </div>
 
-      <nav id="sidebar-nav" class="sidebar-nav" aria-label="OpenAgents surfaces">
-        <div class="sidebar-row">
-          <.link
-            id="open-computers"
-            navigate="/computers"
-            class="sidebar-row__hit"
-            aria-label="Computers"
-          ></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="desktop" /></span>
-            <span class="sidebar-row__label">Computers</span>
+      <div class="sidebar-row" data-selected={@memory_open?}>
+        <button
+          id="toggle-memory"
+          type="button"
+          class="sidebar-row__hit"
+          phx-click="toggle_memory"
+          aria-expanded={to_string(@memory_open?)}
+          aria-controls="memory-manager"
+          aria-label={if @memory_open?, do: "Return to conversation", else: "Memory"}
+        ></button>
+        <span class="sidebar-row__content">
+          <span class="sidebar-row__icon">
+            <.icon name={if @memory_open?, do: "arrow-left", else: "brain"} />
           </span>
-        </div>
-
-        <div class="sidebar-row" data-selected={@memory_open?}>
-          <button
-            id="toggle-memory"
-            type="button"
-            class="sidebar-row__hit"
-            phx-click="toggle_memory"
-            aria-expanded={to_string(@memory_open?)}
-            aria-controls="memory-manager"
-            aria-label={if @memory_open?, do: "Return to conversation", else: "Memory"}
-          ></button>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon">
-              <.icon name={if @memory_open?, do: "arrow-left", else: "brain"} />
-            </span>
-            <span class="sidebar-row__label">
-              {if @memory_open?, do: "Return to conversation", else: "Memory"}
-            </span>
+          <span class="sidebar-row__label">
+            {if @memory_open?, do: "Return to conversation", else: "Memory"}
           </span>
-        </div>
+        </span>
+      </div>
 
-        <div class="sidebar-row">
-          <.link
-            id="open-leaderboard"
-            navigate="/leaderboard"
-            class="sidebar-row__hit"
-            aria-label="Leaderboard"
-          ></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="trophy-top" /></span>
-            <span class="sidebar-row__label">Leaderboard</span>
-          </span>
-        </div>
+      <div class="sidebar-row">
+        <.link
+          id="open-leaderboard"
+          navigate="/leaderboard"
+          class="sidebar-row__hit"
+          aria-label="Leaderboard"
+        ></.link>
+        <span class="sidebar-row__content">
+          <span class="sidebar-row__icon"><.icon name="trophy-top" /></span>
+          <span class="sidebar-row__label">Leaderboard</span>
+        </span>
+      </div>
 
-        <div class="sidebar-row">
-          <.link
-            id="export-atif"
-            href="/data/export/atif"
-            download
-            class="sidebar-row__hit"
-            aria-label="Export"
-          ></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="download" /></span>
-            <span class="sidebar-row__label">Export</span>
-          </span>
-        </div>
-      </nav>
+      <div class="sidebar-row">
+        <.link
+          id="export-atif"
+          href="/data/export/atif"
+          download
+          class="sidebar-row__hit"
+          aria-label="Export"
+        ></.link>
+        <span class="sidebar-row__content">
+          <span class="sidebar-row__icon"><.icon name="download" /></span>
+          <span class="sidebar-row__label">Export</span>
+        </span>
+      </div>
+    </nav>
 
-      <%!-- Calls and work: bounded, durable-backed projections (last eight
+    <%!-- Calls and work: bounded, durable-backed projections (last eight
             each), refreshed by the same PubSub broadcasts that drive the
             transcript. A row whose evidence is a durable transcript message is
             a stretched anchor to it; a row with no target is stated, not
             linked. Empty sections keep their labels and say so honestly. --%>
-      <div id="sidebar-sections" class="sidebar-sections">
-        <section :if={@recent_jobs != []} id="sidebar-work" class="sidebar-section" aria-label="Work">
-          <h2 class="sidebar-section-label scroll-edge-hairline">WORK</h2>
-          <.sidebar_status_row
-            :for={job <- @recent_jobs}
-            id={"sidebar-job-#{job.id}"}
-            target_message_id={job.report_message_id}
-            dot_state={job_dot_state(job)}
-            title={job_title(job)}
-            meta={job_meta(job)}
-            data-status={job.status}
-          />
-        </section>
+    <div id="sidebar-sections" class="sidebar-sections">
+      <section :if={@recent_jobs != []} id="sidebar-work" class="sidebar-section" aria-label="Work">
+        <h2 class="sidebar-section-label scroll-edge-hairline">WORK</h2>
+        <.sidebar_status_row
+          :for={job <- @recent_jobs}
+          id={"sidebar-job-#{job.id}"}
+          target_message_id={job.report_message_id}
+          dot_state={job_dot_state(job)}
+          title={job_title(job)}
+          meta={job_meta(job)}
+          data-status={job.status}
+        />
+      </section>
+    </div>
+
+    <nav
+      :if={Accounts.admin?(@current_user) or @reset_enabled?}
+      id="sidebar-admin"
+      class="sidebar-nav"
+      aria-label="Administration and data"
+    >
+      <div :if={Accounts.admin?(@current_user)} class="sidebar-row">
+        <.link id="open-admin" navigate="/admin" class="sidebar-row__hit" aria-label="Admin"></.link>
+        <span class="sidebar-row__content">
+          <span class="sidebar-row__icon"><.icon name="shield-lock" /></span>
+          <span class="sidebar-row__label">Admin</span>
+        </span>
       </div>
 
-      <nav
-        :if={Accounts.admin?(@current_user) or @reset_enabled?}
-        id="sidebar-admin"
-        class="sidebar-nav"
-        aria-label="Administration and data"
+      <.form
+        :if={@reset_enabled?}
+        for={%{}}
+        id="reset-conversation-form"
+        action="/data/reset"
+        method="delete"
+        class="sidebar-row"
       >
-        <div :if={Accounts.admin?(@current_user)} class="sidebar-row">
-          <.link id="open-admin" navigate="/admin" class="sidebar-row__hit" aria-label="Admin"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="shield-lock" /></span>
-            <span class="sidebar-row__label">Admin</span>
-          </span>
-        </div>
-
-        <.form
-          :if={@reset_enabled?}
-          for={%{}}
-          id="reset-conversation-form"
-          action="/data/reset"
-          method="delete"
-          class="sidebar-row"
-        >
-          <.button
-            id="reset-conversation"
-            variant={:ghost}
-            size={:sm}
-            type="submit"
-            data-confirm="Delete every message and memory for this account?"
-            aria-label="Reset"
-            class="sidebar-row__hit"
-          >{" "}</.button>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="trash" /></span>
-            <span class="sidebar-row__label">Reset</span>
-          </span>
-        </.form>
-      </nav>
-
-      <footer class="sidebar-footer">
-        <Layouts.account_control current_user={@current_user} context={:row} />
-      </footer>
-    </aside>
+        <.button
+          id="reset-conversation"
+          variant={:ghost}
+          size={:sm}
+          type="submit"
+          data-confirm="Delete every message and memory for this account?"
+          aria-label="Reset"
+          class="sidebar-row__hit"
+        >{" "}</.button>
+        <span class="sidebar-row__content">
+          <span class="sidebar-row__icon"><.icon name="trash" /></span>
+          <span class="sidebar-row__label">Reset</span>
+        </span>
+      </.form>
+    </nav>
     """
   end
 
@@ -1618,26 +1517,6 @@ defmodule OpenAgentsWeb.ChatLive do
 
   # Below 768px the sidebar hides behind this slim row: wordmark, connection
   # state, and the menu button that reveals the sidebar as an overlay.
-  defp mobile_header(assigns) do
-    ~H"""
-    <header class="mobile-header">
-      <.button
-        id="mobile-menu"
-        variant={:ghost}
-        size={:sm}
-        class="mobile-menu-button"
-        aria-label="Toggle sidebar"
-        aria-expanded="false"
-        aria-controls="sidebar"
-      >
-        <.icon name="menu" />
-      </.button>
-      <span class="brand-name">SARAH</span>
-      <.connection_state id_prefix="mobile-connection" />
-    </header>
-    """
-  end
-
   attr :id_prefix, :string, required: true
 
   # Connection state is driven by the LiveView socket through element-level

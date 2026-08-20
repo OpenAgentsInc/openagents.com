@@ -10,7 +10,7 @@ defmodule OpenAgents.Repo.Migrations.CreateSarahConversations do
     end
 
     create unique_index(:visitors, [:browser_key_hash])
-    create unique_index(:visitors, [:user_id], where: "user_id IS NOT NULL")
+    create unique_index(:visitors, [:user_id])
 
     create table(:conversations, primary_key: false) do
       add :id, :binary_id, primary_key: true

@@ -192,11 +192,24 @@ defmodule OpenAgentsWeb.Layouts do
   """
   attr :title, :string, required: true
   attr :open, :boolean, default: false
+  attr :id, :string, default: nil, doc: "defaults to a slug of the title"
   slot :inner_block, required: true
 
   def sidebar_section(assigns) do
+    # Not `assign_new`: the `id` attr declaration already puts the key in
+    # assigns as nil, so `assign_new` would consider it present and never
+    # compute. A hook without a DOM id silently does not run.
+    assigns =
+      assign(assigns, :id, assigns.id || "sidebar-section-" <> section_slug(assigns.title))
+
     ~H"""
-    <details class="docs-sidebar__section sidebar-section" open={@open}>
+    <details
+      id={@id}
+      class="docs-sidebar__section sidebar-section"
+      open={@open}
+      phx-hook=".SidebarSection"
+      data-holds-active={to_string(@open)}
+    >
       <summary class="sidebar-section-label sidebar-section__summary">
         <UI.icon name="chevron-right" class="sidebar-section__caret" />
         <span>{@title}</span>
@@ -205,7 +218,72 @@ defmodule OpenAgentsWeb.Layouts do
         {render_slot(@inner_block)}
       </div>
     </details>
+    <%!-- `open` above is a seed, not the truth. The server can only derive it
+    from the active page, so re-deriving it on every navigation collapses every
+    section the reader opened but is not currently inside. The hook makes the
+    reader's own choices the state and keeps them in sessionStorage; the server
+    still decides on first paint and whenever a section holds the active page,
+    so a page can never be hidden inside a section the reader had closed, and
+    the sidebar works with no JavaScript at all. --%>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".SidebarSection">
+      const KEY = "sidebar-sections"
+
+      const read = () => {
+        try {
+          return JSON.parse(sessionStorage.getItem(KEY)) || {}
+        } catch (_error) {
+          return {}
+        }
+      }
+
+      const write = (state) => {
+        try {
+          sessionStorage.setItem(KEY, JSON.stringify(state))
+        } catch (_error) {
+          // A full or unavailable store costs the reader their open sections
+          // on the next navigation, which is the behaviour without the hook.
+        }
+      }
+
+      export default {
+        mounted() {
+          this.onToggle = () => {
+            const state = read()
+            state[this.el.id] = this.el.open
+            write(state)
+          }
+          this.el.addEventListener("toggle", this.onToggle)
+          this.restore()
+        },
+        updated() {
+          this.restore()
+        },
+        destroyed() {
+          this.el.removeEventListener("toggle", this.onToggle)
+        },
+        restore() {
+          // A section holding the active page opens regardless of what the
+          // reader last did, so navigation can never land on a hidden row.
+          if (this.el.dataset.holdsActive === "true") {
+            this.el.open = true
+            this.onToggle()
+            return
+          }
+          const stored = read()[this.el.id]
+          if (stored !== undefined) this.el.open = stored
+        },
+      }
+    </script>
     """
+  end
+
+  # Ids have to survive navigation for the reader's open sections to be found
+  # again, so they come from the section name rather than a render-time counter.
+  defp section_slug(title) do
+    title
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/u, "-")
+    |> String.trim("-")
   end
 
   @doc """

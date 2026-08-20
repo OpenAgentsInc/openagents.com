@@ -395,16 +395,6 @@
   line-height: 1.25rem;
 }
 
-.sidebar-footer {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 8px;
-  border-top: 1px solid var(--ink-raised);
-}
-
 /* Docs layout */
 
 .docs-layout {

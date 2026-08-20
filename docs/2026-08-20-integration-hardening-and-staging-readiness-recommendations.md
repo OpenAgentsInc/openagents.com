@@ -111,9 +111,13 @@ Completed on 2026-08-20:
 - Fixed `mix assets.deploy` to compile Phoenix's colocated assets before
   Tailwind resolves them. The release smoke exposed this production-only build
   failure and now passes against a fresh PostgreSQL 18 container.
+- Added `ops/ci/baseline.sh` to require a clean worktree, run precommit, merged
+  coverage, and the production release smoke without retries, recheck Git
+  identity and cleanliness, and atomically write a content-free receipt under
+  `.git/openagents/gate-receipts/`.
 
-Gate 0 still requires an exact-SHA gate receipt that runs and records these
-completed stages from one clean commit.
+Gate 0 still requires one clean-commit execution of `ops/ci/baseline.sh` and
+inspection of its exact-SHA receipt.
 
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it

@@ -1,5 +1,7 @@
 import Config
 
+config :openagents, :runtime_environment, :test
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used
@@ -73,6 +75,15 @@ config :openagents, :ra_enabled, false
 config :openagents, :computer_controller_enabled, true
 
 config :openagents, :voice_recording_encryption_key, Base.encode64(:crypto.strong_rand_bytes(32))
+
+config :openagents, :voice_recording,
+  enabled: true,
+  timeslice_ms: 5_000,
+  maximum_chunk_bytes: 1_048_576,
+  maximum_chunks: 1_024,
+  maximum_bytes: 25_165_824,
+  late_chunk_grace_seconds: 120,
+  retention_days: 30
 
 config :openagents, :tools, [
   OpenAgents.Tools.ModuleDiscover,

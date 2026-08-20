@@ -4,6 +4,8 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 release_bin="$repo_root/_build/prod/rel/openagents/bin/openagents"
+release_readiness="$repo_root/_build/prod/rel/openagents/bin/config-readiness"
+staging_profile="$repo_root/ops/staging/gate-5-profile.sh"
 database_url=${OPENAGENTS_RELEASE_SMOKE_DATABASE_URL:-}
 disposable=${OPENAGENTS_RELEASE_SMOKE_DISPOSABLE:-}
 port=${OPENAGENTS_RELEASE_SMOKE_PORT:-$((40000 + ($$ % 20000)))}
@@ -22,7 +24,7 @@ cleanup() {
     (cd "$repo_root" && MIX_ENV=prod mix phx.digest.clean --all >/dev/null 2>&1) || true
   fi
 
-  rm -rf -- "$smoke_root"
+  find "$smoke_root" -depth -delete
 }
 
 trap cleanup EXIT INT TERM
@@ -42,7 +44,7 @@ if [ -z "$database_url" ]; then
   exit 1
 fi
 
-for command_name in curl openssl; do
+for command_name in curl jq openssl; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "$command_name is required for the release smoke" >&2
     exit 1
@@ -59,19 +61,37 @@ MIX_ENV=prod mix release --overwrite
 secret_key_base=$(openssl rand -base64 64 | tr -d '\n')
 github_token_key=$(openssl rand -base64 32 | tr -d '\n')
 
+echo "Checking the release configuration profile"
+readiness_report=$(env \
+  DATABASE_URL="$database_url" \
+  GITHUB_CLIENT_ID="release-smoke-client" \
+  GITHUB_CLIENT_SECRET="release-smoke-secret" \
+  GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
+  OPENAI_API_KEY="release-smoke-openai-key" \
+  POOL_SIZE="2" \
+  PORT="$port" \
+  SECRET_KEY_BASE="$secret_key_base" \
+  "$staging_profile" "$release_readiness")
+
+echo "$readiness_report" | jq -e '
+  .schema == "openagents.runtime_configuration.v1" and
+  .status == "ready" and
+  .environment == "staging" and
+  .staging_gate == 5
+' >/dev/null
+
 echo "Starting release against the disposable database"
 env \
   DATABASE_URL="$database_url" \
   GITHUB_CLIENT_ID="release-smoke-client" \
   GITHUB_CLIENT_SECRET="release-smoke-secret" \
-  GITHUB_REDIRECT_URI="https://127.0.0.1/auth/github/callback" \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
-  PHX_HOST="127.0.0.1" \
+  OPENAI_API_KEY="release-smoke-openai-key" \
   PHX_SERVER="true" \
   POOL_SIZE="2" \
   PORT="$port" \
   SECRET_KEY_BASE="$secret_key_base" \
-  "$release_bin" start >"$release_log" 2>&1 &
+  "$staging_profile" "$release_bin" start >"$release_log" 2>&1 &
 release_pid=$!
 
 health_url="http://127.0.0.1:$port/healthz"

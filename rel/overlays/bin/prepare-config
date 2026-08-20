@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+release_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+release_vsn=${RELEASE_VSN:-$(cut -d ' ' -f 2 "$release_root/releases/start_erl.data")}
+release_vsn_dir="$release_root/releases/$release_vsn"
+
+export RELEASE_ROOT="$release_root"
+export RELEASE_VSN="$release_vsn"
+export RELEASE_NAME="${RELEASE_NAME:-openagents}"
+export RELEASE_COMMAND="prepare-config"
+
+. "$release_vsn_dir/env.sh"
+
+release_cookie=${RELEASE_COOKIE:-$(cat "$release_root/releases/COOKIE")}
+release_vm_args=${RELEASE_VM_ARGS:-$release_vsn_dir/vm.args}
+
+exec "$release_vsn_dir/elixir" \
+  --cookie "$release_cookie" \
+  --erl-config "$release_vsn_dir/build" \
+  --boot "$release_vsn_dir/preboot" \
+  --boot-var RELEASE_LIB "$release_root/lib" \
+  --vm-args "$release_vm_args" \
+  --eval "Castle.generate(~s($release_vsn));Castle.make_releases()"

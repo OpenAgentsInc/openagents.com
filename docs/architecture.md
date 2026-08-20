@@ -174,6 +174,12 @@ accounts, and a PostgreSQL instance that does not share a production failure
 domain. Production is out of scope until all hardening gates, the complete
 staging matrix, failure injection, and the 48-hour soak pass.
 
+`OpenAgents.RuntimeConfig` validates the complete behavior-changing settings
+boundary before migrations or traffic. The
+[runtime configuration contract](runtime-configuration.md) defines the safe
+feature profile, durable storage requirements, staging-gate admission, and
+content-free readiness report.
+
 ## Source control transition
 
 GitHub remains the repository's temporary canonical remote during staging

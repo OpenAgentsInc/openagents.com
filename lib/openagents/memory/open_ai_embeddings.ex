@@ -4,7 +4,7 @@ defmodule OpenAgents.Memory.OpenAIEmbeddings do
 
   @impl true
   def embed(text, config) do
-    with api_key when is_binary(api_key) <- System.get_env("OPENAI_API_KEY"),
+    with {:ok, api_key} <- OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key),
          {:ok, response} <-
            Req.post("https://api.openai.com/v1/embeddings",
              auth: {:bearer, api_key},
@@ -21,7 +21,7 @@ defmodule OpenAgents.Memory.OpenAIEmbeddings do
          embedding when is_list(embedding) <- first["embedding"] do
       {:ok, embedding}
     else
-      nil -> {:error, :embedding_provider_unconfigured}
+      {:error, :not_configured} -> {:error, :embedding_provider_unconfigured}
       _failure -> {:error, :embedding_provider_failed}
     end
   end

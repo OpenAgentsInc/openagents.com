@@ -50,7 +50,7 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_forge do
-    if Application.get_env(:openagents, :forge_enabled, false) do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:forge) do
       [OpenAgents.Forge.Supervisor]
     else
       []
@@ -58,7 +58,7 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_semantic_worker do
-    if Application.get_env(:openagents, :semantic_index, enabled: false)[:enabled] do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:semantic_memory) do
       [OpenAgents.Memory.SemanticWorker]
     else
       []
@@ -66,7 +66,7 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_turn_recovery do
-    if Application.get_env(:openagents, :turn_recovery_enabled, false) do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:turn_recovery) do
       [OpenAgents.TurnRecovery]
     else
       []
@@ -74,7 +74,7 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_work_recovery do
-    if Application.get_env(:openagents, :work, enabled: false)[:enabled] do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:work_workers) do
       [OpenAgents.WorkRecovery]
     else
       []
@@ -82,7 +82,7 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_voice_recovery do
-    if Application.get_env(:openagents, :voice, enabled: false)[:enabled] do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:voice_recovery) do
       [OpenAgents.VoiceRecovery]
     else
       []
@@ -90,8 +90,8 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_voice_retention do
-    if Application.get_env(:openagents, :voice, enabled: false)[:enabled] and
-         Application.get_env(:openagents, :voice_retention_enabled, false) do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:voice) and
+         OpenAgents.RuntimeConfig.feature_enabled?(:voice_retention) do
       [OpenAgents.Voice.Retention]
     else
       []
@@ -99,7 +99,7 @@ defmodule OpenAgents.RuntimeSupervisor do
   end
 
   defp maybe_ra_bootstrap do
-    if Application.get_env(:openagents, :ra_enabled, false) do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:ra) do
       [OpenAgents.Cluster.RaBootstrap]
     else
       []

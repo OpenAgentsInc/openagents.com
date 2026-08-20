@@ -1,5 +1,7 @@
 import Config
 
+config :openagents, :runtime_environment, :development
+
 # Configure your database
 config :openagents, OpenAgents.Repo,
   username: System.get_env("USER") || "christopherdavid",

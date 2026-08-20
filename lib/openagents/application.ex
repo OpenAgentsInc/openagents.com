@@ -7,6 +7,8 @@ defmodule OpenAgents.Application do
 
   @impl true
   def start(_type, _args) do
+    runtime_config = OpenAgents.RuntimeConfig.install!()
+
     # Releases migrate on boot (RELEASE-001): the schema must precede traffic.
     # Ecto.Migrator.with_repo takes the migration advisory lock, so concurrent
     # fleet nodes serialize safely and an already-migrated DB is a no-op.
@@ -22,8 +24,15 @@ defmodule OpenAgents.Application do
 
     # Build and install the tool catalog; this snapshot is passed to the
     # embedding warmer and the turn supervisor below.
-    tool_snapshot =
-      OpenAgents.Tools.Registry.install!(Application.fetch_env!(:openagents, :tools))
+    tool_modules =
+      if OpenAgents.RuntimeConfig.feature_enabled?(runtime_config, :tools) do
+        Application.fetch_env!(:openagents, :tools)
+      else
+        []
+      end
+
+    tool_snapshot = OpenAgents.Tools.Registry.install!(tool_modules)
+    :ok = OpenAgents.RuntimeConfig.verify_startup!(runtime_config, tool_snapshot)
 
     children = [
       OpenAgentsWeb.Telemetry,

@@ -33,7 +33,7 @@ defmodule OpenAgents.Cluster.RaBootstrap do
 
   @impl true
   def init(_opts) do
-    data_dir = Application.get_env(:openagents, :ra_data_dir, "/tmp/openagents_ra")
+    data_dir = Application.get_env(:openagents, :ra_data_dir, "/var/lib/openagents/ra")
     expected = Application.get_env(:openagents, :ra_expected_size, 3)
 
     Ra.start_in(data_dir)

@@ -43,9 +43,15 @@ defmodule OpenAgents.Voice.OpenAI.CallClient do
   defp validate_safety_identifier(_identifier), do: {:error, :invalid_safety_identifier}
 
   defp fetch_api_key(options) do
-    case Keyword.get(options, :api_key) || System.get_env("OPENAI_API_KEY") do
-      key when is_binary(key) and byte_size(key) > 0 -> {:ok, key}
-      _missing -> {:error, :missing_api_key}
+    case Keyword.fetch(options, :api_key) do
+      {:ok, key} when is_binary(key) and byte_size(key) > 0 ->
+        {:ok, key}
+
+      _not_supplied ->
+        case OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key) do
+          {:ok, key} -> {:ok, key}
+          {:error, :not_configured} -> {:error, :missing_api_key}
+        end
     end
   end
 

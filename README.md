@@ -9,6 +9,8 @@ The current architecture and trust boundaries are documented in
 [docs/architecture.md](docs/architecture.md). The staged hardening work is
 tracked in the
 [integration hardening plan](docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).
+The typed settings, safe feature profile, and redacted readiness command are in
+[docs/runtime-configuration.md](docs/runtime-configuration.md).
 
 ## Capability status
 

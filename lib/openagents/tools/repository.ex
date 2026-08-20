@@ -31,7 +31,7 @@ defmodule OpenAgents.Tools.Repository do
     Application.get_env(
       :openagents,
       :coding_jobs_dir,
-      Path.join(System.tmp_dir!(), "openagents-coding-jobs")
+      "/var/lib/openagents/coding-jobs"
     )
   end
 

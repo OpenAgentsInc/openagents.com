@@ -33,7 +33,7 @@ defmodule OpenAgents.GitHubOAuth do
           "code_challenge" => challenge,
           "code_challenge_method" => "S256",
           "redirect_uri" => config.redirect_uri,
-          "scope" => "read:user repo",
+          "scope" => oauth_scope(),
           "state" => state
         })
 
@@ -203,6 +203,12 @@ defmodule OpenAgents.GitHubOAuth do
       {"accept", "application/json"},
       {"user-agent", @user_agent}
     ]
+  end
+
+  defp oauth_scope do
+    :openagents
+    |> Application.fetch_env!(:github_oauth_scopes)
+    |> Enum.join(" ")
   end
 
   defp api_headers do

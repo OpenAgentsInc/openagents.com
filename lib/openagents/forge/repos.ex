@@ -13,7 +13,7 @@ defmodule OpenAgents.Forge.Repos do
   @doc "The forge data directory (bare repos + WAL cache + beam artifacts)."
   def data_dir do
     Application.get_env(:openagents, :forge_data_dir) ||
-      Path.join(System.tmp_dir!(), "openagents_forge_data")
+      "/var/lib/openagents/forge"
   end
 
   @doc "Repositories this forge serves. Bounded, config-owned."

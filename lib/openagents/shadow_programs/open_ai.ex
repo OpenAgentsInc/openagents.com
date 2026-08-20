@@ -47,9 +47,9 @@ defmodule OpenAgents.ShadowPrograms.OpenAI do
   end
 
   defp fetch_api_key do
-    case System.get_env("OPENAI_API_KEY") do
-      key when is_binary(key) and byte_size(key) > 0 -> {:ok, key}
-      _missing -> {:error, :missing_api_key}
+    case OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key) do
+      {:ok, key} -> {:ok, key}
+      {:error, :not_configured} -> {:error, :missing_api_key}
     end
   end
 

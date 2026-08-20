@@ -50,7 +50,7 @@ defmodule OpenAgents.Voice.Config do
   end
 
   @spec validate_runtime!(t(), (String.t() -> String.t() | nil)) :: :ok
-  def validate_runtime!(config, get_environment \\ &System.get_env/1)
+  def validate_runtime!(config, get_environment \\ &configured_secret/1)
 
   def validate_runtime!(%__MODULE__{enabled?: false}, _get_environment), do: :ok
 
@@ -129,6 +129,13 @@ defmodule OpenAgents.Voice.Config do
       config.reasoning_effort not in ~w(low medium high) -> {:error, "invalid reasoning effort"}
       config.maximum_session_seconds not in 1..3_300 -> {:error, "invalid session duration"}
       true -> :ok
+    end
+  end
+
+  defp configured_secret("OPENAI_API_KEY") do
+    case OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key) do
+      {:ok, value} -> value
+      {:error, :not_configured} -> nil
     end
   end
 

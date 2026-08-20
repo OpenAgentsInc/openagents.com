@@ -2,8 +2,8 @@ defmodule OpenAgents.Forge.WAL.Local do
   @moduledoc """
   Filesystem adapter for `OpenAgents.Forge.WAL` — the development and test backend.
 
-  Layout under the base directory (`Application.get_env(:openagents, :forge_wal_dir)`,
-  defaulting to `openagents_forge_wal` inside `System.tmp_dir!/0`):
+  Layout under the durable base directory
+  (`Application.get_env(:openagents, :forge_wal_dir)`).
 
       <base>/<repo>/index.json
       <base>/<repo>/entries/<key>
@@ -118,6 +118,6 @@ defmodule OpenAgents.Forge.WAL.Local do
 
   defp base_dir do
     Application.get_env(:openagents, :forge_wal_dir) ||
-      Path.join(System.tmp_dir!(), "openagents_forge_wal")
+      "/var/lib/openagents/forge-wal"
   end
 end

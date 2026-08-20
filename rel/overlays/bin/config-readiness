@@ -3,4 +3,4 @@ set -eu
 
 cd -P -- "$(dirname -- "$0")"
 ./prepare-config >/dev/null
-exec ./openagents eval OpenAgents.Release.migrate
+exec ./openagents eval OpenAgents.RuntimeConfig.print_readiness!

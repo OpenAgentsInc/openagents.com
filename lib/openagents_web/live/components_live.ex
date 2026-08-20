@@ -616,6 +616,22 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   # --- Layout ---------------------------------------------------------------
 
+  defp component_demo(%{item: %{slug: "sidebar-brand"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Two destinations, not one. The wordmark leaves for the application; the
+        section name returns to this section's index. The rule between them says
+        they are separate controls — without it, two links at the same weight read
+        as a single label.
+      </p>
+      <div class="max-w-xs" style="border: 1px solid var(--line); border-radius: 8px;">
+        <Layouts.sidebar_brand title="Components" path={~p"/components"} />
+      </div>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "sidebar-section"}} = assigns) do
     ~H"""
     <div class="space-y-3">

@@ -229,8 +229,10 @@
   width: 280px;
   height: 100%;
   overflow: hidden;
-  border-right: 1px solid var(--ink-raised);
-  background: var(--ink-surface);
+  /* Identical to .docs-sidebar. Two sidebars in one application that differ by
+     a surface rung and a border colour read as two applications. */
+  border-right: 1px solid var(--line);
+  background: var(--ink-void);
 }
 
 .sidebar-header {
@@ -238,8 +240,10 @@
   flex: none;
   align-items: center;
   gap: 10px;
+  /* Matches .docs-header, so the brand and the breadcrumb sit on one line
+     across the two surfaces. */
   min-height: 52px;
-  padding: 8px 8px 8px 16px;
+  padding: 8px 20px;
 }
 
 .brand-name {
@@ -254,7 +258,7 @@
   flex: none;
   flex-direction: column;
   gap: 1px;
-  padding-block: 6px;
+  padding-block: 2px;
 }
 
 .sidebar-nav[aria-label="OpenAgents tools"] {
@@ -289,18 +293,23 @@
 @media (hover: hover) {
   .sidebar-row:hover {
     background: var(--wash-hover);
-    /* One step up from rest, not all the way to primary. Jumping straight to
-       the brightest ink made every hover look like a selection. */
-    color: var(--text-body);
+    /* All the way to the brightest ink. A one-step lift to --text-body was
+       there but unreadable: the wash arrives at the same moment, so a small
+       text change reads as "the background moved" and nothing else. Hover and
+       the current row now share a text colour and are told apart by the
+       background -- selected carries a stronger, persistent wash. */
+    color: var(--text-primary);
   }
 }
 
 .sidebar-row:has(.sidebar-row__hit:active) {
-  background: var(--ink-raised);
+  background: var(--wash-active);
 }
 
 .sidebar-row[data-selected] {
-  background: var(--ink-raised);
+  /* A wash like hover, one step stronger. Using an opaque rung made the current
+     row a different surface floating on the sidebar instead of a state of it. */
+  background: var(--wash-selected);
   /* The place you are is the one row that stays bright without being hovered. */
   color: var(--text-primary);
 }
@@ -376,7 +385,10 @@
   min-height: 36px;
   margin-inline: 12px;
   padding-inline: 8px;
-  background: var(--ink-surface);
+  /* Sticky, so it needs an opaque fill for rows to scroll under -- but it must
+     be the SIDEBAR's fill. Left on --ink-surface it drew a lighter bar across
+     a darker sidebar, which read as a panel rather than a heading. */
+  background: var(--ink-void);
   color: var(--text-muted);
   font-size: 0.875rem;
   font-weight: 400;
@@ -457,7 +469,7 @@
 
 @media (hover: hover) {
   .docs-sidebar__link:hover {
-    background: var(--ink-raised);
+    background: var(--wash-hover);
     color: var(--text-primary);
   }
 }
@@ -623,7 +635,11 @@
      target should be the same shape as the glyph it holds. Width is pinned to
      the height so the box is square before the radius rounds it -- padding
      alone would make it an oval the moment the glyph changed size. */
-  .theme-toggle {
+  /* Selector carries the size attribute deliberately: `.btn[data-size="sm"]`
+     sets `padding: 8px 15px` at (0,2,0) and beats a bare `.theme-toggle`, so
+     the padding survived and pushed the glyph off centre inside a 32px box. */
+  .theme-toggle,
+  .theme-toggle[data-size="sm"] {
     width: 32px;
     min-width: 32px;
     height: 32px;

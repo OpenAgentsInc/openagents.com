@@ -1628,7 +1628,12 @@
    * and pins the menu open. Declare no `display` here so the user agent keeps
    * control of open and closed state. Position is app-shell layout. */
   .menu {
-    margin: 0;
+    /* A native popover is centred by the user agent's `margin: auto`. Setting
+       `margin: 0` defeated that and pinned every menu to the viewport's
+       top-left corner -- the account menu included, not just this demo. Keep
+       the UA's centring as the fallback and anchor to the trigger where the
+       browser can. */
+    margin: auto;
     padding: 0;
     overflow: hidden;
     border: 1px solid var(--line-strong);
@@ -1636,6 +1641,16 @@
     background: var(--ink-surface);
     box-shadow: var(--lift);
     color: var(--text-body);
+  }
+
+  /* Chrome makes a `popovertarget` invoker the popover's implicit anchor, so
+     the panel can sit under the control that opened it. Progressive: browsers
+     without this keep the centred fallback above. */
+  @supports (position-area: bottom) {
+    .menu {
+      position-area: bottom span-right;
+      margin: 6px 0 0;
+    }
   }
 
   .menu::backdrop {
@@ -2101,7 +2116,7 @@
 
   @media (hover: hover) {
     .sidebar-section__summary:hover {
-      color: var(--text-body);
+      color: var(--text-primary);
     }
   }
 
@@ -2355,5 +2370,110 @@
   .docs-prose th {
     color: var(--text-primary);
     font-weight: 600;
+  }
+}
+
+/* ── Sidebar brand ────────────────────────────────────────────────────────── */
+
+/* Wordmark, rule, section name. Two targets because they answer two questions:
+ * the wordmark leaves for the application, the section name returns to this
+ * section's index. The rule between them says they are separate controls --
+ * without it, adjacent links at the same weight read as one. */
+
+@layer components {
+  .sidebar-brand {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding-inline: 20px;
+  }
+
+  .sidebar-brand__mark {
+    flex: none;
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    transition: color 150ms var(--ease);
+  }
+
+  .sidebar-brand__divider {
+    width: 1px;
+    height: 16px;
+    flex: none;
+    background: var(--line-strong);
+  }
+
+  .sidebar-brand__title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-body);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 150ms var(--ease);
+  }
+
+  @media (hover: hover) {
+    .sidebar-brand__mark:hover,
+    .sidebar-brand__title:hover {
+      color: var(--text-primary);
+    }
+  }
+}
+
+/* ── Sidebar footer ───────────────────────────────────────────────────────── */
+
+/* Secondary destinations, so they are quieter than the nav above: a rule
+ * separates them, and hover moves colour only. Giving them the nav's background
+ * wash would make a footer link look as important as a section you are working
+ * in. */
+
+@layer components {
+  .sidebar-footer {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    margin-top: auto;
+    border-top: 1px solid var(--line);
+    padding: 20px;
+  }
+
+  .sidebar-footer__link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding-inline: 5px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    text-decoration: none;
+    transition: color 150ms var(--ease);
+  }
+
+  .sidebar-footer__link .icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    font-size: 16px;
+  }
+
+  @media (hover: hover) {
+    .sidebar-footer__link:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  .sidebar-footer__link:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 6px;
   }
 }

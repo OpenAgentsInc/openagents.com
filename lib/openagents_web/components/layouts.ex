@@ -136,6 +136,30 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
+  The brand lockup at the top of a documentation sidebar.
+
+  Two targets, because they answer two different questions. The mark returns to
+  the application, for a reader who arrived from a search result and wants the
+  product. The title returns to this section's own index, for a reader who is
+  already in the docs and wants the contents.
+
+  Collapsing them into one link would cost one of those, and giving the index
+  its own sidebar row would list a destination the reader is already looking at.
+  """
+  attr :title, :string, required: true
+  attr :path, :string, required: true, doc: "this section's index"
+
+  def sidebar_brand(assigns) do
+    ~H"""
+    <header class="sidebar-brand">
+      <.link navigate={~p"/"} class="sidebar-brand__mark">OpenAgents</.link>
+      <span class="sidebar-brand__divider" aria-hidden="true"></span>
+      <.link patch={@path} class="sidebar-brand__title">{@title}</.link>
+    </header>
+    """
+  end
+
+  @doc """
   A collapsible sidebar section.
 
   A native `<details>`, so it needs no JavaScript, is keyboard operable, and
@@ -379,45 +403,20 @@ defmodule OpenAgentsWeb.Layouts do
       </header>
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
-        <div class="sidebar-row">
-          <.link navigate={~p"/"} class="sidebar-row__hit" aria-label="Home"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="home" /></span>
-            <span class="sidebar-row__label">Home</span>
-          </span>
-        </div>
-
-        <div class="sidebar-row">
-          <.link navigate={~p"/chat"} class="sidebar-row__hit" aria-label="Chat"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="chat" /></span>
-            <span class="sidebar-row__label">Chat</span>
-          </span>
-        </div>
-
-        <div class="sidebar-row">
-          <.link
-            navigate={~p"/OpenAgentsInc/openagents.com/issues"}
-            class="sidebar-row__hit"
-            aria-label="Issues"
-          ></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="bug" /></span>
-            <span class="sidebar-row__label">Issues</span>
-          </span>
-        </div>
-
-        <div class="sidebar-row">
-          <.link
-            navigate={~p"/OpenAgentsInc/openagents.com/projects"}
-            class="sidebar-row__hit"
-            aria-label="Projects"
-          ></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="folder" /></span>
-            <span class="sidebar-row__label">Projects</span>
-          </span>
-        </div>
+        <Layouts.sidebar_link path={~p"/"} label="Home" icon="home" patchable={false} />
+        <Layouts.sidebar_link path={~p"/chat"} label="Chat" icon="chat" patchable={false} />
+        <Layouts.sidebar_link
+          path={~p"/OpenAgentsInc/openagents.com/issues"}
+          label="Issues"
+          icon="bug"
+          patchable={false}
+        />
+        <Layouts.sidebar_link
+          path={~p"/OpenAgentsInc/openagents.com/projects"}
+          label="Projects"
+          icon="folder"
+          patchable={false}
+        />
       </nav>
 
       <%!--
@@ -446,22 +445,14 @@ defmodule OpenAgentsWeb.Layouts do
       </div>
       --%>
 
-      <nav class="sidebar-nav" aria-label="OpenAgents tools">
-        <div class="sidebar-row">
-          <.link navigate={~p"/components"} class="sidebar-row__hit" aria-label="Components"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="widget" /></span>
-            <span class="sidebar-row__label">Components</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <.link navigate={~p"/docs"} class="sidebar-row__hit" aria-label="Documentation"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="book" /></span>
-            <span class="sidebar-row__label">Documentation</span>
-          </span>
-        </div>
-      </nav>
+      <footer class="sidebar-footer">
+        <.link navigate={~p"/components"} class="sidebar-footer__link">
+          <UI.icon name="widget" /> Components
+        </.link>
+        <.link navigate={~p"/docs"} class="sidebar-footer__link">
+          <UI.icon name="book" /> Documentation
+        </.link>
+      </footer>
     </aside>
     """
   end

@@ -190,6 +190,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       title: "Layout",
       items: [
         %{
+          slug: "sidebar-brand",
+          title: "Sidebar brand",
+          icon: "book",
+          source: "OpenAgentsWeb.Layouts.sidebar_brand/1",
+          summary: "Wordmark and section name as two separate destinations."
+        },
+        %{
           slug: "sidebar-section",
           title: "Sidebar section",
           icon: "chevron-down",

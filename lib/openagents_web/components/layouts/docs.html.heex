@@ -1,24 +1,8 @@
 <div class="docs-layout">
   <aside class="docs-sidebar">
-    <nav class="flex flex-col gap-1" aria-label="Docs back">
-      <div class="sidebar-row">
-        <.link navigate={~p"/"} class="sidebar-row__hit" aria-label="Back to app"></.link>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon"><.icon name="arrow-left" /></span>
-          <span class="sidebar-row__label">Back to app</span>
-        </span>
-      </div>
-    </nav>
+    <Layouts.sidebar_brand title="Docs" path={~p"/docs"} />
 
     <nav class="docs-sidebar__nav" aria-label="Documentation">
-      <Layouts.sidebar_link
-        path={~p"/docs"}
-        label="Overview"
-        icon="book"
-        selected={@active_page == :index}
-        patchable={true}
-      />
-
       <Layouts.sidebar_section
         :for={section <- OpenAgentsWeb.DocsCatalog.sections()}
         title={section.title}

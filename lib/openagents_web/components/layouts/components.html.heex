@@ -1,28 +1,9 @@
 <% patchable? = @active_component != :icons %>
 <div class="docs-layout">
   <aside class="docs-sidebar">
-    <nav class="flex flex-col gap-1" aria-label="Components back">
-      <div class="sidebar-row">
-        <.link navigate={~p"/"} class="sidebar-row__hit" aria-label="Back to app"></.link>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon"><.icon name="arrow-left" /></span>
-          <span class="sidebar-row__label">Back to app</span>
-        </span>
-      </div>
-    </nav>
+    <Layouts.sidebar_brand title="Components" path={~p"/components"} />
 
     <nav class="docs-sidebar__nav" aria-label="Component library">
-      <section class="docs-sidebar__section">
-        <h3 class="sidebar-section-label">Overview</h3>
-        <Layouts.sidebar_link
-          path={~p"/components"}
-          label="All components"
-          icon="book"
-          selected={@active_component == :index}
-          patchable={patchable?}
-        />
-      </section>
-
       <Layouts.sidebar_section
         :for={section <- OpenAgentsWeb.ComponentCatalog.sections()}
         title={section.title}

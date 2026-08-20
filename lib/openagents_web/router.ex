@@ -27,8 +27,16 @@ defmodule OpenAgentsWeb.Router do
     live_session :public,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/", HomeLive, :index
+    end
+
+    # `/components/icons` must stay ahead of `/components/:slug` so the literal
+    # route wins; the catalog's own slugs never include "icons".
+    live_session :components,
+      layout: {OpenAgentsWeb.Layouts, :components},
+      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/components", ComponentsLive, :index
       live "/components/icons", IconIndexLive, :index
+      live "/components/:slug", ComponentsLive, :show
     end
 
     live_session :docs,

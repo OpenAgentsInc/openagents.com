@@ -287,27 +287,6 @@
   min-height: 44px;
 }
 
-.docs-sidebar__search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-inline: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--color-base-300);
-  border-radius: 8px;
-  background: var(--color-base-100);
-}
-
-.docs-sidebar__search input {
-  background: transparent;
-  color: var(--color-base-content);
-  outline: none;
-}
-
-.docs-sidebar__search input::placeholder {
-  color: var(--color-neutral);
-}
-
 .docs-sidebar__nav {
   display: flex;
   flex: 1;

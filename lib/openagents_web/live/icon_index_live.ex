@@ -9,6 +9,8 @@ defmodule OpenAgentsWeb.IconIndexLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
+     |> assign(:page_title, "Icons")
+     |> assign(:active_component, :icons)
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:icons, OpenAgentsWeb.Icons.names())}
   end
@@ -16,20 +18,18 @@ defmodule OpenAgentsWeb.IconIndexLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} wide>
-      <div class="max-w-7xl mx-auto">
-        <h1 class="text-2xl font-bold mb-4">Icons ({length(@icons)} glyphs)</h1>
+    <div>
+      <h1 class="text-3xl font-semibold mb-4">Icons ({length(@icons)} glyphs)</h1>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
-          <%= for name <- @icons do %>
-            <div class="flex flex-col items-center gap-2 p-3 border border-base-300 rounded-lg">
-              <.icon name={name} class="size-8" />
-              <span class="text-xs text-center break-all text-base-content/70">{name}</span>
-            </div>
-          <% end %>
-        </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+        <%= for name <- @icons do %>
+          <div class="flex flex-col items-center gap-2 p-3 border border-base-300 rounded-lg">
+            <.icon name={name} class="size-8" />
+            <span class="text-xs text-center break-all text-base-content/70">{name}</span>
+          </div>
+        <% end %>
       </div>
-    </Layouts.app>
+    </div>
     """
   end
 end

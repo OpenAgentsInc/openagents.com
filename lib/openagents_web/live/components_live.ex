@@ -2,13 +2,16 @@ defmodule OpenAgentsWeb.ComponentsLive do
   @moduledoc """
   Public catalog of reusable HEEx components that ship in this codebase.
 
-  Renders every function component in `OpenAgentsWeb.CoreComponents` and
-  `OpenAgentsWeb.Layouts` (except `Layouts.app/1` and `flash_group/1`, which
-  wrap this page). Planned forge and issues components live in
-  `docs/component-library.md`.
+  `/components` is an index; each component gets its own page at
+  `/components/:slug`. The sidebar and the set of valid slugs both come from
+  `OpenAgentsWeb.ComponentCatalog`, so navigation and pages cannot drift.
+
+  Planned forge and issues components are listed in `docs/component-library.md`.
   """
 
   use OpenAgentsWeb, :live_view
+
+  alias OpenAgentsWeb.ComponentCatalog
 
   @sample_rows [
     %{id: 1, owner: "OpenAgentsInc", repo: "openagents.com", state: "open"},
@@ -36,10 +39,35 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Components")
      |> assign(:form, form)
      |> assign(:rows, @sample_rows)
      |> assign(:icons, @icons)}
+  end
+
+  @impl true
+  def handle_params(_params, _uri, %{assigns: %{live_action: :index}} = socket) do
+    {:noreply,
+     socket
+     |> assign(:page_title, "Components")
+     |> assign(:active_component, :index)
+     |> assign(:item, nil)}
+  end
+
+  def handle_params(%{"slug" => slug}, _uri, socket) do
+    case ComponentCatalog.fetch(slug) do
+      nil ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Unknown component: #{slug}")
+         |> push_navigate(to: ~p"/components")}
+
+      item ->
+        {:noreply,
+         socket
+         |> assign(:page_title, item.title)
+         |> assign(:active_component, item.slug)
+         |> assign(:item, item)}
+    end
   end
 
   @impl true
@@ -60,184 +88,177 @@ defmodule OpenAgentsWeb.ComponentsLive do
   end
 
   @impl true
-  def render(assigns) do
+  def render(%{live_action: :index} = assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} wide>
-      <div id="components-gallery" class="space-y-12">
-        <header class="space-y-3">
-          <.header>
-            Component library
-            <:subtitle>
-              Live examples of every reusable function component in this
-              repository. Planned GitHub-shaped components are listed in
-              docs/component-library.md.
-            </:subtitle>
-          </.header>
-          <p class="text-pretty text-base text-base-content/70 max-w-[68ch]">
-            These controls come from <code>OpenAgentsWeb.CoreComponents</code>
-            and <code>OpenAgentsWeb.Layouts</code>. DaisyUI classes style them.
-            New forge and issues components should land in a dedicated module
-            and appear on this page when they ship.
-          </p>
-        </header>
+    <div id="components-index" class="max-w-3xl">
+      <h1 class="text-3xl font-semibold mb-4">Component library</h1>
+      <p class="text-base-content/70 mb-8 text-pretty max-w-[68ch]">
+        Live examples of every reusable function component in this repository.
+        These controls come from <code>OpenAgentsWeb.CoreComponents</code>
+        and <code>OpenAgentsWeb.Layouts</code>, styled with DaisyUI. Planned
+        GitHub-shaped components are listed in <code>docs/component-library.md</code>.
+      </p>
 
-        <.catalog_section
-          id="section-button"
-          title="Button"
-          source="OpenAgentsWeb.CoreComponents.button/1"
-        >
-          <div class="flex flex-wrap items-center gap-3">
-            <.button id="demo-button-default">Default</.button>
-            <.button id="demo-button-primary" variant="primary">Primary</.button>
-            <.button id="demo-button-navigate" navigate={~p"/"}>Navigate home</.button>
-            <.button id="demo-button-disabled" disabled>Disabled</.button>
-          </div>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-input"
-          title="Input"
-          source="OpenAgentsWeb.CoreComponents.input/1"
-        >
-          <.form
-            for={@form}
-            id="component-form"
-            phx-change="validate"
-            phx-submit="save"
-            class="grid gap-4 sm:grid-cols-2"
+      <section :for={section <- ComponentCatalog.sections()} class="mb-10">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-3">
+          {section.title}
+        </h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <.link
+            :for={item <- section.items}
+            navigate={~p"/components/#{item.slug}"}
+            class="card bg-base-200 border border-base-300 p-4 hover:border-base-content/30"
           >
-            <div>
-              <.input field={@form[:title]} label="Title" />
-            </div>
-            <div>
-              <.input
-                field={@form[:state]}
-                type="select"
-                label="State"
-                options={[{"Open", "open"}, {"Closed", "closed"}]}
-              />
-            </div>
-            <div class="sm:col-span-2">
-              <.input field={@form[:body]} type="textarea" label="Body" />
-            </div>
-            <div>
-              <.input field={@form[:public]} type="checkbox" label="Public repository" />
-            </div>
-            <div class="flex items-end">
-              <.button type="submit" variant="primary">Save demo</.button>
-            </div>
-          </.form>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-header"
-          title="Header"
-          source="OpenAgentsWeb.CoreComponents.header/1"
-        >
-          <.header>
-            Repository issues
-            <:subtitle>Open and closed issues for this repository.</:subtitle>
-            <:actions>
-              <.button variant="primary">New issue</.button>
-            </:actions>
-          </.header>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-table"
-          title="Table"
-          source="OpenAgentsWeb.CoreComponents.table/1"
-        >
-          <.table id="demo-table" rows={@rows}>
-            <:col :let={row} label="Owner">{row.owner}</:col>
-            <:col :let={row} label="Repository">{row.repo}</:col>
-            <:col :let={row} label="State">{row.state}</:col>
-            <:action :let={row}>
-              <.link navigate={~p"/"} class="link link-hover">View {row.repo}</.link>
-            </:action>
-          </.table>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-list"
-          title="List"
-          source="OpenAgentsWeb.CoreComponents.list/1"
-        >
-          <.list>
-            <:item title="Flash">Toast alerts for info and error.</:item>
-            <:item title="Button">Primary and soft variants, plus navigation.</:item>
-            <:item title="Input">Text, select, textarea, and checkbox.</:item>
-          </.list>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-icon"
-          title="Icon"
-          source="OpenAgentsWeb.CoreComponents.icon/1"
-        >
-          <ul id="demo-icons" role="list" class="flex flex-wrap gap-4">
-            <li :for={name <- @icons} class="flex flex-col items-center gap-2 w-28">
-              <.icon name={name} class="size-6" />
-              <p class="text-center text-sm text-base-content/70">{name}</p>
-            </li>
-          </ul>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-flash"
-          title="Flash"
-          source="OpenAgentsWeb.CoreComponents.flash/1"
-        >
-          <p class="text-pretty text-base text-base-content/70 max-w-[68ch]">
-            Flash renders through <code>Layouts.flash_group/1</code> at the
-            corner of the page. Trigger a sample message:
-          </p>
-          <div class="flex flex-wrap gap-3">
-            <.button id="demo-flash-info" phx-click="flash-info">Show info flash</.button>
-            <.button id="demo-flash-error" phx-click="flash-error">Show error flash</.button>
-          </div>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-theme-toggle"
-          title="Theme toggle"
-          source="OpenAgentsWeb.Layouts.theme_toggle/1"
-        >
-          <p class="text-pretty text-base text-base-content/70 max-w-[68ch]">
-            System, light, and dark. The same control is in the site header.
-          </p>
-          <div id="demo-theme-toggle">
-            <Layouts.theme_toggle />
-          </div>
-        </.catalog_section>
-
-        <.catalog_section
-          id="section-repo-header"
-          title="Repo header"
-          source="OpenAgentsWeb.Components.RepoHeader.repo_header/1"
-        >
-        </.catalog_section>
-      </div>
-    </Layouts.app>
+            <h3 class="text-lg font-medium mb-1">{item.title}</h3>
+            <p class="text-sm text-base-content/70">{item.summary}</p>
+          </.link>
+        </div>
+      </section>
+    </div>
     """
   end
 
-  attr :id, :string, required: true
-  attr :title, :string, required: true
-  attr :source, :string, required: true
-  slot :inner_block, required: true
-
-  defp catalog_section(assigns) do
+  def render(assigns) do
     ~H"""
-    <section id={@id} class="space-y-4">
-      <div class="space-y-1">
-        <h2 class="text-xl font-semibold tracking-tight text-balance">{@title}</h2>
-        <p class="text-sm text-base-content/70"><code>{@source}</code></p>
-      </div>
+    <div id={"component-#{@item.slug}"} class="max-w-3xl space-y-6">
+      <header class="space-y-1">
+        <h1 class="text-3xl font-semibold">{@item.title}</h1>
+        <p class="text-sm text-base-content/70"><code>{@item.source}</code></p>
+        <p class="text-base text-base-content/70 text-pretty max-w-[68ch]">{@item.summary}</p>
+      </header>
+
       <div class="rounded-box border border-base-300 bg-base-100 p-6">
-        {render_slot(@inner_block)}
+        <.component_demo {assigns} />
       </div>
-    </section>
+    </div>
+    """
+  end
+
+  attr :item, :map, required: true
+  attr :form, :any, default: nil
+  attr :rows, :list, default: []
+  attr :icons, :list, default: []
+
+  defp component_demo(%{item: %{slug: "button"}} = assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-3">
+      <.button id="demo-button-default">Default</.button>
+      <.button id="demo-button-primary" variant="primary">Primary</.button>
+      <.button id="demo-button-navigate" navigate={~p"/"}>Navigate home</.button>
+      <.button id="demo-button-disabled" disabled>Disabled</.button>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "input"}} = assigns) do
+    ~H"""
+    <.form
+      for={@form}
+      id="component-form"
+      phx-change="validate"
+      phx-submit="save"
+      class="grid gap-4 sm:grid-cols-2"
+    >
+      <div>
+        <.input field={@form[:title]} label="Title" />
+      </div>
+      <div>
+        <.input
+          field={@form[:state]}
+          type="select"
+          label="State"
+          options={[{"Open", "open"}, {"Closed", "closed"}]}
+        />
+      </div>
+      <div class="sm:col-span-2">
+        <.input field={@form[:body]} type="textarea" label="Body" />
+      </div>
+      <div>
+        <.input field={@form[:public]} type="checkbox" label="Public repository" />
+      </div>
+      <div class="flex items-end">
+        <.button type="submit" variant="primary">Save demo</.button>
+      </div>
+    </.form>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "header"}} = assigns) do
+    ~H"""
+    <.header>
+      Repository issues
+      <:subtitle>Open and closed issues for this repository.</:subtitle>
+      <:actions>
+        <.button variant="primary">New issue</.button>
+      </:actions>
+    </.header>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "table"}} = assigns) do
+    ~H"""
+    <.table id="demo-table" rows={@rows}>
+      <:col :let={row} label="Owner">{row.owner}</:col>
+      <:col :let={row} label="Repository">{row.repo}</:col>
+      <:col :let={row} label="State">{row.state}</:col>
+      <:action :let={row}>
+        <.link navigate={~p"/"} class="link link-hover">View {row.repo}</.link>
+      </:action>
+    </.table>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "list"}} = assigns) do
+    ~H"""
+    <.list>
+      <:item title="Flash">Toast alerts for info and error.</:item>
+      <:item title="Button">Primary and soft variants, plus navigation.</:item>
+      <:item title="Input">Text, select, textarea, and checkbox.</:item>
+    </.list>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "icon"}} = assigns) do
+    ~H"""
+    <ul id="demo-icons" role="list" class="flex flex-wrap gap-4">
+      <li :for={name <- @icons} class="flex flex-col items-center gap-2 w-28">
+        <.icon name={name} class="size-6" />
+        <p class="text-center text-sm text-base-content/70">{name}</p>
+      </li>
+    </ul>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "flash"}} = assigns) do
+    ~H"""
+    <p class="text-pretty text-base text-base-content/70 max-w-[68ch] mb-4">
+      Flash renders through <code>Layouts.flash_group/1</code>
+      at the corner of the page. Trigger a sample message:
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <.button id="demo-flash-info" phx-click="flash-info">Show info flash</.button>
+      <.button id="demo-flash-error" phx-click="flash-error">Show error flash</.button>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "theme-toggle"}} = assigns) do
+    ~H"""
+    <div id="demo-theme-toggle">
+      <Layouts.theme_toggle />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "repo-header"}} = assigns) do
+    ~H"""
+    <OpenAgentsWeb.Components.RepoHeader.repo_header
+      owner="OpenAgentsInc"
+      repo="openagents.com"
+      active="issues"
+      open_count={12}
+      closed_count={148}
+    />
     """
   end
 end

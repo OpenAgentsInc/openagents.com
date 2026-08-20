@@ -15,7 +15,7 @@ defmodule OpenAgentsWeb.HomeLive do
         <div class="hero-content text-center">
           <div class="max-w-4xl space-y-6">
             <h1 class="text-5xl md:text-7xl font-bold tracking-tight">
-              The agent forge
+              The Agent Forge
             </h1>
             <p class="text-xl md:text-2xl text-base-content/70">
               Purpose-built for planning and shipping issues. Designed for the agent era.

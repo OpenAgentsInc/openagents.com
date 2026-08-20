@@ -3,6 +3,6 @@ defmodule OpenAgentsWeb.PageControllerTest do
 
   test "GET /", %{conn: conn} do
     conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "The agent forge"
+    assert html_response(conn, 200) =~ "The Agent Forge"
   end
 end

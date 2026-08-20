@@ -51,6 +51,57 @@ defmodule OpenAgents.RuntimeConfigTest do
     assert {:error, %{setting: :staging_gate}} = RuntimeConfig.validate(settings)
   end
 
+  test "Gate 12 requires exact packaged source and image identities" do
+    settings = staging_settings() |> Map.put(:staging_gate, 12)
+
+    assert {:error, %{setting: :build_revision}} = RuntimeConfig.validate(settings)
+
+    settings = Map.put(settings, :build_revision, String.duplicate("a", 40))
+    assert {:error, %{setting: :image_digest}} = RuntimeConfig.validate(settings)
+
+    assert {:ok, _config} =
+             settings
+             |> Map.put(:image_digest, "sha256:" <> String.duplicate("b", 64))
+             |> RuntimeConfig.validate()
+  end
+
+  test "fleet deployment requires the isolated GCP rolling provider" do
+    settings =
+      staging_settings()
+      |> Map.merge(%{
+        staging_gate: 13,
+        build_revision: String.duplicate("a", 40),
+        image_digest: "sha256:" <> String.duplicate("b", 64),
+        forge_enabled: true,
+        forge_deploy_lane_enabled: true,
+        forge_boot_converge_enabled: true,
+        forge_expected_fleet_size: 3,
+        forge_operator_token: "staging-operator-token",
+        forge_rolling_provider: OpenAgents.Forge.RollingProvider.Gcp,
+        forge_wal_dir: "/var/lib/openagents/forge-wal",
+        ra_enabled: true,
+        dns_cluster_query: "openagents-fleet.staging.internal",
+        distribution: [
+          enabled: true,
+          node_configured: true,
+          cookie_configured: true,
+          port_min: 9_100,
+          port_max: 9_115
+        ]
+      })
+      |> Map.put(OpenAgents.Forge.RollingProvider.Gcp, rolling_gcp_config())
+
+    assert {:ok, _config} = RuntimeConfig.validate(settings)
+
+    assert {:error, %{setting: :forge_rolling_provider}} =
+             settings
+             |> Map.put(
+               OpenAgents.Forge.RollingProvider.Gcp,
+               Keyword.put(rolling_gcp_config(), :project_id, "production-project")
+             )
+             |> RuntimeConfig.validate()
+  end
+
   test "enabled OpenAI features require the centralized provider secret" do
     settings =
       staging_settings()
@@ -224,6 +275,21 @@ defmodule OpenAgents.RuntimeConfigTest do
     |> put_nested(:graph_memory, :enabled, false)
     |> put_nested(:memory_portability, :enabled, false)
     |> put_nested(:shadow_programs, :enabled, false)
+  end
+
+  defp rolling_gcp_config do
+    [
+      project_id: "staging-project",
+      production_project_id: "production-project",
+      zone: "us-central1-a",
+      instances: %{
+        "openagents@fleet-1.staging.internal" => "openagents-fleet-1",
+        "openagents@fleet-2.staging.internal" => "openagents-fleet-2",
+        "openagents@fleet-3.staging.internal" => "openagents-fleet-3"
+      },
+      image_repository: "us-central1-docker.pkg.dev/staging-project/openagents/app",
+      deployer_node: :"openagents-deployer@openagents-deployer.staging.internal"
+    ]
   end
 
   defp update_oauth(settings, key, value) do

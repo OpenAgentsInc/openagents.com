@@ -9,6 +9,7 @@ defmodule OpenAgents.RuntimeConfig do
   """
 
   alias OpenAgents.Forge.HotLoader
+  alias OpenAgents.Forge.RollingProvider.Gcp
   alias OpenAgents.Tools.Snapshot
 
   @persistent_key {__MODULE__, :current}
@@ -67,6 +68,7 @@ defmodule OpenAgents.RuntimeConfig do
          :ok <- validate_github(settings, environment),
          {:ok, features} <- validate_features(settings, environment, staging_gate),
          :ok <- validate_providers(settings, features),
+         :ok <- validate_release_identity(settings, environment, staging_gate),
          {:ok, allowlist, examples} <- validate_forge(settings, environment, features),
          :ok <- validate_cluster(settings, environment, features) do
       {:ok,
@@ -145,6 +147,26 @@ defmodule OpenAgents.RuntimeConfig do
   end
 
   defp validate_production_lock(_settings, _environment), do: :ok
+
+  defp validate_release_identity(settings, environment, staging_gate) do
+    required? = environment == :production or (environment == :staging and staging_gate >= 12)
+    revision = Map.get(settings, :build_revision)
+    image_digest = Map.get(settings, :image_digest)
+
+    cond do
+      not required? ->
+        :ok
+
+      not exact_sha?(revision) ->
+        error(:build_revision, "must identify the exact packaged Git commit")
+
+      not image_digest?(image_digest) ->
+        error(:image_digest, "must identify the immutable packaged image")
+
+      true ->
+        :ok
+    end
+  end
 
   defp verify_compiled_settings!(%__MODULE__{environment: environment} = config)
        when environment in [:staging, :production] do
@@ -268,6 +290,16 @@ defmodule OpenAgents.RuntimeConfig do
   end
 
   defp decryption_keyring?(_keys, _active_key_id, _environment), do: false
+
+  defp exact_sha?(value) when is_binary(value),
+    do: Regex.match?(~r/\A[0-9a-f]{40}\z/, value)
+
+  defp exact_sha?(_value), do: false
+
+  defp image_digest?(value) when is_binary(value),
+    do: Regex.match?(~r/\Asha256:[0-9a-f]{64}\z/, value)
+
+  defp image_digest?(_value), do: false
 
   defp validate_features(settings, environment, staging_gate) do
     with {:ok, tools?} <- required_boolean(settings, :tools_enabled),
@@ -455,6 +487,8 @@ defmodule OpenAgents.RuntimeConfig do
     boot_retry_max_ms = Map.get(settings, :forge_boot_retry_max_ms)
     operator_token = Map.get(settings, :forge_operator_token)
     mirror_urls = Map.get(settings, :forge_mirror_urls)
+    rolling_provider = Map.get(settings, :forge_rolling_provider)
+    rolling_provider_config = Map.get(settings, Gcp, [])
     durable_required? = environment in [:staging, :production] and features.forge
 
     with :ok <-
@@ -534,12 +568,25 @@ defmodule OpenAgents.RuntimeConfig do
              :forge_expected_fleet_size,
              "must include a canary and peer for deployment"
            ),
+         :ok <- validate_rolling_provider(rolling_provider, rolling_provider_config, features),
          :ok <- validate_forge_secrets(operator_token, durable_required? or features.forge_deploy),
          :ok <- validate_forge_paths(settings, durable_required? or features.forge_deploy),
          :ok <- validate_wal(settings, durable_required? or features.forge_deploy) do
       {:ok, allowlist, examples}
     end
   end
+
+  defp validate_rolling_provider(_provider, _config, %{forge_deploy: false}), do: :ok
+
+  defp validate_rolling_provider(Gcp, config, %{forge_deploy: true}) do
+    case Gcp.validate_config(config) do
+      :ok -> :ok
+      {:error, _reason} -> error(:forge_rolling_provider, "must use an isolated staging project")
+    end
+  end
+
+  defp validate_rolling_provider(_provider, _config, %{forge_deploy: true}),
+    do: error(:forge_rolling_provider, "must be the admitted infrastructure provider")
 
   defp validate_forge_secrets(operator_token, true) do
     if present?(operator_token),

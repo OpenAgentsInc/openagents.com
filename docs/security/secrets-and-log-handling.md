@@ -12,6 +12,8 @@ more than one role on a node:
 | Runtime identity | Purpose | May read |
 | --- | --- | --- |
 | `openagents-staging-web` | Phoenix release and forge Git endpoint | Web, provider, OAuth, vault, recording, forge verification, database, and cluster secrets listed below |
+| `openagents-staging-fleet` | Three-node distributed application lane | The application secrets required by the same candidate plus the cluster cookie; no Compute mutation permission |
+| `openagents-staging-deployer` | Minimal private rolling-replacement controller | Cluster cookie only; Compute mutation comes from its bounded workload identity |
 | `openagents-staging-migrator` | Release migration and token rewrap job | Database URL, active GitHub vault key, prior GitHub vault keyring |
 | `openagents-staging-builder` | Isolated BEAM build sidecar | Forge operator token only; use an askpass helper, never a URL or argv value |
 | `openagents-staging-operator` | Human-triggered staging operations | No application secrets by default; short-lived platform access to invoke jobs and read redacted logs |
@@ -28,15 +30,15 @@ use distinct names and values and remains locked.
 
 | Environment input | Staging secret name | Readers | Rotation trigger |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | `openagents-staging-database-url` | web, migrator | Database credential rotation or suspected log/process exposure |
-| `SECRET_KEY_BASE` | `openagents-staging-secret-key-base` | web | Suspected exposure; rotation invalidates browser sessions |
-| `GITHUB_CLIENT_SECRET` | `openagents-staging-github-client-secret` | web | OAuth app rotation or suspected exposure |
-| `GITHUB_TOKEN_ENCRYPTION_KEY` | `openagents-staging-github-vault-active` | web, migrator | Scheduled vault rotation or suspected exposure |
-| `GITHUB_TOKEN_DECRYPTION_KEYS_JSON` | `openagents-staging-github-vault-previous` | web, migrator, only during rewrap | Delete after every row uses the active key ID |
-| `OPENAI_API_KEY` | `openagents-staging-openai-api-key` | web | Provider rotation or suspected prompt/log exposure |
-| `VOICE_RECORDING_ENCRYPTION_KEY` | `openagents-staging-voice-recording-key` | web when recording is admitted | Scheduled recording-key procedure or suspected exposure |
-| `OPENAGENTS_FORGE_OPERATOR_TOKEN` | `openagents-staging-forge-operator-token` | web, builder | Scheduled rotation, builder replacement, or suspected URL/argv/log exposure |
-| `RELEASE_COOKIE` | `openagents-staging-release-cookie` | web fleet nodes | Fleet-wide coordinated rotation or suspected exposure |
+| `DATABASE_URL` | `openagents-staging-database-url` | web, fleet, migrator | Database credential rotation or suspected log/process exposure |
+| `SECRET_KEY_BASE` | `openagents-staging-secret-key-base` | web, fleet | Suspected exposure; rotation invalidates browser sessions |
+| `GITHUB_CLIENT_SECRET` | `openagents-staging-github-client-secret` | web, fleet | OAuth app rotation |
+| `GITHUB_TOKEN_ENCRYPTION_KEY` | `openagents-staging-github-vault-active` | web, fleet, migrator | Scheduled vault rotation or suspected exposure |
+| `GITHUB_TOKEN_DECRYPTION_KEYS_JSON` | `openagents-staging-github-vault-previous` | web, fleet, migrator, only during rewrap | Delete after every row uses the active key ID |
+| `OPENAI_API_KEY` | `openagents-staging-openai-api-key` | web, fleet | Provider rotation or suspected prompt/log exposure |
+| `VOICE_RECORDING_ENCRYPTION_KEY` | `openagents-staging-voice-recording-key` | web and fleet when recording is admitted | Scheduled recording-key procedure or suspected exposure |
+| `OPENAGENTS_FORGE_OPERATOR_TOKEN` | `openagents-staging-forge-operator-token` | web, fleet, builder | Scheduled rotation, builder replacement, or suspected URL/argv/log exposure |
+| `RELEASE_COOKIE` | `openagents-staging-release-cookie` | web, fleet, deployer | Fleet-wide coordinated rotation or suspected exposure |
 
 `GITHUB_CLIENT_ID` and `GITHUB_TOKEN_ENCRYPTION_KEY_ID` are identifiers, not
 secrets. `DB_PASSWORD` is not used by the admitted staging profile because it

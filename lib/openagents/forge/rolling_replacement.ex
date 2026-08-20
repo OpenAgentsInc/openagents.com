@@ -308,7 +308,9 @@ defmodule OpenAgents.Forge.RollingReplacement do
   defp context(request) do
     %{
       sha: request.sha,
+      previous_sha: request.previous_sha,
       image_digest: request.image_digest,
+      previous_image_digest: request.previous_image_digest,
       expected_nodes: request.expected_nodes
     }
   end

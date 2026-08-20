@@ -35,6 +35,14 @@ openagents-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Terraform working data, plans, variable values, and state are local only.
+**/.terraform/
+*.tfplan
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!.terraform.lock.hcl
+
 # Local environment variables
 /.env
-

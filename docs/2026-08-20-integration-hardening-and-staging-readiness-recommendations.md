@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–5 and 7–10 complete, Gate 6 application controls locally verified
+Status: In progress; Gates 0–11 complete locally, Gate 12 cloud isolation proof pending
 
 ## Outcome
 
@@ -1208,6 +1208,45 @@ as evidence for an OTP relup.
 distributed deployment mechanism without touching production state or sharing
 production's database capacity and failure domain.
 
+### Gate 12 implementation status
+
+Implemented locally on 2026-08-20:
+
+- Added a Terraform root for a dedicated staging project. It defines a private
+  VPC and DNS zone, a separate private-IP Cloud SQL instance, three stable fleet
+  nodes without public IP addresses, durable node-local state disks, a private
+  deployer controller, Cloud NAT, staging-only buckets, Secret Manager
+  placeholders, Artifact Registry, and split workload identities.
+- Added Terraform safety tests that require a project marked as staging, refuse
+  the production project, preserve Cloud SQL deletion protection, and prove
+  that the fleet and deployer have no public access configuration.
+- Added Terraform formatting, initialization, validation, and safety tests as a
+  required stage of every exact-SHA release gate receipt.
+- Added exact-SHA plan and apply wrappers. The wrappers require a clean
+  worktree, a protected remote state bucket, distinct staging and production
+  project IDs, valid Application Default Credentials, and an explicit apply
+  confirmation.
+- Added a content-free isolation validator. It compares project numbers,
+  verifies the private database, its separate application role, and the fleet,
+  checks staging-only storage, secrets, identities, DNS, and networking, and
+  rejects production service accounts in staging IAM. The database password is
+  accepted only as a Terraform ephemeral write-only value and never enters the
+  plan or state.
+- Added exact packaged source and image identity, node-local admission fencing,
+  a bounded rolling node probe, and a Google Cloud rolling provider. The
+  provider uses private Erlang distribution for drain and health checks. A
+  minimal private deployer BEAM node performs exact instance metadata updates
+  and resets under the only identity that holds those permissions; it does not
+  start the application, join Ra, open HTTP, or connect to PostgreSQL.
+
+The local infrastructure definition and mocked safety tests pass. The cloud
+apply, isolation receipt, and one-command disposable-run cleanup proof remain
+open; cloud work is blocked until the operator refreshes the expired Google
+Cloud CLI and Application Default Credentials. No staging or production cloud
+resource changed during this implementation step. See the [isolated staging
+infrastructure](../infra/staging/README.md) for the exact bootstrap, plan,
+apply, and validation procedure.
+
 ## Gate 13: Deploy to staging reproducibly
 
 Use this sequence for every staging candidate:
@@ -1516,7 +1555,7 @@ each handoff.
 - [x] Fleet deployment is transactional and rolls back every affected node.
 - [x] Boot convergence controls readiness.
 - [ ] Relup and rolling replacement pass their staging drills.
-- [ ] Owned local gates produce exact-SHA receipts.
+- [x] Owned local gates produce exact-SHA receipts.
 - [ ] Web and distributed staging are isolated from production.
 - [ ] Staging has a separate database instance and failure domain.
 - [ ] The migration lineage is mapped and rehearsed for every nonempty target.

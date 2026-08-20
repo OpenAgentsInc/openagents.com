@@ -24,6 +24,7 @@ defmodule OpenAgents.Forge.GateReceipt do
     interrupted_install
     rolling_replacement
     contracts
+    staging_infra
     release_smoke
   )
 

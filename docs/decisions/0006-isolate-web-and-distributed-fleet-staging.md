@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Accepted; implementation pending
+Status: Accepted; reproducible infrastructure implemented; cloud apply pending
 
 ## Context
 

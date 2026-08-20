@@ -34,6 +34,8 @@ config :openagents,
   runtime_environment: :development,
   staging_gate: 0,
   production_deploy_enabled: false,
+  build_revision: "image",
+  image_digest: nil,
   migrate_on_boot: false,
   secure_cookies: false,
   https_aliases: [],
@@ -209,6 +211,7 @@ config :openagents,
   forge_wal_dir: nil,
   forge_wal_bucket: nil,
   forge_gcs_token_provider: nil,
+  forge_rolling_provider: nil,
   # Hot-load allowlist: MODULE names, not repo paths. An entry ending in `.`
   # is a prefix; any other entry is an exact module name (see
   # `OpenAgents.Forge.HotLoader.allowlisted?/2`). The narrow list was never

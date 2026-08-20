@@ -100,6 +100,15 @@ Before pushing a release candidate, provision a disposable database and run
 [the release deployment fallback runbook](docs/operations/release-deployment-fallbacks.md).
 This repository deliberately has no hosted CI configuration.
 
+Validate the isolated staging infrastructure without changing cloud state:
+
+```sh
+ops/staging/terraform.sh validate
+```
+
+Read the [isolated staging infrastructure runbook](infra/staging/README.md)
+before you bootstrap, plan, or apply any staging resource.
+
 ## Contributing and source control
 
 Read `AGENTS.md` before changing the application. GitHub is temporarily the

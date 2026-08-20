@@ -9,7 +9,9 @@ defmodule OpenAgents.Forge.RollingProvider do
 
   @type context :: %{
           required(:sha) => binary(),
+          required(:previous_sha) => binary(),
           required(:image_digest) => binary(),
+          required(:previous_image_digest) => binary(),
           required(:expected_nodes) => [node()]
         }
 

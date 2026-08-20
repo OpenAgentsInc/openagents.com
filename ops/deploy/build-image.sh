@@ -24,6 +24,7 @@ trap cleanup EXIT INT TERM
 "$repo_root/ops/ci/gate.sh" --verify
 
 docker build \
+  --build-arg "OPENAGENTS_BUILD_REVISION=$git_sha" \
   --iidfile "$iid_file" \
   --label "org.opencontainers.image.revision=$git_sha" \
   --tag "$tag" \
@@ -39,6 +40,19 @@ case "$image_digest" in
     exit 1
     ;;
 esac
+
+embedded_revision=$(
+  docker run --rm \
+    --entrypoint /bin/sh \
+    "$image_digest" \
+    -c 'release_version=$(awk '\''{print $2}'\'' /app/releases/start_erl.data); /app/erts-*/bin/erl -boot_var RELEASE_LIB /app/lib -boot "/app/releases/$release_version/start_clean" -noshell -pa /app/lib/openagents-*/ebin -eval "io:put_chars('\''Elixir.OpenAgents.BuildInfo'\'':revision()), halt()."' \
+    | tail -n 1
+)
+
+if [ "$embedded_revision" != "$git_sha" ]; then
+  echo "packaged BuildInfo revision does not match the exact Git SHA" >&2
+  exit 1
+fi
 
 mkdir -p "$image_root"
 umask 077

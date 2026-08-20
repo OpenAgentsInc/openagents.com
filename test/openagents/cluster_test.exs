@@ -10,10 +10,23 @@ defmodule OpenAgents.ClusterTest do
     assert report["schema"] == "openagents.cluster_health.v1"
     assert report["node"] == to_string(Node.self())
     assert report["revision"] == OpenAgents.BuildInfo.revision()
+    assert report["image_digest"] == OpenAgents.BuildInfo.image_digest()
+    assert report["admission_ready"] == true
     assert report["version"] == to_string(Application.spec(:openagents, :vsn) || "unknown")
     assert report["live"] == true
     assert report["ready"] == true
     assert is_integer(report["uptime_ms"])
+  end
+
+  test "admission fences local readiness" do
+    on_exit(&OpenAgents.Cluster.Admission.restore/0)
+
+    assert :ok = OpenAgents.Cluster.Admission.remove()
+    refute Cluster.local_report()["ready"]
+    refute Cluster.local_report()["admission_ready"]
+
+    assert :ok = OpenAgents.Cluster.Admission.restore()
+    assert Cluster.local_report()["admission_ready"]
   end
 
   test "quorum and snapshot in single-node mode" do

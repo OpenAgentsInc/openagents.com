@@ -219,6 +219,28 @@ if config_env() == :prod do
       _invalid -> raise "environment variable OPENAGENTS_FORGE_BUILD_EXECUTOR is not admitted"
     end
 
+  forge_rolling_provider =
+    case optional_text.("OPENAGENTS_FORGE_ROLLING_PROVIDER") do
+      nil -> nil
+      "gcp" -> OpenAgents.Forge.RollingProvider.Gcp
+      _invalid -> raise "environment variable OPENAGENTS_FORGE_ROLLING_PROVIDER is not admitted"
+    end
+
+  rolling_instances =
+    case optional_text.("OPENAGENTS_GCP_ROLLING_INSTANCES_JSON") do
+      nil ->
+        %{}
+
+      encoded ->
+        case Jason.decode(encoded) do
+          {:ok, instances} when is_map(instances) ->
+            instances
+
+          _invalid ->
+            raise "environment variable OPENAGENTS_GCP_ROLLING_INSTANCES_JSON must be a JSON object"
+        end
+    end
+
   distribution_enabled = System.get_env("RELEASE_DISTRIBUTION") in ["name", "longnames"]
   release_node = optional_text.("RELEASE_NODE")
   release_cookie = optional_text.("RELEASE_COOKIE")
@@ -239,6 +261,8 @@ if config_env() == :prod do
     runtime_environment: runtime_environment,
     staging_gate: staging_gate,
     production_deploy_enabled: production_deploy_enabled,
+    build_revision: OpenAgents.BuildInfo.revision(),
+    image_digest: optional_text.("OPENAGENTS_IMAGE_DIGEST"),
     secure_cookies: secure_cookies,
     https_aliases: https_aliases,
     migrate_on_boot: migrate_on_boot,
@@ -270,6 +294,7 @@ if config_env() == :prod do
     forge_enabled: forge_enabled,
     forge_deploy_lane_enabled: forge_deploy_enabled,
     forge_boot_converge_enabled: boot_convergence_enabled,
+    forge_rolling_provider: forge_rolling_provider,
     forge_repos: forge_repos,
     forge_repo_owners: Map.new(forge_repos, &{&1, forge_owner}),
     forge_public_visibility: Map.new(forge_repos, &{&1, :l3}),
@@ -301,6 +326,16 @@ if config_env() == :prod do
     horde_enabled: horde_enabled,
     dns_cluster_query: optional_text.("DNS_CLUSTER_QUERY"),
     distribution: distribution
+
+  config :openagents, OpenAgents.Forge.RollingProvider.Gcp,
+    project_id: optional_text.("OPENAGENTS_GCP_ROLLING_PROJECT_ID"),
+    production_project_id: optional_text.("OPENAGENTS_PRODUCTION_PROJECT_ID"),
+    zone: optional_text.("OPENAGENTS_GCP_ROLLING_ZONE"),
+    instances: rolling_instances,
+    image_repository: optional_text.("OPENAGENTS_GCP_IMAGE_REPOSITORY"),
+    deployer_node: :"openagents-deployer@openagents-deployer.staging.internal",
+    rpc_timeout_ms: parse_integer.("OPENAGENTS_GCP_ROLLING_RPC_TIMEOUT_MS", 1_000..120_000),
+    compute_timeout_ms: parse_integer.("OPENAGENTS_GCP_COMPUTE_TIMEOUT_MS", 30_000..600_000)
 
   config :openagents, OpenAgents.Repo, repo_config
 

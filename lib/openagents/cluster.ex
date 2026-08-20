@@ -66,17 +66,20 @@ defmodule OpenAgents.Cluster do
     boot = OpenAgents.Forge.BootConverge.state()
     boot_ready? = OpenAgents.Forge.BootConverge.ready?()
     deployment = OpenAgents.Forge.DeploymentNode.health()
+    admission_ready? = OpenAgents.Cluster.Admission.ready?()
 
     %{
       "schema" => "openagents.cluster_health.v1",
       "node" => to_string(Node.self()),
       "version" => to_string(Application.spec(:openagents, :vsn) || "unknown"),
       "revision" => deployment["revision"] || boot["sha"] || OpenAgents.BuildInfo.revision(),
+      "image_digest" => OpenAgents.BuildInfo.image_digest(),
       "boot_converged" => boot_ready?,
       "deployment_ready" => deployment["participant_ready"],
+      "admission_ready" => admission_ready?,
       "uptime_ms" => uptime_ms(),
       "live" => true,
-      "ready" => boot_ready? and deployment["ready"] == true
+      "ready" => boot_ready? and deployment["ready"] == true and admission_ready?
     }
   end
 

@@ -1,0 +1,190 @@
+#!/bin/bash
+set -euo pipefail
+
+exec >>/var/log/openagents-startup.log 2>&1
+
+metadata() {
+  curl --fail --silent --show-error \
+    --header 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/$1"
+}
+
+metadata_attribute() {
+  metadata "instance/attributes/$1" 2>/dev/null || true
+}
+
+state_device=/dev/disk/by-id/google-openagents-state
+state_root=/var/lib/openagents
+
+if ! blkid "$state_device" >/dev/null 2>&1; then
+  mkfs.ext4 -F "$state_device"
+fi
+
+mkdir -p "$state_root"
+mountpoint -q "$state_root" || mount "$state_device" "$state_root"
+mkdir -p \
+  "$state_root/artifacts" \
+  "$state_root/coding-jobs" \
+  "$state_root/forge" \
+  "$state_root/forge-wal" \
+  "$state_root/ra" \
+  "$state_root/workspace/build" \
+  "$state_root/workspace/build-queue"
+
+image=$(metadata_attribute openagents-image)
+image_digest=$(metadata_attribute openagents-image-digest)
+builder_image=$(metadata_attribute openagents-builder-image)
+builder_digest=$(metadata_attribute openagents-builder-digest)
+source_sha=$(metadata_attribute openagents-sha)
+runtime_secret=$(metadata_attribute openagents-runtime-secret)
+builder_secret=$(metadata_attribute openagents-builder-secret)
+instance_name=$(metadata instance/name)
+
+if [ -z "$image" ] || [ -z "$image_digest" ] || [ -z "$source_sha" ]; then
+  echo "No staging candidate is assigned; leaving the node fenced."
+  exit 0
+fi
+
+application_image_prefix="${region}-docker.pkg.dev/${project_id}/openagents-staging/openagents@"
+builder_image_prefix="${region}-docker.pkg.dev/${project_id}/openagents-staging/openagents-builder@"
+
+case "$image" in
+  "$application_image_prefix"sha256:????????????????????????????????????????????????????????????????) ;;
+  *) echo "Assigned application image is not digest-addressed" >&2; exit 1 ;;
+esac
+
+case "$source_sha" in
+  ????????????????????????????????????????) ;;
+  *) echo "Assigned source revision is malformed" >&2; exit 1 ;;
+esac
+
+case "$source_sha" in
+  *[!0-9a-f]*) echo "Assigned source revision is malformed" >&2; exit 1 ;;
+esac
+
+case "$image_digest" in
+  sha256:????????????????????????????????????????????????????????????????) ;;
+  *) echo "Assigned application digest is malformed" >&2; exit 1 ;;
+esac
+
+image_digest_hex=$${image_digest#sha256:}
+case "$image_digest_hex" in
+  *[!0-9a-f]*) echo "Assigned application digest is malformed" >&2; exit 1 ;;
+esac
+
+case "$image" in
+  *"@$image_digest") ;;
+  *) echo "Assigned application image and digest disagree" >&2; exit 1 ;;
+esac
+
+access_token=$(metadata instance/service-accounts/default/token | jq -r '.access_token')
+
+fetch_secret() {
+  secret_name=$1
+  destination=$2
+
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer $access_token" \
+    "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/$secret_name/versions/latest:access" \
+    | jq -r '.payload.data' \
+    | tr '_-' '/+' \
+    | base64 -d >"$destination"
+
+  chmod 0600 "$destination"
+}
+
+append_secret() {
+  environment_name=$1
+  secret_name=$2
+  destination=$3
+  value=$(
+    curl --fail --silent --show-error \
+      --header "Authorization: Bearer $access_token" \
+      "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/$secret_name/versions/latest:access" \
+      | jq -r '.payload.data' \
+      | tr '_-' '/+' \
+      | base64 -d
+  )
+
+  if [ -z "$value" ] || [ "$(printf %s "$value" | wc -l)" -ne 0 ]; then
+    echo "Runtime secrets must be nonempty single-line values" >&2
+    exit 1
+  fi
+
+  printf '%s=%s\n' "$environment_name" "$value" >>"$destination"
+}
+
+mkdir -p /run/openagents
+fetch_secret "$runtime_secret" /run/openagents/runtime.env
+
+if grep -Eq '^(DATABASE_URL|SECRET_KEY_BASE|GITHUB_CLIENT_SECRET|GITHUB_TOKEN_ENCRYPTION_KEY|GITHUB_TOKEN_DECRYPTION_KEYS_JSON|OPENAI_API_KEY|VOICE_RECORDING_ENCRYPTION_KEY|OPENAGENTS_FORGE_OPERATOR_TOKEN|RELEASE_COOKIE)=' /run/openagents/runtime.env; then
+  echo "Fleet configuration must not duplicate named secrets" >&2
+  exit 1
+fi
+
+append_secret DATABASE_URL openagents-staging-database-url /run/openagents/runtime.env
+append_secret SECRET_KEY_BASE openagents-staging-secret-key-base /run/openagents/runtime.env
+append_secret GITHUB_CLIENT_SECRET openagents-staging-github-client-secret /run/openagents/runtime.env
+append_secret GITHUB_TOKEN_ENCRYPTION_KEY openagents-staging-github-vault-active /run/openagents/runtime.env
+append_secret GITHUB_TOKEN_DECRYPTION_KEYS_JSON openagents-staging-github-vault-previous /run/openagents/runtime.env
+append_secret OPENAI_API_KEY openagents-staging-openai-api-key /run/openagents/runtime.env
+append_secret VOICE_RECORDING_ENCRYPTION_KEY openagents-staging-voice-recording-key /run/openagents/runtime.env
+append_secret OPENAGENTS_FORGE_OPERATOR_TOKEN openagents-staging-forge-operator-token /run/openagents/runtime.env
+append_secret RELEASE_COOKIE openagents-staging-release-cookie /run/openagents/runtime.env
+
+cat >>/run/openagents/runtime.env <<EOF
+DNS_CLUSTER_QUERY=openagents-fleet.staging.internal
+OPENAGENTS_IMAGE_DIGEST=$image_digest
+RELEASE_DISTRIBUTION=name
+RELEASE_NODE=openagents@$instance_name.staging.internal
+EOF
+
+docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
+docker pull "$image"
+docker rm --force openagents 2>/dev/null || true
+docker run --detach \
+  --name openagents \
+  --network host \
+  --restart always \
+  --env-file /run/openagents/runtime.env \
+  --volume "$state_root:$state_root" \
+  "$image"
+
+if [ -n "$builder_image" ] || [ -n "$builder_digest" ]; then
+  case "$builder_image" in
+    "$builder_image_prefix"sha256:????????????????????????????????????????????????????????????????) ;;
+    *) echo "Assigned builder image is not digest-addressed" >&2; exit 1 ;;
+  esac
+
+
+  case "$builder_digest" in
+    sha256:????????????????????????????????????????????????????????????????) ;;
+    *) echo "Assigned builder digest is malformed" >&2; exit 1 ;;
+  esac
+
+  builder_digest_hex=$${builder_digest#sha256:}
+  case "$builder_digest_hex" in
+    *[!0-9a-f]*) echo "Assigned builder digest is malformed" >&2; exit 1 ;;
+  esac
+
+  case "$builder_image" in
+    *"@$builder_digest") ;;
+    *) echo "Assigned builder image and digest disagree" >&2; exit 1 ;;
+  esac
+
+  fetch_secret "$builder_secret" /run/openagents/builder.env
+  if grep -Eq '^OPENAGENTS_FORGE_OPERATOR_TOKEN=' /run/openagents/builder.env; then
+    echo "Builder configuration must not duplicate its named secret" >&2
+    exit 1
+  fi
+  append_secret OPENAGENTS_FORGE_OPERATOR_TOKEN openagents-staging-forge-operator-token /run/openagents/builder.env
+  docker pull "$builder_image"
+  docker rm --force openagents-builder 2>/dev/null || true
+  docker run --detach \
+    --name openagents-builder \
+    --network host \
+    --restart always \
+    --env-file /run/openagents/builder.env \
+    --volume "$state_root/workspace:$state_root/workspace" \
+    "$builder_image"
+fi

@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euo pipefail
+
+exec >>/var/log/openagents-deployer-startup.log 2>&1
+
+metadata() {
+  curl --fail --silent --show-error \
+    --header 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/$1"
+}
+
+metadata_attribute() {
+  metadata "instance/attributes/$1" 2>/dev/null || true
+}
+
+image=$(metadata_attribute openagents-controller-image)
+source_sha=$(metadata_attribute openagents-controller-sha)
+cookie_secret=$(metadata_attribute openagents-cookie-secret)
+
+if [ -z "$image" ] || [ -z "$source_sha" ]; then
+  echo "No staging controller candidate is assigned."
+  exit 0
+fi
+
+controller_image_prefix="${region}-docker.pkg.dev/${project_id}/openagents-staging/openagents@"
+
+case "$image" in
+  "$controller_image_prefix"sha256:????????????????????????????????????????????????????????????????) ;;
+  *) echo "Assigned controller image is not digest-addressed" >&2; exit 1 ;;
+esac
+
+case "$source_sha" in
+  ????????????????????????????????????????) ;;
+  *) echo "Assigned controller source revision is malformed" >&2; exit 1 ;;
+esac
+
+case "$source_sha" in
+  *[!0-9a-f]*) echo "Assigned controller source revision is malformed" >&2; exit 1 ;;
+esac
+
+access_token=$(metadata instance/service-accounts/default/token | jq -r '.access_token')
+mkdir -p /run/openagents
+
+release_cookie=$(
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer $access_token" \
+    "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/$cookie_secret/versions/latest:access" \
+    | jq -r '.payload.data' \
+    | tr '_-' '/+' \
+    | base64 -d
+)
+
+if [ -z "$release_cookie" ] || [ "$(printf %s "$release_cookie" | wc -l)" -ne 0 ]; then
+  echo "Release cookie must be a nonempty single-line value" >&2
+  exit 1
+fi
+
+printf 'RELEASE_COOKIE=%s\n' "$release_cookie" >/run/openagents/deployer.env
+unset release_cookie
+
+chmod 0600 /run/openagents/deployer.env
+docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
+docker pull "$image"
+docker rm --force openagents-deployer 2>/dev/null || true
+docker run --detach \
+  --name openagents-deployer \
+  --network host \
+  --restart always \
+  --env-file /run/openagents/deployer.env \
+  --env "OPENAGENTS_CONTROLLER_SHA=$source_sha" \
+  --entrypoint /bin/sh \
+  "$image" -c '
+    set -eu
+    : "$${RELEASE_COOKIE:?RELEASE_COOKIE is required}"
+    release_version=$(awk '\''{print $2}'\'' /app/releases/start_erl.data)
+    cookie_root=/tmp/openagents-deployer-home
+    mkdir -p "$cookie_root"
+    umask 077
+    printf %s "$RELEASE_COOKIE" >"$cookie_root/.erlang.cookie"
+    unset RELEASE_COOKIE
+    export HOME="$cookie_root"
+    exec /app/erts-*/bin/erl \
+      -boot_var RELEASE_LIB /app/lib \
+      -boot "/app/releases/$release_version/start_clean" \
+      -name openagents-deployer@openagents-deployer.staging.internal \
+      -kernel inet_dist_listen_min 9100 inet_dist_listen_max 9115 \
+      -noshell \
+      -pa /app/lib/openagents-*/ebin \
+      -eval "'\''Elixir.OpenAgents.Forge.RollingProvider.Gcp.Deployer'\'':start()."
+  '

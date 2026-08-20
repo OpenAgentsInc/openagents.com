@@ -35,7 +35,23 @@ defmodule OpenAgentsWeb.HealthControllerTest do
              "status" => "unavailable",
              "reason" => "runtime_not_ready",
              "boot_converged" => false,
-             "deployment_ready" => true
+             "deployment_ready" => true,
+             "admission_ready" => true
+           }
+  end
+
+  test "refuses readiness while a rolling provider drains the node", %{conn: conn} do
+    on_exit(&OpenAgents.Cluster.Admission.restore/0)
+    :ok = OpenAgents.Cluster.Admission.remove()
+
+    conn = get(conn, ~p"/healthz")
+
+    assert json_response(conn, 503) == %{
+             "status" => "unavailable",
+             "reason" => "runtime_not_ready",
+             "boot_converged" => true,
+             "deployment_ready" => true,
+             "admission_ready" => false
            }
   end
 end

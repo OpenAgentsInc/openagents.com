@@ -54,6 +54,7 @@ URLs, receipts, or checked-in environment files.
 | Release | `OPENAGENTS_ENVIRONMENT` | `staging`; `production` remains separately locked |
 | Release | `OPENAGENTS_STAGING_GATE` | Integer `0` through `16`; feature admission is tied to it |
 | Release | `OPENAGENTS_PRODUCTION_DEPLOY_ENABLED` | `false` until a later production decision |
+| Release | `OPENAGENTS_IMAGE_DIGEST` | Exact `sha256:` image digest at staging Gate 12 and later; empty before that gate |
 | Endpoint | `PHX_HOST` | Exactly `stage.openagents.com` in staging |
 | Endpoint | `OPENAGENTS_ALLOWED_ORIGINS` | Comma-separated exact HTTPS origins including `https://stage.openagents.com` |
 | Endpoint | `OPENAGENTS_HTTPS_ALIASES` | Comma-separated hostnames; empty means no aliases |
@@ -140,6 +141,14 @@ discovery, node identity, cookie, and bounded distribution ports.
 | `OPENAGENTS_FORGE_DEPLOY_TOKEN_TTL_MS` | `120000`; admitted range 30 seconds to 30 minutes and at least eight deployment timeouts |
 | `OPENAGENTS_FORGE_BOOT_RETRY_MIN_MS` | `1000`; admitted range 100 milliseconds to one minute |
 | `OPENAGENTS_FORGE_BOOT_RETRY_MAX_MS` | `30000`; admitted range one to 300 seconds and not less than the minimum |
+| `OPENAGENTS_FORGE_ROLLING_PROVIDER` | `gcp` when fleet deployment is enabled; empty while disabled |
+| `OPENAGENTS_GCP_ROLLING_PROJECT_ID` | Isolated staging project; must differ from `OPENAGENTS_PRODUCTION_PROJECT_ID` |
+| `OPENAGENTS_PRODUCTION_PROJECT_ID` | Production project used only as a fail-closed comparison value |
+| `OPENAGENTS_GCP_ROLLING_ZONE` | Zone that contains the three stable staging instances |
+| `OPENAGENTS_GCP_ROLLING_INSTANCES_JSON` | Exact JSON map from three BEAM node names to three staging instance names |
+| `OPENAGENTS_GCP_IMAGE_REPOSITORY` | Staging Artifact Registry repository and image path without a tag or digest |
+| `OPENAGENTS_GCP_ROLLING_RPC_TIMEOUT_MS` | Bounded private node-probe timeout from one to 120 seconds |
+| `OPENAGENTS_GCP_COMPUTE_TIMEOUT_MS` | Bounded private deployer call timeout from 30 seconds to 10 minutes |
 | `OPENAGENTS_CODING_JOBS_DIR` | Absolute durable path outside `/tmp` when work or computers are enabled |
 | `OPENAGENTS_RA_DATA_DIR` | Absolute durable path outside `/tmp` when Ra is enabled |
 | `OPENAGENTS_RA_EXPECTED_SIZE` | At least `3` when Ra is enabled |

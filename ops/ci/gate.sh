@@ -4,7 +4,7 @@ set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 receipt_root="$repo_root/.git/openagents/release-gate-receipts"
-required_stages='compile production_compile precommit cluster javascript direct_transaction relup version_chain interrupted_install rolling_replacement contracts release_smoke'
+required_stages='compile production_compile precommit cluster javascript direct_transaction relup version_chain interrupted_install rolling_replacement contracts staging_infra release_smoke'
 mode=${1:-run}
 
 if [ ! -d "$repo_root/.git" ]; then
@@ -132,6 +132,7 @@ run_stage interrupted_install env \
 run_stage rolling_replacement env MIX_ENV=test mix test --warnings-as-errors \
   test/openagents/forge/rolling_replacement_test.exs
 run_stage contracts ops/ci/contracts.sh
+run_stage staging_infra ops/ci/staging-infra.sh
 run_stage release_smoke ops/ci/release-smoke.sh
 
 if [ "$(git rev-parse --verify HEAD)" != "$git_sha" ]; then
@@ -173,6 +174,7 @@ cat >"$receipt_temp" <<EOF
     "interrupted_install": {"status": "passed", "duration_seconds": $interrupted_install_duration_seconds},
     "rolling_replacement": {"status": "passed", "duration_seconds": $rolling_replacement_duration_seconds},
     "contracts": {"status": "passed", "duration_seconds": $contracts_duration_seconds},
+    "staging_infra": {"status": "passed", "duration_seconds": $staging_infra_duration_seconds},
     "release_smoke": {"status": "passed", "duration_seconds": $release_smoke_duration_seconds}
   }
 }

@@ -13,7 +13,8 @@ defmodule OpenAgentsWeb.HealthController do
           status: "unavailable",
           reason: "runtime_not_ready",
           boot_converged: report["boot_converged"],
-          deployment_ready: report["deployment_ready"]
+          deployment_ready: report["deployment_ready"],
+          admission_ready: report["admission_ready"]
         })
 
       {{:error, _reason}, _report} ->

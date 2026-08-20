@@ -21,6 +21,40 @@ defmodule OpenAgentsWeb do
     do:
       ~w(assets fonts images favicon.ico favicon-32x32.png favicon-16x16.png apple-touch-icon.png robots.txt)
 
+  @doc """
+  Prefixes for static files that are served under a digested name.
+
+  `Plug.Static`'s `:only` matches a whole path segment, and digesting rewrites
+  the segment: `favicon-32x32.png` is requested as
+  `favicon-32x32-<hash>.png`, which matches nothing in `static_paths/0` and is
+  refused. Every file listed there that sits at the root -- rather than inside
+  `assets`, `fonts` or `images`, whose directory name is the segment being
+  matched -- needs a prefix here or it 404s in any environment that digests.
+
+  It only widens what may be served to names that begin this way; a file still
+  has to exist in `priv/static` to be sent.
+  """
+  def static_prefixes, do: ~w(favicon apple-touch-icon robots)
+
+  @doc """
+  `Plug.Static` options for this application's endpoint.
+
+  Assembled here rather than written inline in the endpoint so a test can hold
+  the real options against a real `Plug.Static` and check that a digested file
+  is actually served.
+  """
+  def static_options(overrides \\ []) do
+    Keyword.merge(
+      [
+        at: "/",
+        from: :openagents,
+        only: static_paths(),
+        only_matching: static_prefixes()
+      ],
+      overrides
+    )
+  end
+
   def router do
     quote do
       use Phoenix.Router, helpers: false

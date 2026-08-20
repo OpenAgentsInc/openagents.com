@@ -1,0 +1,135 @@
+{
+  "schema": "openagents.staging-regression-matrix.v1",
+  "revision": 1,
+  "groups": [
+    {
+      "id": "public_browser",
+      "title": "Public and browser surfaces",
+      "cases": [
+        {"id": "public-001", "title": "Bounded health, status, API status, and favicon responses", "execution": "automated"},
+        {"id": "public-002", "title": "Anonymous public pages and configured public Forge pages render", "execution": "hybrid"},
+        {"id": "public-003", "title": "Hidden, private, operator, and unconfigured Forge surfaces do not disclose existence", "execution": "hybrid"},
+        {"id": "public-004", "title": "LiveView reconnects after a transient network interruption", "execution": "manual"},
+        {"id": "public-005", "title": "CSP, cookies, origins, images, and microphone policies match the architecture", "execution": "hybrid"},
+        {"id": "public-006", "title": "Critical flows pass responsive, keyboard, reduced-motion, and screen-reader checks", "execution": "manual"}
+      ]
+    },
+    {
+      "id": "authentication",
+      "title": "Authentication and account state",
+      "cases": [
+        {"id": "auth-001", "title": "GitHub OAuth state, PKCE, expiry, replay, callback errors, and banned users behave correctly", "execution": "hybrid"},
+        {"id": "auth-002", "title": "The retained staging browser session remains recoverable", "execution": "manual"},
+        {"id": "auth-003", "title": "Session renewal, logout, and concurrent-browser continuity behave correctly", "execution": "manual"},
+        {"id": "auth-004", "title": "GitHub token retention or disposal matches the declared contract", "execution": "hybrid"},
+        {"id": "auth-005", "title": "Account export, reset, and deletion affect only the authenticated owner", "execution": "hybrid"}
+      ]
+    },
+    {
+      "id": "chat_markdown",
+      "title": "Typed chat and Markdown",
+      "cases": [
+        {"id": "chat-001", "title": "A first conversation creates one greeting and one canonical conversation", "execution": "hybrid"},
+        {"id": "chat-002", "title": "Typed messages stream, persist, reload, paginate, cancel, fail, and recover", "execution": "hybrid"},
+        {"id": "chat-003", "title": "The staging reset removes messages and memory and restores one greeting", "execution": "hybrid"},
+        {"id": "chat-004", "title": "Markdown supports admitted structures and refuses unsafe or oversized input", "execution": "hybrid"},
+        {"id": "chat-005", "title": "Tool activity remains bounded and content-free", "execution": "hybrid"},
+        {"id": "chat-006", "title": "Rate, size, continuation, and tool budgets fail honestly", "execution": "hybrid"}
+      ]
+    },
+    {
+      "id": "memory_data_rights",
+      "title": "Memory and data rights",
+      "cases": [
+        {"id": "memory-001", "title": "Remember, list, search, correct, forget, export, reset, and delete flows pass", "execution": "hybrid"},
+        {"id": "memory-002", "title": "Activity chips and memory panels match PostgreSQL after reload", "execution": "hybrid"},
+        {"id": "memory-003", "title": "Cross-account and cross-conversation reads fail", "execution": "hybrid"},
+        {"id": "memory-004", "title": "Snapshot fences exclude writes made after capture", "execution": "hybrid"},
+        {"id": "memory-005", "title": "Semantic failure returns the documented lexical fallback", "execution": "hybrid"},
+        {"id": "memory-006", "title": "Direct database truth resolves ambiguous UI or cache behavior", "execution": "manual"}
+      ]
+    },
+    {
+      "id": "voice_recording",
+      "title": "Voice and recording",
+      "cases": [
+        {"id": "voice-001", "title": "Voice controls drive a clean call lifecycle", "execution": "hybrid"},
+        {"id": "voice-002", "title": "The fake-media harness observes listening, speaking, interruption, and clean end", "execution": "automated"},
+        {"id": "voice-003", "title": "Voice creation and final deletion return the expected statuses", "execution": "automated"},
+        {"id": "voice-004", "title": "Typed input during voice persists without ending or competing with the call", "execution": "hybrid"},
+        {"id": "voice-005", "title": "The next spoken response can use injected typed content", "execution": "manual"},
+        {"id": "voice-006", "title": "Voice tool calls complete within their budgets", "execution": "hybrid"},
+        {"id": "voice-007", "title": "Reloaded chat shows durable voice transcript and interruption markers", "execution": "manual"},
+        {"id": "voice-008", "title": "Recording disclosure appears before microphone access", "execution": "hybrid"},
+        {"id": "voice-009", "title": "Recording chunks and completion carry the correct generation", "execution": "automated"},
+        {"id": "voice-010", "title": "Only an operator can play an assembled recording", "execution": "hybrid"},
+        {"id": "voice-011", "title": "Recording layout, encryption, truncation, retention, export, and deletion match the invariant", "execution": "hybrid"},
+        {"id": "voice-012", "title": "Recorder failure leaves voice and typed chat usable", "execution": "automated"}
+      ]
+    },
+    {
+      "id": "leaderboard_admin",
+      "title": "Leaderboard and administrative surfaces",
+      "cases": [
+        {"id": "admin-001", "title": "Anonymous leaderboard rows expose only published fields", "execution": "hybrid"},
+        {"id": "admin-002", "title": "Typed and voice usage refresh the leaderboard without per-viewer database queries", "execution": "hybrid"},
+        {"id": "admin-003", "title": "Operator allowlisting uses immutable GitHub IDs", "execution": "hybrid"},
+        {"id": "admin-004", "title": "Unauthorized admin routes match the documented unauthenticated path", "execution": "hybrid"},
+        {"id": "admin-005", "title": "Promotion accepts only a pushed commit and writes an immutable operator receipt", "execution": "hybrid"},
+        {"id": "admin-006", "title": "Administrative pages expose no private product or credential content", "execution": "manual"}
+      ]
+    },
+    {
+      "id": "issues_projects",
+      "title": "Issues and Projects",
+      "cases": [
+        {"id": "tracker-001", "title": "Public reads and authenticated writes follow route policy", "execution": "hybrid"},
+        {"id": "tracker-002", "title": "Tracker endpoints return documented statuses and shapes", "execution": "hybrid"},
+        {"id": "tracker-003", "title": "Tracker LiveViews cover empty, populated, validation, and interaction states", "execution": "hybrid"},
+        {"id": "tracker-004", "title": "Repository boundaries prevent cross-repository issue effects", "execution": "hybrid"},
+        {"id": "tracker-005", "title": "Issue and milestone numbers can repeat across repositories", "execution": "hybrid"},
+        {"id": "tracker-006", "title": "Pagination, filters, malformed input, missing rows, size limits, and rate limits behave consistently", "execution": "hybrid"}
+      ]
+    },
+    {
+      "id": "machines_work",
+      "title": "Machines and delegated work",
+      "cases": [
+        {"id": "machine-001", "title": "Pairing, one-time claim, approval, inventory, state, and revoke work", "execution": "hybrid"},
+        {"id": "machine-002", "title": "Machine token replay fails after claim and revoke", "execution": "automated"},
+        {"id": "machine-003", "title": "A harmless real coding-agent job reports live and terminal state in chat", "execution": "manual"},
+        {"id": "machine-004", "title": "Cancellation and worker restart preserve committed evidence without duplicate execution", "execution": "hybrid"},
+        {"id": "machine-005", "title": "Cleanup removes the ephemeral controller home and disposable project", "execution": "manual"}
+      ]
+    },
+    {
+      "id": "forge_deployment",
+      "title": "Forge and deployment",
+      "cases": [
+        {"id": "forge-001", "title": "Clone, fetch, and push work against the staging Forge", "execution": "automated"},
+        {"id": "forge-002", "title": "WAL and mirror receipts match pushed refs", "execution": "hybrid"},
+        {"id": "forge-003", "title": "An allowlisted change passes build, canary, fleet transaction, and live receipt", "execution": "automated"},
+        {"id": "forge-004", "title": "An off-allowlist module refuses the complete direct-load candidate", "execution": "automated"},
+        {"id": "forge-005", "title": "Invalid artifact identities and shapes fail before loading", "execution": "automated"},
+        {"id": "forge-006", "title": "Remote timeout and load failure restore every affected node", "execution": "automated"},
+        {"id": "forge-007", "title": "A cold replacement node converges before readiness", "execution": "automated"},
+        {"id": "forge-008", "title": "Stateful relup preserves PID and state through upgrade, downgrade, and re-upgrade", "execution": "automated"},
+        {"id": "forge-009", "title": "Interrupted relup returns to the prior permanent release and permits retry", "execution": "automated"},
+        {"id": "forge-010", "title": "Structural rolling replacement drains only one node at a time", "execution": "automated"},
+        {"id": "forge-011", "title": "Failed rolling replacement stops before another node drains", "execution": "automated"}
+      ]
+    },
+    {
+      "id": "logs_truth",
+      "title": "Logs and operational truth",
+      "cases": [
+        {"id": "logs-001", "title": "Log queries bind to the exact revision and test window", "execution": "automated"},
+        {"id": "logs-002", "title": "Severity errors and application error text are both inspected", "execution": "hybrid"},
+        {"id": "logs-003", "title": "Deploy-overlap connection noise is separated from regressions", "execution": "manual"},
+        {"id": "logs-004", "title": "Failures correlate through bounded request and receipt IDs", "execution": "manual"},
+        {"id": "logs-005", "title": "Direct database truth distinguishes projection and persistence failures", "execution": "manual"},
+        {"id": "logs-006", "title": "Logs contain no secrets or private product content", "execution": "hybrid"}
+      ]
+    }
+  ]
+}

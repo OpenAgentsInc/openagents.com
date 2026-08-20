@@ -36,7 +36,10 @@ staging-only secret versions during Gate 13.
 After this boundary exists, use the
 [immutable candidate runbook](../../docs/operations/staging-candidate-artifacts.md)
 to publish the exact application image, builder image, release archive, SBOM,
-and candidate manifest for Gate 13.
+and candidate manifest for Gate 13. Use the
+[staging regression runbook](../../docs/operations/staging-regression.md) only
+after the candidate and selected migration path are proven on this isolated
+target.
 
 ## Prerequisites
 

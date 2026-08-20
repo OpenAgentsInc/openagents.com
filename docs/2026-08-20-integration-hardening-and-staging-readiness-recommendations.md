@@ -2,7 +2,8 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–11 complete locally, Gate 12 cloud and live cleanup proof pending
+Status: In progress; Gates 0–11 complete locally, Gate 12 cloud proof pending,
+Gate 13 live deployment pending, and the Gate 14 harness complete locally
 
 ## Outcome
 
@@ -1493,6 +1494,40 @@ erase the first failure; record both attempts and explain the result.
 every failed first attempt has a documented cause and successful corrective
 verification.
 
+### Gate 14 implementation status
+
+Implemented locally on 2026-08-20:
+
+- Added a versioned matrix with 69 uniquely identified cases across all 10
+  Gate 14 groups. Every case declares whether its execution is automated,
+  hybrid, or manual.
+- Added a private report generator that binds the complete result set to one
+  candidate Git SHA, application and builder manifest digest, release, SBOM,
+  and exact-SHA local gate receipt.
+- Added a bounded public staging smoke runner for health, status, favicon,
+  public pages, CSP nonce binding, and the microphone permissions policy. Its
+  receipt retains only status codes, content types, byte counts, policy
+  booleans, and hashes—not response bodies or header values.
+- Added a fail-closed evidence scanner, append-only attempt recorder, report
+  validator, and atomic state finalizer. Failed attempts remain in the report
+  after a successful retry. Evidence must remain inside the report directory,
+  match its checksum, use owner-only permissions, and pass the private-content
+  scan.
+- Added contract tests and included shell syntax plus the harness suite in the
+  owned contracts stage. The local dry run proves all 69 cases are present,
+  unsafe evidence is refused without echoing its value, and a draft cannot pass
+  regression validation.
+- Added the [staging regression runbook](operations/staging-regression.md) and
+  [evidence report contract](operations/staging-report-template.md), including
+  persistent-session handling, revision binding, fake-media voice checks,
+  exact-window operational truth, retries, finalization, and manifest-scoped
+  cleanup.
+
+The harness dry run and focused tests pass without a network request. Gate 14
+itself remains open until Gate 12 isolation and Gate 13 deployment complete and
+all applicable cases pass live on one candidate. No staging or production
+resource changed while implementing the harness.
+
 ## Gate 15: Run failure injection and soak staging
 
 After functional regression passes, test the system under controlled failure.
@@ -1624,6 +1659,8 @@ each handoff.
 - [x] Boot convergence controls readiness.
 - [ ] Relup and rolling replacement pass their staging drills.
 - [x] Owned local gates produce exact-SHA receipts.
+- [x] The versioned staging matrix, private evidence report, scanner, recorder,
+      validator, and network-free harness dry run exist.
 - [ ] Web and distributed staging are isolated from production.
 - [ ] Staging has a separate database instance and failure domain.
 - [ ] The migration lineage is mapped and rehearsed for every nonempty target.

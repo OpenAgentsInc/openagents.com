@@ -421,6 +421,20 @@
   line-height: 1.25rem;
 }
 
+/* A sticky element sticks to the scrollport's edge, and the nav has block
+   padding, so rows scrolling past stayed visible in the few pixels above the
+   heading -- they appeared to bleed through it. This carries the heading's own
+   fill up over that band. Inline it reaches past the heading's margins as
+   well, so a row cannot show beside it either. */
+.sidebar-section-label::before {
+  content: "";
+  position: absolute;
+  inset-inline: -12px;
+  bottom: 100%;
+  height: 12px;
+  background: inherit;
+}
+
 /* Docs layout */
 
 .docs-layout {

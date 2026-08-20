@@ -184,7 +184,9 @@ defmodule OpenAgentsWeb.Layouts do
   def sidebar_brand(assigns) do
     ~H"""
     <header class="sidebar-brand">
-      <.link navigate={~p"/"} class="sidebar-brand__mark">OpenAgents</.link>
+      <.link navigate={~p"/"} class="sidebar-brand__mark" aria-label="OpenAgents home">
+        <img src={~p"/favicon-32x32.png"} alt="" width="20" height="20" />
+      </.link>
       <span :if={@title} class="sidebar-brand__divider" aria-hidden="true"></span>
       <.link :if={@title} patch={@path} class="sidebar-brand__title">{@title}</.link>
     </header>

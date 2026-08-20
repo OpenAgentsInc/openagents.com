@@ -336,7 +336,6 @@ defmodule OpenAgentsWeb.UI do
   attr :id, :string, required: true
   attr :rows, :list, required: true
   attr :row_id, :any, default: nil
-  attr :row_click, :any, default: nil
   attr :row_item, :any, default: &Function.identity/1
 
   slot :col, required: true do
@@ -364,11 +363,10 @@ defmodule OpenAgentsWeb.UI do
         </thead>
         <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
           <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="hover:bg-muted/40">
-            <td
-              :for={column <- @col}
-              phx-click={@row_click && @row_click.(row)}
-              class={["px-3 py-2", @row_click && "hover:cursor-pointer"]}
-            >
+            <%!-- No row-level click. A `phx-click` on a `td` is not reachable
+            by keyboard and announces nothing, so a table built that way is
+            usable only with a mouse. Put a real control in a cell instead. --%>
+            <td :for={column <- @col} class="px-3 py-2">
               {render_slot(column, @row_item.(row))}
             </td>
             <td :if={@action != []} class="w-0 px-3 py-2 font-semibold">

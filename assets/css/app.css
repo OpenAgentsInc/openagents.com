@@ -262,7 +262,11 @@
   flex: none;
   flex-direction: column;
   gap: 1px;
-  padding-block: 2px;
+  /* No block padding. A sticky section heading sticks to the scrollport edge,
+     and any padding above that edge is a band the heading cannot cover, so
+     rows scrolled through it. Removing the gap is the fix; painting over it
+     with a pseudo-element put an opaque box inside a z-indexed sticky element,
+     which is a good way to cover the heading's own text. */
 }
 
 .sidebar-nav[aria-label="OpenAgents tools"] {
@@ -415,6 +419,9 @@
      it is horizontally. Uppercasing it with tracking made it shout a word the
      reader already scanned past. */
   min-height: 32px;
+  /* Same reason as `.sidebar-row__label`: at 20px the line box ends on the
+     baseline's shoulder and the tails of g, y and p sit on the edge of it. */
+  line-height: 1.5rem;
   margin-inline: 12px;
   padding-inline: 8px;
   /* Sticky, so it needs an opaque fill for rows to scroll under -- but it must
@@ -424,21 +431,6 @@
   color: var(--text-muted);
   font-size: 0.875rem;
   font-weight: 400;
-  line-height: 1.25rem;
-}
-
-/* A sticky element sticks to the scrollport's edge, and the nav has block
-   padding, so rows scrolling past stayed visible in the few pixels above the
-   heading -- they appeared to bleed through it. This carries the heading's own
-   fill up over that band. Inline it reaches past the heading's margins as
-   well, so a row cannot show beside it either. */
-.sidebar-section-label::before {
-  content: "";
-  position: absolute;
-  inset-inline: -12px;
-  bottom: 100%;
-  height: 12px;
-  background: inherit;
 }
 
 /* Docs layout */
@@ -461,10 +453,10 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  /* The same rhythm as .sidebar-nav. These two rails differ in exactly one
-     way -- this one scrolls -- and nothing else about them should. */
+  /* The same rhythm as .sidebar-nav, including its lack of block padding: a
+     sticky heading cannot cover a band above the scrollport edge, so rows
+     scrolled visibly through it. */
   gap: 1px;
-  padding-block: 2px;
   overflow-y: auto;
   overscroll-behavior: none;
 }

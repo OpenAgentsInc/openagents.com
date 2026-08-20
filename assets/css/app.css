@@ -222,15 +222,19 @@
 /* This file is for your main application CSS */
 
 /* ── Sidebar (OpenAgents layout with OpenAgents color tokens) ───────────── */
-.sidebar {
+/* One rule rather than two kept identical by hand. The previous pair carried a
+   comment asserting they matched while they had already drifted on gap and
+   padding, so the docs rail sat 12px lower with 8px more between its parts
+   than the application rail. A shared selector cannot drift. */
+.sidebar,
+.docs-sidebar {
   display: flex;
   min-height: 0;
+  flex: none;
   flex-direction: column;
   width: 280px;
   height: 100%;
   overflow: hidden;
-  /* Identical to .docs-sidebar. Two sidebars in one application that differ by
-     a surface rung and a border colour read as two applications. */
   border-right: 1px solid var(--line);
   background: var(--ink-void);
 }
@@ -412,16 +416,6 @@
   overflow: hidden;
 }
 
-.docs-sidebar {
-  display: flex;
-  width: 280px;
-  flex: none;
-  flex-direction: column;
-  gap: 8px;
-  border-right: 1px solid var(--line);
-  background: var(--ink-void);
-  padding: 12px 0;
-}
 
 .docs-sidebar__header {
   display: flex;
@@ -434,7 +428,10 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  /* The same rhythm as .sidebar-nav. These two rails differ in exactly one
+     way -- this one scrolls -- and nothing else about them should. */
+  gap: 1px;
+  padding-block: 2px;
   overflow-y: auto;
   overscroll-behavior: none;
 }

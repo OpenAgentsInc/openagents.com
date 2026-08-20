@@ -93,6 +93,23 @@ defmodule OpenAgents.RuntimeConfig do
   def feature_enabled?(%__MODULE__{features: features}, feature),
     do: Map.fetch!(features, feature)
 
+  @doc """
+  Whether surfaces built for people working on the application are advertised.
+
+  The component library documents the parts a page is assembled from rather
+  than anything a visitor came for, so production does not link to it. This
+  hides the link, not the route: `/components` still resolves, because a
+  surface that is reachable but unadvertised is honest, while a route that
+  disappears between environments is a difference that only shows up in
+  production.
+  """
+  @spec internal_surfaces_visible?() :: boolean()
+  def internal_surfaces_visible?, do: internal_surfaces_visible?(current!())
+
+  @spec internal_surfaces_visible?(t()) :: boolean()
+  def internal_surfaces_visible?(%__MODULE__{environment: environment}),
+    do: environment != :production
+
   @spec fetch_secret(:openai_api_key) :: {:ok, String.t()} | {:error, :not_configured}
   def fetch_secret(:openai_api_key) do
     case Application.fetch_env(:openagents, :openai_api_key) do

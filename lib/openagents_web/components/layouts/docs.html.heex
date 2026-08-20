@@ -32,11 +32,15 @@
 
       <div class="docs-header__controls">
         <Layouts.theme_toggle />
+        <%!-- The Markdown source, not the URL. A reader copying from a docs
+        page is nearly always taking it somewhere that renders Markdown -- an
+        issue, a model prompt, a note -- and a link makes them fetch and strip
+        the page themselves. --%>
         <UI.copy_button
           :if={assigns[:page]}
-          id="copy-docs-link"
-          text={"#{OpenAgentsWeb.Endpoint.url()}/docs/#{@page.item.slug}"}
-          label="Copy link"
+          id="copy-docs-page"
+          text={@page.markdown}
+          label="Copy page"
           copied_label="Copied"
         />
       </div>

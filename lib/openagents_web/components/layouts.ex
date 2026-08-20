@@ -162,14 +162,20 @@ defmodule OpenAgentsWeb.Layouts do
   @doc """
   The secondary links at the foot of a sidebar.
 
-  Every sidebar carries the same two, so a reader who finds the component
+  Every sidebar carries the same set, so a reader who finds the component
   library from the application can get back to the docs from either, and does
   not have to remember which shell they are in.
+
+  The component library is advertised outside production only. It documents
+  the parts a page is built from rather than anything a visitor came for.
   """
   def sidebar_footer(assigns) do
+    assigns =
+      assign(assigns, :components_link?, OpenAgents.RuntimeConfig.internal_surfaces_visible?())
+
     ~H"""
     <footer class="sidebar-footer">
-      <.link navigate={~p"/components"} class="sidebar-footer__link">
+      <.link :if={@components_link?} navigate={~p"/components"} class="sidebar-footer__link">
         <UI.icon name="widget" /> Components
       </.link>
       <.link navigate={~p"/docs"} class="sidebar-footer__link">

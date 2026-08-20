@@ -327,4 +327,27 @@ defmodule OpenAgents.RuntimeConfigTest do
   defp put_endpoint(settings, key, value) do
     Map.update!(settings, OpenAgentsWeb.Endpoint, &Keyword.put(&1, key, value))
   end
+
+  describe "internal_surfaces_visible?/1" do
+    test "production does not advertise the component library" do
+      refute RuntimeConfig.internal_surfaces_visible?(%RuntimeConfig{
+               environment: :production,
+               staging_gate: 0,
+               features: %{},
+               groups: %{}
+             })
+    end
+
+    test "every other environment does" do
+      for environment <- [:development, :test, :staging] do
+        assert RuntimeConfig.internal_surfaces_visible?(%RuntimeConfig{
+                 environment: environment,
+                 staging_gate: 0,
+                 features: %{},
+                 groups: %{}
+               }),
+               "expected #{environment} to advertise the component library"
+      end
+    end
+  end
 end

@@ -118,8 +118,9 @@ defmodule OpenAgentsWeb.DocsCatalog do
   @doc """
   Read and render one page.
 
-  Returns the rendered HTML and the headings found in it, so a page and its
-  table of contents come from one parse rather than two that can disagree.
+  Returns the rendered HTML, the headings found in it, and the Markdown source
+  it came from, so a page, its table of contents, and the text the copy button
+  hands over all come from one read rather than several that can disagree.
   """
   def render(slug) do
     with %{} = item <- fetch(slug),
@@ -128,7 +129,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
       toc = headings(markdown)
       html = markdown |> OpenAgents.Markdown.to_html() |> anchor_headings(toc)
 
-      {:ok, %{item: item, html: html, toc: toc}}
+      {:ok, %{item: item, html: html, toc: toc, markdown: markdown}}
     else
       _ -> :error
     end

@@ -106,6 +106,14 @@ defmodule OpenAgentsWeb.Router do
 
   forward "/git", OpenAgents.Forge.GitHTTP
 
+  scope "/", OpenAgentsWeb do
+    pipe_through :api
+
+    post "/controller/pairings", ControllerPairingController, :create
+    get "/controller/pairings/:id", ControllerPairingController, :show
+    post "/api/inference/proxy", InferenceProxyController, :create
+  end
+
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :api
 

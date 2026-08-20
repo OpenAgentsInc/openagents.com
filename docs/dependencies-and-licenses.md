@@ -61,8 +61,12 @@ ops/staging/generate-sbom.sh <image-reference> <evidence-directory>/sbom.cdx.jso
 ```
 
 The script uses digest-pinned Syft `v1.51.0`, resolves the scanned image digest,
-writes CycloneDX JSON atomically, and writes a receipt with the source commit and
-SBOM checksum. Retain both files with the staging evidence.
+and refuses a dirty worktree or an image whose OCI revision label differs from
+`HEAD`. It exports that exact image into a disposable directory so Syft can
+inventory both Debian packages and the OTP applications actually present in the
+release. It writes CycloneDX JSON atomically, verifies both package families are
+present, and writes a receipt with the source commit, image revision, and SBOM
+checksum. Retain both files with the staging evidence.
 
 ## Vendored asset notices
 

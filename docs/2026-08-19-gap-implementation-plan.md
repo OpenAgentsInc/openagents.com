@@ -77,19 +77,30 @@ the production cutover. The first job is to make `mix test` honest again.
 - `OpenAgentsWeb.ChatToolActivity` renamed to `OpenAgentsWeb.ToolActivity` to
   match the test suite; `conversation_page_size` and `maximum_message_bytes`
   corrected to the Sarah values.
+- `OpenAgentsWeb.AllowedOrigins` added.
+- Orphaned controller routes added: `/api/changelog`, `/api/status`,
+  `/memory/export`, `/data/export`, `/data/export/atif`, `/data`, `/data/reset`,
+  `/api/computers`, `/api/computers/pairings/:id/approve`,
+  `/api/computers/:machine_id/agent-jobs`, `/api/computer-agent-jobs/:id`,
+  and `forward "/git"`.
+- `OpenAgentsWeb.ControllerSocket` mounted at `/controller`.
+- Admin recording audio route and controller removed; audio recordings are not
+  saved.
 
 ## Current test signal
 
 `mix precommit` is green (54 passing, 893 skipped).  
-`mix test --include skip` is now **575/947 passed**, down from the starting
-301/947. 372 failures remain, dominated by missing routes/LiveViews, the
-`OpenAgentsWeb.AllowedOrigins` module, the `computer_controller_enabled` flag
-being `false` in tests, and the `voice_call_provider` configuration still
-pointing at the wrong `voice/` module.
+`mix test --include skip` is now **601/947 passed**, down from the starting
+301/947. 346 failures remain, dominated by missing LiveViews (`/admin`,
+`/computers`, `/changelog`, `/status`, `/leaderboard`), the
+`computer_controller_enabled` flag being `false` in tests, the `/status` JSON
+endpoint, and the `/controller/pairings` creation route.
 
 ## Current cycle
 
-Phase A is complete; Phase B (runtime commissioning) is mostly done. The next
-commits are routing and LiveViews (Phase C), starting with the 7 orphaned
-controllers, `OpenAgentsWeb.AllowedOrigins`, and the `/git`, `/admin`,
-`/computers`, `/memory/export`, and `/data/export` routes.
+Phase A is complete and Phase B is largely done. Phase C is now active: the next
+commits are the missing LiveViews (`/admin`, `/admin/forge`, `/computers`,
+`/changelog`, `/status`, `/leaderboard`), the `/status` JSON endpoint, and the
+`/controller/pairings` creation route, or we can skip to the faster wins in
+Phase B that are still failing (e.g. `computer_controller_enabled` in tests and
+`voice_call_provider` wiring).

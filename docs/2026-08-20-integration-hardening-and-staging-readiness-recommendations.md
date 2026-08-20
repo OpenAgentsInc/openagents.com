@@ -1290,6 +1290,39 @@ change, and first-time feature enablement in one staging candidate.
 **Exit criteria:** Another operator can repeat the deploy from the recorded SHA
 and obtain the same revision, schema, configuration posture, and checks.
 
+### Gate 13 implementation status
+
+Implemented locally on 2026-08-20:
+
+- Added a reviewed, machine-readable map for the known nonempty prior database
+  lineage. It partitions every current migration into shared, baselined,
+  reconciling, or genuinely new groups and explains every baselined version.
+- Added a release command that classifies empty, current, known prior, already
+  baselined, partial, and unknown databases without returning content. It
+  validates the known prior migration signature and the required tables,
+  columns, key types, constraints, indexes, and forbidden transitional forge
+  structures.
+- Added a snapshot-gated compatibility bridge. It adds one nullable account
+  column and partial index, records only the 14 reviewed migration versions,
+  uses the release migration advisory lock, and refuses unknown or partial
+  lineages. The current migration inventory test fails if any version is
+  omitted or classified twice.
+- Added a guarded reconciliation migration for the visitor identity constraint.
+  Fresh current-lineage databases were missing the constraint even though the
+  changeset named it; prior-lineage databases already have it and remain
+  unchanged.
+- Rehearsed the bridge and all 20 remaining current migrations on a disposable
+  copy of the complete 57-version prior schema. Account, message, forge target,
+  build receipt, and deploy receipt probes remained present. Both the candidate
+  application and the last-known-good application started against the migrated
+  copy.
+
+The [staging migration-lineage runbook](operations/staging-migration-lineage.md)
+defines classification, copy rehearsal, snapshot, single-job migration,
+rollback compatibility, and evidence collection. Gate 13 remains open until
+the exact candidate image and release artifacts are retained and the selected
+path runs against the isolated staging target.
+
 ## Gate 14: Run the staging regression matrix
 
 Record every case as passed, failed, blocked, or not applicable. A retry does not
@@ -1597,7 +1630,7 @@ this disposition for the current plan:
 | --- | --- |
 | A1, missing browser tests and incomplete baseline | Resolved by Gate 0. The owned baseline now runs the Node suites, merged Elixir coverage, and release smoke against an exact SHA. |
 | A2, staging shares a production database failure domain | Open and blocking Gates 12 and 15. Provision a separate staging database instance before any failure injection or soak. |
-| A3, incompatible migration lineage on a nonempty prior database | Open and blocking Gate 13 for every prior-lineage target. Map and rehearse that lineage before deployment. |
+| A3, incompatible migration lineage on a nonempty prior database | Mapped and rehearsed locally with a fail-closed release command. Each actual prior-lineage target still requires its own snapshot-copy rehearsal before Gate 13 deployment. |
 | A4, component, icon, and palette conflicts | Resolved by Gate 4 and its compiled CSS contract tests. |
 | A5, silent runtime configuration failures | Resolved by Gate 5 and its fail-closed runtime readiness checks. |
 | A6, repository authorization violations | Resolved by Gate 7 in code, PostgreSQL constraints, and the populated migration rehearsal. |

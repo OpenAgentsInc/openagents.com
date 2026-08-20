@@ -1,0 +1,257 @@
+{
+  "schema": "openagents.migration-lineage.v1",
+  "lineage_id": "prior-2026-08-19",
+  "prior_signature_versions": [
+    20260816170746,
+    20260816203029,
+    20260816205329,
+    20260816211100,
+    20260816211900,
+    20260816220500,
+    20260816222500,
+    20260816224000,
+    20260816233000,
+    20260817000500,
+    20260817070000,
+    20260817080000,
+    20260817125732,
+    20260817170050,
+    20260818003948,
+    20260818150000,
+    20260819011000,
+    20260819012000,
+    20260819013000
+  ],
+  "current_root_versions": [
+    20260816214000,
+    20260816214200
+  ],
+  "shared_versions": [
+    20260816214500,
+    20260816214735,
+    20260816215500,
+    20260816220000,
+    20260816224054,
+    20260816230000,
+    20260816231500,
+    20260816231919,
+    20260816234500,
+    20260816235500,
+    20260817002000,
+    20260817003500,
+    20260817005000,
+    20260817010500,
+    20260817012000,
+    20260817012100,
+    20260817020000,
+    20260817020100,
+    20260817030000,
+    20260817030100,
+    20260817040000,
+    20260817040100,
+    20260817050000,
+    20260817060000,
+    20260817065533,
+    20260817140345,
+    20260817171456,
+    20260818003237,
+    20260818003358,
+    20260818003949,
+    20260818150100,
+    20260818160000,
+    20260818230000,
+    20260818232337,
+    20260818234500,
+    20260819010000,
+    20260819080000,
+    20260819170000
+  ],
+  "baseline_entries": [
+    {
+      "current_version": 20260816214000,
+      "satisfied_by": [20260817070000, 20260817080000, 20260817125732],
+      "reason": "The prior lineage already created the users table and GitHub identity columns."
+    },
+    {
+      "current_version": 20260816214200,
+      "satisfied_by": [
+        20260816170746,
+        20260816203029,
+        20260816205329,
+        20260816211100,
+        20260816211900,
+        20260816220500,
+        20260816222500,
+        20260816224000,
+        20260816233000,
+        20260817000500,
+        20260818003948,
+        20260818150000
+      ],
+      "reason": "The prior lineage already created the conversation, turn, receipt, provider-step, and tool-step tables."
+    },
+    {
+      "current_version": 20260819214108,
+      "satisfied_by": [20260817070000],
+      "reason": "The prior GitHub account migration already created OAuth attempts."
+    },
+    {
+      "current_version": 20260819223229,
+      "satisfied_by": [20260819011000],
+      "reason": "The prior lineage already created UUID forge fleet targets in the final receipt shape."
+    },
+    {
+      "current_version": 20260819223230,
+      "satisfied_by": [20260819012000],
+      "reason": "The prior lineage already created UUID forge build receipts in the final pre-hardening shape."
+    },
+    {
+      "current_version": 20260819223231,
+      "satisfied_by": [20260819013000],
+      "reason": "The prior lineage already created UUID forge deployment receipts."
+    },
+    {
+      "current_version": 20260819233053,
+      "satisfied_by": [20260817070000, 20260817170050],
+      "reason": "The prior lineage already added account constraints and leaderboard policy; the bridge adds users.browser_key_hash before baselining this version."
+    },
+    {
+      "current_version": 20260820025008,
+      "satisfied_by": [20260819011000, 20260819013000],
+      "reason": "The prior forge target and deployment identifiers are already UUIDs; replay would convert them to bigint."
+    },
+    {
+      "current_version": 20260820025112,
+      "satisfied_by": [20260819013000],
+      "reason": "The prior forge deployment receipt already has the nodes column."
+    },
+    {
+      "current_version": 20260820025133,
+      "satisfied_by": [20260819013000],
+      "reason": "The prior forge deployment receipt already has result, canary, timing, and node columns."
+    },
+    {
+      "current_version": 20260820031230,
+      "satisfied_by": [20260819011000, 20260819012000, 20260819013000],
+      "reason": "The prior forge tables already use UUID identifiers; replay would truncate receipt data."
+    },
+    {
+      "current_version": 20260820031258,
+      "satisfied_by": [20260819012000],
+      "reason": "The prior forge build target identifier is already a UUID."
+    },
+    {
+      "current_version": 20260820031313,
+      "satisfied_by": [20260819012000, 20260819013000],
+      "reason": "The prior receipt tables already omit the temporary target foreign keys."
+    },
+    {
+      "current_version": 20260820040000,
+      "satisfied_by": [20260819011000, 20260819012000],
+      "reason": "The prior target and build tables already use the aligned receipt schemas; replay would drop build history."
+    }
+  ],
+  "bridge_changes": [
+    {
+      "operation": "add_nullable_column",
+      "table": "users",
+      "column": "browser_key_hash",
+      "type": "bytea"
+    },
+    {
+      "operation": "add_partial_unique_index",
+      "index": "users_browser_key_hash_index",
+      "predicate": "browser_key_hash IS NOT NULL"
+    }
+  ],
+  "reconciliation_versions_to_run": [
+    20260820030850,
+    20260820030959,
+    20260820120000,
+    20260820160000
+  ],
+  "new_versions_to_run": [
+    20260819202148,
+    20260819202444,
+    20260819202647,
+    20260819202649,
+    20260819203939,
+    20260819203943,
+    20260819203944,
+    20260820032524,
+    20260820073810,
+    20260820074227,
+    20260820074644,
+    20260820082100,
+    20260820085203,
+    20260820130000,
+    20260820140000,
+    20260820150000
+  ],
+  "required_tables": [
+    "users",
+    "visitors",
+    "conversations",
+    "messages",
+    "turns",
+    "turn_receipts",
+    "turn_provider_steps",
+    "turn_tool_steps",
+    "github_oauth_attempts",
+    "forge_fleet_targets",
+    "forge_builds",
+    "forge_deploys"
+  ],
+  "required_columns": {
+    "users": ["id", "github_id", "github_login", "github_name", "github_avatar_url", "status", "banned_at", "ban_reason_code", "last_authenticated_at", "github_token_ciphertext", "public_leaderboard_opted_out"],
+    "visitors": ["id", "browser_key_hash", "user_id"],
+    "conversations": ["id", "visitor_id"],
+    "messages": ["id", "conversation_id", "role", "content", "status", "provider_response_id", "modality", "voice_session_id", "provider_item_id", "transcript_kind", "interrupted", "work_job_id", "search_vector"],
+    "turns": ["id", "conversation_id", "user_message_id", "assistant_message_id", "status", "error_message", "error_code", "provider_response_id", "started_at", "completed_at"],
+    "turn_receipts": ["id", "turn_id", "schema_version", "status", "model_id", "persona_id", "persona_digest", "role_id", "role_digest", "role_selection", "instruction_digest", "input_digest", "input_message_count", "input_bytes", "tool_catalog_digest", "blueprint_revision", "blueprint_digest", "program_artifact_id", "program_artifact_digest", "program_artifact_receipt", "memory_snapshot_ref", "profile_memory_snapshot_ref", "preference_snapshot_ref", "used_preferences", "experience_bank_ref", "used_experiences", "used_source_refs", "used_tool_step_refs", "used_memory_evidence", "usage", "provider_started_at", "provider_completed_at"],
+    "turn_provider_steps": ["id", "turn_receipt_id", "sequence", "provider_id", "model_id", "status", "provider_response_id", "usage", "error_code", "started_at", "completed_at"],
+    "turn_tool_steps": ["id", "turn_id", "turn_receipt_id", "sequence", "provider_call_id", "provider_item_id", "provider_response_id", "tool_name", "tool_version", "module_id", "module_artifact_digest", "executor_implementation_digest", "routing_receipt_id", "side_effect_class", "invocation_key", "attribution_policy_id", "attribution_policy_version", "attribution_policy_digest", "billable", "billable_attribution_key", "cost_units", "catalog_digest", "raw_arguments", "argument_digest", "status", "outcome_digest", "outcome_receipt_ref", "usage", "result", "error", "executor_id", "executor_disclosure", "target_receipt_refs", "attribution_refs", "requested_at", "started_at", "completed_at"],
+    "github_oauth_attempts": ["id", "state_digest", "expires_at", "consumed_at"],
+    "forge_fleet_targets": ["id", "repo", "sha", "promoted_by", "status", "details"],
+    "forge_builds": ["id", "repo", "sha", "target_id", "modules", "warnings", "tests", "duration_ms", "artifact"],
+    "forge_deploys": ["id", "repo", "sha", "target_id", "modules", "nodes", "result", "canary", "push_to_live_ms"]
+  },
+  "required_column_types": {
+    "users.id": "uuid",
+    "users.github_id": "int8",
+    "users.github_avatar_url": "text",
+    "messages.search_vector": "tsvector",
+    "turn_tool_steps.raw_arguments": "text",
+    "forge_fleet_targets.id": "uuid",
+    "forge_builds.id": "uuid",
+    "forge_builds.target_id": "uuid",
+    "forge_builds.modules": "_varchar",
+    "forge_deploys.id": "uuid",
+    "forge_deploys.target_id": "uuid",
+    "forge_deploys.modules": "_varchar",
+    "forge_deploys.nodes": "_varchar"
+  },
+  "required_constraints": [
+    "users_status_check",
+    "users_ban_state_check",
+    "visitors_identity_source_check",
+    "forge_fleet_target_status",
+    "forge_deploys_result"
+  ],
+  "required_indexes": [
+    "users_github_id_index",
+    "visitors_browser_key_hash_index",
+    "visitors_user_id_index",
+    "github_oauth_attempts_state_digest_index"
+  ],
+  "pre_baseline_required_indexes": [
+    "forge_builds_repo_sha_target_id_index"
+  ],
+  "forbidden_constraints": [
+    "forge_builds_target_id_fkey",
+    "forge_deploys_target_id_fkey"
+  ],
+  "forbidden_tables": [
+    "forge_builds_phase3_legacy"
+  ]
+}

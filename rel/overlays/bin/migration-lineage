@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+cd -P -- "$(dirname -- "$0")"
+
+case "${1:-check}" in
+  check) action=check ;;
+  --apply) action=apply ;;
+  *) echo "usage: bin/migration-lineage [check|--apply]" >&2; exit 64 ;;
+esac
+
+if [ "$action" = apply ]; then
+  : "${OPENAGENTS_STAGING_SNAPSHOT_ID:?OPENAGENTS_STAGING_SNAPSHOT_ID is required}"
+fi
+
+./prepare-config >/dev/null
+
+export OPENAGENTS_MIGRATION_LINEAGE_ACTION="$action"
+
+exec ./openagents eval \
+  'OpenAgents.Release.migration_lineage(System.fetch_env!("OPENAGENTS_MIGRATION_LINEAGE_ACTION"), System.get_env("OPENAGENTS_STAGING_SNAPSHOT_ID"))'

@@ -20,6 +20,23 @@ defmodule OpenAgents.Release do
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))
   end
 
+  @doc "Classifies or baselines the reviewed prior database lineage."
+  @spec migration_lineage(String.t(), String.t() | nil) :: :ok
+  def migration_lineage(mode, snapshot_ref \\ nil) do
+    load_app()
+
+    for repo <- repos() do
+      {:ok, output, _apps} =
+        Ecto.Migrator.with_repo(repo, fn started_repo ->
+          OpenAgents.MigrationLineage.command!(started_repo, mode, snapshot_ref)
+        end)
+
+      IO.puts(output)
+    end
+
+    :ok
+  end
+
   @doc "Rewrap retained GitHub grants with the configured active vault key."
   def rotate_github_tokens do
     load_app()

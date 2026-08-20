@@ -424,8 +424,7 @@ Remove the unused parser and update every related document in the same commit.
 system, one documented two-tier icon policy, no nonfunctional theme control, no
 unexplained dependency, and complete license records.
 
-**Gate 4 implementation status (2026-08-20): complete; exact-image SBOM
-evidence pending.**
+**Gate 4 status (2026-08-20): complete.**
 
 - Replaced the retired parser with MDEx and removed its stale lock entry.
   `OpenAgents.Markdown` disables dangerous rendering, applies an exact Ammonia
@@ -450,10 +449,17 @@ evidence pending.**
   Basecoat, icons, fonts, and the brand mark, and digest-pinned Syft SBOM
   tooling. `mix precommit` now runs Hex retirement, MixAudit vulnerability, and
   unused-lock checks. All three checks pass locally.
-- The remaining evidence item is the CycloneDX SBOM for the exact staging image
-  digest. `ops/staging/generate-sbom.sh` is ready, but Gate 4 does not claim the
-  artifact until an exact committed candidate is built and scanned. Retain its
-  JSON and receipt with staging evidence before advancing this gate.
+- Built and scanned the exact committed staging candidate
+  `eeacfd196ea7cd1c0b4f2f923b7366ff63130124`. Its OCI revision label matches
+  that SHA and its loopback-registry digest is
+  `sha256:5bf9d09a6ac43affaba4ac5bc71f225f047be642d5a8e209825c6c06a338b3fd`.
+  The retained [CycloneDX 1.7 SBOM](evidence/gate-4/eeacfd196ea7cd1c0b4f2f923b7366ff63130124/sbom.cdx.json)
+  contains 63 OTP applications and 116 Debian packages; its
+  [receipt](evidence/gate-4/eeacfd196ea7cd1c0b4f2f923b7366ff63130124/sbom.cdx.json.receipt)
+  binds the source SHA, image digest, image revision, digest-pinned Syft image,
+  generation time, and SBOM checksum. This is release-inventory evidence, not a
+  deployment claim; the same image must still pass Gates 13 through 15 before
+  staging is considered ready.
 
 ## Gate 5: Make runtime configuration explicit and fail closed
 

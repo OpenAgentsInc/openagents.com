@@ -9,6 +9,8 @@ defmodule OpenAgents.Cluster.Registry do
 
   @name OpenAgents.HordeRegistry
 
+  def start_link(opts), do: Registry.start_link(opts)
+
   @spec lookup(atom() | pid(), term()) :: [{pid(), term()}]
   def lookup(name \\ @name, key) do
     Registry.lookup(name, key)

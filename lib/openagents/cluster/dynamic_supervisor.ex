@@ -5,6 +5,8 @@ defmodule OpenAgents.Cluster.DynamicSupervisor do
 
   @name OpenAgents.HordeSupervisor
 
+  def start_link(opts), do: DynamicSupervisor.start_link(opts)
+
   @spec start_child(atom() | pid(), {module(), term()} | map()) ::
           DynamicSupervisor.on_start_child()
   def start_child(name \\ @name, spec) do

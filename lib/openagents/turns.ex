@@ -1,14 +1,27 @@
 defmodule OpenAgents.Turns do
   @moduledoc """
-  Turn lifecycle stub for the Sarah chat cutover.
-
-  The real turn execution pipeline is deferred until the inference and tool
-  runtimes are fully wired. For now `start/1` reports success so the chat UI
-  compiles and the form resets, while `cancel/1` is a no-op that lets the
-  composer continue to be usable.
+  Supervises one temporary process per active response turn.
   """
 
-  def start(_turn_id), do: {:ok, nil}
+  alias OpenAgents.Conversations
+  alias OpenAgents.Turns.TurnServer
 
-  def cancel(_turn_id), do: :ok
+  def start(turn_id) do
+    DynamicSupervisor.start_child(OpenAgents.TurnSupervisor, {TurnServer, turn_id})
+  end
+
+  def cancel(turn_id) do
+    case Registry.lookup(OpenAgents.TurnRegistry, turn_id) do
+      [{pid, _value}] -> GenServer.call(pid, :cancel)
+      [] -> cancel_persisted(turn_id)
+    end
+  end
+
+  defp cancel_persisted(turn_id) do
+    turn = Conversations.get_turn!(turn_id)
+
+    if turn.status in ["queued", "streaming"],
+      do: Conversations.cancel_turn(turn),
+      else: {:ok, turn}
+  end
 end

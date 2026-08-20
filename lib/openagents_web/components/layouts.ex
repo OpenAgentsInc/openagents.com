@@ -111,7 +111,33 @@ defmodule OpenAgentsWeb.Layouts do
 
   def account_control(assigns) do
     ~H"""
-    <div class="account-control"></div>
+    <%= if @current_user do %>
+      <details class="dropdown dropdown-end">
+        <summary class="btn btn-ghost btn-circle avatar list-none cursor-pointer">
+          <img
+            src={@current_user.github_avatar_url}
+            alt={"GitHub avatar for @#{@current_user.github_login}"}
+            class="w-8 h-8 rounded-full"
+          />
+        </summary>
+        <ul class="menu dropdown-content bg-base-100 rounded-box z-10 w-56 p-2 shadow border border-base-300">
+          <li class="p-2">
+            <span class="font-semibold">{account_display_name(@current_user)}</span>
+            <span :if={@current_user.github_name} class="text-sm text-base-content/70">
+              @{@current_user.github_login}
+            </span>
+          </li>
+          <li>
+            <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0 w-full">
+              <input type="hidden" name="_method" value="delete" />
+              <button type="submit" class="w-full text-left flex items-center gap-2">
+                <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" /> Log out
+              </button>
+            </.form>
+          </li>
+        </ul>
+      </details>
+    <% end %>
     """
   end
 

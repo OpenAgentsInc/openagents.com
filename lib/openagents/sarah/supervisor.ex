@@ -17,7 +17,9 @@ defmodule OpenAgents.Sarah.Supervisor do
   def init(_init_arg) do
     children = [
       {Registry, keys: :unique, name: OpenAgents.HordeRegistry},
-      {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.HordeSupervisor}
+      {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.HordeSupervisor},
+      {Registry, keys: :unique, name: OpenAgents.TurnRegistry},
+      {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.TurnSupervisor}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

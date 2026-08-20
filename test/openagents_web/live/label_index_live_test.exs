@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
   end
 
   test "mounts with the create form and an empty state", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/labels")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
 
     assert html =~ "Labels"
     assert has_element?(view, "#new-label-form")
@@ -23,7 +23,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
     label_fixture(%{name: "bug", color: "d73a4a", description: "Something is broken"})
     label_fixture(%{name: "docs", color: "0075ca", description: nil})
 
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/labels")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
 
     refute html =~ "No labels yet"
     assert has_element?(view, "#labels")
@@ -35,7 +35,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
   end
 
   test "submitting the form creates a label and re-renders the table", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/labels")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
 
     html =
       view
@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
   end
 
   test "a label missing its required color re-renders the form with an error", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/labels")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
 
     html =
       view
@@ -63,7 +63,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
   test "deleting a label removes it and returns the empty state", %{conn: conn} do
     label = label_fixture(%{name: "wontfix", color: "ffffff"})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/labels")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
     assert has_element?(view, "#labels td", "wontfix")
 
     html =

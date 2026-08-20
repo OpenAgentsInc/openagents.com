@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.AdminForgeLive do
   live off the forge PubSub topics.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.Accounts
   alias OpenAgents.Forge
@@ -86,7 +86,7 @@ defmodule OpenAgentsWeb.AdminForgeLive do
   end
 
   defp primary_repo do
-    OpenAgents.Forge.Repos.allowed_repos() |> List.first() || "sarah"
+    OpenAgents.Forge.Repos.allowed_repos() |> List.first() || "openagents.com"
   end
 
   defp git_store(repo, sha) do

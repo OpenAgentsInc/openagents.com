@@ -27,7 +27,7 @@ defmodule OpenAgents.Tools.ConversationRead do
         disclosure: "Sarah conversation recall"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "application_postgres"

@@ -1,5 +1,5 @@
 defmodule OpenAgents.TurnProvenanceTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
   alias OpenAgents.{Context.Composer, Conversations, Turns}
   alias OpenAgents.Conversations.{ProviderStep, TurnReceipt}
   alias OpenAgents.Provenance.Canonical

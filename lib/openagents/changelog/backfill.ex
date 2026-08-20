@@ -14,7 +14,7 @@ defmodule OpenAgents.Changelog.Backfill do
 
   alias OpenAgents.Changelog
 
-  @repo "sarah"
+  @repo "openagents.com"
 
   @doc "Boot entrypoint: seed if configured, never raise."
   def boot do

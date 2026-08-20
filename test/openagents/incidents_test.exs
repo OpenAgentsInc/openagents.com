@@ -1,5 +1,5 @@
 defmodule OpenAgents.IncidentsTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
   alias OpenAgents.Incidents
   alias OpenAgents.Incidents.Triage
   alias OpenAgents.{Accounts, Conversations, Repo}

@@ -19,7 +19,7 @@ defmodule OpenAgents.Changelog do
   alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, PushReceipt, Visibility}
   alias OpenAgents.Repo
 
-  @schema_version "sarah.changelog.v1"
+  @schema_version "openagents.changelog.v1"
   @cache_key {__MODULE__, :cache}
   @cache_ttl_ms 5_000
   @entry_limit 200

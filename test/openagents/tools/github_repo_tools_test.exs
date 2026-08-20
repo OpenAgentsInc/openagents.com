@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.GitHubRepoToolsTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}
@@ -61,14 +61,14 @@ defmodule OpenAgents.Tools.GitHubRepoToolsTest do
     scope = github_scope("repo-reader", "gho_stored-for-reading")
 
     Req.Test.expect(__MODULE__, fn conn ->
-      assert conn.request_path == "/repos/repo-reader/sarah/contents/mix.exs"
+      assert conn.request_path == "/repos/repo-reader/demo/contents/mix.exs"
 
       Req.Test.json(conn, %{
         "type" => "file",
         "path" => "mix.exs",
         "size" => 20,
         "encoding" => "base64",
-        "content" => Base.encode64("defmodule Sarah do")
+        "content" => Base.encode64("defmodule Demo do")
       })
     end)
 
@@ -76,7 +76,7 @@ defmodule OpenAgents.Tools.GitHubRepoToolsTest do
              Runner.run(
                snapshot,
                call("github_repo_read", %{
-                 "repository" => "repo-reader/sarah",
+                 "repository" => "repo-reader/demo",
                  "path" => "mix.exs",
                  "ref" => ""
                }),
@@ -85,7 +85,7 @@ defmodule OpenAgents.Tools.GitHubRepoToolsTest do
 
     assert outcome["status"] == "succeeded"
     assert outcome["result"]["type"] == "file"
-    assert outcome["result"]["content"] == "defmodule Sarah do"
+    assert outcome["result"]["content"] == "defmodule Demo do"
     refute inspect(outcome) =~ "gho_stored-for-reading"
   end
 

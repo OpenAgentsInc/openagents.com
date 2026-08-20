@@ -13,7 +13,7 @@ defmodule OpenAgentsWeb.CodeBlobLive do
   the leaderboard: read-only, no session required, cannot invoke OpenAgents.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.Forge.{Browse, Visibility}
 

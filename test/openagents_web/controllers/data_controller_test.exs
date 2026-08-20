@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.DataControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Ecto.Query
   import Phoenix.LiveViewTest
 

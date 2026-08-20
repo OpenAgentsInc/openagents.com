@@ -8,7 +8,7 @@ defmodule OpenAgents.ChangelogTest do
   backfill seed.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Changelog
   alias OpenAgents.Changelog.{Backfill, Entry}
   alias OpenAgents.Forge.{DeployReceipt, PushReceipt}
@@ -36,7 +36,7 @@ defmodule OpenAgents.ChangelogTest do
   defp entry_attrs(overrides) do
     Map.merge(
       %{
-        repo: "sarah",
+        repo: "openagents.com",
         sha: full_sha("feed0001"),
         summary: "A test entry",
         category: "ui",
@@ -53,7 +53,7 @@ defmodule OpenAgents.ChangelogTest do
       |> DeployReceipt.changeset(
         Map.merge(
           %{
-            repo: "sarah",
+            repo: "openagents.com",
             target_id: Ecto.UUID.generate(),
             result: "live",
             modules: ["Elixir.OpenAgents.Something"],
@@ -101,7 +101,7 @@ defmodule OpenAgents.ChangelogTest do
     end
 
     test "a repo configured :l2 returns entries newest first" do
-      override_visibility(%{"sarah" => :l2})
+      override_visibility(%{"openagents.com" => :l2})
 
       now = DateTime.utc_now()
 
@@ -117,7 +117,7 @@ defmodule OpenAgents.ChangelogTest do
       {:ok, _} =
         Changelog.record(entry_attrs(%{sha: full_sha("feed0002"), summary: "Newer entry"}))
 
-      assert {:ok, [newer, older]} = Changelog.timeline("sarah", refresh: true)
+      assert {:ok, [newer, older]} = Changelog.timeline("openagents.com", refresh: true)
       assert newer.summary == "Newer entry"
       assert older.summary == "Older entry"
       assert Enum.all?([newer, older], &(&1.kind == :entry))
@@ -137,7 +137,7 @@ defmodule OpenAgents.ChangelogTest do
           })
         )
 
-      assert {:ok, [row]} = Changelog.timeline("sarah", refresh: true)
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
       assert row.summary == "Security fix under embargo"
       assert row.sha == nil
       assert row.short_sha == nil
@@ -157,7 +157,7 @@ defmodule OpenAgents.ChangelogTest do
           })
         )
 
-      assert {:ok, [row]} = Changelog.timeline("sarah", refresh: true)
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
       assert row.sha == sha
       assert row.short_sha == String.slice(sha, 0, 12)
     end
@@ -165,7 +165,7 @@ defmodule OpenAgents.ChangelogTest do
     test "a receipted deploy with no authored entry appears as a bare :receipt row" do
       deploy = insert_deploy!(%{sha: full_sha("feed0005")})
 
-      assert {:ok, [row]} = Changelog.timeline("sarah", refresh: true)
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
       assert row.kind == :receipt
       assert row.summary == nil
       assert row.sha == deploy.sha
@@ -181,7 +181,7 @@ defmodule OpenAgents.ChangelogTest do
 
       deploy = insert_deploy!(%{sha: full_sha("feed0006"), push_to_live_ms: 5_540})
 
-      assert {:ok, [row]} = Changelog.timeline("sarah", refresh: true)
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
       assert row.kind == :entry
       assert row.summary == "Short-sha entry from backfill lane"
       assert row.deploy.push_to_live_ms == 5_540
@@ -197,22 +197,25 @@ defmodule OpenAgents.ChangelogTest do
       {:ok, push} =
         %PushReceipt{}
         |> PushReceipt.changeset(%{
-          repo: "sarah",
+          repo: "openagents.com",
           wal_seq: 1,
           principal: "operator:abc123",
           refs: %{"refs/heads/main" => %{"new" => sha}}
         })
         |> Repo.insert()
 
-      assert {:ok, payload} = Changelog.projection("sarah", refresh: true)
+      assert {:ok, payload} = Changelog.projection("openagents.com", refresh: true)
 
-      assert payload["schema"] == "sarah.changelog.v1"
-      assert payload["repo"] == "sarah"
+      assert payload["schema"] == "openagents.changelog.v1"
+      assert payload["repo"] == "openagents.com"
 
       assert [entry] = payload["entries"]
       assert entry["summary"] == "Projected entry"
       assert entry["receipt_ids"]["push"] == push.id
-      assert entry["commit_url"] == "/OpenAgentsInc/sarah/commit/#{String.slice(sha, 0, 12)}"
+
+      assert entry["commit_url"] ==
+               "/OpenAgentsInc/openagents.com/commit/#{String.slice(sha, 0, 12)}"
+
       assert entry["push"]["principal_role"] == "operator"
       assert entry["push"]["wal_seq"] == 1
 
@@ -233,7 +236,7 @@ defmodule OpenAgents.ChangelogTest do
       Backfill.run()
       assert Repo.aggregate(Entry, :count) == seeded
 
-      assert {:ok, rows} = Changelog.timeline("sarah", refresh: true)
+      assert {:ok, rows} = Changelog.timeline("openagents.com", refresh: true)
       assert Enum.any?(rows, &(&1.source == "backfill"))
     end
   end

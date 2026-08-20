@@ -11,21 +11,24 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
   end
 
   test "mounts with zeroed counts and an empty state", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
 
     assert html =~ "No open issues"
     assert html =~ "Issues will show up here once they are created."
     refute has_element?(view, "#issues")
 
     # The default filter is `open`, and it is the one marked current.
-    assert has_element?(view, ~s{a[href="/OpenAgentsInc/sarah/issues?state=open"][aria-current]})
+    assert has_element?(
+             view,
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=open"][aria-current]}
+           )
 
     refute has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/issues?state=closed"][aria-current]}
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=closed"][aria-current]}
            )
 
-    assert has_element?(view, ~s{a[href="/OpenAgentsInc/sarah/issues/new"]}, "New issue")
+    assert has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/issues/new"]}, "New issue")
   end
 
   test "lists open issues with their number, author, labels, and assignees", %{conn: conn} do
@@ -39,14 +42,14 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
         "assignees" => ["grace"]
       })
 
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
 
     refute html =~ "No open issues"
     assert has_element?(view, "#issues")
 
     assert has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/issues/#{issue.number}"]},
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]},
              "Streaming stalls"
            )
 
@@ -59,7 +62,7 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
   test "an issue with no author falls back to anonymous", %{conn: conn} do
     {:ok, _} = Issues.create_issue(%{"title" => "Orphaned"})
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues")
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
 
     assert html =~ "Orphaned"
     assert html =~ "anonymous"
@@ -68,7 +71,7 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
   test "the comment count only renders once an issue has comments", %{conn: conn} do
     {:ok, issue} = Issues.create_issue(%{"title" => "Chatty"})
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues")
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
     refute html =~ "hero-chat-bubble-left"
 
     {:ok, _} =
@@ -78,7 +81,7 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
         user: %{"login" => "ada"}
       })
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues")
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
     assert html =~ "hero-chat-bubble-left"
   end
 
@@ -87,13 +90,13 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     {:ok, closed} = Issues.create_issue(%{"title" => "Closed one"})
     {:ok, _} = Issues.update_issue(closed, %{"state" => "closed"})
 
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
     assert html =~ "Open one"
     refute html =~ "Closed one"
 
     html =
       view
-      |> element(~s{a[href="/OpenAgentsInc/sarah/issues?state=closed"]})
+      |> element(~s{a[href="/OpenAgentsInc/openagents.com/issues?state=closed"]})
       |> render_click()
 
     assert html =~ "Closed one"
@@ -101,16 +104,19 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
 
     assert has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/issues?state=closed"][aria-current]}
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=closed"][aria-current]}
            )
 
-    refute has_element?(view, ~s{a[href="/OpenAgentsInc/sarah/issues?state=open"][aria-current]})
+    refute has_element?(
+             view,
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=open"][aria-current]}
+           )
   end
 
   test "the closed filter has its own empty-state wording", %{conn: conn} do
     {:ok, _open} = Issues.create_issue(%{"title" => "Open one"})
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues?state=closed")
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues?state=closed")
 
     assert html =~ "No closed issues"
     refute html =~ "No open issues"
@@ -123,24 +129,26 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     {:ok, _} = Issues.update_issue(c, %{"state" => "closed"})
 
     for state <- ["open", "closed"] do
-      {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues?state=#{state}")
+      {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues?state=#{state}")
 
       assert has_element?(
                view,
-               ~s{a[href="/OpenAgentsInc/sarah/issues?state=open"]},
+               ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=open"]},
                "2 Open"
              )
 
       assert has_element?(
                view,
-               ~s{a[href="/OpenAgentsInc/sarah/issues?state=closed"]},
+               ~s{a[href="/OpenAgentsInc/openagents.com/issues?state=closed"]},
                "1 Closed"
              )
     end
   end
 
   test "an anonymous visitor is redirected away from the issue list" do
-    assert {:error, {:redirect, %{to: to}}} = live(build_conn(), ~p"/OpenAgentsInc/sarah/issues")
-    refute to == "/OpenAgentsInc/sarah/issues"
+    assert {:error, {:redirect, %{to: to}}} =
+             live(build_conn(), ~p"/OpenAgentsInc/openagents.com/issues")
+
+    refute to == "/OpenAgentsInc/openagents.com/issues"
   end
 end

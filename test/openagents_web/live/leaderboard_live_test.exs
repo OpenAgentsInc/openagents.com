@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.LeaderboardLiveTest do
   carry anything past the published projection.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Accounts

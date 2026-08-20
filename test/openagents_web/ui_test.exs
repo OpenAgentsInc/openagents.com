@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.UITest do
   @moduledoc """
-  Contract tests for Sarah's interface primitives.
+  Contract tests for OpenAgents interface primitives.
 
   These assert the rules `DESIGN.md` and `INVARIANTS.md` place on the component
   library itself, so a surface cannot inherit a violation from a primitive.
@@ -10,7 +10,7 @@ defmodule OpenAgentsWeb.UITest do
   import ExUnit.CaptureIO
   import Phoenix.Component
   import Phoenix.LiveViewTest
-  import OpenAgentsWeb.SarahUI
+  import OpenAgentsWeb.UI
 
   describe "button/1" do
     test "defaults to a primary control and omits unset variant attributes" do
@@ -96,7 +96,7 @@ defmodule OpenAgentsWeb.UITest do
           Code.compile_string("""
           defmodule OpenAgentsWeb.UITest.IconSize do
             use Phoenix.Component
-            import OpenAgentsWeb.SarahUI
+            import OpenAgentsWeb.UI
 
             def render(assigns), do: ~H"<.button size={:icon}>X</.button>"
           end
@@ -113,7 +113,7 @@ defmodule OpenAgentsWeb.UITest do
           Code.compile_string("""
           defmodule OpenAgentsWeb.UITest.BogusVariant do
             use Phoenix.Component
-            import OpenAgentsWeb.SarahUI
+            import OpenAgentsWeb.UI
 
             def render(assigns), do: ~H"<.button variant={:bogus}>X</.button>"
           end
@@ -347,7 +347,7 @@ defmodule OpenAgentsWeb.UITest do
       # and recall content must never reach the browser. The component's
       # signature is the enforcement point.
       declared =
-        OpenAgentsWeb.SarahUI.__components__()
+        OpenAgentsWeb.UI.__components__()
         |> Map.fetch!(:item)
         |> Map.fetch!(:attrs)
         |> Enum.map(& &1.name)
@@ -441,7 +441,7 @@ defmodule OpenAgentsWeb.UITest do
 
     test "requires a name, because a page of recordings is a page of identical players" do
       declared =
-        OpenAgentsWeb.SarahUI.__components__()
+        OpenAgentsWeb.UI.__components__()
         |> Map.fetch!(:audio_player)
         |> Map.fetch!(:attrs)
 
@@ -465,7 +465,7 @@ defmodule OpenAgentsWeb.UITest do
   describe "status_indicator/1" do
     test "requires a label so color never carries state alone" do
       declared =
-        OpenAgentsWeb.SarahUI.__components__()
+        OpenAgentsWeb.UI.__components__()
         |> Map.fetch!(:status_indicator)
         |> Map.fetch!(:attrs)
 

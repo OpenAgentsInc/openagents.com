@@ -1,5 +1,5 @@
 defmodule OpenAgents.MachinesTest do
-  use OpenAgents.SarahDataCase, async: true
+  use OpenAgents.DataCase, async: true
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Pairing
 

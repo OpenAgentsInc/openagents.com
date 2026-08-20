@@ -1,5 +1,5 @@
 defmodule OpenAgents.Forge.HotLoaderTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   @moduletag :capture_log
 
   alias OpenAgents.Forge.DeployReceipt
@@ -66,7 +66,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     {:ok, target} =
       %Target{}
       |> Target.changeset(%{
-        repo: "sarah",
+        repo: "openagents.com",
         sha: sha,
         promoted_by: "test-op",
         status: status
@@ -102,7 +102,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
 
     broadcast_build_ready(loader, %{
-      repo: "sarah",
+      repo: "openagents.com",
       sha: sha,
       target_id: target.id,
       artifact: artifact,
@@ -116,13 +116,13 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     receipt = deploy_receipt(sha)
     assert receipt.result == "live"
-    assert receipt.repo == "sarah"
+    assert receipt.repo == "openagents.com"
     assert receipt.target_id == target.id
     assert receipt.modules == [name]
     assert receipt.canary == "ok"
     assert receipt.nodes == ["#{Node.self()}=ok"]
 
-    assert_receive {:forge_deploy, %{repo: "sarah", sha: ^sha, result: "live"}}
+    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "live"}}
   end
 
   test "allowlist refusal: off-allowlist module means needs_rolling_replace and no load", %{
@@ -137,7 +137,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
 
     broadcast_build_ready(loader, %{
-      repo: "sarah",
+      repo: "openagents.com",
       sha: sha,
       target_id: target.id,
       artifact: artifact,
@@ -155,7 +155,8 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     offenders = Repo.get!(Target, target.id).details["modules"]
     assert offenders == ["OpenAgents.Turns.Whatever"]
 
-    assert_receive {:forge_deploy, %{repo: "sarah", sha: ^sha, result: "needs_rolling_replace"}}
+    assert_receive {:forge_deploy,
+                    %{repo: "openagents.com", sha: ^sha, result: "needs_rolling_replace"}}
   end
 
   test "canary revert: a corrupt beam reverts the whole artifact", %{loader: loader} do
@@ -170,7 +171,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
 
     broadcast_build_ready(loader, %{
-      repo: "sarah",
+      repo: "openagents.com",
       sha: sha,
       target_id: target.id,
       artifact: artifact,
@@ -184,7 +185,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     assert Repo.get!(Target, target.id).status == "reverted"
     assert deploy_receipt(sha).result == "reverted"
 
-    assert_receive {:forge_deploy, %{repo: "sarah", sha: ^sha, result: "reverted"}}
+    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "reverted"}}
   end
 
   test "push_to_live_ms is measured from the matching push receipt", %{loader: loader} do
@@ -197,7 +198,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     {:ok, _push} =
       %PushReceipt{}
       |> PushReceipt.changeset(%{
-        repo: "sarah",
+        repo: "openagents.com",
         wal_seq: System.unique_integer([:positive]),
         principal: "test-op",
         refs: %{"refs/heads/main" => %{"old" => String.duplicate("0", 40), "new" => sha}}
@@ -205,7 +206,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
       |> Repo.insert()
 
     broadcast_build_ready(loader, %{
-      repo: "sarah",
+      repo: "openagents.com",
       sha: sha,
       target_id: target.id,
       artifact: artifact,
@@ -226,7 +227,7 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     artifact = tar_artifact([{name, binary}])
 
     broadcast_build_ready(loader, %{
-      repo: "sarah",
+      repo: "openagents.com",
       sha: sha,
       target_id: target.id,
       artifact: artifact,

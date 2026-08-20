@@ -1,5 +1,5 @@
-defmodule OpenAgents.Forge.SarahTargetsTest do
-  use OpenAgents.SarahDataCase, async: false
+defmodule OpenAgents.Forge.TargetLifecycleTest do
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.{Repos, Targets}
 
   setup do

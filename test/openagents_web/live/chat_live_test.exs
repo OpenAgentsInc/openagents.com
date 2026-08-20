@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ChatLiveTest do
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
   import Ecto.Query
 
@@ -287,7 +287,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
              render(view) =~ ~s(data-server-status="listening")
            end)
 
-    typed = "Read https://github.com/OpenAgentsInc/sarah while we talk."
+    typed = "Read https://github.com/OpenAgentsInc/openagents.com while we talk."
 
     view
     |> form("#message-form", chat: %{message: typed})
@@ -301,7 +301,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     assert eventually(fn ->
              rendered = render(view)
 
-             rendered =~ "Read https://github.com/OpenAgentsInc/sarah" and
+             rendered =~ "Read https://github.com/OpenAgentsInc/openagents.com" and
                rendered =~ ~s(data-server-status="listening")
            end)
 

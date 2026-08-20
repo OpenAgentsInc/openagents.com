@@ -147,8 +147,8 @@ config :openagents,
   forge_boot_converge_enabled: false,
   forge_deploy_lane_enabled: true,
   forge_data_dir: nil,
-  forge_build_dir: "/var/lib/sarah/workspace/build",
-  forge_repos: ["sarah"],
+  forge_build_dir: "/var/lib/openagents/workspace/build",
+  forge_repos: ["openagents.com"],
   forge_internal_git_url: "http://127.0.0.1:8080/git",
   forge_operator_token: nil,
   forge_mirror_urls: %{},
@@ -168,16 +168,9 @@ config :openagents,
     "OpenAgents.Scratch.",
     "OpenAgents.BuildInfo"
   ],
-  forge_public_visibility: %{"sarah" => :l2},
-  forge_repo_owners: %{"sarah" => "OpenAgentsInc"},
-  forge_public_paths: %{
-    "sarah" => [
-      "README.md",
-      "CHANGELOG.md",
-      "docs/audits/2026-08-19-public-changelog-transparency-audit.md",
-      "docs/plans/2026-08-19-transparency-spec-and-roadmap.md"
-    ]
-  },
+  forge_public_visibility: %{"openagents.com" => :l3},
+  forge_repo_owners: %{"openagents.com" => "OpenAgentsInc"},
+  forge_public_paths: %{"openagents.com" => []},
   dns_cluster_query: nil
 
 # Configure the endpoint

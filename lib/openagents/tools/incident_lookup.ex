@@ -47,7 +47,7 @@ defmodule OpenAgents.Tools.IncidentLookup do
         disclosure: "Durable failure records for the signed-in owner"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "signed_browser_owner",
         "residency" => "application_process",

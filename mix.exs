@@ -114,6 +114,7 @@ defmodule OpenAgents.MixProject do
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format",
+        "cmd ops/ci/reference-check.sh",
         "assets.test",
         "test --warnings-as-errors"
       ]

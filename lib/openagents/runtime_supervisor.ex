@@ -1,6 +1,6 @@
-defmodule OpenAgents.Sarah.Supervisor do
+defmodule OpenAgents.RuntimeSupervisor do
   @moduledoc """
-  Supervisor for the ported Sarah subsystems.
+  Supervisor for the integrated OpenAgents runtime subsystems.
 
   Starts the registries and supervisors used by turns, work, voice, and
   memory workers. Heavy recovery and retention workers are gated by feature

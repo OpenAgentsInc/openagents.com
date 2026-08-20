@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.AdminLiveTest do
   what the page is allowed to show once it renders.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Conversations

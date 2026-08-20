@@ -1,7 +1,7 @@
 defmodule OpenAgents.Forge.TargetsTest do
   @moduledoc """
   The two surfaces of `OpenAgents.Forge.Targets` that the end-to-end
-  lifecycle test (`OpenAgents.Forge.SarahTargetsTest`, which drives a real
+  lifecycle test (`OpenAgents.Forge.TargetLifecycleTest`, which drives a real
   bare repo) does not reach: the injectable `commit_store`, and the bounded
   `details` map.
 

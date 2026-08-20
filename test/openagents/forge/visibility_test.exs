@@ -5,7 +5,7 @@ defmodule OpenAgents.Forge.VisibilityTest do
   each capability has an explicit minimum level.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.Visibility
 
   defp override_visibility(map) do
@@ -29,11 +29,11 @@ defmodule OpenAgents.Forge.VisibilityTest do
   end
 
   test "the configured level is read from :forge_public_visibility" do
-    # config.exs ships "sarah" at :l2 — it is a private repository.
-    assert Visibility.level("sarah") == :l2
+    # config.exs ships "openagents.com" at :l3 — it is a public repository.
+    assert Visibility.level("openagents.com") == :l3
 
-    override_visibility(%{"sarah" => :l1, "demo" => :l2})
-    assert Visibility.level("sarah") == :l1
+    override_visibility(%{"openagents.com" => :l1, "demo" => :l2})
+    assert Visibility.level("openagents.com") == :l1
     assert Visibility.level("demo") == :l2
   end
 
@@ -75,41 +75,41 @@ defmodule OpenAgents.Forge.VisibilityTest do
 
   describe "published documents (a private repo publishes files, not history)" do
     test "published?/2 reads the operator-owned allowlist" do
-      override_paths(%{"sarah" => ["docs/a.md", "CHANGELOG.md"]})
+      override_paths(%{"openagents.com" => ["docs/a.md", "CHANGELOG.md"]})
 
-      assert Visibility.published?("sarah", "docs/a.md")
-      assert Visibility.published?("sarah", "CHANGELOG.md")
-      refute Visibility.published?("sarah", "lib/secret.ex")
+      assert Visibility.published?("openagents.com", "docs/a.md")
+      assert Visibility.published?("openagents.com", "CHANGELOG.md")
+      refute Visibility.published?("openagents.com", "lib/secret.ex")
       refute Visibility.published?("other", "docs/a.md")
     end
 
     test "allows_file?/4 serves a published path only at head below :l3" do
-      override_visibility(%{"sarah" => :l2})
-      override_paths(%{"sarah" => ["docs/a.md"]})
+      override_visibility(%{"openagents.com" => :l2})
+      override_paths(%{"openagents.com" => ["docs/a.md"]})
 
-      assert Visibility.allows_file?("sarah", "docs/a.md", "headsha", "headsha")
+      assert Visibility.allows_file?("openagents.com", "docs/a.md", "headsha", "headsha")
       # An older ref for the same published path is refused: publishing a
       # document must not publish its history.
-      refute Visibility.allows_file?("sarah", "docs/a.md", "oldsha", "headsha")
+      refute Visibility.allows_file?("openagents.com", "docs/a.md", "oldsha", "headsha")
       # A path that was never published is refused at any ref.
-      refute Visibility.allows_file?("sarah", "lib/secret.ex", "headsha", "headsha")
+      refute Visibility.allows_file?("openagents.com", "lib/secret.ex", "headsha", "headsha")
     end
 
     test "allows_file?/4 serves anything at :l3, at any ref" do
-      override_visibility(%{"sarah" => :l3})
-      override_paths(%{"sarah" => []})
+      override_visibility(%{"openagents.com" => :l3})
+      override_paths(%{"openagents.com" => []})
 
-      assert Visibility.allows_file?("sarah", "lib/anything.ex", "oldsha", "headsha")
+      assert Visibility.allows_file?("openagents.com", "lib/anything.ex", "oldsha", "headsha")
     end
 
     test "a dark repo publishes nothing even with an allowlist" do
-      override_visibility(%{"sarah" => :l0})
-      override_paths(%{"sarah" => ["docs/a.md"]})
+      override_visibility(%{"openagents.com" => :l0})
+      override_paths(%{"openagents.com" => ["docs/a.md"]})
 
-      refute Visibility.allows?("sarah", :ledger)
+      refute Visibility.allows?("openagents.com", :ledger)
       # allows_file?/4 still honors the explicit publication decision; the
       # surfaces gate on the level first, which is what makes :l0 dark.
-      assert Visibility.published?("sarah", "docs/a.md")
+      assert Visibility.published?("openagents.com", "docs/a.md")
     end
   end
 

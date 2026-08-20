@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.RepoList do
-  @moduledoc "Lists a directory of Sarah's own source tree, bounded."
+  @moduledoc "Lists a directory of OpenAgents source tree, bounded."
 
   @behaviour OpenAgents.Tools.Tool
 
@@ -16,7 +16,7 @@ defmodule OpenAgents.Tools.RepoList do
       name: "repo_list",
       version: 1,
       description:
-        "Lists files and directories in Sarah's own source tree. Pass path relative to the " <>
+        "Lists files and directories in OpenAgents source tree. Pass path relative to the " <>
           "repository root (default: the root). from selects \"image\" (running source, " <>
           "default) or \"workspace\" (this job's clone).",
       input_schema: %{
@@ -33,10 +33,10 @@ defmodule OpenAgents.Tools.RepoList do
       required_authority: "repository.read",
       executor: %{
         id: "sarah.repository.self",
-        disclosure: "Sarah's own runtime, listing her running source"
+        disclosure: "the OpenAgents runtime, listing her running source"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "host",

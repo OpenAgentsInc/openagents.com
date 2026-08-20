@@ -14,7 +14,7 @@ defmodule OpenAgentsWeb.ComputersController do
       |> Enum.map(&computer_projection/1)
 
     json(conn, %{
-      "schema" => "sarah.computers.v1",
+      "schema" => "openagents.computers.v1",
       "pairing_enabled" => Computer.enabled?(),
       "computers" => computers
     })

@@ -20,8 +20,8 @@ defmodule OpenAgents.Cluster.DrainTest do
 
   test "a drained node leaves Raft; survivors keep quorum and keep committing" do
     cookie = :erlang.get_cookie()
-    {peer1, node1} = start_peer(:sarah_drain1, cookie)
-    {peer2, node2} = start_peer(:sarah_drain2, cookie)
+    {peer1, node1} = start_peer(:openagents_drain1, cookie)
+    {peer2, node2} = start_peer(:openagents_drain2, cookie)
     on_exit(fn -> for p <- [peer1, peer2], do: safe_stop(p) end)
 
     Ra.start_in(data_dir(node()))
@@ -50,7 +50,7 @@ defmodule OpenAgents.Cluster.DrainTest do
   # ── helpers ──────────────────────────────────────────────────────────────
 
   defp data_dir(node) do
-    base = Path.join(System.tmp_dir!(), "sarah_drain_test")
+    base = Path.join(System.tmp_dir!(), "openagents_drain_test")
     short = node |> Atom.to_string() |> String.replace(~r/[^a-zA-Z0-9]/, "_")
     Path.join(base, "#{short}_#{System.unique_integer([:positive])}")
   end

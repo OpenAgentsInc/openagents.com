@@ -9,7 +9,7 @@ defmodule OpenAgents.GitHubOAuth do
   @default_user_url "https://api.github.com/user"
   @default_attempt_ttl_seconds 600
   @github_api_version "2022-11-28"
-  @user_agent "OpenAgents-Sarah"
+  @user_agent "OpenAgents"
 
   @type attempt :: %{required(String.t()) => String.t() | integer()}
 

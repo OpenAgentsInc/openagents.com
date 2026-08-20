@@ -12,11 +12,11 @@ defmodule OpenAgentsWeb.ComponentsLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgentsWeb.ComponentCatalog
-  alias OpenAgentsWeb.SarahUI, as: UI
+  alias OpenAgentsWeb.UI, as: UI
 
   @sample_rows [
     %{id: 1, owner: "OpenAgentsInc", repo: "openagents.com", state: "open"},
-    %{id: 2, owner: "OpenAgentsInc", repo: "sarah", state: "open"},
+    %{id: 2, owner: "OpenAgentsInc", repo: "openagents.com", state: "open"},
     %{id: 3, owner: "OpenAgentsInc", repo: "arcade", state: "closed"}
   ]
 
@@ -25,8 +25,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
     hero-arrow-path hero-sun-micro hero-moon-micro hero-computer-desktop-micro
   )
 
-  # SarahUI.icon/1 renders the vendored Apps SDK set, not heroicons.
-  @sarah_icons ~w(sparkle compass folder document user bell play star)
+  # UI.icon/1 renders the vendored Apps SDK set, not heroicons.
+  @openagents_icons ~w(sparkle compass folder document user bell play star)
 
   # account_control/1 and command_bar/1 read three fields off the current user.
   # A plain map is enough and keeps the catalog page free of database access.
@@ -54,7 +54,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
      |> assign(:form, form)
      |> assign(:rows, @sample_rows)
      |> assign(:icons, @icons)
-     |> assign(:sarah_icons, @sarah_icons)
+     |> assign(:openagents_icons, @openagents_icons)
      |> assign(:demo_user, @demo_user)}
   end
 
@@ -109,10 +109,10 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <p class="text-base-content/70 mb-8 text-pretty max-w-[68ch]">
         Live examples of every reusable function component in this repository, drawn from
         <code>OpenAgentsWeb.CoreComponents</code>
-        (the Phoenix set, restyled onto basecoat), <code>OpenAgentsWeb.SarahUI</code>
-        (the Sarah interface primitives), and <code>OpenAgentsWeb.Layouts</code>. <code>button</code>, <code>input</code>, and
+        (the Phoenix set, restyled onto basecoat), <code>OpenAgentsWeb.UI</code>
+        (the OpenAgents interface primitives), and <code>OpenAgentsWeb.Layouts</code>. <code>button</code>, <code>input</code>, and
         <code>icon</code>
-        exist in both component sets, so the SarahUI entries are listed separately.
+        exist in both component sets, so the UI entries are listed separately.
         A test asserts this page covers every public component in those modules.
         Planned GitHub-shaped components are listed in <code>docs/component-library.md</code>.
       </p>
@@ -156,7 +156,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   attr :form, :any, default: nil
   attr :rows, :list, default: []
   attr :icons, :list, default: []
-  attr :sarah_icons, :list, default: []
+  attr :openagents_icons, :list, default: []
   attr :demo_user, :map, default: nil
 
   defp component_demo(%{item: %{slug: "button"}} = assigns) do
@@ -284,12 +284,12 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  # --- Sarah UI -------------------------------------------------------------
-  # SarahUI is imported by `sarah_html_helpers`, not by `:live_view`, so these
+  # --- OpenAgents UI -------------------------------------------------------------
+  # UI is imported by `openagents_html_helpers`, not by `:live_view`, so these
   # are called with the full module prefix. That also documents provenance on a
   # page whose whole job is showing where a component comes from.
 
-  defp component_demo(%{item: %{slug: "sarah-button"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-button"}} = assigns) do
     ~H"""
     <div class="space-y-4">
       <div class="flex flex-wrap items-center gap-3">
@@ -311,7 +311,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-text-button"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-text-button"}} = assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-4">
       <UI.text_button>Default</UI.text_button>
@@ -321,21 +321,21 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-input"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-input"}} = assigns) do
     ~H"""
     <div class="space-y-3 max-w-sm">
-      <UI.input id="sarah-input-demo" name="demo" value="Ship the catalog" />
-      <UI.input id="sarah-input-demo-empty" name="demo_empty" placeholder="Placeholder text" />
-      <UI.input id="sarah-input-demo-disabled" name="demo_disabled" value="Disabled" disabled />
+      <UI.input id="openagents-input-demo" name="demo" value="Ship the catalog" />
+      <UI.input id="openagents-input-demo-empty" name="demo_empty" placeholder="Placeholder text" />
+      <UI.input id="openagents-input-demo-disabled" name="demo_disabled" value="Disabled" disabled />
     </div>
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-textarea"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-textarea"}} = assigns) do
     ~H"""
     <div class="max-w-sm">
       <UI.textarea
-        id="sarah-textarea-demo"
+        id="openagents-textarea-demo"
         name="demo_body"
         value="Multi-line text primitive."
         rows="4"
@@ -344,31 +344,31 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-label"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-label"}} = assigns) do
     ~H"""
     <div class="space-y-2 max-w-sm">
-      <UI.label for="sarah-label-target">Repository name</UI.label>
-      <UI.input id="sarah-label-target" name="repo" value="openagents.com" />
+      <UI.label for="openagents-label-target">Repository name</UI.label>
+      <UI.input id="openagents-label-target" name="repo" value="openagents.com" />
     </div>
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-field"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-field"}} = assigns) do
     ~H"""
     <div class="max-w-sm space-y-4">
       <UI.field>
-        <UI.label for="sarah-field-title">Title</UI.label>
-        <UI.input id="sarah-field-title" name="title" value="Ship the component catalog" />
+        <UI.label for="openagents-field-title">Title</UI.label>
+        <UI.input id="openagents-field-title" name="title" value="Ship the component catalog" />
       </UI.field>
       <UI.field>
-        <UI.label for="sarah-field-body">Body</UI.label>
-        <UI.textarea id="sarah-field-body" name="body" rows="3" />
+        <UI.label for="openagents-field-body">Body</UI.label>
+        <UI.textarea id="openagents-field-body" name="body" rows="3" />
       </UI.field>
     </div>
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-alert"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-alert"}} = assigns) do
     ~H"""
     <div class="space-y-6">
       <div class="space-y-3">
@@ -392,7 +392,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-badge"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-badge"}} = assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-3">
       <UI.badge :for={v <- ~w(default info success warning danger dim)a} variant={v}>
@@ -402,18 +402,18 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-card"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-card"}} = assigns) do
     ~H"""
     <div class="grid gap-4 sm:grid-cols-2">
-      <UI.card id="sarah-card-default">
+      <UI.card id="openagents-card-default">
         <p class="font-medium">Default</p>
         <p class="text-sm text-base-content/70">A plain content container.</p>
       </UI.card>
-      <UI.card id="sarah-card-corners" frame={:corners}>
+      <UI.card id="openagents-card-corners" frame={:corners}>
         <p class="font-medium">Corner frame</p>
         <p class="text-sm text-base-content/70">With bracket decoration.</p>
       </UI.card>
-      <UI.card id="sarah-card-danger" variant={:danger}>
+      <UI.card id="openagents-card-danger" variant={:danger}>
         <p class="font-medium">Danger</p>
         <p class="text-sm text-base-content/70">For destructive context.</p>
       </UI.card>
@@ -421,7 +421,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-avatar"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-avatar"}} = assigns) do
     ~H"""
     <div class="flex flex-wrap items-end gap-6">
       <UI.avatar :for={sz <- ~w(sm default lg)a} size={sz} fallback="OA" label={"size #{sz}"} />
@@ -430,7 +430,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-item"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-item"}} = assigns) do
     ~H"""
     <div class="space-y-2">
       <UI.item status="ok" label="Fleet node 1" detail="converged" />
@@ -440,10 +440,10 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-event-header"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-event-header"}} = assigns) do
     ~H"""
     <UI.event_header
-      id="sarah-event-header-demo"
+      id="openagents-event-header-demo"
       status="ok"
       title="repo_commit_push"
       status_note="completed"
@@ -457,15 +457,15 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-empty"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-empty"}} = assigns) do
     ~H"""
-    <UI.empty id="sarah-empty-demo" title="No delegations yet">
+    <UI.empty id="openagents-empty-demo" title="No delegations yet">
       Work you delegate to a paired machine will appear here.
     </UI.empty>
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-kbd"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-kbd"}} = assigns) do
     ~H"""
     <p class="flex flex-wrap items-center gap-2 text-sm">
       Press
@@ -479,13 +479,13 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-menu"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-menu"}} = assigns) do
     ~H"""
     <div class="space-y-3">
-      <UI.button popovertarget="sarah-demo-menu" popovertargetaction="toggle">
+      <UI.button popovertarget="openagents-demo-menu" popovertargetaction="toggle">
         Open menu
       </UI.button>
-      <UI.menu id="sarah-demo-menu" label="Demo menu">
+      <UI.menu id="openagents-demo-menu" label="Demo menu">
         <UI.text_button>Profile</UI.text_button>
         <UI.text_button>Settings</UI.text_button>
         <UI.text_button tone={:danger}>Sign out</UI.text_button>
@@ -494,7 +494,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-frame"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-frame"}} = assigns) do
     ~H"""
     <UI.frame>
       <div class="p-6">
@@ -505,7 +505,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-status-indicator"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-status-indicator"}} = assigns) do
     ~H"""
     <div class="flex flex-wrap items-center gap-6">
       <UI.status_indicator state="ok" label="Healthy" />
@@ -516,11 +516,11 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-audio-player"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-audio-player"}} = assigns) do
     ~H"""
     <div class="space-y-2">
       <UI.audio_player
-        id="sarah-audio-demo"
+        id="openagents-audio-demo"
         src="/audio/does-not-exist.wav"
         label="Voice recording (demo source, nothing to play)"
       />
@@ -531,10 +531,10 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "sarah-icon"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-icon"}} = assigns) do
     ~H"""
-    <ul id="sarah-demo-icons" role="list" class="flex flex-wrap gap-4">
-      <li :for={name <- @sarah_icons} class="flex flex-col items-center gap-2 w-28">
+    <ul id="openagents-demo-icons" role="list" class="flex flex-wrap gap-4">
+      <li :for={name <- @openagents_icons} class="flex flex-col items-center gap-2 w-28">
         <UI.icon name={name} class="size-6" />
         <p class="text-center text-sm text-base-content/70">{name}</p>
       </li>

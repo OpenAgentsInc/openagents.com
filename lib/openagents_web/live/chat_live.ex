@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ChatLive do
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.{
     Accounts,
@@ -802,7 +802,7 @@ defmodule OpenAgentsWeb.ChatLive do
     ~H"""
     <Layouts.app flash={@flash} title="Chat" current_scope={@current_scope}>
       <div
-        id="sarah-app"
+        id="openagents-app"
         class="app-shell chat-shell"
         data-mobile-open="false"
         phx-hook=".SidebarShell"

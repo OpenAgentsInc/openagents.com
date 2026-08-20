@@ -206,7 +206,7 @@ defmodule OpenAgents.Modules.RegistryTest do
       required_authority: "conversation.read",
       executor: %{id: "sarah.local", disclosure: "Sarah local module test"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{"privacy" => "browser_scoped", "residency" => "host"},
       module_metadata:
         Metadata.first_party("conversation.read", "browser_conversation",

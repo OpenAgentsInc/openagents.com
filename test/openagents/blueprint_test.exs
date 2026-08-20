@@ -1,5 +1,5 @@
 defmodule OpenAgents.BlueprintTest do
-  use OpenAgents.SarahDataCase, async: true
+  use OpenAgents.DataCase, async: true
   alias OpenAgents.Blueprint
   alias OpenAgents.Blueprint.Revision
   alias OpenAgents.Conversations

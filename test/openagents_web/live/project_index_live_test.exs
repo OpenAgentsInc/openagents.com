@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   end
 
   test "mounts with the create form and an empty state", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/projects")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     assert html =~ "Projects"
     assert has_element?(view, "#new-project-form")
@@ -21,20 +21,20 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   test "lists projects owned by the URL owner and links to each board", %{conn: conn} do
     project = project_fixture(%{title: "Roadmap", owner: "OpenAgentsInc", state: "open"})
 
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/projects")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     refute html =~ "No projects yet"
     assert html =~ "Roadmap"
 
     assert has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/projects/#{project.number}"]},
+             ~s{a[href="/OpenAgentsInc/openagents.com/projects/#{project.number}"]},
              "Roadmap"
            )
 
     assert has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/projects/#{project.number}"]},
+             ~s{a[href="/OpenAgentsInc/openagents.com/projects/#{project.number}"]},
              "View"
            )
   end
@@ -42,14 +42,14 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   test "a project owned by someone else is filtered out", %{conn: conn} do
     project_fixture(%{title: "Someone elses", owner: "other-org"})
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/sarah/projects")
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     refute html =~ "Someone elses"
     assert html =~ "No projects yet"
   end
 
   test "submitting the form creates a project owned by the URL owner", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/projects")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     html =
       view
@@ -66,7 +66,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   end
 
   test "a project with no title re-renders the form with an error", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/projects")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     html =
       view
@@ -81,7 +81,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   test "deleting a project returns the empty state", %{conn: conn} do
     project = project_fixture(%{title: "Doomed", owner: "OpenAgentsInc"})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/projects")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     html =
       view

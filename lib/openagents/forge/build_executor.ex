@@ -4,7 +4,7 @@ defmodule OpenAgents.Forge.BuildExecutor do
   the set of changed `.beam` binaries for that commit.
 
   The production adapter is `OpenAgents.Forge.BuildExecutor.Sidecar`, which
-  talks to the `sarah-builder` sidecar container through a file queue on
+  talks to the `openagents-builder` sidecar container through a file queue on
   the shared workspace volume. Tests use `OpenAgents.Forge.FakeBuildExecutor`.
   The adapter is selected via the `:forge_build_executor` application env
   (see `OpenAgents.Forge.Builder`).
@@ -42,8 +42,8 @@ end
 
 defmodule OpenAgents.Forge.BuildExecutor.Sidecar do
   @moduledoc """
-  Production build adapter: talks to the `sarah-builder` sidecar container
-  through a file queue on the shared workspace volume. The Sarah release
+  Production build adapter: talks to the `openagents-builder` sidecar container
+  through a file queue on the shared workspace volume. The OpenAgents release
   container runs unprivileged with no docker socket, so it cannot exec
   into the sidecar — the queue is the whole interface. Protocol (the
   watcher script lives in `ops/fleet/fleet-startup.sh`):
@@ -198,7 +198,7 @@ defmodule OpenAgents.Forge.BuildExecutor.Sidecar do
   """
   def warm? do
     build_dir =
-      Application.get_env(:openagents, :forge_build_dir, "/var/lib/sarah/workspace/build")
+      Application.get_env(:openagents, :forge_build_dir, "/var/lib/openagents/workspace/build")
 
     File.exists?(Path.join(build_dir, ".forge-manifest"))
   end
@@ -207,7 +207,7 @@ defmodule OpenAgents.Forge.BuildExecutor.Sidecar do
     Application.get_env(
       :openagents,
       :forge_build_queue_dir,
-      "/var/lib/sarah/workspace/build-queue"
+      "/var/lib/openagents/workspace/build-queue"
     )
   end
 

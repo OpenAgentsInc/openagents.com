@@ -15,7 +15,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
   defp project!, do: project_fixture(%{title: "Roadmap", owner: "OpenAgentsInc"})
 
-  defp path(project), do: ~p"/OpenAgentsInc/sarah/projects/#{project.number}"
+  defp path(project), do: ~p"/OpenAgentsInc/openagents.com/projects/#{project.number}"
 
   test "mounts and renders every board column plus the add form", %{conn: conn} do
     project = project!()
@@ -27,7 +27,12 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
     assert html =~ "In Progress"
     assert html =~ "Done"
     assert has_element?(view, "#new-project-item-form")
-    assert has_element?(view, ~s{a[href="/OpenAgentsInc/sarah/projects"]}, "Back to projects")
+
+    assert has_element?(
+             view,
+             ~s{a[href="/OpenAgentsInc/openagents.com/projects"]},
+             "Back to projects"
+           )
   end
 
   test "an empty board renders the columns with no cards", %{conn: conn} do
@@ -35,7 +40,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
     {:ok, view, _html} = live(conn, path(project))
 
-    refute has_element?(view, ~s{a[href^="/OpenAgentsInc/sarah/issues/"]})
+    refute has_element?(view, ~s{a[href^="/OpenAgentsInc/openagents.com/issues/"]})
     # With no issues in the repo the issue select carries only its prompt.
     refute has_element?(view, ~s{#item_issue_number option:not([value=""])})
   end
@@ -83,7 +88,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
     assert has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/issues/#{issue.number}"]},
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]},
              "Fix the parser"
            )
   end
@@ -121,7 +126,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
     assert has_element?(
              view,
-             ~s{a[href="/OpenAgentsInc/sarah/issues/#{issue.number}"]},
+             ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]},
              "Ship the runbook"
            )
 
@@ -148,19 +153,19 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
     # Cards are grouped by column; the "Done" column is the third section.
     assert has_element?(
              view,
-             ~s{section:nth-of-type(3) a[href="/OpenAgentsInc/sarah/issues/#{issue.number}"]},
+             ~s{section:nth-of-type(3) a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]},
              "Fixture-placed"
            )
 
     refute has_element?(
              view,
-             ~s{section:nth-of-type(1) a[href="/OpenAgentsInc/sarah/issues/#{issue.number}"]}
+             ~s{section:nth-of-type(1) a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
            )
   end
 
   test "a missing project number raises rather than rendering an empty board", %{conn: conn} do
     assert_raise Ecto.NoResultsError, fn ->
-      live(conn, ~p"/OpenAgentsInc/sarah/projects/9999")
+      live(conn, ~p"/OpenAgentsInc/openagents.com/projects/9999")
     end
   end
 end

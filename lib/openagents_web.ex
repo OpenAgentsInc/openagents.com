@@ -60,21 +60,21 @@ defmodule OpenAgentsWeb do
     end
   end
 
-  def sarah_live_view do
+  def openagents_live_view do
     quote do
       use Phoenix.LiveView
 
-      unquote(sarah_html_helpers())
+      unquote(openagents_html_helpers())
 
       import OpenAgentsWeb.Components.RepoHeader
     end
   end
 
-  def sarah_html do
+  def openagents_html do
     quote do
       use Phoenix.Component
 
-      unquote(sarah_html_helpers())
+      unquote(openagents_html_helpers())
     end
   end
 
@@ -118,12 +118,12 @@ defmodule OpenAgentsWeb do
     end
   end
 
-  defp sarah_html_helpers do
+  defp openagents_html_helpers do
     quote do
       # HTML escaping functionality
       import Phoenix.HTML
-      # Sarah interface primitives
-      import OpenAgentsWeb.SarahUI
+      # OpenAgents interface primitives
+      import OpenAgentsWeb.UI
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

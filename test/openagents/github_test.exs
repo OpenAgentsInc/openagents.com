@@ -22,7 +22,7 @@ defmodule OpenAgents.GitHubTest do
       assert ["Bearer gho_listing-token"] = Plug.Conn.get_req_header(conn, "authorization")
       assert ["application/vnd.github+json"] = Plug.Conn.get_req_header(conn, "accept")
       assert ["2022-11-28"] = Plug.Conn.get_req_header(conn, "x-github-api-version")
-      assert ["OpenAgents-Sarah"] = Plug.Conn.get_req_header(conn, "user-agent")
+      assert ["OpenAgents"] = Plug.Conn.get_req_header(conn, "user-agent")
 
       query = URI.decode_query(conn.query_string)
       assert query["per_page"] == "5"

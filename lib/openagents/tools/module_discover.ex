@@ -24,7 +24,7 @@ defmodule OpenAgents.Tools.ModuleDiscover do
       required_authority: "module.discover",
       executor: %{id: "sarah.module.discovery", disclosure: "Sarah module discovery"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "public_catalog_metadata_only",
         "residency" => "application_process"

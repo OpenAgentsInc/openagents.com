@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ComputersControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   alias OpenAgents.Computer
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Pairing
@@ -10,7 +10,7 @@ defmodule OpenAgentsWeb.ComputersControllerTest do
     "tier" => "curated",
     "platform" => "linux-x64",
     "agent_version" => "0.4.0",
-    "roots" => ["/tmp/sarah-api-canary"]
+    "roots" => ["/tmp/openagents-api-canary"]
   }
 
   test "the API drives pairing, claim, presence, inventory, and revoke without exposing tokens",
@@ -70,7 +70,7 @@ defmodule OpenAgentsWeb.ComputersControllerTest do
       |> json_response(200)
 
     assert %{
-             "schema" => "sarah.computers.v1",
+             "schema" => "openagents.computers.v1",
              "pairing_enabled" => true,
              "computers" => [listed]
            } = inventory

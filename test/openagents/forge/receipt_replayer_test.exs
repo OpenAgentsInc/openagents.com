@@ -6,7 +6,7 @@ defmodule OpenAgents.Forge.ReceiptReplayerTest do
   rows are never duplicated or rewritten; refs never live in Postgres.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   import Ecto.Query
 
   alias OpenAgents.Forge

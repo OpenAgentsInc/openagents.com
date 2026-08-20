@@ -10,15 +10,15 @@ defmodule OpenAgentsWeb.CoreComponents do
 
   The foundation for styling is Tailwind CSS, a utility-first CSS framework,
   on top of the vendored Basecoat component structure in
-  `assets/vendor/basecoat/components/` and Sarah's style pack in
-  `assets/css/sarah.css`. Basecoat expresses variants as data attributes
+  `assets/vendor/basecoat/components/` and OpenAgents style pack in
+  `assets/css/openagents.css`. Basecoat expresses variants as data attributes
   (`data-variant`, `data-size`), so a control is `class="btn"` plus a data
   attribute rather than a stack of variant classes. There is no second
   component library — DaisyUI was removed, and reintroducing it would put flat
   `.btn`-style rules back above `.btn[data-variant=…]`. Here are useful
   references:
 
-    * `OpenAgentsWeb.SarahUI` - nineteen ready primitives over that CSS
+    * `OpenAgentsWeb.UI` - nineteen ready primitives over that CSS
       (`button/1`, `card/1`, `badge/1`, `alert/1`, `input/1`, …). Prefer them
       to hand-written component classes.
 
@@ -73,7 +73,7 @@ defmodule OpenAgentsWeb.CoreComponents do
       class="fixed top-4 right-4 z-50 flex flex-col items-end gap-2"
       {@rest}
     >
-      <%!-- Basecoat/Sarah `.alert` is a three-column grid: leading marker,
+      <%!-- Basecoat/OpenAgents `.alert` is a three-column grid: leading marker,
       body `<section>`, trailing action. Keeping exactly three children is what
       lets the close control sit in the third column instead of wrapping. --%>
       <div
@@ -105,12 +105,12 @@ defmodule OpenAgentsWeb.CoreComponents do
   @doc """
   Renders a button with navigation support.
 
-  A thin wrapper over the Basecoat/Sarah `.btn` recipe: the class is always
+  A thin wrapper over the Basecoat/OpenAgents `.btn` recipe: the class is always
   `btn` and the look comes from `data-variant`, never from a stack of variant
   classes. `class` adds layout utilities alongside it rather than replacing it,
   so a caller cannot accidentally drop the component styling.
 
-  `OpenAgentsWeb.SarahUI.button/1` is the fuller control (eight variants, three
+  `OpenAgentsWeb.UI.button/1` is the fuller control (eight variants, three
   sizes, a danger tone). This one exists so surfaces on `CoreComponents` alone
   still get the same two shapes.
 
@@ -390,7 +390,7 @@ defmodule OpenAgentsWeb.CoreComponents do
     ~H"""
     <%!-- Basecoat's `.table` carries structure only — widths, alignment, and
     the row rule. Rhythm and colour are utilities here rather than a zebra
-    variant: Sarah separates rows with the hairline, not with alternating
+    variant: OpenAgents separates rows with the hairline, not with alternating
     fills. --%>
     <div class="table-container">
       <table class="table text-sm">

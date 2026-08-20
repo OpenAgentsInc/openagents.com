@@ -7,7 +7,7 @@ defmodule OpenAgents.Forge.LoopV0Test do
   rolling-replace verification; this is the loop itself.)
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.{FakeBuildExecutor, Targets}
 
   defmodule TestPipeline do
@@ -50,7 +50,7 @@ defmodule OpenAgents.Forge.LoopV0Test do
       File.rm_rf(base)
     end)
 
-    %{base: base, url: "http://x:#{@operator_token}@127.0.0.1:#{port}/sarah.git"}
+    %{base: base, url: "http://x:#{@operator_token}@127.0.0.1:#{port}/openagents.com.git"}
   end
 
   # Restoring a nil via put_env stores literal nil, which then shadows
@@ -113,21 +113,21 @@ defmodule OpenAgents.Forge.LoopV0Test do
 
     # 2. Promote (the operator approval).
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, "forge:deploys")
-    assert {:ok, target} = Targets.promote("sarah", sha, "operator:loop-test")
+    assert {:ok, target} = Targets.promote("openagents.com", sha, "operator:loop-test")
 
     # 3–4. Build + hot-load run off the PubSub signals; wait for live.
-    assert_receive {:forge_deploy, %{repo: "sarah", sha: ^sha, result: "live"}}, 10_000
+    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "live"}}, 10_000
 
     # The module is actually live in this runtime.
     module = Module.concat([module_name])
     assert module.revision() == "loop-v0"
 
     # Target walked the full lifecycle.
-    assert Targets.current("sarah").status == "live"
-    assert Targets.current("sarah").id == target.id
+    assert Targets.current("openagents.com").status == "live"
+    assert Targets.current("openagents.com").id == target.id
 
     # The loop time is first-class: measured from the push receipt.
-    assert [deploy] = OpenAgents.Forge.recent_deploys("sarah")
+    assert [deploy] = OpenAgents.Forge.recent_deploys("openagents.com")
     assert deploy.result == "live"
     assert is_integer(deploy.push_to_live_ms) and deploy.push_to_live_ms >= 0
     assert deploy.sha == sha
@@ -162,11 +162,11 @@ defmodule OpenAgents.Forge.LoopV0Test do
     sha = String.trim(sha)
 
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, "forge:deploys")
-    {:ok, target} = Targets.promote("sarah", sha, "operator:loop-test")
+    {:ok, target} = Targets.promote("openagents.com", sha, "operator:loop-test")
 
     assert_receive {:forge_deploy, %{sha: ^sha, result: "needs_rolling_replace"}}, 10_000
     refute Code.ensure_loaded?(Module.concat([module_name]))
-    assert Targets.current("sarah").id == target.id
-    assert Targets.current("sarah").status == "needs_rolling_replace"
+    assert Targets.current("openagents.com").id == target.id
+    assert Targets.current("openagents.com").status == "needs_rolling_replace"
   end
 end

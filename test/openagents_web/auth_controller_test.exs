@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.AuthControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.{Accounts, Conversations}

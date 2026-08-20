@@ -48,7 +48,7 @@ defmodule OpenAgents.Forge.WAL do
   @callback put_object(repo, object_key :: String.t(), payload :: binary()) ::
               {:ok, String.t()} | {:error, term}
 
-  @repo_pattern ~r/^[a-z0-9][a-z0-9_-]*$/
+  @repo_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9]))*$/
   @entry_key_pattern ~r/^entries\/[0-9]{8}-[0-9a-f]{12}$/
   @artifact_key_pattern ~r/^artifacts\/[0-9a-f]{7,40}\.tar$/
 

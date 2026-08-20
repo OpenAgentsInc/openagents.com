@@ -1,5 +1,5 @@
 defmodule OpenAgents.VoiceSessionsTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.{Conversations, Voice, VoiceSessions}
   alias OpenAgents.Voice.ProviderEvent
 
@@ -398,7 +398,7 @@ defmodule OpenAgents.VoiceSessionsTest do
 
     assert_receive {:sideband_started, _sideband, _sideband_session}
 
-    typed = "Check https://github.com/OpenAgentsInc/sarah please"
+    typed = "Check https://github.com/OpenAgentsInc/openagents.com please"
     assert {:ok, message} = Conversations.create_voice_context_message(conversation, typed)
     assert message.status == "complete"
     assert message.role == "user"

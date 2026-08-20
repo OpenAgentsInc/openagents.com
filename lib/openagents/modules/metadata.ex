@@ -40,7 +40,7 @@ defmodule OpenAgents.Modules.Metadata do
       },
       "publisher" => "OpenAgentsInc",
       "provenance" => %{
-        "source" => "https://github.com/OpenAgentsInc/sarah",
+        "source" => "https://github.com/OpenAgentsInc/openagents.com",
         "admission" => "reviewed_first_party_release"
       },
       "compatibility" => %{

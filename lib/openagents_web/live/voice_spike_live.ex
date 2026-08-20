@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.VoiceSpikeLive do
   @moduledoc false
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   @impl true
   def mount(_params, _session, socket) do

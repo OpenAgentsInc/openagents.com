@@ -1,5 +1,5 @@
 defmodule OpenAgents.MachinesCapacityTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Machine
 

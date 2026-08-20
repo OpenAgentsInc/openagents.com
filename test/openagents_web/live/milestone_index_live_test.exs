@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   end
 
   test "mounts with the create form and an empty state", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     assert html =~ "Milestones"
     assert has_element?(view, "#new-milestone-form")
@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   test "lists seeded milestones with their state and due date", %{conn: conn} do
     milestone_fixture(%{title: "v1.0", state: "open", due_on: "2026-12-31", description: "Ship"})
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     refute html =~ "No milestones yet"
     assert html =~ "v1.0"
@@ -40,7 +40,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
     {:ok, done_issue} = Issues.set_milestone(done_issue, milestone.number)
     {:ok, _} = Issues.update_issue(done_issue, %{"state" => "closed"})
 
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     assert has_element?(
              view,
@@ -56,7 +56,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   test "a milestone with no issues reports zero progress", %{conn: conn} do
     milestone_fixture(%{title: "Empty", due_on: nil})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     assert has_element?(
              view,
@@ -65,7 +65,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   end
 
   test "submitting the form creates a milestone", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     html =
       view
@@ -80,7 +80,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   end
 
   test "a milestone with no title re-renders the form with an error", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     html =
       view
@@ -94,7 +94,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   test "closing a milestone flips its state and hides the close button", %{conn: conn} do
     milestone = milestone_fixture(%{title: "Closeable", state: "open", due_on: nil})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
     assert has_element?(view, ~s{button[phx-click="close"][phx-value-id="#{milestone.id}"]})
 
     html =
@@ -110,7 +110,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   test "deleting a milestone returns the empty state", %{conn: conn} do
     milestone = milestone_fixture(%{title: "Deletable", due_on: nil})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/milestones")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
     html =
       view

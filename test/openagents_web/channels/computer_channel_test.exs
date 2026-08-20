@@ -1,8 +1,8 @@
 defmodule OpenAgentsWeb.ComputerChannelTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
 
   import Phoenix.ChannelTest
-  import OpenAgentsWeb.SarahConnCase, only: [github_user: 1]
+  import OpenAgentsWeb.ConnCase, only: [github_user: 1]
 
   @endpoint OpenAgentsWeb.Endpoint
 
@@ -36,7 +36,7 @@ defmodule OpenAgentsWeb.ComputerChannelTest do
     assert {:error, %{"reason" => "machine_mismatch"}} =
              subscribe_and_join(socket, "computer:#{Ecto.UUID.generate()}", %{})
 
-    assert {:ok, %{"protocol" => "sarah.computer.v1"}, _joined} =
+    assert {:ok, %{"protocol" => "openagents.computer.v1"}, _joined} =
              subscribe_and_join(socket, "computer:#{machine.id}", %{})
   end
 

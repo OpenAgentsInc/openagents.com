@@ -19,8 +19,9 @@ persona artifact IDs, behavior revisions, evaluations, visible identity, and
 voice copy.
 
 Use OpenAgents names for generic supervisors, web helpers, style packs,
-runtime paths, build services, test cases, and configuration. Gate 2 performs
-that semantic rename and adds an allowlist for intentional references.
+runtime paths, build services, test cases, and configuration. Gate 2 completed
+that semantic rename and added an executable allowlist for intentional
+references.
 
 ## Consequences
 

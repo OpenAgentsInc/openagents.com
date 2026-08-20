@@ -6,7 +6,7 @@ defmodule OpenAgents.Forge.BootConvergeTest do
   module — never a refusal to boot.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.BootConverge
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target

@@ -52,7 +52,7 @@ defmodule OpenAgents.Tools.ComputerDevin do
       },
       maintainer: "OpenAgents",
       attribution: [
-        "OpenAgentsInc/sarah",
+        "OpenAgentsInc/openagents.com",
         "OpenAgentsInc/sarah-computer-controller",
         "agentclientprotocol/agent-client-protocol"
       ],

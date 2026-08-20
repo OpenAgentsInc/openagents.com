@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.VoiceTelemetryControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Repo, Voice}

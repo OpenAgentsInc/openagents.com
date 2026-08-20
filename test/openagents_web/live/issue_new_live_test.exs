@@ -12,20 +12,20 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   end
 
   test "mounts with an empty form and a cancel link back to the list", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     assert html =~ "New issue"
     assert has_element?(view, "#new-issue-form")
     assert has_element?(view, "#issue_title")
     assert has_element?(view, "#issue_body")
-    assert has_element?(view, ~s{a[href="/OpenAgentsInc/sarah/issues"]}, "Cancel")
+    assert has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/issues"]}, "Cancel")
   end
 
   test "the milestone and label selects offer the seeded records", %{conn: conn} do
     milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
     label_fixture(%{name: "bug", color: "d73a4a"})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     assert has_element?(view, ~s{#issue_milestone option[value="#{milestone.number}"]}, "v1.0")
     assert has_element?(view, ~s{#issue_labels option[value="bug"]}, "bug")
@@ -33,14 +33,14 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   end
 
   test "with no milestones or labels the selects render only the prompt", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     assert has_element?(view, "#issue_milestone")
     refute has_element?(view, ~s{#issue_labels option})
   end
 
   test "submitting a title creates the issue and navigates to it", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     result =
       view
@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
     assert issue.body == "Please"
 
     {:ok, _show, html} =
-      follow_redirect(result, conn, ~p"/OpenAgentsInc/sarah/issues/#{issue.number}")
+      follow_redirect(result, conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
     assert html =~ "Issue created"
     assert html =~ "Add a runbook"
@@ -62,7 +62,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
     milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
     label_fixture(%{name: "bug", color: "d73a4a"})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     assert {:error, {:live_redirect, _}} =
              view
@@ -85,7 +85,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   test "an empty label and milestone selection leaves the issue bare", %{conn: conn} do
     label_fixture(%{name: "bug", color: "d73a4a"})
 
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     assert {:error, {:live_redirect, _}} =
              view
@@ -100,7 +100,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   end
 
   test "a blank title re-renders the form with an error and creates nothing", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/sarah/issues/new")
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
     html =
       view

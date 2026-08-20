@@ -1,5 +1,5 @@
 defmodule OpenAgents.CompensationTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.{Compensation, Context.Composer, Conversations}
   alias OpenAgents.Compensation.{Event, Statement}
   alias OpenAgents.Providers.Request
@@ -34,7 +34,7 @@ defmodule OpenAgents.CompensationTest do
     assert event.classification == "eligible"
     assert event.technical_units == 100
     assert event.eligible_units == 100
-    assert share.contribution_ref == "OpenAgentsInc/sarah"
+    assert share.contribution_ref == "OpenAgentsInc/openagents.com"
     assert share.allocated_units == 100
 
     assert {:ok, %{event: same, shares: [same_share]}} = Compensation.account(step.id, policy)
@@ -207,7 +207,11 @@ defmodule OpenAgents.CompensationTest do
     register!(policy, artifact())
 
     assert {:ok, statement} =
-             Compensation.reconcile("OpenAgentsInc/sarah", policy, operator("empty-statement"))
+             Compensation.reconcile(
+               "OpenAgentsInc/openagents.com",
+               policy,
+               operator("empty-statement")
+             )
 
     assert_raise Postgrex.Error, fn ->
       statement |> Ecto.Changeset.change(net_units: 999) |> Repo.update!()
@@ -226,7 +230,12 @@ defmodule OpenAgents.CompensationTest do
              Compensation.register_module(
                policy,
                artifact,
-               [%{"contribution_ref" => "OpenAgentsInc/sarah", "allocation_ppm" => 1_000_000}],
+               [
+                 %{
+                   "contribution_ref" => "OpenAgentsInc/openagents.com",
+                   "allocation_ppm" => 1_000_000
+                 }
+               ],
                operator("module-allocation")
              )
   end
@@ -274,7 +283,7 @@ defmodule OpenAgents.CompensationTest do
       "result" => %{"private" => private_result},
       "error" => nil,
       "target_receipt_refs" => ["message:opaque"],
-      "attribution_refs" => ["OpenAgentsInc/sarah"],
+      "attribution_refs" => ["OpenAgentsInc/openagents.com"],
       "started_at" => "2026-08-16T20:00:00Z",
       "completed_at" => "2026-08-16T20:00:01Z"
     }

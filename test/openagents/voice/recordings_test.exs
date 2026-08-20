@@ -5,7 +5,7 @@ defmodule OpenAgents.Voice.RecordingsTest do
   things that keeps honest: ordering, fencing, ceilings, and sealing.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Conversations
   alias OpenAgents.Repo
@@ -299,6 +299,23 @@ defmodule OpenAgents.Voice.RecordingsTest do
       assert {:error, :chunk_unsealable} = RecordingVault.open(sealed, recording_id, 4)
     end
 
+    test "legacy Sarah version-1 chunks remain readable during migration" do
+      recording_id = Ecto.UUID.generate()
+      sequence = 3
+      nonce = :crypto.strong_rand_bytes(12)
+
+      {:ok, key} =
+        Base.decode64(Application.fetch_env!(:openagents, :voice_recording_encryption_key))
+
+      aad = "sarah.voice_recording_chunk.v1:#{recording_id}:#{sequence}"
+
+      {ciphertext, tag} =
+        :crypto.crypto_one_time_aead(:aes_256_gcm, key, nonce, "legacy audio", aad, true)
+
+      sealed = <<1, nonce::binary, tag::binary, ciphertext::binary>>
+      assert {:ok, "legacy audio"} = RecordingVault.open(sealed, recording_id, sequence)
+    end
+
     test "a wrong key fails closed" do
       recording_id = Ecto.UUID.generate()
       assert {:ok, sealed} = RecordingVault.seal("audio", recording_id, 1)
@@ -309,7 +326,7 @@ defmodule OpenAgents.Voice.RecordingsTest do
         Application.put_env(
           :openagents,
           :voice_recording_encryption_key,
-          Base.encode64("sarah-test-voice-recording-OTHER")
+          Base.encode64(String.duplicate("x", 32))
         )
 
         assert {:error, :chunk_unsealable} = RecordingVault.open(sealed, recording_id, 1)

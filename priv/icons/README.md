@@ -13,7 +13,7 @@ Generated files. **Do not edit these by hand.**
 Upstream ships one React component per glyph under
 `src/components/Icon/svg/`, each drawing a `currentColor` SVG sized at `1em`.
 Sarah has no React and no `node_modules`, so the components cannot be consumed
-as published. `mix sarah.icons.vendor <path-to-apps-sdk-ui>` converts them:
+as published. `mix openagents.icons.vendor <path-to-apps-sdk-ui>` converts them:
 
 - JSX attribute names become their SVG spelling (`fillRule` → `fill-rule`, and
   the rest);
@@ -31,7 +31,7 @@ change fails loudly rather than emitting a subtly wrong glyph.
 ## Upgrading
 
 1. Pull the upstream checkout to the new commit.
-2. Re-run `mix sarah.icons.vendor <path>`. It clears the previous set first, so
+2. Re-run `mix openagents.icons.vendor <path>`. It clears the previous set first, so
    glyphs deleted upstream do not linger.
 3. Update the commit and date above.
 4. Run `mix precommit`. The icon tests fail if a glyph a surface depends on has

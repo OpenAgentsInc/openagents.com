@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
   rather than reviewed by eye.
   """
 
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
 
   describe "icon-only controls" do
@@ -66,22 +66,9 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
     test "no surface hand-writes an svg outside the vendored set" do
       # Every glyph must come from `priv/icons` through `icon/1`. A pasted
       # `<svg>` in a template is how a second, unmanaged icon set starts.
-      #
-      # Ported from Sarah, where this globbed `lib/sarah_web/**` and carried a
-      # documented exemption for Sarah's landing template
-      # (`lib/sarah_web/controllers/home_html/show.html.heex`), whose
-      # `landing-grid` is a background pattern rather than an icon. That
-      # exemption is dropped rather than repointed: the OpenAgents home is
-      # `OpenAgentsWeb.HomeLive` ("The Agent Forge"), it renders no background
-      # SVG, and Sarah's landing template is deliberately not part of this app.
-      # If a background pattern is ever added here, re-add the exemption WITH
-      # the staleness assertion that guarded it.
-      #
-      # The exempt files are the ones that IMPLEMENT the vendored set:
-      # `icons.ex` holds it, and `icon/1` is defined in both `sarah_ui.ex` (which
-      # matches the `ui.ex` suffix Sarah used) and `core_components.ex`. The
-      # assertions below fail loudly if either stops being icon plumbing, so the
-      # exemption cannot silently become a hole.
+      # The exempt files implement the vendored set. `icons.ex` holds the
+      # embedded SVG markup, while `ui.ex` and `core_components.ex` render it.
+      # The assertions below fail if an exemption stops being icon plumbing.
       renderers = ["lib/openagents_web/components/core_components.ex"]
 
       for renderer <- renderers do

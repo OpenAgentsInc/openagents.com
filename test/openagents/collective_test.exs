@@ -1,5 +1,5 @@
 defmodule OpenAgents.CollectiveTest do
-  use OpenAgents.SarahDataCase, async: true
+  use OpenAgents.DataCase, async: true
   alias OpenAgents.Collective
   alias OpenAgents.Collective.{Candidate, ConsentReceipt}
   alias OpenAgents.Conversations

@@ -1,5 +1,5 @@
 defmodule OpenAgents.ProgramLifecycleTest do
-  use OpenAgents.SarahDataCase, async: true
+  use OpenAgents.DataCase, async: true
   alias OpenAgents.ProgramArtifacts.Reader
   alias OpenAgents.ProgramLifecycle
   alias OpenAgents.ProgramLifecycle.Event

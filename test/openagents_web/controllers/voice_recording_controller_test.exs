@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.VoiceRecordingControllerTest do
   container outside the allowlist, and another account's call.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   alias OpenAgents.Conversations
   alias OpenAgents.Voice
   alias OpenAgents.Voice.Config

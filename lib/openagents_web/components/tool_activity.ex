@@ -92,13 +92,16 @@ defmodule OpenAgentsWeb.ToolActivity do
   def subject("computer_devin"), do: "a Devin coding task on your computer"
   def subject("computer_agent"), do: "a coding agent task on your computer"
   def subject("module_discover"), do: "a check of what Sarah can do"
-  def subject("repo_read"), do: "a read of Sarah's own source code"
-  def subject("repo_grep"), do: "a search of Sarah's own source code"
-  def subject("repo_list"), do: "a listing of Sarah's own source tree"
+  def subject("repo_read"), do: "a read of OpenAgents source code"
+  def subject("repo_grep"), do: "a search of OpenAgents source code"
+  def subject("repo_list"), do: "a listing of the OpenAgents source tree"
   def subject("code_check"), do: "a syntax and compile check of candidate code"
-  def subject("repo_edit"), do: "an edit in this job's clone of Sarah's repository"
-  def subject("repo_write"), do: "a file written in this job's clone of Sarah's repository"
-  def subject("repo_commit_push"), do: "a commit pushed to this job's branch on Sarah's forge"
+  def subject("repo_edit"), do: "an edit in this job's clone of the OpenAgents repository"
+  def subject("repo_write"), do: "a file written in this job's OpenAgents repository clone"
+
+  def subject("repo_commit_push"),
+    do: "a commit pushed to this job's branch on the OpenAgents forge"
+
   def subject(tool_name), do: "the #{humanized_tool(tool_name)} step"
 
   @doc "Bounded pretty JSON of the step's durable raw arguments, or nil."

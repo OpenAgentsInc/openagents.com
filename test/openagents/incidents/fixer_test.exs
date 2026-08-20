@@ -1,5 +1,5 @@
 defmodule OpenAgents.Incidents.FixerTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.Incidents
   alias OpenAgents.Incidents.Fixer

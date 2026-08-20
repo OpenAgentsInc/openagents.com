@@ -1,5 +1,5 @@
 defmodule OpenAgents.Memory.EvaluationTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.Memory.Evaluation.{Corpus, ReleaseGate, Report, Runner}
 

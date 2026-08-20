@@ -28,8 +28,8 @@ defmodule OpenAgents.Work.HandoffTest do
 
   test "a Horde singleton relocates to a survivor when its node dies, staying unique" do
     cookie = :erlang.get_cookie()
-    {peer1, node1} = start_peer(:sarah_handoff_peer1, cookie)
-    {peer2, node2} = start_peer(:sarah_handoff_peer2, cookie)
+    {peer1, node1} = start_peer(:openagents_handoff_peer1, cookie)
+    {peer2, node2} = start_peer(:openagents_handoff_peer2, cookie)
 
     on_exit(fn ->
       for p <- [peer1, peer2], do: safe_stop(p)

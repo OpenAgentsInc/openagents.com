@@ -6,7 +6,7 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
   discipline — plus every refusal the invariant promises.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Repos
@@ -44,10 +44,10 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
     Application.put_env(
       :openagents,
       :forge_self_push_url,
-      "http://x:#{@operator_token}@127.0.0.1:#{port}/sarah.git"
+      "http://x:#{@operator_token}@127.0.0.1:#{port}/openagents.com.git"
     )
 
-    # Seed the forge's "sarah" repo with one commit so clones have a base.
+    # Seed the forge's "openagents.com" repo with one commit so clones have a base.
     seed_repo!()
 
     on_exit(fn ->
@@ -72,7 +72,7 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
   end
 
   defp seed_repo! do
-    path = Repos.ensure_repo!("sarah")
+    path = Repos.ensure_repo!("openagents.com")
 
     {blob, 0} = plumb(path, ["hash-object", "-w", "--stdin"], "original content\n")
     {tree, 0} = plumb(path, ["mktree"], "100644 blob #{String.trim(blob)}\tnote.txt\n")
@@ -222,23 +222,23 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
     sha = pushed["result"]["sha"]
     assert sha =~ ~r/^[0-9a-f]{40}$/
     branch = pushed["result"]["branch"]
-    assert branch == "sarah/job-11111111-2222-3333-4444-555555555555"
+    assert branch == "openagents/job-11111111-2222-3333-4444-555555555555"
 
     # The commit SHA is in the outcome receipt refs (SELF-EDIT-001). The
     # middle segment is the forge repo the coding lane edits
-    # (`OpenAgents.Tools.Repository.repo/0`), which is still `sarah` — the
-    # same name this test uses for the branch, the push receipt, and the
+    # (`OpenAgents.Tools.Repository.repo/0`), which is now `openagents.com` — the
+    # same repository this test uses for the branch, the push receipt, and the
     # bare path below. Renaming the forge repo is a separate whole-repo
     # change (config `forge_repos`, visibility, public paths, git URL).
-    assert "forge-commit:sarah:#{sha}" in pushed["target_receipt_refs"]
+    assert "forge-commit:openagents.com:#{sha}" in pushed["target_receipt_refs"]
 
     # The push is receipted with a WAL sequence, and the ref exists on the
     # forge with exactly that sha.
-    assert [receipt | _rest] = Forge.recent_pushes("sarah")
+    assert [receipt | _rest] = Forge.recent_pushes("openagents.com")
     assert is_integer(receipt.wal_seq)
     assert %{"new" => ^sha} = Map.get(receipt.refs, "refs/heads/" <> branch)
 
-    path = Repos.bare_path("sarah")
+    path = Repos.bare_path("openagents.com")
     {out, 0} = Repos.git(path, ["rev-parse", "refs/heads/" <> branch])
     assert String.trim(out) == sha
 

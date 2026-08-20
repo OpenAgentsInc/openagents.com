@@ -5,7 +5,7 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
   the unreachable-mirror posture (forge unaffected, nothing reported).
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   import Ecto.Query
 
   alias OpenAgents.Forge.{MirrorWatch, Repos}
@@ -26,10 +26,10 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
     # A local bare repo stands in for GitHub.
     mirror = Path.join(base, "github-mirror.git")
     {_, 0} = System.cmd("git", ["init", "--bare", "--quiet", mirror])
-    Application.put_env(:openagents, :forge_mirror_urls, %{"sarah" => mirror})
+    Application.put_env(:openagents, :forge_mirror_urls, %{"openagents.com" => mirror})
 
     # Seed the forge repo with one commit on main.
-    path = Repos.ensure_repo!("sarah")
+    path = Repos.ensure_repo!("openagents.com")
     seed_commit!(path, "one")
 
     on_exit(fn ->
@@ -105,12 +105,12 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
   test "sustained lag records ONE degraded incident per episode" do
     # Make the mirror un-pushable but still readable: replace it with a
     # bare repo whose receive hook rejects everything.
-    mirror = Application.fetch_env!(:openagents, :forge_mirror_urls)["sarah"]
+    mirror = Application.fetch_env!(:openagents, :forge_mirror_urls)["openagents.com"]
     hook = Path.join(mirror, "hooks/pre-receive")
     File.write!(hook, "#!/bin/sh\nexit 1\n")
     File.chmod!(hook, 0o755)
     # Diverge the forge past the mirror.
-    seed_commit!(Repos.bare_path("sarah"), "diverge")
+    seed_commit!(Repos.bare_path("openagents.com"), "diverge")
 
     now = System.monotonic_time(:millisecond)
     state = MirrorWatch.check_all(fresh_state(), now)
@@ -132,7 +132,10 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
     _state = MirrorWatch.check_all(fresh_state())
     assert MirrorWatch.state()["state"] == "off"
 
-    Application.put_env(:openagents, :forge_mirror_urls, %{"sarah" => "/nonexistent/mirror.git"})
+    Application.put_env(:openagents, :forge_mirror_urls, %{
+      "openagents.com" => "/nonexistent/mirror.git"
+    })
+
     _state = MirrorWatch.check_all(fresh_state())
     assert incident_count() == 0
   end

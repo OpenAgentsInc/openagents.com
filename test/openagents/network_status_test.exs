@@ -1,11 +1,11 @@
 defmodule OpenAgents.NetworkStatusTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
   alias OpenAgents.NetworkStatus
 
   test "the projection is bounded, content-free, and schema-versioned (STATUS-001)" do
     projection = NetworkStatus.projection(refresh: true)
 
-    assert projection["schema"] == "sarah.network_status.v1"
+    assert projection["schema"] == "openagents.network_status.v1"
     # Legacy /status compatibility keys survive in the superset.
     assert projection["status"] in ["ok", "degraded"]
     assert is_binary(projection["revision"])
@@ -75,7 +75,7 @@ defmodule OpenAgents.NetworkStatusTest do
       target =
         %Target{}
         |> Target.changeset(%{
-          repo: "sarah",
+          repo: "openagents.com",
           sha: sha,
           promoted_by: "operator:99887766",
           status: "promoted"
@@ -84,7 +84,7 @@ defmodule OpenAgents.NetworkStatusTest do
 
       %DeployReceipt{}
       |> DeployReceipt.changeset(%{
-        repo: "sarah",
+        repo: "openagents.com",
         sha: sha,
         target_id: target.id,
         modules: ["Elixir.OpenAgents.VerySecretModule"],
@@ -115,13 +115,18 @@ defmodule OpenAgents.NetworkStatusTest do
 
       target =
         %Target{}
-        |> Target.changeset(%{repo: "sarah", sha: sha, promoted_by: "operator:1", status: "live"})
+        |> Target.changeset(%{
+          repo: "openagents.com",
+          sha: sha,
+          promoted_by: "operator:1",
+          status: "live"
+        })
         |> Repo.insert!()
 
       for {result, ms} <- [{"live", 30_000}, {"failed", nil}, {"live", 20_000}, {"live", 10_000}] do
         %DeployReceipt{}
         |> DeployReceipt.changeset(%{
-          repo: "sarah",
+          repo: "openagents.com",
           sha: sha,
           target_id: target.id,
           result: result,

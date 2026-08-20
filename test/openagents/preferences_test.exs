@@ -1,5 +1,5 @@
 defmodule OpenAgents.PreferencesTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.{Context.Composer, Conversations, Preferences}
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Providers.Request

@@ -1,10 +1,10 @@
 /* See the Tailwind configuration guide for advanced usage
    https://tailwindcss.com/docs/configuration */
 
-/* There is exactly one component system here: Basecoat structure plus Sarah's
+/* There is exactly one component system here: Basecoat structure plus OpenAgents
  * style pack. DaisyUI was removed (see AGENTS.md) — it emitted flat component
  * rules from its own cascade layer that outranked every `.btn[data-variant=…]`
- * in sarah.css, so all eight SarahUI button variants rendered identically. Do
+ * in openagents.css, so all eight UI button variants rendered identically. Do
  * not reintroduce it, and do not add a second component library beside it.
  *
  * With DaisyUI gone the layer order Tailwind itself declares
@@ -20,10 +20,10 @@
  * basecoat-components.css. See assets/vendor/basecoat/README.md.
  *
  * These carry the structure (display, padding, min-height, background) that
- * sarah.css deliberately does not set — its .btn only adds gap, border,
+ * openagents.css deliberately does not set — its .btn only adds gap, border,
  * radius, colour, font, and transition on top. With DaisyUI gone they are the
  * only source of that geometry, so nothing here is optional. This list is
- * Sarah's, plus `table` for `CoreComponents.table/1`. */
+ * OpenAgents, plus `table` for `CoreComponents.table/1`. */
 @import "../vendor/basecoat/base/base.css";
 @import "../vendor/basecoat/components/button.css";
 @import "../vendor/basecoat/components/input.css";
@@ -40,8 +40,8 @@
 @import "../vendor/basecoat/components/kbd.css";
 @import "../vendor/basecoat/components/table.css";
 
-/* Sarah's identity. Must stay last so its declarations win. */
-@import "./sarah.css";
+/* OpenAgents identity. Must stay last so its declarations win. */
+@import "./openagents.css";
 @source "../css";
 @source "../js";
 @source "../../lib/openagents_web";
@@ -53,25 +53,25 @@
 @plugin "../vendor/heroicons";
 
 /* ── Token ladder ───────────────────────────────────────────────────────────
- * Ported from Sarah, where these are the two tiers of DESIGN.md "Color
+ * Integrated into OpenAgents, where these are the two tiers of DESIGN.md "Color
  * Tokens": PRIMITIVES are the hand-picked Aiur oklch values; DERIVATIONS are
  * color-mix() steps off one ink, so the hover/focus/border grammar is
  * systematic rather than accumulated.
  *
- * sarah.css consumes these but does not define them — it aliases them onto
+ * openagents.css consumes these but does not define them — it aliases them onto
  * the Basecoat names (`--background`, `--card`, `--primary`, `--border`, …)
  * in its own `:root`. Before this block existed those aliases resolved to
  * nothing and the DaisyUI theme was carrying the palette instead, which is
- * exactly the collision that made every SarahUI variant render identically.
+ * exactly the collision that made every UI variant render identically.
  *
  * The three surfaces are a fixed relationship, not three loose colors: page
  * and sidebar sit on the darkest (--ink-void), the working canvas one step up
  * (--ink-surface), elevated components another step up (--ink-raised). New
  * surfaces take a rung; they do not invent a fourth.
  *
- * The palette is dark-only, as Sarah's is (`color-scheme: dark`). The
+ * The palette is dark-only, as OpenAgents is (`color-scheme: dark`). The
  * `data-theme` plumbing in root.html.heex still runs, but there is no second
- * light palette behind it any more — DaisyUI's was the only one, and Sarah
+ * light palette behind it any more — DaisyUI's was the only one, and OpenAgents
  * ships no light variant to replace it with.
  */
 :root {
@@ -135,11 +135,11 @@
  * are still spoken by surfaces this change did not restyle (the component
  * catalog, the marketing home template, and the sidebar/docs/chat CSS at the
  * foot of this file). They are kept as aliases onto the three surface rungs so
- * that vocabulary keeps resolving; they are now names for Sarah tokens, not a
+ * that vocabulary keeps resolving; they are now names for OpenAgents tokens, not a
  * second palette. Prefer Basecoat's own `background` / `card` / `foreground` /
  * `border` names in new markup.
  *
- * The semantic four are Sarah's, not DaisyUI's, and have no Basecoat
+ * The semantic four are OpenAgents, not DaisyUI's, and have no Basecoat
  * equivalent — `--color-destructive` covers danger, but there is no success,
  * warning, or info in the Basecoat base. */
 @theme {
@@ -167,7 +167,7 @@
 
 /* This file is for your main application CSS */
 
-/* ── Sidebar (Sarah-style layout with OpenAgents color tokens) ───────────── */
+/* ── Sidebar (OpenAgents layout with OpenAgents color tokens) ───────────── */
 .sidebar {
   display: flex;
   min-height: 0;
@@ -396,7 +396,7 @@
   padding: 32px;
 }
 
-/* Chat UI (Sarah-style) */
+/* Chat UI (OpenAgents) */
 
 .chat-transcript {
   display: flex;

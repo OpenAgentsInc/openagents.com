@@ -80,7 +80,7 @@ const build = (overrides = {}) => {
 
   const call = new CallRecorder({
     microphone: "mic-stream",
-    remoteStream: "sarah-stream",
+    remoteStream: "remote-stream",
     generation: "3",
     timesliceMs: 5000,
     mimeType: "audio/webm;codecs=opus",

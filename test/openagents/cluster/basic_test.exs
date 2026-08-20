@@ -1,4 +1,4 @@
-defmodule OpenAgents.SarahClusterTest do
+defmodule OpenAgents.Cluster.BasicTest do
   # Not async: it manipulates node-global distribution state.
   use ExUnit.Case, async: false
   alias OpenAgents.Cluster

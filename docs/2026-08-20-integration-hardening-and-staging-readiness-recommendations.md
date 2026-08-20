@@ -232,6 +232,42 @@ Add a repository check that searches source, tests, configuration, and docs for
 service domains. Maintain a small allowlist of intentional Sarah-specific
 locations. Fail the check on every unclassified match.
 
+### Gate 2 implementation status
+
+Completed on 2026-08-20:
+
+- Renamed the generic runtime supervisor to `OpenAgents.RuntimeSupervisor` and
+  the generic web macros to `openagents_live_view`, `openagents_html`, and
+  `openagents_html_helpers`.
+- Renamed the product component module to `OpenAgentsWeb.UI` and the style pack
+  to `assets/css/openagents.css`. Updated the catalog, component tests, Basecoat
+  notes, and contributor instructions with the new names.
+- Consolidated lifted connection and data tests onto `OpenAgentsWeb.ConnCase`
+  and `OpenAgents.DataCase`, renamed the shared channel case, removed unused
+  lifted factory and fixture stubs, and removed duplicate lifted error tests.
+- Replaced inherited runtime, Ra, forge, WAL, build-sidecar, test-peer, and
+  coding-workspace names with OpenAgents names. The default forge repository is
+  now the public `OpenAgentsInc/openagents.com` repository, represented as
+  `openagents.com` in repository-scoped records and URLs.
+- Extended repository validation to admit bounded domain-style names without
+  admitting consecutive dots, trailing dots, path separators, uppercase
+  names, or unconfigured repositories.
+- Changed generic GitHub user agents, machine wire schemas, network and
+  changelog schemas, observability schemas, and Git authentication labels to
+  OpenAgents names.
+- Versioned machine-token and voice-recording authenticated encryption. New
+  ciphertext uses OpenAgents AAD and version 2; reads retain explicit support
+  for legacy version-1 Sarah ciphertext so the rename does not strand existing
+  encrypted staging data.
+- Added `ops/ci/reference-check.sh` and a documented allowlist. `mix precommit`
+  now rejects unclassified Sarah names, retired service domains, inherited
+  filesystem roots, source-project symbols, builder labels, and repository
+  names. The allowlist preserves persona language, stable behavior and data
+  contracts, persona artifacts, historical migrations, and named historical
+  documents.
+- Verified the change with 15 browser tests, 1,222 default Elixir tests, and all
+  9 isolated cluster tests, with zero failures.
+
 **Exit criteria:** Every remaining Sarah reference is intentional, documented,
 and specific to Sarah rather than inherited infrastructure.
 
@@ -1050,7 +1086,7 @@ each handoff.
 ## Final staging readiness checklist
 
 - [x] The repository has one accurate architecture narrative.
-- [ ] Every remaining Sarah reference is intentional and specific.
+- [x] Every remaining Sarah reference is intentional and specific.
 - [ ] All documentation links and invariant evidence resolve.
 - [ ] The application has one Markdown parser, component system, and documented
       two-tier icon policy.

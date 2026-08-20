@@ -1,5 +1,5 @@
 defmodule OpenAgents.ObservabilityTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Observability
   alias OpenAgents.Observability.{Readback, ReleaseGate}
 
@@ -51,7 +51,7 @@ defmodule OpenAgents.ObservabilityTest do
   test "read-back is aggregate-only and the zero-tolerance gate is explicit" do
     readback = Readback.snapshot()
 
-    assert readback.schema == "sarah.observability.readback.v1"
+    assert readback.schema == "openagents.observability.readback.v1"
 
     assert Map.keys(readback.planes) |> Enum.sort() ==
              ~w(collective evaluation memory module provider tool)

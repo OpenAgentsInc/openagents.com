@@ -1,12 +1,12 @@
 defmodule OpenAgentsWeb.UIGalleryLiveTest do
   @moduledoc """
   The gallery is routed only under `:dev_routes`, so it is mounted in isolation
-  here. Rendering it exercises every `OpenAgentsWeb.SarahUI` component in every variant
+  here. Rendering it exercises every `OpenAgentsWeb.UI` component in every variant
   and state at once, which catches a primitive that unit tests render in
   isolation but that breaks inside a real LiveView.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: true
   import Phoenix.LiveViewTest
 
   test "renders every component variant without raising", %{conn: conn} do

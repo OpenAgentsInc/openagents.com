@@ -1,5 +1,5 @@
 defmodule OpenAgents.CollectivePublicationTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Collective
 
   alias OpenAgents.Collective.{

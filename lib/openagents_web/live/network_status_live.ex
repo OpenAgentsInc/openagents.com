@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   full fleet to render — it is most useful precisely when something is down.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.NetworkStatus
 
@@ -33,7 +33,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Network status · Sarah")
+     |> assign(:page_title, "Network status · OpenAgents")
      |> assign(:events, [])
      |> assign_projection(NetworkStatus.projection())}
   end
@@ -250,7 +250,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <main id="network-status-page" class="app-shell status-shell">
-        <Layouts.command_bar aria_label="Sarah network status" current_user={@current_user}>
+        <Layouts.command_bar aria_label="OpenAgents network status" current_user={@current_user}>
           <:lockup>
             <.button
               :if={@current_user}
@@ -269,7 +269,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
             <div>
               <h1>Network status</h1>
               <p>
-                The Sarah fleet — a quorum cluster that survives node loss and
+                The OpenAgents fleet — a quorum cluster that survives node loss and
                 upgrades in place. Owned sessions dropped per node loss or
                 upgrade: 0; the release gate refuses anything that breaks that.
               </p>
@@ -360,7 +360,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
           <.card id="status-forge">
             <h2>Rapid deploys</h2>
             <p class="status-forge__intro">
-              Code moves through Sarah's own forge: a push is promoted by an
+              Code moves through the OpenAgents forge: a push is promoted by an
               operator, built into just the changed modules, and hot-loaded
               across the fleet without a restart — watch it sweep the nodes
               above.
@@ -451,7 +451,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
           <footer class="status-footer">
             <p>
               Machine-readable: <code>GET /api/status</code>
-              (schema <code>sarah.network_status.v1</code>) ·
+              (schema <code>openagents.network_status.v1</code>) ·
               probe: <code>GET /healthz</code>. This page updates live.
             </p>
           </footer>

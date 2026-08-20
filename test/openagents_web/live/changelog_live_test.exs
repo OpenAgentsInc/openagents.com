@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
   repo.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Changelog
@@ -19,7 +19,7 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
 
     {:ok, entry} =
       Changelog.record(%{
-        repo: "sarah",
+        repo: "openagents.com",
         sha: "abcdef1",
         summary: "Moved the mic button test entry",
         category: "ui",
@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
     {:ok, _view, html} = live(conn, ~p"/changelog")
 
     assert html =~ "abcdef1"
-    assert html =~ "/OpenAgentsInc/sarah/commit/abcdef1"
+    assert html =~ "/OpenAgentsInc/openagents.com/commit/abcdef1"
   end
 
   test "carries the shared command bar without account controls for a visitor", %{conn: conn} do
@@ -73,8 +73,8 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
     conn = get(conn, ~p"/api/changelog")
     payload = json_response(conn, 200)
 
-    assert payload["schema"] == "sarah.changelog.v1"
-    assert payload["repo"] == "sarah"
+    assert payload["schema"] == "openagents.changelog.v1"
+    assert payload["repo"] == "openagents.com"
 
     assert Enum.any?(
              payload["entries"],

@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.Layouts do
   """
   use OpenAgentsWeb, :html
 
-  alias OpenAgentsWeb.SarahUI, as: UI
+  alias OpenAgentsWeb.UI, as: UI
 
   # Embed all files in layouts/* within this module.
   # The default root.html.heex file contains the HTML
@@ -109,7 +109,7 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
-  The Sarah-style command bar: brand lockup on the left, account controls on the
+  The OpenAgents command bar: brand lockup on the left, account controls on the
   right. `current_user` is optional because public surfaces are anonymous.
   """
   attr :aria_label, :string, required: true
@@ -190,7 +190,7 @@ defmodule OpenAgentsWeb.Layouts do
   defp account_dropdown(assigns) do
     ~H"""
     <%!-- A native <details> disclosure rather than a JavaScript dropdown, for
-    the same reason `SarahUI.menu/1` uses the popover API: the account control
+    the same reason `UI.menu/1` uses the popover API: the account control
     has to work before any client script has run. --%>
     <details class="relative">
       <summary class="btn list-none cursor-pointer !p-1" data-variant="ghost">
@@ -375,7 +375,7 @@ defmodule OpenAgentsWeb.Layouts do
   The `data-theme` segmented control.
 
   The attribute plumbing in `root.html.heex` still runs, but since DaisyUI was
-  removed there is only one palette behind it: Sarah's token ladder is
+  removed there is only one palette behind it: OpenAgents token ladder is
   dark-only (`color-scheme: dark` in app.css) and ships no light variant. The
   control therefore moves its indicator without repainting the page. Keep it or
   remove it deliberately — do not reintroduce a second theme to make it work.

@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.ComputerToolsTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Incidents
@@ -828,7 +828,7 @@ defmodule OpenAgents.Tools.ComputerToolsTest do
                  "machine_id" => machine.id,
                  "agent_id" => "claude",
                  "prompt" => "first pass",
-                 "cwd" => "/Users/test/work/sarah"
+                 "cwd" => "/Users/test/work/openagents.com"
                }),
                context(scope)
              )
@@ -842,7 +842,7 @@ defmodule OpenAgents.Tools.ComputerToolsTest do
                  "machine_id" => machine.id,
                  "agent_id" => "claude",
                  "prompt" => "retry the same work",
-                 "cwd" => "/Users/test/work/sarah"
+                 "cwd" => "/Users/test/work/openagents.com"
                }),
                context(scope)
              )
@@ -877,7 +877,7 @@ defmodule OpenAgents.Tools.ComputerToolsTest do
     machine = probed_agent_machine(scope.user, "infer-box", ["claude"])
 
     connect(machine.id, fn {:agent, request_id, payload, caller} ->
-      assert payload["cwd"] == "/Users/christopherdavid/work/sarah"
+      assert payload["cwd"] == "/Users/test/work/openagents.com"
 
       FakeController.exit(caller, request_id, %{
         "status" => "completed",
@@ -895,13 +895,13 @@ defmodule OpenAgents.Tools.ComputerToolsTest do
                call_raw("computer_agent", %{
                  "agent_id" => "claude",
                  "prompt" =>
-                   "Work only in /Users/christopherdavid/work/sarah. Do not touch openagents."
+                   "Work only in /Users/test/work/openagents.com. Do not touch openagents."
                }),
                context(scope)
              )
 
     assert outcome["result"]["status"] == "started"
-    assert outcome["result"]["cwd"] == "/Users/christopherdavid/work/sarah"
+    assert outcome["result"]["cwd"] == "/Users/test/work/openagents.com"
     await_delegation(outcome)
   end
 
@@ -960,7 +960,7 @@ defmodule OpenAgents.Tools.ComputerToolsTest do
   end
 
   defp call("computer_agent", arguments) do
-    call_raw("computer_agent", Map.put_new(arguments, "cwd", "/Users/test/work/sarah"))
+    call_raw("computer_agent", Map.put_new(arguments, "cwd", "/Users/test/work/openagents.com"))
   end
 
   defp call(name, arguments), do: call_raw(name, arguments)

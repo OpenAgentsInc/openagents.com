@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.ConversationRecallToolsTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.{Context.Composer, Conversations, Repo, Voice}
   alias OpenAgents.Conversations.Message
@@ -646,7 +646,7 @@ defmodule OpenAgents.Tools.ConversationRecallToolsTest do
       "result" => result,
       "error" => nil,
       "target_receipt_refs" => [],
-      "attribution_refs" => ["OpenAgentsInc/sarah"],
+      "attribution_refs" => ["OpenAgentsInc/openagents.com"],
       "started_at" => "2026-08-16T20:00:00Z",
       "completed_at" => "2026-08-16T20:00:01Z"
     }

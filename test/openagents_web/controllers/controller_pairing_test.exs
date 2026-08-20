@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ControllerPairingTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   alias OpenAgents.Machines
 
   @create_params %{

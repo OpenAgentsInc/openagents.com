@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ChatDelegationRailTest do
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
 
   alias OpenAgents.{Computer, Conversations, Machines}

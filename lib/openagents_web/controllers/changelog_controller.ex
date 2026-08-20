@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.ChangelogController do
   @moduledoc """
   `GET /api/changelog` — the machine-readable changelog
-  (schema `sarah.changelog.v1`), the superset of the public `/changelog`
+  (schema `openagents.changelog.v1`), the superset of the public `/changelog`
   page including receipt row ids so agents can cross-check every claim
   against the receipt chain. Same posture as `/api/status`: public,
   read-only, bounded, no identity state.
@@ -10,7 +10,7 @@ defmodule OpenAgentsWeb.ChangelogController do
   use OpenAgentsWeb, :controller
 
   def show(conn, params) do
-    repo = Map.get(params, "repo", "sarah")
+    repo = Map.get(params, "repo", "openagents.com")
 
     case OpenAgents.Changelog.projection(repo) do
       {:ok, payload} ->

@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.InferenceProxyControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Grant
   alias OpenAgents.Machines

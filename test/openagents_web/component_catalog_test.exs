@@ -2,7 +2,7 @@ defmodule OpenAgentsWeb.ComponentCatalogTest do
   @moduledoc """
   Guards the catalog against silently falling behind the code.
 
-  The catalog was originally hand-written and drifted: nineteen SarahUI
+  The catalog was originally hand-written and drifted: nineteen UI
   components shipped without ever appearing on the components page. This test
   makes that failure mode loud — adding a public function component to a
   documented module fails the suite until it is catalogued or explicitly

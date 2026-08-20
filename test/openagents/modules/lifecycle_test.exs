@@ -1,5 +1,5 @@
 defmodule OpenAgents.Modules.LifecycleTest do
-  use OpenAgents.SarahDataCase, async: true
+  use OpenAgents.DataCase, async: true
 
   alias OpenAgents.Modules.{Discovery, Lifecycle, LifecycleReceipt, Metadata}
   alias OpenAgents.Tools.{Registry, Tool}
@@ -184,7 +184,7 @@ defmodule OpenAgents.Modules.LifecycleTest do
       required_authority: "conversation.read",
       executor: %{id: "sarah.test", disclosure: "Sarah lifecycle test"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{"privacy" => "test", "residency" => "test"},
       module_metadata:
         Metadata.first_party("conversation.read", "browser_conversation",

@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.AccountChromeTest do
   the connection marker must actually be driven by the socket.
   """
 
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Accounts

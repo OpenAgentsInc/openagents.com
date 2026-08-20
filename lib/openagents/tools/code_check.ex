@@ -38,10 +38,10 @@ defmodule OpenAgents.Tools.CodeCheck do
       required_authority: "code.execute",
       executor: %{
         id: "sarah.repository.self",
-        disclosure: "Sarah's own runtime, parsing candidate code in a throwaway process"
+        disclosure: "the OpenAgents runtime, parsing candidate code in a throwaway process"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "application_process",

@@ -1,5 +1,5 @@
 defmodule OpenAgents.VoiceTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.{Conversations, Voice}
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}
   alias OpenAgents.Voice.{Config, ProviderEvent, Session}

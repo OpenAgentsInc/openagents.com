@@ -1,7 +1,7 @@
 defmodule OpenAgents.Tools.RepoCommitPush do
   @moduledoc """
-  Commits this job's clone and pushes to the job's own `sarah/job-<id>`
-  branch on Sarah's own forge — never GitHub, never another ref
+  Commits this job's clone and pushes to the job's own `openagents/job-<id>`
+  branch on the OpenAgents forge — never GitHub, never another ref
   (SELF-EDIT-001). The commit SHA lands in the tool outcome receipt; the
   forge's WAL entry for the push is the durable artifact digest.
   """
@@ -19,7 +19,7 @@ defmodule OpenAgents.Tools.RepoCommitPush do
       version: 1,
       description:
         "Commits all changes in this coding job's clone and pushes them to this job's own " <>
-          "branch on Sarah's forge. Pass message as the commit message. The push branch is " <>
+          "branch on the OpenAgents forge. Pass message as the commit message. The push branch is " <>
           "fixed to this job; any other branch is refused. Returns the commit sha.",
       input_schema: %{
         "type" => "object",
@@ -36,10 +36,10 @@ defmodule OpenAgents.Tools.RepoCommitPush do
       required_authority: "repository.write",
       executor: %{
         id: "sarah.repository.self",
-        disclosure: "Sarah's own runtime, pushing this job's branch to her own forge"
+        disclosure: "the OpenAgents runtime, pushing this job's branch to her own forge"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "host",

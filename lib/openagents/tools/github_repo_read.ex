@@ -25,7 +25,7 @@ defmodule OpenAgents.Tools.GitHubRepoRead do
       required_authority: "github.read",
       executor: %{id: "sarah.github.api", disclosure: "GitHub API with the user's authorization"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "signed_browser_owner",
         "residency" => "application_process",

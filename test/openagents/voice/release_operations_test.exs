@@ -1,5 +1,5 @@
 defmodule OpenAgents.Voice.ReleaseOperationsTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
 
   import ExUnit.CaptureLog
 

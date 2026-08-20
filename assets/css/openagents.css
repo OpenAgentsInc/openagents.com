@@ -1,10 +1,10 @@
 /*
- * Sarah style pack
+ * OpenAgents style pack
  *
  * Basecoat ships structure (assets/vendor/basecoat/components/*.css: layout,
  * accessibility selectors, behavior hooks - no color, no radius) separately
  * from visual style packs. We import the structure and write this pack instead
- * of adopting Vega or any other shadcn pack, so Sarah's identity is a
+ * of adopting Vega or any other shadcn pack, so OpenAgents identity is a
  * first-class artifact rather than a diff against another product's defaults.
  *
  * This file is imported last. Every rule here must be traceable to DESIGN.md.
@@ -108,7 +108,7 @@
 }
 
 /* ── Token layer ───────────────────────────────────────────────────────────
- * Sarah's Aiur tokens (declared in app.css) are the authored source of truth.
+ * OpenAgents Aiur tokens (declared in app.css) are the authored source of truth.
  * Basecoat's shadcn-compatible names are derived from them so both vocabularies
  * resolve to one palette. DESIGN.md's token table stays the readable contract.
  */
@@ -182,7 +182,7 @@
 
 /* ── Surface recipes ───────────────────────────────────────────────────────
  * Shared mechanics that later phases compose by name. Each is a pattern with
- * one utility class, not a component: components stay in SarahWeb.UI.
+ * one utility class, not a component: components stay in OpenAgentsWeb.UI.
  */
 
 @layer components {
@@ -792,7 +792,7 @@
     inset: 3px;
   }
 
-  /* Link buttons are Sarah's inline action: underlined text, not a boxed
+  /* Link buttons are OpenAgents inline action: underlined text, not a boxed
      control. Size tokens must not apply. */
   .btn[data-variant="link"] {
     min-height: 0;
@@ -1229,7 +1229,7 @@
 @layer components {
   /* One durable event as a disclosure row: chevron, status dot, quiet 13px
      one-line title, optional short status note in text, hover-revealed
-     timestamp. Devin's event-header primitive over Sarah's tokens; the
+     timestamp. Devin's event-header primitive over OpenAgents tokens; the
      expansion carries the bounded durable details. */
   .event-header {
     min-width: 0;
@@ -1509,7 +1509,7 @@
 /* ── Status indicator ─────────────────────────────────────────────────────── */
 
 @layer components {
-  /* Sarah's semantic state marker: a small lit dot that reinforces a text
+  /* OpenAgents semantic state marker: a small lit dot that reinforces a text
      label and never replaces it. Reserved meanings: green completed and
      connected, blue active and streaming, gold required attention, red
      failed. The halo is the state made legible at a glance, not decoration. */
@@ -1524,7 +1524,7 @@
   }
 
   /* "ended", "live", and "attention" are the sidebar status rows' lifecycle
-     vocabulary (DESIGN.md, Sarah shell): an ordinarily ended call is a muted
+     vocabulary (DESIGN.md, OpenAgents shell): an ordinarily ended call is a muted
      fact, a live call is blue activity, and budget/interrupted outcomes ask
      for gold attention. Each joins the existing hue group; no new color. */
   .status-indicator[data-state="idle"],
@@ -1596,7 +1596,7 @@
 @layer components {
   /* Native controls, deliberately: the browser's transport is already keyboard
    * operable and already announced, and a hand-rolled one would have to re-earn
-   * both. Only the box the transport sits in is Sarah's. */
+   * both. Only the box the transport sits in is OpenAgents. */
   .audio-player {
     display: block;
     width: 100%;
@@ -1615,7 +1615,7 @@
 /* ── Popover / menu ───────────────────────────────────────────────────────── */
 
 @layer components {
-  /* Sarah keeps the native `popover` API: no Basecoat JavaScript, and the
+  /* OpenAgents keeps the native `popover` API: no Basecoat JavaScript, and the
    * control works without client-side script.
    *
    * Basecoat's own popover CSS is deliberately not imported. There, `.popover`

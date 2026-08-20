@@ -8,17 +8,17 @@ defmodule OpenAgents.Forge.Repos do
   ever carry request data.
   """
 
-  @name_pattern ~r/^[a-z0-9][a-z0-9_-]{0,63}$/
+  @name_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9])){0,63}$/
 
   @doc "The forge data directory (bare repos + WAL cache + beam artifacts)."
   def data_dir do
     Application.get_env(:openagents, :forge_data_dir) ||
-      Path.join(System.tmp_dir!(), "sarah_forge_data")
+      Path.join(System.tmp_dir!(), "openagents_forge_data")
   end
 
   @doc "Repositories this forge serves. Bounded, config-owned."
   def allowed_repos do
-    Application.get_env(:openagents, :forge_repos, ["sarah"])
+    Application.get_env(:openagents, :forge_repos, ["openagents.com"])
   end
 
   def valid_name?(name) when is_binary(name) do
@@ -84,7 +84,7 @@ defmodule OpenAgents.Forge.Repos do
 
   @doc "The WAL sequence this bare repo has applied (cache freshness marker)."
   def applied_seq(repo) do
-    case File.read(Path.join(bare_path(repo), "sarah-wal-seq")) do
+    case File.read(Path.join(bare_path(repo), "openagents-wal-seq")) do
       {:ok, contents} ->
         case Integer.parse(String.trim(contents)) do
           {seq, _} -> seq
@@ -97,7 +97,7 @@ defmodule OpenAgents.Forge.Repos do
   end
 
   def record_applied_seq!(repo, seq) when is_integer(seq) do
-    File.write!(Path.join(bare_path(repo), "sarah-wal-seq"), Integer.to_string(seq))
+    File.write!(Path.join(bare_path(repo), "openagents-wal-seq"), Integer.to_string(seq))
   end
 
   @doc "Run git with `--git-dir` pinned to the bare repo. Returns {output, status}."

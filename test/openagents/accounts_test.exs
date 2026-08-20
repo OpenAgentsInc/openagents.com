@@ -1,5 +1,5 @@
 defmodule OpenAgents.AccountsTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Accounts
   alias OpenAgents.Conversations
 

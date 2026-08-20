@@ -62,10 +62,10 @@ config :phoenix,
 # `OpenAgents.Forge.HotLoader` themselves.
 config :openagents,
   forge_enabled: true,
-  forge_repos: ["sarah", "demo"],
+  forge_repos: ["openagents.com", "demo"],
   forge_operator_token: "forge_test_operator_token_0123456789",
   forge_deploy_lane_enabled: false,
-  forge_repo_owners: %{"sarah" => "OpenAgentsInc", "demo" => "OpenAgentsInc"}
+  forge_repo_owners: %{"openagents.com" => "OpenAgentsInc", "demo" => "OpenAgentsInc"}
 
 config :openagents, :migrate_on_boot, false
 config :openagents, :ra_enabled, false

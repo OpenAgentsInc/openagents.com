@@ -17,7 +17,7 @@ defmodule OpenAgents.Observability.Readback do
     voice_config = OpenAgents.Voice.Config.current!()
 
     %{
-      schema: "sarah.observability.readback.v1",
+      schema: "openagents.observability.readback.v1",
       captured_at: DateTime.utc_now() |> DateTime.to_iso8601(),
       persona_id: OpenAgents.Persona.current!().id,
       persona_digest: OpenAgents.Persona.current!().digest,

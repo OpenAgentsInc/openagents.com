@@ -84,7 +84,7 @@ defmodule OpenAgents.Forge.Visibility do
   @doc """
   The owning account for `repo` — the first path segment of its public URL,
   so a forge URL is shaped exactly like the GitHub one it replaces
-  (`/OpenAgentsInc/sarah/blob/main/README.md`). Operator-owned config.
+  (`/OpenAgentsInc/openagents.com/blob/main/README.md`). Operator-owned config.
   """
   def owner(repo) when is_binary(repo) do
     :openagents

@@ -46,7 +46,7 @@ defmodule OpenAgents.Forge.BootConverge do
   end
 
   @doc false
-  def converge(repo \\ "sarah") do
+  def converge(repo \\ "openagents.com") do
     outcome =
       try do
         attempt(repo)

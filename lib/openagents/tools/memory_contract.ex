@@ -17,7 +17,7 @@ defmodule OpenAgents.Tools.MemoryContract do
       required_authority: authority,
       executor: %{id: "sarah.postgres.profile_memory", disclosure: "Sarah profile memory"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah", "OpenResponses/2026-04-24"],
+      attribution: ["OpenAgentsInc/openagents.com", "OpenResponses/2026-04-24"],
       policy_facets: %{
         "privacy" => "signed_browser_owner",
         "residency" => "application_postgres",

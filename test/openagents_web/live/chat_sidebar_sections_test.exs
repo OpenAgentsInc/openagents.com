@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ChatSidebarSectionsTest do
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
 
   alias OpenAgents.{Conversations, Work}

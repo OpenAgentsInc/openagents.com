@@ -25,7 +25,7 @@ defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
     else
       _ ->
         conn
-        |> put_resp_header("www-authenticate", ~s(Basic realm="sarah-forge"))
+        |> put_resp_header("www-authenticate", ~s(Basic realm="openagents-forge"))
         |> send_resp(401, "authentication required")
         |> halt()
     end

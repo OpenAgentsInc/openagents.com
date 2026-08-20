@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     issue
   end
 
-  defp path(issue), do: ~p"/OpenAgentsInc/sarah/issues/#{issue.number}"
+  defp path(issue), do: ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}"
 
   test "mounts and renders the title, number, state, and body", %{conn: conn} do
     issue =
@@ -65,12 +65,12 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "bug"
     assert html =~ "Assignees"
     assert has_element?(view, ~s{[title="grace"]})
-    assert has_element?(view, ~s{a[href="/OpenAgentsInc/sarah/milestones"]}, "v1.0")
+    assert has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/milestones"]}, "v1.0")
   end
 
   test "a missing issue number raises rather than rendering an empty page", %{conn: conn} do
     assert_raise Ecto.NoResultsError, fn ->
-      live(conn, ~p"/OpenAgentsInc/sarah/issues/9999")
+      live(conn, ~p"/OpenAgentsInc/openagents.com/issues/9999")
     end
   end
 
@@ -206,6 +206,6 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     issue = issue!(%{"title" => "Private"})
 
     assert {:error, {:redirect, %{to: to}}} = live(build_conn(), path(issue))
-    refute to == "/OpenAgentsInc/sarah/issues/#{issue.number}"
+    refute to == "/OpenAgentsInc/openagents.com/issues/#{issue.number}"
   end
 end

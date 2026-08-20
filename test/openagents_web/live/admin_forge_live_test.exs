@@ -6,7 +6,7 @@ defmodule OpenAgentsWeb.AdminForgeLiveTest do
   operator identity; only WAL-pushed SHAs are promotable.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Forge.{Repos, Targets}
@@ -74,8 +74,8 @@ defmodule OpenAgentsWeb.AdminForgeLiveTest do
   end
 
   test "promote records the operator identity and broadcasts", %{conn: conn} do
-    # "sarah" is the primary configured repo in test config.
-    sha = seeded_commit("sarah")
+    # "openagents.com" is the primary configured repo in test config.
+    sha = seeded_commit("openagents.com")
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, "forge:target")
 
     conn = log_in_admin_user(conn, "forge-promoter")
@@ -83,15 +83,15 @@ defmodule OpenAgentsWeb.AdminForgeLiveTest do
 
     render_hook(view, "promote", %{"sha" => sha})
 
-    assert_receive {:forge_target, %{repo: "sarah", sha: ^sha}}
-    target = Targets.current("sarah")
+    assert_receive {:forge_target, %{repo: "openagents.com", sha: ^sha}}
+    target = Targets.current("openagents.com")
     assert target.sha == sha
     assert target.promoted_by =~ "operator:"
     assert render(view) =~ String.slice(sha, 0, 12)
   end
 
   test "promoting a commit that is not in the forge is refused honestly", %{conn: conn} do
-    Repos.ensure_repo!("sarah")
+    Repos.ensure_repo!("openagents.com")
     conn = log_in_admin_user(conn, "forge-refuser")
     {:ok, view, _html} = live(conn, ~p"/admin/forge")
 
@@ -102,7 +102,7 @@ defmodule OpenAgentsWeb.AdminForgeLiveTest do
     # targets written by another test's async builder can leak past the
     # sandbox and land in the table, which made the global-emptiness form
     # flaky under the full suite.)
-    refute Enum.any?(Targets.recent("sarah", 50), &(&1.sha == refused_sha))
+    refute Enum.any?(Targets.recent("openagents.com", 50), &(&1.sha == refused_sha))
     assert render(view) =~ "only pushed commits are promotable"
   end
 end

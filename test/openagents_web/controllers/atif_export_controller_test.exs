@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.AtifExportControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Conversations.Visitor

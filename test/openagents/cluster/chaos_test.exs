@@ -29,8 +29,8 @@ defmodule OpenAgents.Cluster.ChaosTest do
 
   test "zero owned sessions are dropped across sequential node losses" do
     cookie = :erlang.get_cookie()
-    {peer1, node1} = start_peer(:sarah_chaos1, cookie)
-    {peer2, node2} = start_peer(:sarah_chaos2, cookie)
+    {peer1, node1} = start_peer(:openagents_chaos1, cookie)
+    {peer2, node2} = start_peer(:openagents_chaos2, cookie)
     on_exit(fn -> for p <- [peer1, peer2], do: safe_stop(p) end)
 
     assert eventually(fn ->

@@ -6,15 +6,15 @@ defmodule OpenAgentsWeb.ChangelogLive do
 
   Same public posture as the leaderboard and status pages (UI-001 lineage,
   TRANSPARENCY-001): read-only, mounts without a session, cannot invoke
-  Sarah, renders only `OpenAgentsWeb.UI` primitives (UI-003), and updates live
+  OpenAgents, renders only `OpenAgentsWeb.UI` primitives (UI-003), and updates live
   off the forge PubSub — a hot-load appears here seconds after it lands.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.Changelog
 
-  @repo "sarah"
+  @repo "openagents.com"
   @forge_topics ["forge:pushes", "forge:target", "forge:builds", "forge:deploys"]
 
   @impl true
@@ -31,7 +31,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Changelog · Sarah")
+     |> assign(:page_title, "Changelog · OpenAgents")
      |> assign(:repo, @repo)
      |> assign(:base, OpenAgents.Forge.Visibility.repo_path(@repo) || "")
      |> assign(:rows, rows)
@@ -92,7 +92,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <main id="changelog-page" class="app-shell changelog-shell">
-        <Layouts.command_bar aria_label="Sarah changelog" current_user={@current_user}>
+        <Layouts.command_bar aria_label="OpenAgents changelog" current_user={@current_user}>
           <:lockup>
             <.button
               :if={@current_user}
@@ -111,9 +111,9 @@ defmodule OpenAgentsWeb.ChangelogLive do
             <div>
               <h1>Changelog</h1>
               <p>
-                Every change to Sarah, two layers deep: what changed in plain
+                Every change to OpenAgents, two layers deep: what changed in plain
                 words, and — expand any entry — the receipts: the commit, the
-                modules hot-loaded, and the measured push→live time. Sarah
+                modules hot-loaded, and the measured push→live time. OpenAgents
                 ships her own code through her own forge; this page is how
                 you watch her do it.
               </p>

@@ -105,7 +105,7 @@ defmodule OpenAgents.Incidents.Fixer do
     context: #{context}
 
     Delegate to a coding agent on the paired computer. Reproduce the failure in
-    the OpenAgentsInc/sarah repo if you can, diagnose the root cause, and propose
+    the OpenAgentsInc/openagents.com repo if you can, diagnose the root cause, and propose
     a MINIMAL patch by opening a pull request. Do NOT deploy and do NOT push to
     main directly — propose only. Report what you found and what you changed.
     """

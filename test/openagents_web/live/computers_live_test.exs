@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ComputersLiveTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Computer
@@ -142,7 +142,7 @@ defmodule OpenAgentsWeb.ComputersLiveTest do
                "tier" => "curated",
                "platform" => "linux-x64",
                "agent_version" => "0.4.0",
-               "roots" => ["/home/sarah/work"]
+               "roots" => ["/home/test/work"]
              })
 
     pairing

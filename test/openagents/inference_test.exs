@@ -1,6 +1,6 @@
 defmodule OpenAgents.InferenceTest do
-  use OpenAgents.SarahDataCase, async: false
-  import OpenAgentsWeb.SarahConnCase, only: [github_user: 1]
+  use OpenAgents.DataCase, async: false
+  import OpenAgentsWeb.ConnCase, only: [github_user: 1]
 
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Grant

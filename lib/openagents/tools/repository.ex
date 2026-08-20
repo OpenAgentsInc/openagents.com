@@ -10,7 +10,7 @@ defmodule OpenAgents.Tools.Repository do
   - **Per-job clone** (`workspace_dir/1`): a working tree cloned from the
     local forge bare repo (origin is never GitHub) under the job's own
     directory. The ONLY place mutation tools may act, and pushes from it go
-    only to that job's `sarah/job-<id>` branch. Removed when the job ends.
+    only to that job's `openagents/job-<id>` branch. Removed when the job ends.
 
   Path handling fails closed: every path is resolved and verified to stay
   inside its root before any filesystem call.
@@ -19,11 +19,11 @@ defmodule OpenAgents.Tools.Repository do
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Sync
 
-  @repo "sarah"
+  @repo "openagents.com"
 
   @doc "The baked source root (the running code's own tree)."
   def source_dir do
-    Application.get_env(:openagents, :sarah_source_dir, File.cwd!())
+    Application.get_env(:openagents, :source_repo_dir, File.cwd!())
   end
 
   @doc "The workspace root that holds all per-job clones."
@@ -31,7 +31,7 @@ defmodule OpenAgents.Tools.Repository do
     Application.get_env(
       :openagents,
       :coding_jobs_dir,
-      Path.join(System.tmp_dir!(), "sarah-coding-jobs")
+      Path.join(System.tmp_dir!(), "openagents-coding-jobs")
     )
   end
 
@@ -42,7 +42,7 @@ defmodule OpenAgents.Tools.Repository do
   def workspace_dir("work-job:" <> job_id), do: Path.join(jobs_dir(), "job-" <> job_id)
 
   @doc "This job's push branch — the only ref it may ever push."
-  def job_branch("work-job:" <> job_id), do: "sarah/job-" <> job_id
+  def job_branch("work-job:" <> job_id), do: "openagents/job-" <> job_id
 
   @doc """
   Ensure the per-job clone exists, cloning from the LOCAL forge bare repo
@@ -156,7 +156,7 @@ defmodule OpenAgents.Tools.Repository do
   Approval receipts for the repository mutation modules, minted for a coding
   job. Starting the coding job is the person's exact current consent for the
   reversible writes inside the job's own clone; the operator posture for the
-  one external effect (a push to the job's own branch on Sarah's own forge)
+  one external effect (a push to the job's own branch on the OpenAgents forge)
   is host policy: the branch is sandboxed and promotion stays operator-only
   (SELF-EDIT-001).
   """

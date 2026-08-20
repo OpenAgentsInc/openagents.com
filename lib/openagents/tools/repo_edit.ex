@@ -39,10 +39,10 @@ defmodule OpenAgents.Tools.RepoEdit do
       required_authority: "repository.write",
       executor: %{
         id: "sarah.repository.self",
-        disclosure: "Sarah's own runtime, editing this job's clone of her repository"
+        disclosure: "the OpenAgents runtime, editing this job's clone of her repository"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "host",

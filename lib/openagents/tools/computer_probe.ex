@@ -37,7 +37,7 @@ defmodule OpenAgents.Tools.ComputerProbe do
         disclosure: "Read-only discovery on the user's paired computer"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah", "OpenAgentsInc/sarah-computer-controller"],
+      attribution: ["OpenAgentsInc/openagents.com", "OpenAgentsInc/sarah-computer-controller"],
       policy_facets: %{
         "privacy" => "signed_browser_owner",
         "residency" => "operator_machine",

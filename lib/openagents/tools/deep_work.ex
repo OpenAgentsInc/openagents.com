@@ -36,7 +36,7 @@ defmodule OpenAgents.Tools.DeepWork do
       required_authority: "work.delegate",
       executor: %{id: "sarah.work.jobs", disclosure: "Sarah durable work jobs"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "application_postgres",

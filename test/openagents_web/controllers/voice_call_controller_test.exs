@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.VoiceCallControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
 
   setup do
     previous_voice = Application.fetch_env!(:openagents, :voice)

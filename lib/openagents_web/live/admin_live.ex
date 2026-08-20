@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.AdminLive do
       separate decision from cross-account listening.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.Accounts
   alias OpenAgents.Admin

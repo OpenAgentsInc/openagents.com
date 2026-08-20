@@ -5,7 +5,7 @@ defmodule OpenAgents.LeaderboardTest do
   counted twice.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Accounts
   alias OpenAgents.Context.Composer
   alias OpenAgents.Conversations

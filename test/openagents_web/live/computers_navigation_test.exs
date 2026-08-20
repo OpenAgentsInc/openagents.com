@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ComputersNavigationTest do
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
 
   test "the canonical Computers surface carries authenticated application chrome", %{conn: conn} do

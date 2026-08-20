@@ -41,7 +41,7 @@ defmodule OpenAgents.Tools.ComputerRun do
         disclosure: "Command execution on the user's paired computer, bounded by its local policy"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah", "OpenAgentsInc/sarah-computer-controller"],
+      attribution: ["OpenAgentsInc/openagents.com", "OpenAgentsInc/sarah-computer-controller"],
       policy_facets: %{
         "privacy" => "signed_browser_owner",
         "residency" => "operator_machine",

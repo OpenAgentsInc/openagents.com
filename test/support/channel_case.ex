@@ -1,6 +1,6 @@
-defmodule OpenAgentsWeb.SarahChannelCase do
+defmodule OpenAgentsWeb.ChannelCase do
   @moduledoc """
-  Sarah-specific channel case used by the lifted Sarah channel tests.
+  Shared channel case for authenticated OpenAgents channel tests.
   """
 
   use ExUnit.CaseTemplate
@@ -12,8 +12,8 @@ defmodule OpenAgentsWeb.SarahChannelCase do
       use OpenAgentsWeb, :verified_routes
 
       import Phoenix.ChannelTest
-      import OpenAgentsWeb.SarahConnCase, only: [github_user: 1]
-      import OpenAgentsWeb.SarahChannelCase
+      import OpenAgentsWeb.ConnCase, only: [github_user: 1]
+      import OpenAgentsWeb.ChannelCase
     end
   end
 

@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.NetworkStatusLiveTest do
-  use OpenAgentsWeb.SarahConnCase
+  use OpenAgentsWeb.ConnCase
   import Phoenix.LiveViewTest
 
   test "renders publicly for an anonymous browser visitor", %{conn: conn} do
@@ -42,7 +42,7 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
        %{conn: conn} do
     response = conn |> get(~p"/api/status") |> json_response(200)
 
-    assert response["schema"] == "sarah.network_status.v1"
+    assert response["schema"] == "openagents.network_status.v1"
     assert response["status"] in ["ok", "degraded"]
     assert is_binary(response["revision"])
     assert is_list(response["nodes"])
@@ -59,7 +59,7 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
   defp seed_target(status, opts \\ []) do
     %Target{}
     |> Target.changeset(%{
-      repo: "sarah",
+      repo: "openagents.com",
       sha: Keyword.get(opts, :sha, String.duplicate("c", 40)),
       promoted_by: Keyword.get(opts, :promoted_by, "operator:31337"),
       status: status
@@ -119,7 +119,7 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
         OpenAgents.PubSub,
         "forge:target",
         {:forge_target_status,
-         %{repo: "sarah", sha: target.sha, target_id: target.id, status: "building"}}
+         %{repo: "openagents.com", sha: target.sha, target_id: target.id, status: "building"}}
       )
 
       html = render(view)
@@ -128,7 +128,7 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
       Phoenix.PubSub.broadcast(
         OpenAgents.PubSub,
         "forge:deploys",
-        {:forge_deploy, %{repo: "sarah", sha: target.sha, result: "live"}}
+        {:forge_deploy, %{repo: "openagents.com", sha: target.sha, result: "live"}}
       )
 
       assert render(view) =~ "hot deploy #{String.duplicate("c", 12)}: live"
@@ -139,7 +139,7 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
 
       %DeployReceipt{}
       |> DeployReceipt.changeset(%{
-        repo: "sarah",
+        repo: "openagents.com",
         sha: target.sha,
         target_id: target.id,
         modules: ["Elixir.OpenAgents.HiddenModuleName"],

@@ -24,7 +24,7 @@ defmodule OpenAgents.Memory.SemanticFailingProvider do
 end
 
 defmodule OpenAgents.SemanticRecallTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Message
 

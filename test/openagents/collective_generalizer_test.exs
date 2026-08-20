@@ -1,5 +1,5 @@
 defmodule OpenAgents.CollectiveGeneralizerTest do
-  use OpenAgents.SarahDataCase, async: true
+  use OpenAgents.DataCase, async: true
   alias OpenAgents.Collective
   alias OpenAgents.Collective.Generalizer
   alias OpenAgents.Conversations

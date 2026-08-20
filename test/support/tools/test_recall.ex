@@ -36,7 +36,7 @@ defmodule OpenAgents.Tools.TestRecall do
       required_authority: "conversation.read",
       executor: %{id: "sarah.local.recall", disclosure: "Sarah local conversation recall"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{"privacy" => "browser_scoped"},
       module_metadata:
         Metadata.first_party("conversation.read", "browser_conversation",

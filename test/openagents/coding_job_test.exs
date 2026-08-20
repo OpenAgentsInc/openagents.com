@@ -9,7 +9,7 @@ defmodule OpenAgents.CodingJobTest do
   action and is covered by the forge suite.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Work}
@@ -49,7 +49,7 @@ defmodule OpenAgents.CodingJobTest do
     Application.put_env(
       :openagents,
       :forge_self_push_url,
-      "http://x:#{@operator_token}@127.0.0.1:#{port}/sarah.git"
+      "http://x:#{@operator_token}@127.0.0.1:#{port}/openagents.com.git"
     )
 
     seed_repo!()
@@ -75,7 +75,7 @@ defmodule OpenAgents.CodingJobTest do
   end
 
   defp seed_repo! do
-    path = Repos.ensure_repo!("sarah")
+    path = Repos.ensure_repo!("openagents.com")
     {blob, 0} = plumb(path, ["hash-object", "-w", "--stdin"], "original content\n")
     {tree, 0} = plumb(path, ["mktree"], "100644 blob #{String.trim(blob)}\tnote.txt\n")
 
@@ -139,7 +139,7 @@ defmodule OpenAgents.CodingJobTest do
     # The report names the pushed commit — the operator promotes from it.
     assert job.report =~ "Coding report: pushed "
     assert [_, sha] = Regex.run(~r/pushed ([0-9a-f]{40})/, job.report)
-    assert job.report =~ "sarah/job-#{job.id}"
+    assert job.report =~ "openagents/job-#{job.id}"
 
     # Step receipts: all four tools succeeded, executor disclosed, and the
     # push step carries the commit SHA in its target receipt refs
@@ -150,18 +150,18 @@ defmodule OpenAgents.CodingJobTest do
 
     push_step = List.last(steps)
     # The middle segment is the forge repo the coding lane edits
-    # (`OpenAgents.Tools.Repository.repo/0`) — still `sarah`, the same name
+    # (`OpenAgents.Tools.Repository.repo/0`) — now `openagents.com`, the same repository
     # the push receipt below is looked up under.
-    assert "forge-commit:sarah:#{sha}" in push_step.target_receipt_refs
+    assert "forge-commit:openagents.com:#{sha}" in push_step.target_receipt_refs
 
     # The push is WAL-receipted on the forge, on the job's own branch.
-    assert [push_receipt | _rest] = Forge.recent_pushes("sarah")
+    assert [push_receipt | _rest] = Forge.recent_pushes("openagents.com")
     assert is_integer(push_receipt.wal_seq)
-    branch_ref = "refs/heads/sarah/job-#{job.id}"
+    branch_ref = "refs/heads/openagents/job-#{job.id}"
     assert %{"new" => ^sha} = Map.get(push_receipt.refs, branch_ref)
 
     # Only the job branch moved — main is untouched (promotion is a human).
-    path = Repos.bare_path("sarah")
+    path = Repos.bare_path("openagents.com")
     {main_sha, 0} = Repos.git(path, ["rev-parse", "refs/heads/main"])
     refute String.trim(main_sha) == sha
 

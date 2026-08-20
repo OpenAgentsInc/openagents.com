@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ComputerChannel do
   @moduledoc """
-  `sarah.computer.v1` — the live channel a paired controller keeps open.
+  `openagents.computer.v1` — the live channel a paired controller keeps open.
 
   Server to controller: `probe`, `run`, `agent`, `devin`, and `cancel` (each correlated
   by a server-minted `request_id`). Controller to server: `hello` (agent
@@ -27,7 +27,7 @@ defmodule OpenAgentsWeb.ComputerChannel do
             {:ok, _owner} ->
               Phoenix.PubSub.subscribe(OpenAgents.PubSub, "machine:#{machine.id}")
               Machines.record_seen(machine)
-              {:ok, %{"protocol" => "sarah.computer.v1"}, assign(socket, :machine, machine)}
+              {:ok, %{"protocol" => "openagents.computer.v1"}, assign(socket, :machine, machine)}
 
             # A prior registration (usually from a node that just died) hasn't
             # been pruned yet — refuse the join; the controller's reconnect

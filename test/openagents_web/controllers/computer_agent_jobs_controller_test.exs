@@ -1,12 +1,12 @@
 defmodule OpenAgentsWeb.ComputerAgentJobsControllerTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Machines
   alias OpenAgents.Support.FakeController
   alias OpenAgents.Work
 
-  @root "/tmp/sarah-agent-api"
+  @root "/tmp/openagents-agent-api"
 
   test "an API-started Codex job streams into ChatLive and posts its terminal report", %{
     conn: conn

@@ -1,5 +1,5 @@
 defmodule OpenAgents.Memory.EvidenceTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.{Context.Composer, Conversations, Repo}
   alias OpenAgents.Conversations.Message

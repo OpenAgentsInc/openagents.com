@@ -383,7 +383,7 @@ defmodule OpenAgents.Tools.Runner do
     do: "old_string matches more than once — include more surrounding context or set replace_all."
 
   defp error_message(:branch_refused),
-    do: "A coding job may push only to its own sarah/job-<id> branch."
+    do: "A coding job may push only to its own openagents/job-<id> branch."
 
   defp error_message(:nothing_to_commit), do: "The workspace has no changes to commit."
   defp error_message(:commit_failed), do: "git commit failed in the job workspace."

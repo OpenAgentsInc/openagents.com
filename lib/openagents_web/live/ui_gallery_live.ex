@@ -8,12 +8,12 @@ defmodule OpenAgentsWeb.UIGalleryLive do
   UI-001 still forbids navigation chrome in the shipped interface.
 
   Check this page after re-vendoring Basecoat or editing
-  `assets/css/style-sarah.css` — the shared corner radius, the sanctioned depth
+  `assets/css/openagents.css` — the shared corner radius, the sanctioned depth
   tokens, reserved semantic colors, Geist rendering rather than a system
   fallback, and a visible focus ring on every control.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   @statuses ~w(idle connected requested running succeeded failed cancelled interrupted refused unavailable)
   @voice_states ~w(idle requesting connecting listening speaking interrupted reconnecting muted blocked failed ending)
@@ -138,7 +138,7 @@ defmodule OpenAgentsWeb.UIGalleryLive do
           </.section>
 
           <.section title="Audio player">
-            <%!-- Native controls in Sarah's box. The source is deliberately
+            <%!-- Native controls in the OpenAgents box. The source is deliberately
                   absent: this is a look at the transport's chrome in the dark
                   theme, not a playback test. --%>
             <.audio_player class="max-w-sm" src="" label="Recording of a voice call" />

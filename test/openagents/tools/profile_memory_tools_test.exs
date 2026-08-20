@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   alias OpenAgents.Conversations.{Message, Visitor}
   alias OpenAgents.Memory.Consent

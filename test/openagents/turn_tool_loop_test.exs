@@ -1,5 +1,5 @@
 defmodule OpenAgents.TurnToolLoopTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Turns}

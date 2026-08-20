@@ -77,7 +77,7 @@ defmodule OpenAgentsWeb.Router do
 
   # The public forge web UI (TRANSPARENCY-001), addressed exactly the way the
   # GitHub URL it replaces is:
-  # openagents.com/OpenAgentsInc/sarah/blob/main/README.md.
+  # openagents.com/OpenAgentsInc/openagents.com/blob/main/README.md.
   #
   # The owner is a LITERAL scope segment, not a `:owner` pattern: a wildcard
   # first segment would match every two-segment path on the domain (/dev/ui,

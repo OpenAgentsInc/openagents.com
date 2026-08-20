@@ -1,5 +1,5 @@
 defmodule OpenAgents.ExperienceMemoryTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.{Context.Composer, Conversations, ExperienceMemory}
   alias OpenAgents.ExperienceMemory.{Bank, BankItem, DeletionReceipt, EvidenceRef, Pattern}
   alias OpenAgents.Providers.Request
@@ -342,7 +342,7 @@ defmodule OpenAgents.ExperienceMemoryTest do
       "result" => %{"verified" => true},
       "error" => nil,
       "target_receipt_refs" => [target_ref],
-      "attribution_refs" => ["OpenAgentsInc/sarah"],
+      "attribution_refs" => ["OpenAgentsInc/openagents.com"],
       "started_at" => "2026-08-16T20:00:00Z",
       "completed_at" => "2026-08-16T20:00:01Z"
     }

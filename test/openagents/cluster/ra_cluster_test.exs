@@ -22,8 +22,8 @@ defmodule OpenAgents.Cluster.RaClusterTest do
 
   test "3-node Raft: cross-node commit, linearizable reads, fence, and quorum survival" do
     cookie = :erlang.get_cookie()
-    {peer1, node1} = start_peer(:sarah_ra_peer1, cookie)
-    {peer2, node2} = start_peer(:sarah_ra_peer2, cookie)
+    {peer1, node1} = start_peer(:openagents_ra_peer1, cookie)
+    {peer2, node2} = start_peer(:openagents_ra_peer2, cookie)
     on_exit(fn -> for p <- [peer1, peer2], do: safe_stop(p) end)
 
     nodes = [node(), node1, node2]
@@ -73,8 +73,8 @@ defmodule OpenAgents.Cluster.RaClusterTest do
 
   test "a node joins an existing cluster via Ra.join and becomes a voting member" do
     cookie = :erlang.get_cookie()
-    {peer1, node1} = start_peer(:sarah_ra_join1, cookie)
-    {peer2, node2} = start_peer(:sarah_ra_join2, cookie)
+    {peer1, node1} = start_peer(:openagents_ra_join1, cookie)
+    {peer2, node2} = start_peer(:openagents_ra_join2, cookie)
     on_exit(fn -> for p <- [peer1, peer2], do: safe_stop(p) end)
 
     Ra.start_in(data_dir(node()))
@@ -103,8 +103,8 @@ defmodule OpenAgents.Cluster.RaClusterTest do
 
   test "a phantom member (local server down, still in config) restarts and rejoins" do
     cookie = :erlang.get_cookie()
-    {peer1, node1} = start_peer(:sarah_ra_phantom1, cookie)
-    {peer2, node2} = start_peer(:sarah_ra_phantom2, cookie)
+    {peer1, node1} = start_peer(:openagents_ra_phantom1, cookie)
+    {peer2, node2} = start_peer(:openagents_ra_phantom2, cookie)
     on_exit(fn -> for p <- [peer1, peer2], do: safe_stop(p) end)
 
     Ra.start_in(data_dir(node()))
@@ -115,11 +115,8 @@ defmodule OpenAgents.Cluster.RaClusterTest do
 
     # Stop peer2's local Raft server, leaving it in the cluster config but not
     # running here — the phantom-member state an ungraceful restart produces.
-    # The Ra cluster atom was renamed `:sarah_sessions` -> `:openagents_sessions`
-    # in `OpenAgents.Cluster.Ra`, but this line kept the old name. `:ra.stop_server`
-    # answers `:ok` for a server id it does not know, so the stop silently did
-    # nothing and peer2's real server stayed up. Ask the module for the id so the
-    # test can never drift from the cluster name again.
+    # Ask the module for the server ID so this test cannot drift from the
+    # configured cluster name.
     :ok = :erpc.call(node2, :ra, :stop_server, [:default, Ra.server_id(node2)])
 
     assert eventually(fn -> :erpc.call(node2, Ra, :members, [node2]) == [] end),
@@ -139,8 +136,8 @@ defmodule OpenAgents.Cluster.RaClusterTest do
     cookie = :erlang.get_cookie()
     # standard_io control channels: the peers must survive losing their dist
     # connection to us — that loss IS the partition under test.
-    {peer1, node1} = start_peer(:sarah_ra_part1, cookie, connection: :standard_io)
-    {peer2, node2} = start_peer(:sarah_ra_part2, cookie, connection: :standard_io)
+    {peer1, node1} = start_peer(:openagents_ra_part1, cookie, connection: :standard_io)
+    {peer2, node2} = start_peer(:openagents_ra_part2, cookie, connection: :standard_io)
     on_exit(fn -> for p <- [peer1, peer2], do: safe_stop(p) end)
 
     Ra.start_in(data_dir(node()))
@@ -224,7 +221,7 @@ defmodule OpenAgents.Cluster.RaClusterTest do
   end
 
   defp data_dir(node) do
-    base = Path.join(System.tmp_dir!(), "sarah_ra_test")
+    base = Path.join(System.tmp_dir!(), "openagents_ra_test")
 
     short =
       node |> Atom.to_string() |> String.replace(~r/[^a-zA-Z0-9]/, "_")

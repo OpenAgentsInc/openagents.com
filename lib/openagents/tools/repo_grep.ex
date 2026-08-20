@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.RepoGrep do
-  @moduledoc "Searches Sarah's own source for a pattern, bounded, without shelling out."
+  @moduledoc "Searches OpenAgents source for a pattern, bounded, without shelling out."
 
   @behaviour OpenAgents.Tools.Tool
 
@@ -17,7 +17,7 @@ defmodule OpenAgents.Tools.RepoGrep do
       name: "repo_grep",
       version: 1,
       description:
-        "Searches Sarah's own source code for a regular expression. Returns matching " <>
+        "Searches OpenAgents source code for a regular expression. Returns matching " <>
           "path:line:text rows, bounded. Optional glob filters files (e.g. \"lib/**/*.ex\"); " <>
           "from selects \"image\" (running source, default) or \"workspace\" (this job's clone).",
       input_schema: %{
@@ -37,10 +37,10 @@ defmodule OpenAgents.Tools.RepoGrep do
       required_authority: "repository.read",
       executor: %{
         id: "sarah.repository.self",
-        disclosure: "Sarah's own runtime, searching her running source"
+        disclosure: "the OpenAgents runtime, searching her running source"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "host",

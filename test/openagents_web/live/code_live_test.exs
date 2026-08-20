@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   missing path, and a flag-shaped ref 404 indistinguishably.
   """
 
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Forge.{DeployReceipt, Repos}
@@ -37,8 +37,9 @@ defmodule OpenAgentsWeb.CodeLiveTest do
     # explicitly via `browsable/0`.
     previous_vis = Application.get_env(:openagents, :forge_public_visibility)
     previous_paths = Application.get_env(:openagents, :forge_public_paths)
-    Application.put_env(:openagents, :forge_public_visibility, %{"sarah" => :l2})
-    Application.put_env(:openagents, :forge_public_paths, %{"sarah" => ["docs/audit.md"]})
+    Application.put_env(:openagents, :forge_public_visibility, %{"openagents.com" => :l2})
+
+    Application.put_env(:openagents, :forge_public_paths, %{"openagents.com" => ["docs/audit.md"]})
 
     on_exit(fn ->
       if previous_data,
@@ -60,11 +61,11 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       File.rm_rf(base)
     end)
 
-    seed_repo("sarah")
+    seed_repo("openagents.com")
   end
 
   defp browsable,
-    do: Application.put_env(:openagents, :forge_public_visibility, %{"sarah" => :l3})
+    do: Application.put_env(:openagents, :forge_public_visibility, %{"openagents.com" => :l3})
 
   # Two chained commits: the first seeds README.md + file.txt, the second
   # adds docs/audit.md (a markdown heading the tests can recognize) with the
@@ -72,7 +73,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   defp seed_repo(repo) do
     path = Repos.ensure_repo!(repo)
 
-    readme = write_blob(path, "# Sarah test repo\n\nFixture readme.\n")
+    readme = write_blob(path, "# OpenAgents test repo\n\nFixture readme.\n")
     file = write_blob(path, "hello\n")
 
     tree_one =
@@ -140,7 +141,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
     {:ok, deploy} =
       %DeployReceipt{}
       |> DeployReceipt.changeset(%{
-        repo: "sarah",
+        repo: "openagents.com",
         sha: sha,
         target_id: Ecto.UUID.generate(),
         result: "live",
@@ -155,14 +156,16 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
   describe "/code/:repo" do
     test "a private repo below :l3 does not expose a browsable repo home", %{conn: conn} do
-      assert_raise OpenAgentsWeb.PublicNotFoundError, fn -> live(conn, "/OpenAgentsInc/sarah") end
+      assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+        live(conn, "/OpenAgentsInc/openagents.com")
+      end
     end
 
     test "renders the repo home for a visitor with no session", %{conn: conn, short: short} do
       browsable()
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com")
 
-      assert html =~ "<h1>OpenAgentsInc/sarah</h1>"
+      assert html =~ "<h1>OpenAgentsInc/openagents.com</h1>"
       assert html =~ "Add the transparency audit fixture"
       assert html =~ "First commit"
       assert html =~ ~s(id="repo-refs")
@@ -174,7 +177,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
     test "publishes no node internals and no account controls anonymously", %{conn: conn} do
       browsable()
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com")
 
       refute html =~ to_string(node())
       refute html =~ ~s(id="account-menu-trigger")
@@ -183,12 +186,12 @@ defmodule OpenAgentsWeb.CodeLiveTest do
     test "the repo is reachable only under its owning account", %{conn: conn} do
       browsable()
       # The GitHub-identical URL works...
-      {:ok, _view, _html} = live(conn, "/OpenAgentsInc/sarah")
+      {:ok, _view, _html} = live(conn, "/OpenAgentsInc/openagents.com")
       # ...and no other account segment is even routed (no wildcard owner), so
       # a two-segment path that is not ours 404s without reaching a LiveView.
-      assert conn |> get("/someoneelse/sarah") |> Map.fetch!(:status) == 404
+      assert conn |> get("/someoneelse/demo") |> Map.fetch!(:status) == 404
       # The old /code/* shape is gone.
-      assert conn |> get("/code/sarah") |> Map.fetch!(:status) == 404
+      assert conn |> get("/code/demo") |> Map.fetch!(:status) == 404
     end
 
     test "a dark repo and an unknown repo 404 indistinguishably", %{conn: conn} do
@@ -199,7 +202,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
   describe "/code/:repo/blob/:ref/*path" do
     test "renders markdown as HTML, not source", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/blob/main/docs/audit.md")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/blob/main/docs/audit.md")
 
       assert html =~ @audit_heading
       refute html =~ "# #{@audit_heading}"
@@ -207,7 +210,8 @@ defmodule OpenAgentsWeb.CodeLiveTest do
     end
 
     test "?plain=1 renders the raw markdown source", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/blob/main/docs/audit.md?plain=1")
+      {:ok, _view, html} =
+        live(conn, "/OpenAgentsInc/openagents.com/blob/main/docs/audit.md?plain=1")
 
       assert html =~ "# #{@audit_heading}"
       assert html =~ ~s(class="code-source")
@@ -218,7 +222,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       short: short
     } do
       browsable()
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/blob/#{short}/docs/audit.md")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/blob/#{short}/docs/audit.md")
 
       assert html =~ @audit_heading
       refute html =~ "# #{@audit_heading}"
@@ -230,40 +234,42 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       second: second
     } do
       # Head: served (it is on the allowlist).
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/blob/main/docs/audit.md")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/blob/main/docs/audit.md")
       assert html =~ @audit_heading
 
       # The same path pinned to an older commit: 404. Publishing one document
       # must not publish every past revision of it.
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
-        live(conn, "/OpenAgentsInc/sarah/blob/#{first}/docs/audit.md")
+        live(conn, "/OpenAgentsInc/openagents.com/blob/#{first}/docs/audit.md")
       end
 
       # Pinning to the head sha itself is fine — it is the same content.
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/blob/#{second}/docs/audit.md")
+      {:ok, _view, html} =
+        live(conn, "/OpenAgentsInc/openagents.com/blob/#{second}/docs/audit.md")
+
       assert html =~ @audit_heading
     end
 
     test "a path that is not on the published allowlist 404s below :l3", %{conn: conn} do
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
-        live(conn, "/OpenAgentsInc/sarah/blob/main/README.md")
+        live(conn, "/OpenAgentsInc/openagents.com/blob/main/README.md")
       end
 
       # …and is served once the repo is browsable.
       browsable()
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/blob/main/README.md")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/blob/main/README.md")
       assert html =~ "Fixture readme."
     end
 
     test "a missing path 404s", %{conn: conn} do
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
-        live(conn, "/OpenAgentsInc/sarah/blob/main/missing.txt")
+        live(conn, "/OpenAgentsInc/openagents.com/blob/main/missing.txt")
       end
     end
 
     test "a flag-shaped ref 404s without reaching git", %{conn: conn} do
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
-        live(conn, "/OpenAgentsInc/sarah/blob/-evil/file.txt")
+        live(conn, "/OpenAgentsInc/openagents.com/blob/-evil/file.txt")
       end
     end
   end
@@ -273,7 +279,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       conn: conn,
       short: short
     } do
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/commit/#{short}")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
 
       assert html =~ "Add the transparency audit fixture"
       assert html =~ "Claude-Session"
@@ -287,14 +293,14 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
     test "the diff is published once the repo is browsable", %{conn: conn, short: short} do
       browsable()
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/commit/#{short}")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
 
       assert html =~ "diff --git"
       assert html =~ @audit_heading
     end
 
     test "a commit with no receipts says so honestly", %{conn: conn, short: short} do
-      {:ok, _view, html} = live(conn, "/OpenAgentsInc/sarah/commit/#{short}")
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
 
       assert html =~ "Not deployed through the forge lane"
       refute html =~ "push→live"
@@ -307,7 +313,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
     } do
       insert_deploy!(second)
 
-      {:ok, view, html} = live(conn, "/OpenAgentsInc/sarah/commit/#{short}")
+      {:ok, view, html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
 
       refute html =~ "Not deployed through the forge lane"
 
@@ -320,7 +326,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
     test "an unknown sha 404s", %{conn: conn} do
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
-        live(conn, "/OpenAgentsInc/sarah/commit/deadbeefdead")
+        live(conn, "/OpenAgentsInc/openagents.com/commit/deadbeefdead")
       end
     end
   end

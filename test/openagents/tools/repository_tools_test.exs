@@ -5,7 +5,7 @@ defmodule OpenAgents.Tools.RepositoryToolsTest do
   refusals that keep the family inside SELF-EDIT-001.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Tools.{
     CodeCheck,
@@ -22,13 +22,13 @@ defmodule OpenAgents.Tools.RepositoryToolsTest do
     File.mkdir_p!(Path.join(source, "lib"))
     File.write!(Path.join(source, "lib/sample.ex"), "defmodule RepoToolsFixtureSample do\nend\n")
     File.write!(Path.join(source, "README.md"), "hello forge sample\n")
-    previous = Application.get_env(:openagents, :sarah_source_dir)
-    Application.put_env(:openagents, :sarah_source_dir, source)
+    previous = Application.get_env(:openagents, :source_repo_dir)
+    Application.put_env(:openagents, :source_repo_dir, source)
 
     on_exit(fn ->
       if previous,
-        do: Application.put_env(:openagents, :sarah_source_dir, previous),
-        else: Application.delete_env(:openagents, :sarah_source_dir)
+        do: Application.put_env(:openagents, :source_repo_dir, previous),
+        else: Application.delete_env(:openagents, :source_repo_dir)
 
       File.rm_rf(source)
     end)

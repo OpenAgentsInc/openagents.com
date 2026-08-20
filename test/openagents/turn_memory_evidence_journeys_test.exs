@@ -1,5 +1,5 @@
 defmodule OpenAgents.TurnMemoryEvidenceJourneysTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
   import Ecto.Query
 
   alias OpenAgents.{Conversations, Repo, Turns}

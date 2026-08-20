@@ -5,7 +5,7 @@ defmodule OpenAgents.AdminTest do
   and that a call with no audio is still a row.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Accounts
   alias OpenAgents.Admin
   alias OpenAgents.Admin.Call

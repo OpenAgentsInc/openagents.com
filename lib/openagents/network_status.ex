@@ -23,7 +23,7 @@ defmodule OpenAgents.NetworkStatus do
   up/down and the status page's slow tick call `broadcast/0`).
   """
 
-  @schema "sarah.network_status.v1"
+  @schema "openagents.network_status.v1"
   @topic "network_status"
   @cache_key {__MODULE__, :cache}
   @cache_ms 2_000
@@ -119,7 +119,9 @@ defmodule OpenAgents.NetworkStatus do
   # Every read degrades to nil/[] — forge disabled or DB down renders as
   # "no deploys yet", never an error.
   defp forge_section do
-    repo = safely(fn -> List.first(OpenAgents.Forge.Repos.allowed_repos()) end) || "sarah"
+    repo =
+      safely(fn -> List.first(OpenAgents.Forge.Repos.allowed_repos()) end) || "openagents.com"
+
     targets = safely(fn -> OpenAgents.Forge.Targets.recent(repo, 10) end) || []
     deploys = safely(fn -> OpenAgents.Forge.recent_deploys(repo, 10) end) || []
 

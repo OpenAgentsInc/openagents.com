@@ -10,7 +10,7 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
   end
 
   test "mounts with an honest empty state when no issue has an assignee", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/assignees")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/assignees")
 
     assert html =~ "Assignees"
     assert has_element?(view, ~s{[role="status"]}, "No assignees have been assigned")
@@ -25,7 +25,7 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
     # A closed issue still counts: the view lists `state: "all"`.
     {:ok, _} = Issues.update_issue(third, %{"state" => "closed"})
 
-    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/sarah/assignees")
+    {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/assignees")
 
     assert has_element?(view, "#assignees")
     refute html =~ "No assignees have been assigned"
@@ -40,8 +40,8 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
 
   test "an anonymous visitor is redirected away from the assignee list" do
     assert {:error, {:redirect, %{to: to}}} =
-             live(build_conn(), ~p"/OpenAgentsInc/sarah/assignees")
+             live(build_conn(), ~p"/OpenAgentsInc/openagents.com/assignees")
 
-    refute to == "/OpenAgentsInc/sarah/assignees"
+    refute to == "/OpenAgentsInc/openagents.com/assignees"
   end
 end

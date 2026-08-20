@@ -1,12 +1,12 @@
-defmodule OpenAgentsWeb.SarahUI do
+defmodule OpenAgentsWeb.UI do
   @moduledoc """
-  Sarah's interface primitives.
+  OpenAgents interface primitives.
 
-  Every component here wraps a vendored Basecoat class and exposes Sarah's
+  Every component here wraps a vendored Basecoat class and exposes OpenAgents
   vocabulary rather than Basecoat's. Product surfaces build interface only from
   these components; they do not author component-level CSS classes. See
-  `DESIGN.md`, `assets/css/style-sarah.css`, and
-  `docs/decisions/0003-basecoat-component-library.md`.
+  `assets/css/openagents.css` and
+  `docs/decisions/0005-use-basecoat-and-one-component-system.md`.
 
   Basecoat expresses variants as data attributes (`data-variant`, `data-size`),
   so each `attr` maps straight onto the DOM with no class-merging utility.
@@ -33,7 +33,7 @@ defmodule OpenAgentsWeb.SarahUI do
   @doc """
   A boxed control.
 
-  `:link` renders Sarah's inline underlined action rather than a boxed button
+  `:link` renders OpenAgents inline underlined action rather than a boxed button
   and ignores `size`; pair it with `tone={:danger}` for a destructive inline
   action.
 
@@ -226,7 +226,7 @@ defmodule OpenAgentsWeb.SarahUI do
   @doc """
   A short typographic status label.
 
-  Sarah states status as text; the badge carries the reserved semantic color
+  OpenAgents states status as text; the badge carries the reserved semantic color
   and never stands in for the words.
   """
   attr :variant, :atom,
@@ -439,12 +439,12 @@ defmodule OpenAgentsWeb.SarahUI do
   Render the matching trigger with `button/1` and
   `popovertarget={id} popovertargetaction="toggle"`.
 
-  Carries Sarah's own `.menu` class rather than Basecoat's `.popover`. In
+  Carries OpenAgents own `.menu` class rather than Basecoat's `.popover`. In
   Basecoat, `.popover` is the *anchor* (`position: relative`) and the floating
   panel is `[data-popover]`, positioned by its JavaScript. Putting `.popover` on
   the panel gave it author-origin `display: inline-flex`, which outranks the
   user agent's `[popover]:not(:popover-open) { display: none }` and leaves the
-  menu permanently open and in flow. Sarah styles the native element directly.
+  menu permanently open and in flow. OpenAgents styles the native element directly.
   """
   attr :id, :string, required: true
   attr :label, :string, default: nil
@@ -515,7 +515,7 @@ defmodule OpenAgentsWeb.SarahUI do
   @doc """
   A native audio player for one stored recording.
 
-  Basecoat has no audio component and Sarah does not ship a custom transport, so
+  Basecoat has no audio component and OpenAgents does not ship a custom transport, so
   this wraps the browser's own `<audio controls>` rather than rebuilding play,
   pause, and volume in JavaScript. Native controls are already keyboard operable
   and already announced, which a hand-rolled transport would have to re-earn.

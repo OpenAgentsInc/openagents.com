@@ -13,7 +13,7 @@ defmodule OpenAgents.Observability.ReleaseGate do
     warnings = exceeded(integrity, @warnings)
 
     %{
-      schema: "sarah.observability.release_gate.v1",
+      schema: "openagents.observability.release_gate.v1",
       status: if(blockers == [], do: "passed", else: "blocked"),
       blockers: blockers,
       warnings: warnings,

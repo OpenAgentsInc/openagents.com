@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ComputersAccessTest do
-  use OpenAgentsWeb.SarahConnCase, async: false
+  use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Machines
@@ -27,7 +27,7 @@ defmodule OpenAgentsWeb.ComputersAccessTest do
                "tier" => "probe",
                "platform" => "linux-x64",
                "agent_version" => "0.4.0",
-               "roots" => ["/home/sarah/work"]
+               "roots" => ["/home/test/work"]
              })
 
     assert {:ok, machine} = Machines.approve_pairing(owner, pairing.code)

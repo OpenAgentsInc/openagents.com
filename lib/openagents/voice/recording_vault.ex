@@ -12,7 +12,8 @@ defmodule OpenAgents.Voice.RecordingVault do
 
   @nonce_bytes 12
   @tag_bytes 16
-  @version 1
+  @version 2
+  @legacy_version 1
 
   @spec configured?() :: boolean()
   def configured?, do: match?({:ok, _key}, key())
@@ -23,7 +24,7 @@ defmodule OpenAgents.Voice.RecordingVault do
              is_integer(sequence) and sequence > 0 do
     with {:ok, key} <- key() do
       nonce = :crypto.strong_rand_bytes(@nonce_bytes)
-      aad = aad(recording_id, sequence)
+      aad = aad(@version, recording_id, sequence)
 
       {ciphertext, tag} =
         :crypto.crypto_one_time_aead(:aes_256_gcm, key, nonce, plaintext, aad, true)
@@ -36,19 +37,20 @@ defmodule OpenAgents.Voice.RecordingVault do
 
   @spec open(binary(), Ecto.UUID.t(), pos_integer()) :: {:ok, binary()} | {:error, atom()}
   def open(
-        <<@version, nonce::binary-size(@nonce_bytes), tag::binary-size(@tag_bytes),
+        <<version, nonce::binary-size(@nonce_bytes), tag::binary-size(@tag_bytes),
           ciphertext::binary>>,
         recording_id,
         sequence
       )
-      when is_binary(recording_id) and is_integer(sequence) and sequence > 0 do
+      when version in [@legacy_version, @version] and is_binary(recording_id) and
+             is_integer(sequence) and sequence > 0 do
     with {:ok, key} <- key() do
       case :crypto.crypto_one_time_aead(
              :aes_256_gcm,
              key,
              nonce,
              ciphertext,
-             aad(recording_id, sequence),
+             aad(version, recording_id, sequence),
              tag,
              false
            ) do
@@ -60,7 +62,10 @@ defmodule OpenAgents.Voice.RecordingVault do
 
   def open(_sealed, _recording_id, _sequence), do: {:error, :chunk_unsealable}
 
-  defp aad(recording_id, sequence),
+  defp aad(@version, recording_id, sequence),
+    do: "openagents.voice_recording_chunk.v2:#{recording_id}:#{sequence}"
+
+  defp aad(@legacy_version, recording_id, sequence),
     do: "sarah.voice_recording_chunk.v1:#{recording_id}:#{sequence}"
 
   defp key do

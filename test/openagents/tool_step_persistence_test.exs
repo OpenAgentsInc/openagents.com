@@ -1,5 +1,5 @@
 defmodule OpenAgents.ToolStepPersistenceTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
   import Ecto.Query
 
   alias OpenAgents.{Context.Composer, Conversations}
@@ -318,7 +318,7 @@ defmodule OpenAgents.ToolStepPersistenceTest do
       "result" => result,
       "error" => nil,
       "target_receipt_refs" => ["message:1"],
-      "attribution_refs" => ["OpenAgentsInc/sarah"],
+      "attribution_refs" => ["OpenAgentsInc/openagents.com"],
       "started_at" => "2026-08-16T20:00:00Z",
       "completed_at" => "2026-08-16T20:00:01Z"
     }

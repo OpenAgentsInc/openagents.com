@@ -1,5 +1,5 @@
 defmodule OpenAgents.Memory.PolicyAndRedactionTest do
-  use OpenAgents.SarahDataCase
+  use OpenAgents.DataCase
 
   import ExUnit.CaptureLog
 

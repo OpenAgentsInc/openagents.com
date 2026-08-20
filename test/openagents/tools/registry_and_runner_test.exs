@@ -111,7 +111,7 @@ defmodule OpenAgents.Tools.RegistryAndRunnerTest do
     assert outcome["module_ref"]["module_id"] == "sarah.tool.echo"
     assert outcome["executor_ref"]["disclosure"] == "Sarah's local test executor"
     assert outcome["target_receipt_refs"] == ["message:1"]
-    assert outcome["attribution_refs"] == ["OpenAgentsInc/sarah"]
+    assert outcome["attribution_refs"] == ["OpenAgentsInc/openagents.com"]
   end
 
   test "unknown tools, incompatible versions, and schema failures are bounded" do
@@ -302,7 +302,7 @@ defmodule OpenAgents.Tools.RegistryAndRunnerTest do
       required_authority: "conversation.read",
       executor: %{id: "sarah.local", disclosure: "Sarah's local test executor"},
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{"privacy" => "browser_scoped", "residency" => "host"},
       module_metadata:
         Metadata.first_party("conversation.read", "browser_conversation",

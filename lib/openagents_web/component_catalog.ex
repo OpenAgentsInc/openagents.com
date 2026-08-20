@@ -14,9 +14,9 @@ defmodule OpenAgentsWeb.ComponentCatalog do
 
     * `OpenAgentsWeb.CoreComponents` — the Phoenix-generated set, restyled onto
       basecoat. Imported by `use OpenAgentsWeb, :live_view`.
-    * `OpenAgentsWeb.SarahUI` — the Sarah interface primitives, imported
-      separately via `sarah_html_helpers`. `button`, `input`, and `icon` exist
-      in both sets, which is why the SarahUI slugs are prefixed `sarah-`.
+    * `OpenAgentsWeb.UI` — the OpenAgents interface primitives, imported
+      separately via `openagents_html_helpers`. `button`, `input`, and `icon` exist
+      in both sets, which is why the UI slugs are prefixed `openagents-`.
 
   Icon names are drawn from the vendored Apps SDK set (`OpenAgentsWeb.Icons`).
   """
@@ -77,139 +77,139 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       ]
     },
     %{
-      title: "Sarah UI",
+      title: "OpenAgents UI",
       items: [
         %{
-          slug: "sarah-button",
+          slug: "openagents-button",
           title: "Button",
           icon: "cube",
-          source: "OpenAgentsWeb.SarahUI.button/1",
+          source: "OpenAgentsWeb.UI.button/1",
           summary: "Eight variants, four sizes, and a danger tone."
         },
         %{
-          slug: "sarah-text-button",
+          slug: "openagents-text-button",
           title: "Text button",
           icon: "text",
-          source: "OpenAgentsWeb.SarahUI.text_button/1",
+          source: "OpenAgentsWeb.UI.text_button/1",
           summary: "Borderless action for inline and secondary affordances."
         },
         %{
-          slug: "sarah-input",
+          slug: "openagents-input",
           title: "Input",
           icon: "square-text",
-          source: "OpenAgentsWeb.SarahUI.input/1",
+          source: "OpenAgentsWeb.UI.input/1",
           summary: "Bare text input primitive, unwrapped by a form field."
         },
         %{
-          slug: "sarah-textarea",
+          slug: "openagents-textarea",
           title: "Textarea",
           icon: "text",
-          source: "OpenAgentsWeb.SarahUI.textarea/1",
+          source: "OpenAgentsWeb.UI.textarea/1",
           summary: "Multi-line text primitive."
         },
         %{
-          slug: "sarah-label",
+          slug: "openagents-label",
           title: "Label",
           icon: "tag",
-          source: "OpenAgentsWeb.SarahUI.label/1",
+          source: "OpenAgentsWeb.UI.label/1",
           summary: "Form label bound to a control by id."
         },
         %{
-          slug: "sarah-field",
+          slug: "openagents-field",
           title: "Field",
           icon: "file-document",
-          source: "OpenAgentsWeb.SarahUI.field/1",
+          source: "OpenAgentsWeb.UI.field/1",
           summary: "Wrapper that stacks a label and its control."
         },
         %{
-          slug: "sarah-alert",
+          slug: "openagents-alert",
           title: "Alert",
           icon: "warning",
-          source: "OpenAgentsWeb.SarahUI.alert/1",
+          source: "OpenAgentsWeb.UI.alert/1",
           summary: "Four variants across box, row, and notice appearances."
         },
         %{
-          slug: "sarah-badge",
+          slug: "openagents-badge",
           title: "Badge",
           icon: "tag",
-          source: "OpenAgentsWeb.SarahUI.badge/1",
+          source: "OpenAgentsWeb.UI.badge/1",
           summary: "Status pill in six variants."
         },
         %{
-          slug: "sarah-card",
+          slug: "openagents-card",
           title: "Card",
           icon: "square-image",
-          source: "OpenAgentsWeb.SarahUI.card/1",
+          source: "OpenAgentsWeb.UI.card/1",
           summary: "Content container with an optional corner frame and danger variant."
         },
         %{
-          slug: "sarah-avatar",
+          slug: "openagents-avatar",
           title: "Avatar",
           icon: "user",
-          source: "OpenAgentsWeb.SarahUI.avatar/1",
+          source: "OpenAgentsWeb.UI.avatar/1",
           summary: "Image or initials fallback in three sizes."
         },
         %{
-          slug: "sarah-item",
+          slug: "openagents-item",
           title: "Item",
           icon: "dot",
-          source: "OpenAgentsWeb.SarahUI.item/1",
+          source: "OpenAgentsWeb.UI.item/1",
           summary: "Status, label, and detail row for activity lists."
         },
         %{
-          slug: "sarah-event-header",
+          slug: "openagents-event-header",
           title: "Event header",
           icon: "info",
-          source: "OpenAgentsWeb.SarahUI.event_header/1",
+          source: "OpenAgentsWeb.UI.event_header/1",
           summary: "Titled event row with status, timestamp, and chip slot."
         },
         %{
-          slug: "sarah-empty",
+          slug: "openagents-empty",
           title: "Empty state",
           icon: "circle",
-          source: "OpenAgentsWeb.SarahUI.empty/1",
+          source: "OpenAgentsWeb.UI.empty/1",
           summary: "Placeholder for lists and panels with nothing to show."
         },
         %{
-          slug: "sarah-kbd",
+          slug: "openagents-kbd",
           title: "Keyboard key",
           icon: "keyboard",
-          source: "OpenAgentsWeb.SarahUI.kbd/1",
+          source: "OpenAgentsWeb.UI.kbd/1",
           summary: "Rendered keycap for shortcut documentation."
         },
         %{
-          slug: "sarah-menu",
+          slug: "openagents-menu",
           title: "Menu",
           icon: "menu",
-          source: "OpenAgentsWeb.SarahUI.menu/1",
+          source: "OpenAgentsWeb.UI.menu/1",
           summary: "Popover menu surface used by the account control."
         },
         %{
-          slug: "sarah-frame",
+          slug: "openagents-frame",
           title: "Frame",
           icon: "grid",
-          source: "OpenAgentsWeb.SarahUI.frame/1",
+          source: "OpenAgentsWeb.UI.frame/1",
           summary: "Corner-bracket decoration around arbitrary content."
         },
         %{
-          slug: "sarah-status-indicator",
+          slug: "openagents-status-indicator",
           title: "Status indicator",
           icon: "check-circle",
-          source: "OpenAgentsWeb.SarahUI.status_indicator/1",
+          source: "OpenAgentsWeb.UI.status_indicator/1",
           summary: "Labelled state dot, optionally decorative."
         },
         %{
-          slug: "sarah-audio-player",
+          slug: "openagents-audio-player",
           title: "Audio player",
           icon: "play",
-          source: "OpenAgentsWeb.SarahUI.audio_player/1",
+          source: "OpenAgentsWeb.UI.audio_player/1",
           summary: "Labelled audio element for recordings."
         },
         %{
-          slug: "sarah-icon",
+          slug: "openagents-icon",
           title: "Icon",
           icon: "sparkle",
-          source: "OpenAgentsWeb.SarahUI.icon/1",
+          source: "OpenAgentsWeb.UI.icon/1",
           summary: "Apps SDK glyph with an optional accessible label."
         }
       ]
@@ -276,7 +276,7 @@ defmodule OpenAgentsWeb.ComponentCatalog do
   def documented_modules do
     %{
       OpenAgentsWeb.CoreComponents => [],
-      OpenAgentsWeb.SarahUI => [],
+      OpenAgentsWeb.UI => [],
       OpenAgentsWeb.Layouts => [:app, :flash_group]
     }
   end

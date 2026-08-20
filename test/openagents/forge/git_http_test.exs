@@ -6,7 +6,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
   the roadmap, minus the fleet.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge
   alias OpenAgents.Forge.{Repos, WAL}
 

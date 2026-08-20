@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   projections; data comes from `OpenAgents.Forge.Browse`'s bounded plumbing.
   """
 
-  use OpenAgentsWeb, :sarah_live_view
+  use OpenAgentsWeb, :openagents_live_view
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.{Browse, Visibility}
@@ -57,7 +57,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <main id="code-repo-page" class="app-shell code-shell">
-        <Layouts.command_bar aria_label="Sarah code" current_user={@current_user}>
+        <Layouts.command_bar aria_label="OpenAgents code" current_user={@current_user}>
           <:lockup>
             <.button
               :if={@current_user}

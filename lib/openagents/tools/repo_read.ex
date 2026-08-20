@@ -1,5 +1,5 @@
 defmodule OpenAgents.Tools.RepoRead do
-  @moduledoc "Reads one file from Sarah's own source (baked image tree or the job's clone)."
+  @moduledoc "Reads one file from OpenAgents source (baked image tree or the job's clone)."
 
   @behaviour OpenAgents.Tools.Tool
 
@@ -15,7 +15,7 @@ defmodule OpenAgents.Tools.RepoRead do
       name: "repo_read",
       version: 1,
       description:
-        "Reads one file from Sarah's own source code. Pass path relative to the repository " <>
+        "Reads one file from OpenAgents source code. Pass path relative to the repository " <>
           "root. from selects the tree: \"image\" (default) reads the source of the code " <>
           "currently running; \"workspace\" reads this job's editable clone.",
       input_schema: %{
@@ -33,10 +33,10 @@ defmodule OpenAgents.Tools.RepoRead do
       required_authority: "repository.read",
       executor: %{
         id: "sarah.repository.self",
-        disclosure: "Sarah's own runtime, reading her running source"
+        disclosure: "the OpenAgents runtime, reading her running source"
       },
       maintainer: "OpenAgents",
-      attribution: ["OpenAgentsInc/sarah"],
+      attribution: ["OpenAgentsInc/openagents.com"],
       policy_facets: %{
         "privacy" => "browser_conversation",
         "residency" => "host",

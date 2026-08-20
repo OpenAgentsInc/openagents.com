@@ -34,12 +34,12 @@ defmodule OpenAgentsWeb.ToolActivityTest do
     test "github_repo_read is read repository/path" do
       step =
         activity("github_repo_read", %{
-          "repository" => "OpenAgentsInc/sarah",
+          "repository" => "OpenAgentsInc/openagents.com",
           "path" => "DESIGN.md",
           "ref" => "main"
         })
 
-      assert ToolActivity.title(step) == "read OpenAgentsInc/sarah/DESIGN.md"
+      assert ToolActivity.title(step) == "read OpenAgentsInc/openagents.com/DESIGN.md"
     end
 
     test "conversation_search is search with the quoted query" do

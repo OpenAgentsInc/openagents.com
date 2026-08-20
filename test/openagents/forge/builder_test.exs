@@ -1,5 +1,5 @@
 defmodule OpenAgents.Forge.BuilderTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.BuildExecutor
   alias OpenAgents.Forge.BuildExecutor.Sidecar
   alias OpenAgents.Forge.BuildReceipt
@@ -10,8 +10,8 @@ defmodule OpenAgents.Forge.BuilderTest do
 
   describe "pure Sidecar adapter pieces" do
     test "render_job serializes the two env-style lines the watcher sources" do
-      assert Sidecar.render_job("abc123", "http://x:tok@127.0.0.1:8080/git/sarah.git") ==
-               "SHA=abc123\nREPO_URL=http://x:tok@127.0.0.1:8080/git/sarah.git\n"
+      assert Sidecar.render_job("abc123", "http://x:tok@127.0.0.1:8080/git/openagents.com.git") ==
+               "SHA=abc123\nREPO_URL=http://x:tok@127.0.0.1:8080/git/openagents.com.git\n"
     end
 
     test "parse_result reads env-style lines, tolerating garbage" do
@@ -91,7 +91,7 @@ defmodule OpenAgents.Forge.BuilderTest do
       unless Process.whereis(Builder), do: start_supervised!({Builder, []})
 
       Phoenix.PubSub.subscribe(OpenAgents.PubSub, "forge:builds")
-      %{sha: seeded_commit("sarah"), data_dir: Path.join(base, "data")}
+      %{sha: seeded_commit("openagents.com"), data_dir: Path.join(base, "data")}
     end
 
     test "promotion builds, writes artifact tar + receipt, advances to built",
@@ -116,11 +116,11 @@ defmodule OpenAgents.Forge.BuilderTest do
         {:ok, %{beams: beams, warnings: "warn: something minor", tests: nil, duration_ms: 123}}
       )
 
-      {:ok, target} = Targets.promote("sarah", sha, "test-operator")
+      {:ok, target} = Targets.promote("openagents.com", sha, "test-operator")
 
       assert_receive {:forge_build_ready,
                       %{
-                        repo: "sarah",
+                        repo: "openagents.com",
                         sha: ^sha,
                         target_id: target_id,
                         artifact: artifact,
@@ -140,7 +140,7 @@ defmodule OpenAgents.Forge.BuilderTest do
       assert binary == beam.binary
 
       # Receipt row.
-      receipt = Repo.get_by!(BuildReceipt, repo: "sarah", sha: sha)
+      receipt = Repo.get_by!(BuildReceipt, repo: "openagents.com", sha: sha)
       assert receipt.target_id == target.id
       assert receipt.modules == [module]
       assert receipt.warnings == "warn: something minor"
@@ -161,7 +161,7 @@ defmodule OpenAgents.Forge.BuilderTest do
         {:error, "boom\n" <> String.duplicate("x", 20_000)}
       )
 
-      {:ok, target} = Targets.promote("sarah", sha, "test-operator")
+      {:ok, target} = Targets.promote("openagents.com", sha, "test-operator")
 
       failed = await_status(target, "failed")
       assert failed.status == "failed"
@@ -186,7 +186,7 @@ defmodule OpenAgents.Forge.BuilderTest do
         {:ok, %{beams: beams, warnings: "", tests: nil, duration_ms: 1}}
       )
 
-      {:ok, target2} = Targets.promote("sarah", sha, "test-operator")
+      {:ok, target2} = Targets.promote("openagents.com", sha, "test-operator")
       target2_id = target2.id
       assert_receive {:forge_build_ready, %{sha: ^sha, target_id: ^target2_id}}, 5_000
     end

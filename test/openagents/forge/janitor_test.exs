@@ -1,7 +1,7 @@
 defmodule OpenAgents.Forge.JanitorTest do
   @moduledoc "Cache retention (#123): stale clones and non-live artifacts are pruned; truth never is."
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.Janitor
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target
@@ -40,7 +40,12 @@ defmodule OpenAgents.Forge.JanitorTest do
     File.write!(Path.join(base, "data/beams/oldjunk.tar"), "junk")
 
     %Target{}
-    |> Target.changeset(%{repo: "sarah", sha: live_sha, promoted_by: "op:t", status: "promoted"})
+    |> Target.changeset(%{
+      repo: "openagents.com",
+      sha: live_sha,
+      promoted_by: "op:t",
+      status: "promoted"
+    })
     |> Repo.insert!()
     |> Ecto.Changeset.change(%{
       status: "live",

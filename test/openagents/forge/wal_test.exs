@@ -2,13 +2,13 @@ defmodule OpenAgents.Forge.WALTest do
   use ExUnit.Case, async: false
   alias OpenAgents.Forge.WAL
 
-  @repo "sarah"
+  @repo "openagents.com"
 
   setup do
     tmp_dir =
       Path.join(
         System.tmp_dir!(),
-        "sarah_forge_wal_test_#{System.unique_integer([:positive])}"
+        "openagents_forge_wal_test_#{System.unique_integer([:positive])}"
       )
 
     File.mkdir_p!(tmp_dir)
@@ -115,7 +115,7 @@ defmodule OpenAgents.Forge.WALTest do
 
   describe "repo validation" do
     test "rejects invalid repo names on every dispatcher function" do
-      for bad <- ["Sarah", "a/b", "", "-lead", "sarah.git", :openagents] do
+      for bad <- ["Uppercase", "a/b", "", "-lead", "bad..git", :openagents] do
         assert {:error, :invalid_repo} = WAL.read_index(bad)
         assert {:error, :invalid_repo} = WAL.cas_index(bad, :none, WAL.new_index())
         assert {:error, :invalid_repo} = WAL.put_entry(bad, 0, "x")
@@ -228,11 +228,16 @@ defmodule OpenAgents.Forge.WALTest do
     end
 
     test "object naming helpers" do
-      assert OpenAgents.Forge.WAL.Gcs.prefix("sarah") == "forge/wal/sarah/"
-      assert OpenAgents.Forge.WAL.Gcs.index_object("sarah") == "forge/wal/sarah/index.json"
+      assert OpenAgents.Forge.WAL.Gcs.prefix("openagents.com") == "forge/wal/openagents.com/"
 
-      assert OpenAgents.Forge.WAL.Gcs.object_name("sarah", "entries/00000000-0123456789ab") ==
-               "forge/wal/sarah/entries/00000000-0123456789ab"
+      assert OpenAgents.Forge.WAL.Gcs.index_object("openagents.com") ==
+               "forge/wal/openagents.com/index.json"
+
+      assert OpenAgents.Forge.WAL.Gcs.object_name(
+               "openagents.com",
+               "entries/00000000-0123456789ab"
+             ) ==
+               "forge/wal/openagents.com/entries/00000000-0123456789ab"
     end
   end
 end

@@ -6,7 +6,7 @@ defmodule OpenAgents.Forge.BrowseTest do
   shape gates that keep request data from ever becoming a git flag.
   """
 
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.Forge.{Browse, Repos}
 
   @second_message """
@@ -38,7 +38,7 @@ defmodule OpenAgents.Forge.BrowseTest do
       File.rm_rf(base)
     end)
 
-    seed_repo("sarah")
+    seed_repo("openagents.com")
   end
 
   # Two chained commits in the bare repo via plumbing (no clone, no WAL):
@@ -47,7 +47,7 @@ defmodule OpenAgents.Forge.BrowseTest do
   defp seed_repo(repo) do
     path = Repos.ensure_repo!(repo)
 
-    readme = write_blob(path, "# Sarah test repo\n\nFixture readme.\n")
+    readme = write_blob(path, "# OpenAgents test repo\n\nFixture readme.\n")
     file_v1 = write_blob(path, "hello\n")
 
     tree_one =
@@ -114,26 +114,26 @@ defmodule OpenAgents.Forge.BrowseTest do
 
   describe "resolve_commit/2" do
     test "resolves a branch name, a full sha, and a short sha", %{second: second} do
-      assert {:ok, ^second} = Browse.resolve_commit("sarah", "main")
-      assert {:ok, ^second} = Browse.resolve_commit("sarah", second)
-      assert {:ok, ^second} = Browse.resolve_commit("sarah", String.slice(second, 0, 8))
+      assert {:ok, ^second} = Browse.resolve_commit("openagents.com", "main")
+      assert {:ok, ^second} = Browse.resolve_commit("openagents.com", second)
+      assert {:ok, ^second} = Browse.resolve_commit("openagents.com", String.slice(second, 0, 8))
     end
 
     test "an unknown ref or sha is :not_found" do
-      assert {:error, :not_found} = Browse.resolve_commit("sarah", "no-such-branch")
-      assert {:error, :not_found} = Browse.resolve_commit("sarah", "deadbeefdeadbeef")
+      assert {:error, :not_found} = Browse.resolve_commit("openagents.com", "no-such-branch")
+      assert {:error, :not_found} = Browse.resolve_commit("openagents.com", "deadbeefdeadbeef")
     end
 
     test "a malformed ref never reaches git" do
-      assert {:error, :not_found} = Browse.resolve_commit("sarah", "-evil")
-      assert {:error, :not_found} = Browse.resolve_commit("sarah", "a..b")
+      assert {:error, :not_found} = Browse.resolve_commit("openagents.com", "-evil")
+      assert {:error, :not_found} = Browse.resolve_commit("openagents.com", "a..b")
     end
   end
 
   describe "commit/2" do
     test "returns subject, author, parents, and parsed trailers — never an email",
          %{first: first, second: second} do
-      assert {:ok, commit} = Browse.commit("sarah", String.slice(second, 0, 8))
+      assert {:ok, commit} = Browse.commit("openagents.com", String.slice(second, 0, 8))
 
       assert commit.sha == second
       assert commit.subject == "Second commit"
@@ -154,14 +154,14 @@ defmodule OpenAgents.Forge.BrowseTest do
 
   test "changed_files/2 lists the second commit's additions and modifications",
        %{second: second} do
-    assert {:ok, files} = Browse.changed_files("sarah", second)
+    assert {:ok, files} = Browse.changed_files("openagents.com", second)
 
     assert %{status: "A", path: "docs/note.md"} in files
     assert %{status: "M", path: "file.txt"} in files
   end
 
   test "diff/2 returns the patch with an honest truncation flag", %{second: second} do
-    assert {:ok, diff, false} = Browse.diff("sarah", second)
+    assert {:ok, diff, false} = Browse.diff("openagents.com", second)
 
     assert diff =~ "docs/note.md"
     assert diff =~ "Body of the note."
@@ -169,7 +169,7 @@ defmodule OpenAgents.Forge.BrowseTest do
 
   describe "tree/3" do
     test "lists root entries with directories first" do
-      assert {:ok, entries} = Browse.tree("sarah", "main")
+      assert {:ok, entries} = Browse.tree("openagents.com", "main")
 
       assert Enum.map(entries, & &1.name) == ["docs", "README.md", "file.txt"]
       assert [%{kind: "tree", size: nil} | blobs] = entries
@@ -177,13 +177,14 @@ defmodule OpenAgents.Forge.BrowseTest do
     end
 
     test "lists a subdirectory" do
-      assert {:ok, [%{name: "note.md", kind: "blob"}]} = Browse.tree("sarah", "main", "docs")
+      assert {:ok, [%{name: "note.md", kind: "blob"}]} =
+               Browse.tree("openagents.com", "main", "docs")
     end
   end
 
   describe "blob/3" do
     test "returns bounded content with size" do
-      assert {:ok, blob} = Browse.blob("sarah", "main", "file.txt")
+      assert {:ok, blob} = Browse.blob("openagents.com", "main", "file.txt")
 
       assert blob.content == "hello world\n"
       assert blob.size == byte_size("hello world\n")
@@ -192,7 +193,7 @@ defmodule OpenAgents.Forge.BrowseTest do
     end
 
     test "a missing path is :not_found" do
-      assert {:error, :not_found} = Browse.blob("sarah", "main", "missing.txt")
+      assert {:error, :not_found} = Browse.blob("openagents.com", "main", "missing.txt")
     end
 
     test "an unknown repo name is :not_found before any git runs" do
@@ -201,12 +202,12 @@ defmodule OpenAgents.Forge.BrowseTest do
   end
 
   test "readme/2 finds README.md at a ref" do
-    assert {:ok, "README.md", blob} = Browse.readme("sarah", "main")
+    assert {:ok, "README.md", blob} = Browse.readme("openagents.com", "main")
     assert blob.content =~ "Fixture readme."
   end
 
   test "log/3 returns both commits newest first", %{first: first, second: second} do
-    assert {:ok, [newest, oldest]} = Browse.log("sarah", "main", 30)
+    assert {:ok, [newest, oldest]} = Browse.log("openagents.com", "main", 30)
 
     assert newest.sha == second
     assert newest.subject == "Second commit"

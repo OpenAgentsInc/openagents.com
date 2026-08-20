@@ -1,0 +1,45 @@
+# Persona source, evaluation, and program artifacts.
+^priv/sarah/
+
+# Historical migration identity. Never rename a migration that may have run.
+^priv/repo/migrations/[0-9]+_.*sarah.*\.exs:
+
+# Dated migration plans and audits retain exact historical names and findings.
+^docs/2026-08-19-gap-implementation-plan\.md:
+^docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations\.md:
+^docs/2026-08-20-test-coverage-audit\.md:
+^docs/chat-inference-plan\.md:
+^docs/component-library\.md:
+^docs/github-auth-plan\.md:
+^docs/issues-projects-ui-roadmap\.md:
+^docs/sarah-integration-plan\.md:
+
+# Current architecture and decisions discuss the Sarah persona boundary.
+^docs/architecture\.md:
+^docs/decisions/0001-integrate-the-complete-public-application\.md:
+^docs/decisions/0002-model-sarah-as-an-openagents-persona\.md:
+^docs/decisions/0005-use-basecoat-and-one-component-system\.md:
+
+# The invariant ledger includes Sarah-specific persona and behavior contracts.
+^INVARIANTS\.md:
+
+# Natural-language Sarah references describe the visible persona or her actions.
+^(assets|lib|test)/.*:[0-9]+:.*(^|[^A-Za-z0-9_])[Ss][Aa][Rr][Aa][Hh]([^A-Za-z0-9_]|$)
+^assets/js/voice_controller\.js:[0-9]+:.*interruptSarah
+
+# Versioned Sarah behavior, tool, evaluation, and persisted-data identifiers are
+# stable artifact contracts. Rename them only through an explicit data migration.
+^(assets|lib|test)/.*:[0-9]+:.*sarah\.[A-Za-z0-9_#{}.-]+
+
+# Persona artifact paths, names, and stable database table names.
+^(assets|lib|test)/.*:[0-9]+:.*(priv/)?sarah/(evals|persona|programs)/
+^(assets|lib|test)/.*:[0-9]+:.*sarah\.v1\.(md|sources\.json)
+^(assets|lib|test)/.*:[0-9]+:.*sarah_blueprint_(facts|revisions)
+
+# User-facing Sarah data export names and the persona's commit identity.
+^(assets|lib|test)/.*:[0-9]+:.*sarah-(account-data|conversation-|memory-account)
+^(assets|lib|test)/.*:[0-9]+:.*sarah@openagents\.com
+
+# Persona-specific recording layout and source-manifest vocabulary.
+^(assets|lib|test)/.*:[0-9]+:.*mic_left_sarah_right
+^(assets|lib|test)/.*:[0-9]+:.*(sarah_authored_speech|(final|prepared)_sarah_script|sarah-(corpus|runbook|contracts|knowledge))

@@ -1,5 +1,5 @@
 defmodule OpenAgents.GitHubOAuthTest do
-  use OpenAgents.SarahDataCase, async: false
+  use OpenAgents.DataCase, async: false
   alias OpenAgents.{GitHubOAuth, Repo}
   alias OpenAgents.Accounts.OAuthAttempt
 
@@ -44,7 +44,7 @@ defmodule OpenAgents.GitHubOAuthTest do
     Req.Test.expect(__MODULE__, fn conn ->
       assert conn.request_path == "/login/oauth/access_token"
       assert ["application/json"] = Plug.Conn.get_req_header(conn, "accept")
-      assert ["OpenAgents-Sarah"] = Plug.Conn.get_req_header(conn, "user-agent")
+      assert ["OpenAgents"] = Plug.Conn.get_req_header(conn, "user-agent")
       body = Req.Test.raw_body(conn)
       assert body =~ "client_id=test-github-client-id"
       assert body =~ "client_secret=test-github-client-secret"

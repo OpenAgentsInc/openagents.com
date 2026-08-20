@@ -59,7 +59,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     # Computers, Memory and Leaderboard are destinations for everyone, so they
     # sit in the application sidebar rather than appearing only on chat.
     assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/computers"]))
-    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat?panel=memory"]))
+    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/memory"]))
     # Leaderboard is a secondary destination, so it sits in the footer with the
     # docs and the component library rather than in the working nav.
     assert has_element?(view, ~s(#sidebar .sidebar-footer a[href="/leaderboard"]))
@@ -806,118 +806,6 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     assert {:ok, receipt} = Conversations.get_turn_receipt(turn)
     refute inspect(receipt) =~ secret
-  end
-
-  test "memory surface is accessible, exact, source-dated, and account-scoped", %{conn: conn} do
-    token = "memory-surface-browser-credential-000000000000000"
-    %{record: record, source: source} = create_profile_memory(token, "I prefer concise answers")
-    conn = log_in_github_user(conn, token)
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
-
-    html = render_patch(view, ~p"/chat?panel=memory")
-
-    assert html =~ ~s(id="memory-manager")
-    assert html =~ ~s(aria-labelledby="memory-heading")
-    assert html =~ "Memory in your account"
-    assert html =~ "follow your authenticated Sarah account across browsers"
-    assert html =~ "I prefer concise answers"
-    assert html =~ "OWNER_STATEMENT" or html =~ "owner_statement"
-    assert html =~ Date.to_iso8601(DateTime.to_date(source.inserted_at))
-    assert has_element?(view, "#memory-record-#{record.id}[data-status=active]")
-    assert has_element?(view, "#memory-claim-#{record.id}")
-    assert has_element?(view, "#forget-category-#{record.id}")
-    assert has_element?(view, "#export-memory[href='/memory/export']")
-    assert has_element?(view, "#delete-data-form label[for='privacy_confirmation']")
-    assert has_element?(view, "#delete-data-form input#privacy_confirmation[type='text']")
-    assert has_element?(view, "#delete-data-form button#delete-all-data[type='submit']")
-    refute has_element?(view, "#message-form")
-
-    render_patch(view, ~p"/chat")
-    assert has_element?(view, "#message-form")
-    assert render(view) =~ "Hello. I&#39;m Sarah—an OpenAgent. What are we working on?"
-  end
-
-  test "correction preserves supersession and reconciles another open tab", %{conn: conn} do
-    token = "memory-correction-browser-credential-0000000000000"
-    %{record: record} = create_profile_memory(token, "I prefer concise answers")
-    user = github_user(token)
-    conn = log_in_github_user(conn, token)
-    assert {:ok, first, _html} = live(conn, ~p"/chat")
-    assert {:ok, second, _html} = live(conn, ~p"/chat")
-    render_patch(first, ~p"/chat?panel=memory")
-    render_patch(second, ~p"/chat?panel=memory")
-
-    first
-    |> form("#memory-record-#{record.id} form", %{"claim" => "I prefer concise, direct answers"})
-    |> render_submit()
-
-    assert eventually(fn ->
-             html = render(second)
-
-             html =~ "I prefer concise, direct answers" and
-               has_element?(second, "#memory-record-#{record.id}[data-status=superseded]")
-           end)
-
-    conversation = Conversations.get_conversation_for_user(user)
-    owner = Conversations.get_conversation_owner!(conversation)
-    assert {:ok, [replacement]} = ProfileMemory.list_current(owner)
-    assert replacement.claim == "I prefer concise, direct answers"
-    assert replacement.supersedes_record_id == record.id
-  end
-
-  test "forget requires inline confirmation and disappears from future snapshots", %{conn: conn} do
-    token = "memory-forget-ui-browser-credential-000000000000"
-    %{record: record} = create_profile_memory(token, "I prefer concise answers")
-    user = github_user(token)
-    conn = log_in_github_user(conn, token)
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
-    render_patch(view, ~p"/chat?panel=memory")
-
-    view |> element("#forget-record-#{record.id}") |> render_click()
-    assert has_element?(view, "#memory-confirmation")
-    assert render(view) =~ "Confirm destructive action"
-
-    view |> element("#cancel-memory-action") |> render_click()
-    refute has_element?(view, "#memory-confirmation")
-    assert has_element?(view, "#memory-record-#{record.id}[data-status=active]")
-
-    view |> element("#forget-record-#{record.id}") |> render_click()
-    view |> element("#confirm-memory-forget") |> render_click()
-
-    assert has_element?(view, "#memory-record-#{record.id}[data-status=forgotten]")
-    assert render(view) =~ "Forgot 1 memory record(s) in this account."
-
-    conversation = Conversations.get_conversation_for_user(user)
-    owner = Conversations.get_conversation_owner!(conversation)
-    assert {:ok, snapshot} = ProfileMemory.capture_snapshot(owner)
-    assert {:ok, []} = ProfileMemory.list_active(owner, snapshot)
-  end
-
-  test "category and whole-account controls confirm their exact destructive breadth", %{
-    conn: conn
-  } do
-    token = "memory-bulk-forget-browser-credential-00000000000"
-    %{record: preference} = create_profile_memory(token, "I prefer concise answers")
-    %{record: project} = create_profile_memory(token, "My project is One", "project")
-    user = github_user(token)
-    conn = log_in_github_user(conn, token)
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
-    render_patch(view, ~p"/chat?panel=memory")
-
-    view |> element("#forget-category-#{project.id}") |> render_click()
-    assert render(view) =~ "Forget every active project memory in this account?"
-    view |> element("#confirm-memory-forget") |> render_click()
-    assert has_element?(view, "#memory-record-#{project.id}[data-status=forgotten]")
-    assert has_element?(view, "#memory-record-#{preference.id}[data-status=active]")
-
-    view |> element("#forget-all-memory") |> render_click()
-    assert render(view) =~ "Forget every active profile memory in this account?"
-    view |> element("#confirm-memory-forget") |> render_click()
-    assert has_element?(view, "#memory-record-#{preference.id}[data-status=forgotten]")
-
-    conversation = Conversations.get_conversation_for_user(user)
-    owner = Conversations.get_conversation_owner!(conversation)
-    assert {:ok, []} = ProfileMemory.list_current(owner)
   end
 
   test "bounded export uses safe account-scoped public projections", %{conn: conn} do

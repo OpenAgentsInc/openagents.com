@@ -51,9 +51,9 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
     test "the memory surface pairs destructive actions with a glyph and keeps the words",
          %{conn: conn} do
       conn = log_in_github_user(conn, "icon-memory-user")
-      {:ok, view, _html} = live(conn, ~p"/chat")
+      {:ok, view, _html} = live(conn, ~p"/memory")
 
-      html = render_patch(view, ~p"/chat?panel=memory")
+      html = render(view)
 
       assert html =~ "Export ALL DATA"
       assert html =~ "DELETE ALL DATA"

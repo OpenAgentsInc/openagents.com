@@ -558,11 +558,8 @@ defmodule OpenAgentsWeb.Layouts do
           icon="desktop"
           patchable={false}
         />
-        <%!-- Memory is the conversation's, but reaching it should not require
-        knowing that: the row goes to chat with the panel open, which is where
-        it lives. --%>
         <Layouts.sidebar_link
-          path={~p"/chat?panel=memory"}
+          path={~p"/memory"}
           label="Memory"
           icon="brain"
           patchable={false}

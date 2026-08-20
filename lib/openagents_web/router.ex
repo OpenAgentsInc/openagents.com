@@ -115,6 +115,7 @@ defmodule OpenAgentsWeb.Router do
     live_session :authenticated,
       on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
       live "/chat", ChatLive, :index
+      live "/memory", MemoryLive, :index
       live "/computers", ComputersLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
       live "/:owner/:repo/issues/new", IssueNewLive, :new

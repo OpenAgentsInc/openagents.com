@@ -37,7 +37,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/voice/",
     "/data",
     "/machines",
-    "/memory/",
+    # No trailing slash: the memory page is "/memory" itself, and its export
+    # lives under it.
+    "/memory",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",
@@ -193,7 +195,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope(_path), do: "product:self"
 
   defp browser_mutation?(path, :get),
-    do: path in ["/chat", "/computers", "/settings/api-tokens"]
+    do: path in ["/chat", "/memory", "/computers", "/settings/api-tokens"]
 
   defp browser_mutation?(_path, _verb), do: true
 

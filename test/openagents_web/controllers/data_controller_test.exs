@@ -186,8 +186,9 @@ defmodule OpenAgentsWeb.DataControllerTest do
     conn: conn
   } do
     conn = log_in_github_user(conn, "privacy-controls-browser")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
-    render_click(view, "toggle_memory")
+    # Memory is its own page now, reached from the sidebar rather than by
+    # swapping the transcript out from under the reader.
+    assert {:ok, view, _html} = live(conn, ~p"/memory")
     html = render(view)
 
     assert html =~ "Detailed operational voice evidence is purged after 90 days"

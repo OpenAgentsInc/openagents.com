@@ -5,7 +5,6 @@ defmodule OpenAgents.MarkdownTest do
   """
 
   use ExUnit.Case, async: true
-  @moduletag :skip
   alias OpenAgents.Markdown
 
   defp html(text, options \\ []) do

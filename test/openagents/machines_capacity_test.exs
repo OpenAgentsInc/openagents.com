@@ -1,6 +1,5 @@
 defmodule OpenAgents.MachinesCapacityTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Machine
 

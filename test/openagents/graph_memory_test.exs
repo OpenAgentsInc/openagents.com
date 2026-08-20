@@ -1,6 +1,5 @@
 defmodule OpenAgents.GraphMemoryTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.{Conversations, ExperienceMemory, GraphMemory}
 
   alias OpenAgents.GraphMemory.{

@@ -2,7 +2,7 @@ defmodule OpenAgents.GitHub do
   @moduledoc "Server-side GitHub REST API access using the signed-in user's OAuth token."
 
   @github_api_version "2022-11-28"
-  @user_agent "OpenAgents"
+  @user_agent "OpenAgents-Sarah"
   @full_name_regex ~r/\A[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+\z/
   @maximum_file_bytes 65_536
 

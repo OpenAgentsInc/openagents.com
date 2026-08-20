@@ -1,6 +1,5 @@
 defmodule OpenAgents.GitHubOAuthTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.{GitHubOAuth, Repo}
   alias OpenAgents.Accounts.OAuthAttempt
 

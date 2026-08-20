@@ -1,6 +1,5 @@
 defmodule OpenAgents.NetworkStatusTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   alias OpenAgents.NetworkStatus
 
   test "the projection is bounded, content-free, and schema-versioned (STATUS-001)" do

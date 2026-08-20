@@ -1,6 +1,5 @@
 defmodule OpenAgents.ConversationsTest do
   use OpenAgents.SarahDataCase, async: true
-  @moduletag :skip
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.{Message, Visitor}
 

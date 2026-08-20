@@ -1,6 +1,5 @@
 defmodule OpenAgents.MachinesTest do
   use OpenAgents.SarahDataCase, async: true
-  @moduletag :skip
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Pairing
 

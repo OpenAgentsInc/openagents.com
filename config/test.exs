@@ -15,9 +15,9 @@ config :openagents, OpenAgents.Repo,
 
 # Test-only GitHub OAuth and vault keys. GitHub is mocked in tests.
 config :openagents, :github_oauth,
-  client_id: "test-client-id",
-  client_secret: "test-client-secret",
-  redirect_uri: "http://localhost:4002/auth/github/callback"
+  client_id: "test-github-client-id",
+  client_secret: "test-github-client-secret",
+  redirect_uri: "http://127.0.0.1:4002/auth/github/callback"
 
 config :openagents,
        :github_token_encryption_key,

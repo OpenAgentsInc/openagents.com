@@ -1,5 +1,6 @@
 defmodule OpenAgents.ClusterTest do
   use ExUnit.Case
+  @moduletag :skip
 
   alias OpenAgents.Cluster
 

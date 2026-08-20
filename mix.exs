@@ -81,7 +81,7 @@ defmodule OpenAgents.MixProject do
        depth: 1},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
-      {:mdex, "~> 0.3"},
+      {:earmark, "~> 1.4"},
       {:horde, "~> 0.9.0"},
       {:ra, "~> 2.16"},
       {:websockex, "~> 0.5.1"},

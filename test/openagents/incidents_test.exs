@@ -1,6 +1,5 @@
 defmodule OpenAgents.IncidentsTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   alias OpenAgents.Incidents
   alias OpenAgents.Incidents.Triage
   alias OpenAgents.{Accounts, Conversations, Repo}

@@ -13,7 +13,6 @@ defmodule OpenAgents.Work.HandoffTest do
   `mix test --include cluster` (needs epmd).
   """
   use ExUnit.Case, async: false
-  @moduletag :skip
 
   @moduletag :cluster
 

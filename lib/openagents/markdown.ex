@@ -6,9 +6,12 @@ defmodule OpenAgents.Markdown do
 
   ## Untrusted input
 
-  Model output is not trusted. We render it with `MDEx` and then sanitize the
-  resulting HTML with `MDEx.Document.default_sanitize_options/0`, which strips
-  dangerous tags and attributes and adds `rel="noopener noreferrer"` to links.
+  Model output is not trusted. Earmark passes raw HTML straight through and will
+  happily emit a `javascript:` href, so neither its HTML output nor its
+  transformer is used. Instead the parsed AST is walked against an allowlist of
+  tags and attributes, and this module writes the HTML itself so every text node
+  is escaped here rather than somewhere further down. Anything not on the
+  allowlist is dropped, and its text is kept.
 
   ## Partial input
 
@@ -25,6 +28,17 @@ defmodule OpenAgents.Markdown do
   matter more than the completeness.
   """
 
+  @block_tags ~w(p ul ol li blockquote pre h1 h2 h3 h4 h5 h6 hr table thead tbody tr th td)
+  @inline_tags ~w(strong em del code a br)
+  @allowed_tags @block_tags ++ @inline_tags
+
+  @void_tags ~w(br hr)
+
+  # `code` carries Earmark's own `inline` marker; everything else is dropped.
+  @allowed_attributes %{"a" => ["href"], "code" => ["class"], "pre" => ["class"]}
+
+  @safe_schemes ~w(http https mailto)
+
   @emphasis_markers ~w(*** ___ ** __ ~~ * _)
 
   @doc """
@@ -37,15 +51,81 @@ defmodule OpenAgents.Markdown do
   def to_html(text, options \\ []) when is_binary(text) do
     text
     |> then(fn raw -> if options[:streaming], do: complete(raw), else: raw end)
-    |> then(
-      &MDEx.to_html!(&1,
-        extension: [strikethrough: true, table: true, tasklist: true],
-        render: [unsafe: true],
-        sanitize: MDEx.Document.default_sanitize_options()
-      )
-    )
-    |> Phoenix.HTML.raw()
+    |> parse()
+    |> Enum.map(&render_node/1)
+    |> then(&{:safe, &1})
   end
+
+  defp parse(text) do
+    case Earmark.Parser.as_ast(text, gfm: true, breaks: true) do
+      {:ok, ast, _messages} -> ast
+      {:error, ast, _messages} -> ast
+    end
+  end
+
+  # ── Rendering ──────────────────────────────────────────────────────────────
+
+  defp render_node(text) when is_binary(text), do: escape(text)
+
+  defp render_node({tag, attributes, children, _meta}) when tag in @allowed_tags do
+    rendered = Enum.map(children, &render_node/1)
+
+    cond do
+      tag in @void_tags -> ["<", tag, attributes(tag, attributes), " />"]
+      true -> ["<", tag, attributes(tag, attributes), ">", rendered, "</", tag, ">"]
+    end
+  end
+
+  # An unknown tag keeps its text and loses its markup, which is the safe
+  # direction: a reader still sees the words.
+  defp render_node({_tag, _attributes, children, _meta}), do: Enum.map(children, &render_node/1)
+
+  defp render_node(_other), do: []
+
+  defp attributes(tag, attributes) do
+    allowed = Map.get(@allowed_attributes, tag, [])
+
+    attributes
+    |> Enum.filter(fn {name, _value} -> name in allowed end)
+    |> Enum.flat_map(&attribute(tag, &1))
+  end
+
+  defp attribute("a", {"href", value}) do
+    case safe_url(value) do
+      nil ->
+        []
+
+      url ->
+        # Model output can link anywhere, so a link leaves without carrying the
+        # referrer or a handle on this window.
+        [~s( href="), escape(url), ~s(" rel="noopener noreferrer nofollow" target="_blank")]
+    end
+  end
+
+  defp attribute(_tag, {name, value}), do: [" ", name, ~s(="), escape(value), ~s(")]
+
+  defp safe_url(value) do
+    trimmed = value |> to_string() |> String.trim()
+
+    cond do
+      trimmed == "" -> nil
+      String.starts_with?(trimmed, ["/", "#"]) -> trimmed
+      scheme_of(trimmed) in @safe_schemes -> trimmed
+      # No scheme at all is a bare domain; treat it as https rather than
+      # letting the browser resolve it relative to OpenAgents.
+      scheme_of(trimmed) == nil -> "https://" <> trimmed
+      true -> nil
+    end
+  end
+
+  defp scheme_of(url) do
+    case Regex.run(~r/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, url) do
+      [_, scheme] -> String.downcase(scheme)
+      nil -> nil
+    end
+  end
+
+  defp escape(value), do: value |> to_string() |> Phoenix.HTML.html_escape() |> elem(1)
 
   # ── Completion of partial Markdown ─────────────────────────────────────────
 

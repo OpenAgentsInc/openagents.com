@@ -1,6 +1,5 @@
 defmodule OpenAgents.Incidents.FixerTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   alias OpenAgents.Incidents
   alias OpenAgents.Incidents.Fixer

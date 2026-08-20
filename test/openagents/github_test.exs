@@ -1,6 +1,5 @@
 defmodule OpenAgents.GitHubTest do
   use ExUnit.Case, async: false
-  @moduletag :skip
   alias OpenAgents.GitHub
 
   setup {Req.Test, :verify_on_exit!}

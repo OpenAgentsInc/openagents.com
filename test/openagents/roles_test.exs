@@ -1,6 +1,5 @@
 defmodule OpenAgents.RolesTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
   alias OpenAgents.Context.Composer
   alias OpenAgents.Roles
   alias OpenAgents.Roles.{Catalog, Selection, SelectionInput}

@@ -1,6 +1,5 @@
 defmodule OpenAgents.ObservabilityTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Observability
   alias OpenAgents.Observability.{Readback, ReleaseGate}
 

@@ -1,6 +1,5 @@
 defmodule OpenAgents.ProfileMemoryTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
   alias OpenAgents.{Conversations, ProfileMemory, Repo}
   alias OpenAgents.Conversations.{Message, Visitor}
   alias OpenAgents.ProfileMemory.Source

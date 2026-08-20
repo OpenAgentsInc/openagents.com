@@ -66,6 +66,20 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Ancestor trail ending in the current page, which is not a link."
         },
         %{
+          slug: "openagents-file-table",
+          title: "File table",
+          icon: "folder",
+          source: "OpenAgentsWeb.UI.file_table/1",
+          summary: "A repository tree: ref bar, latest commit, and entries."
+        },
+        %{
+          slug: "openagents-repo-about",
+          title: "Repo about",
+          icon: "info",
+          source: "OpenAgentsWeb.UI.repo_about/1",
+          summary: "The rail beside a repository: description, licence, languages."
+        },
+        %{
           slug: "openagents-diff-file",
           title: "Diff",
           icon: "code",

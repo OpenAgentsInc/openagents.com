@@ -4919,3 +4919,252 @@
     margin: 0;
   }
 }
+
+/* ── Repository view ──────────────────────────────────────────────────────── */
+
+/* The GitHub-shaped repo home: a ref bar, the latest commit, the tree, and a
+ * rail describing the repository. Adapted from the clones catalogued in
+ * docs/audits/2026-08-19-github-clone-harvest-candidates.md -- gh-next (MIT)
+ * for the Tailwind repo home, Gitea's view_list.tmpl for what a tree row
+ * carries. Values are ours. */
+
+@layer components {
+  .repo-view {
+    display: grid;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  @media (min-width: 1024px) {
+    .repo-view {
+      grid-template-columns: minmax(0, 1fr) 296px;
+    }
+  }
+
+  /* ── File table ─────────────────────────────────────────────────────────── */
+
+  .file-table {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
+
+  .file-table__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    padding: 12px;
+    background: var(--ink-surface);
+    font-size: 0.8125rem;
+  }
+
+  .file-table__ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .file-table__count {
+    color: var(--text-muted);
+  }
+
+  .file-table__count strong {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .file-table__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: auto;
+  }
+
+  /* Above the table, not inside it. This row describes the whole tree, and a
+     row that describes the table while looking like a row in it is the part of
+     GitHub's own version that reads oddly at first glance. */
+  .file-table__commit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    border-block: 1px solid var(--line);
+    background: var(--ink-raised);
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .file-table__list {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .file-row + .file-row {
+    border-top: 1px solid var(--line-faint);
+  }
+
+  .file-row td {
+    padding: 8px 12px;
+  }
+
+  .file-row__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-body);
+    text-decoration: none;
+  }
+
+  /* A folder leads, so it is tinted; a file is the default and is not. Tinting
+     both would mean tinting nothing. */
+  .file-row[data-kind="tree"] .file-row__link .icon {
+    color: var(--info);
+  }
+
+  .file-row .icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  @media (hover: hover) {
+    .file-row__link:hover {
+      color: var(--text-primary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  .file-row__size {
+    width: 1%;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  .file-table__empty {
+    padding: 16px 12px;
+    color: var(--text-dim);
+    font-size: 0.875rem;
+  }
+
+  /* ── About rail ─────────────────────────────────────────────────────────── */
+
+  .repo-about {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .repo-about__title {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .repo-about__description {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-wrap: pretty;
+  }
+
+  .repo-about__links,
+  .repo-about__stats,
+  .repo-about__language-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .repo-about__links li,
+  .repo-about__stats li,
+  .repo-about__language-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+  }
+
+  .repo-about__links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    .repo-about__links a:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  .repo-about .icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  .repo-about__languages h3 {
+    padding-block-end: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  /* One bar rather than a stack: the proportions are the point, and they only
+     read as proportions when the segments share a length. */
+  .language-bar {
+    display: flex;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  .language-bar__segment {
+    height: 100%;
+  }
+
+  .language-dot {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border-radius: 50%;
+  }
+
+  /* A fixed rotation rather than a hash of the name: six steps off the ink
+     ladder, so the chart stays in the palette and two adjacent languages are
+     always distinguishable. */
+  .language-bar__segment[data-index="0"], .language-dot[data-index="0"] { background: var(--text-primary); }
+  .language-bar__segment[data-index="1"], .language-dot[data-index="1"] { background: var(--info); }
+  .language-bar__segment[data-index="2"], .language-dot[data-index="2"] { background: var(--success); }
+  .language-bar__segment[data-index="3"], .language-dot[data-index="3"] { background: var(--warning); }
+  .language-bar__segment[data-index="4"], .language-dot[data-index="4"] { background: var(--text-muted); }
+  .language-bar__segment[data-index="5"], .language-dot[data-index="5"] { background: var(--text-dim); }
+
+  .repo-about__percent {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+}

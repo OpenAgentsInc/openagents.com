@@ -958,6 +958,89 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "openagents-file-table"}} = assigns) do
+    assigns =
+      assign(assigns, :entries, [
+        %{name: "assets", kind: "tree", size: nil},
+        %{name: "config", kind: "tree", size: nil},
+        %{name: "lib", kind: "tree", size: nil},
+        %{name: "priv", kind: "tree", size: nil},
+        %{name: "test", kind: "tree", size: nil},
+        %{name: ".formatter.exs", kind: "blob", size: 412},
+        %{name: "mix.exs", kind: "blob", size: 4_318},
+        %{name: "README.md", kind: "blob", size: 1_204_291}
+      ])
+
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Takes what <code>Browse.tree/3</code> already returns. Directories sort above
+        files, which is what makes a deep repository scannable: a reader looks for the
+        folder first and only then for the file.
+      </p>
+      <p class="text-sm text-base-content/60">
+        The latest commit sits above the table, not inside it. It describes the tree as
+        a whole, and a row that describes the table while looking like a row in it is
+        the part of GitHub's own version that reads oddly at first glance.
+      </p>
+      <UI.file_table
+        owner="OpenAgentsInc"
+        repo="openagents.com"
+        ref="main"
+        entries={@entries}
+        branches={2}
+        tags={0}
+      >
+        <:actions>
+          <UI.button size={:sm}>Add file</UI.button>
+          <UI.button variant={:primary} size={:sm}>Code</UI.button>
+        </:actions>
+        <:commit>
+          <strong>AtlantisPleb</strong>
+          <span>The commit page shows a diff instead of printing one</span>
+          <code>57d5fd9</code>
+          <span>15 minutes ago</span>
+        </:commit>
+      </UI.file_table>
+      <p class="text-sm text-base-content/60">
+        Per-row commit messages are deliberately absent: GitHub fills them by walking
+        history once per path, which is one git process per file. When that is cheap the
+        row has a slot for it and the markup does not change.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "openagents-repo-about"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Every row is optional and an absent one renders nothing. A rail that says
+        "no description" is louder than one that simply does not mention it.
+      </p>
+      <div class="max-w-xs">
+        <UI.repo_about description="The Agent Forge" license="AGPL-3.0">
+          <:link icon="book" navigate="/docs">Readme</:link>
+          <:link icon="text" navigate="/changelog">Activity</:link>
+          <:stat icon="star">2 stars</:stat>
+          <:stat icon="eye">0 watching</:stat>
+          <:language percent={91.8}>Elixir</:language>
+          <:language percent={3.1}>CSS</:language>
+          <:language percent={3.1}>Shell</:language>
+          <:language percent={1.0}>JavaScript</:language>
+          <:language percent={1.0}>Other</:language>
+        </UI.repo_about>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The language breakdown is one bar rather than a stack of them: the proportions
+        are the point, and they only read as proportions when the segments share a
+        length. Colours are a fixed six-step rotation off the ink ladder, so the chart
+        stays in the palette instead of hashing a hue per language name.
+      </p>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "openagents-diff-file"}} = assigns) do
     assigns =
       assign(

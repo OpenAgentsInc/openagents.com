@@ -819,6 +819,176 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
+  A repository's file table: the ref bar, the latest commit, and the entries.
+
+  Adapted from the GitHub-shaped clones catalogued in
+  `docs/audits/2026-08-19-github-clone-harvest-candidates.md` -- `gh-next`
+  (MIT, Fredkiss3/gh-next) for the Tailwind repo home's header and rail, and
+  Gitea's `view_list.tmpl` for what a tree row must actually carry.
+
+  Directories sort above files, which is what `Browse.tree/3` already returns
+  and what makes a deep repository scannable: a reader looks for the folder
+  first and only then for the file.
+
+  The latest-commit bar sits above the table rather than inside it. It
+  describes the tree as a whole, and a row that describes the whole table but
+  looks like a row is the reason GitHub's own version of this reads oddly on
+  first sight.
+
+  Per-row commit messages are deliberately absent. GitHub fills them by
+  walking history once per path, which is one process per file; when we have
+  that cheaply the slot is `meta` and it costs no markup change.
+  """
+  attr :owner, :string, required: true
+  attr :repo, :string, required: true
+  attr :ref, :string, required: true
+  attr :path, :string, default: ""
+  attr :entries, :list, required: true, doc: "`[%{name, kind, size}]` from `Browse.tree/3`"
+  attr :branches, :integer, default: nil
+  attr :tags, :integer, default: nil
+  attr :class, :any, default: nil
+  slot :commit, doc: "the latest commit, shown above the table"
+  slot :actions, doc: "controls at the trailing edge of the ref bar"
+
+  def file_table(assigns) do
+    ~H"""
+    <div class={["file-table", @class]}>
+      <div class="file-table__bar">
+        <span class="file-table__ref">
+          <.icon name="branch" /> {@ref}
+        </span>
+        <span :if={@branches} class="file-table__count">
+          <strong>{@branches}</strong> {plural(@branches, "Branch", "Branches")}
+        </span>
+        <span :if={@tags} class="file-table__count">
+          <strong>{@tags}</strong> {plural(@tags, "Tag", "Tags")}
+        </span>
+        <span :if={@actions != []} class="file-table__actions">{render_slot(@actions)}</span>
+      </div>
+
+      <div :if={@commit != []} class="file-table__commit">{render_slot(@commit)}</div>
+
+      <table class="file-table__list">
+        <caption class="visually-hidden">
+          Files in {(@path == "" && "the repository root") || @path}
+        </caption>
+        <tbody>
+          <tr :for={entry <- @entries} class="file-row" data-kind={entry.kind}>
+            <td class="file-row__name">
+              <.link navigate={entry_path(@owner, @repo, @ref, @path, entry)} class="file-row__link">
+                <.icon name={if entry.kind == "tree", do: "folder", else: "file-document"} />
+                {entry.name}
+              </.link>
+            </td>
+            <td class="file-row__size">{size_label(entry)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p :if={@entries == []} class="file-table__empty">Nothing at this path.</p>
+    </div>
+    """
+  end
+
+  # A directory goes to `tree`, a file to `blob`. GitHub's grammar, which the
+  # harvest audit treats as the compatibility target rather than a style
+  # choice: an existing link, bookmark, or `gh`-shaped tool should keep working.
+  defp entry_path(owner, repo, ref, path, %{kind: kind, name: name}) do
+    noun = if kind == "tree", do: "tree", else: "blob"
+    joined = if path == "", do: name, else: path <> "/" <> name
+    "/#{owner}/#{repo}/#{noun}/#{ref}/#{joined}"
+  end
+
+  # `UI` is not a gettext backend, and these two words are the only plurals it
+  # needs.
+  defp plural(1, singular, _plural), do: singular
+  defp plural(_count, _singular, plural), do: plural
+
+  defp size_label(%{kind: "tree"}), do: nil
+  defp size_label(%{size: nil}), do: nil
+
+  defp size_label(%{size: bytes}) when is_integer(bytes) do
+    cond do
+      bytes < 1_024 -> "#{bytes} B"
+      bytes < 1_048_576 -> "#{Float.round(bytes / 1_024, 1)} KB"
+      true -> "#{Float.round(bytes / 1_048_576, 1)} MB"
+    end
+  end
+
+  defp size_label(_entry), do: nil
+
+  @doc """
+  The rail beside a repository: what it is, how it is licensed, what it is made of.
+
+  Adapted from `gh-next`'s repo home. Every row is optional, and an absent one
+  renders nothing rather than a placeholder -- a rail that says "no description"
+  is louder than one that simply does not mention it.
+  """
+  attr :description, :string, default: nil
+  attr :license, :string, default: nil
+  attr :class, :any, default: nil
+
+  slot :link, doc: "one related destination" do
+    attr :icon, :string
+    attr :navigate, :string
+    attr :href, :string
+  end
+
+  slot :stat, doc: "one count" do
+    attr :icon, :string
+  end
+
+  slot :language, doc: "one language" do
+    attr :percent, :float, required: true
+  end
+
+  def repo_about(assigns) do
+    ~H"""
+    <aside class={["repo-about", @class]} aria-label="About this repository">
+      <h2 class="repo-about__title">About</h2>
+      <p :if={@description} class="repo-about__description">{@description}</p>
+
+      <ul :if={@link != [] or @license} class="repo-about__links">
+        <li :if={@license}>
+          <.icon name="scales" /> {@license}
+        </li>
+        <li :for={link <- @link}>
+          <.link navigate={link[:navigate]} href={link[:href]}>
+            <.icon :if={link[:icon]} name={link.icon} /> {render_slot(link)}
+          </.link>
+        </li>
+      </ul>
+
+      <ul :if={@stat != []} class="repo-about__stats">
+        <li :for={stat <- @stat}>
+          <.icon :if={stat[:icon]} name={stat.icon} /> {render_slot(stat)}
+        </li>
+      </ul>
+
+      <div :if={@language != []} class="repo-about__languages">
+        <h3>Languages</h3>
+        <%!-- One bar, not a stack of bars: the proportions are the point, and
+        they only read as proportions when they share a length. --%>
+        <div class="language-bar" role="img" aria-label="Language breakdown">
+          <span
+            :for={{language, index} <- Enum.with_index(@language)}
+            class="language-bar__segment"
+            data-index={rem(index, 6)}
+            style={"width: #{language.percent}%"}
+          ></span>
+        </div>
+        <ul class="repo-about__language-list">
+          <li :for={{language, index} <- Enum.with_index(@language)}>
+            <span class="language-dot" data-index={rem(index, 6)} aria-hidden="true"></span>
+            {render_slot(language)} <span class="repo-about__percent">{language.percent}%</span>
+          </li>
+        </ul>
+      </div>
+    </aside>
+    """
+  end
+
+  @doc """
   One file's diff: a header, its hunks, and every line numbered on both sides.
 
   Adapted from Pierre's `FileDiff` (`@pierre/diffs`, Apache 2.0,

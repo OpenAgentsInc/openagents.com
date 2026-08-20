@@ -45,7 +45,7 @@ defmodule OpenAgentsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <div class="h-screen flex overflow-hidden bg-base-100">
+    <div class="h-screen flex overflow-hidden bg-background">
       <%= if @current_scope do %>
         <.sidebar current_scope={@current_scope} />
       <% end %>
@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.Layouts do
 
         <main class={[
           "flex-1 min-w-0 overflow-y-auto overscroll-none p-4",
-          @current_scope && "bg-base-100"
+          @current_scope && "bg-background"
         ]}>
           <%= if @current_scope do %>
             {render_slot(@inner_block)}
@@ -78,29 +78,29 @@ defmodule OpenAgentsWeb.Layouts do
 
   defp openagents_command_bar(assigns) do
     ~H"""
-    <header class="navbar bg-base-100 border-b border-base-300 px-4 h-16 shrink-0">
-      <div class="navbar-start">
+    <header class="flex items-center gap-2 bg-background border-b border-border px-4 h-16 shrink-0">
+      <div class="flex flex-1 min-w-0 items-center gap-2">
         <%= if !@current_scope do %>
-          <.link navigate={~p"/"} class="btn btn-ghost text-xl">
+          <.link navigate={~p"/"} class="btn text-xl text-foreground" data-variant="ghost">
             OpenAgents
           </.link>
         <% end %>
         <%= if @title do %>
-          <div class="flex flex-col justify-center">
-            <h1 class="text-base font-semibold leading-tight">{@title}</h1>
+          <div class="flex flex-col justify-center min-w-0">
+            <h1 class="text-base font-semibold leading-tight truncate">{@title}</h1>
             <%= if @subtitle do %>
-              <p class="text-xs text-base-content/60">{@subtitle}</p>
+              <p class="text-xs text-muted-foreground truncate">{@subtitle}</p>
             <% end %>
           </div>
         <% end %>
       </div>
 
-      <div class="navbar-end gap-2">
+      <div class="flex items-center gap-2">
         <%= if @current_scope do %>
           <.account_dropdown current_scope={@current_scope} />
         <% else %>
           <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
-            <.button type="submit" class="btn btn-primary btn-sm">Sign in with GitHub</.button>
+            <.button type="submit" variant="primary" size="sm">Sign in with GitHub</.button>
           </.form>
         <% end %>
       </div>
@@ -189,25 +189,31 @@ defmodule OpenAgentsWeb.Layouts do
 
   defp account_dropdown(assigns) do
     ~H"""
-    <details class="dropdown dropdown-end">
-      <summary class="btn btn-ghost btn-circle avatar list-none cursor-pointer">
+    <%!-- A native <details> disclosure rather than a JavaScript dropdown, for
+    the same reason `SarahUI.menu/1` uses the popover API: the account control
+    has to work before any client script has run. --%>
+    <details class="relative">
+      <summary class="btn list-none cursor-pointer !p-1" data-variant="ghost">
         <img
           src={@current_scope.github_avatar_url}
           alt={"GitHub avatar for @#{@current_scope.github_login}"}
           class="w-8 h-8 rounded-full"
         />
       </summary>
-      <ul class="menu dropdown-content bg-base-100 rounded-box z-10 w-56 p-2 shadow border border-base-300">
-        <li class="p-2">
+      <ul class="absolute end-0 z-10 mt-2 w-56 rounded-lg border border-border bg-popover p-2 shadow-lg">
+        <li class="flex flex-col p-2">
           <span class="font-semibold">{account_display_name(@current_scope)}</span>
-          <span :if={@current_scope.github_name} class="text-sm text-base-content/70">
+          <span :if={@current_scope.github_name} class="text-sm text-muted-foreground">
             @{@current_scope.github_login}
           </span>
         </li>
         <li>
           <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0 w-full">
             <input type="hidden" name="_method" value="delete" />
-            <button type="submit" class="w-full text-left flex items-center gap-2">
+            <button
+              type="submit"
+              class="w-full rounded-md px-2 py-1.5 text-left flex items-center gap-2 hover:bg-muted"
+            >
               <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" /> Log out
             </button>
           </.form>
@@ -366,17 +372,21 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
+  The `data-theme` segmented control.
 
-  See <head> in root.html.heex which applies the theme before page load.
+  The attribute plumbing in `root.html.heex` still runs, but since DaisyUI was
+  removed there is only one palette behind it: Sarah's token ladder is
+  dark-only (`color-scheme: dark` in app.css) and ships no light variant. The
+  control therefore moves its indicator without repainting the page. Keep it or
+  remove it deliberately — do not reintroduce a second theme to make it work.
   """
   def theme_toggle(assigns) do
     ~H"""
     <%!-- w-24 is load-bearing: the three buttons are w-1/3, so without an explicit
     width this stretches to fill any block-level parent and the segments stretch
     with it. 24 (6rem) is the natural content width: 3 buttons x (p-2 + size-4). --%>
-    <div class="card relative flex flex-row items-center w-24 shrink-0 border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
+    <div class="relative flex flex-row items-center w-24 shrink-0 border-2 border-muted bg-muted rounded-full">
+      <div class="absolute w-1/3 h-full rounded-full border-1 border-card bg-background brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
 
       <button
         class="flex p-2 cursor-pointer w-1/3"

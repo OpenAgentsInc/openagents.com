@@ -15,7 +15,7 @@ defmodule OpenAgentsWeb.DocsLive do
     ~H"""
     <div class="max-w-3xl mx-auto">
       <h1 class="text-3xl font-semibold mb-4">Documentation</h1>
-      <p class="text-base-content/70 mb-8">
+      <p class="text-muted-foreground mb-8">
         The OpenAgents docs are a work in progress. This placeholder shows the structure we will build out next.
       </p>
 
@@ -31,10 +31,14 @@ defmodule OpenAgentsWeb.DocsLive do
 
   defp card(assigns) do
     ~H"""
-    <div class="card bg-base-200 border border-base-300 p-4">
-      <h2 class="text-lg font-medium mb-1">{@title}</h2>
-      <p class="text-sm text-base-content/70">{@description}</p>
-    </div>
+    <%!-- `.card` brings its own padding and lift; the surrounding grid supplies
+    the gaps, so the panel margin is dropped here. --%>
+    <article class="card !m-0">
+      <header>
+        <h2 class="card-title">{@title}</h2>
+        <p>{@description}</p>
+      </header>
+    </article>
     """
   end
 end

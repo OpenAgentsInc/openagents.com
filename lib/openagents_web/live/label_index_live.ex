@@ -52,34 +52,40 @@ defmodule OpenAgentsWeb.LabelIndexLive do
         for={@form}
         id="new-label-form"
         phx-submit="save"
-        class="card bg-base-100 border border-base-300 p-4 mb-6"
+        class="card !mx-0 !mt-0 mb-6"
       >
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <.input field={@form[:name]} label="Name" required />
           <.input field={@form[:color]} label="Color" required />
           <.input field={@form[:description]} label="Description" />
         </div>
-        <div class="card-actions justify-end mt-2">
+        <footer class="flex justify-end mt-2">
           <.button variant="primary">Add label</.button>
-        </div>
+        </footer>
       </.form>
 
       <%= if @labels == [] do %>
-        <div class="alert alert-info">
+        <div class="alert" data-variant="info" role="status">
           <.icon name="hero-information-circle" class="size-5" />
-          <span>No labels yet.</span>
+          <section>No labels yet.</section>
         </div>
       <% else %>
         <.table id="labels" rows={@labels}>
           <:col :let={label} label="Label">
-            <span class="badge badge-md" style={"background-color: ##{label.color}; color: #000;"}>
+            <span
+              class="badge rounded-full px-2 py-0.5"
+              style={"background-color: ##{label.color}; color: #000;"}
+            >
               {label.name}
             </span>
           </:col>
           <:col :let={label} label="Description">{label.description || "—"}</:col>
           <:col :let={label} label="">
             <button
-              class="btn btn-ghost btn-sm text-error"
+              class="btn"
+              data-variant="ghost"
+              data-size="sm"
+              data-tone="danger"
               phx-click="delete"
               phx-value-id={label.id}
               data-confirm="Delete this label?"

@@ -107,35 +107,31 @@ defmodule OpenAgentsWeb.IssueShowLive do
           for={@form}
           id="issue-edit-form"
           phx-submit="save"
-          class="card bg-base-100 p-4 border border-base-300 mb-6"
+          class="card !mx-0 !mt-0 mb-6"
         >
           <.input field={@form[:title]} label="Title" />
           <.input field={@form[:body]} type="textarea" label="Body" />
-          <div class="card-actions justify-end mt-2 gap-2">
-            <button type="button" class="btn btn-ghost" phx-click="toggle_edit">
+          <footer class="flex justify-end mt-2 gap-2">
+            <button type="button" class="btn" data-variant="ghost" phx-click="toggle_edit">
               Cancel
             </button>
             <.button variant="primary">Save</.button>
-          </div>
+          </footer>
         </.form>
       <% else %>
         <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
           <div class="flex-1">
             <h1 class="text-3xl font-bold mb-2">
               {@issue.title}
-              <span class="text-base-content/50 text-xl font-normal">
+              <span class="text-muted-foreground text-xl font-normal">
                 #{@issue.number}
               </span>
             </h1>
             <div class="flex items-center gap-2 mb-3">
-              <span class={[
-                "badge",
-                @issue.state == "open" && "badge-success",
-                @issue.state == "closed" && "badge-ghost"
-              ]}>
+              <span class="badge" data-variant={if @issue.state == "open", do: "success", else: "dim"}>
                 {@issue.state}
               </span>
-              <p class="text-sm text-base-content/70">
+              <p class="text-sm text-muted-foreground">
                 Opened on {Calendar.strftime(@issue.inserted_at, "%b %d, %Y")} by {(@issue.user &&
                                                                                       @issue.user[
                                                                                         "login"
@@ -145,13 +141,25 @@ defmodule OpenAgentsWeb.IssueShowLive do
             </div>
           </div>
           <div class="flex gap-2 shrink-0">
-            <button :if={@issue.state == "open"} class="btn btn-sm btn-success" phx-click="close">
+            <button
+              :if={@issue.state == "open"}
+              class="btn"
+              data-variant="primary"
+              data-size="sm"
+              phx-click="close"
+            >
               Close issue
             </button>
-            <button :if={@issue.state == "closed"} class="btn btn-sm btn-ghost" phx-click="reopen">
+            <button
+              :if={@issue.state == "closed"}
+              class="btn"
+              data-variant="ghost"
+              data-size="sm"
+              phx-click="reopen"
+            >
               Reopen issue
             </button>
-            <button class="btn btn-sm btn-ghost" phx-click="toggle_edit">
+            <button class="btn" data-variant="ghost" data-size="sm" phx-click="toggle_edit">
               Edit
             </button>
           </div>
@@ -160,8 +168,8 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div class="lg:col-span-3 space-y-6">
-          <div class="card bg-base-100 border border-base-300 p-4">
-            <p class="whitespace-pre-wrap text-base-content/90">
+          <div class="card !m-0">
+            <p class="whitespace-pre-wrap text-foreground">
               {@issue.body || "No description provided."}
             </p>
           </div>
@@ -170,22 +178,22 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
           <div class="space-y-4">
             <%= for comment <- @comments do %>
-              <div class="card bg-base-100 border border-base-300 p-4">
+              <div class="card !m-0">
                 <div class="flex items-center gap-2 mb-2">
-                  <div class="avatar avatar-placeholder">
-                    <div class="bg-neutral text-neutral-content w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold">
+                  <span class="avatar size-8 font-semibold">
+                    <span>
                       {(comment.user && comment.user["login"] |> String.first() |> String.upcase()) ||
                         "?"}
-                    </div>
-                  </div>
+                    </span>
+                  </span>
                   <span class="font-semibold text-sm">
                     {(comment.user && comment.user["login"]) || "anonymous"}
                   </span>
-                  <span class="text-sm text-base-content/50">
+                  <span class="text-sm text-muted-foreground">
                     {Calendar.strftime(comment.created_at, "%b %d, %Y %H:%M")}
                   </span>
                 </div>
-                <p class="whitespace-pre-wrap text-base-content/90">
+                <p class="whitespace-pre-wrap text-foreground">
                   {comment.body}
                 </p>
               </div>
@@ -196,23 +204,23 @@ defmodule OpenAgentsWeb.IssueShowLive do
             for={@comment_form}
             id="comment-form"
             phx-submit="add_comment"
-            class="card bg-base-100 border border-base-300 p-4"
+            class="card !m-0"
           >
             <.input field={@comment_form[:body]} type="textarea" label="Write a comment" />
-            <div class="card-actions justify-end mt-2">
+            <footer class="flex justify-end mt-2">
               <.button variant="primary">Comment</.button>
-            </div>
+            </footer>
           </.form>
         </div>
 
         <div class="space-y-4">
           <%= if @issue.labels != [] do %>
             <div>
-              <h3 class="font-semibold text-sm text-base-content/70 mb-2">Labels</h3>
+              <h3 class="font-semibold text-sm text-muted-foreground mb-2">Labels</h3>
               <div class="flex flex-wrap gap-1">
                 <%= for label <- @issue.labels do %>
                   <span
-                    class="badge badge-sm"
+                    class="badge rounded-full px-2 py-0.5"
                     style={"background-color: ##{label["color"]}; color: #000;"}
                   >
                     {label["name"]}
@@ -224,14 +232,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
           <%= if @issue.assignees != [] do %>
             <div>
-              <h3 class="font-semibold text-sm text-base-content/70 mb-2">Assignees</h3>
-              <div class="flex -space-x-2">
+              <h3 class="font-semibold text-sm text-muted-foreground mb-2">Assignees</h3>
+              <div class="avatar-group">
                 <%= for assignee <- @issue.assignees do %>
-                  <div class="avatar avatar-placeholder" title={assignee["login"]}>
-                    <div class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold">
+                  <span class="avatar size-7 font-semibold" title={assignee["login"]}>
+                    <span class="!text-xs">
                       {assignee["login"] |> String.first() |> String.upcase()}
-                    </div>
-                  </div>
+                    </span>
+                  </span>
                 <% end %>
               </div>
             </div>
@@ -239,11 +247,8 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
           <%= if @issue.milestone do %>
             <div>
-              <h3 class="font-semibold text-sm text-base-content/70 mb-2">Milestone</h3>
-              <.link
-                navigate={~p"/#{@owner}/#{@repo}/milestones"}
-                class="badge badge-ghost badge-sm"
-              >
+              <h3 class="font-semibold text-sm text-muted-foreground mb-2">Milestone</h3>
+              <.link navigate={~p"/#{@owner}/#{@repo}/milestones"} class="badge" data-variant="dim">
                 {@issue.milestone["title"]}
               </.link>
             </div>

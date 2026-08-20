@@ -90,72 +90,80 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
         for={@form}
         id="new-milestone-form"
         phx-submit="save"
-        class="card bg-base-100 border border-base-300 p-4 mb-6"
+        class="card !mx-0 !mt-0 mb-6"
       >
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <.input field={@form[:title]} label="Title" required />
           <.input field={@form[:due_on]} label="Due on" />
           <.input field={@form[:description]} label="Description" />
         </div>
-        <div class="card-actions justify-end mt-2">
+        <footer class="flex justify-end mt-2">
           <.button variant="primary">Add milestone</.button>
-        </div>
+        </footer>
       </.form>
 
       <%= if @milestones == [] do %>
-        <div class="alert alert-info">
+        <div class="alert" data-variant="info" role="status">
           <.icon name="hero-information-circle" class="size-5" />
-          <span>No milestones yet.</span>
+          <section>No milestones yet.</section>
         </div>
       <% else %>
         <div class="space-y-4">
           <%= for milestone <- @milestones do %>
-            <div class="card bg-base-100 border border-base-300 p-4">
+            <div class="card !m-0">
               <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                 <h3 class="text-lg font-semibold">{milestone.title}</h3>
                 <div class="flex gap-2">
-                  <span class={[
-                    "badge badge-sm",
-                    milestone.state == "open" && "badge-success",
-                    milestone.state == "closed" && "badge-ghost"
-                  ]}>
+                  <span
+                    class="badge"
+                    data-variant={if milestone.state == "open", do: "success", else: "dim"}
+                  >
                     {milestone.state}
                   </span>
                   <%= if milestone.due_on do %>
-                    <span class="badge badge-ghost badge-sm">Due {milestone.due_on}</span>
+                    <span class="badge" data-variant="dim">Due {milestone.due_on}</span>
                   <% end %>
                 </div>
               </div>
 
               <%= if milestone.description do %>
-                <p class="text-sm text-base-content/70 mb-3">
+                <p class="text-sm text-muted-foreground mb-3">
                   {milestone.description}
                 </p>
               <% end %>
 
               <div class="flex items-center gap-4 mb-2">
-                <div class="flex-1">
-                  <progress
-                    class="progress progress-success w-full"
-                    value={milestone.progress}
-                    max="100"
-                  ></progress>
+                <%!-- A meter, not task progress: the value is a measured
+                ratio of closed to total, so `<progress>`'s indeterminate state
+                never applies. Drawn from the surface rungs rather than a
+                component variant, since the style pack has no bar. --%>
+                <div
+                  class="flex-1 h-2 rounded-full bg-muted overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={milestone.progress}
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-label={"#{milestone.title} progress"}
+                >
+                  <div class="h-full bg-success" style={"width: #{milestone.progress}%;"}></div>
                 </div>
                 <span class="text-sm font-semibold w-12 text-right">
                   {milestone.progress}%
                 </span>
               </div>
 
-              <div class="flex items-center gap-4 text-sm text-base-content/70 mb-3">
+              <div class="flex items-center gap-4 text-sm text-muted-foreground mb-3">
                 <span>{milestone.open_count} open</span>
                 <span>{milestone.closed_count} closed</span>
                 <span>{milestone.total_count} total</span>
               </div>
 
-              <div class="card-actions justify-end">
+              <footer class="flex justify-end gap-2">
                 <%= if milestone.state == "open" do %>
                   <button
-                    class="btn btn-ghost btn-sm"
+                    class="btn"
+                    data-variant="ghost"
+                    data-size="sm"
                     phx-click="close"
                     phx-value-id={milestone.id}
                   >
@@ -163,14 +171,17 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
                   </button>
                 <% end %>
                 <button
-                  class="btn btn-ghost btn-sm text-error"
+                  class="btn"
+                  data-variant="ghost"
+                  data-size="sm"
+                  data-tone="danger"
                   phx-click="delete"
                   phx-value-id={milestone.id}
                   data-confirm="Delete this milestone?"
                 >
                   Delete
                 </button>
-              </div>
+              </footer>
             </div>
           <% end %>
         </div>

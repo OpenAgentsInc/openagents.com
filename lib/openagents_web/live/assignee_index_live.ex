@@ -27,19 +27,17 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
       <h1 class="text-2xl font-bold mb-4">Assignees</h1>
 
       <%= if @assignees == [] do %>
-        <div class="alert alert-info">
+        <div class="alert" data-variant="info" role="status">
           <.icon name="hero-information-circle" class="size-5" />
-          <span>No assignees have been assigned to issues yet.</span>
+          <section>No assignees have been assigned to issues yet.</section>
         </div>
       <% else %>
         <.table id="assignees" rows={@assignees}>
           <:col :let={{login, _count}} label="Assignee">
             <div class="flex items-center gap-2">
-              <div class="avatar avatar-placeholder">
-                <div class="bg-neutral text-neutral-content w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold">
-                  {login |> String.first() |> String.upcase()}
-                </div>
-              </div>
+              <span class="avatar size-8 font-semibold">
+                <span>{login |> String.first() |> String.upcase()}</span>
+              </span>
               <span class="font-semibold">{login}</span>
             </div>
           </:col>

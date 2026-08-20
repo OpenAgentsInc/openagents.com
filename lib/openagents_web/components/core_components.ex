@@ -9,11 +9,18 @@ defmodule OpenAgentsWeb.CoreComponents do
   them in any way you want, based on your application growth and needs.
 
   The foundation for styling is Tailwind CSS, a utility-first CSS framework,
-  augmented with daisyUI, a Tailwind CSS plugin that provides UI components
-  and themes. Here are useful references:
+  on top of the vendored Basecoat component structure in
+  `assets/vendor/basecoat/components/` and Sarah's style pack in
+  `assets/css/sarah.css`. Basecoat expresses variants as data attributes
+  (`data-variant`, `data-size`), so a control is `class="btn"` plus a data
+  attribute rather than a stack of variant classes. There is no second
+  component library — DaisyUI was removed, and reintroducing it would put flat
+  `.btn`-style rules back above `.btn[data-variant=…]`. Here are useful
+  references:
 
-    * [daisyUI](https://daisyui.com/docs/intro/) - a good place to get
-      started and see the available components.
+    * `OpenAgentsWeb.SarahUI` - nineteen ready primitives over that CSS
+      (`button/1`, `card/1`, `badge/1`, `alert/1`, `input/1`, …). Prefer them
+      to hand-written component classes.
 
     * [Tailwind CSS](https://tailwindcss.com) - the foundational framework
       we build on. You will use it for layout, sizing, flexbox, grid, and
@@ -63,21 +70,22 @@ defmodule OpenAgentsWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="fixed top-4 right-4 z-50 flex flex-col items-end gap-2"
       {@rest}
     >
-      <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
-      ]}>
+      <%!-- Basecoat/Sarah `.alert` is a three-column grid: leading marker,
+      body `<section>`, trailing action. Keeping exactly three children is what
+      lets the close control sit in the third column instead of wrapping. --%>
+      <div
+        class="alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap"
+        data-variant={if @kind == :error, do: "danger", else: "info"}
+      >
         <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
-        <div>
+        <section>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
-        </div>
-        <div class="flex-1" />
+        </section>
         <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
           <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
         </button>
@@ -89,6 +97,15 @@ defmodule OpenAgentsWeb.CoreComponents do
   @doc """
   Renders a button with navigation support.
 
+  A thin wrapper over the Basecoat/Sarah `.btn` recipe: the class is always
+  `btn` and the look comes from `data-variant`, never from a stack of variant
+  classes. `class` adds layout utilities alongside it rather than replacing it,
+  so a caller cannot accidentally drop the component styling.
+
+  `OpenAgentsWeb.SarahUI.button/1` is the fuller control (eight variants, three
+  sizes, a danger tone). This one exists so surfaces on `CoreComponents` alone
+  still get the same two shapes.
+
   ## Examples
 
       <.button>Send!</.button>
@@ -98,33 +115,21 @@ defmodule OpenAgentsWeb.CoreComponents do
   attr :rest, :global,
     include: ~w(href navigate patch method download name value disabled type id phx-click)
 
-  attr :class, :any
-  attr :variant, :string, values: ~w(primary)
+  attr :class, :any, default: nil
+  attr :variant, :string, values: ~w(primary secondary ghost outline), default: "secondary"
+  attr :size, :string, values: [nil | ~w(xs sm lg)], default: nil
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{
-      "primary" => "bg-primary text-primary-content hover:bg-[#4c57b5]",
-      nil => "bg-[#1c1c1f] text-base-content border border-[#26262a] hover:bg-[#26262a]"
-    }
-
-    assigns =
-      assign_new(assigns, :class, fn ->
-        [
-          "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed",
-          Map.fetch!(variants, assigns[:variant])
-        ]
-      end)
-
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""
-      <.link class={@class} {@rest}>
+      <.link class={["btn", @class]} data-variant={@variant} data-size={@size} {@rest}>
         {render_slot(@inner_block)}
       </.link>
       """
     else
       ~H"""
-      <button class={@class} {@rest}>
+      <button class={["btn", @class]} data-variant={@variant} data-size={@size} {@rest}>
         {render_slot(@inner_block)}
       </button>
       """
@@ -220,7 +225,7 @@ defmodule OpenAgentsWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field mb-2">
       <label for={@id}>
         <input
           type="hidden"
@@ -229,14 +234,17 @@ defmodule OpenAgentsWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
+        <span class="label inline-flex items-center gap-2">
+          <%!-- The one native control the style pack does not restyle. Letting
+          the browser draw it and tinting it with accent-color keeps it
+          keyboard- and platform-correct for free. --%>
           <input
             type="checkbox"
             id={@id}
             name={@name}
             value="true"
             checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
+            class={@class || "size-4 shrink-0 accent-primary"}
             {@rest}
           />{@label}
         </span>
@@ -248,13 +256,14 @@ defmodule OpenAgentsWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field mb-2">
       <label for={@id}>
         <span :if={@label} class="label mb-1">{@label}</span>
         <select
           id={@id}
           name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+          class={[@class || "w-full input", "aria-invalid:border-destructive", @error_class]}
+          aria-invalid={@errors != [] && "true"}
           multiple={@multiple}
           {@rest}
         >
@@ -269,16 +278,14 @@ defmodule OpenAgentsWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field mb-2">
       <label for={@id}>
         <span :if={@label} class="label mb-1">{@label}</span>
         <textarea
           id={@id}
           name={@name}
-          class={[
-            @class || "w-full textarea",
-            @errors != [] && (@error_class || "textarea-error")
-          ]}
+          class={[@class || "w-full textarea", "aria-invalid:border-destructive", @error_class]}
+          aria-invalid={@errors != [] && "true"}
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
@@ -290,7 +297,7 @@ defmodule OpenAgentsWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="field mb-2">
       <label for={@id}>
         <span :if={@label} class="label mb-1">{@label}</span>
         <input
@@ -298,10 +305,8 @@ defmodule OpenAgentsWeb.CoreComponents do
           name={@name}
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
-          class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
-          ]}
+          class={[@class || "w-full input", "aria-invalid:border-destructive", @error_class]}
+          aria-invalid={@errors != [] && "true"}
           {@rest}
         />
       </label>
@@ -313,7 +318,7 @@ defmodule OpenAgentsWeb.CoreComponents do
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
+    <p class="mt-1.5 flex gap-2 items-center text-sm text-destructive">
       <.icon name="hero-exclamation-circle" class="size-5" />
       {render_slot(@inner_block)}
     </p>
@@ -334,7 +339,7 @@ defmodule OpenAgentsWeb.CoreComponents do
         <h1 class="text-lg font-semibold leading-8">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
+        <p :if={@subtitle != []} class="text-sm text-muted-foreground">
           {render_slot(@subtitle)}
         </p>
       </div>
@@ -375,34 +380,42 @@ defmodule OpenAgentsWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="table table-zebra">
-      <thead>
-        <tr>
-          <th :for={col <- @col}>{col[:label]}</th>
-          <th :if={@action != []}>
-            <span class="sr-only">{gettext("Actions")}</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-        <tr :for={row <- @rows} id={@row_id && @row_id.(row)}>
-          <td
-            :for={col <- @col}
-            phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
-          >
-            {render_slot(col, @row_item.(row))}
-          </td>
-          <td :if={@action != []} class="w-0 font-semibold">
-            <div class="flex gap-4">
-              <%= for action <- @action do %>
-                {render_slot(action, @row_item.(row))}
-              <% end %>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <%!-- Basecoat's `.table` carries structure only — widths, alignment, and
+    the row rule. Rhythm and colour are utilities here rather than a zebra
+    variant: Sarah separates rows with the hairline, not with alternating
+    fills. --%>
+    <div class="table-container">
+      <table class="table text-sm">
+        <thead>
+          <tr>
+            <th :for={col <- @col} class="px-3 py-2 text-left text-muted-foreground">
+              {col[:label]}
+            </th>
+            <th :if={@action != []} class="px-3 py-2">
+              <span class="sr-only">{gettext("Actions")}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
+          <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="hover:bg-muted/40">
+            <td
+              :for={col <- @col}
+              phx-click={@row_click && @row_click.(row)}
+              class={["px-3 py-2", @row_click && "hover:cursor-pointer"]}
+            >
+              {render_slot(col, @row_item.(row))}
+            </td>
+            <td :if={@action != []} class="w-0 px-3 py-2 font-semibold">
+              <div class="flex gap-4">
+                <%= for action <- @action do %>
+                  {render_slot(action, @row_item.(row))}
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     """
   end
 
@@ -422,11 +435,11 @@ defmodule OpenAgentsWeb.CoreComponents do
 
   def list(assigns) do
     ~H"""
-    <ul class="list">
-      <li :for={item <- @item} class="list-row">
-        <div class="list-col-grow">
-          <div class="font-bold">{item.title}</div>
-          <div>{render_slot(item)}</div>
+    <ul class="divide-y divide-border">
+      <li :for={item <- @item} class="flex items-start gap-4 py-3">
+        <div class="min-w-0 grow">
+          <div class="font-semibold">{item.title}</div>
+          <div class="text-muted-foreground">{render_slot(item)}</div>
         </div>
       </li>
     </ul>

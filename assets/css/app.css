@@ -1,18 +1,15 @@
 /* See the Tailwind configuration guide for advanced usage
    https://tailwindcss.com/docs/configuration */
 
-/* Cascade-layer order, declared before any @import so it is the FIRST @layer
- * statement in the bundle — only the first one establishes order; later ones
- * can add names but cannot reorder existing layers.
+/* There is exactly one component system here: Basecoat structure plus Sarah's
+ * style pack. DaisyUI was removed (see AGENTS.md) — it emitted flat component
+ * rules from its own cascade layer that outranked every `.btn[data-variant=…]`
+ * in sarah.css, so all eight SarahUI button variants rendered identically. Do
+ * not reintroduce it, and do not add a second component library beside it.
  *
- * DaisyUI emits into its own `daisyui` layer. Without this line that layer is
- * declared after `components`, and a later-declared layer beats an earlier one
- * regardless of specificity, so DaisyUI's flat `.btn` overrode every
- * `.btn[data-variant=...]` rule in sarah.css and all eight SarahUI button
- * variants rendered identically. Listing `daisyui` before `components` keeps
- * Sarah's component styles authoritative, which is what sarah.css's own
- * "must stay last so its declarations win" note requires. */
-@layer theme, base, daisyui, components, utilities;
+ * With DaisyUI gone the layer order Tailwind itself declares
+ * (`theme, base, components, utilities`) is correct as-is, so this file no
+ * longer restates it. */
 
 @import "tailwindcss" source(none);
 @import "phoenix-colocated/openagents/colocated.css";
@@ -24,8 +21,9 @@
  *
  * These carry the structure (display, padding, min-height, background) that
  * sarah.css deliberately does not set — its .btn only adds gap, border,
- * radius, colour, font, and transition on top. Without them SarahUI controls
- * fall back to DaisyUI's geometry. This list matches Sarah's exactly. */
+ * radius, colour, font, and transition on top. With DaisyUI gone they are the
+ * only source of that geometry, so nothing here is optional. This list is
+ * Sarah's, plus `table` for `CoreComponents.table/1`. */
 @import "../vendor/basecoat/base/base.css";
 @import "../vendor/basecoat/components/button.css";
 @import "../vendor/basecoat/components/input.css";
@@ -40,6 +38,7 @@
 @import "../vendor/basecoat/components/item.css";
 @import "../vendor/basecoat/components/empty.css";
 @import "../vendor/basecoat/components/kbd.css";
+@import "../vendor/basecoat/components/table.css";
 
 /* Sarah's identity. Must stay last so its declarations win. */
 @import "./sarah.css";
@@ -53,82 +52,106 @@
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
 
-/* daisyUI Tailwind Plugin. */
-@plugin "daisyui/packages/bundle/daisyui" {
-  themes: false;
+/* ── Token ladder ───────────────────────────────────────────────────────────
+ * Ported from Sarah, where these are the two tiers of DESIGN.md "Color
+ * Tokens": PRIMITIVES are the hand-picked Aiur oklch values; DERIVATIONS are
+ * color-mix() steps off one ink, so the hover/focus/border grammar is
+ * systematic rather than accumulated.
+ *
+ * sarah.css consumes these but does not define them — it aliases them onto
+ * the Basecoat names (`--background`, `--card`, `--primary`, `--border`, …)
+ * in its own `:root`. Before this block existed those aliases resolved to
+ * nothing and the DaisyUI theme was carrying the palette instead, which is
+ * exactly the collision that made every SarahUI variant render identically.
+ *
+ * The three surfaces are a fixed relationship, not three loose colors: page
+ * and sidebar sit on the darkest (--ink-void), the working canvas one step up
+ * (--ink-surface), elevated components another step up (--ink-raised). New
+ * surfaces take a rung; they do not invent a fourth.
+ *
+ * The palette is dark-only, as Sarah's is (`color-scheme: dark`). The
+ * `data-theme` plumbing in root.html.heex still runs, but there is no second
+ * light palette behind it any more — DaisyUI's was the only one, and Sarah
+ * ships no light variant to replace it with.
+ */
+:root {
+  color-scheme: dark;
+
+  /* PRIMITIVES — the Aiur palette, verbatim. */
+  --ink-void: oklch(12.901% 0.01498 266.378); /* darkest: page, sidebar */
+  --ink-surface: oklch(18.311% 0.03089 263.383); /* +1: canvas, chrome */
+  --ink-raised: oklch(24.185% 0.04699 263.85); /* +2: elevated components */
+  --text-ink: oklch(96.386% 0.01695 267.792); /* the one text/icon/wash ink */
+  --accent: oklch(62.308% 0.18801 259.815);
+  --accent-bright: oklch(71.374% 0.14338 254.624);
+  --info: oklch(75.351% 0.13899 232.661);
+  --success: oklch(72.275% 0.19201 149.579);
+  --warning: oklch(76.859% 0.16466 70.08);
+  --danger: oklch(71.063% 0.16615 22.216);
+
+  /* DERIVATIONS — text tiers as alpha steps of the ink. The literals are the
+     Aiur values; the percentages beside them are the measured best-fit alpha
+     steps, recorded so a later theme can choose the ladder deliberately. */
+  --text-primary: color-mix(in oklab, var(--text-ink) 100%, transparent); /* 100% */
+  --text-body: oklch(90.551% 0.0307 265.325); /* exception; best fit 91% */
+  --text-muted: oklch(71.613% 0.04926 262.439); /* exception; best fit 65% */
+  --text-dim: oklch(65.775% 0.04389 274.477); /* exception; best fit 57% */
+
+  /* Icon tiers. Glyphs read lighter than text at the same alpha, so they get
+     their own ladder rather than borrowing the text one. */
+  --icon-primary: color-mix(in oklab, var(--text-ink) 100%, transparent); /* 100% */
+  --icon-secondary: color-mix(in oklab, var(--text-ink) 66%, transparent); /* 66% */
+  --icon-tertiary: color-mix(in oklab, var(--text-ink) 52%, transparent); /* 52% */
+  --icon-faint: color-mix(in oklab, var(--text-ink) 28%, transparent); /* 28% */
+
+  /* Washes — translucent ink laid over whatever surface is beneath, so hover
+     and selection read as the same gesture on every rung of the surface
+     ladder. Hover < active < selected < strong. */
+  --wash-hover: color-mix(in oklab, var(--text-ink) 6%, transparent); /* 6% */
+  --wash-active: color-mix(in oklab, var(--text-ink) 8%, transparent); /* 8% */
+  --wash-selected: color-mix(in oklab, var(--text-ink) 10%, transparent); /* 10% */
+  --wash-strong: color-mix(in oklab, var(--text-ink) 14%, transparent); /* 14% */
+
+  /* The hover surface is the wash resolved opaquely over the raised rung. */
+  --ink-hover: color-mix(in oklab, var(--text-ink) 4%, var(--ink-raised)); /* 4% over raised */
+
+  /* The one inverted control: the strongest ink as ground, the darkest rung as
+     glyph. State changes ride opacity so the fill never shifts hue. */
+  --control-inverse-bg: var(--text-primary);
+  --control-inverse-fg: var(--ink-void);
+
+  /* Borders. --line and --line-strong are the 12% and 20% rungs by role but
+     keep their literals (same chroma accounting as the text exceptions); the
+     soft and faint rungs are true ladder steps. */
+  --line: oklch(29.154% 0.0506 264.607); /* exception; best fit 11% */
+  --line-soft: color-mix(in oklab, var(--text-ink) 8%, transparent); /* 8% */
+  --line-faint: color-mix(in oklab, var(--text-ink) 4%, transparent); /* 4% */
+  --line-strong: oklch(36.455% 0.0696 264.888); /* exception; best fit 20% */
 }
 
-/* daisyUI theme plugin.
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "dark";
-  default: true;
-  prefersdark: true;
-  color-scheme: "dark";
-  --color-base-100: #08090a;
-  --color-base-200: #0f1011;
-  --color-base-300: #1c1c1f;
-  --color-base-content: #f7f8f8;
-  --color-primary: #5e6ad2;
-  --color-primary-content: #f7f8f8;
-  --color-secondary: #1f2023;
-  --color-secondary-content: #f7f8f8;
-  --color-accent: #5e6ad2;
-  --color-accent-content: #f7f8f8;
-  --color-neutral: #62666d;
-  --color-neutral-content: #f7f8f8;
-  --color-info: #5e6ad2;
-  --color-info-content: #f7f8f8;
-  --color-success: #4cb782;
-  --color-success-content: #08090a;
-  --color-warning: #f2994a;
-  --color-warning-content: #08090a;
-  --color-error: #eb5757;
-  --color-error-content: #f7f8f8;
-  --radius-selector: 0.25rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 0;
-}
+/* Utility namespaces on top of the ladder.
+ *
+ * `base-100/200/300` and `base-content` were DaisyUI's surface vocabulary and
+ * are still spoken by surfaces this change did not restyle (the component
+ * catalog, the marketing home template, and the sidebar/docs/chat CSS at the
+ * foot of this file). They are kept as aliases onto the three surface rungs so
+ * that vocabulary keeps resolving; they are now names for Sarah tokens, not a
+ * second palette. Prefer Basecoat's own `background` / `card` / `foreground` /
+ * `border` names in new markup.
+ *
+ * The semantic four are Sarah's, not DaisyUI's, and have no Basecoat
+ * equivalent — `--color-destructive` covers danger, but there is no success,
+ * warning, or info in the Basecoat base. */
+@theme {
+  --color-base-100: var(--ink-void);
+  --color-base-200: var(--ink-surface);
+  --color-base-300: var(--ink-raised);
+  --color-base-content: var(--text-primary);
 
-@plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "light";
-  default: false;
-  prefersdark: false;
-  color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
-  --noise: 0;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-danger: var(--danger);
 }
 
 /* Add variants based on LiveView classes */
@@ -283,7 +306,7 @@
   min-height: 32px;
   padding-inline: 16px;
   background: var(--color-base-200);
-  color: var(--color-neutral);
+  color: var(--text-muted);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -343,7 +366,7 @@
 
 .docs-sidebar__section-title {
   padding-inline: 8px;
-  color: var(--color-neutral);
+  color: var(--text-muted);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -407,7 +430,7 @@
 }
 
 .message-time {
-  color: var(--color-neutral);
+  color: var(--text-muted);
   font-size: 0.75rem;
   line-height: 1rem;
 }
@@ -425,8 +448,8 @@
   padding: 10px 14px;
   border-radius: 16px;
   border-bottom-right-radius: 4px;
-  background: var(--color-primary);
-  color: var(--color-primary-content);
+  background: var(--accent);
+  color: var(--text-primary);
 }
 
 .composer {
@@ -447,8 +470,8 @@
 }
 
 .composer-card:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary) / 20%;
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent-bright) 22%, transparent);
 }
 
 .composer-grid {
@@ -475,7 +498,7 @@
 }
 
 .composer-input::placeholder {
-  color: var(--color-neutral);
+  color: var(--text-muted);
 }
 
 .composer-trailing {
@@ -495,8 +518,8 @@
   justify-content: center;
   border: 0;
   border-radius: 50%;
-  background: var(--color-primary);
-  color: var(--color-primary-content);
+  background: var(--accent);
+  color: var(--text-primary);
   cursor: pointer;
   transition: filter 150ms ease, transform 150ms ease;
 }

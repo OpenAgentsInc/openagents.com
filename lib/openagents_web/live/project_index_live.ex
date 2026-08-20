@@ -60,53 +60,57 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
         for={@form}
         id="new-project-form"
         phx-submit="save"
-        class="card bg-base-100 border border-base-300 p-4 mb-6"
+        class="card !mx-0 !mt-0 mb-6"
       >
         <.input field={@form[:title]} label="Title" required />
-        <div class="card-actions justify-end mt-2">
+        <footer class="flex justify-end mt-2">
           <.button variant="primary">Add project</.button>
-        </div>
+        </footer>
       </.form>
 
       <%= if @projects == [] do %>
-        <div class="alert alert-info">
+        <div class="alert" data-variant="info" role="status">
           <.icon name="hero-information-circle" class="size-5" />
-          <span>No projects yet.</span>
+          <section>No projects yet.</section>
         </div>
       <% else %>
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <%= for project <- @projects do %>
-            <div class="card bg-base-100 border border-base-300">
-              <div class="card-body">
+            <article class="card !m-0">
+              <header>
                 <h3 class="card-title">
                   <.link
                     navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
-                    class="link link-primary"
+                    class="btn px-0"
+                    data-variant="link"
                   >
                     {project.title}
                   </.link>
                 </h3>
-                <p class="text-sm text-base-content/70">
-                  {project.state}
-                </p>
-                <div class="card-actions justify-end">
-                  <.link
-                    navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
-                    class="btn btn-sm btn-ghost"
-                  >
-                    View
-                  </.link>
-                  <button
-                    class="btn btn-ghost btn-sm text-error"
-                    phx-click="delete"
-                    phx-value-id={project.id}
-                    data-confirm="Delete this project?"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
+                <p>{project.state}</p>
+              </header>
+              <footer class="flex justify-end gap-2 mt-4">
+                <.link
+                  navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
+                  class="btn"
+                  data-variant="ghost"
+                  data-size="sm"
+                >
+                  View
+                </.link>
+                <button
+                  class="btn"
+                  data-variant="ghost"
+                  data-size="sm"
+                  data-tone="danger"
+                  phx-click="delete"
+                  phx-value-id={project.id}
+                  data-confirm="Delete this project?"
+                >
+                  Delete
+                </button>
+              </footer>
+            </article>
           <% end %>
         </div>
       <% end %>

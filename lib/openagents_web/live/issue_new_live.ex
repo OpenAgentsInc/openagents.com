@@ -79,7 +79,7 @@ defmodule OpenAgentsWeb.IssueNewLive do
         for={@form}
         id="new-issue-form"
         phx-submit="save"
-        class="card bg-base-100 border border-base-300 p-4 space-y-4"
+        class="card !m-0 space-y-4"
       >
         <.input field={@form[:title]} label="Title" required />
         <.input field={@form[:body]} type="textarea" label="Body" />
@@ -97,12 +97,12 @@ defmodule OpenAgentsWeb.IssueNewLive do
           options={@label_options}
           multiple
         />
-        <div class="card-actions justify-end gap-2">
-          <.link navigate={~p"/#{@owner}/#{@repo}/issues"} class="btn btn-ghost">
+        <footer class="flex justify-end gap-2">
+          <.link navigate={~p"/#{@owner}/#{@repo}/issues"} class="btn" data-variant="ghost">
             Cancel
           </.link>
           <.button variant="primary">Create issue</.button>
-        </div>
+        </footer>
       </.form>
     </Layouts.app>
     """

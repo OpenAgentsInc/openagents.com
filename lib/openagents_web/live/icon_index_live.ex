@@ -23,9 +23,9 @@ defmodule OpenAgentsWeb.IconIndexLive do
 
       <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
         <%= for name <- @icons do %>
-          <div class="flex flex-col items-center gap-2 p-3 border border-base-300 rounded-lg">
+          <div class="flex flex-col items-center gap-2 p-3 border border-border rounded-lg">
             <.icon name={name} class="size-8" />
-            <span class="text-xs text-center break-all text-base-content/70">{name}</span>
+            <span class="text-xs text-center break-all text-muted-foreground">{name}</span>
           </div>
         <% end %>
       </div>

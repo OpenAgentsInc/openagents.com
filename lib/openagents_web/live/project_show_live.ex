@@ -67,7 +67,12 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="flex items-center justify-between mb-4">
         <h1 class="text-2xl font-bold">{@project.title}</h1>
-        <.link navigate={~p"/#{@owner}/#{@repo}/projects"} class="btn btn-ghost btn-sm">
+        <.link
+          navigate={~p"/#{@owner}/#{@repo}/projects"}
+          class="btn"
+          data-variant="ghost"
+          data-size="sm"
+        >
           Back to projects
         </.link>
       </div>
@@ -76,7 +81,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
         for={@form}
         id="new-project-item-form"
         phx-submit="add_item"
-        class="card bg-base-100 border border-base-300 p-4 mb-6"
+        class="card !mx-0 !mt-0 mb-6"
       >
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <.input
@@ -95,43 +100,44 @@ defmodule OpenAgentsWeb.ProjectShowLive do
             required
           />
         </div>
-        <div class="card-actions justify-end mt-2">
+        <footer class="flex justify-end mt-2">
           <.button variant="primary">Add to board</.button>
-        </div>
+        </footer>
       </.form>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         <%= for status <- @statuses do %>
-          <div class="card bg-base-200 border border-base-300">
-            <div class="card-body p-3">
-              <h3 class="card-title text-sm font-bold mb-2">{status}</h3>
-              <div class="space-y-2 min-h-24">
-                <%= for item <- @items, item.status == status do %>
-                  <div class="card bg-base-100 border border-base-300 shadow-sm p-3">
-                    <.link
-                      navigate={~p"/#{@owner}/#{@repo}/issues/#{item.issue.number}"}
-                      class="link link-primary text-sm font-semibold"
-                    >
-                      {item.issue.title}
-                    </.link>
-                    <span class="text-xs text-base-content/50 block">
-                      #{item.issue.number}
-                    </span>
-                    <div class="flex flex-wrap gap-1 mt-2">
-                      <%= for label <- item.issue.labels || [] do %>
-                        <span
-                          class="badge badge-sm"
-                          style={"background-color: ##{label["color"]}; color: #000;"}
-                        >
-                          {label["name"]}
-                        </span>
-                      <% end %>
-                    </div>
+          <section class="card !m-0 !p-3">
+            <header class="mb-2">
+              <h3 class="card-title !text-sm">{status}</h3>
+            </header>
+            <div class="space-y-2 min-h-24">
+              <%= for item <- @items, item.status == status do %>
+                <article class="card !m-0 !p-3">
+                  <.link
+                    navigate={~p"/#{@owner}/#{@repo}/issues/#{item.issue.number}"}
+                    class="btn px-0 text-sm font-semibold"
+                    data-variant="link"
+                  >
+                    {item.issue.title}
+                  </.link>
+                  <span class="text-xs text-muted-foreground block">
+                    #{item.issue.number}
+                  </span>
+                  <div class="flex flex-wrap gap-1 mt-2">
+                    <%= for label <- item.issue.labels || [] do %>
+                      <span
+                        class="badge rounded-full px-2 py-0.5"
+                        style={"background-color: ##{label["color"]}; color: #000;"}
+                      >
+                        {label["name"]}
+                      </span>
+                    <% end %>
                   </div>
-                <% end %>
-              </div>
+                </article>
+              <% end %>
             </div>
-          </div>
+          </section>
         <% end %>
       </div>
     </Layouts.app>

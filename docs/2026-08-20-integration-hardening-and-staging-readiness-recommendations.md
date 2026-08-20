@@ -169,6 +169,24 @@ Add focused architecture decision records for:
 - Forge-canonical source control and GitHub mirroring, if that remains the
   intended cutover.
 
+### Gate 1 implementation status
+
+Completed on 2026-08-20:
+
+- Added `docs/architecture.md` as the source of truth for product ownership,
+  durable authority, provider and trust boundaries, forge planes, deployment
+  strategies, staging topology, and the source-control transition.
+- Classified public, authenticated, operator, machine, internal-service, and
+  Git principals. The architecture names Gate 6's exhaustive route ledger as
+  the enforcement proof instead of claiming that route placement is enough.
+- Added seven focused decision records for the complete public integration,
+  Sarah's persona boundary, provider credentials, encrypted GitHub token
+  retention, the Basecoat component system, isolated staging topology, and the
+  proof-gated forge-canonical cutover.
+- Recorded GitHub as the accurate temporary canonical remote during hardening.
+  The forge cutover cannot occur until its Git, mirror, artifact, rollback, and
+  recovery gates pass together with updated contributor automation.
+
 **Exit criteria:** A contributor can explain the application and its trust
 boundaries without reading a superseded plan or another repository.
 
@@ -1031,7 +1049,7 @@ each handoff.
 
 ## Final staging readiness checklist
 
-- [ ] The repository has one accurate architecture narrative.
+- [x] The repository has one accurate architecture narrative.
 - [ ] Every remaining Sarah reference is intentional and specific.
 - [ ] All documentation links and invariant evidence resolve.
 - [ ] The application has one Markdown parser, component system, and documented

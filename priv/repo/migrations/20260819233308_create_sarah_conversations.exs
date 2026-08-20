@@ -9,7 +9,7 @@ defmodule OpenAgents.Repo.Migrations.CreateSarahConversations do
       timestamps(type: :utc_datetime_usec)
     end
 
-    create unique_index(:visitors, [:browser_key_hash], where: "browser_key_hash IS NOT NULL")
+    create unique_index(:visitors, [:browser_key_hash])
     create unique_index(:visitors, [:user_id], where: "user_id IS NOT NULL")
 
     create table(:conversations, primary_key: false) do

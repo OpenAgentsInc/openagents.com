@@ -132,6 +132,13 @@
   --wash-selected: color-mix(in oklab, var(--text-ink) 10%, transparent); /* 10% */
   --wash-strong: color-mix(in oklab, var(--text-ink) 14%, transparent); /* 14% */
 
+  /* The scrim behind a modal. Deliberately NOT built from `--ink-void`, which
+     is the page and flips to near-white in light mode: a scrim's job is to
+     darken whatever is behind it, and a white one over a white page hides
+     nothing. Fixed dark in both themes, which is why it is a token of its own
+     rather than a reference to another. */
+  --scrim: color-mix(in oklab, #08090a 55%, transparent);
+
   /* The hover surface is the wash resolved opaquely over the raised rung. */
   --ink-hover: color-mix(in oklab, var(--text-ink) 4%, var(--ink-raised)); /* 4% over raised */
 

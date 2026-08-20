@@ -5860,7 +5860,7 @@
   }
 
   .command-palette::backdrop {
-    background: color-mix(in oklab, #08090a 55%, transparent);
+    background: var(--scrim);
   }
 
   .command-palette__panel {

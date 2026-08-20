@@ -226,14 +226,14 @@ defmodule OpenAgentsWeb.UI.CircleTest do
         ~r/(?<![-\w])#[0-9a-fA-F]{3,8}\b/
         |> Regex.scan(section)
         |> List.flatten()
-        |> Enum.reject(&(&1 == "#08090a"))
 
       assert literals == [], """
       The Issues section names colours directly instead of resolving to a
       token: #{Enum.join(literals, ", ")}
 
-      The one permitted literal is the backdrop scrim, which mixes against the
-      darkest ink on purpose.
+      There are no permitted literals. The modal scrim, which is the one value
+      that cannot come from `--ink-void` (that token flips to near-white in
+      light mode and a white scrim hides nothing), has its own `--scrim` token.
       """
     end
 

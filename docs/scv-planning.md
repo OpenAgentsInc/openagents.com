@@ -2,9 +2,9 @@
 
 Date: 2026-08-20
 
-Status: First complete OpenCode SCV environment implemented and locally proven;
-staging qualification in progress; durable coordination, durable tool effects,
-and autonomous deployment remain disabled
+Status: First complete OpenCode SCV environment implemented and proven locally
+and in the shared-project read-only staging lane; durable coordination, durable
+tool effects, isolated staging, and autonomous deployment remain disabled
 
 ## Outcome
 
@@ -224,6 +224,41 @@ It accepts only the staging environment and read-only permission profile. This
 proof does not admit repository writes or autonomous deployment. Add the
 durable worker protocol, process-tree or cgroup enforcement, run-scoped
 credential proxy, and effect-persistence sidecar before enabling writes.
+
+### Proven staging qualification
+
+On 2026-08-20, Cloud Build built commit
+`09a775b83fa05b6a92854b0ad1f7b5c23b3aee88` on native `linux/amd64`
+in build `9721075d-ed17-491c-af9a-85be8f46bf52`. Artifact Registry stored the
+image as
+`sha256:ee2a74660faa6137e4021a2870380f5977796d33ca9dcaabcb0b958f35e0e36b`.
+Cloud Run job execution `openagents-scv-staging-wrppq` ran that digest with one
+task, zero retries, and the dedicated
+`openagents-scv-staging@openagentsgemini.iam.gserviceaccount.com` identity.
+
+The job configuration referenced only the staging provider secret. It did not
+contain database, GitHub, Forge, release-cookie, deployment, or general cloud
+credentials. The SCV emitted `run_preparing`, process-start, heartbeat,
+normalized OpenCode, process-finish, run-finish, and terminal worker-result
+records through Cloud Logging before it exited with status `0`.
+
+The terminal result recorded:
+
+- `succeeded` in 11,008 milliseconds;
+- eight normalized OpenCode events, two completed `read` calls, and no tool
+  errors;
+- 5,520 input, 173 output, 158 reasoning, and 3,072 cache-read tokens;
+- an estimated cost of `$0.0058599`;
+- 666,734,592 bytes of peak direct-process RSS, 114% maximum sampled CPU, and
+  44 resource samples with no sampling errors;
+- 16,910 observed and captured bytes with no truncation;
+- event artifact digest
+  `sha256:506e4cbd02eb19abd5078d73832be45049b707e06f8c73ef1b4ef7dcc53c1e83`.
+
+This result qualifies the complete read-only SCV image in the existing shared
+Google Cloud project. It does not pass the isolated-staging gate described in
+this plan and does not authorize writes, Forge handoff, or autonomous
+deployment.
 
 ## Goals
 

@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Read-only qualification procedure
+Status: Read-only qualification procedure; first shared-project proof passed
 
 Use this procedure to prove the first complete SCV image in staging. This lane
 qualifies one OpenCode-driven SCV run. It does not admit repository writes,
@@ -57,7 +57,7 @@ The Cloud Logging stream must contain these records for one run ID:
 
 - `run_preparing`;
 - `process_started`;
-- at least one `resource_heartbeat` during a long-enough run;
+- at least one `heartbeat` during a long-enough run;
 - normalized `opencode_event` records;
 - `process_finished`;
 - `run_finished`;
@@ -74,3 +74,21 @@ not call it an isolated-staging pass or enable writes. Before an SCV can write,
 add the durable coordinator and worker protocol, process-tree or cgroup
 enforcement, run-scoped inference grants, persistent per-effect barriers,
 artifact storage, cancellation, and the isolated Forge staging lane.
+
+## First qualification receipt
+
+The first shared-project qualification passed on 2026-08-20:
+
+| Field | Value |
+| --- | --- |
+| Source revision | `09a775b83fa05b6a92854b0ad1f7b5c23b3aee88` |
+| Build | `9721075d-ed17-491c-af9a-85be8f46bf52` |
+| Image digest | `sha256:ee2a74660faa6137e4021a2870380f5977796d33ca9dcaabcb0b958f35e0e36b` |
+| Job execution | `openagents-scv-staging-wrppq` |
+| SCV run | `db8a6849-1e59-41fb-ba7d-461c9a4fa4a3` |
+| Result | `succeeded` in 11,008 milliseconds with two completed read calls and no output truncation |
+
+Cloud Logging received lifecycle events, five two-second heartbeats, eight
+normalized OpenCode events, resource measurements, and the terminal worker
+result before the container exited with status `0`. This receipt proves the
+read-only image and event path. The safety limitation above remains in force.

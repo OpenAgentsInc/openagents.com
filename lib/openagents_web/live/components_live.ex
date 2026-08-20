@@ -53,6 +53,126 @@ defmodule OpenAgentsWeb.ComponentsLive do
     %{id: "scv-15", status: :running, label: "15", weight: 0.8, item_status: :discovered}
   ]
 
+  # The same fifteen agents as the swarm, with the tail each is emitting. Text
+  # is representative of real OpenCode output rather than lorem, so the row
+  # width is exercised the way it will be in use.
+  @demo_streams [
+    %{
+      id: "scv-01",
+      label: "scv-01",
+      status: :running,
+      weight: 0.9,
+      tool: "edit",
+      text: "applying patch to lib/openagents/forge/hot_loader.ex (3 hunks)"
+    },
+    %{
+      id: "scv-02",
+      label: "scv-02",
+      status: :running,
+      weight: 0.3,
+      tool: "bash",
+      text: "mix test test/openagents/forge/targets_test.exs --seed 0"
+    },
+    %{
+      id: "scv-03",
+      label: "scv-03",
+      status: :idle,
+      weight: 0.0,
+      text: "waiting for admitted work"
+    },
+    %{
+      id: "scv-04",
+      label: "scv-04",
+      status: :running,
+      weight: 0.6,
+      tool: "read",
+      text: "reading docs/scv-planning.md to bound the objective"
+    },
+    %{
+      id: "scv-05",
+      label: "scv-05",
+      status: :paused,
+      weight: 0.4,
+      tool: "edit",
+      text: "paused: budget window exhausted, resumes at the next window"
+    },
+    %{
+      id: "scv-06",
+      label: "scv-06",
+      status: :idle,
+      weight: 0.0,
+      text: "waiting for admitted work"
+    },
+    %{
+      id: "scv-07",
+      label: "scv-07",
+      status: :circuit_open,
+      weight: 0.2,
+      text: "circuit open after 3 consecutive provider timeouts"
+    },
+    %{
+      id: "scv-08",
+      label: "scv-08",
+      status: :running,
+      weight: 1.0,
+      tool: "grep",
+      text: "searching for remaining callers of Sarah.Forge.Targets.promote/4"
+    },
+    %{
+      id: "scv-09",
+      label: "scv-09",
+      status: :disabled,
+      weight: 0.0,
+      text: "disabled by operator"
+    },
+    %{
+      id: "scv-10",
+      label: "scv-10",
+      status: :running,
+      weight: 0.5,
+      tool: "bash",
+      text: "mix precommit -- 1416 passed, 14 excluded"
+    },
+    %{
+      id: "scv-11",
+      label: "scv-11",
+      status: :idle,
+      weight: 0.0,
+      text: "waiting for admitted work"
+    },
+    %{
+      id: "scv-12",
+      label: "scv-12",
+      status: :paused,
+      weight: 0.7,
+      tool: "read",
+      text: "paused: awaiting human promotion under SELF-EDIT-001"
+    },
+    %{
+      id: "scv-13",
+      label: "scv-13",
+      status: :running,
+      weight: 0.15,
+      tool: "edit",
+      text: "reverting: regression test still red after the third attempt"
+    },
+    %{
+      id: "scv-14",
+      label: "scv-14",
+      status: :disabled,
+      weight: 0.0,
+      text: "disabled by operator"
+    },
+    %{
+      id: "scv-15",
+      label: "scv-15",
+      status: :running,
+      weight: 0.8,
+      tool: "write",
+      text: "writing test/openagents_web/components/graph_test.exs"
+    }
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     form =
@@ -72,7 +192,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
      |> assign(:rows, @sample_rows)
      |> assign(:openagents_icons, @openagents_icons)
      |> assign(:demo_user, @demo_user)
-     |> assign(:demo_swarm, @demo_swarm)}
+     |> assign(:demo_swarm, @demo_swarm)
+     |> assign(:demo_streams, @demo_streams)}
   end
 
   @impl true
@@ -131,7 +252,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
         <div class="grid gap-4 sm:grid-cols-2">
           <.link
             :for={item <- section.items}
-            navigate={~p"/components/#{item.slug}"}
+            patch={~p"/components/#{item.slug}"}
             class="card bg-card border border-border p-4 hover:border-foreground/30"
           >
             <h3 class="text-lg font-medium mb-1">{item.title}</h3>
@@ -495,6 +616,29 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   # --- Layout ---------------------------------------------------------------
 
+  defp component_demo(%{item: %{slug: "sidebar-link"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The row that builds this page's own sidebar. A selected row carries <code>aria-current="page"</code>, so the current place is announced rather
+        than only shaded.
+      </p>
+      <div class="docs-sidebar__section max-w-xs">
+        <Layouts.sidebar_link path="#" label="Not selected" icon="book" patchable={false} />
+        <Layouts.sidebar_link path="#" label="Selected" icon="cube" selected patchable={false} />
+        <Layouts.sidebar_link path="#" label="Another row" icon="grid" patchable={false} />
+      </div>
+      <p class="text-sm text-base-content/60">
+        <code>patchable</code>
+        decides whether the row patches or navigates. Patching keeps the sidebar's DOM
+        and therefore its scroll position; navigating remounts and sends the list back
+        to the top. A row may patch only when the mounted LiveView already owns the
+        target params.
+      </p>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "command-bar"}} = assigns) do
     ~H"""
     <Layouts.command_bar aria_label="Demo command bar" current_user={@demo_user}>
@@ -677,6 +821,23 @@ defmodule OpenAgentsWeb.ComponentsLive do
           <Graph.graph_node id="demo-back-tgt" x={300.0} y={34.0} r={14.0} status={:idle} />
         </Graph.graph_surface>
       </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "scv-streams"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The swarm answers "how is the fleet"; this answers "what is it doing". A
+        status ring can tell you an agent is running, but not that it has been
+        rewriting the same test for four minutes.
+      </p>
+      <Graph.scv_streams scvs={@demo_streams} selected_id="scv-04" />
+      <p class="text-sm text-base-content/60">
+        Rows are a fixed height and the tail clips from the left, so a chatty agent
+        cannot push the others off screen and the newest text stays visible.
+      </p>
     </div>
     """
   end

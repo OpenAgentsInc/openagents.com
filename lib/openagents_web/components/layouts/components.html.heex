@@ -1,3 +1,4 @@
+<% patchable? = @active_component != :icons %>
 <div class="docs-layout">
   <aside class="docs-sidebar">
     <nav class="flex flex-col gap-1" aria-label="Components back">
@@ -13,13 +14,13 @@
     <nav class="docs-sidebar__nav" aria-label="Component library">
       <section class="docs-sidebar__section">
         <h3 class="sidebar-section-label">Overview</h3>
-        <div class="sidebar-row" data-selected={@active_component == :index}>
-          <.link navigate={~p"/components"} class="sidebar-row__hit" aria-label="All components"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="book" /></span>
-            <span class="sidebar-row__label">All components</span>
-          </span>
-        </div>
+        <Layouts.sidebar_link
+          path={~p"/components"}
+          label="All components"
+          icon="book"
+          selected={@active_component == :index}
+          patchable={patchable?}
+        />
       </section>
 
       <section
@@ -27,32 +28,25 @@
         class="docs-sidebar__section"
       >
         <h3 class="sidebar-section-label">{section.title}</h3>
-        <div
+        <Layouts.sidebar_link
           :for={item <- section.items}
-          class="sidebar-row"
-          data-selected={@active_component == item.slug}
-        >
-          <.link
-            navigate={~p"/components/#{item.slug}"}
-            class="sidebar-row__hit"
-            aria-label={item.title}
-          ></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name={item.icon} /></span>
-            <span class="sidebar-row__label">{item.title}</span>
-          </span>
-        </div>
+          path={~p"/components/#{item.slug}"}
+          label={item.title}
+          icon={item.icon}
+          selected={@active_component == item.slug}
+          patchable={patchable?}
+        />
       </section>
 
       <section class="docs-sidebar__section">
         <h3 class="sidebar-section-label">Reference</h3>
-        <div class="sidebar-row" data-selected={@active_component == :icons}>
-          <.link navigate={~p"/components/icons"} class="sidebar-row__hit" aria-label="Icons"></.link>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="book-open" /></span>
-            <span class="sidebar-row__label">Icons</span>
-          </span>
-        </div>
+        <Layouts.sidebar_link
+          path={~p"/components/icons"}
+          label="Icons"
+          icon="book-open"
+          selected={@active_component == :icons}
+          patchable={false}
+        />
       </section>
     </nav>
   </aside>

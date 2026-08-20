@@ -299,6 +299,71 @@ defmodule OpenAgentsWeb.UI.Graph do
   end
 
   @doc """
+  SCVs beside what each one is currently saying.
+
+  The swarm answers "how is the fleet", this answers "what is it doing". A
+  status ring tells you an SCV is running; it cannot tell you it has been
+  rewriting the same test for four minutes. The stream can.
+
+  Each row is one SCV: its node, its identity, and the tail of its output. Rows
+  keep a fixed height so a chatty agent cannot push the others off screen —
+  fifteen rows that stay put are readable, fifteen that reflow are not. The
+  stream is a bounded tail, never the whole transcript: `scv_steps` is specified
+  to record every provider and tool boundary, and rendering all of it would make
+  a busy fleet unreadable and expensive at once.
+
+  Each entry is a map with `:id`, `:status`, and optionally `:label`,
+  `:weight`, `:tool` (the tool boundary currently open) and `:text` (the tail).
+  """
+  attr :id, :string, default: "scv-streams"
+  attr :scvs, :list, required: true
+  attr :selected_id, :string, default: nil
+  attr :class, :any, default: nil
+
+  def scv_streams(assigns) do
+    ~H"""
+    <ul id={@id} class={["scv-streams", @class]} role="list">
+      <li
+        :for={scv <- @scvs}
+        class="scv-stream"
+        data-status={scv.status}
+        data-selected={scv.id == @selected_id}
+      >
+        <.graph_surface
+          view_box="0 0 44 44"
+          label={"#{Map.get(scv, :label, scv.id)}, #{scv.status}"}
+          prefix={"#{@id}-#{scv.id}"}
+          class="scv-stream__glyph"
+        >
+          <.graph_node
+            id={"#{@id}-#{scv.id}-node"}
+            x={22.0}
+            y={22.0}
+            r={13.0 + Map.get(scv, :weight, 0.0) * 5.0}
+            status={scv.status}
+          />
+        </.graph_surface>
+
+        <div class="scv-stream__body">
+          <div class="scv-stream__meta">
+            <span class="scv-stream__id">{Map.get(scv, :label, scv.id)}</span>
+            <span :if={scv[:tool]} class="scv-stream__tool">{scv[:tool]}</span>
+            <span class="scv-stream__status">{scv.status}</span>
+          </div>
+          <p class="scv-stream__text">
+            {scv[:text]}<span
+              :if={scv.status == :running}
+              class="scv-stream__caret"
+              aria-hidden="true"
+            ></span>
+          </p>
+        </div>
+      </li>
+    </ul>
+    """
+  end
+
+  @doc """
   A swarm of SCVs in a deterministic staged layout.
 
   Position is stable and derived from the index, never from a mutable field

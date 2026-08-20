@@ -190,6 +190,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       title: "Layout",
       items: [
         %{
+          slug: "sidebar-link",
+          title: "Sidebar link",
+          icon: "menu",
+          source: "OpenAgentsWeb.Layouts.sidebar_link/1",
+          summary: "A navigation row that patches within a LiveView and navigates out of it."
+        },
+        %{
           slug: "command-bar",
           title: "Command bar",
           icon: "compass",
@@ -222,6 +229,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           icon: "compass",
           source: "OpenAgentsWeb.UI.Graph.graph_link/1",
           summary: "Surface-anchored link with a shape-conforming termination and a step pulse."
+        },
+        %{
+          slug: "scv-streams",
+          title: "SCV streams",
+          icon: "text",
+          source: "OpenAgentsWeb.UI.Graph.scv_streams/1",
+          summary: "Each agent beside the tail of what it is currently saying."
         },
         %{
           slug: "scv-swarm",

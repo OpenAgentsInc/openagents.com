@@ -136,6 +136,50 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
+  A sidebar row that navigates without throwing the sidebar away.
+
+  `/components` and `/components/:slug` are the same LiveView, so moving
+  between them is a patch: the DOM is diffed, the row's selected state updates
+  in place, and the sidebar keeps its scroll position. `navigate` would remount
+  and scroll the list back to the top on every click.
+
+  `/components/icons` is a different LiveView, so a patch cannot reach it and a
+  patch cannot leave it. `patchable` says whether the currently mounted view is
+  the one that owns these params; when it is not, the row falls back to a
+  navigate that remounts on purpose.
+  """
+  attr :path, :string, required: true
+  attr :label, :string, required: true
+  attr :icon, :string, required: true
+  attr :selected, :boolean, default: false
+  attr :patchable, :boolean, default: false
+
+  def sidebar_link(assigns) do
+    ~H"""
+    <div class="sidebar-row" data-selected={@selected}>
+      <.link
+        :if={@patchable}
+        patch={@path}
+        class="sidebar-row__hit"
+        aria-label={@label}
+        aria-current={@selected && "page"}
+      ></.link>
+      <.link
+        :if={!@patchable}
+        navigate={@path}
+        class="sidebar-row__hit"
+        aria-label={@label}
+        aria-current={@selected && "page"}
+      ></.link>
+      <span class="sidebar-row__content">
+        <span class="sidebar-row__icon"><UI.icon name={@icon} /></span>
+        <span class="sidebar-row__label">{@label}</span>
+      </span>
+    </div>
+    """
+  end
+
+  @doc """
   One control that flips between light and dark.
 
   There is no explicit "system" rung. Storing nothing IS system, and that is the

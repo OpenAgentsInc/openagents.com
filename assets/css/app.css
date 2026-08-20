@@ -350,7 +350,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   pointer-events: none;
 }
 
@@ -360,8 +360,15 @@
 .sidebar-row__icon {
   display: inline-flex;
   width: 16px;
+  height: 16px;
   flex: none;
+  align-items: center;
   justify-content: center;
+  /* Stated here rather than as a gap on an ancestor. The nav rows took their
+     spacing from `.sidebar-row__content`'s 6px gap and the footer links from
+     their own 12px, so the two columns sat at different distances from their
+     labels while looking like the same control. */
+  margin-right: 12px;
   color: currentColor;
   font-size: 16px;
 }

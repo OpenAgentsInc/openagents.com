@@ -127,7 +127,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
          path = Path.join(source_dir(), "#{slug}.md"),
          {:ok, markdown} <- File.read(path) do
       toc = headings(markdown)
-      html = markdown |> OpenAgents.Markdown.to_html() |> anchor_headings(toc)
+      # Authored prose, not a message: the source is wrapped for editing, and
+      # those wraps are not line breaks the reader should see.
+      html =
+        markdown
+        |> OpenAgents.Markdown.to_html(hardbreaks: false)
+        |> anchor_headings(toc)
 
       {:ok, %{item: item, html: html, toc: toc, markdown: markdown}}
     else

@@ -146,7 +146,10 @@ defmodule OpenAgentsWeb.UI.Graph do
   attr :r, :float, default: 22.0, doc: "radius for a circle node"
   attr :width, :float, default: 44.0, doc: "width for a rect node"
   attr :height, :float, default: 32.0, doc: "height for a rect node"
-  attr :status, :atom, default: :idle
+  # Both vocabularies: a node draws an SCV or a work item, and the two
+  # lifecycles are distinct sets. Naming only the SCV ones made the compiler
+  # reject the item statuses the demo and the swarm both legitimately pass.
+  attr :status, :atom, values: @statuses ++ @item_statuses, default: :idle
   attr :label, :string, default: nil
   attr :selected, :boolean, default: false
   attr :class, :any, default: nil

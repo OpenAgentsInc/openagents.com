@@ -74,15 +74,17 @@ defmodule OpenAgents.Markdown do
 
       true ->
         source = if options[:streaming], do: complete(text), else: text
-        render(source)
+        render(source, options)
     end
   end
 
-  defp render(text) do
-    with {:ok, document} <- MDEx.parse_document(text, @mdex_options),
+  defp render(text, options) do
+    mdex_options = mdex_options(options)
+
+    with {:ok, document} <- MDEx.parse_document(text, mdex_options),
          :ok <- validate_nesting(document),
          document <- normalize_links(document),
-         {:ok, rendered} <- MDEx.to_html(document),
+         {:ok, rendered} <- MDEx.to_html(document, mdex_options),
          rendered <- String.replace(rendered, @empty_link, "<a>"),
          :ok <- validate_output(rendered) do
       {:safe, rendered}
@@ -139,6 +141,20 @@ defmodule OpenAgents.Markdown do
     case Regex.run(~r/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, url) do
       [_, scheme] -> String.downcase(scheme)
       nil -> nil
+    end
+  end
+
+  # Hard breaks are correct for a person's message, where the line breaks they
+  # typed are part of what they said. They are wrong for authored documents,
+  # whose source is wrapped at a comfortable editing width: every one of those
+  # wraps became a `<br>`, so a docs page rendered at the width of its source
+  # file rather than the width of its column, and no amount of CSS could widen
+  # it.
+  defp mdex_options(options) do
+    if Keyword.get(options, :hardbreaks, true) do
+      @mdex_options
+    else
+      put_in(@mdex_options, [:render, :hardbreaks], false)
     end
   end
 

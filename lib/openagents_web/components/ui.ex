@@ -1113,8 +1113,16 @@ defmodule OpenAgentsWeb.UI do
   """
   attr :id, :string, required: true
   attr :label, :string, default: "Log in with GitHub"
-  attr :variant, :atom, default: :primary
-  attr :size, :atom, default: :md
+
+  attr :variant, :atom,
+    values: [:primary, :secondary, :outline, :ghost, :destructive, :chip, :notched, :link],
+    default: :primary
+
+  # Every atom attr states its values. Without a `values:` list Phoenix cannot
+  # check call sites, and this one defaulted to `:md` -- not one of
+  # `button/1`'s sizes -- so it rendered `data-size="md"`, matched no size
+  # rule, and left the control with no height, padding or type scale at all.
+  attr :size, :atom, values: [:default, :xs, :sm, :lg], default: :default
 
   attr :action, :string,
     default: "/auth/github?github_tools=enabled",

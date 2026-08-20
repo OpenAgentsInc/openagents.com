@@ -74,6 +74,22 @@ run "isolated_topology" {
   }
 
   assert {
+    condition = alltrue([
+      for binding in values(google_secret_manager_secret_iam_member.fleet_scv_codex_credential_add) :
+      binding.role == "roles/secretmanager.secretVersionAdder"
+    ])
+    error_message = "The staging fleet identity may add versions only to the preallocated SCV Codex credential slots."
+  }
+
+  assert {
+    condition = alltrue([
+      for binding in values(google_secret_manager_secret_iam_member.fleet_scv_codex_credential_read) :
+      binding.role == "roles/secretmanager.secretAccessor"
+    ])
+    error_message = "The staging fleet identity may read exact versions only from the preallocated SCV Codex credential slots."
+  }
+
+  assert {
     condition = toset(google_project_iam_custom_role.deployer.permissions) == toset([
       "compute.instances.get",
       "compute.instances.reset",

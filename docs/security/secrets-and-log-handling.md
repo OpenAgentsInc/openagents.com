@@ -11,8 +11,8 @@ more than one role on a node:
 
 | Runtime identity | Purpose | May read |
 | --- | --- | --- |
-| `openagents-staging-web` | Phoenix release and forge Git endpoint | Web, provider, OAuth, vault, recording, forge verification, database, and cluster secrets listed below |
-| `openagents-staging-fleet` | Three-node distributed application lane | The application secrets required by the same candidate plus the cluster cookie; no Compute mutation permission |
+| `openagents-staging-web` | Phoenix release and forge Git endpoint | Web, provider, OAuth, vault, recording, forge verification, database, cluster, and preallocated Codex credential-slot secrets listed below |
+| `openagents-staging-fleet` | Three-node distributed application lane | The application and preallocated Codex credential-slot secrets required by the same candidate plus the cluster cookie; no Compute mutation permission |
 | `openagents-staging-deployer` | Minimal private rolling-replacement controller | Cluster cookie only; Compute mutation comes from its bounded workload identity |
 | `openagents-staging-migrator` | Release migration and token rewrap job | Database URL, active GitHub vault key, prior GitHub vault keyring |
 | `openagents-staging-builder` | Isolated BEAM build sidecar | Forge operator token only; use an askpass helper, never a URL or argv value |
@@ -39,8 +39,8 @@ use distinct names and values and remains locked.
 | `VOICE_RECORDING_ENCRYPTION_KEY` | `openagents-staging-voice-recording-key` | web and fleet when recording is admitted | Scheduled recording-key procedure or suspected exposure |
 | `OPENAGENTS_FORGE_OPERATOR_TOKEN` | `openagents-staging-forge-operator-token` | web, fleet, builder | Scheduled rotation, builder replacement, or suspected URL/argv/log exposure |
 | `RELEASE_COOKIE` | `openagents-staging-release-cookie` | web, fleet, deployer | Fleet-wide coordinated rotation or suspected exposure |
-| Connected Codex account slot 1 | `openagents-staging-scv-codex-operator-1` | web may add and read versions; a future isolated Codex SCV runtime may read one exact version | Operator disconnect, OpenAI reauthentication, or suspected exposure |
-| Connected Codex account slot 2 | `openagents-staging-scv-codex-operator-2` | web may add and read versions; a future isolated Codex SCV runtime may read one exact version | Operator disconnect, OpenAI reauthentication, or suspected exposure |
+| Connected Codex account slot 1 | `openagents-staging-scv-codex-operator-1` | web and fleet may add and read versions; an isolated Codex SCV runtime may read one exact version | Operator disconnect, OpenAI reauthentication, or suspected exposure |
+| Connected Codex account slot 2 | `openagents-staging-scv-codex-operator-2` | web and fleet may add and read versions; an isolated Codex SCV runtime may read one exact version | Operator disconnect, OpenAI reauthentication, or suspected exposure |
 
 `GITHUB_CLIENT_ID` and `GITHUB_TOKEN_ENCRYPTION_KEY_ID` are identifiers, not
 secrets. `DB_PASSWORD` is not used by the admitted staging profile because it

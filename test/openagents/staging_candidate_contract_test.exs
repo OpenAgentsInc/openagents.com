@@ -81,7 +81,10 @@ defmodule OpenAgents.StagingCandidateContractTest do
 
     assert terraform =~ "roles/secretmanager.secretVersionAdder"
     assert terraform =~ "roles/secretmanager.secretAccessor"
+    assert terraform =~ "fleet_scv_codex_credential_add"
+    assert terraform =~ "fleet_scv_codex_credential_read"
     assert isolation_validator =~ "scv_codex_credential_slots"
+    assert isolation_validator =~ "fleet_member"
   end
 
   test "production preflight preserves a pinned candidate across later commits" do

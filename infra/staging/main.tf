@@ -391,6 +391,22 @@ resource "google_secret_manager_secret_iam_member" "scv_codex_credential_read" {
   member    = google_service_account.web.member
 }
 
+resource "google_secret_manager_secret_iam_member" "fleet_scv_codex_credential_add" {
+  for_each = local.scv_codex_credential_secrets
+
+  secret_id = google_secret_manager_secret.runtime[each.value].id
+  role      = "roles/secretmanager.secretVersionAdder"
+  member    = google_service_account.fleet.member
+}
+
+resource "google_secret_manager_secret_iam_member" "fleet_scv_codex_credential_read" {
+  for_each = local.scv_codex_credential_secrets
+
+  secret_id = google_secret_manager_secret.runtime[each.value].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.fleet.member
+}
+
 resource "google_artifact_registry_repository" "openagents" {
   location      = var.region
   repository_id = "openagents-staging"

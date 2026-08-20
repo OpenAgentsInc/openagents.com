@@ -683,6 +683,9 @@ incompatible account.
 
 - Add restricted account and login-attempt records.
 - Implement the device-code ceremony with one temporary process per attempt.
+- Register each temporary process through the cluster registry so a LiveView
+  reconnect on another fleet node can recover the same ceremony. Limit an
+  unclustered web lane to one instance while the ceremony remains in memory.
 - Add account read, model, rate-limit, health, drain, disconnect, and audit
   operations.
 

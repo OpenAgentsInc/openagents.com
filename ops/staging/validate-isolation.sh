@@ -132,11 +132,14 @@ jq -e '
 ' "$run_root/secrets.json" >/dev/null
 
 web_member="serviceAccount:openagents-staging-web@$staging_project.iam.gserviceaccount.com"
+fleet_member="serviceAccount:openagents-staging-fleet@$staging_project.iam.gserviceaccount.com"
 
 for slot in openagents-staging-scv-codex-operator-1 openagents-staging-scv-codex-operator-2; do
-  jq -e --arg member "$web_member" '
-    any(.bindings[]?; .role == "roles/secretmanager.secretVersionAdder" and (.members | index($member))) and
-    any(.bindings[]?; .role == "roles/secretmanager.secretAccessor" and (.members | index($member)))
+  jq -e --arg web "$web_member" --arg fleet "$fleet_member" '
+    all([$web, $fleet][]; . as $member |
+      any(.bindings[]?; .role == "roles/secretmanager.secretVersionAdder" and (.members | index($member))) and
+      any(.bindings[]?; .role == "roles/secretmanager.secretAccessor" and (.members | index($member)))
+    )
   ' "$run_root/$slot-iam.json" >/dev/null
 done
 

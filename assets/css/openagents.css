@@ -1667,3 +1667,169 @@
     }
   }
 }
+
+/* ── Graph surface (SCV swarm) ────────────────────────────────────────────── */
+
+/* Unit's visual language, expressed in the sanctioned palette. Status is
+ * carried by ring STYLE as well as hue -- hairline, heavy, dashed, doubled --
+ * so the taxonomy survives a colour-blind reader and a greyscale screenshot.
+ * See docs/2026-08-20-scv-swarm-visualization-unit-audit.md. */
+
+@layer components {
+  .graph-surface {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    font-family: var(--font-sans);
+  }
+
+  .graph-node__body {
+    fill: var(--ink-raised);
+    stroke: var(--line-strong);
+    stroke-width: 1;
+    transition:
+      fill var(--motion-fast) var(--ease),
+      stroke var(--motion-fast) var(--ease),
+      stroke-width var(--motion-fast) var(--ease);
+  }
+
+  .graph-node__label {
+    fill: var(--text-muted);
+    font-size: 9px;
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  .graph-node[data-shape="circle"] {
+    cursor: pointer;
+  }
+
+  /* SCV lifecycle. */
+  .graph-node[data-status="idle"] .graph-node__body {
+    stroke: var(--line);
+  }
+
+  .graph-node[data-status="running"] .graph-node__body {
+    stroke: var(--accent);
+    stroke-width: 2;
+    fill: color-mix(in oklab, var(--accent) 12%, var(--ink-raised));
+  }
+
+  .graph-node[data-status="paused"] .graph-node__body {
+    stroke: var(--warning);
+    stroke-dasharray: 3 3;
+  }
+
+  .graph-node[data-status="circuit_open"] .graph-node__body {
+    stroke: var(--danger);
+    stroke-width: 2;
+    fill: color-mix(in oklab, var(--danger) 10%, var(--ink-raised));
+  }
+
+  .graph-node[data-status="disabled"] .graph-node__body {
+    stroke: var(--line-faint);
+    fill: transparent;
+  }
+
+  .graph-node[data-status="disabled"] .graph-node__label {
+    fill: var(--text-dim);
+  }
+
+  /* Work-item lifecycle, on rect nodes. */
+  .graph-node[data-status="discovered"] .graph-node__body {
+    stroke: var(--line-soft);
+    stroke-dasharray: 2 2;
+    fill: transparent;
+  }
+
+  .graph-node[data-status="admitted"] .graph-node__body {
+    stroke: var(--line-strong);
+  }
+
+  .graph-node[data-status="completed"] .graph-node__body {
+    stroke: var(--success);
+    fill: color-mix(in oklab, var(--success) 12%, var(--ink-raised));
+  }
+
+  .graph-node[data-status="deferred"] .graph-node__body {
+    stroke: var(--text-dim);
+    stroke-dasharray: 4 2;
+  }
+
+  .graph-node[data-status="refused"] .graph-node__body {
+    stroke: var(--warning);
+  }
+
+  .graph-node[data-status="failed"] .graph-node__body {
+    stroke: var(--danger);
+  }
+
+  .graph-node--selected .graph-node__body {
+    stroke: var(--text-primary);
+    stroke-width: 2;
+  }
+
+  /* Links. Three coincident paths: hit area, visible stroke, text anchor. */
+  .graph-link__hit {
+    stroke: transparent;
+    stroke-width: 12;
+    fill: none;
+    cursor: pointer;
+  }
+
+  .graph-link__base {
+    stroke: var(--line-strong);
+    stroke-width: 1;
+    fill: none;
+  }
+
+  .graph-link__text-path {
+    fill: none;
+    stroke: none;
+  }
+
+  .graph-link__label {
+    fill: var(--text-dim);
+    font-size: 8px;
+    text-anchor: middle;
+  }
+
+  .graph-link[data-kind="error"] .graph-link__base {
+    stroke: var(--danger);
+  }
+
+  .graph-link[data-kind="data"] .graph-link__base {
+    stroke: var(--line);
+    stroke-dasharray: 2 2;
+  }
+
+  .graph-link[data-kind="type"] .graph-link__base {
+    stroke: var(--line-soft);
+  }
+
+  .graph-link[data-kind="exposed"] .graph-link__base {
+    stroke: var(--accent-bright);
+  }
+
+  .graph-link--active .graph-link__base {
+    stroke: var(--accent);
+  }
+
+  .graph-link__pulse {
+    fill: var(--accent);
+  }
+
+  .graph-arrow {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1.5;
+  }
+
+  /* A step pulse is motion, and motion is the one channel that should mean
+     something on this surface. Honour the reader's preference to stop it. */
+  @media (prefers-reduced-motion: reduce) {
+    .graph-link__pulse {
+      display: none;
+    }
+  }
+}

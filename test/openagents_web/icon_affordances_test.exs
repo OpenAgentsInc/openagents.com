@@ -66,13 +66,24 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
     test "no surface hand-writes an svg outside the vendored set" do
       # Every glyph must come from `priv/icons` through `icon/1`. A pasted
       # `<svg>` in a template is how a second, unmanaged icon set starts.
-      # The exempt files implement the vendored set. `icons.ex` holds embedded
-      # markup and `ui.ex` renders the one governed root element.
+      #
+      # `icons.ex` holds the embedded markup and `ui.ex` renders the one
+      # governed root element, so both implement the vendored set rather than
+      # bypassing it.
+      #
+      # `graph.ex` is exempt for a different reason: it draws data, not
+      # affordances. Its circles, rects and paths are positioned from live SCV
+      # geometry and cannot come from a fixed glyph set — there is no icon for
+      # "a link terminating on this node's surface at this angle". The rule this
+      # test defends is "one icon set", not "no vector output", and a graph node
+      # is not an icon. Any glyph *inside* a graph surface still goes through
+      # `icon/1`.
+      exempt = ["ui.ex", "icons.ex", "graph.ex"]
 
       offenders =
         "lib/openagents_web/**/*.{ex,heex}"
         |> Path.wildcard()
-        |> Enum.reject(&String.ends_with?(&1, ["ui.ex", "icons.ex"]))
+        |> Enum.reject(&String.ends_with?(&1, exempt))
         |> Enum.filter(fn path -> path |> File.read!() |> String.contains?("<svg") end)
 
       assert offenders == [],

@@ -192,6 +192,33 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       ]
     },
     %{
+      title: "SCV graph",
+      items: [
+        %{
+          slug: "graph-node",
+          title: "Graph node",
+          icon: "circle",
+          source: "OpenAgentsWeb.UI.Graph.graph_node/1",
+          summary:
+            "Circle for a live SCV, rect for inert data; ring style carries lifecycle state."
+        },
+        %{
+          slug: "graph-link",
+          title: "Graph link",
+          icon: "compass",
+          source: "OpenAgentsWeb.UI.Graph.graph_link/1",
+          summary: "Surface-anchored link with a shape-conforming termination and a step pulse."
+        },
+        %{
+          slug: "scv-swarm",
+          title: "SCV swarm",
+          icon: "grid",
+          source: "OpenAgentsWeb.UI.Graph.scv_swarm/1",
+          summary: "Many SCVs at once in a deterministic staged layout."
+        }
+      ]
+    },
+    %{
       title: "Forge",
       items: [
         %{
@@ -222,6 +249,10 @@ defmodule OpenAgentsWeb.ComponentCatalog do
     %{
       OpenAgentsWeb.UI => [],
       OpenAgentsWeb.Layouts => [:app, :flash_group],
+      # graph_defs/1 emits marker definitions into a parent graph surface; it
+      # renders nothing on its own, so it has no demoable page. graph_surface/1
+      # is the host element and is demoed through the components that use it.
+      OpenAgentsWeb.UI.Graph => [:graph_defs, :graph_surface],
       OpenAgentsWeb.Components.RepoHeader => []
     }
   end

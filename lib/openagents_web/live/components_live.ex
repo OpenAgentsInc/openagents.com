@@ -12,6 +12,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgentsWeb.ComponentCatalog
+  alias OpenAgentsWeb.UI.Graph
   alias OpenAgentsWeb.UI, as: UI
 
   @sample_rows [
@@ -32,6 +33,26 @@ defmodule OpenAgentsWeb.ComponentsLive do
     github_avatar_url: nil
   }
 
+  # Fifteen SCVs spanning every status, so the swarm page is the taxonomy in
+  # aggregate rather than a happy-path screenshot.
+  @demo_swarm [
+    %{id: "scv-01", status: :running, label: "01", weight: 0.9, item_status: :running},
+    %{id: "scv-02", status: :running, label: "02", weight: 0.3, item_status: :running},
+    %{id: "scv-03", status: :idle, label: "03", weight: 0.0},
+    %{id: "scv-04", status: :running, label: "04", weight: 0.6, item_status: :admitted},
+    %{id: "scv-05", status: :paused, label: "05", weight: 0.4, item_status: :deferred},
+    %{id: "scv-06", status: :idle, label: "06", weight: 0.0},
+    %{id: "scv-07", status: :circuit_open, label: "07", weight: 0.2},
+    %{id: "scv-08", status: :running, label: "08", weight: 1.0, item_status: :running},
+    %{id: "scv-09", status: :disabled, label: "09", weight: 0.0},
+    %{id: "scv-10", status: :running, label: "10", weight: 0.5, item_status: :completed},
+    %{id: "scv-11", status: :idle, label: "11", weight: 0.0},
+    %{id: "scv-12", status: :paused, label: "12", weight: 0.7, item_status: :refused},
+    %{id: "scv-13", status: :running, label: "13", weight: 0.15, item_status: :failed},
+    %{id: "scv-14", status: :disabled, label: "14", weight: 0.0},
+    %{id: "scv-15", status: :running, label: "15", weight: 0.8, item_status: :discovered}
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     form =
@@ -50,7 +71,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
      |> assign(:form, form)
      |> assign(:rows, @sample_rows)
      |> assign(:openagents_icons, @openagents_icons)
-     |> assign(:demo_user, @demo_user)}
+     |> assign(:demo_user, @demo_user)
+     |> assign(:demo_swarm, @demo_swarm)}
   end
 
   @impl true
@@ -498,6 +520,173 @@ defmodule OpenAgentsWeb.ComponentsLive do
         context alongside this one produces duplicate ids. That is fine for a layout,
         which has a single account control, but it is a real constraint on reuse.
       </p>
+    </div>
+    """
+  end
+
+  # --- SCV graph -----------------------------------------------------------
+  # The full state taxonomy is rendered here rather than described, so the
+  # catalog page is the executable inventory of what each state looks like.
+
+  defp component_demo(%{item: %{slug: "graph-node"}} = assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">
+          SCV lifecycle — circle nodes. Ring style carries the state as well as hue.
+        </p>
+        <Graph.graph_surface view_box="0 0 460 78" label="SCV statuses" prefix="demo-scv">
+          <Graph.graph_node
+            :for={{status, i} <- Enum.with_index(Graph.statuses())}
+            id={"demo-scv-#{status}"}
+            shape={:circle}
+            x={40.0 + i * 92}
+            y={30.0}
+            r={18.0}
+            status={status}
+            label={to_string(status)}
+          />
+        </Graph.graph_surface>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">
+          Work-item lifecycle — rect nodes, because a work item is inert data, not a
+          running machine.
+        </p>
+        <Graph.graph_surface view_box="0 0 640 78" label="Work item statuses" prefix="demo-item">
+          <Graph.graph_node
+            :for={{status, i} <- Enum.with_index(Graph.item_statuses())}
+            id={"demo-item-#{status}"}
+            shape={:rect}
+            x={44.0 + i * 90}
+            y={30.0}
+            width={44.0}
+            height={30.0}
+            status={status}
+            label={to_string(status)}
+          />
+        </Graph.graph_surface>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">Selected, and radius scaled by spend.</p>
+        <Graph.graph_surface view_box="0 0 300 78" label="Node emphasis" prefix="demo-emph">
+          <Graph.graph_node id="demo-sel" x={40.0} y={34.0} r={18.0} status={:running} selected />
+          <Graph.graph_node id="demo-small" x={130.0} y={34.0} r={11.0} status={:running} />
+          <Graph.graph_node id="demo-big" x={230.0} y={34.0} r={26.0} status={:running} />
+        </Graph.graph_surface>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "graph-link"}} = assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">
+          Every link kind. Distance is typed, so related things sit closer — the spacing
+          here is each kind's own <code>link_distance/1</code>.
+        </p>
+        <Graph.graph_surface view_box="0 0 520 92" label="Link kinds" prefix="demo-kinds">
+          <g :for={{kind, i} <- Enum.with_index(Graph.link_kinds())}>
+            <Graph.graph_link
+              id={"demo-link-#{kind}"}
+              prefix="demo-kinds"
+              source={%{shape: :circle, x: 34.0 + i * 104, y: 34.0, r: 13.0}}
+              target={
+                %{
+                  shape: :rect,
+                  x: 34.0 + i * 104 + 13.0 + Graph.link_distance(kind) + 11.0,
+                  y: 34.0,
+                  width: 22.0,
+                  height: 16.0
+                }
+              }
+              kind={kind}
+            />
+            <Graph.graph_node
+              id={"demo-link-src-#{kind}"}
+              x={34.0 + i * 104}
+              y={34.0}
+              r={13.0}
+              status={:idle}
+              label={to_string(kind)}
+            />
+            <Graph.graph_node
+              id={"demo-link-tgt-#{kind}"}
+              shape={:rect}
+              x={34.0 + i * 104 + 13.0 + Graph.link_distance(kind) + 11.0}
+              y={34.0}
+              width={22.0}
+              height={16.0}
+              status={:admitted}
+            />
+          </g>
+        </Graph.graph_surface>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">
+          A step traversing the link, and a labelled link. Terminations conform to the
+          surface they touch: an arc into a circle, a flat bar into a rect.
+        </p>
+        <Graph.graph_surface
+          view_box="0 0 320 92"
+          label="Active and labelled links"
+          prefix="demo-active"
+        >
+          <Graph.graph_link
+            id="demo-link-active"
+            prefix="demo-active"
+            source={%{shape: :circle, x: 34.0, y: 34.0, r: 14.0}}
+            target={%{shape: :rect, x: 150.0, y: 34.0, width: 24.0, height: 18.0}}
+            kind={:normal}
+            active
+            label="step"
+          />
+          <Graph.graph_node id="demo-active-src" x={34.0} y={34.0} r={14.0} status={:running} />
+          <Graph.graph_node
+            id="demo-active-tgt"
+            shape={:rect}
+            x={150.0}
+            y={34.0}
+            width={24.0}
+            height={18.0}
+            status={:running}
+          />
+          <Graph.graph_link
+            id="demo-link-back"
+            prefix="demo-active"
+            source={%{shape: :rect, x: 240.0, y: 34.0, width: 24.0, height: 18.0}}
+            target={%{shape: :circle, x: 300.0, y: 34.0, r: 14.0}}
+            kind={:normal}
+          />
+          <Graph.graph_node
+            id="demo-back-src"
+            shape={:rect}
+            x={240.0}
+            y={34.0}
+            width={24.0}
+            height={18.0}
+            status={:completed}
+          />
+          <Graph.graph_node id="demo-back-tgt" x={300.0} y={34.0} r={14.0} status={:idle} />
+        </Graph.graph_surface>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "scv-swarm"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Fifteen SCVs at once. Position is derived from index, never from a mutable
+        field, so "the third one down" keeps meaning the same agent.
+      </p>
+      <Graph.scv_swarm scvs={@demo_swarm} selected_id="scv-04" />
     </div>
     """
   end

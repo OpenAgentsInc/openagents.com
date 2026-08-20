@@ -55,6 +55,9 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
     executable = Keyword.get(options, :executable, default_executable())
     config_seed = Keyword.get(options, :config_seed)
     diagnostic_logs = Keyword.get(options, :diagnostic_logs, false)
+    repository_revision = Keyword.get(options, :repository_revision)
+    event_context = Keyword.get(options, :event_context, %{})
+    run_context = Keyword.get(options, :run_context, %{})
 
     heartbeat_interval_ms =
       Keyword.get(options, :heartbeat_interval_ms, @default_heartbeat_interval_ms)
@@ -86,6 +89,9 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
              :heartbeat_interval_invalid
            ),
          :ok <- validate_event_sink(event_sink),
+         :ok <- validate_repository_revision(repository_revision),
+         :ok <- validate_context(event_context, :event_context_invalid),
+         :ok <- validate_context(run_context, :run_context_invalid),
          {:ok, config_seed} <- validate_config_seed(config_seed),
          {:ok, executable} <- validate_executable(executable) do
       {:ok,
@@ -104,6 +110,9 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
          executable: executable,
          config_seed: config_seed,
          diagnostic_logs: diagnostic_logs,
+         repository_revision: repository_revision,
+         event_context: event_context,
+         run_context: run_context,
          heartbeat_interval_ms: heartbeat_interval_ms,
          event_sink: event_sink
        }}
@@ -550,8 +559,9 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
       duration_ms: duration_ms,
       repository: %{
         path: input.repository,
-        git_sha: git_sha(input.repository)
+        git_sha: input.repository_revision || git_sha(input.repository)
       },
+      scv: input.run_context,
       runtime: %{
         adapter: "opencode",
         executable: input.executable,
@@ -786,6 +796,26 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
   defp validate_event_sink(event_sink) when is_function(event_sink, 1), do: :ok
   defp validate_event_sink(_event_sink), do: {:error, :event_sink_invalid}
 
+  defp validate_repository_revision(nil), do: :ok
+
+  defp validate_repository_revision(revision) when is_binary(revision) do
+    if Regex.match?(~r/\A[0-9a-f]{40}\z/, revision),
+      do: :ok,
+      else: {:error, :repository_revision_invalid}
+  end
+
+  defp validate_repository_revision(_revision), do: {:error, :repository_revision_invalid}
+
+  defp validate_context(context, error) when is_map(context) and map_size(context) <= 16 do
+    allowed = MapSet.new([:driver, :environment, :runner, :capabilities])
+
+    if context |> Map.keys() |> MapSet.new() |> MapSet.subset?(allowed),
+      do: :ok,
+      else: {:error, error}
+  end
+
+  defp validate_context(_context, error), do: {:error, error}
+
   defp validate_permissions(permissions) when permissions in [:read_only, :workspace_write],
     do: :ok
 
@@ -860,15 +890,14 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
 
   defp emit_event(input, type, data) do
     event =
-      Map.merge(
-        %{
-          schema: "openagents.scv.event.v1",
-          run_id: input.run_id,
-          type: type,
-          emitted_at: DateTime.utc_now() |> DateTime.to_iso8601()
-        },
-        data
-      )
+      %{
+        schema: "openagents.scv.event.v1",
+        run_id: input.run_id,
+        type: type,
+        emitted_at: DateTime.utc_now() |> DateTime.to_iso8601()
+      }
+      |> Map.merge(input.event_context)
+      |> Map.merge(data)
 
     try do
       input.event_sink.(event)

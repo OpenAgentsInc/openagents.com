@@ -1,21 +1,80 @@
-ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
-FROM ${UBUNTU_IMAGE}
+ARG RUNTIME_IMAGE=docker.io/debian:trixie-20260803-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
+ARG ELIXIR_IMAGE=docker.io/hexpm/elixir:1.20.3-erlang-29.0.5-debian-trixie-20260803-slim@sha256:ae38be7cb19bffa78adedb04732d9e6ba83a507b4cfb06983cbe711edb49da54
+
+FROM ${ELIXIR_IMAGE} AS scv-release-builder
+
+ARG DEBIAN_SNAPSHOT=20260803T000000Z
+ARG HEX_VERSION=2.5.1
+ARG REBAR3_VERSION=3.25.1
+ARG REBAR3_SHA512=69073f6ad163f74971545015238614c327893960c1b3f26df5377df135c773a0716b48b65c2a48cef878f185dd92805abc69894adfa3fd27a90c62a64ba371e2
+ARG OPENAGENTS_BUILD_REVISION=image
+ARG SOURCE_DATE_EPOCH=0
+
+ENV MIX_ENV=prod
+ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+
+RUN sed -i \
+      "s|URIs: http://deb.debian.org/debian$|URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && sed -i \
+      "s|URIs: http://deb.debian.org/debian-security$|URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends build-essential ca-certificates git \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN mix local.hex "${HEX_VERSION}" --force \
+  && mix local.rebar rebar3 \
+      "https://github.com/erlang/rebar3/releases/download/${REBAR3_VERSION}/rebar3" \
+      --sha512 "${REBAR3_SHA512}" \
+      --force
+
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only prod \
+  && mkdir config
+
+COPY config/config.exs config/prod.exs config/
+RUN mix deps.compile
+
+COPY priv priv
+COPY lib lib
+COPY rel rel
+RUN mix compile --warnings-as-errors
+
+COPY config/runtime.exs config/
+RUN mix release
+
+FROM ${RUNTIME_IMAGE} AS opencode-toolchain
 
 ARG TARGETARCH
 ARG DEBIAN_FRONTEND=noninteractive
+ARG DEBIAN_SNAPSHOT=20260803T000000Z
 ARG NODE_VERSION=24.15.0
 ARG BUN_VERSION=1.3.14
 ARG OPENCODE_VERSION=1.18.5
+ARG OPENAGENTS_BUILD_REVISION=image
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update \
+RUN sed -i \
+      "s|URIs: http://deb.debian.org/debian$|URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && sed -i \
+      "s|URIs: http://deb.debian.org/debian-security$|URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
     git \
     jq \
+    libsctp1 \
     openssh-client \
     pkg-config \
     procps \
@@ -91,9 +150,23 @@ ENV XDG_CACHE_HOME=/home/scv/.cache
 ENV XDG_CONFIG_HOME=/home/scv/.config
 ENV XDG_DATA_HOME=/home/scv/.local/share
 ENV XDG_STATE_HOME=/home/scv/.local/state
+ENV ELIXIR_ERL_OPTIONS=+fnu
+ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
+ENV OPENAGENTS_ENVIRONMENT=staging
+ENV OPENAGENTS_RUNTIME_ROLE=scv
+ENV OPENCODE_BIN=/opt/scv/opencode/bin/opencode
+ENV SCV_DRIVER=opencode
+ENV SCV_ENVIRONMENT=opencode-core
+ENV SCV_OUTPUT_ROOT=/workspace/runs
+ENV SCV_PERMISSION_PROFILE=read_only
+ENV SCV_REPOSITORY=/workspace/openagents
+ENV SCV_REPOSITORY_REVISION=${OPENAGENTS_BUILD_REVISION}
+
+COPY --from=scv-release-builder --chown=scv:scv /app/_build/prod/rel/openagents /opt/scv/openagents
+COPY --chown=scv:scv . /workspace/openagents
 
 USER scv
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["opencode", "--version"]
+CMD ["/opt/scv/openagents/bin/openagents", "start"]

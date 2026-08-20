@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Openagents.Scv.Opencode do
 
   use Mix.Task
 
-  alias OpenAgents.SCV.Executor.OpenCode
+  alias OpenAgents.SCV
 
   @shortdoc "Run one bounded local SCV execution through OpenCode"
 
@@ -55,7 +55,7 @@ defmodule Mix.Tasks.Openagents.Scv.Opencode do
     timeout_ms = Keyword.get(options, :timeout_seconds, 300) * 1_000
     permissions = if Keyword.get(options, :write, false), do: :workspace_write, else: :read_only
 
-    executor_options =
+    driver_options =
       [
         api_key: System.get_env("OPENAI_API_KEY"),
         executable: Keyword.get(options, :opencode, default_executable()),
@@ -64,11 +64,15 @@ defmodule Mix.Tasks.Openagents.Scv.Opencode do
         output_root: output_root,
         timeout_ms: timeout_ms,
         diagnostic_logs: Keyword.get(options, :diagnostic_logs, false),
-        event_sink: &print_live_event/1,
-        permissions: permissions
+        event_sink: &print_live_event/1
       ]
 
-    case OpenCode.run(repository, prompt, executor_options) do
+    case SCV.run(repository, prompt,
+           driver: :opencode,
+           environment: :opencode_core,
+           permission_profile: permissions,
+           driver_options: driver_options
+         ) do
       {:ok, result} ->
         print_result(result, Keyword.get(options, :json, false))
 

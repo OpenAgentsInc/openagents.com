@@ -160,6 +160,31 @@ Development code reloading is not a production deployment strategy. Keep every
 deployment capability disabled by default until its local proof and isolated
 staging drill pass.
 
+## SCV boundary
+
+An SCV is the durable coding-execution and supervision contract. It is not a
+container, model, OpenCode session, or tool catalog. The internal agent runtime
+deploys SCV runs and each run binds these parts:
+
+- A driver adapts one coding implementation, such as OpenCode or a native
+  Elixir tool loop.
+- An environment supplies a digest-addressed image or owned host with declared
+  language and system capabilities.
+- A runner starts and supervises the driver in that environment.
+- The SCV owns policy, lifecycle, budgets, events, cancellation, artifacts,
+  receipts, and the handoff to Forge.
+
+This boundary lets the runtime deploy several SCVs with different drivers and
+environments. Native coding tools belong to a native driver. OpenCode keeps its
+own protocol behind the same SCV policy and event boundary; OpenCode does not
+become the SCV or the environment.
+
+The first qualification image combines the Elixir SCV worker release with the
+OpenCode driver and the `opencode-core` polyglot environment. Its staging
+process role accepts only read-only runs and starts no Phoenix endpoint, Repo,
+Forge service, or deployment coordinator. Forge remains the only deployment
+authority.
+
 ## Runtime and staging topology
 
 The accepted target has two isolated staging lanes:

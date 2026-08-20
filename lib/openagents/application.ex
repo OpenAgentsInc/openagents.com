@@ -7,6 +7,13 @@ defmodule OpenAgents.Application do
 
   @impl true
   def start(_type, _args) do
+    case Application.get_env(:openagents, :runtime_role, :web) do
+      :scv -> start_scv_worker()
+      :web -> start_web()
+    end
+  end
+
+  defp start_web do
     runtime_config = OpenAgents.RuntimeConfig.install!()
 
     # Releases migrate on boot (RELEASE-001): the schema must precede traffic.
@@ -72,6 +79,30 @@ defmodule OpenAgents.Application do
     end
 
     result
+  end
+
+  defp start_scv_worker do
+    child = %{
+      id: OpenAgents.SCV.Worker,
+      start: {Task, :start_link, [fn -> run_scv_worker() end]},
+      restart: :temporary
+    }
+
+    Supervisor.start_link([child], strategy: :one_for_one, name: OpenAgents.SCV.Supervisor)
+  end
+
+  defp run_scv_worker do
+    exit_status =
+      try do
+        OpenAgents.SCV.Worker.run_from_env!()
+        0
+      rescue
+        _error -> 1
+      catch
+        _kind, _reason -> 1
+      end
+
+    System.stop(exit_status)
   end
 
   # Tell Phoenix to update the endpoint configuration

@@ -82,11 +82,20 @@ parse_csv = fn name ->
   |> Enum.reject(&(&1 == ""))
 end
 
+runtime_role =
+  case System.get_env("OPENAGENTS_RUNTIME_ROLE", "web") do
+    "web" -> :web
+    "scv" -> :scv
+    _invalid -> raise "environment variable OPENAGENTS_RUNTIME_ROLE is not admitted"
+  end
+
+config :openagents, :runtime_role, runtime_role
+
 if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
 end
 
-if config_env() == :prod do
+if config_env() == :prod and runtime_role == :web do
   runtime_environment =
     case required_text.("OPENAGENTS_ENVIRONMENT") do
       "staging" -> :staging
@@ -348,66 +357,80 @@ if config_env() == :prod do
     secret_key_base: required_text.("SECRET_KEY_BASE")
 end
 
-github_oauth = Application.get_env(:openagents, :github_oauth, [])
+if config_env() == :prod and runtime_role == :scv do
+  runtime_environment =
+    case required_text.("OPENAGENTS_ENVIRONMENT") do
+      "staging" -> :staging
+      _invalid -> raise "an SCV worker is admitted only in staging"
+    end
 
-github_oauth =
-  github_oauth
-  |> Keyword.merge(
-    client_id: System.get_env("GITHUB_CLIENT_ID") || github_oauth[:client_id],
-    client_secret: System.get_env("GITHUB_CLIENT_SECRET") || github_oauth[:client_secret],
-    redirect_uri: System.get_env("GITHUB_REDIRECT_URI") || github_oauth[:redirect_uri]
-  )
-  |> OpenAgents.GitHubOAuth.RuntimeConfig.load!(config_env(),
-    public_host: System.get_env("PHX_HOST")
-  )
-
-config :openagents, :github_oauth, github_oauth
-
-token_encryption_key = optional_text.("GITHUB_TOKEN_ENCRYPTION_KEY")
-token_encryption_key_id = optional_text.("GITHUB_TOKEN_ENCRYPTION_KEY_ID")
-
-token_decryption_keys =
-  case optional_text.("GITHUB_TOKEN_DECRYPTION_KEYS_JSON") do
-    nil ->
-      %{}
-
-    encoded ->
-      case Jason.decode(encoded) do
-        {:ok, keys} when is_map(keys) ->
-          keys
-
-        _invalid ->
-          raise "environment variable GITHUB_TOKEN_DECRYPTION_KEYS_JSON must be a JSON object"
-      end
-  end
-
-valid_token_key? =
-  is_binary(token_encryption_key) and
-    match?({:ok, key} when byte_size(key) == 32, Base.decode64(token_encryption_key))
-
-valid_token_key_id? =
-  is_binary(token_encryption_key_id) and
-    String.match?(token_encryption_key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/)
-
-valid_decryption_keys? =
-  map_size(token_decryption_keys) <= 16 and
-    not Map.has_key?(token_decryption_keys, token_encryption_key_id) and
-    Enum.all?(token_decryption_keys, fn {key_id, encoded_key} ->
-      is_binary(key_id) and String.match?(key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/) and
-        is_binary(encoded_key) and
-        match?({:ok, key} when byte_size(key) == 32, Base.decode64(encoded_key))
-    end)
-
-if config_env() == :prod and
-     not (valid_token_key? and valid_token_key_id? and valid_decryption_keys?) do
-  raise "GitHub token keyring environment variables are invalid"
+  config :openagents,
+    runtime_environment: runtime_environment,
+    openai_api_key: required_text.("OPENAI_API_KEY")
 end
 
-if valid_token_key? and valid_token_key_id? and valid_decryption_keys? do
-  config :openagents,
-    github_token_encryption_key: token_encryption_key,
-    github_token_encryption_key_id: token_encryption_key_id,
-    github_token_decryption_keys: token_decryption_keys
+if runtime_role == :web do
+  github_oauth = Application.get_env(:openagents, :github_oauth, [])
+
+  github_oauth =
+    github_oauth
+    |> Keyword.merge(
+      client_id: System.get_env("GITHUB_CLIENT_ID") || github_oauth[:client_id],
+      client_secret: System.get_env("GITHUB_CLIENT_SECRET") || github_oauth[:client_secret],
+      redirect_uri: System.get_env("GITHUB_REDIRECT_URI") || github_oauth[:redirect_uri]
+    )
+    |> OpenAgents.GitHubOAuth.RuntimeConfig.load!(config_env(),
+      public_host: System.get_env("PHX_HOST")
+    )
+
+  config :openagents, :github_oauth, github_oauth
+
+  token_encryption_key = optional_text.("GITHUB_TOKEN_ENCRYPTION_KEY")
+  token_encryption_key_id = optional_text.("GITHUB_TOKEN_ENCRYPTION_KEY_ID")
+
+  token_decryption_keys =
+    case optional_text.("GITHUB_TOKEN_DECRYPTION_KEYS_JSON") do
+      nil ->
+        %{}
+
+      encoded ->
+        case Jason.decode(encoded) do
+          {:ok, keys} when is_map(keys) ->
+            keys
+
+          _invalid ->
+            raise "environment variable GITHUB_TOKEN_DECRYPTION_KEYS_JSON must be a JSON object"
+        end
+    end
+
+  valid_token_key? =
+    is_binary(token_encryption_key) and
+      match?({:ok, key} when byte_size(key) == 32, Base.decode64(token_encryption_key))
+
+  valid_token_key_id? =
+    is_binary(token_encryption_key_id) and
+      String.match?(token_encryption_key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/)
+
+  valid_decryption_keys? =
+    map_size(token_decryption_keys) <= 16 and
+      not Map.has_key?(token_decryption_keys, token_encryption_key_id) and
+      Enum.all?(token_decryption_keys, fn {key_id, encoded_key} ->
+        is_binary(key_id) and String.match?(key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/) and
+          is_binary(encoded_key) and
+          match?({:ok, key} when byte_size(key) == 32, Base.decode64(encoded_key))
+      end)
+
+  if config_env() == :prod and
+       not (valid_token_key? and valid_token_key_id? and valid_decryption_keys?) do
+    raise "GitHub token keyring environment variables are invalid"
+  end
+
+  if valid_token_key? and valid_token_key_id? and valid_decryption_keys? do
+    config :openagents,
+      github_token_encryption_key: token_encryption_key,
+      github_token_encryption_key_id: token_encryption_key_id,
+      github_token_decryption_keys: token_decryption_keys
+  end
 end
 
 if parse_optional_boolean.("PHX_SERVER") do

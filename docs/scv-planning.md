@@ -2,9 +2,9 @@
 
 Date: 2026-08-20
 
-Status: Initial local OpenCode qualification adapter implemented; isolated
-worker scheduling, durable tool effects, and autonomous deployment remain
-disabled
+Status: First complete OpenCode SCV environment implemented and locally proven;
+staging qualification in progress; durable coordination, durable tool effects,
+and autonomous deployment remain disabled
 
 ## Outcome
 
@@ -43,12 +43,58 @@ The recommended first autonomous milestone is staging-only deployment of a
 narrow, low-risk change class. Production autonomy is a later admission, not a
 configuration toggle hidden inside the first release.
 
+## SCV runtime boundary
+
+Define an SCV as the durable execution and supervision contract. Do not define
+an SCV as a container, OpenCode session, model, or tool catalog. The internal
+runtime deploys an SCV run. Each run selects one implementation driver and one
+execution environment.
+
+| Boundary | Responsibility |
+| --- | --- |
+| SCV | Owns identity, objective, policy, capabilities, lifecycle, budgets, events, receipts, cancellation, artifacts, and Forge handoff |
+| Driver | Adapts one coding implementation, such as OpenCode or a native Elixir tool loop, to the SCV contract |
+| Environment | Supplies one digest-addressed runtime image or owned host with declared language and system capabilities |
+| Runner | Starts and supervises the selected driver inside the environment |
+| Tool catalog | Defines the typed effects available to a native driver; an external driver may retain its protocol only when the SCV maps it to the same policy and event boundary |
+
+An SCV run normally binds one driver to one worker. A durable SCV campaign may
+coordinate several runs with different drivers or environments. Do not place
+several independent repository writers inside one worker and call the container
+an SCV.
+
+Expose two tool surfaces:
+
+- The internal runtime uses SCV control tools to start, inspect, cancel, and
+  collect artifacts from SCV runs.
+- A native SCV driver uses admitted coding tools for workspace inspection,
+  edits, commands, tests, and Git operations. OpenCode retains its own protocol
+  behind the same capability policy until the durable sidecar replaces its
+  direct effects.
+
+This split gives every implementation one operational contract without forcing
+OpenCode, a native Elixir driver, and future coding runtimes to share one model
+or tool-loop implementation.
+
 ## Local implementation checkpoint
 
-The repository now contains a local, coarse-effect OpenCode adapter that proves
-the first runtime integration without enabling an SCV coordinator, repository
-write authority, worker registration, Forge promotion, or deployment:
+The repository now contains a complete direct-process SCV boundary and the
+first container environment. This implementation proves driver dispatch and
+worker execution without enabling a durable coordinator, repository write
+authority in staging, worker registration, Forge promotion, or deployment:
 
+- `OpenAgents.SCV.Run` binds one objective to an admitted driver, environment,
+  permission profile, capability set, and runner.
+- `OpenAgents.SCV.Driver.OpenCode` adapts OpenCode to the common SCV run and
+  event contract.
+- `OpenAgents.SCV.Environment` declares the `opencode-core` capabilities
+  separately from the driver.
+- `OpenAgents.SCV.Runner.Local` supervises the driver as a direct process in the
+  current environment. A container scheduler may place this runner inside a
+  digest-addressed worker.
+- `OpenAgents.SCV.Worker` accepts the staging environment contract, admits only
+  read-only OpenCode runs, streams JSON events, writes one terminal result, and
+  exits with the run status.
 - `OpenAgents.SCV.Executor.OpenCode` starts one bounded OpenCode process with an
   isolated home, XDG roots, SQLite database, operator-owned configuration, and
   explicit permission profile.
@@ -57,8 +103,9 @@ write authority, worker registration, Forge promotion, or deployment:
 - `OpenAgents.SCV.ResourceSampler` observes the direct OpenCode process from the
   host and records RSS and CPU samples.
 - `mix openagents.scv.opencode` exposes the adapter for local qualification.
-- `ops/scv/images/opencode-core/Dockerfile` defines the first multi-architecture
-  worker toolchain with pinned Ubuntu, Node.js, Bun, and OpenCode inputs.
+- `ops/scv/images/opencode-core/Dockerfile` defines the first complete
+  multi-architecture environment with a pinned Debian runtime, Elixir release,
+  Node.js, Bun, Python, Git, native build tools, and OpenCode.
 
 The executor emits `openagents.scv.event.v1` records while the run is active.
 Callers can supply an `event_sink` function, and the executor also emits the
@@ -147,24 +194,31 @@ construction.
 ### Proven image build
 
 Run `ops/scv/images/build-opencode-core.sh` to build the native architecture as
-`openagents/scv-opencode-core:local`. On 2026-08-20, the ARM64 build produced
-local image digest
-`sha256:d19e17c36f40cfa9dfb8123a9bfb93aec5d09deb1513ac0ceaf26b80a29360e3`
-and size 313,619,978 bytes. This local digest is evidence, not an admitted or
-published worker identity.
+`openagents/scv-opencode-core:local`. The build pins its Debian and Elixir base
+digests, Debian snapshot, Hex, Rebar3, Node.js, Bun, and OpenCode. It produces a
+self-contained Elixir release and the OpenCode toolchain in one image.
 
-The smoke test ran as UID and GID `10001` and verified OpenCode `1.18.5`, Bun
-`1.3.14`, Node.js `24.15.0`, npm `11.12.1`, Python `3.12.3`, Git `2.43.0`, and
-ripgrep `14.1.0`. The image contains neither a Docker client nor a mounted
-Docker socket. A live OpenCode session inside the image returned
-`SCV_IMAGE_OK`, emitted a start, text, and finish event, used 3,296 tokens, and
-reported `$0.00258825` estimated cost.
+On 2026-08-20, the complete ARM64 image ran as UID and GID `10001` through the
+Elixir SCV process role. The SCV selected the `opencode` driver and
+`opencode-core` environment, inspected the source baked into the image, and
+made no changes. The worker emitted lifecycle records, two-second heartbeats,
+normalized OpenCode events, two completed `read` calls, resource samples, and
+one terminal worker result.
 
-The image currently supplies the first execution toolchain, not the final
-Elixir worker release or sidecar. The local Elixir adapter remains outside the
-container. Add the process-role-specific worker release, protocol client,
-cgroup collector, credential proxy, and read-only runtime mount before Forge
-admits the image.
+The terminal result recorded:
+
+- `succeeded` in 9,387 milliseconds;
+- eight normalized OpenCode events and no tool errors;
+- 9,060 metered tokens and an estimated cost of `$0.00657015`;
+- 706,650,112 bytes of peak direct-process RSS and 188% maximum sampled CPU;
+- 16,908 captured bytes with no truncation.
+
+The image contains no Docker client or socket. The SCV process role starts no
+Phoenix endpoint, application Repo, Forge service, or deployment coordinator.
+It accepts only the staging environment and read-only permission profile. This
+proof does not admit repository writes or autonomous deployment. Add the
+durable worker protocol, process-tree or cgroup enforcement, run-scoped
+credential proxy, and effect-persistence sidecar before enabling writes.
 
 ## Goals
 
@@ -275,8 +329,10 @@ server provider adapter   capability scheduler
                  +-----------------+-----------------+
                  |                 |                 |
                  v                 v                 v
-          OpenCode core      browser worker      Rust worker
-          SCV worker         and benchmarks      and native build
+          OpenCode driver    OpenCode driver     native driver
+                 |                 |                 |
+                 v                 v                 v
+          core environment   browser environment Rust environment
                  |                 |                 |
                  +-----------------+-----------------+
                                    |
@@ -335,7 +391,7 @@ Candidate code is untrusted during evaluation even though the worker runs in an
 owned environment. Tests and Mix tasks can execute arbitrary repository code.
 Do not mount any credential that candidate code could read or transmit.
 
-## OpenCode as the first execution runtime
+## OpenCode as the first driver
 
 Use OpenCode for the first end-to-end SCV worker implementation. This validates
 non-Elixir execution, long model-driven runs, structured events, permission
@@ -344,13 +400,13 @@ the SCV targets `openagents.com` itself.
 
 Keep these milestones separate:
 
-1. **Runtime qualification:** Build the OpenCode worker image, compile and test
+1. **Environment qualification:** Build the OpenCode worker image, compile and test
    the inspected OpenCode source, exercise one bounded OpenCode session, and
    collect resource and benchmark evidence without pushing a candidate.
-2. **Self-targeting proof:** Use the read-only admitted OpenCode runtime to fix
+2. **Self-targeting proof:** Use the read-only admitted OpenCode driver to fix
    a seeded OpenCode defect in the separate target checkout. Stop at a
    propose-only run ref.
-3. **Product pilot:** Use the qualified OpenCode runtime to improve
+3. **Product pilot:** Use the qualified OpenCode driver and environment to improve
    `openagents.com`, pass its Elixir and Forge gates, and keep promotion human
    controlled.
 
@@ -390,10 +446,10 @@ tag or let repository code select the worker image.
 
 ### Trust boundary
 
-OpenCode is an execution runtime inside a worker. It is not the SCV coordinator,
-lease authority, policy engine, receipt store, or promotion authority. The
-Elixir control plane owns those responsibilities even when OpenCode manages the
-model and tool loop for one run.
+OpenCode is a driver inside an SCV worker. It is not an environment, SCV
+coordinator, lease authority, policy engine, receipt store, or promotion
+authority. The Elixir control plane owns those responsibilities even when
+OpenCode manages the model and tool loop for one run.
 
 When an SCV works on OpenCode, keep two separate copies:
 
@@ -414,7 +470,7 @@ the first executable SCV milestone and should contain:
 
 | Layer | Pinned contents |
 | --- | --- |
-| Operating system | Ubuntu 24.04 for parity with OpenCode's primary Linux tests |
+| Operating system | Digest-pinned Debian Trixie from one dated snapshot for the build and runtime stages; use a separate Ubuntu qualification environment when exact OpenCode CI parity matters |
 | JavaScript runtimes | Bun `1.3.14` baseline build, Node.js `24.15`, and Corepack |
 | Native support | Python 3, `setuptools`, `build-essential`, `pkg-config`, `libgcc`, and `libstdc++` |
 | Repository tools | Git, OpenSSH client without credentials, `curl`, certificates, `jq`, `ripgrep`, `unzip`, `xz-utils`, and `zip` |
@@ -1499,6 +1555,9 @@ Keep one module per file.
 
 ```text
 lib/openagents/scv.ex
+lib/openagents/scv/driver.ex
+lib/openagents/scv/driver/open_code.ex
+lib/openagents/scv/environment.ex
 lib/openagents/scv/instance.ex
 lib/openagents/scv/work_item.ex
 lib/openagents/scv/run.ex
@@ -1509,6 +1568,8 @@ lib/openagents/scv/worker.ex
 lib/openagents/scv/worker_supervisor.ex
 lib/openagents/scv/worker_client.ex
 lib/openagents/scv/worker_runner.ex
+lib/openagents/scv/runner.ex
+lib/openagents/scv/runner/local.ex
 lib/openagents/scv/execution.ex
 lib/openagents/scv/benchmark_definition.ex
 lib/openagents/scv/benchmark_run.ex

@@ -41,6 +41,40 @@ endpoint starts:
 - Every `forge_hot_load_examples` entry must produce its configured allow or
   deny result under the actual hot-load allowlist.
 
+## Process roles
+
+`OPENAGENTS_RUNTIME_ROLE` selects the supervision tree in an assembled release.
+The setting accepts these values:
+
+| Value | Behavior |
+| --- | --- |
+| `web` | Default. Validates the complete web release configuration and starts the endpoint, Repo, Forge, and enabled application services. |
+| `scv` | Staging-only qualification role. Requires a provider credential and starts one temporary `OpenAgents.SCV.Worker` task. It starts no endpoint, Repo, Forge service, or deployment coordinator. |
+
+The current SCV process role admits only the `opencode` driver,
+`opencode-core` environment, and `read_only` permission profile. Configure one
+run with these settings:
+
+| Environment setting | Requirement |
+| --- | --- |
+| `SCV_REPOSITORY` | Absolute repository path inside the environment; defaults to `/workspace/openagents` in the first image |
+| `SCV_OBJECTIVE` | Bounded objective for one run; required |
+| `SCV_DRIVER` | `opencode` |
+| `SCV_ENVIRONMENT` | `opencode-core` |
+| `SCV_PERMISSION_PROFILE` | `read_only` |
+| `SCV_MODEL` | Admitted OpenCode model identifier |
+| `SCV_REPOSITORY_REVISION` | Exact 40-character lowercase Git SHA baked into the image |
+| `SCV_RUN_ID` | Optional externally assigned UUID; the worker generates one when omitted |
+| `SCV_TIMEOUT_MS` | Wall-clock limit for the OpenCode process |
+| `SCV_HEARTBEAT_INTERVAL_MS` | Resource and liveness event interval |
+| `SCV_DIAGNOSTIC_LOGS` | `true` to emit bounded redacted diagnostic records; otherwise `false` |
+
+The process writes versioned SCV events and one terminal worker result as JSON
+lines. Do not mount database, GitHub, Forge, release-cookie, deployment, or
+general cloud credentials into this role. A provider key is a temporary
+qualification mechanism; replace it with a run-scoped inference grant before
+admitting repository writes.
+
 ## Required release settings
 
 All settings in this section are mandatory in a production release unless

@@ -77,8 +77,7 @@ The baseline at `d5679e8` recorded 1,218 default tests passing with 9 cluster
 tests excluded, all 9 cluster tests passing separately, no compile warnings, no
 hidden skips, and 83.14% line coverage before merging cluster coverage. Keep
 that result as historical evidence, but rerun the complete gate for each
-candidate. Gate 0 remains blocked until the missing JavaScript suite exists and
-runs.
+candidate. The implementation status below supersedes the historical blockers.
 
 ### Gate 0 implementation status
 
@@ -92,9 +91,14 @@ Completed on 2026-08-20:
   fails when browser-side voice behavior regresses.
 - Removed the remaining test-compilation warnings and made
   `mix test --warnings-as-errors` part of `mix precommit`.
+- Replaced Ra's captured session-query functions with stable
+  module-function-argument descriptors. The cluster suite now runs under
+  coverage without a peer crashing on an instrumented function identity.
+- Merged the default and cluster coverage exports locally. The combined result
+  is 83.37%; the exact-SHA receipt and enforced floor remain pending.
 
-Gate 0 still requires the merged default and cluster coverage report, release
-startup proof against a disposable database, and an exact-SHA gate receipt.
+Gate 0 still requires an enforced coverage floor, release startup proof against
+a disposable database, and an exact-SHA gate receipt.
 
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it
@@ -1074,6 +1078,11 @@ names creation of the missing suite as blocking work.
 `assets/test/voice_recording_test.mjs` now cover these behaviors,
 `assets/package.json` provides `npm test`, and `mix precommit` runs the suite
 through `mix assets.test`.
+
+The first merged coverage attempt also exposed an instrumented anonymous Ra
+query that crashed on a peer with `badfun`. Session-registry queries now use
+stable module-function-argument descriptors, and all 9 cluster tests complete
+under coverage. The merged default and cluster result is 83.37%.
 
 ## A2. Blocker: staging is not isolated from production today
 

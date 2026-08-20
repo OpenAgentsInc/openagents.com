@@ -91,14 +91,18 @@ defmodule OpenAgents.Cluster.SessionRegistry do
 
   # ── query builders (used with :ra.consistent_query) ────────────────────────
 
-  @doc "A linearizable query function returning the entry for `id` (or nil)."
-  def lookup(id), do: fn %{sessions: sessions} -> Map.get(sessions, id) end
+  @doc "A linearizable query descriptor returning the entry for `id` (or nil)."
+  def lookup(id), do: {__MODULE__, :lookup_query, [id]}
 
-  @doc "A linearizable query function returning all session ids owned by `node`."
-  def owned_by(owner) do
-    fn %{sessions: sessions} ->
-      for {id, %{owner: ^owner, status: :claimed}} <- sessions, do: id
-    end
+  @doc "A linearizable query descriptor returning all session IDs owned by `node`."
+  def owned_by(owner), do: {__MODULE__, :owned_by_query, [owner]}
+
+  @doc false
+  def lookup_query(id, %{sessions: sessions}), do: Map.get(sessions, id)
+
+  @doc false
+  def owned_by_query(owner, %{sessions: sessions}) do
+    for {id, %{owner: ^owner, status: :claimed}} <- sessions, do: id
   end
 
   # ── internal ───────────────────────────────────────────────────────────────

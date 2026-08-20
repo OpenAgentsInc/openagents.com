@@ -34,7 +34,7 @@ defmodule OpenAgents.Cluster.SessionRegistryPropertyTest do
                "command #{inspect(command)} on #{inspect(s)} => #{inspect(reply)}, expected #{inspect(expected)}"
 
         # The committed generation in the machine never goes backwards.
-        if entry = Reg.lookup(id).(new_machine) do
+        if entry = query(Reg.lookup(id), new_machine) do
           assert entry.generation >= s.gen
         end
 
@@ -75,4 +75,7 @@ defmodule OpenAgents.Cluster.SessionRegistryPropertyTest do
   # Before any claim (gen 0) the session has no entry, so the fence replies nil.
   defp fence_gen(0), do: nil
   defp fence_gen(gen), do: gen
+
+  defp query({module, function, arguments}, state),
+    do: Kernel.apply(module, function, arguments ++ [state])
 end

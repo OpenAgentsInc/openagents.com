@@ -1,6 +1,5 @@
 defmodule OpenAgents.Accounts.TokenVaultTest do
   use ExUnit.Case, async: false
-  @moduletag :skip
 
   alias OpenAgents.Accounts.TokenVault
 

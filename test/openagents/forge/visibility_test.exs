@@ -6,7 +6,6 @@ defmodule OpenAgents.Forge.VisibilityTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.Visibility
 
   defp override_visibility(map) do

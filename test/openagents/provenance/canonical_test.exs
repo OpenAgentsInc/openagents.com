@@ -1,6 +1,5 @@
 defmodule OpenAgents.Provenance.CanonicalTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Provenance.Canonical
 

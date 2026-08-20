@@ -1,6 +1,5 @@
 defmodule OpenAgents.Forge.WALTest do
   use ExUnit.Case, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.WAL
 
   @repo "sarah"

@@ -1,6 +1,5 @@
 defmodule OpenAgents.Persona.SourceManifestTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Persona.SourceManifest
 

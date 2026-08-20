@@ -7,7 +7,6 @@ defmodule OpenAgentsWeb.UITest do
   """
 
   use ExUnit.Case, async: true
-  @moduletag :skip
   import ExUnit.CaptureIO
   import Phoenix.Component
   import Phoenix.LiveViewTest

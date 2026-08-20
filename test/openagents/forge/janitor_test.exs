@@ -2,7 +2,6 @@ defmodule OpenAgents.Forge.JanitorTest do
   @moduledoc "Cache retention (#123): stale clones and non-live artifacts are pruned; truth never is."
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Forge.Janitor
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target

@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.AllowedOriginsTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
   alias OpenAgentsWeb.AllowedOrigins
 
   test "includes the primary host and configured Cloud Run aliases" do

@@ -1,6 +1,5 @@
 defmodule OpenAgents.Persona.EvaluationTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
 
   alias OpenAgents.Persona
   alias OpenAgents.Persona.Evaluation.{Corpus, ReleaseGate, Report, Runner, Scorer}

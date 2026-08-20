@@ -958,6 +958,32 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "openagents-github-login"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A real form POST, because signing in starts an OAuth round-trip. Submitting
+        swaps the mark for a spinner and disables the control: the round-trip leaves
+        the page, so without it there is a window where the button looks idle and
+        clickable while a redirect is already in flight, and a second click makes a
+        second OAuth attempt. The pending state is also expressed for <code>:disabled</code>
+        alone, so a browser restoring the page on
+        back-navigation still shows the right thing.
+      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <UI.github_login id="demo-github-login" />
+        <UI.button variant={:primary} class="login-button" disabled>
+          <UI.icon name="brand-github" class="login-button__mark" />
+          <UI.icon name="circle-dashed" class="login-button__spinner" /> Log in with GitHub
+        </UI.button>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The second is the pending state, shown by disabling it directly.
+      </p>
+    </div>
+    """
+  end
+
   # ── Landing ───────────────────────────────────────────────────────────────
   #
   # These demo at reduced scale inside the documentation column. A hero is

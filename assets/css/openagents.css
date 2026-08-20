@@ -2947,15 +2947,41 @@
     margin-inline: auto;
   }
 
+  /* The prose column needs a basis. Without one it shrinks to fit whatever the
+     action row demands, and that row holds four text buttons -- so the heading
+     and its paragraph were squeezed into a ten-character ribbon while the
+     controls took the width. */
   .memory-header {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: 12px 16px;
+  }
+
+  .memory-header > :first-child {
+    flex: 1 1 22rem;
+    min-width: 0;
+  }
+
+  .memory-header h1 {
+    color: var(--text-primary);
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .memory-header p {
+    max-width: 60ch;
+    padding-block-start: 4px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
 
   .memory-header__actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
   }
@@ -4102,5 +4128,56 @@
     justify-content: center;
     color: var(--text-dim);
     font-size: 0.8125rem;
+  }
+}
+
+/* ── Login ────────────────────────────────────────────────────────────────── */
+
+/* Signing in leaves the page, so between the click and the redirect there is a
+ * window where an idle-looking button invites a second click and a second
+ * OAuth attempt. The pending state closes it.
+ *
+ * Both `[data-pending]` and `:disabled` select it: the hook sets the first, but
+ * a browser restoring the page on back-navigation, or one running no script at
+ * all, should still not show a spinner-less disabled button. */
+
+@layer components {
+  .login-form {
+    margin: 0;
+  }
+
+  .login-button__spinner {
+    display: none;
+    animation: login-spin 900ms linear infinite;
+  }
+
+  .login-button[data-pending] .login-button__mark,
+  .login-button:disabled .login-button__mark {
+    display: none;
+  }
+
+  .login-button[data-pending] .login-button__spinner,
+  .login-button:disabled .login-button__spinner {
+    display: inline-flex;
+  }
+
+  .login-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  @keyframes login-spin {
+    to {
+      rotate: 360deg;
+    }
+  }
+
+  /* The spinner is the only thing reporting that the round-trip started, so it
+     keeps turning; the disabled state and the swapped glyph already carry the
+     meaning without it, which is what a reduced-motion reader gets. */
+  @media (prefers-reduced-motion: reduce) {
+    .login-button__spinner {
+      animation: none;
+    }
   }
 }

@@ -68,24 +68,12 @@ defmodule OpenAgentsWeb.AdminLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="Admin">
       <main id="admin-page" class="app-shell admin-shell">
         <%!-- The same bar every other surface renders, so moving between them
               reads as one application. The lockup carries only the way back:
               nothing in the product links here, and this is not a place to
               navigate onward from. --%>
-        <Layouts.command_bar aria_label="OpenAgents operator panel" current_user={@current_user}>
-          <:lockup>
-            <.button
-              id="return-to-conversation"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(~p"/chat")}
-            >
-              <.icon name="arrow-left" /> RETURN TO CONVERSATION
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
 
         <section class="admin" aria-label="Voice call recordings">
           <header class="admin-heading">

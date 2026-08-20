@@ -163,12 +163,25 @@ defmodule OpenAgents.Accounts do
 
   def admin?(_user), do: false
 
-  @doc "The configured operator GitHub IDs."
+  # The owner, by GitHub's immutable numeric id. Operator access is otherwise
+  # configured per environment, and `runtime.exs` replaces the list wholesale
+  # from `OPENAGENTS_ADMIN_GITHUB_IDS` -- so an environment whose variable is
+  # unset, mistyped, or lost in a redeploy would lock the owner out of the very
+  # surface used to fix it. Unioned in here rather than defaulted in config so
+  # no environment can drop it.
+  @owner_github_id 14_167_547
+
+  @doc """
+  The operator GitHub IDs: the owner, plus whatever this environment configures.
+  """
   @spec admin_github_ids() :: [pos_integer()]
   def admin_github_ids do
-    :openagents
-    |> Application.get_env(:admin_github_ids, [])
-    |> Enum.filter(&(is_integer(&1) and &1 > 0))
+    configured =
+      :openagents
+      |> Application.get_env(:admin_github_ids, [])
+      |> Enum.filter(&(is_integer(&1) and &1 > 0))
+
+    Enum.uniq([@owner_github_id | configured])
   end
 
   @doc false

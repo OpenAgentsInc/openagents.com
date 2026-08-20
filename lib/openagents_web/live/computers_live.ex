@@ -192,21 +192,8 @@ defmodule OpenAgentsWeb.ComputersLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={assigns[:current_scope]} title="Computers">
       <main id="computers-page" class="app-shell computers-shell">
-        <Layouts.command_bar aria_label="Sarah computers" current_user={@current_user}>
-          <:lockup>
-            <.button
-              id="return-to-conversation"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(~p"/chat")}
-            >
-              <.icon name="arrow-left" /> RETURN TO CONVERSATION
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
-
         <section id="computers-manager" class="computers" aria-label="Paired computers">
           <div class="computers__inner">
             <header class="computers-heading">

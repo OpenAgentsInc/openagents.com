@@ -40,20 +40,22 @@ defmodule OpenAgentsWeb.LeaderboardLiveTest do
   test "carries the shared command bar without account controls for a visitor", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/leaderboard")
 
-    assert html =~ ~s(class="command-bar")
+    # The shell supplies the one command bar; the page no longer builds a second.
+    refute html =~ ~s(class="command-bar")
     assert html =~ "OpenAgents"
-    refute html =~ ~s(id="account-menu-trigger")
+    refute html =~ ~s(id="account-bar-trigger")
     refute html =~ ~s(id="return-to-conversation")
   end
 
-  test "offers the account menu and a way back to the conversation when logged in", %{conn: conn} do
+  test "carries the shell account menu and sidebar when logged in", %{conn: conn} do
     conn = log_in_github_user(conn, "leaderboard-header-browser")
 
     {:ok, _view, html} = live(conn, ~p"/leaderboard")
 
-    assert html =~ ~s(id="account-menu-trigger")
-    assert html =~ ~s(id="return-to-conversation")
-    assert html =~ "RETURN TO CONVERSATION"
+    assert html =~ ~s(id="account-bar-trigger")
+    # Chat is a sidebar row, so the page carries no chip back to it.
+    refute html =~ ~s(id="return-to-conversation")
+    assert html =~ ~s(href="/chat")
   end
 
   test "explains itself when no account has spent a token", %{conn: conn} do

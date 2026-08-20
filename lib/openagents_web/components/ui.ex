@@ -821,6 +821,75 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
+  The GitHub sign-in control.
+
+  A real form POST, not a link: signing in starts an OAuth round-trip, and a
+  control labelled "log in" that navigates somewhere else instead is lying
+  about what it does.
+
+  The round-trip leaves the page, so there is a window where the button looks
+  idle and clickable while a redirect is already in flight. Submitting swaps
+  the mark for a spinner and disables the control, which both reports that
+  something is happening and stops a second submission creating a second OAuth
+  attempt.
+
+  The pending state is applied by a hook, but it is also expressed for
+  `:disabled` alone, so a browser that re-enables the button on back-navigation
+  or runs no script still shows the right thing.
+  """
+  attr :id, :string, required: true
+  attr :label, :string, default: "Log in with GitHub"
+  attr :variant, :atom, default: :primary
+  attr :size, :atom, default: :md
+
+  attr :action, :string,
+    default: "/auth/github?github_tools=enabled",
+    doc: "where the sign-in posts; the caller owns the route"
+
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def github_login(assigns) do
+    ~H"""
+    <.form
+      for={%{}}
+      as={:auth}
+      id={"#{@id}-form"}
+      action={@action}
+      method="post"
+      class="login-form"
+      phx-hook=".LoginPending"
+      {@rest}
+    >
+      <.button id={@id} type="submit" variant={@variant} size={@size} class={["login-button", @class]}>
+        <.icon name="brand-github" class="login-button__mark" />
+        <.icon name="circle-dashed" class="login-button__spinner" />
+        {@label}
+      </.button>
+    </.form>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".LoginPending">
+      export default {
+        mounted() {
+          this.button = this.el.querySelector("button[type=submit]")
+          this.onSubmit = () => {
+            if (!this.button) return
+            this.button.dataset.pending = "true"
+            // Disabled after the event, not during it: disabling a submit
+            // button inside its own submit handler cancels the submission in
+            // some browsers.
+            window.setTimeout(() => { this.button.disabled = true }, 0)
+          }
+          this.el.addEventListener("submit", this.onSubmit)
+        },
+        destroyed() {
+          this.el.removeEventListener("submit", this.onSubmit)
+        },
+      }
+    </script>
+    """
+  end
+
+  @doc """
   A control that copies text to the clipboard and reports that it did.
 
   The confirmation is the point. A copy button that changes nothing on click

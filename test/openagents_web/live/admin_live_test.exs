@@ -194,9 +194,9 @@ defmodule OpenAgentsWeb.AdminLiveTest do
       conn = log_in_admin_user(conn, "admin-chrome-operator")
       {:ok, view, _html} = live(conn, ~p"/admin")
 
-      assert has_element?(view, "header.command-bar")
-      assert has_element?(view, "#return-to-conversation")
-      assert has_element?(view, "#account-menu-trigger")
+      refute has_element?(view, "header.command-bar")
+      assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
+      assert has_element?(view, "#account-bar-trigger")
       # Nothing navigates onward from here, and nothing in the product links in.
       refute has_element?(view, "#open-leaderboard")
     end

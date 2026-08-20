@@ -104,21 +104,8 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="SCV Codex accounts">
       <main id="admin-scv-accounts-page" class="app-shell admin-shell">
-        <Layouts.command_bar aria_label="SCV Codex account settings" current_user={@current_user}>
-          <:lockup>
-            <.button
-              id="return-to-operator"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(~p"/admin")}
-            >
-              <.icon name="arrow-left" /> OPERATOR
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
-
         <section class="admin space-y-8" aria-labelledby="scv-codex-heading">
           <header class="admin-heading">
             <h1 id="scv-codex-heading">Codex accounts for SCVs</h1>

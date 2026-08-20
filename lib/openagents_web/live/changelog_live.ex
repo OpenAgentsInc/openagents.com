@@ -90,22 +90,8 @@ defmodule OpenAgentsWeb.ChangelogLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="Changelog">
       <main id="changelog-page" class="app-shell changelog-shell">
-        <Layouts.command_bar aria_label="OpenAgents changelog" current_user={@current_user}>
-          <:lockup>
-            <.button
-              :if={@current_user}
-              id="return-to-conversation"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(~p"/chat")}
-            >
-              <.icon name="arrow-left" /> RETURN TO CONVERSATION
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
-
         <section class="changelog" aria-label="Changelog">
           <header class="changelog-heading">
             <div>

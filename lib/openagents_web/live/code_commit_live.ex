@@ -123,21 +123,8 @@ defmodule OpenAgentsWeb.CodeCommitLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="Commit">
       <main id="code-commit-page" class="app-shell code-shell">
-        <Layouts.command_bar aria_label="Sarah code" current_user={@current_user}>
-          <:lockup>
-            <.button
-              id="code-back-to-repo"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(@base)}
-            >
-              <.icon name="arrow-left" /> {@repo}
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
-
         <section class="code" aria-label="Commit view">
           <header class="code-heading">
             <div>

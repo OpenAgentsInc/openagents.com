@@ -66,6 +66,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Ancestor trail ending in the current page, which is not a link."
         },
         %{
+          slug: "openagents-github-login",
+          title: "GitHub login",
+          icon: "brand-github",
+          source: "OpenAgentsWeb.UI.github_login/1",
+          summary: "Sign-in form that goes pending on submit."
+        },
+        %{
           slug: "openagents-copy-button",
           title: "Copy button",
           icon: "copy",

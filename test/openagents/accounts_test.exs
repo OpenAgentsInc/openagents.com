@@ -121,4 +121,30 @@ defmodule OpenAgents.AccountsTest do
       github_avatar_url: avatar_url || "https://avatars.githubusercontent.com/u/#{id}?v=4"
     }
   end
+
+  describe "operator identity" do
+    test "the owner is an operator no matter what the environment configures" do
+      original = Application.get_env(:openagents, :admin_github_ids)
+      on_exit(fn -> Application.put_env(:openagents, :admin_github_ids, original) end)
+
+      # `runtime.exs` replaces this list wholesale from an environment
+      # variable, so an unset or mistyped value must not be able to lock the
+      # owner out of the surface used to fix it.
+      Application.put_env(:openagents, :admin_github_ids, [])
+      assert 14_167_547 in Accounts.admin_github_ids()
+
+      Application.put_env(:openagents, :admin_github_ids, [999_999])
+      ids = Accounts.admin_github_ids()
+      assert 14_167_547 in ids
+      assert 999_999 in ids
+    end
+
+    test "the owner is not an operator while banned" do
+      {:ok, owner} = Accounts.upsert_github_user(profile(14_167_547, "AtlantisPleb"))
+      assert Accounts.admin?(owner)
+
+      {:ok, banned} = Accounts.ban_user(owner, "manual_abuse_review")
+      refute Accounts.admin?(banned)
+    end
+  end
 end

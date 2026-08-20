@@ -8,9 +8,9 @@ defmodule OpenAgentsWeb.ComputersNavigationTest do
 
     assert has_element?(view, "#computers-page")
     assert has_element?(view, "#computers-manager")
-    assert has_element?(view, "header.command-bar")
-    assert has_element?(view, "#return-to-conversation")
-    assert has_element?(view, "#account-menu-trigger")
+    refute has_element?(view, "header.command-bar")
+    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
+    assert has_element?(view, "#account-bar-trigger")
   end
 
   test "the legacy authenticated path redirects to the canonical URL without its query", %{

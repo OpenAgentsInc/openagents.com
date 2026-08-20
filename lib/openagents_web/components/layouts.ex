@@ -131,9 +131,10 @@ defmodule OpenAgentsWeb.Layouts do
         <%= if @current_scope do %>
           <.account_dropdown current_scope={@current_scope} />
         <% else %>
-          <.button navigate={~p"/#github-tools"} variant={:primary} size={:sm}>
-            <UI.icon name="brand-github" /> Log in with GitHub
-          </.button>
+          <%!-- A real sign-in, not a link to the homepage's anchor: a control
+          labelled "log in" that navigates somewhere else instead is lying
+          about what it does. --%>
+          <UI.github_login id="command-bar-signin" size={:sm} />
         <% end %>
       </div>
     </header>

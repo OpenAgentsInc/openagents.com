@@ -48,17 +48,7 @@ defmodule OpenAgentsWeb.HomeLive do
                 View issues
               </.button>
             <% else %>
-              <.form
-                for={%{}}
-                as={:auth}
-                action={~p"/auth/github?github_tools=enabled"}
-                method="post"
-                class="m-0"
-              >
-                <.button type="submit" variant={:primary} size={:lg} id="home-cta-signin">
-                  <.icon name="brand-github" /> Log in with GitHub
-                </.button>
-              </.form>
+              <.github_login id="home-cta-signin" size={:lg} />
               <%!-- Quieter than the action beside it. `variant` defaults to
               `:primary`, so two filled buttons sat side by side stating that
               both were the thing to do, which leaves a reader picking rather

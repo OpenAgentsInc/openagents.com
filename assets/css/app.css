@@ -584,6 +584,18 @@
   color: var(--text-muted);
 }
 
+/* The card is the control, so the card carries the focus state. Basecoat's
+   `.textarea:focus` paints a 3px ring, and the composer autofocuses on mount,
+   so that ring drew a second rounded rectangle inside the card from the moment
+   the page loaded. `.composer-card:focus-within` already states the same
+   thing, once, on the right element. */
+.composer-input:focus,
+.composer-input:focus-visible {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
 .composer-trailing {
   display: flex;
   align-items: center;

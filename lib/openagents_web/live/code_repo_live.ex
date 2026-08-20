@@ -55,22 +55,8 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="Code">
       <main id="code-repo-page" class="app-shell code-shell">
-        <Layouts.command_bar aria_label="OpenAgents code" current_user={@current_user}>
-          <:lockup>
-            <.button
-              :if={@current_user}
-              id="return-to-conversation"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(~p"/chat")}
-            >
-              <.icon name="arrow-left" /> RETURN TO CONVERSATION
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
-
         <section class="code" aria-label="Repository">
           <header class="code-heading">
             <div>

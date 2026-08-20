@@ -49,18 +49,20 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
   test "carries the shared command bar without account controls for a visitor", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/changelog")
 
-    assert html =~ ~s(class="command-bar")
-    refute html =~ ~s(id="account-menu-trigger")
+    # The shell supplies the one command bar; the page no longer builds a second.
+    refute html =~ ~s(class="command-bar")
+    refute html =~ ~s(id="account-bar-trigger")
     refute html =~ ~s(id="return-to-conversation")
   end
 
-  test "offers a way back to the conversation when logged in", %{conn: conn} do
+  test "carries the shell sidebar when logged in", %{conn: conn} do
     conn = log_in_github_user(conn, "changelog-header-browser")
 
     {:ok, _view, html} = live(conn, ~p"/changelog")
 
-    assert html =~ ~s(id="return-to-conversation")
-    assert html =~ "RETURN TO CONVERSATION"
+    # Chat is a sidebar row, so the page carries no chip back to it.
+    refute html =~ ~s(id="return-to-conversation")
+    assert html =~ ~s(href="/chat")
   end
 
   test "publishes no node internals", %{conn: conn} do

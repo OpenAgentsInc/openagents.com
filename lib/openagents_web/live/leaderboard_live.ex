@@ -37,22 +37,8 @@ defmodule OpenAgentsWeb.LeaderboardLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={assigns[:current_scope]} title="Leaderboard">
       <main id="leaderboard-page" class="app-shell leaderboard-shell">
-        <Layouts.command_bar aria_label="OpenAgents leaderboard" current_user={@current_user}>
-          <:lockup>
-            <.button
-              :if={@current_user}
-              id="return-to-conversation"
-              variant={:chip}
-              size={:xs}
-              phx-click={JS.navigate(~p"/chat")}
-            >
-              <.icon name="arrow-left" /> RETURN TO CONVERSATION
-            </.button>
-          </:lockup>
-        </Layouts.command_bar>
-
         <section class="leaderboard" aria-label="Token leaderboard">
           <header class="leaderboard-heading">
             <h1>Leaderboard</h1>

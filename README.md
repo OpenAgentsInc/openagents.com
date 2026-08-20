@@ -11,6 +11,8 @@ tracked in the
 [integration hardening plan](docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).
 The typed settings, safe feature profile, and redacted readiness command are in
 [docs/runtime-configuration.md](docs/runtime-configuration.md).
+Repository creation, one-time GitHub import, and the terminal client are
+documented in the [OpenAgents CLI guide](docs/openagents-cli/index.md).
 
 ## Capability status
 
@@ -25,6 +27,8 @@ No part of this repository is approved for production deployment yet.
 - Voice session, transcript, usage, recording, and operator-projection domains.
 - Issues, comments, labels, milestones, projects, public status, changelog, and
   bounded source-browsing surfaces.
+- GitHub-backed repository namespaces, private and public repository creation,
+  one-time GitHub import, Git smart HTTP, and the Effect TypeScript CLI.
 - Git HTTP, push receipts, promotion targets, build receipts, and local BEAM
   deployment primitives, including transactional direct loading, two-way
   relups, and provider-neutral rolling replacement.
@@ -43,12 +47,15 @@ feature has passed staging, security review, failure injection, or a soak.
 - Direct BEAM loading, relup installation, rolling replacement, and boot
   convergence require isolated three-node staging proof before they can be
   enabled outside a disposable environment.
-- The self-hosted forge is being hardened, but GitHub remains the canonical Git
-  remote until the proof-gated cutover in ADR 0007.
+- The self-hosted forge is being hardened. GitHub remains the canonical remote
+  for the OpenAgents platform repository until the proof-gated cutover in ADR
+  0007; newly created hosted repositories use OpenAgents as their source of
+  truth.
 
 ### Planned or blocked on hardening
 
-- Repository-backed tenant isolation for every issue and project record.
+- Staging qualification and release of repository creation, GitHub import, and
+  the OpenAgents CLI.
 - Separate web and distributed staging lanes, a full regression matrix,
   failure-injection drills, and a 48-hour soak.
 - Any production rollout. Production remains explicitly out of scope until the

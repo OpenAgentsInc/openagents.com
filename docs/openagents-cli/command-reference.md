@@ -1,0 +1,145 @@
+# OpenAgents CLI command reference
+
+The `openagents` command manages authentication and hosted repositories.
+
+```text
+openagents <subcommand> [flags]
+```
+
+Run `openagents <command> --help` for the reference installed with your CLI
+version.
+
+## Global flags
+
+| Flag | Description |
+| --- | --- |
+| `--profile production\|staging\|local` | Select a named API profile. |
+| `--api-url ORIGIN` | Use a custom HTTPS or loopback API origin. |
+| `--json` | Write one machine-readable JSON value. |
+| `--no-color` | Disable ANSI output. |
+| `--help`, `-h` | Show help. |
+| `--version`, `-v` | Show the CLI version. |
+| `--completions bash\|zsh\|fish\|sh` | Print a shell completion script. |
+
+Place shared flags before the subcommand, for example:
+
+```sh
+openagents --profile staging --json repo list
+```
+
+Setting `NO_COLOR` also disables ANSI output.
+
+## Authentication commands
+
+| Command | Description |
+| --- | --- |
+| `openagents auth login` | Start browser-assisted device authorization and store the token. |
+| `openagents auth login --token-stdin` | Read and store a token from standard input. |
+| `openagents auth token-stdin` | Read and store a token from standard input. |
+| `openagents auth status` | Show the selected API, account, namespaces, expiry, and helper state. |
+| `openagents auth logout` | Remove the stored token for the selected API origin. |
+| `openagents auth setup-git --local` | Configure the current Git repository. |
+| `openagents auth setup-git --global --yes` | Configure global Git settings with explicit confirmation. |
+
+`auth git-credential` is an internal Git helper endpoint. Do not invoke it
+directly.
+
+## Repository commands
+
+### `repo create`
+
+```text
+openagents repo create [flags] <name-or-namespace/name>
+```
+
+| Flag | Description |
+| --- | --- |
+| `--description TEXT` | Set the repository description. |
+| `--public` | Create a public repository. |
+| `--private` | Create a private repository, which is the default. |
+| `--default-branch NAME` | Set the initial default branch. The default is `main`. |
+| `--wait-timeout SECONDS` | Wait for provisioning. The default is `300`; `0` does not wait. |
+| `--source DIRECTORY` | Attach the new repository to a Git worktree. |
+| `--remote NAME` | Set the remote name used with `--source`. The default is `origin`. |
+
+The command creates the server repository before it configures a local remote.
+It never pushes automatically.
+
+### `repo import`
+
+```text
+openagents repo import [flags] <github-owner/repository>
+```
+
+| Flag | Description |
+| --- | --- |
+| `--name NAME` | Override the destination repository name. |
+| `--namespace OWNER` | State the matching eligible GitHub owner. |
+| `--public` | Create a public destination. |
+| `--private` | Create a private destination, which is the default. |
+| `--wait-timeout SECONDS` | Wait for import. The default is `300`; `0` does not wait. |
+
+This command performs one import. It does not start synchronization.
+
+### `repo list`
+
+```text
+openagents repo list [--namespace OWNER] [--limit 1..100] [--after CURSOR]
+```
+
+The default limit is `30`. When more results exist, human output prints the
+next opaque cursor and JSON output returns it as `next_cursor`.
+
+### `repo view`
+
+```text
+openagents repo view [OWNER/REPOSITORY]
+openagents repo view --repo OWNER/REPOSITORY
+```
+
+When you omit the repository, the CLI infers it from an exact OpenAgents
+`origin` remote on the selected API origin.
+
+### `repo clone`
+
+```text
+openagents repo clone [OWNER/REPOSITORY] [DIRECTORY]
+openagents repo clone --repo OWNER/REPOSITORY [DIRECTORY]
+```
+
+The CLI retrieves the clone URL from the API and starts standard Git.
+
+## JSON and noninteractive use
+
+With `--json`, stdout contains machine-readable output. Human progress and
+errors do not contaminate a successful JSON response. Responses never include
+an API token or token digest.
+
+In a noninteractive process:
+
+- Set `OPENAGENTS_TOKEN` or provide an existing credential-store entry.
+- Pass every ambiguous value as an argument or flag.
+- Do not use browser login or global Git-helper setup.
+- Handle `SIGINT` and `SIGTERM` as exit code `130`. The CLI cancels in-flight
+  HTTP work and terminates its child Git process.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success. |
+| `1` | Git, output, or unclassified operational failure. |
+| `2` | Usage, configuration, or validation error. |
+| `3` | Authentication, authorization, or credential-store failure. |
+| `4` | Repository or API resource not found. |
+| `5` | Conflict, such as an existing repository name. |
+| `6` | Network, server, transport, or API-contract failure. |
+| `7` | Provisioning or import failure or timeout. |
+| `130` | Interrupted by `SIGINT` or `SIGTERM`. |
+
+## Commands not included
+
+This release does not provide `repo delete`, `repo mirror`, pull-request,
+ruleset, SSH-key, generic API, or self-update commands. Use only commands shown
+by the installed version's `--help` output.
+

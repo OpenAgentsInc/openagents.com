@@ -6,7 +6,6 @@ defmodule OpenAgentsWeb.LeaderboardLiveTest do
   """
 
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Accounts
@@ -42,7 +41,7 @@ defmodule OpenAgentsWeb.LeaderboardLiveTest do
     {:ok, _view, html} = live(conn, ~p"/leaderboard")
 
     assert html =~ ~s(class="command-bar")
-    assert html =~ "SARAH"
+    assert html =~ "OpenAgents"
     refute html =~ ~s(id="account-menu-trigger")
     refute html =~ ~s(id="return-to-conversation")
   end

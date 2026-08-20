@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.LeaderboardLive do
   The public leaderboard.
 
   A read-only projection of `OpenAgents.Leaderboard`. It mounts without a session,
-  holds no conversation, and offers no action that can invoke Sarah, which is
+  holds no conversation, and offers no action that can invoke OpenAgents, which is
   what lets a second public surface sit alongside the authentication boundary
   (`INVARIANTS.md` UI-001, LEADERBOARD-001).
 
@@ -23,7 +23,7 @@ defmodule OpenAgentsWeb.LeaderboardLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Leaderboard · Sarah")
+     |> assign(:page_title, "Leaderboard · OpenAgents")
      |> assign(:entries, Leaderboard.entries())}
   end
 
@@ -39,7 +39,7 @@ defmodule OpenAgentsWeb.LeaderboardLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <main id="leaderboard-page" class="app-shell leaderboard-shell">
-        <Layouts.command_bar aria_label="Sarah leaderboard" current_user={@current_user}>
+        <Layouts.command_bar aria_label="OpenAgents leaderboard" current_user={@current_user}>
           <:lockup>
             <.button
               :if={@current_user}
@@ -56,7 +56,7 @@ defmodule OpenAgentsWeb.LeaderboardLive do
         <section class="leaderboard" aria-label="Token leaderboard">
           <header class="leaderboard-heading">
             <h1>Leaderboard</h1>
-            <p>Accounts ranked by tokens used with Sarah, across typed and spoken turns.</p>
+            <p>Accounts ranked by tokens used with OpenAgents, across typed and spoken turns.</p>
           </header>
 
           <.empty :if={@entries == []} id="leaderboard-empty" title="No tokens yet">

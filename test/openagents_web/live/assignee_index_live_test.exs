@@ -1,9 +1,10 @@
 defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Issues
+  import OpenAgents.AccountsFixtures
 
   setup %{conn: conn} do
     {:ok, conn: log_in_github_user(conn, "assignee-index")}
@@ -18,9 +19,20 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
   end
 
   test "tallies assignees across open and closed issues, most-assigned first", %{conn: conn} do
-    {:ok, _first} = Issues.create_issue(%{"title" => "First", "assignees" => ["ada", "grace"]})
-    {:ok, _second} = Issues.create_issue(%{"title" => "Second", "assignees" => ["ada"]})
-    {:ok, third} = Issues.create_issue(%{"title" => "Third", "assignees" => ["ada"]})
+    repository_user_fixture("ada-assignee")
+    repository_user_fixture("grace-assignee")
+
+    {:ok, _first} =
+      Issues.create_issue(%{
+        "title" => "First",
+        "assignees" => ["ada-assignee", "grace-assignee"]
+      })
+
+    {:ok, _second} =
+      Issues.create_issue(%{"title" => "Second", "assignees" => ["ada-assignee"]})
+
+    {:ok, third} =
+      Issues.create_issue(%{"title" => "Third", "assignees" => ["ada-assignee"]})
 
     # A closed issue still counts: the view lists `state: "all"`.
     {:ok, _} = Issues.update_issue(third, %{"state" => "closed"})
@@ -30,10 +42,10 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
     assert has_element?(view, "#assignees")
     refute html =~ "No assignees have been assigned"
 
-    # Rows are sorted by descending count, so `ada` (3) precedes `grace` (1).
-    assert has_element?(view, "#assignees tr:first-child td:first-child", "ada")
+    # Rows are sorted by descending count.
+    assert has_element?(view, "#assignees tr:first-child td:first-child", "ada-assignee")
     assert has_element?(view, "#assignees tr:first-child td:nth-child(2)", "3")
-    assert has_element?(view, "#assignees tr:nth-child(2) td:first-child", "grace")
+    assert has_element?(view, "#assignees tr:nth-child(2) td:first-child", "grace-assignee")
     assert has_element?(view, "#assignees tr:nth-child(2) td:nth-child(2)", "1")
     refute has_element?(view, "#assignees tr:nth-child(3)")
   end

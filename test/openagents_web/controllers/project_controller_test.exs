@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.ProjectControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "projects")}
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "projects", "alice")}
 
   import OpenAgents.ProjectFieldsFixtures
   import OpenAgents.ProjectItemsFixtures
@@ -314,6 +314,57 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn = get(conn, ~p"/api/v3/users/alice/projectsV2/999999/fields")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
+    end
+  end
+
+  describe "owner-path authorization" do
+    test "another username cannot read or mutate a project through any project action", %{
+      conn: conn
+    } do
+      project = project_fixture(%{title: "Alice only", owner: "alice"})
+      {:ok, issue} = Issues.create_issue(%{title: "Tracked"})
+
+      {:ok, item} =
+        Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      _field =
+        project_field_fixture(%{
+          project_id: project.id,
+          name: "Status",
+          data_type: "single_select"
+        })
+
+      assert get(conn, ~p"/api/v3/users/bob/projectsV2/#{project.number}")
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert get(recycle(conn), ~p"/api/v3/users/bob/projectsV2/#{project.number}/items")
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert get(recycle(conn), ~p"/api/v3/users/bob/projectsV2/#{project.number}/fields")
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert post(
+               recycle(conn),
+               ~p"/api/v3/users/bob/projectsV2/#{project.number}/items",
+               %{issue_number: issue.number}
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert patch(
+               recycle(conn),
+               ~p"/api/v3/users/bob/projectsV2/#{project.number}/items/#{item.id}",
+               %{values: %{"Status" => "Done"}}
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert Projects.get_project_item!(item.id).values == %{}
+    end
+
+    test "a token owner cannot create a project for another username", %{conn: conn} do
+      assert post(conn, ~p"/api/v3/bob/projectsV2", %{title: "Not Bob's"})
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert Projects.list_projects() == []
     end
   end
 end

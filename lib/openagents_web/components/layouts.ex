@@ -291,7 +291,7 @@ defmodule OpenAgentsWeb.Layouts do
 
         <div class="sidebar-row">
           <.link
-            navigate={~p"/OpenAgents/openagents/issues"}
+            navigate={~p"/OpenAgentsInc/openagents.com/issues"}
             class="sidebar-row__hit"
             aria-label="Issues"
           ></.link>
@@ -303,7 +303,7 @@ defmodule OpenAgentsWeb.Layouts do
 
         <div class="sidebar-row">
           <.link
-            navigate={~p"/OpenAgents/openagents/projects"}
+            navigate={~p"/OpenAgentsInc/openagents.com/projects"}
             class="sidebar-row__hit"
             aria-label="Projects"
           ></.link>

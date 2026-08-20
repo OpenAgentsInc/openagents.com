@@ -5,10 +5,13 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Issues
+  alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+
     assignees =
-      Issues.list_issues(state: "all")
+      Issues.list_issues(repository, state: "all")
       |> Enum.flat_map(&(&1.assignees || []))
       |> Enum.frequencies_by(& &1["login"])
       |> Enum.sort_by(fn {_, count} -> -count end)
@@ -18,6 +21,7 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
+     |> assign(:repository, repository)
      |> assign(:assignees, assignees)}
   end
 

@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Core surfaces implemented; tenant and design-system hardening pending
+Status: Core surfaces and repository boundary implemented; staging UX validation pending
 
 ## Current surface
 
@@ -39,46 +39,51 @@ and the coverage added to close them.
 - Icons come from the vendored set through `OpenAgentsWeb.UI.icon/1`; icon-only
   controls have accessible names.
 
-The current component inventory and transitional generated helpers are
-documented in [docs/component-library.md](component-library.md).
+The current governed component inventory is documented in
+[docs/component-library.md](component-library.md).
 
-## Blocking domain work
+## Repository boundary
 
-The route shape currently looks repository-scoped, but the durable issue and
-project data model does not yet enforce that scope. Gate 7 must complete this
-before the tracker is treated as a multi-repository forge:
+Gate 7 completed the durable repository boundary:
 
-1. Add a canonical repository entity.
-2. Add repository foreign keys and scoped uniqueness to issues, labels,
-   milestones, comments, assignees, and repository projects.
-3. Resolve every resource through owner, repository, and resource identity in
-   one authorized query.
-4. Reject cross-repository identifiers in application code and PostgreSQL.
-5. Replace the hardcoded assignee projection with repository membership and
-   authorization.
-6. Enforce project ownership instead of ignoring the username in Projects V2
-   routes.
-7. Separate public reads from authenticated browser and API writes.
-8. Rehearse the backfill of existing rows into the initial repository.
+- `repositories` owns the stable repository ID, display and normalized path,
+  visibility, and default branch. The explicit initial repository is
+  `OpenAgentsInc/openagents.com`.
+- Issues, labels, milestones, comments, projects, project items, issue-label
+  links, and issue-assignee links carry repository ownership. Issue,
+  milestone, and project numbers are unique within a repository.
+- Public API reads resolve only public repositories. Authenticated LiveViews
+  and PAT writes resolve a writable repository membership before loading or
+  changing a resource.
+- Assignees are active repository members with a writable role. Arbitrary
+  login snapshots are no longer accepted.
+- Projects V2 compatibility paths enforce the requested username in show,
+  item, update-item, and field actions. The user-shaped API is deliberately
+  bounded to the initial repository because its URL has no repository segment.
+- Composite PostgreSQL foreign keys prevent a comment, label relation,
+  assignee relation, milestone reference, or project item from crossing its
+  repository.
+- The reversible migration was run down/up, populated with pre-scope rows, run
+  up, validated, then run down/up again. It reconstructed repository,
+  membership, author, label, assignee, milestone, project-owner, and
+  project-item relationships.
 
-Until this work passes cross-repository isolation tests, the URL is
-presentation context rather than a proven tenancy boundary.
+Context, controller, and LiveView tests cover same-number resources in multiple
+repositories, private-repository hiding, nonmember write refusal, wrong-owner
+Projects V2 paths, and database constraint failures.
 
 ## Remaining interface work
 
-After Gate 7 establishes the domain boundary:
+With the domain boundary established:
 
-1. Reconcile every issue/project surface onto `OpenAgentsWeb.UI` and remove
-   transitional generated component callers.
-2. Extract repeated issue rows, comment threads, label selectors, milestone
+1. Extract repeated issue rows, comment threads, label selectors, milestone
    progress, and project columns only where doing so improves behavior and test
    ownership.
-3. Add bounded search, filtering, pagination, and useful empty/loading/error
+2. Add bounded search, filtering, pagination, and useful empty/loading/error
    states.
-4. Add PubSub invalidation and database rereads where concurrent users need
+3. Add PubSub invalidation and database rereads where concurrent users need
    live updates.
-5. Add repository authorization-aware actions and explicit refusal states.
-6. Run accessibility, keyboard, responsive, compiled-CSS, and browser staging
+4. Run accessibility, keyboard, responsive, compiled-CSS, and browser staging
    checks against the same candidate SHA.
 
 Drag-and-drop boards, advanced project views, pull requests, review workflows,

@@ -8,6 +8,12 @@ defmodule OpenAgents.IssuesTest do
   import OpenAgents.IssuesFixtures
   import OpenAgents.LabelsFixtures
   import OpenAgents.MilestonesFixtures
+  import OpenAgents.AccountsFixtures
+
+  setup do
+    Enum.each(~w(alice bob carol), &repository_user_fixture/1)
+    :ok
+  end
 
   defp backdate!(%Issue{} = issue, seconds_ago) do
     at = DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:second)
@@ -140,18 +146,26 @@ defmodule OpenAgents.IssuesTest do
              ]
     end
 
-    test "invents a white label for an unknown name" do
-      assert {:ok, %Issue{} = issue} =
-               Issues.create_issue(%{title: "labelled", labels: ["nope"]})
-
-      assert issue.labels == [%{"name" => "nope", "color" => "ffffff"}]
+    test "rejects a label outside the repository label set" do
+      assert_raise Ecto.NoResultsError, fn ->
+        Issues.create_issue(%{title: "labelled", labels: ["nope"]})
+      end
     end
 
-    test "passes label maps through untouched" do
+    test "canonicalizes label maps from the repository row" do
+      label = label_fixture(name: "bug", color: "abcdef")
       given = [%{"name" => "bug", "color" => "abcdef"}]
 
       assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "labelled", labels: given})
-      assert issue.labels == given
+
+      assert issue.labels == [
+               %{
+                 "id" => label.id,
+                 "name" => "bug",
+                 "color" => "abcdef",
+                 "description" => label.description
+               }
+             ]
     end
 
     test "accepts an empty label list" do
@@ -165,11 +179,11 @@ defmodule OpenAgents.IssuesTest do
       assert issue.assignees == [%{"login" => "alice"}, %{"login" => "bob"}]
     end
 
-    test "passes assignee maps through untouched" do
+    test "canonicalizes assignee maps from repository membership" do
       given = [%{"login" => "alice", "id" => 7}]
 
       assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "assigned", assignees: given})
-      assert issue.assignees == given
+      assert issue.assignees == [%{"login" => "alice"}]
     end
 
     test "expands a milestone number into a milestone map" do

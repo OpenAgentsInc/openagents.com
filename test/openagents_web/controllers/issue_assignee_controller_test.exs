@@ -4,8 +4,11 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
   setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-assignees")}
 
   alias OpenAgents.Issues
+  import OpenAgents.AccountsFixtures
 
   setup do
+    repository_user_fixture("octocat")
+    repository_user_fixture("hubot")
     {:ok, issue} = Issues.create_issue(%{title: "Assignable issue"})
     %{issue: issue}
   end
@@ -15,7 +18,8 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn: conn,
       issue: issue
     } do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees")
+      conn =
+        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees")
 
       assert json_response(conn, 200) == %{"assignees" => []}
     end
@@ -26,14 +30,15 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
     } do
       {:ok, _issue} = Issues.add_assignees(issue, ["octocat"])
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees")
+      conn =
+        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees")
 
       assert %{"assignees" => [assignee]} = json_response(conn, 200)
       assert assignee["login"] == "octocat"
     end
 
     test "GET .../issues/:issue_number/assignees returns 404 for a missing issue", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999/assignees")
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -42,9 +47,13 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
   describe "create" do
     test "POST .../issues/:issue_number/assignees adds an assignee", %{conn: conn, issue: issue} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees", %{
-          assignees: ["octocat"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          %{
+            assignees: ["octocat"]
+          }
+        )
 
       assert %{"assignees" => [%{"login" => "octocat"}]} = json_response(conn, 200)
 
@@ -56,9 +65,13 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees", %{
-          assignees: ["octocat", "hubot"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          %{
+            assignees: ["octocat", "hubot"]
+          }
+        )
 
       assert %{"assignees" => assignees} = json_response(conn, 200)
       assert Enum.map(assignees, & &1["login"]) == ["octocat", "hubot"]
@@ -71,9 +84,13 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       {:ok, _issue} = Issues.add_assignees(issue, ["octocat"])
 
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees", %{
-          assignees: ["octocat"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          %{
+            assignees: ["octocat"]
+          }
+        )
 
       assert %{"assignees" => [_only_one]} = json_response(conn, 200)
     end
@@ -81,14 +98,18 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
     test "POST .../issues/:issue_number/assignees with no assignees leaves the issue unchanged",
          %{conn: conn, issue: issue} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees", %{})
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          %{}
+        )
 
       assert json_response(conn, 200) == %{"assignees" => []}
     end
 
     test "POST .../issues/:issue_number/assignees returns 404 for a missing issue", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999/assignees", %{
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees", %{
           assignees: ["octocat"]
         })
 
@@ -104,9 +125,13 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       {:ok, _issue} = Issues.add_assignees(issue, ["octocat", "hubot"])
 
       conn =
-        delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees", %{
-          assignees: ["octocat"]
-        })
+        delete(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          %{
+            assignees: ["octocat"]
+          }
+        )
 
       assert %{"assignees" => [%{"login" => "hubot"}]} = json_response(conn, 200)
 
@@ -120,9 +145,13 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       {:ok, _issue} = Issues.add_assignees(issue, ["octocat"])
 
       conn =
-        delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/assignees", %{
-          assignees: ["nobody"]
-        })
+        delete(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          %{
+            assignees: ["nobody"]
+          }
+        )
 
       assert %{"assignees" => [%{"login" => "octocat"}]} = json_response(conn, 200)
     end
@@ -131,7 +160,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn: conn
     } do
       conn =
-        delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999/assignees", %{
+        delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees", %{
           assignees: ["octocat"]
         })
 

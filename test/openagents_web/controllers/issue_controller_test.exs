@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       {:ok, _issue} = Issues.create_issue(%{title: "First issue"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues")
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => [issue | _]} = json_response(conn, 200)
       assert issue["title"] == "First issue"
@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, _open_issue} = Issues.create_issue(%{title: "Open issue"})
       {:ok, _closed_issue} = Issues.create_issue(%{title: "Closed issue", state: "closed"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues?state=closed")
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=closed")
 
       assert %{"issues" => [issue]} = json_response(conn, 200)
       assert issue["title"] == "Closed issue"
@@ -33,7 +33,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   describe "create" do
     test "POST /api/v3/repos/:owner/:repo/issues creates an issue", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues", %{
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "New issue",
           body: "A description"
         })
@@ -50,7 +50,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn: conn
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues", %{body: "No title"})
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{body: "No title"})
 
       assert json_response(conn, 422)["errors"] != %{}
     end
@@ -62,7 +62,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       {:ok, issue} = Issues.create_issue(%{title: "Show me"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{
                "title" => "Show me",
@@ -75,7 +75,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "GET /api/v3/repos/:owner/:repo/issues/:issue_number returns 404 when missing", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999")
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999")
 
       assert json_response(conn, 404)
     end
@@ -88,7 +88,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(%{title: "Close me"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}", %{
+        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
           state: "closed"
         })
 

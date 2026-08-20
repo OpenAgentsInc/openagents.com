@@ -17,7 +17,7 @@ defmodule OpenAgents.Forge.TargetsTest do
   alias OpenAgents.Forge.Target
   alias OpenAgents.Forge.Targets
 
-  @repo "OpenAgents/openagents.com"
+  @repo "OpenAgentsInc/openagents.com"
 
   # A SHA that is well-formed but not in any repo, so only the injected
   # store decides whether it is promotable.

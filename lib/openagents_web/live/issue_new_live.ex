@@ -8,8 +8,10 @@ defmodule OpenAgentsWeb.IssueNewLive do
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Labels
   alias OpenAgents.Milestones
+  alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
     changeset = Issues.change_issue(%Issue{}, %{"title" => "", "body" => ""})
 
     socket =
@@ -17,14 +19,15 @@ defmodule OpenAgentsWeb.IssueNewLive do
       |> assign(:current_scope, socket.assigns[:current_scope])
       |> assign(:owner, owner)
       |> assign(:repo, repo)
+      |> assign(:repository, repository)
       |> assign(:form, to_form(changeset))
       |> assign(
         :milestone_options,
-        Enum.map(Milestones.list_milestones(), &{&1.title, &1.number})
+        Enum.map(Milestones.list_milestones(repository), &{&1.title, &1.number})
       )
       |> assign(
         :label_options,
-        Enum.map(Labels.list_labels(), &{&1.name, &1.name})
+        Enum.map(Labels.list_labels(repository), &{&1.name, &1.name})
       )
 
     {:ok, socket}
@@ -36,10 +39,11 @@ defmodule OpenAgentsWeb.IssueNewLive do
     milestone = issue_params["milestone"] || ""
     labels = issue_params["labels"] || []
 
-    case Issues.create_issue(%{
-           "title" => title,
-           "body" => body
-         }) do
+    case Issues.create_issue(
+           socket.assigns.repository,
+           %{"title" => title, "body" => body},
+           socket.assigns.current_user
+         ) do
       {:ok, issue} ->
         issue = apply_metadata(issue, labels, milestone)
 

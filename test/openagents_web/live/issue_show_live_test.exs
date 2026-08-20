@@ -1,7 +1,8 @@
 defmodule OpenAgentsWeb.IssueShowLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import OpenAgents.AccountsFixtures
   import OpenAgents.LabelsFixtures
   import OpenAgents.MilestonesFixtures
 
@@ -46,6 +47,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
   end
 
   test "the sidebar only renders sections the issue actually has", %{conn: conn} do
+    repository_user_fixture("grace-show")
     bare = issue!(%{"title" => "Bare"})
     {:ok, _view, html} = live(conn, path(bare))
 
@@ -56,7 +58,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     label_fixture(%{name: "bug", color: "d73a4a"})
     milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
 
-    rich = issue!(%{"title" => "Rich", "labels" => ["bug"], "assignees" => ["grace"]})
+    rich = issue!(%{"title" => "Rich", "labels" => ["bug"], "assignees" => ["grace-show"]})
     {:ok, rich} = Issues.set_milestone(rich, milestone.number)
 
     {:ok, view, html} = live(conn, path(rich))
@@ -64,7 +66,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "Labels"
     assert html =~ "bug"
     assert html =~ "Assignees"
-    assert has_element?(view, ~s{[title="grace"]})
+    assert has_element?(view, ~s{[title="grace-show"]})
     assert has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/milestones"]}, "v1.0")
   end
 

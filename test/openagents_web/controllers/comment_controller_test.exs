@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.CommentControllerTest do
     Issues.create_comment(%{issue_id: issue.id, body: "First comment"})
 
     conn =
-      get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/comments")
+      get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments")
 
     assert %{"comments" => [comment]} = json_response(conn, 200)
     assert comment["body"] == "First comment"
@@ -28,9 +28,13 @@ defmodule OpenAgentsWeb.CommentControllerTest do
     issue: issue
   } do
     conn =
-      post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/comments", %{
-        body: "New comment"
-      })
+      post(
+        conn,
+        ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments",
+        %{
+          body: "New comment"
+        }
+      )
 
     assert %{"body" => "New comment"} = json_response(conn, 201)
   end
@@ -42,7 +46,7 @@ defmodule OpenAgentsWeb.CommentControllerTest do
     {:ok, comment} = Issues.create_comment(%{issue_id: issue.id, body: "Show me"})
 
     conn =
-      get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/comments/#{comment.id}")
+      get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
 
     assert %{"body" => "Show me"} = json_response(conn, 200)
   end
@@ -54,7 +58,7 @@ defmodule OpenAgentsWeb.CommentControllerTest do
     {:ok, comment} = Issues.create_comment(%{issue_id: issue.id, body: "Before"})
 
     conn =
-      patch(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/comments/#{comment.id}", %{
+      patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}", %{
         body: "After"
       })
 
@@ -68,7 +72,7 @@ defmodule OpenAgentsWeb.CommentControllerTest do
     {:ok, comment} = Issues.create_comment(%{issue_id: issue.id, body: "Delete me"})
 
     conn =
-      delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/comments/#{comment.id}")
+      delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
 
     assert response(conn, 204)
   end

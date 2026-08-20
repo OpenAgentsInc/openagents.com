@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.AuthController do
   use OpenAgentsWeb, :controller
 
-  alias OpenAgents.{Accounts, GitHubOAuth}
+  alias OpenAgents.{Accounts, GitHubOAuth, Repositories}
 
   @attempt_session_key "github_oauth_attempt"
 
@@ -30,6 +30,7 @@ defmodule OpenAgentsWeb.AuthController do
            GitHubOAuth.exchange_and_fetch(code, verifier),
          {:ok, user} <- Accounts.upsert_github_user(profile),
          {:ok, active_user} <- Accounts.get_active_user(user.id),
+         {:ok, _membership} <- Repositories.ensure_initial_membership(active_user),
          {:ok, _stored} <-
            Accounts.store_github_token(active_user, access_token, granted_scopes) do
       conn

@@ -3,14 +3,20 @@ defmodule OpenAgentsWeb.MilestoneController do
 
   alias OpenAgents.Milestones
   alias OpenAgents.Milestones.Milestone
+  alias OpenAgents.Repositories
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
-    milestones = Milestones.list_milestones()
+    repository = Repositories.get_public_by_path!(owner, repo)
+    milestones = Milestones.list_milestones(repository)
     render(conn, :index, milestones: milestones, owner: owner, repo: repo)
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
-    case Milestones.create_milestone(params) do
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+
+    case Milestones.create_milestone(repository, params) do
       {:ok, %Milestone{} = milestone} ->
         conn
         |> put_status(:created)
@@ -21,6 +27,8 @@ defmodule OpenAgentsWeb.MilestoneController do
         |> put_status(:unprocessable_entity)
         |> render(:error, changeset: changeset)
     end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def show(conn, %{
@@ -28,7 +36,9 @@ defmodule OpenAgentsWeb.MilestoneController do
         "repo" => repo,
         "milestone_number" => milestone_number
       }) do
-    milestone = Milestones.get_milestone_by_number!(String.to_integer(milestone_number))
+    milestone =
+      Milestones.get_milestone_by_path!(owner, repo, String.to_integer(milestone_number))
+
     render(conn, :show, milestone: milestone, owner: owner, repo: repo)
   rescue
     Ecto.NoResultsError ->
@@ -45,7 +55,10 @@ defmodule OpenAgentsWeb.MilestoneController do
           "milestone_number" => milestone_number
         } = params
       ) do
-    milestone = Milestones.get_milestone_by_number!(String.to_integer(milestone_number))
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+
+    milestone =
+      Milestones.get_milestone_by_number!(repository, String.to_integer(milestone_number))
 
     case Milestones.update_milestone(milestone, params) do
       {:ok, %Milestone{} = milestone} ->
@@ -64,11 +77,14 @@ defmodule OpenAgentsWeb.MilestoneController do
   end
 
   def delete(conn, %{
-        "owner" => _owner,
-        "repo" => _repo,
+        "owner" => owner,
+        "repo" => repo,
         "milestone_number" => milestone_number
       }) do
-    milestone = Milestones.get_milestone_by_number!(String.to_integer(milestone_number))
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+
+    milestone =
+      Milestones.get_milestone_by_number!(repository, String.to_integer(milestone_number))
 
     case Milestones.delete_milestone(milestone) do
       {:ok, %Milestone{}} ->
@@ -84,5 +100,9 @@ defmodule OpenAgentsWeb.MilestoneController do
       conn
       |> put_status(:not_found)
       |> json(%{message: "Not Found"})
+  end
+
+  defp not_found(conn) do
+    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
   end
 end

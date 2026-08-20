@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.LabelIndexLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
   import OpenAgents.LabelsFixtures

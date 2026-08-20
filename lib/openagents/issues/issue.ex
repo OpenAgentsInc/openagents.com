@@ -2,6 +2,10 @@ defmodule OpenAgents.Issues.Issue do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias OpenAgents.Accounts.User
+  alias OpenAgents.Milestones.Milestone
+  alias OpenAgents.Repositories.Repository
+
   schema "issues" do
     field :number, :integer
     field :title, :string
@@ -16,6 +20,9 @@ defmodule OpenAgents.Issues.Issue do
     field :assignees, {:array, :map}, default: []
     field :milestone, :map
     field :user, :map
+    belongs_to :repository, Repository, type: :binary_id
+    belongs_to :milestone_record, Milestone, foreign_key: :milestone_id
+    belongs_to :author_user, User, type: :binary_id
     timestamps(type: :utc_datetime)
   end
 
@@ -35,8 +42,15 @@ defmodule OpenAgents.Issues.Issue do
       :labels,
       :assignees,
       :milestone,
-      :user
+      :user,
+      :repository_id,
+      :milestone_id,
+      :author_user_id
     ])
-    |> validate_required([:title, :number])
+    |> validate_required([:title, :number, :repository_id])
+    |> unique_constraint([:repository_id, :number])
+    |> foreign_key_constraint(:repository_id)
+    |> foreign_key_constraint(:milestone_id)
+    |> foreign_key_constraint(:author_user_id)
   end
 end

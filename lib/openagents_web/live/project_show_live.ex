@@ -7,19 +7,22 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   alias OpenAgents.Issues
   alias OpenAgents.Projects
   alias OpenAgents.ProjectItems.ProjectItem
+  alias OpenAgents.Repositories
 
   @statuses ["To Do", "In Progress", "Done"]
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
-    project = Projects.get_project_by_number!(String.to_integer(number))
-    items = project_items(project.id)
-    issue_options = issue_options()
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    project = Projects.get_project_by_number!(repository, String.to_integer(number))
+    items = project_items(repository, project)
+    issue_options = issue_options(repository)
 
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
+     |> assign(:repository, repository)
      |> assign(:project, project)
      |> assign(:items, items)
      |> assign(:issue_options, issue_options)
@@ -38,12 +41,12 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
     case Projects.create_project_item(
            %{"issue_number" => number, "values" => %{"Status" => status}},
-           project.id
+           project
          ) do
       {:ok, _item} ->
         {:noreply,
          socket
-         |> assign(:items, project_items(project.id))
+         |> assign(:items, project_items(socket.assigns.repository, project))
          |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
          |> put_flash(:info, "Issue added to project")}
 
@@ -52,17 +55,17 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     end
   end
 
-  defp project_items(project_id) do
-    Projects.list_project_items(project_id)
+  defp project_items(repository, project) do
+    Projects.list_project_items(project)
     |> Enum.map(fn item ->
-      issue = Issues.get_issue!(item.issue_id)
+      issue = Issues.get_issue!(repository, item.issue_id)
       status = get_in(item.values, ["Status"]) || "To Do"
       Map.merge(item, %{issue: issue, status: status})
     end)
   end
 
-  defp issue_options do
-    Issues.list_issues(state: "all")
+  defp issue_options(repository) do
+    Issues.list_issues(repository, state: "all")
     |> Enum.map(&{"##{&1.number} #{&1.title}", &1.number})
   end
 

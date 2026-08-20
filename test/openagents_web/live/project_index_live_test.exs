@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ProjectIndexLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
   import OpenAgents.ProjectsFixtures
@@ -7,7 +7,9 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   alias OpenAgents.Projects
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "project-index")}
+    user = github_user("project-index")
+    conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+    {:ok, conn: conn, user: user}
   end
 
   test "mounts with the create form and an empty state", %{conn: conn} do
@@ -39,16 +41,19 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
            )
   end
 
-  test "a project owned by someone else is filtered out", %{conn: conn} do
+  test "the repository board lists projects regardless of their user owner", %{conn: conn} do
     project_fixture(%{title: "Someone elses", owner: "other-org"})
 
     {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
-    refute html =~ "Someone elses"
-    assert html =~ "No projects yet"
+    assert html =~ "Someone elses"
+    refute html =~ "No projects yet"
   end
 
-  test "submitting the form creates a project owned by the URL owner", %{conn: conn} do
+  test "submitting the form creates a project owned by the authenticated member", %{
+    conn: conn,
+    user: user
+  } do
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     html =
@@ -61,7 +66,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
 
     assert [project] = Projects.list_projects()
     assert project.title == "Q3 delivery"
-    assert project.owner == "OpenAgentsInc"
+    assert project.owner == user.github_login
     assert project.state == "open"
   end
 

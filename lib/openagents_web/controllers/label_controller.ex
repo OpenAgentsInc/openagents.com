@@ -3,14 +3,20 @@ defmodule OpenAgentsWeb.LabelController do
 
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
+  alias OpenAgents.Repositories
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
-    labels = Labels.list_labels()
+    repository = Repositories.get_public_by_path!(owner, repo)
+    labels = Labels.list_labels(repository)
     render(conn, :index, labels: labels, owner: owner, repo: repo)
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
-    case Labels.create_label(params) do
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+
+    case Labels.create_label(repository, params) do
       {:ok, %Label{} = label} ->
         conn
         |> put_status(:created)
@@ -21,10 +27,12 @@ defmodule OpenAgentsWeb.LabelController do
         |> put_status(:unprocessable_entity)
         |> render(:error, changeset: changeset)
     end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def show(conn, %{"owner" => owner, "repo" => repo, "name" => name}) do
-    label = Labels.get_label_by_name!(name)
+    label = Labels.get_label_by_path!(owner, repo, name)
     render(conn, :show, label: label, owner: owner, repo: repo)
   rescue
     Ecto.NoResultsError ->
@@ -34,7 +42,8 @@ defmodule OpenAgentsWeb.LabelController do
   end
 
   def update(conn, %{"owner" => owner, "repo" => repo, "name" => name} = params) do
-    label = Labels.get_label_by_name!(name)
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    label = Labels.get_label_by_name!(repository, name)
 
     case Labels.update_label(label, params) do
       {:ok, %Label{} = label} ->
@@ -52,8 +61,9 @@ defmodule OpenAgentsWeb.LabelController do
       |> json(%{message: "Not Found"})
   end
 
-  def delete(conn, %{"owner" => _owner, "repo" => _repo, "name" => name}) do
-    label = Labels.get_label_by_name!(name)
+  def delete(conn, %{"owner" => owner, "repo" => repo, "name" => name}) do
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    label = Labels.get_label_by_name!(repository, name)
 
     case Labels.delete_label(label) do
       {:ok, %Label{}} ->
@@ -69,5 +79,9 @@ defmodule OpenAgentsWeb.LabelController do
       conn
       |> put_status(:not_found)
       |> json(%{message: "Not Found"})
+  end
+
+  defp not_found(conn) do
+    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
   end
 end

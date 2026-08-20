@@ -24,12 +24,12 @@ defmodule OpenAgentsWeb.HomeLive do
               <%= if @current_user do %>
                 <.button
                   id="home-cta-create"
-                  navigate={~p"/OpenAgents/openagents/issues/new"}
+                  navigate={~p"/OpenAgentsInc/openagents.com/issues/new"}
                   variant={:primary}
                 >
                   Create new issue
                 </.button>
-                <.button id="home-cta-browse" navigate={~p"/OpenAgents/openagents/issues"}>
+                <.button id="home-cta-browse" navigate={~p"/OpenAgentsInc/openagents.com/issues"}>
                   View issues
                 </.button>
               <% else %>

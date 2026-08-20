@@ -32,7 +32,7 @@ defmodule OpenAgentsWeb.ApiTokenControllerTest do
   test "forge mutations refuse missing, malformed, expired, and revoked credentials", %{
     conn: conn
   } do
-    path = ~p"/api/v3/repos/OpenAgents/openagents/issues"
+    path = ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues"
 
     missing = conn |> delete_req_header("authorization") |> post(path, %{title: "denied"})
     assert json_response(missing, 401) == %{"error" => "invalid_api_token"}

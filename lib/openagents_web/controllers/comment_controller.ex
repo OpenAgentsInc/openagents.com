@@ -3,14 +3,15 @@ defmodule OpenAgentsWeb.CommentController do
 
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Comment
+  alias OpenAgents.Repositories
 
   def index(conn, %{
-        "owner" => _owner,
-        "repo" => _repo,
+        "owner" => owner,
+        "repo" => repo,
         "issue_number" => issue_number
       }) do
-    issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
-    comments = Issues.list_comments(issue.id)
+    issue = Issues.get_issue_by_path!(owner, repo, String.to_integer(issue_number))
+    comments = Issues.list_comments(issue)
     render(conn, :index, comments: comments)
   rescue
     Ecto.NoResultsError ->
@@ -22,14 +23,15 @@ defmodule OpenAgentsWeb.CommentController do
   def create(
         conn,
         %{
-          "owner" => _owner,
-          "repo" => _repo,
+          "owner" => owner,
+          "repo" => repo,
           "issue_number" => issue_number
         } = params
       ) do
-    issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
 
-    case Issues.create_comment(Map.put(params, :issue_id, issue.id)) do
+    case Issues.create_comment(issue, params, conn.assigns.current_user) do
       {:ok, %Comment{} = comment} ->
         conn
         |> put_status(:created)
@@ -47,8 +49,8 @@ defmodule OpenAgentsWeb.CommentController do
       |> json(%{message: "Not Found"})
   end
 
-  def show(conn, %{"owner" => _owner, "repo" => _repo, "id" => id}) do
-    comment = Issues.get_comment!(String.to_integer(id))
+  def show(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
+    comment = Issues.get_comment_by_path!(owner, repo, String.to_integer(id))
     render(conn, :show, comment: comment)
   rescue
     Ecto.NoResultsError ->
@@ -57,8 +59,9 @@ defmodule OpenAgentsWeb.CommentController do
       |> json(%{message: "Not Found"})
   end
 
-  def update(conn, %{"owner" => _owner, "repo" => _repo, "id" => id} = params) do
-    comment = Issues.get_comment!(String.to_integer(id))
+  def update(conn, %{"owner" => owner, "repo" => repo, "id" => id} = params) do
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    comment = Issues.get_comment!(repository, String.to_integer(id))
 
     case Issues.update_comment(comment, params) do
       {:ok, %Comment{} = comment} ->
@@ -76,8 +79,9 @@ defmodule OpenAgentsWeb.CommentController do
       |> json(%{message: "Not Found"})
   end
 
-  def delete(conn, %{"owner" => _owner, "repo" => _repo, "id" => id}) do
-    comment = Issues.get_comment!(String.to_integer(id))
+  def delete(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    comment = Issues.get_comment!(repository, String.to_integer(id))
 
     case Issues.delete_comment(comment) do
       {:ok, :ok} ->

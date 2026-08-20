@@ -1,7 +1,8 @@
 defmodule OpenAgentsWeb.IssueIndexLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import OpenAgents.AccountsFixtures
   import OpenAgents.LabelsFixtures
 
   alias OpenAgents.Issues
@@ -32,6 +33,7 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
   end
 
   test "lists open issues with their number, author, labels, and assignees", %{conn: conn} do
+    repository_user_fixture("grace-index")
     label_fixture(%{name: "bug", color: "d73a4a"})
 
     {:ok, issue} =
@@ -39,7 +41,7 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
         "title" => "Streaming stalls",
         "user" => %{"login" => "ada"},
         "labels" => ["bug"],
-        "assignees" => ["grace"]
+        "assignees" => ["grace-index"]
       })
 
     {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
@@ -56,7 +58,7 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     assert html =~ "##{issue.number}"
     assert html =~ "ada"
     assert html =~ "bug"
-    assert has_element?(view, ~s{[title="grace"]})
+    assert has_element?(view, ~s{[title="grace-index"]})
   end
 
   test "an issue with no author falls back to anonymous", %{conn: conn} do

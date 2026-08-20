@@ -38,15 +38,23 @@ defmodule OpenAgentsWeb.ConnCase do
 
   def github_user(key) when is_binary(key) do
     digest = :crypto.hash(:sha256, key)
-    github_id = digest |> binary_part(0, 7) |> :binary.decode_unsigned()
     login_suffix = digest |> Base.encode16(case: :lower) |> binary_part(0, 12)
+
+    github_user(key, "test-#{login_suffix}")
+  end
+
+  def github_user(key, login) when is_binary(key) and is_binary(login) do
+    digest = :crypto.hash(:sha256, key)
+    github_id = digest |> binary_part(0, 7) |> :binary.decode_unsigned()
 
     {:ok, user} =
       OpenAgents.Accounts.upsert_github_user(%{
         github_id: github_id,
-        github_login: "test-#{login_suffix}",
+        github_login: login,
         github_avatar_url: "https://avatars.githubusercontent.com/u/#{github_id}?v=4"
       })
+
+    {:ok, _membership} = OpenAgents.Repositories.ensure_initial_membership(user)
 
     user
   end
@@ -59,6 +67,17 @@ defmodule OpenAgentsWeb.ConnCase do
   def put_forge_api_token(conn, key) when is_binary(key) do
     user = github_user("api-token-" <> key)
 
+    put_forge_api_token_for_user(conn, user)
+  end
+
+  def put_forge_api_token(conn, key, login)
+      when is_binary(key) and is_binary(login) do
+    user = github_user("api-token-" <> key, login)
+
+    put_forge_api_token_for_user(conn, user)
+  end
+
+  defp put_forge_api_token_for_user(conn, user) do
     {:ok, _credential, plaintext} =
       OpenAgents.ApiTokens.create(user, %{
         name: "test forge client",

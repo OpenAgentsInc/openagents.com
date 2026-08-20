@@ -499,7 +499,7 @@ Each endpoint test file follows this shape:
       use OpenAgentsWeb.ConnCase
 
       test "GET /api/v3/repos/:owner/:repo/issues lists open issues", %{conn: conn} do
-        conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues")
+        conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
         assert json_response(conn, 200)["issues"] != nil
       end
     end

@@ -6,26 +6,31 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
 
   alias OpenAgents.Projects
   alias OpenAgents.Projects.Project
+  alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
-     |> assign(:projects, filter_projects(owner))
+     |> assign(:repository, repository)
+     |> assign(:projects, Projects.list_projects(repository))
      |> assign(:form, to_form(Projects.change_project(%Project{})))}
   end
 
   def handle_event("save", %{"project" => project_params}, socket) do
-    owner = socket.assigns.owner
-    params = Map.put(project_params, "owner", owner)
-
-    case Projects.create_project(params) do
+    case Projects.create_project(
+           socket.assigns.repository,
+           project_params,
+           socket.assigns.current_user
+         ) do
       {:ok, _project} ->
         {:noreply,
          socket
-         |> assign(:projects, filter_projects(owner))
+         |> assign(:projects, Projects.list_projects(socket.assigns.repository))
          |> assign(:form, to_form(Projects.change_project(%Project{})))
          |> put_flash(:info, "Project created")}
 
@@ -35,18 +40,13 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    project = Projects.get_project!(String.to_integer(id))
+    project = Projects.get_project!(socket.assigns.repository, String.to_integer(id))
     {:ok, _} = Projects.delete_project(project)
 
     {:noreply,
      socket
-     |> assign(:projects, filter_projects(socket.assigns.owner))
+     |> assign(:projects, Projects.list_projects(socket.assigns.repository))
      |> put_flash(:info, "Project deleted")}
-  end
-
-  defp filter_projects(owner) do
-    Projects.list_projects()
-    |> Enum.filter(&(&1.owner == owner))
   end
 
   def render(assigns) do

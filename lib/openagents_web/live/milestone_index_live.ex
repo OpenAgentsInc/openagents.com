@@ -7,23 +7,27 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   alias OpenAgents.Issues
   alias OpenAgents.Milestones
   alias OpenAgents.Milestones.Milestone
+  alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
-     |> assign(:milestones, milestones_with_stats())
+     |> assign(:repository, repository)
+     |> assign(:milestones, milestones_with_stats(repository))
      |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))}
   end
 
   def handle_event("save", %{"milestone" => milestone_params}, socket) do
-    case Milestones.create_milestone(milestone_params) do
+    case Milestones.create_milestone(socket.assigns.repository, milestone_params) do
       {:ok, _milestone} ->
         {:noreply,
          socket
-         |> assign(:milestones, milestones_with_stats())
+         |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
          |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))
          |> put_flash(:info, "Milestone created")}
 
@@ -33,29 +37,29 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   end
 
   def handle_event("close", %{"id" => id}, socket) do
-    milestone = Milestones.get_milestone!(String.to_integer(id))
+    milestone = Milestones.get_milestone!(socket.assigns.repository, String.to_integer(id))
     {:ok, _} = Milestones.update_milestone(milestone, %{"state" => "closed"})
 
     {:noreply,
      socket
-     |> assign(:milestones, milestones_with_stats())
+     |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
      |> put_flash(:info, "Milestone closed")}
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    milestone = Milestones.get_milestone!(String.to_integer(id))
+    milestone = Milestones.get_milestone!(socket.assigns.repository, String.to_integer(id))
     {:ok, _} = Milestones.delete_milestone(milestone)
 
     {:noreply,
      socket
-     |> assign(:milestones, milestones_with_stats())
+     |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
      |> put_flash(:info, "Milestone deleted")}
   end
 
-  defp milestones_with_stats do
-    all_issues = Issues.list_issues(state: "all")
+  defp milestones_with_stats(repository) do
+    all_issues = Issues.list_issues(repository, state: "all")
 
-    Milestones.list_milestones()
+    Milestones.list_milestones(repository)
     |> Enum.map(fn milestone ->
       open =
         Enum.count(all_issues, fn i ->

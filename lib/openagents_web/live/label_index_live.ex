@@ -6,23 +6,27 @@ defmodule OpenAgentsWeb.LabelIndexLive do
 
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
+  alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
-     |> assign(:labels, Labels.list_labels())
+     |> assign(:repository, repository)
+     |> assign(:labels, Labels.list_labels(repository))
      |> assign(:form, to_form(Labels.change_label(%Label{})))}
   end
 
   def handle_event("save", %{"label" => label_params}, socket) do
-    case Labels.create_label(label_params) do
+    case Labels.create_label(socket.assigns.repository, label_params) do
       {:ok, _label} ->
         {:noreply,
          socket
-         |> assign(:labels, Labels.list_labels())
+         |> assign(:labels, Labels.list_labels(socket.assigns.repository))
          |> assign(:form, to_form(Labels.change_label(%Label{})))
          |> put_flash(:info, "Label created")}
 
@@ -32,12 +36,12 @@ defmodule OpenAgentsWeb.LabelIndexLive do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    label = Labels.get_label!(String.to_integer(id))
+    label = Labels.get_label!(socket.assigns.repository, String.to_integer(id))
     {:ok, _} = Labels.delete_label(label)
 
     {:noreply,
      socket
-     |> assign(:labels, Labels.list_labels())
+     |> assign(:labels, Labels.list_labels(socket.assigns.repository))
      |> put_flash(:info, "Label deleted")}
   end
 

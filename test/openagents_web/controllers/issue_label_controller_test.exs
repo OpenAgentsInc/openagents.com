@@ -17,7 +17,8 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn: conn,
       issue: issue
     } do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels")
+      conn =
+        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels")
 
       assert json_response(conn, 200) == %{"labels" => []}
     end
@@ -29,14 +30,15 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       label_fixture(%{name: "bug", color: "d73a4a"})
       {:ok, _issue} = Issues.add_labels(issue, ["bug"])
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels")
+      conn =
+        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels")
 
       assert %{"labels" => [label]} = json_response(conn, 200)
       assert label["name"] == "bug"
     end
 
     test "GET .../issues/:issue_number/labels returns 404 for a missing issue", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999/labels")
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/labels")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -50,9 +52,13 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       label_fixture(%{name: "bug", color: "d73a4a"})
 
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels", %{
-          labels: ["bug"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels",
+          %{
+            labels: ["bug"]
+          }
+        )
 
       assert %{"labels" => [label]} = json_response(conn, 200)
       assert label["name"] == "bug"
@@ -68,9 +74,13 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       label_fixture(%{name: "docs", color: "0075ca"})
 
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels", %{
-          labels: ["bug", "docs"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels",
+          %{
+            labels: ["bug", "docs"]
+          }
+        )
 
       assert %{"labels" => labels} = json_response(conn, 200)
       assert Enum.map(labels, & &1["name"]) == ["bug", "docs"]
@@ -84,9 +94,13 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       {:ok, _issue} = Issues.add_labels(issue, ["bug"])
 
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels", %{
-          labels: ["bug"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels",
+          %{
+            labels: ["bug"]
+          }
+        )
 
       assert %{"labels" => [_only_one]} = json_response(conn, 200)
     end
@@ -96,7 +110,11 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels", %{})
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels",
+          %{}
+        )
 
       assert json_response(conn, 200) == %{"labels" => []}
     end
@@ -106,9 +124,13 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels", %{
-          labels: ["never-created"]
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels",
+          %{
+            labels: ["never-created"]
+          }
+        )
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
       assert Issues.get_issue_by_number!(issue.number).labels == []
@@ -116,7 +138,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
 
     test "POST .../issues/:issue_number/labels returns 404 for a missing issue", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999/labels", %{
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/labels", %{
           labels: ["bug"]
         })
 
@@ -134,7 +156,10 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       {:ok, _issue} = Issues.add_labels(issue, ["bug", "docs"])
 
       conn =
-        delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels/bug")
+        delete(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels/bug"
+        )
 
       assert %{"labels" => [label]} = json_response(conn, 200)
       assert label["name"] == "docs"
@@ -152,7 +177,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels/good first issue"
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels/good first issue"
         )
 
       assert json_response(conn, 200) == %{"labels" => []}
@@ -166,7 +191,10 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       {:ok, _issue} = Issues.add_labels(issue, ["bug"])
 
       conn =
-        delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/#{issue.number}/labels/docs")
+        delete(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels/docs"
+        )
 
       assert %{"labels" => [%{"name" => "bug"}]} = json_response(conn, 200)
     end
@@ -174,7 +202,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
     test "DELETE .../issues/:issue_number/labels/:name returns 404 for a missing issue", %{
       conn: conn
     } do
-      conn = delete(conn, ~p"/api/v3/repos/OpenAgents/openagents/issues/999999/labels/bug")
+      conn = delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/labels/bug")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end

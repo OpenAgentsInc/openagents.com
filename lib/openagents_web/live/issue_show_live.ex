@@ -6,16 +6,19 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Comment
+  alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
-    issue = Issues.get_issue_by_number!(String.to_integer(number))
-    comments = Issues.list_comments(issue.id)
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    issue = Issues.get_issue_by_number!(repository, String.to_integer(number))
+    comments = Issues.list_comments(issue)
 
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
+     |> assign(:repository, repository)
      |> assign(:issue, issue)
      |> assign(:comments, comments)
      |> assign(:editing, false)
@@ -81,11 +84,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   def handle_event("add_comment", %{"comment" => %{"body" => body}}, socket) do
     issue = socket.assigns.issue
 
-    case Issues.create_comment(%{
-           issue_id: issue.id,
-           body: body,
-           user: %{"login" => "anonymous"}
-         }) do
+    case Issues.create_comment(issue, %{body: body}, socket.assigns.current_user) do
       {:ok, comment} ->
         {:noreply,
          socket

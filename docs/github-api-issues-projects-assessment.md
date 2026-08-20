@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Implemented subset with known compatibility and authorization gaps
+Status: Repository-scoped subset implemented; bounded compatibility gaps remain
 
 ## Intent
 
@@ -44,30 +44,42 @@ GitHub Projects V2 creation workflow is not supplied by the assessed REST
 surface. Project update/delete, item delete/read, field mutation, views,
 ordering, draft items, and organization projects remain unimplemented.
 
-## Known blockers
+## Enforced authority contract
 
-These are current measured behaviors, not hypothetical future concerns:
+These are current measured behaviors:
 
 - `/api/v3` public reads and authenticated writes use separate pipelines.
   Writes require an expiring digest-only `oa_pat_…` bearer with exact
   `forge:write` scope. An authenticated person creates and revokes credentials
   at `/settings/api-tokens`; plaintext is shown once.
-- The route's owner/repository values are not backed by a canonical repository
-  foreign key across the issue/project schema.
-- Project show, item, update-item, and field actions do not consistently enforce
-  the username in the route.
-- The assignee read endpoints are placeholders while issue writes accept
-  arbitrary login strings.
+- Owner and repository path values resolve a canonical repository row. Public
+  reads expose only repositories marked public; writes additionally require a
+  writable membership for the PAT principal.
+- Resource reads and mutations include repository ownership in their database
+  query. Composite foreign keys reject cross-repository comments, label and
+  assignee links, milestones, and project items.
+- Issue and milestone numbers are repository-local. Project numbers are also
+  repository-local for the repository-shaped LiveView surface.
+- Project show, item, update-item, and field actions enforce the username in the
+  route. The user-shaped Projects V2 subset is limited to the explicit initial
+  repository because those compatibility URLs contain no repository segment.
+- Assignee reads return active repository members with writable roles, and
+  issue assignment accepts only those members.
+
+## Remaining compatibility gaps
+
+These are compatibility limits, not authorization fallbacks:
+
 - Label rename does not implement GitHub's `new_name` behavior.
 - Adding a nonexistent label, removing an absent label, and some label URL
   encoding cases differ from GitHub behavior.
 - Error envelopes and pagination/link headers are a bounded local contract,
   not complete Octokit or `gh` parity.
 
-Gate 6 must assign an explicit API principal and mutation policy. Gate 7 must
-add repository entities, foreign keys, scoped uniqueness, one-query ownership
-checks, and cross-repository isolation tests. Compatibility fixes follow those
-authority boundaries rather than preceding them.
+Gate 6 supplied the explicit API principal and mutation policy. Gate 7 supplied
+repository entities, foreign keys, scoped uniqueness, ownership checks, and
+cross-repository isolation tests. Further compatibility work must preserve
+those authority boundaries.
 
 ## Evidence
 
@@ -79,3 +91,5 @@ authority boundaries rather than preceding them.
 - `test/openagents_web/controllers/issue_assignee_controller_test.exs`
 - `test/openagents_web/controllers/milestone_controller_test.exs`
 - `test/openagents_web/controllers/project_controller_test.exs`
+- `test/openagents_web/controllers/repository_isolation_controller_test.exs`
+- `test/openagents/repositories_test.exs`

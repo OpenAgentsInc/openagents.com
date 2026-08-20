@@ -7,6 +7,8 @@ defmodule OpenAgents.ProjectItems do
   alias OpenAgents.Repo
 
   alias OpenAgents.ProjectItems.ProjectItem
+  alias OpenAgents.Projects.Project
+  alias OpenAgents.Repositories
 
   @doc """
   Returns the list of project_items.
@@ -18,7 +20,8 @@ defmodule OpenAgents.ProjectItems do
 
   """
   def list_project_items do
-    Repo.all(ProjectItem)
+    repository_id = Repositories.initial_repository!().id
+    Repo.all(from item in ProjectItem, where: item.repository_id == ^repository_id)
   end
 
   @doc """
@@ -35,7 +38,10 @@ defmodule OpenAgents.ProjectItems do
       ** (Ecto.NoResultsError)
 
   """
-  def get_project_item!(id), do: Repo.get!(ProjectItem, id)
+  def get_project_item!(id) do
+    repository_id = Repositories.initial_repository!().id
+    Repo.get_by!(ProjectItem, id: id, repository_id: repository_id)
+  end
 
   @doc """
   Creates a project_item.
@@ -50,8 +56,11 @@ defmodule OpenAgents.ProjectItems do
 
   """
   def create_project_item(attrs) do
+    attrs = for {key, value} <- attrs, into: %{}, do: {to_string(key), value}
+    repository_id = repository_id_for(Map.get(attrs, "project_id"))
+
     %ProjectItem{}
-    |> ProjectItem.changeset(attrs)
+    |> ProjectItem.changeset(Map.put(attrs, "repository_id", repository_id))
     |> Repo.insert()
   end
 
@@ -100,5 +109,14 @@ defmodule OpenAgents.ProjectItems do
   """
   def change_project_item(%ProjectItem{} = project_item, attrs \\ %{}) do
     ProjectItem.changeset(project_item, attrs)
+  end
+
+  defp repository_id_for(nil), do: Repositories.initial_repository!().id
+
+  defp repository_id_for(project_id) do
+    case Repo.get(Project, project_id) do
+      %Project{repository_id: repository_id} -> repository_id
+      nil -> Repositories.initial_repository!().id
+    end
   end
 end

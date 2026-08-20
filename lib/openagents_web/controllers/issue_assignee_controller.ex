@@ -2,9 +2,10 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
   use OpenAgentsWeb, :controller
 
   alias OpenAgents.Issues
+  alias OpenAgents.Repositories
 
-  def index(conn, %{"owner" => _owner, "repo" => _repo, "issue_number" => issue_number}) do
-    issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
+  def index(conn, %{"owner" => owner, "repo" => repo, "issue_number" => issue_number}) do
+    issue = Issues.get_issue_by_path!(owner, repo, String.to_integer(issue_number))
     json(conn, %{assignees: issue.assignees || []})
   rescue
     Ecto.NoResultsError ->
@@ -16,12 +17,13 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
   def create(
         conn,
         %{
-          "owner" => _owner,
-          "repo" => _repo,
+          "owner" => owner,
+          "repo" => repo,
           "issue_number" => issue_number
         } = params
       ) do
-    issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
     logins = params["assignees"] || []
 
     case Issues.add_assignees(issue, logins) do
@@ -43,12 +45,13 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
   def delete(
         conn,
         %{
-          "owner" => _owner,
-          "repo" => _repo,
+          "owner" => owner,
+          "repo" => repo,
           "issue_number" => issue_number
         } = params
       ) do
-    issue = Issues.get_issue_by_number!(String.to_integer(issue_number))
+    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
     logins = params["assignees"] || []
 
     case Issues.remove_assignees(issue, logins) do

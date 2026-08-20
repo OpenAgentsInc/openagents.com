@@ -3,21 +3,27 @@ defmodule OpenAgentsWeb.ProjectController do
 
   alias OpenAgents.Projects
   alias OpenAgents.Projects.Project
+  alias OpenAgents.Repositories
 
   def index(conn, %{"username" => username}) do
-    projects =
-      Projects.list_projects()
-      |> Enum.filter(&(&1.owner == username))
+    projects = Projects.list_projects_by_owner(username)
 
     render(conn, :index, projects: projects)
   end
 
   def create(conn, %{"owner" => owner} = params) do
-    attrs =
-      params
-      |> Map.put("owner", owner)
+    user = conn.assigns.current_user
 
-    case Projects.create_project(attrs) do
+    if String.downcase(owner) != String.downcase(user.github_login) do
+      raise Ecto.NoResultsError, queryable: Project
+    end
+
+    {repository_owner, repository_name} = Repositories.initial_path()
+
+    repository =
+      Repositories.get_writable_by_path!(repository_owner, repository_name, user)
+
+    case Projects.create_project(repository, params, user) do
       {:ok, %Project{} = project} ->
         conn
         |> put_status(:created)
@@ -28,10 +34,14 @@ defmodule OpenAgentsWeb.ProjectController do
         |> put_status(:unprocessable_entity)
         |> render(:error, changeset: changeset)
     end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
   end
 
-  def show(conn, %{"username" => _username, "project_number" => project_number}) do
-    project = Projects.get_project_by_number!(String.to_integer(project_number))
+  def show(conn, %{"username" => username, "project_number" => project_number}) do
+    project =
+      Projects.get_project_by_owner_and_number!(username, String.to_integer(project_number))
+
     render(conn, :show, project: project)
   rescue
     Ecto.NoResultsError ->
@@ -41,11 +51,13 @@ defmodule OpenAgentsWeb.ProjectController do
   end
 
   def items(conn, %{
-        "username" => _username,
+        "username" => username,
         "project_number" => project_number
       }) do
-    project = Projects.get_project_by_number!(String.to_integer(project_number))
-    items = Projects.list_project_items(project.id)
+    project =
+      Projects.get_project_by_owner_and_number!(username, String.to_integer(project_number))
+
+    items = Projects.list_project_items(project)
     render(conn, :items, items: items)
   rescue
     Ecto.NoResultsError ->
@@ -57,11 +69,14 @@ defmodule OpenAgentsWeb.ProjectController do
   def create_item(
         conn,
         %{
-          "username" => _username,
+          "username" => username,
           "project_number" => project_number
         } = params
       ) do
-    project = Projects.get_project_by_number!(String.to_integer(project_number))
+    authorize_owner!(conn.assigns.current_user, username)
+
+    project =
+      Projects.get_project_by_owner_and_number!(username, String.to_integer(project_number))
 
     case cast_issue_number(params["issue_number"]) do
       :error ->
@@ -70,7 +85,7 @@ defmodule OpenAgentsWeb.ProjectController do
       {:ok, issue_number} ->
         params = Map.put(params, "issue_number", issue_number)
 
-        case Projects.create_project_item(params, project.id) do
+        case Projects.create_project_item(params, project) do
           {:ok, item} ->
             conn
             |> put_status(:created)
@@ -92,12 +107,19 @@ defmodule OpenAgentsWeb.ProjectController do
   def update_item(
         conn,
         %{
-          "username" => _username,
-          "project_number" => _project_number,
+          "username" => username,
+          "project_number" => project_number,
           "item_id" => item_id
         } = params
       ) do
-    item = Projects.get_project_item!(String.to_integer(item_id))
+    authorize_owner!(conn.assigns.current_user, username)
+
+    item =
+      Projects.get_project_item_by_owner!(
+        username,
+        String.to_integer(project_number),
+        String.to_integer(item_id)
+      )
 
     if is_map(Map.get(params, "values", %{})) do
       case Projects.update_project_item(item, params) do
@@ -120,11 +142,13 @@ defmodule OpenAgentsWeb.ProjectController do
   end
 
   def fields(conn, %{
-        "username" => _username,
+        "username" => username,
         "project_number" => project_number
       }) do
-    project = Projects.get_project_by_number!(String.to_integer(project_number))
-    fields = Projects.list_project_fields(project.id)
+    project =
+      Projects.get_project_by_owner_and_number!(username, String.to_integer(project_number))
+
+    fields = Projects.list_project_fields(project)
     render(conn, :fields, fields: fields)
   rescue
     Ecto.NoResultsError ->
@@ -148,5 +172,17 @@ defmodule OpenAgentsWeb.ProjectController do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{errors: errors})
+  end
+
+  defp authorize_owner!(user, username) do
+    if String.downcase(user.github_login) != String.downcase(username) do
+      raise Ecto.NoResultsError, queryable: Project
+    end
+
+    :ok
+  end
+
+  defp not_found(conn) do
+    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
   end
 end

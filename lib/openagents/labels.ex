@@ -5,6 +5,8 @@ defmodule OpenAgents.Labels do
 
   import Ecto.Query, warn: false
   alias OpenAgents.Repo
+  alias OpenAgents.Repositories
+  alias OpenAgents.Repositories.Repository
 
   alias OpenAgents.Labels.Label
 
@@ -17,8 +19,13 @@ defmodule OpenAgents.Labels do
       [%Label{}, ...]
 
   """
-  def list_labels do
-    Repo.all(Label)
+  def list_labels, do: list_labels(Repositories.initial_repository!())
+
+  def list_labels(%Repository{id: repository_id}) do
+    Label
+    |> where(repository_id: ^repository_id)
+    |> order_by(asc: :name)
+    |> Repo.all()
   end
 
   @doc """
@@ -35,10 +42,30 @@ defmodule OpenAgents.Labels do
       ** (Ecto.NoResultsError)
 
   """
-  def get_label!(id), do: Repo.get!(Label, id)
+  def get_label!(id), do: get_label!(Repositories.initial_repository!(), id)
+
+  def get_label!(%Repository{id: repository_id}, id) do
+    Repo.get_by!(Label, id: id, repository_id: repository_id)
+  end
 
   def get_label_by_name!(name) when is_binary(name) do
-    Repo.get_by!(Label, name: URI.decode(name))
+    get_label_by_name!(Repositories.initial_repository!(), name)
+  end
+
+  def get_label_by_name!(%Repository{id: repository_id}, name) when is_binary(name) do
+    Repo.get_by!(Label, repository_id: repository_id, name: URI.decode(name))
+  end
+
+  def get_label_by_path!(owner, repository_name, name) do
+    Repo.one!(
+      from label in Label,
+        join: repository in Repository,
+        on: repository.id == label.repository_id,
+        where:
+          repository.owner_key == ^String.downcase(owner) and
+            repository.name_key == ^String.downcase(repository_name) and
+            repository.visibility == "public" and label.name == ^URI.decode(name)
+    )
   end
 
   @doc """
@@ -53,7 +80,14 @@ defmodule OpenAgents.Labels do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_label(attrs) do
+  def create_label(attrs), do: create_label(Repositories.initial_repository!(), attrs)
+
+  def create_label(%Repository{} = repository, attrs) do
+    attrs =
+      attrs
+      |> Enum.into(%{}, fn {key, value} -> {to_string(key), value} end)
+      |> Map.put("repository_id", repository.id)
+
     %Label{}
     |> Label.changeset(attrs)
     |> Repo.insert()
@@ -72,6 +106,8 @@ defmodule OpenAgents.Labels do
 
   """
   def update_label(%Label{} = label, attrs) do
+    attrs = Map.drop(attrs, [:repository_id, "repository_id"])
+
     label
     |> Label.changeset(attrs)
     |> Repo.update()

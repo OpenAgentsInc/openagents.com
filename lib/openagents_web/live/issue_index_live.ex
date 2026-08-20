@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Issues
+  alias OpenAgents.Repositories
 
   def mount(_params, _session, socket) do
     {:ok, assign(socket, :current_scope, socket.assigns[:current_scope])}
@@ -12,14 +13,16 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
   def handle_params(%{"owner" => owner, "repo" => repo} = params, _url, socket) do
     state = params["state"] || "open"
-    issues = Issues.list_issues(state: state)
-    open_count = Issues.list_issues(state: "open") |> length()
-    closed_count = Issues.list_issues(state: "closed") |> length()
+    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    issues = Issues.list_issues(repository, state: state)
+    open_count = Issues.list_issues(repository, state: "open") |> length()
+    closed_count = Issues.list_issues(repository, state: "closed") |> length()
 
     socket =
       socket
       |> assign(:owner, owner)
       |> assign(:repo, repo)
+      |> assign(:repository, repository)
       |> assign(:state, state)
       |> assign(:open_count, open_count)
       |> assign(:closed_count, closed_count)

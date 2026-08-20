@@ -97,15 +97,16 @@ defmodule OpenAgents.ProjectItemsTest do
       refute Map.has_key?(errors_on(changeset), :project_id)
     end
 
-    test "create_project_item/1 does not declare a foreign key constraint" do
-      # `project_items.project_id` / `issue_id` reference their parent tables but
-      # the changeset never calls `foreign_key_constraint/2`, so a dangling id
-      # raises instead of returning an error changeset. Characterised, not endorsed.
+    test "create_project_item/1 reports a dangling project as a changeset error" do
       issue = issue_fixture()
 
-      assert_raise Ecto.ConstraintError, fn ->
-        ProjectItems.create_project_item(%{project_id: 2_147_483_000, issue_id: issue.id})
-      end
+      assert {:error, changeset} =
+               ProjectItems.create_project_item(%{
+                 project_id: 2_147_483_000,
+                 issue_id: issue.id
+               })
+
+      assert %{project_id: ["does not exist"]} = errors_on(changeset)
     end
 
     test "create_project_item/1 allows the same issue in two projects" do

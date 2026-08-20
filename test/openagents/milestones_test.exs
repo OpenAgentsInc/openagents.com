@@ -41,7 +41,7 @@ defmodule OpenAgents.MilestonesTest do
       assert {:error, %Ecto.Changeset{}} = Milestones.create_milestone(@invalid_attrs)
     end
 
-    test "update_milestone/2 with valid data updates the milestone" do
+    test "update_milestone/2 updates mutable fields but preserves its repository number" do
       milestone = milestone_fixture()
 
       update_attrs = %{
@@ -58,7 +58,7 @@ defmodule OpenAgents.MilestonesTest do
       assert milestone.state == "some updated state"
       assert milestone.description == "some updated description"
       assert milestone.title == "some updated title"
-      assert milestone.number == 43
+      assert milestone.number == 42
       assert milestone.due_on == "some updated due_on"
     end
 

@@ -2598,8 +2598,8 @@
     width: 16px;
     height: 16px;
     flex: none;
-    /* The same 12px the nav rows use, so the two columns read as one set. */
-    margin-right: 12px;
+    /* The same 10px the nav rows use, so the two columns read as one set. */
+    margin-right: 10px;
     font-size: 16px;
   }
 

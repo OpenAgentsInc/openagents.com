@@ -1,9 +1,47 @@
 /* See the Tailwind configuration guide for advanced usage
    https://tailwindcss.com/docs/configuration */
 
+/* Cascade-layer order, declared before any @import so it is the FIRST @layer
+ * statement in the bundle — only the first one establishes order; later ones
+ * can add names but cannot reorder existing layers.
+ *
+ * DaisyUI emits into its own `daisyui` layer. Without this line that layer is
+ * declared after `components`, and a later-declared layer beats an earlier one
+ * regardless of specificity, so DaisyUI's flat `.btn` overrode every
+ * `.btn[data-variant=...]` rule in sarah.css and all eight SarahUI button
+ * variants rendered identically. Listing `daisyui` before `components` keeps
+ * Sarah's component styles authoritative, which is what sarah.css's own
+ * "must stay last so its declarations win" note requires. */
+@layer theme, base, daisyui, components, utilities;
+
 @import "tailwindcss" source(none);
 @import "phoenix-colocated/openagents/colocated.css";
+/* Basecoat component structure, vendored at tag 1.0.2 (6953a4a). Import
+ * components individually and only when a surface uses one: component CSS
+ * lives in @layer components and is emitted whether or not the class appears
+ * in markup. Never import basecoat.css, basecoat-base.css, or
+ * basecoat-components.css. See assets/vendor/basecoat/README.md.
+ *
+ * These carry the structure (display, padding, min-height, background) that
+ * sarah.css deliberately does not set — its .btn only adds gap, border,
+ * radius, colour, font, and transition on top. Without them SarahUI controls
+ * fall back to DaisyUI's geometry. This list matches Sarah's exactly. */
 @import "../vendor/basecoat/base/base.css";
+@import "../vendor/basecoat/components/button.css";
+@import "../vendor/basecoat/components/input.css";
+@import "../vendor/basecoat/components/textarea.css";
+@import "../vendor/basecoat/components/label.css";
+@import "../vendor/basecoat/components/field.css";
+@import "../vendor/basecoat/components/form.css";
+@import "../vendor/basecoat/components/alert.css";
+@import "../vendor/basecoat/components/badge.css";
+@import "../vendor/basecoat/components/card.css";
+@import "../vendor/basecoat/components/avatar.css";
+@import "../vendor/basecoat/components/item.css";
+@import "../vendor/basecoat/components/empty.css";
+@import "../vendor/basecoat/components/kbd.css";
+
+/* Sarah's identity. Must stay last so its declarations win. */
 @import "./sarah.css";
 @source "../css";
 @source "../js";

@@ -114,6 +114,11 @@ if config_env() == :prod and runtime_role == :web do
   ecto_ipv6? = parse_boolean.("OPENAGENTS_DATABASE_IPV6")
   pool_size = parse_integer.("POOL_SIZE", 1..200)
 
+  admin_github_ids =
+    "OPENAGENTS_ADMIN_GITHUB_IDS"
+    |> optional_text.()
+    |> OpenAgents.Accounts.OperatorConfig.parse_github_ids!()
+
   repo_config =
     case required_text.("OPENAGENTS_DATABASE_MODE") do
       "url" ->
@@ -313,6 +318,7 @@ if config_env() == :prod and runtime_role == :web do
     staging_cleanup_enabled: staging_cleanup_enabled,
     production_deploy_enabled: production_deploy_enabled,
     build_revision: OpenAgents.BuildInfo.revision(),
+    admin_github_ids: admin_github_ids,
     image_digest: optional_text.("OPENAGENTS_IMAGE_DIGEST"),
     secure_cookies: secure_cookies,
     https_aliases: https_aliases,

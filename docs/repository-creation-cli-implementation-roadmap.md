@@ -2,8 +2,8 @@
 
 Date: 2026-08-20
 
-Status: Implementation complete; the cross-repository loopback suite passes.
-Exact `localhost:4000` and staging receipts remain gated
+Status: Implementation complete; the exact `localhost:4000` cross-repository
+loopback suite passes. The staging receipt remains gated.
 
 ## Outcome
 
@@ -467,7 +467,7 @@ result. Do not store tokens, local absolute paths, or repository content.
 | 9. CLI package scaffold | Complete | `@openagentsinc/cli`, Effect 4 command graph, build, and package inspection |
 | 10. CLI configuration and authentication | Complete | Profiles, persisted configuration precedence, custom origins, OS credential store, headless refusal, stable errors, and origin-isolated Git helper tests |
 | 11. CLI repository commands | Complete | Create, matching-namespace import, idempotent transport retry, cursor list, view, clone, source remote, inference, signal cancellation, and refusal tests |
-| 12. Local cross-repository verification | In progress | The default-`4000` disposable suite passes on an alternate loopback port for create, push, clone, anonymous read, private concealment, viewer push refusal, cache reconstruction, exact import refs, and no later sync. See [`cf04c00-de8015d1e5.json`](evidence/repository-cli-local-e2e/cf04c00-de8015d1e5.json). Record the exact `localhost:4000` receipt when that port is available. |
+| 12. Local cross-repository verification | Complete | The disposable suite passes on exact `http://localhost:4000` for create, push, clone, anonymous read, private concealment, viewer push refusal, cache reconstruction, exact import refs, and no later sync. See [`f8a7822-5bd8fb1eaf.json`](evidence/repository-cli-local-e2e/f8a7822-5bd8fb1eaf.json). |
 | 13. Staging and release | Not started | — |
 
 ## Completion audit

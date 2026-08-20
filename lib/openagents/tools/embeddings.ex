@@ -124,7 +124,7 @@ defmodule OpenAgents.Tools.Embeddings do
   end
 
   defp provider do
-    :sarah
+    :openagents
     |> Application.get_env(:tool_discovery, [])
     |> Keyword.get(:provider)
   end

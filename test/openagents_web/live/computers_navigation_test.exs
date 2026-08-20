@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.ComputersNavigationTest do
   use OpenAgentsWeb.SarahConnCase
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   test "the canonical Computers surface carries authenticated application chrome", %{conn: conn} do

@@ -101,7 +101,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   # ── run + translate ─────────────────────────────────────────────────────
 
   defp run(conn, grant, request) do
-    provider = Application.fetch_env!(:sarah, :provider)
+    provider = Application.fetch_env!(:openagents, :provider)
     parent = self()
 
     # The provider pushes events synchronously; capture them to this process's

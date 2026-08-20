@@ -150,7 +150,7 @@ defmodule OpenAgents.Tools.Selector do
   end
 
   defp default_top_k do
-    :sarah
+    :openagents
     |> Application.get_env(:tool_discovery, [])
     |> Keyword.get(:top_k, 12)
   end

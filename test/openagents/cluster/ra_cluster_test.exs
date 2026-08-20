@@ -9,8 +9,6 @@ defmodule OpenAgents.Cluster.RaClusterTest do
   (needs epmd).
   """
   use ExUnit.Case, async: false
-  @moduletag :skip
-
   @moduletag :cluster
 
   alias OpenAgents.Cluster.Ra
@@ -117,7 +115,12 @@ defmodule OpenAgents.Cluster.RaClusterTest do
 
     # Stop peer2's local Raft server, leaving it in the cluster config but not
     # running here — the phantom-member state an ungraceful restart produces.
-    :ok = :erpc.call(node2, :ra, :stop_server, [:default, {:sarah_sessions, node2}])
+    # The Ra cluster atom was renamed `:sarah_sessions` -> `:openagents_sessions`
+    # in `OpenAgents.Cluster.Ra`, but this line kept the old name. `:ra.stop_server`
+    # answers `:ok` for a server id it does not know, so the stop silently did
+    # nothing and peer2's real server stayed up. Ask the module for the id so the
+    # test can never drift from the cluster name again.
+    :ok = :erpc.call(node2, :ra, :stop_server, [:default, Ra.server_id(node2)])
 
     assert eventually(fn -> :erpc.call(node2, Ra, :members, [node2]) == [] end),
            "peer2 local server did not stop"
@@ -231,7 +234,7 @@ defmodule OpenAgents.Cluster.RaClusterTest do
 
   defp start_peer(name, cookie, opts \\ []) do
     base = %{
-      name: name,
+      name: unique_peer_name(name),
       host: ~c"127.0.0.1",
       args: [~c"-setcookie", Atom.to_charlist(cookie)]
     }
@@ -265,8 +268,12 @@ defmodule OpenAgents.Cluster.RaClusterTest do
       Node.self() != :nonode@nohost ->
         :ok
 
-      match?({:ok, _}, :net_kernel.start([:"sarah_test@127.0.0.1", :longnames])) ->
-        :erlang.set_cookie(Node.self(), :sarah_cluster_test_cookie)
+      # A fixed node name wedges this whole stage on any machine where an
+      # earlier run left that name registered with epmd: net_kernel then
+      # refuses to start and every distribution test flunks "unavailable".
+      # Unique per run, and OpenAgents-named now that this is not Sarah's BEAM.
+      match?({:ok, _}, :net_kernel.start([unique_test_node(), :longnames])) ->
+        :erlang.set_cookie(Node.self(), :openagents_cluster_test_cookie)
         :ok
 
       true ->
@@ -280,5 +287,16 @@ defmodule OpenAgents.Cluster.RaClusterTest do
       attempts <= 0 -> false
       true -> Process.sleep(100) && eventually(fun, attempts - 1)
     end
+  end
+
+  defp unique_test_node do
+    :erlang.list_to_atom(~c"openagents_test_#{:erlang.unique_integer([:positive])}@127.0.0.1")
+  end
+
+  # Peer node names register with epmd too. A fixed name that a killed peer
+  # left behind makes the next run's :peer.start_link fail, so the gate is
+  # green once and wedged thereafter. Suffix every peer uniquely.
+  defp unique_peer_name(base) do
+    :erlang.list_to_atom(~c"#{base}_#{:erlang.unique_integer([:positive])}")
   end
 end

@@ -13,8 +13,6 @@ defmodule OpenAgents.Cluster.ChaosTest do
   Tagged `:cluster`; run with `mix test --include cluster` (needs epmd).
   """
   use ExUnit.Case, async: false
-  @moduletag :skip
-
   @moduletag :cluster
   @moduletag timeout: 180_000
 
@@ -105,7 +103,7 @@ defmodule OpenAgents.Cluster.ChaosTest do
   defp start_peer(name, cookie) do
     {:ok, peer, node} =
       :peer.start_link(%{
-        name: name,
+        name: unique_peer_name(name),
         host: ~c"127.0.0.1",
         args: [~c"-setcookie", Atom.to_charlist(cookie)]
       })
@@ -130,8 +128,12 @@ defmodule OpenAgents.Cluster.ChaosTest do
       Node.self() != :nonode@nohost ->
         :ok
 
-      match?({:ok, _}, :net_kernel.start([:"sarah_test@127.0.0.1", :longnames])) ->
-        :erlang.set_cookie(Node.self(), :sarah_cluster_test_cookie)
+      # A fixed node name wedges this whole stage on any machine where an
+      # earlier run left that name registered with epmd: net_kernel then
+      # refuses to start and every distribution test flunks "unavailable".
+      # Unique per run, and OpenAgents-named now that this is not Sarah's BEAM.
+      match?({:ok, _}, :net_kernel.start([unique_test_node(), :longnames])) ->
+        :erlang.set_cookie(Node.self(), :openagents_cluster_test_cookie)
         :ok
 
       true ->
@@ -145,5 +147,16 @@ defmodule OpenAgents.Cluster.ChaosTest do
       attempts <= 0 -> false
       true -> Process.sleep(100) && eventually(fun, attempts - 1)
     end
+  end
+
+  defp unique_test_node do
+    :erlang.list_to_atom(~c"openagents_test_#{:erlang.unique_integer([:positive])}@127.0.0.1")
+  end
+
+  # Peer node names register with epmd too. A fixed name that a killed peer
+  # left behind makes the next run's :peer.start_link fail, so the gate is
+  # green once and wedged thereafter. Suffix every peer uniquely.
+  defp unique_peer_name(base) do
+    :erlang.list_to_atom(~c"#{base}_#{:erlang.unique_integer([:positive])}")
   end
 end

@@ -1,7 +1,6 @@
 defmodule OpenAgents.SarahClusterTest do
   # Not async: it manipulates node-global distribution state.
   use ExUnit.Case, async: false
-  @moduletag :skip
   alias OpenAgents.Cluster
 
   describe "single-node (undistributed or one member)" do
@@ -31,7 +30,7 @@ defmodule OpenAgents.SarahClusterTest do
 
       {:ok, peer, node} =
         :peer.start_link(%{
-          name: :sarah_cluster_peer,
+          name: unique_peer_name("openagents_cluster_peer"),
           host: ~c"127.0.0.1",
           args: [~c"-setcookie", Atom.to_charlist(cookie)]
         })
@@ -57,8 +56,11 @@ defmodule OpenAgents.SarahClusterTest do
       Node.self() != :nonode@nohost ->
         :ok
 
-      match?({:ok, _}, :net_kernel.start([:"sarah_test@127.0.0.1", :longnames])) ->
-        :erlang.set_cookie(Node.self(), :sarah_cluster_test_cookie)
+      # Unique per run: a fixed name that a crashed run left registered with
+      # epmd makes net_kernel refuse to start ever after. OpenAgents-named now
+      # that this is not Sarah's BEAM.
+      match?({:ok, _}, :net_kernel.start([unique_test_node(), :longnames])) ->
+        :erlang.set_cookie(Node.self(), :openagents_cluster_test_cookie)
         :ok
 
       true ->
@@ -72,5 +74,13 @@ defmodule OpenAgents.SarahClusterTest do
       attempts <= 0 -> false
       true -> Process.sleep(50) && eventually(fun, attempts - 1)
     end
+  end
+
+  defp unique_test_node do
+    :erlang.list_to_atom(~c"openagents_test_#{:erlang.unique_integer([:positive])}@127.0.0.1")
+  end
+
+  defp unique_peer_name(base) do
+    :erlang.list_to_atom(~c"#{base}_#{:erlang.unique_integer([:positive])}")
   end
 end

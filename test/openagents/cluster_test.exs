@@ -1,13 +1,8 @@
 defmodule OpenAgents.ClusterTest do
-  use ExUnit.Case
-  @moduletag :skip
+  # Not async: the last test manipulates node-global distribution state.
+  use ExUnit.Case, async: false
 
   alias OpenAgents.Cluster
-
-  setup do
-    on_exit(fn -> _ = Node.stop() end)
-    :ok
-  end
 
   test "single-node health report is well-formed" do
     report = Cluster.local_report()
@@ -33,8 +28,12 @@ defmodule OpenAgents.ClusterTest do
     assert snapshot["size"] == 1
   end
 
+  # Real peer nodes: gated to the `mix test --only cluster` stage, like every
+  # other distribution test here. Left in the default suite it both needs epmd
+  # and inherits whatever node-global state a previous cluster module left
+  # behind — which is exactly how it came to fail on `net_kernel already started`.
+  @tag :cluster
   test "three local nodes form a cluster, report a consistent revision, and detect a missing node" do
-    start_epmd()
     start_distribution!()
     peers = start_peers(3)
 
@@ -61,11 +60,17 @@ defmodule OpenAgents.ClusterTest do
       assert report2["missing"] == []
       refute to_string(down_node) in Enum.map(Cluster.members(), &to_string/1)
     after
+      # Stop this test's peers, but leave net_kernel up. Stopping it stranded
+      # every cluster module scheduled after this one: their
+      # `ensure_distributed/0` then saw an undistributed node whose net_kernel
+      # would no longer restart, and flunked "distribution unavailable".
       for {pid, _node} <- peers, do: safe_stop_peer(pid)
-      _ = Node.stop()
+      assert wait_for(fn -> Node.list() == [] end)
     end
   end
 
+  # Idempotent: an already-distributed node is a legitimate state in the cluster
+  # stage (another module got here first), not a reason to fail.
   defp start_distribution! do
     suffix = :erlang.unique_integer([:positive])
     name = :erlang.list_to_atom(~c"openagents_test_#{suffix}@127.0.0.1")
@@ -74,16 +79,11 @@ defmodule OpenAgents.ClusterTest do
       :ok -> :ok
       true -> :ok
       {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
       other -> raise "Failed to start net_kernel: #{inspect(other)}"
     end
 
     _ = Node.set_cookie(:openagents_test_cookie)
-    :ok
-  end
-
-  defp start_epmd do
-    # Start the Erlang port mapper if it is not already running.
-    _ = System.cmd("epmd", ["-daemon"], stderr_to_stdout: true)
     :ok
   end
 

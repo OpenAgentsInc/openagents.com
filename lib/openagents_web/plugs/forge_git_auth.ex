@@ -49,7 +49,7 @@ defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
   end
 
   defp principal_for(token) when is_binary(token) and token != "" do
-    operator_token = Application.get_env(:sarah, :forge_operator_token)
+    operator_token = Application.get_env(:openagents, :forge_operator_token)
 
     if is_binary(operator_token) and operator_token != "" and
          Plug.Crypto.secure_compare(token, operator_token) do

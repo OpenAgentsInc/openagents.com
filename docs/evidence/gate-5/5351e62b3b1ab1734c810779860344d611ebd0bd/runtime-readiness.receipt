@@ -1,0 +1,11 @@
+source_commit=5351e62b3b1ab1734c810779860344d611ebd0bd
+source_tree=e201c78c38bc03645bda33c3abdf3d692d205df9
+profile_sha256=c05d37778d2bbc34d6fd996fda3b0543be2eb4d3b2e0a317397f59d70e518995
+readiness_sha256=c3a540b980de44e97a9a77bea5e5a6805c4a6037aa1217773c8aa4d820c26cc3
+generated_at=2026-08-20T07:34:06Z
+readiness_status=ready
+release_smoke=passed
+default_elixir_tests=1237
+cluster_elixir_tests=9
+browser_tests=17
+production_action=none

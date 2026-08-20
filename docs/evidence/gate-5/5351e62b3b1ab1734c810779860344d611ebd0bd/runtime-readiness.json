@@ -1,0 +1,38 @@
+{
+  "environment": "staging",
+  "features": {
+    "boot_convergence": false,
+    "computers": false,
+    "conversation_reset": false,
+    "experience_memory": false,
+    "forge": false,
+    "forge_deploy": false,
+    "graph_memory": false,
+    "incident_fixer": false,
+    "memory_portability": false,
+    "ra": false,
+    "semantic_memory": false,
+    "shadow_programs": false,
+    "tool_embeddings": false,
+    "tools": true,
+    "turn_recovery": false,
+    "voice": false,
+    "voice_recording": false,
+    "voice_recovery": false,
+    "voice_retention": false,
+    "work": false,
+    "work_workers": false
+  },
+  "groups": {
+    "cluster": "ready",
+    "database": "ready",
+    "endpoint": "ready",
+    "features": "ready",
+    "forge": "ready",
+    "github": "ready",
+    "providers": "ready"
+  },
+  "schema": "openagents.runtime_configuration.v1",
+  "staging_gate": 5,
+  "status": "ready"
+}

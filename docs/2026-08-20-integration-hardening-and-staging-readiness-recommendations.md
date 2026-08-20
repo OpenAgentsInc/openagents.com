@@ -509,6 +509,35 @@ boots without its tools or rejects every direct load is not ready.
 **Exit criteria:** A staging release either starts with a valid, reviewed
 configuration or exits before serving traffic with a redacted diagnostic.
 
+**Gate 5 status (2026-08-20): complete.**
+
+- Added `OpenAgents.RuntimeConfig` as the typed boundary for endpoint,
+  database, GitHub, provider, feature, forge, storage, Horde, Ra, discovery,
+  node, and distribution settings. It validates before migrations, supervised
+  workers, or the endpoint and names only the invalid setting in failures.
+- Replaced provider-side process-environment reads with the boundary's
+  centralized OpenAI secret accessor. GitHub OAuth scopes are now configured
+  once and validated against the implemented retained-token tool model.
+- Added an explicit Gate 5 staging profile with every feature boolean set.
+  Staging-gate fences refuse advanced product features before Gate 14, forge
+  deployment and boot convergence before Gate 13, and Ra before Gate 12.
+  Production remains separately locked.
+- Removed inherited temporary-directory fallbacks for Ra, forge data, forge
+  WAL, build queues, artifacts, and coding jobs. Enabled staging features must
+  use explicit absolute storage paths outside `/tmp`.
+- Added content-free Mix and release readiness commands plus startup behavior
+  checks for the executable tool catalog and hot-load examples. The release
+  wrapper now generates Castle runtime configuration before either readiness
+  or migrations, fixing a fresh-release preboot ordering defect.
+- Exact committed SHA `5351e62b3b1ab1734c810779860344d611ebd0bd`
+  passed 1,237 default Elixir tests, all 9 distributed tests, 17 browser tests,
+  the documentation and dependency gates, the redacted release readiness
+  check, migrations, and startup against a disposable PostgreSQL database.
+  The retained [readiness report](evidence/gate-5/5351e62b3b1ab1734c810779860344d611ebd0bd/runtime-readiness.json)
+  and [receipt](evidence/gate-5/5351e62b3b1ab1734c810779860344d611ebd0bd/runtime-readiness.receipt)
+  contain no credentials, URLs, hosts, paths, node names, or tokens. No staging
+  deployment or production action occurred.
+
 ## Gate 6: Harden identity, authorization, and secrets
 
 ### Decide GitHub token retention deliberately
@@ -1156,7 +1185,7 @@ each handoff.
 - [x] The application has one Markdown parser, component system, and documented
       two-tier icon policy.
 - [x] The dark-only palette has no nonfunctional theme control.
-- [ ] Runtime configuration is typed, redacted, and staging-specific.
+- [x] Runtime configuration is typed, redacted, and staging-specific.
 - [ ] Every route has an explicit authority class.
 - [ ] GitHub token behavior matches code, UI disclosure, and data rights.
 - [ ] Issues and Projects are scoped by repository in code and PostgreSQL.

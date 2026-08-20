@@ -26,20 +26,38 @@ defmodule OpenAgents.SCV.CodexAccounts do
     Repo.all(from(account in DriverAccount, order_by: [desc: account.inserted_at]))
   end
 
+  @spec recover_device_login(User.t()) ::
+          {:ok, map()} | {:error, :login_not_running, Ecto.UUID.t()} | :none
+  def recover_device_login(%User{} = operator) do
+    if Accounts.admin?(operator) do
+      case active_attempt(operator) do
+        %DriverLoginAttempt{} = attempt -> recover_attempt(attempt)
+        nil -> :none
+      end
+    else
+      :none
+    end
+  end
+
+  def recover_device_login(_operator), do: :none
+
   @spec start_device_login(User.t(), map()) ::
           {:ok, DriverAccount.t(), DriverLoginAttempt.t(), map()} | {:error, atom()}
   def start_device_login(%User{} = operator, attributes) when is_map(attributes) do
     with true <- Accounts.admin?(operator) or {:error, :not_authorized},
          true <- enabled?() or {:error, :codex_not_enabled},
-         {:ok, account, attempt} <- create_pending(operator, attributes),
-         {:ok, ceremony} <- CodexLoginSupervisor.start_login(account, attempt) do
-      {:ok, account, attempt, ceremony}
+         {:ok, account, attempt} <- create_pending(operator, attributes) do
+      case CodexLoginSupervisor.start_login(account, attempt) do
+        {:ok, ceremony} ->
+          {:ok, account, attempt, ceremony}
+
+        {:error, reason} ->
+          mark_failed(account, attempt, reason)
+          {:error, reason}
+      end
     else
       {:error, _reason} = error ->
         error
-
-      false ->
-        {:error, :not_authorized}
     end
   end
 
@@ -51,8 +69,16 @@ defmodule OpenAgents.SCV.CodexAccounts do
     with true <- Accounts.admin?(operator) or {:error, :not_authorized},
          %DriverLoginAttempt{operator_id: operator_id} = attempt <-
            Repo.get(DriverLoginAttempt, attempt_id),
-         true <- operator_id == operator.id or {:error, :not_authorized} do
-      CodexLoginSupervisor.cancel(attempt)
+         true <- operator_id == operator.id or {:error, :not_authorized},
+         true <- attempt.status in ["starting", "waiting"] or {:error, :login_not_running} do
+      case CodexLoginSupervisor.cancel(attempt) do
+        :ok ->
+          :ok
+
+        {:error, :login_not_running} ->
+          account = Repo.get!(DriverAccount, attempt.account_id)
+          mark_cancelled(account, attempt)
+      end
     else
       nil -> {:error, :login_not_found}
       {:error, reason} -> {:error, reason}
@@ -217,6 +243,31 @@ defmodule OpenAgents.SCV.CodexAccounts do
     end
   end
 
+  defp active_attempt(operator) do
+    Repo.one(
+      from(attempt in DriverLoginAttempt,
+        where: attempt.operator_id == ^operator.id,
+        where: attempt.status in ["starting", "waiting"],
+        order_by: [desc: attempt.inserted_at],
+        limit: 1,
+        preload: [:account]
+      )
+    )
+  end
+
+  defp recover_attempt(%DriverLoginAttempt{} = attempt) do
+    if DateTime.after?(attempt.expires_at, DateTime.utc_now()) do
+      case CodexLoginSupervisor.snapshot(attempt) do
+        {:ok, ceremony} -> {:ok, ceremony}
+        {:error, :login_not_running} -> {:error, :login_not_running, attempt.id}
+        {:error, _reason} -> :none
+      end
+    else
+      mark_failed(attempt.account, attempt, "login_expired")
+      :none
+    end
+  end
+
   defp normalized_label(value) when is_binary(value) do
     case String.trim(value) do
       "" -> "Operator Codex account"
@@ -256,7 +307,7 @@ defmodule OpenAgents.SCV.CodexAccounts do
       )
 
     :telemetry.execute([:openagents, :scv, :codex_account, :event], %{count: 1}, metadata)
-    Logger.info("SCV Codex account lifecycle event", Map.to_list(metadata))
+    Logger.info("SCV Codex account lifecycle event #{Jason.encode!(metadata)}")
     :ok
   end
 

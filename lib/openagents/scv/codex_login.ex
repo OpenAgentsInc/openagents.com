@@ -24,18 +24,33 @@ defmodule OpenAgents.SCV.CodexLogin do
 
   def start_link(options) do
     attempt = Keyword.fetch!(options, :attempt)
-    name = {:via, Registry, {OpenAgents.SCV.CodexLoginRegistry, attempt.id}}
+    name = {:via, Horde.Registry, {OpenAgents.HordeRegistry, registry_key(attempt.id)}}
     GenServer.start_link(__MODULE__, options, name: name)
   end
 
+  @doc false
+  def registry_key(attempt_id), do: {:scv_codex_login, attempt_id}
+
   @spec begin(pid()) :: {:ok, map()} | {:error, atom()}
-  def begin(server), do: GenServer.call(server, :begin, 30_000)
+  def begin(server) do
+    GenServer.call(server, :begin, 30_000)
+  catch
+    :exit, _reason -> {:error, :login_start_failed}
+  end
 
   @spec snapshot(pid()) :: {:ok, map()} | {:error, atom()}
-  def snapshot(server), do: GenServer.call(server, :snapshot)
+  def snapshot(server) do
+    GenServer.call(server, :snapshot)
+  catch
+    :exit, _reason -> {:error, :login_not_running}
+  end
 
   @spec cancel(pid()) :: :ok | {:error, atom()}
-  def cancel(server), do: GenServer.call(server, :cancel, 15_000)
+  def cancel(server) do
+    GenServer.call(server, :cancel, 15_000)
+  catch
+    :exit, _reason -> {:error, :login_not_running}
+  end
 
   @impl true
   def init(options) do

@@ -4,6 +4,7 @@ exec 2>/dev/null
 
 mkdir -p "${CODEX_HOME}"
 account_reads=0
+mode="${1:-complete}"
 
 while IFS= read -r line; do
   id=$(printf '%s' "${line}" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
@@ -18,8 +19,10 @@ while IFS= read -r line; do
       printf '%s' '{"auth_mode":"chatgpt","tokens":{"access_token":"test-only","refresh_token":"test-only"}}' > "${CODEX_HOME}/auth.json"
       chmod 600 "${CODEX_HOME}/auth.json"
       printf '{"id":%s,"result":{"type":"chatgptDeviceCode","loginId":"fake-login-id","verificationUrl":"https://auth.openai.com/codex/device","userCode":"TEST-CODE"}}\n' "${id}"
-      printf '%s\n' '{"method":"account/login/completed","params":{"loginId":"fake-login-id","success":true,"error":null}}'
-      printf '%s\n' '{"method":"account/updated","params":{"authMode":"chatgpt","planType":"plus"}}'
+      if [ "${mode}" != "hold" ]; then
+        printf '%s\n' '{"method":"account/login/completed","params":{"loginId":"fake-login-id","success":true,"error":null}}'
+        printf '%s\n' '{"method":"account/updated","params":{"authMode":"chatgpt","planType":"plus"}}'
+      fi
       ;;
     *'"method":"account/read"'*)
       account_reads=$((account_reads + 1))

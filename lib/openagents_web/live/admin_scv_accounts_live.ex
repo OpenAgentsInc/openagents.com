@@ -11,11 +11,14 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
     if Accounts.admin?(socket.assigns.current_user) do
       if connected?(socket), do: CodexAccounts.subscribe()
 
+      {pending, interrupted_attempt_id} = recover_pending(socket.assigns.current_user)
+
       {:ok,
        socket
        |> assign(:page_title, "Operator · SCV Codex accounts")
        |> assign(:codex_enabled, CodexAccounts.enabled?())
-       |> assign(:pending, nil)
+       |> assign(:pending, pending)
+       |> assign(:interrupted_attempt_id, interrupted_attempt_id)
        |> assign(:form, to_form(%{"label" => ""}, as: :account))
        |> load_accounts()}
     else
@@ -31,6 +34,7 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
       {:noreply,
        socket
        |> assign(:pending, ceremony)
+       |> assign(:interrupted_attempt_id, nil)
        |> assign(:form, to_form(%{"label" => ""}, as: :account))
        |> put_flash(:info, "Codex supplied a one-time device code.")
        |> load_accounts()}
@@ -46,18 +50,33 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
   def handle_event("cancel_login", _params, socket) do
     if Accounts.admin?(socket.assigns.current_user) do
       result =
-        case socket.assigns.pending do
-          %{attempt_id: attempt_id} ->
-            CodexAccounts.cancel_device_login(socket.assigns.current_user, attempt_id)
+        cond do
+          match?(%{attempt_id: _attempt_id}, socket.assigns.pending) ->
+            CodexAccounts.cancel_device_login(
+              socket.assigns.current_user,
+              socket.assigns.pending.attempt_id
+            )
 
-          nil ->
+          is_binary(socket.assigns.interrupted_attempt_id) ->
+            CodexAccounts.cancel_device_login(
+              socket.assigns.current_user,
+              socket.assigns.interrupted_attempt_id
+            )
+
+          true ->
             {:error, :login_not_found}
         end
 
       socket =
         case result do
-          :ok -> socket |> assign(:pending, nil) |> put_flash(:info, "Codex login cancelled.")
-          {:error, reason} -> put_flash(socket, :error, error_message(reason))
+          :ok ->
+            socket
+            |> assign(:pending, nil)
+            |> assign(:interrupted_attempt_id, nil)
+            |> put_flash(:info, "Codex login cancelled. You can start a new connection.")
+
+          {:error, reason} ->
+            put_flash(socket, :error, error_message(reason))
         end
 
       {:noreply, load_accounts(socket)}
@@ -73,6 +92,7 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
     {:noreply,
      socket
      |> assign(:pending, pending)
+     |> assign(:interrupted_attempt_id, nil)
      |> put_flash(:info, "Codex account connected and verified for SCVs.")
      |> load_accounts()}
   end
@@ -83,6 +103,7 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
     {:noreply,
      socket
      |> assign(:pending, pending)
+     |> assign(:interrupted_attempt_id, nil)
      |> put_flash(:error, error_message(code))
      |> load_accounts()}
   end
@@ -91,6 +112,7 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
     {:noreply,
      socket
      |> assign(:pending, clear_pending(socket.assigns.pending, account_id))
+     |> assign(:interrupted_attempt_id, nil)
      |> load_accounts()}
   end
 
@@ -100,6 +122,14 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
 
   defp clear_pending(%{account_id: account_id}, account_id), do: nil
   defp clear_pending(pending, _account_id), do: pending
+
+  defp recover_pending(operator) do
+    case CodexAccounts.recover_device_login(operator) do
+      {:ok, ceremony} -> {ceremony, nil}
+      {:error, :login_not_running, attempt_id} -> {nil, attempt_id}
+      :none -> {nil, nil}
+    end
+  end
 
   @impl true
   def render(assigns) do
@@ -132,7 +162,30 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
             This deployment has not enabled the Codex account runtime.
           </.alert>
 
-          <section :if={@codex_enabled && is_nil(@pending)} aria-labelledby="connect-codex-heading">
+          <.alert
+            :if={@codex_enabled && is_binary(@interrupted_attempt_id)}
+            id="codex-login-interrupted"
+            variant={:warning}
+          >
+            <div class="space-y-3">
+              <p>
+                The previous SCV Codex login process is no longer reachable. No credential was
+                stored.
+              </p>
+              <.button
+                id="clear-interrupted-codex-login"
+                variant={:secondary}
+                phx-click="cancel_login"
+              >
+                CLEAR AND RETRY
+              </.button>
+            </div>
+          </.alert>
+
+          <section
+            :if={@codex_enabled && is_nil(@pending) && is_nil(@interrupted_attempt_id)}
+            aria-labelledby="connect-codex-heading"
+          >
             <.card id="connect-codex-account">
               <div class="space-y-5">
                 <div class="max-w-2xl space-y-2">

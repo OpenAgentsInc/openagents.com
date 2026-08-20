@@ -49,4 +49,31 @@ defmodule OpenAgentsWeb.AdminScvAccountsLiveTest do
     assert has_element?(view, "#codex-accounts", "gpt-5.6-luna")
     refute has_element?(view, "#codex-device-login")
   end
+
+  test "recovers an active device ceremony after a LiveView reconnect", %{conn: conn} do
+    config = Application.fetch_env!(:openagents, :scv_codex)
+
+    Application.put_env(
+      :openagents,
+      :scv_codex,
+      Keyword.put(config, :client_options, args: ["hold"])
+    )
+
+    on_exit(fn -> Application.put_env(:openagents, :scv_codex, config) end)
+
+    conn = log_in_admin_user(conn, "scv-codex-reconnect")
+    {:ok, first_view, _html} = live(conn, ~p"/admin/scv/accounts")
+
+    first_view
+    |> form("#codex-account-form", account: %{label: "Reconnect Codex"})
+    |> render_submit()
+
+    assert has_element?(first_view, "#codex-device-code", "TEST-CODE")
+
+    {:ok, recovered_view, _html} = live(conn, ~p"/admin/scv/accounts")
+
+    assert has_element?(recovered_view, "#codex-device-login")
+    assert has_element?(recovered_view, "#codex-device-code", "TEST-CODE")
+    refute has_element?(recovered_view, "#codex-account-form")
+  end
 end

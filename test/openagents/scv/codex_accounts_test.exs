@@ -156,6 +156,65 @@ defmodule OpenAgents.SCV.CodexAccountsTest do
     assert account_id == failed_account.id
   end
 
+  test "recovers an active device ceremony through the cluster registry" do
+    operator = operator("codex-recover")
+    configure_held_login()
+
+    assert {:ok, account, attempt, ceremony} =
+             CodexAccounts.start_device_login(operator, %{"label" => "Recoverable Codex"})
+
+    assert {:ok, recovered} = CodexAccounts.recover_device_login(operator)
+    assert recovered == ceremony
+
+    assert [{pid, _value}] =
+             Horde.Registry.lookup(
+               OpenAgents.HordeRegistry,
+               {:scv_codex_login, attempt.id}
+             )
+
+    assert node(pid) == node()
+    assert :ok = CodexAccounts.cancel_device_login(operator, attempt.id)
+
+    assert Repo.get!(DriverAccount, account.id).status == "failed"
+    assert Repo.get!(DriverLoginAttempt, attempt.id).status == "cancelled"
+  end
+
+  test "surfaces and clears a device ceremony interrupted by process loss" do
+    operator = operator("codex-interrupted")
+    configure_held_login()
+
+    assert {:ok, account, attempt, _ceremony} =
+             CodexAccounts.start_device_login(operator, %{"label" => "Interrupted Codex"})
+
+    assert [{pid, _value}] =
+             Horde.Registry.lookup(
+               OpenAgents.HordeRegistry,
+               {:scv_codex_login, attempt.id}
+             )
+
+    monitor = Process.monitor(pid)
+    GenServer.stop(pid, :normal)
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}
+
+    assert {:error, :login_not_running, attempt_id} =
+             CodexAccounts.recover_device_login(operator)
+
+    assert attempt_id == attempt.id
+    assert :ok = CodexAccounts.cancel_device_login(operator, attempt.id)
+    assert Repo.get!(DriverAccount, account.id).status == "failed"
+    assert Repo.get!(DriverLoginAttempt, attempt.id).status == "cancelled"
+  end
+
+  defp configure_held_login do
+    config = Application.fetch_env!(:openagents, :scv_codex)
+
+    Application.put_env(
+      :openagents,
+      :scv_codex,
+      Keyword.put(config, :client_options, args: ["hold"])
+    )
+  end
+
   defp operator(key) do
     account = user(key)
 

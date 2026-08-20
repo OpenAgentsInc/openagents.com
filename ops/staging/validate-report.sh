@@ -151,7 +151,7 @@ jq -e \
   exit 1
 }
 
-report_dir=$(CDPATH= cd -- "$(dirname -- "$report")" && pwd)
+report_dir=$(realpath "$(dirname -- "$report")")
 refs=$(mktemp /tmp/openagents-staging-report-refs.XXXXXX)
 cleanup() {
   unlink "$refs" 2>/dev/null || true
@@ -198,7 +198,7 @@ while IFS="$tab" read -r relative_path expected_sha256; do
     exit 1
   fi
 
-  mode_bits=$(stat -c '%a' "$evidence_path")
+  mode_bits=$(stat -c '%a' "$evidence_path" 2>/dev/null || stat -f '%Lp' "$evidence_path")
   case "$mode_bits" in
     400 | 600) ;;
     *) echo "evidence file must not grant group or world access: $relative_path" >&2; exit 1 ;;

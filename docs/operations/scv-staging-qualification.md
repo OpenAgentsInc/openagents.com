@@ -101,3 +101,28 @@ passed as execution `openagents-scv-staging-9gdhz`. SCV run
 two read calls, eight normalized events, 754,118,656 bytes of peak RSS, 45
 resource samples, no sampling errors, and no output truncation. This second
 receipt proves the currently deployed job configuration.
+
+## GPT-5.6 Luna staging receipt
+
+Cloud Build `655a2fe6-8173-4686-9533-f3a1733942b0` built source revision
+`c7175ed8a8781ea1aab7d204623a28ac45a70bc1`. Artifact Registry resolved the
+worker image to
+`sha256:156ff9f51e955d03b4795af8e2bb190a6c4f9962cc7942a6dcc0586e9b48b0a9`.
+The control-plane, parity, production-readiness, and staging SCV jobs all use
+that digest with `SCV_MODEL=openai/gpt-5.6-luna` and
+`SCV_REASONING_EFFORT=low`.
+
+Parity execution `openagents-scv-parity-audit-p5mkz` completed successfully as
+SCV run `0f13d278-02aa-47cd-bc07-3bdcd2fd6135`. The OpenCode process ran for
+58,553 milliseconds and emitted 62 normalized events. It completed 9 `glob`,
+9 `grep`, and 22 `read` calls, recorded 688,361,472 bytes of peak RSS, and
+reported no sampling or output truncation.
+
+Cloud Logging stored the terminal result as
+`openagents.scv.worker.result.v1` and the 8,645-byte report as three ordered
+`openagents.scv.report.chunk.v1` JSON records. Both the initial
+`run_preparing` event and terminal result recorded the exact model and reasoning
+effort. This receipt qualifies the Luna model-selection, live event, bounded
+report, and terminal-result paths in the shared staging project. It does not
+admit repository writes or count the report findings as claimed or completed
+issues.

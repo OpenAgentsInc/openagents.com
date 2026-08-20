@@ -300,6 +300,16 @@ Google Cloud project. It does not pass the isolated-staging gate described in
 this plan and does not authorize writes, Forge handoff, or autonomous
 deployment.
 
+The current staging worker now uses `openai/gpt-5.6-luna` with `low` reasoning.
+Cloud Build `655a2fe6-8173-4686-9533-f3a1733942b0` built revision
+`c7175ed8a8781ea1aab7d204623a28ac45a70bc1` as image digest
+`sha256:156ff9f51e955d03b4795af8e2bb190a6c4f9962cc7942a6dcc0586e9b48b0a9`.
+Parity execution `openagents-scv-parity-audit-p5mkz` proved the exact model and
+reasoning effort in its live preparation event and terminal result. Its bounded
+report arrived as three ordered structured JSON chunks without truncation. See
+[Qualify an SCV in staging](operations/scv-staging-qualification.md) for the
+complete receipt.
+
 ## Goals
 
 An SCV should:

@@ -14,6 +14,11 @@
 ^docs/issues-projects-ui-roadmap\.md:
 ^docs/sarah-integration-plan\.md:
 
+# The production cutover retains current provider resource names until the
+# OpenAgents observation window completes.
+^docs/operations/production-cutover\.md:
+^ops/production/preflight\.sh:
+
 # Current architecture and decisions discuss the Sarah persona boundary.
 ^README\.md:[0-9]+:.*[Ss][Aa][Rr][Aa][Hh]
 ^docs/architecture\.md:

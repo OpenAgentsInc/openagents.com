@@ -258,5 +258,10 @@ defmodule OpenAgents.SCV.Worker do
   defp error_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
   defp error_code(_reason), do: "worker_failed"
 
-  defp write_json(value), do: IO.puts(Jason.encode!(value))
+  @doc false
+  @spec encode_event(map()) :: String.t()
+  def encode_event(value) when is_map(value),
+    do: Jason.encode!(value, escape: :unicode_safe)
+
+  defp write_json(value), do: IO.puts(encode_event(value))
 end

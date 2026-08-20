@@ -154,6 +154,12 @@ defmodule OpenAgents.SCV.RunTest do
     assert Enum.all?(chunks, &(&1.report_digest == digest))
     assert Enum.all?(chunks, &(byte_size(Jason.encode!(&1)) < 4_096))
     assert chunks |> Enum.map(& &1.text) |> Enum.join() == text
+
+    encoded = chunks |> hd() |> Worker.encode_event()
+    assert encoded =~ "\\uD83D\\uDE80"
+    refute encoded =~ "🚀"
+    assert {:ok, %{"text" => decoded}} = Jason.decode(encoded)
+    assert decoded == hd(chunks).text
   end
 
   defp fake_executable do

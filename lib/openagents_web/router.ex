@@ -14,10 +14,10 @@ defmodule OpenAgentsWeb.Router do
     plug :protect_from_forgery
 
     plug :put_secure_browser_headers, %{
-      "content-security-policy" =>
-        "default-src 'self'; base-uri 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; img-src 'self' data: https://avatars.githubusercontent.com; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
       "permissions-policy" => "microphone=(self)"
     }
+
+    plug OpenAgentsWeb.Plugs.ContentSecurityPolicy
 
     plug :fetch_current_user
   end

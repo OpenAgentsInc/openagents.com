@@ -76,6 +76,10 @@ OpenAgents style pack, every supported button variant survives compilation, no
 retired palette alias survives, both owned themes compile, the operating-system
 fallback compiles, and no third theme selector enters the bundle.
 
+The root theme bootstrap is the only inline script. The browser pipeline creates
+a unique CSP nonce for each response, places it in `script-src`, and binds it to
+that bootstrap. Do not admit another inline script with the nonce.
+
 See [the UI roadmap](issues-projects-ui-roadmap.md),
 [ADR 0005](decisions/0005-use-basecoat-and-one-component-system.md), and the
 [hardening plan](2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).

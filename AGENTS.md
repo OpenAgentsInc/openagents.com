@@ -52,7 +52,7 @@ custom classes must fully style the input
 - Out of the box **only the app.js and app.css bundles are supported**
   - You cannot reference an external vendor'd script `src` or link `href` in the layouts
   - You must import the vendor deps into app.js and app.css to use them
-  - **Never write inline `<script>` tags within templates.** The only exception is the synchronous, content-free theme bootstrap in `root.html.heex`, which must run before the first stylesheet paint. Put every other client behavior in `app.js` or a colocated LiveView hook
+  - **Never write inline `<script>` tags within templates.** The only exception is the synchronous, content-free theme bootstrap in `root.html.heex`, which must run before the first stylesheet paint and carry the response-scoped CSP nonce. Put every other client behavior in `app.js` or a colocated LiveView hook
 
 ### UI and UX design guidelines
 

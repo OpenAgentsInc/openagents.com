@@ -15,7 +15,7 @@
     "system" stores nothing and leaves data-theme unset so the CSS
     prefers-color-scheme fallback governs; an explicit choice sets the
     attribute, which always wins. --%>
-    <script phx-no-curly-interpolation>
+    <script nonce={assigns[:csp_nonce]} phx-no-curly-interpolation>
       (() => {
         const stored = localStorage.getItem("phx:theme");
         const apply = (choice) => {

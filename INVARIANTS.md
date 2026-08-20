@@ -1523,16 +1523,18 @@ Adopting an additional Basecoat component requires a
 `docs/component-library.md` change and an explicit per-component import. The
 application exposes one system, light, and dark preference control. A
 synchronous, content-free bootstrap applies the stored choice before first
-paint and synchronizes changes across tabs. Apps SDK UI glyphs are preferred;
-the pinned Heroicons fallback has an explicit inventory and no current product
-call sites.
+paint and synchronizes changes across tabs. A unique response-scoped CSP nonce
+admits only that bootstrap; `script-src` does not allow arbitrary inline code.
+Apps SDK UI glyphs are preferred; the pinned Heroicons fallback has an explicit
+inventory and no current product call sites.
 
 Evidence: `assets/vendor/basecoat/README.md`, `assets/css/openagents.css`,
 `priv/static/fonts`, `OpenAgentsWeb.UI`, `OpenAgentsWeb.ComponentCatalog`,
 `OpenAgentsWeb.UITest`, `OpenAgentsWeb.UIGalleryLiveTest`,
 `test/openagents_web/component_catalog_test.exs`,
 `test/openagents_web/icon_affordances_test.exs`,
-`test/openagents_web/live/components_live_test.exs`, and
+`test/openagents_web/live/components_live_test.exs`,
+`test/openagents_web/home_controller_test.exs`, and
 `assets/test/css_contract_test.mjs`.
 
 ### LEADERBOARD-001 — The public board publishes one bounded projection

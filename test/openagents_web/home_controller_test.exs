@@ -36,6 +36,34 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     refute policy =~ ~r/img-src[^;]*\shttps:(?:\s|;)/
   end
 
+  test "the browser policy admits only the response-scoped theme bootstrap", %{conn: conn} do
+    first = get(conn, ~p"/")
+    second = conn |> recycle() |> get(~p"/")
+
+    [first_policy] = get_resp_header(first, "content-security-policy")
+    [second_policy] = get_resp_header(second, "content-security-policy")
+
+    [first_nonce] =
+      Regex.run(~r/script-src 'self' 'nonce-([A-Za-z0-9_-]{24})'/, first_policy,
+        capture: :all_but_first
+      )
+
+    [second_nonce] =
+      Regex.run(~r/script-src 'self' 'nonce-([A-Za-z0-9_-]{24})'/, second_policy,
+        capture: :all_but_first
+      )
+
+    refute first_nonce == second_nonce
+    refute first_policy =~ ~r/script-src[^;]*'unsafe-inline'/
+
+    document = first |> html_response(200) |> LazyHTML.from_document()
+
+    assert document
+           |> LazyHTML.query(~s{script[nonce="#{first_nonce}"]})
+           |> LazyHTML.to_tree()
+           |> length() == 1
+  end
+
   test "the landing styles do not use Sarah's cycling verb" do
     css = File.read!("assets/css/app.css")
 

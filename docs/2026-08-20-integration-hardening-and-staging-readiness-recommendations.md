@@ -448,6 +448,9 @@ records.
   palette. The documentation check now refuses the superseded dark-only claims
   in active contracts, and the component test enumerates the system, light, and
   dark controls without treating the system preference as a third palette.
+- Bound the synchronous prepaint theme bootstrap to a unique response-scoped
+  CSP nonce. The browser policy test proves that the header and script nonce
+  match, changes between responses, and never enables arbitrary inline scripts.
 - Migrated current glyph uses to the preferred vendored Apps SDK set. Retained
   Heroicons only as the owner-approved second tier, pinned it to immutable
   revision `0435d4ca364a608cc75e2f8683d374e55abbae26`, and recorded an empty

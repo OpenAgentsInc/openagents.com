@@ -5,6 +5,8 @@ defmodule OpenAgentsWeb.Layouts do
   """
   use OpenAgentsWeb, :html
 
+  alias OpenAgentsWeb.SarahUI, as: UI
+
   # Embed all files in layouts/* within this module.
   # The default root.html.heex file contains the HTML
   # skeleton of your application, namely HTML headers
@@ -49,7 +51,7 @@ defmodule OpenAgentsWeb.Layouts do
       <% end %>
 
       <div class="flex-1 min-w-0 flex flex-col h-screen">
-        <.command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle} />
+        <.openagents_command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle} />
 
         <main class={[
           "flex-1 min-w-0 overflow-y-auto overscroll-none p-4",
@@ -74,7 +76,7 @@ defmodule OpenAgentsWeb.Layouts do
   attr :title, :string, default: nil
   attr :subtitle, :string, default: nil
 
-  defp command_bar(assigns) do
+  defp openagents_command_bar(assigns) do
     ~H"""
     <header class="navbar bg-base-100 border-b border-base-300 px-4 h-16 shrink-0">
       <div class="navbar-start">
@@ -106,38 +108,82 @@ defmodule OpenAgentsWeb.Layouts do
     """
   end
 
+  @doc """
+  The Sarah-style command bar: brand lockup on the left, account controls on the
+  right. `current_user` is optional because public surfaces are anonymous.
+  """
+  attr :aria_label, :string, required: true
   attr :current_user, :map, default: nil
-  attr :context, :atom, default: :bar
+  slot :lockup, doc: "chip controls rendered beside the brand name"
+  slot :controls, doc: "surface-specific controls rendered before the account menu"
+
+  def command_bar(assigns) do
+    ~H"""
+    <header class="command-bar" aria-label={@aria_label}>
+      <div class="brand-lockup">
+        <span class="brand-name">OpenAgents</span>
+        {render_slot(@lockup)}
+      </div>
+      <div class="command-controls">
+        {render_slot(@controls)}
+
+        <.account_control :if={@current_user} current_user={@current_user} />
+      </div>
+    </header>
+    """
+  end
+
+  @doc """
+  The one authenticated identity control: an avatar trigger opening a bounded
+  native popover with the same identity and a labeled `LOG OUT` action.
+  """
+  attr :current_user, :map, required: true
+  attr :context, :atom, values: [:bar, :row], default: :bar
 
   def account_control(assigns) do
     ~H"""
-    <%= if @current_user do %>
-      <details class="dropdown dropdown-end">
-        <summary class="btn btn-ghost btn-circle avatar list-none cursor-pointer">
-          <img
-            src={@current_user.github_avatar_url}
-            alt={"GitHub avatar for @#{@current_user.github_login}"}
-            class="w-8 h-8 rounded-full"
-          />
-        </summary>
-        <ul class="menu dropdown-content bg-base-100 rounded-box z-10 w-56 p-2 shadow border border-base-300">
-          <li class="p-2">
-            <span class="font-semibold">{account_display_name(@current_user)}</span>
-            <span :if={@current_user.github_name} class="text-sm text-base-content/70">
-              @{@current_user.github_login}
-            </span>
-          </li>
-          <li>
-            <.form for={%{}} as={:logout} action={~p"/logout"} method="post" class="m-0 w-full">
-              <input type="hidden" name="_method" value="delete" />
-              <button type="submit" class="w-full text-left flex items-center gap-2">
-                <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" /> Log out
-              </button>
-            </.form>
-          </li>
-        </ul>
-      </details>
-    <% end %>
+    <UI.button
+      id="account-menu-trigger"
+      variant={if(@context == :row, do: :ghost, else: :secondary)}
+      size={:sm}
+      class={["account-menu-trigger", @context == :row && "account-menu-trigger--row"]}
+      popovertarget="account-menu"
+      popovertargetaction="toggle"
+      aria-label={"Account menu for @#{@current_user.github_login}"}
+    >
+      <UI.avatar src={@current_user.github_avatar_url} size={:sm} />
+      <span :if={@context == :bar}>@{@current_user.github_login}</span>
+      <span :if={@context == :row} class="account-trigger-identity">
+        <strong>{account_display_name(@current_user)}</strong>
+        <small :if={@current_user.github_name} class="!text-[0.75rem]">@{@current_user.github_login}</small>
+      </span>
+      <UI.icon name="chevron-down" class="account-menu-trigger__caret" />
+    </UI.button>
+
+    <UI.menu id="account-menu" class="account-menu">
+      <div class="account-menu__identity">
+        <UI.avatar
+          src={@current_user.github_avatar_url}
+          alt={"GitHub avatar for @#{@current_user.github_login}"}
+          size={:lg}
+        />
+        <span>
+          <strong>{account_display_name(@current_user)}</strong>
+          <small :if={@current_user.github_name}>@{@current_user.github_login}</small>
+        </span>
+      </div>
+      <.form for={%{}} id="logout-form" action={~p"/logout"} method="delete">
+        <UI.button
+          id="logout"
+          variant={:ghost}
+          type="submit"
+          role="menuitem"
+          class="account-menu__logout"
+        >
+          <UI.icon name="logout" /> Log out
+        </UI.button>
+      </.form>
+    </UI.menu>
     """
   end
 

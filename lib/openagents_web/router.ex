@@ -27,6 +27,12 @@ defmodule OpenAgentsWeb.Router do
     live_session :public,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/", HomeLive, :index
+      live "/status", NetworkStatusLive, :index
+      live "/changelog", ChangelogLive, :index
+      live "/leaderboard", LeaderboardLive, :index
+      live "/code/:owner/:repo", CodeRepoLive, :index
+      live "/code/:owner/:repo/blob/*path", CodeBlobLive, :index
+      live "/code/:owner/:repo/commit/:sha", CodeCommitLive, :index
     end
 
     # `/components/icons` must stay ahead of `/components/:slug` so the literal
@@ -49,7 +55,6 @@ defmodule OpenAgentsWeb.Router do
     get "/auth/github/callback", AuthController, :callback
     delete "/logout", AuthController, :logout
     get "/healthz", HealthController, :show
-    get "/status", NetworkStatusController, :show
   end
 
   scope "/", OpenAgentsWeb do
@@ -58,6 +63,9 @@ defmodule OpenAgentsWeb.Router do
     live_session :authenticated,
       on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
       live "/chat", ChatLive, :index
+      live "/computers", ComputersLive, :index
+      live "/admin", AdminLive, :index
+      live "/admin/forge", AdminForgeLive, :index
 
       live "/:owner/:repo/issues/new", IssueNewLive, :new
       live "/:owner/:repo/issues/:number", IssueShowLive, :show
@@ -83,7 +91,6 @@ defmodule OpenAgentsWeb.Router do
     delete "/data", DataController, :delete
     delete "/data/reset", DataController, :reset
 
-    get "/computers", ComputersController, :index
     get "/machines", ComputersController, :index
     get "/api/computers", ComputersController, :index
     post "/api/computers/pairings/:id/approve", ComputersController, :approve_pairing

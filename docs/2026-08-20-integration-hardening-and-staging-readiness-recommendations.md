@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Proposed, amended with measured findings
+Status: In progress; Gate 0 complete, amended with measured findings
 
 ## Outcome
 
@@ -94,8 +94,8 @@ Completed on 2026-08-20:
 - Replaced Ra's captured session-query functions with stable
   module-function-argument descriptors. The cluster suite now runs under
   coverage without a peer crashing on an instrumented function identity.
-- Merged the default and cluster coverage exports locally. The current combined
-  result is 83.58% from 1,222 default tests and all 9 cluster tests.
+- Merged the default and cluster coverage exports locally. The completed
+  baseline result is 83.59% from 1,222 default tests and all 9 cluster tests.
 - Added `ops/ci/coverage.sh` to discard stale exports, run both suites with
   warnings as errors, collect execution from distributed peers, merge both
   exports, and enforce an initial 83% floor. Raise the floor as direct recovery
@@ -115,9 +115,19 @@ Completed on 2026-08-20:
   coverage, and the production release smoke without retries, recheck Git
   identity and cleanliness, and atomically write a content-free receipt under
   `.git/openagents/gate-receipts/`.
+- Ran the complete baseline on clean commit
+  `d9ffc65f5cdd961cf228146a95e9d651e14692d2`. It passed without automatic
+  retries in 76 seconds: 15 JavaScript tests, 1,222 default Elixir tests, all 9
+  separately executed cluster tests, 83.59% merged coverage, and the packaged
+  production release smoke against a disposable PostgreSQL 18 database.
+- Inspected the resulting mode-`0600`, content-free local receipt at
+  `.git/openagents/gate-receipts/d9ffc65f5cdd961cf228146a95e9d651e14692d2.json`.
+  The receipt identifies the exact commit, stage results and durations, bounded
+  test counts, coverage, and zero automatic retries; it contains no logs,
+  database URLs, hostnames, credentials, or product content.
 
-Gate 0 still requires one clean-commit execution of `ops/ci/baseline.sh` and
-inspection of its exact-SHA receipt.
+Gate 0 is complete. Run `ops/ci/baseline.sh` again on every subsequent release
+candidate; a receipt for one SHA is never evidence for another.
 
 Do not use the current green suite as evidence for untested code. The updated
 coverage audit records strong Issues and Projects coverage and the defects it
@@ -1103,7 +1113,10 @@ query that crashed on a peer with `badfun`. Session-registry queries now use
 stable module-function-argument descriptors, and all 9 cluster tests complete
 under coverage. Coverage-aware peer shutdown now collects remote execution, and
 direct `RaBootstrap` decision tests cover the previously untested worker. The
-merged default and cluster result is 83.58% and passes the enforced 83% floor.
+completed exact-SHA baseline supersedes that intermediate result. At
+`d9ffc65f5cdd961cf228146a95e9d651e14692d2`, the merged default and cluster
+result is 83.59% and passes the enforced 83% floor. The release smoke also
+passes, and the inspected local receipt records zero automatic retries.
 
 ## A2. Blocker: staging is not isolated from production today
 

@@ -36,6 +36,17 @@ defmodule OpenAgentsWeb.UserAuth do
     |> halt()
   end
 
+  def require_admin_user(conn, _options) do
+    if Accounts.admin?(conn.assigns[:current_user]) do
+      conn
+    else
+      conn
+      |> put_resp_header("cache-control", "no-store")
+      |> Phoenix.Controller.redirect(to: ~p"/")
+      |> halt()
+    end
+  end
+
   def on_mount(:mount_current_user, _params, session, socket) do
     with user_id when is_binary(user_id) <- session[@session_key],
          {:ok, user} <- Accounts.get_active_user(user_id) do
@@ -73,6 +84,20 @@ defmodule OpenAgentsWeb.UserAuth do
     end
   end
 
+  def on_mount(:ensure_admin, _params, _session, socket) do
+    with %{id: user_id} <- socket.assigns[:current_user],
+         {:ok, user} <- Accounts.get_active_user(user_id),
+         true <- Accounts.admin?(user) do
+      {:cont,
+       socket
+       |> Phoenix.Component.assign(:current_user, user)
+       |> Phoenix.LiveView.attach_hook(:admin_guard, :handle_event, &ensure_admin_event/3)}
+    else
+      _not_an_operator ->
+        {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/")}
+    end
+  end
+
   defp ensure_active_event(_event, _params, socket) do
     case Accounts.get_active_user(socket.assigns.current_user.id) do
       {:ok, user} ->
@@ -83,6 +108,15 @@ defmodule OpenAgentsWeb.UserAuth do
          socket
          |> Phoenix.LiveView.put_flash(:error, "This session is no longer active.")
          |> Phoenix.LiveView.redirect(to: ~p"/")}
+    end
+  end
+
+  defp ensure_admin_event(_event, _params, socket) do
+    with {:ok, user} <- Accounts.get_active_user(socket.assigns.current_user.id),
+         true <- Accounts.admin?(user) do
+      {:cont, Phoenix.Component.assign(socket, :current_user, user)}
+    else
+      _not_an_operator -> {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/")}
     end
   end
 

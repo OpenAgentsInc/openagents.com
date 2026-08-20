@@ -13,6 +13,18 @@ git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
 plan_root="$repo_root/.git/openagents/staging-plans"
 plan_path="$plan_root/$git_sha.tfplan"
 
+authenticate_terraform() {
+  if gcloud auth application-default print-access-token >/dev/null 2>&1; then
+    return
+  fi
+
+  # The Google provider and GCS backend accept this process-only token. The
+  # operator credential never enters Terraform state, a plan, or command output.
+  # Refresh it for every command because Terraform cannot renew access tokens.
+  GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)
+  export GOOGLE_OAUTH_ACCESS_TOKEN
+}
+
 require_boundary() {
   : "${staging_project:?OPENAGENTS_STAGING_PROJECT_ID is required}"
   : "${production_project:?OPENAGENTS_PRODUCTION_PROJECT_ID is required}"
@@ -29,7 +41,7 @@ require_boundary() {
     exit 1
   fi
 
-  gcloud auth application-default print-access-token >/dev/null
+  authenticate_terraform
   export TF_VAR_staging_project_id="$staging_project"
   export TF_VAR_production_project_id="$production_project"
 }

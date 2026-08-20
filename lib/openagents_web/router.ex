@@ -40,6 +40,10 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
   end
 
+  pipeline :forge_git do
+    plug OpenAgentsWeb.Plugs.ForgeGitAuth
+  end
+
   pipeline :status_probe_compat do
     plug OpenAgentsWeb.Plugs.StatusProbeCompat
   end
@@ -47,6 +51,10 @@ defmodule OpenAgentsWeb.Router do
   pipeline :authenticated do
     plug :put_no_store
     plug :require_authenticated_user
+  end
+
+  pipeline :operator do
+    plug :require_admin_user
   end
 
   scope "/", OpenAgentsWeb do
@@ -80,7 +88,6 @@ defmodule OpenAgentsWeb.Router do
     post "/auth/github", AuthController, :start
     get "/auth/github/callback", AuthController, :callback, log: false
     delete "/logout", AuthController, :logout
-    get "/healthz", HealthController, :show
   end
 
   # The public forge web UI (TRANSPARENCY-001), addressed exactly the way the
@@ -110,10 +117,6 @@ defmodule OpenAgentsWeb.Router do
       live "/chat", ChatLive, :index
       live "/computers", ComputersLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
-      live "/admin", AdminLive, :index
-      live "/admin/forge", AdminForgeLive, :index
-      live "/admin/scv/accounts", AdminScvAccountsLive, :index
-
       live "/:owner/:repo/issues/new", IssueNewLive, :new
       live "/:owner/:repo/issues/:number", IssueShowLive, :show
       live "/:owner/:repo/issues", IssueIndexLive, :index
@@ -162,11 +165,33 @@ defmodule OpenAgentsWeb.Router do
     delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
   end
 
-  forward "/git", OpenAgents.Forge.GitHTTP
+  scope "/admin", OpenAgentsWeb do
+    pipe_through [:browser, :authenticated, :operator]
+
+    live_session :operator,
+      on_mount: [
+        {OpenAgentsWeb.UserAuth, :ensure_authenticated},
+        {OpenAgentsWeb.UserAuth, :ensure_admin}
+      ] do
+      live "/", AdminLive, :index
+      live "/forge", AdminForgeLive, :index
+      live "/recordings", AdminRecordingsLive, :index
+      live "/scv/accounts", AdminScvAccountsLive, :index
+    end
+
+    get "/recordings/:id/audio", AdminRecordingController, :show
+  end
+
+  scope "/git" do
+    pipe_through :forge_git
+    forward "/", OpenAgents.Forge.GitHTTP
+  end
 
   scope "/", OpenAgentsWeb do
     pipe_through :api
 
+    get "/health", HealthController, :show
+    get "/healthz", HealthController, :show
     get "/api/status", NetworkStatusController, :show
     get "/api/changelog", ChangelogController, :show
 

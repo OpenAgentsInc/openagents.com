@@ -1388,7 +1388,7 @@ Define the expected signals before promotion. Use candidate-specific signals
 where possible:
 
 - the new regression test remains green against the packaged or live target;
-- `/healthz` and deployment readiness remain healthy;
+- `/health` and deployment readiness remain healthy;
 - fleet revision and artifact identities remain consistent;
 - affected error codes do not regress;
 - latency, memory, mailbox, and restart measurements remain within an admitted

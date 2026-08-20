@@ -195,7 +195,7 @@ record_check() {
   ' >>"$checks"
 }
 
-record_check public-001 /healthz json
+record_check public-001 /health json
 record_check public-001 /status json
 record_check public-001 /api/status json
 record_check public-001 /favicon.ico binary

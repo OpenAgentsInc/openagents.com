@@ -133,11 +133,16 @@ ops/staging/record-result.sh \
   "$report" public-001 passed public-smoke "$smoke_receipt"
 ```
 
-The smoke checks `/healthz`, `/status`, `/api/status`, `/favicon.ico`, `/`,
+The smoke checks `/health`, `/status`, `/api/status`, `/favicon.ico`, `/`,
 `/leaderboard`, `/changelog`, `/docs`, and `/components`. JSON endpoints must
 report the candidate SHA. The home response must bind the CSP nonce to the
 theme bootstrap and publish the microphone permissions policy. The receipt
 contains no response bodies or header values.
+
+Use `/health` for every public Cloud Run check. Cloud Run reserves some paths
+that end in `z`, so `/healthz` can return a platform `404` before the request
+reaches Phoenix. The application retains `/healthz` as a compatibility alias
+for direct and distributed fleet traffic.
 
 The receipt proves all of `public-001` and only the automated portions of
 `public-002` and `public-005`. Complete the configured forge, browser-policy,

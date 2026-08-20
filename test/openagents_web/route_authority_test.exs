@@ -56,6 +56,24 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert route!(:post, "/controller/pairings").class == :machine
     assert route!(:get, "/controller/pairings/:id").scope == "machine:pairing:claim"
     assert route!(:post, "/api/inference/proxy").class == :internal_service
+    assert Enum.find(RouteAuthority.socket_inventory(), &(&1.path == "/controller/socket"))
+
+    assert Enum.any?(OpenAgentsWeb.Endpoint.__sockets__(), fn
+             {"/controller/socket", OpenAgentsWeb.ControllerSocket, _options} -> true
+             _socket -> false
+           end)
+  end
+
+  test "the Forge smart HTTP mount always runs through credential authentication" do
+    route =
+      Phoenix.Router.route_info(
+        OpenAgentsWeb.Router,
+        "GET",
+        "/git/openagents.com.git/info/refs",
+        "stage.openagents.com"
+      )
+
+    assert route.pipe_through == [:forge_git]
   end
 
   test "the OAuth callback suppresses router parameter logging at the application boundary" do

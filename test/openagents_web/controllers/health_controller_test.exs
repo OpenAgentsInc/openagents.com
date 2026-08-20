@@ -2,12 +2,16 @@ defmodule OpenAgentsWeb.HealthControllerTest do
   use OpenAgentsWeb.ConnCase
 
   test "reports healthy when PostgreSQL is reachable", %{conn: conn} do
-    conn = get(conn, ~p"/status")
+    conn = get(conn, ~p"/health")
 
     assert json_response(conn, 200) == %{
              "status" => "ok",
              "revision" => OpenAgents.BuildInfo.revision()
            }
+  end
+
+  test "retains the non-Cloud Run healthz alias", %{conn: conn} do
+    assert %{"status" => "ok"} = conn |> get(~p"/healthz") |> json_response(200)
   end
 
   test "refuses readiness while boot code diverges from the live target", %{conn: conn} do

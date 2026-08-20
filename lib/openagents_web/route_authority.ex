@@ -27,6 +27,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/components/:slug",
     "/docs",
     "/docs/:slug",
+    "/health",
     "/healthz"
   ]
 
@@ -83,7 +84,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
       %{
         transport: :websocket,
         verb: "connect",
-        path: "/controller",
+        path: "/controller/socket",
         handler: "OpenAgentsWeb.ControllerSocket",
         action: "connect",
         class: :machine,
@@ -115,6 +116,12 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: "/admin/scv/accounts"}),
     do: declaration(:operator, "configured operator GitHub ID", "scv:account:connect", true)
+
+  defp policy(%{path: "/admin/recordings"}),
+    do: declaration(:operator, "configured operator GitHub ID", "voice:recording:list", false)
+
+  defp policy(%{path: "/admin/recordings/:id/audio"}),
+    do: declaration(:operator, "configured operator GitHub ID", "voice:recording:read", false)
 
   defp policy(%{path: "/admin"}),
     do: declaration(:operator, "configured operator GitHub ID", "voice:metadata:read", false)

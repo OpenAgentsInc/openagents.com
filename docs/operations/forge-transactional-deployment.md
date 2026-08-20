@@ -138,7 +138,7 @@ On a cold or replaced node, boot convergence:
    artifacts or receipts.
 6. Publishes a bounded convergence state and enters readiness.
 
-If image code does not match the live target and convergence fails, `/healthz`
+If image code does not match the live target and convergence fails, `/health`
 returns `503` and `/status` reports a content-free degraded state. The worker
 retries indefinitely with exponential backoff capped by
 `OPENAGENTS_FORGE_BOOT_RETRY_MAX_MS`. A missing live target is the only normal

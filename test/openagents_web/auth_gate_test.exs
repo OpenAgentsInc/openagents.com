@@ -40,7 +40,7 @@ defmodule OpenAgentsWeb.AuthGateTest do
 
   test "health endpoints remain public and create no identity state", %{conn: conn} do
     assert %{"status" => "ok"} = conn |> get(~p"/status") |> json_response(200)
-    assert %{"status" => "ok"} = conn |> recycle() |> get(~p"/healthz") |> json_response(200)
+    assert %{"status" => "ok"} = conn |> recycle() |> get(~p"/health") |> json_response(200)
     assert Repo.aggregate(from(visitor in Visitor), :count) == 0
   end
 

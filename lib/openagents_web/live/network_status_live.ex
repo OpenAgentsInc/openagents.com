@@ -483,7 +483,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
             <p>
               Machine-readable: <code>GET /api/status</code>
               (schema <code>openagents.network_status.v1</code>) ·
-              probe: <code>GET /healthz</code>. This page updates live.
+              probe: <code>GET /health</code>. This page updates live.
             </p>
           </footer>
         </section>

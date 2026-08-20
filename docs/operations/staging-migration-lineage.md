@@ -27,7 +27,7 @@ partitions every current migration into four disjoint groups:
   drop build history if replayed.
 - Four reconciliation migrations run normally because they are guarded or
   idempotent.
-- 16 versions are genuinely new and run normally after the baseline.
+- 17 versions are genuinely new and run normally after the baseline.
 
 The bridge adds only the nullable `users.browser_key_hash` column and its
 partial unique index. It then records the 14 reviewed versions. It preserves
@@ -85,7 +85,7 @@ isolated staging database instance and rehearse on that disposable copy:
 8. Run `bin/migration-lineage check` again and require `prior_baselined` with
    zero missing facts.
 9. Start the candidate release with high-risk features disabled. Require
-   configuration readiness, database connectivity, `/healthz`, and `/status`.
+   configuration readiness, database connectivity, `/health`, and `/status`.
 10. Start the last-known-good release against the migrated copy with traffic and
     workers disabled. This verifies that the additive schema remains rollback
     compatible.

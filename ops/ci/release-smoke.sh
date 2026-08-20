@@ -96,7 +96,7 @@ env \
   "$staging_profile" "$release_bin" start >"$release_log" 2>&1 &
 release_pid=$!
 
-health_url="http://127.0.0.1:$port/healthz"
+health_url="http://127.0.0.1:$port/health"
 health_body=
 
 for attempt in $(seq 1 120); do

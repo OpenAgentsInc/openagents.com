@@ -88,8 +88,8 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
     assert is_map(response["cluster"])
   end
 
-  test "GET /healthz is unchanged", %{conn: conn} do
-    assert %{"status" => "ok"} = conn |> get(~p"/healthz") |> json_response(200)
+  test "GET /health is the public readiness probe", %{conn: conn} do
+    assert %{"status" => "ok"} = conn |> get(~p"/health") |> json_response(200)
   end
 
   alias OpenAgents.Forge.{DeployReceipt, Target}

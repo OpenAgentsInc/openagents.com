@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.Endpoint do
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
-  socket "/controller", OpenAgentsWeb.ControllerSocket,
+  socket "/controller/socket", OpenAgentsWeb.ControllerSocket,
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 

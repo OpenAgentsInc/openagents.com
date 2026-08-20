@@ -1700,7 +1700,7 @@ quorum, the database, or a full fleet — every gathered field degrades
 independently (an unreachable node reports as unreachable; a failed count is
 absent), and the per-node fan-out is time-bounded and briefly cached so page
 traffic cannot become an rpc storm. Legacy JSON pollers of `/status` keep the
-old health payload via content negotiation until they migrate to `/healthz`
+old health payload via content negotiation until they migrate to `/health`
 or `/api/status`.
 
 Evidence: `OpenAgents.NetworkStatus`, `OpenAgentsWeb.NetworkStatusLive`,

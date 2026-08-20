@@ -71,12 +71,18 @@ stored in the plan or state. Generate it with an approved password manager,
 keep it out of shell history, and use the same value when Gate 13 creates the
 staging runtime secret. Never reuse a production credential.
 
-Authenticate both the Cloud CLI and Terraform provider:
+Authenticate the Cloud CLI. Application Default Credentials are preferred for
+Terraform because they can refresh during a long operation:
 
 ```sh
 gcloud auth login
 gcloud auth application-default login
 ```
+
+If Application Default Credentials have expired, the wrapper uses a fresh,
+process-only Cloud CLI access token. Terraform cannot renew that token, so each
+`plan`, `apply`, or `output` command must complete within one hour. The wrapper
+never writes the token to a plan, Terraform state, or command output.
 
 ## Provision the boundary
 

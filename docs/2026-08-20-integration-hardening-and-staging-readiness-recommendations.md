@@ -108,7 +108,7 @@ Completed on 2026-08-20:
 - Added `ops/ci/release-smoke.sh`. It requires an explicitly acknowledged
   disposable PostgreSQL URL, generates throwaway runtime secrets, builds the
   production assets and release, starts the real release, waits for the bounded
-  `/healthz` response, and terminates the release cleanly.
+  `/health` response, and terminates the release cleanly.
 - Fixed `mix assets.deploy` to compile Phoenix's colocated assets before
   Tailwind resolves them. The release smoke exposed this production-only build
   failure and now passes against a fresh PostgreSQL 18 container.
@@ -1031,7 +1031,7 @@ Completed locally on 2026-08-20:
   cycle. A late-joining or replaced node leaves readiness while a target is
   deploying or as soon as a newer live target exists, then converges before it
   serves that revision.
-- Made `/healthz` return `503` while boot code or a deployment participant is
+- Made `/health` return `503` while boot code or a deployment participant is
   divergent. Added a bounded, content-free boot and deployment projection to
   `/status`, and made its quorum calculation honor the configured forge fleet
   size even when Ra is disabled.
@@ -1284,7 +1284,7 @@ Use this sequence for every staging candidate:
 7. Snapshot the actual staging database.
 8. Deploy the candidate to the web acceptance lane with high-risk features
    disabled.
-9. Confirm migration completion, `/healthz`, `/status`, database connectivity,
+9. Confirm migration completion, `/health`, `/status`, database connectivity,
    LiveView connection, and revision identity.
 10. Hard-reload persistent browser sessions so they connect to the new revision.
 11. Enable one gated subsystem at a time and run its regression group.
@@ -1322,7 +1322,7 @@ Implemented locally on 2026-08-20:
   Fresh current-lineage databases were missing the constraint even though the
   changeset named it; prior-lineage databases already have it and remain
   unchanged.
-- Rehearsed the bridge and all 20 remaining current migrations on a disposable
+- Rehearsed the bridge and all 21 remaining current migrations on a disposable
   copy of the complete 57-version prior schema. Account, message, forge target,
   build receipt, and deploy receipt probes remained present. Both the candidate
   application and the last-known-good application started against the migrated
@@ -1359,7 +1359,7 @@ erase the first failure; record both attempts and explain the result.
 
 ### Public and browser surfaces
 
-- `/healthz`, `/status`, `/api/status`, and `/favicon.ico` return their bounded
+- `/health`, `/status`, `/api/status`, and `/favicon.ico` return their bounded
   expected responses.
 - `/`, `/leaderboard`, `/changelog`, `/docs`, `/components`, and configured
   public forge pages render without an authenticated session where intended.

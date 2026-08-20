@@ -211,9 +211,6 @@ defmodule OpenAgentsWeb.Layouts do
 
     ~H"""
     <footer class="sidebar-footer">
-      <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
-        <UI.icon name="trophy-top" /> Leaderboard
-      </.link>
       <.link
         :if={@admin_link?}
         id="open-admin"
@@ -228,6 +225,9 @@ defmodule OpenAgentsWeb.Layouts do
       </.link>
       <.link navigate={~p"/docs"} class="sidebar-footer__link">
         <UI.icon name="book" /> Documentation
+      </.link>
+      <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
+        <UI.icon name="trophy-top" /> Leaderboard
       </.link>
     </footer>
     """
@@ -578,6 +578,19 @@ defmodule OpenAgentsWeb.Layouts do
   # A nil scope is not an operator. The footer renders on public pages too.
   defp admin?(nil), do: false
   defp admin?(user), do: OpenAgents.Accounts.admin?(user)
+
+  @doc """
+  The browser title: the page's own name, then the brand.
+
+  Returns nil when the page has no name, so `live_title`'s default renders the
+  brand alone instead of appending it to itself.
+  """
+  def page_title(assigns) do
+    case assigns[:page_title] do
+      title when is_binary(title) and title != "" -> title <> " · OpenAgents"
+      _absent -> nil
+    end
+  end
 
   defp account_display_name(%{github_name: name}) when is_binary(name) and name != "", do: name
   defp account_display_name(%{github_login: login}), do: "@" <> login

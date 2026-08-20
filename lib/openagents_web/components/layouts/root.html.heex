@@ -8,7 +8,10 @@
     <link rel="icon" href={~p"/favicon-32x32.png"} type="image/png" sizes="32x32" />
     <link rel="icon" href={~p"/favicon-16x16.png"} type="image/png" sizes="16x16" />
     <link rel="apple-touch-icon" href={~p"/apple-touch-icon.png"} sizes="180x180" />
-    <.live_title default="OpenAgents" suffix=" · OpenAgents" phx-no-format>{assigns[:page_title]}</.live_title>
+    <%!-- The suffix is composed here rather than passed to `live_title`,
+    which applies it to `default` as well: a page with no title of its own
+    rendered the brand twice. --%>
+    <.live_title default="OpenAgents" phx-no-format>{page_title(assigns)}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <%!-- Runs before first paint, and deliberately not deferred: resolving the
     theme after the stylesheet has painted produces a flash of the wrong theme.

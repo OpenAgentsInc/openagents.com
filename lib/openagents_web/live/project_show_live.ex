@@ -23,6 +23,10 @@ defmodule OpenAgentsWeb.ProjectShowLive do
      |> assign(:project, project)
      |> assign(:items, items)
      |> assign(:issue_options, issue_options)
+     # The board columns are read as `@statuses` inside ~H, where `@` means
+     # `assigns.statuses`, not the module attribute. Without this assign every
+     # render raised KeyError and the route was unreachable.
+     |> assign(:statuses, @statuses)
      |> assign(:status_options, Enum.map(@statuses, &{&1, &1}))
      |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))}
   end

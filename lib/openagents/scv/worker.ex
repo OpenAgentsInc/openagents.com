@@ -9,11 +9,13 @@ defmodule OpenAgents.SCV.Worker do
   """
 
   alias OpenAgents.SCV
+  alias OpenAgents.SCV.OpenCodeReport
   alias OpenAgents.SCV.Run
 
   @default_model "openai/gpt-5.4-mini"
   @default_timeout_ms 300_000
   @default_output_root "/workspace/runs"
+  @maximum_report_chunk_bytes 3_072
 
   @spec run(map(), keyword()) :: {:ok, map()} | {:error, term()}
   def run(environment \\ System.get_env(), options \\ [])
@@ -34,11 +36,11 @@ defmodule OpenAgents.SCV.Worker do
 
     case run(System.get_env(), event_sink: sink) do
       {:ok, %{status: "succeeded"} = result} ->
-        write_json(worker_result(result))
+        write_terminal_events(result)
         :ok
 
       {:ok, result} ->
-        write_json(worker_result(result))
+        write_terminal_events(result)
         raise "SCV worker finished with status #{result.status}"
 
       {:error, reason} ->
@@ -186,11 +188,47 @@ defmodule OpenAgents.SCV.Worker do
     end
   end
 
-  defp worker_result(result) do
+  @doc false
+  @spec terminal_events(map()) :: [map()]
+  def terminal_events(result) when is_map(result) do
+    chunks = OpenCodeReport.chunks(result.report, @maximum_report_chunk_bytes)
+    emitted_at = DateTime.utc_now() |> DateTime.to_iso8601()
+    chunk_count = length(chunks)
+    report_digest = digest(result.report.text)
+
+    report_events =
+      chunks
+      |> Enum.with_index(1)
+      |> Enum.map(fn {chunk, sequence} ->
+        %{
+          schema: "openagents.scv.report.chunk.v1",
+          type: "report_chunk",
+          emitted_at: emitted_at,
+          run_id: result.run_id,
+          repository_revision: result.repository.git_sha,
+          sequence: sequence,
+          chunk_count: chunk_count,
+          report_digest: report_digest,
+          text: chunk
+        }
+      end)
+
+    report_metadata = %{
+      schema: result.report.schema,
+      bytes: result.report.bytes,
+      truncated: result.report.truncated,
+      chunk_count: chunk_count,
+      digest: report_digest
+    }
+
+    report_events ++ [worker_result(result, report_metadata, emitted_at)]
+  end
+
+  defp worker_result(result, report_metadata, emitted_at) do
     %{
       schema: "openagents.scv.worker.result.v1",
       type: "worker_finished",
-      emitted_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+      emitted_at: emitted_at,
       run_id: result.run_id,
       status: result.status,
       driver: result.scv.driver,
@@ -202,8 +240,18 @@ defmodule OpenAgents.SCV.Worker do
       usage: result.events.usage,
       resources: result.resources,
       artifact_digest: result.artifacts.events_digest,
-      report: result.report
+      report: report_metadata
     }
+  end
+
+  defp write_terminal_events(result) do
+    result
+    |> terminal_events()
+    |> Enum.each(&write_json/1)
+  end
+
+  defp digest(value) do
+    "sha256:" <> (:crypto.hash(:sha256, value) |> Base.encode16(case: :lower))
   end
 
   defp error_code(reason) when is_atom(reason), do: Atom.to_string(reason)

@@ -119,6 +119,43 @@ defmodule OpenAgents.SCV.RunTest do
              Worker.run(Map.delete(environment, "OPENAI_API_KEY"))
   end
 
+  test "emits bounded structured report chunks before the terminal result" do
+    text = String.duplicate("SCV finding 🚀 ", 500)
+    digest = "sha256:" <> (:crypto.hash(:sha256, text) |> Base.encode16(case: :lower))
+
+    result = %{
+      run_id: Ecto.UUID.generate(),
+      status: "succeeded",
+      duration_ms: 100,
+      repository: %{git_sha: String.duplicate("a", 40)},
+      scv: %{driver: "opencode", environment: "opencode-core"},
+      events: %{event_count: 2, tool_calls: %{}, usage: %{}},
+      resources: %{},
+      artifacts: %{events_digest: String.duplicate("b", 64)},
+      report: %{
+        schema: "openagents.scv.report.v1",
+        text: text,
+        bytes: byte_size(text),
+        truncated: false
+      }
+    }
+
+    events = Worker.terminal_events(result)
+    terminal = List.last(events)
+    chunks = Enum.drop(events, -1)
+
+    assert terminal.type == "worker_finished"
+    assert terminal.report.digest == digest
+    assert terminal.report.chunk_count == length(chunks)
+    refute Map.has_key?(terminal.report, :text)
+
+    assert Enum.map(chunks, & &1.sequence) == Enum.to_list(1..length(chunks))
+    assert Enum.all?(chunks, &(&1.type == "report_chunk"))
+    assert Enum.all?(chunks, &(&1.report_digest == digest))
+    assert Enum.all?(chunks, &(byte_size(Jason.encode!(&1)) < 4_096))
+    assert chunks |> Enum.map(& &1.text) |> Enum.join() == text
+  end
+
   defp fake_executable do
     """
     #!/bin/sh

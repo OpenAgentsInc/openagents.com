@@ -5,8 +5,6 @@ _build/
 deps/
 cover/
 doc/
-docs/
-test/
 tmp/
 assets/node_modules/
 priv/static/assets/

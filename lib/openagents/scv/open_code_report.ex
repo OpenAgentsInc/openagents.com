@@ -43,6 +43,13 @@ defmodule OpenAgents.SCV.OpenCodeReport do
     }
   end
 
+  @doc "Splits a report into UTF-8-safe chunks for structured log delivery."
+  @spec chunks(map(), pos_integer()) :: [String.t()]
+  def chunks(%{text: text}, maximum_bytes)
+      when is_binary(text) and is_integer(maximum_bytes) and maximum_bytes >= 4 do
+    split_chunks(text, maximum_bytes, [])
+  end
+
   defp append(state, ""), do: state
 
   defp append(state, text) do
@@ -77,5 +84,14 @@ defmodule OpenAgents.SCV.OpenCodeReport do
       |> binary_part(0, byte_size(value) - 1)
       |> remove_invalid_suffix()
     end
+  end
+
+  defp split_chunks("", _maximum_bytes, chunks), do: Enum.reverse(chunks)
+
+  defp split_chunks(text, maximum_bytes, chunks) do
+    chunk = valid_prefix(text, maximum_bytes)
+    remaining_bytes = byte_size(text) - byte_size(chunk)
+    remaining = binary_part(text, byte_size(chunk), remaining_bytes)
+    split_chunks(remaining, maximum_bytes, [chunk | chunks])
   end
 end

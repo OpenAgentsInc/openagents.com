@@ -2,9 +2,10 @@
 
 Date: 2026-08-20
 
-Status: First complete OpenCode SCV environment implemented and proven locally
-and in the shared-project read-only staging lane; durable coordination, durable
-tool effects, isolated staging, and autonomous deployment remain disabled
+Status: OpenCode SCV environment and bounded report path implemented and proven
+locally; three shared-project read-only audit SCVs deployed; durable
+coordination, durable tool effects, isolated staging, and autonomous deployment
+remain disabled
 
 ## Outcome
 
@@ -100,6 +101,9 @@ authority in staging, worker registration, Forge promotion, or deployment:
   explicit permission profile.
 - `OpenAgents.SCV.OpenCodeEvents` normalizes content-free event counts, tool
   outcomes, token classes, and estimated cost.
+- `OpenAgents.SCV.OpenCodeReport` collects only redacted OpenCode text events
+  into a versioned report capped at 32 KiB. It never includes tool output or
+  diagnostic lines.
 - `OpenAgents.SCV.ResourceSampler` observes the direct OpenCode process from the
   host and records RSS and CPU samples.
 - `mix openagents.scv.opencode` exposes the adapter for local qualification.
@@ -115,6 +119,14 @@ OpenCode events to standard error. `--diagnostic-logs` also prints redacted
 OpenCode logs as OpenCode produces them. Final JSON remains on standard output,
 so an operator or process can consume the receipt without waiting blindly for
 the command to finish.
+
+The terminal worker result now includes `openagents.scv.report.v1`. The executor
+applies its run-specific provider-key redaction before the report parser sees a
+line, preserves valid UTF-8 at the byte limit, and marks truncated reports. This
+path makes a read-only audit result consumable through Cloud Logging. It does
+not replace durable artifact storage: a write-capable SCV must persist and
+acknowledge the report, event artifact, and their digests before it reports
+success.
 
 The adapter writes the bounded prompt to a mode `0600` scratch file and gives
 that finite file to OpenCode as standard input. This keeps prompt content out of

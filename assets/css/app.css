@@ -638,13 +638,22 @@
   /* Selector carries the size attribute deliberately: `.btn[data-size="sm"]`
      sets `padding: 8px 15px` at (0,2,0) and beats a bare `.theme-toggle`, so
      the padding survived and pushed the glyph off centre inside a 32px box. */
+  /* Centring is stated here rather than inherited. `.btn[data-size="sm"]` sets
+     padding at (0,2,0) and outranks a bare class, and the button holds two
+     glyphs with one hidden, so neither the padding reset nor the flex centring
+     can be assumed -- both are declared, on a selector that outranks the size
+     rule. */
   .theme-toggle,
   .theme-toggle[data-size="sm"] {
+    display: inline-flex;
     width: 32px;
     min-width: 32px;
     height: 32px;
     min-height: 32px;
     padding: 0;
+    gap: 0;
+    align-items: center;
+    justify-content: center;
     border: 0;
     border-radius: 50%;
     background: transparent;

@@ -2439,17 +2439,24 @@
     display: flex;
     flex: none;
     flex-direction: column;
+    align-items: stretch;
     margin-top: auto;
     border-top: 1px solid var(--line);
-    padding: 20px;
+    /* Block padding only. The inline inset comes from the link, so a footer
+       link lines up with the nav rows above it instead of sitting at its own
+       indent. */
+    padding: 12px 0;
   }
 
   .sidebar-footer__link {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 8px;
     min-height: 36px;
-    padding-inline: 5px;
+    /* Same 12px + 8px as .sidebar-row, so the two columns share one left edge. */
+    margin-inline: 12px;
+    padding-inline: 8px;
     color: var(--text-muted);
     font-size: 0.8125rem;
     font-weight: 500;

@@ -146,16 +146,36 @@ defmodule OpenAgentsWeb.Layouts do
   Collapsing them into one link would cost one of those, and giving the index
   its own sidebar row would list a destination the reader is already looking at.
   """
-  attr :title, :string, required: true
-  attr :path, :string, required: true, doc: "this section's index"
+  attr :title, :string, default: nil, doc: "section name; omitted in the app shell"
+  attr :path, :string, default: nil, doc: "this section's index"
 
   def sidebar_brand(assigns) do
     ~H"""
     <header class="sidebar-brand">
       <.link navigate={~p"/"} class="sidebar-brand__mark">OpenAgents</.link>
-      <span class="sidebar-brand__divider" aria-hidden="true"></span>
-      <.link patch={@path} class="sidebar-brand__title">{@title}</.link>
+      <span :if={@title} class="sidebar-brand__divider" aria-hidden="true"></span>
+      <.link :if={@title} patch={@path} class="sidebar-brand__title">{@title}</.link>
     </header>
+    """
+  end
+
+  @doc """
+  The secondary links at the foot of a sidebar.
+
+  Every sidebar carries the same two, so a reader who finds the component
+  library from the application can get back to the docs from either, and does
+  not have to remember which shell they are in.
+  """
+  def sidebar_footer(assigns) do
+    ~H"""
+    <footer class="sidebar-footer">
+      <.link navigate={~p"/components"} class="sidebar-footer__link">
+        <UI.icon name="widget" /> Components
+      </.link>
+      <.link navigate={~p"/docs"} class="sidebar-footer__link">
+        <UI.icon name="book" /> Documentation
+      </.link>
+    </footer>
     """
   end
 
@@ -398,9 +418,7 @@ defmodule OpenAgentsWeb.Layouts do
   defp sidebar(assigns) do
     ~H"""
     <aside class="sidebar hidden lg:flex">
-      <header class="sidebar-header">
-        <span class="brand-name">OpenAgents</span>
-      </header>
+      <Layouts.sidebar_brand />
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
         <Layouts.sidebar_link path={~p"/"} label="Home" icon="home" patchable={false} />
@@ -445,14 +463,7 @@ defmodule OpenAgentsWeb.Layouts do
       </div>
       --%>
 
-      <footer class="sidebar-footer">
-        <.link navigate={~p"/components"} class="sidebar-footer__link">
-          <UI.icon name="widget" /> Components
-        </.link>
-        <.link navigate={~p"/docs"} class="sidebar-footer__link">
-          <UI.icon name="book" /> Documentation
-        </.link>
-      </footer>
+      <Layouts.sidebar_footer />
     </aside>
     """
   end

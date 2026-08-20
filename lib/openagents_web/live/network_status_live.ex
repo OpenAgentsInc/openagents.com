@@ -14,6 +14,8 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.NetworkStatus
+  alias OpenAgents.SCV.Activity
+  alias OpenAgentsWeb.UI.Graph
 
   @tick_ms 5_000
   @events_kept 20
@@ -22,6 +24,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       :ok = NetworkStatus.subscribe()
+      :ok = Activity.subscribe()
 
       Enum.each(["forge:pushes", "forge:target", "forge:builds", "forge:deploys"], fn topic ->
         Phoenix.PubSub.subscribe(OpenAgents.PubSub, topic)
@@ -41,6 +44,10 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   @impl true
   def handle_info({:network_status, projection}, socket) do
     {:noreply, socket |> track_transitions(projection) |> assign_projection(projection)}
+  end
+
+  def handle_info({:scv_activity, entries}, socket) do
+    {:noreply, assign(socket, :scvs, public_scvs(entries))}
   end
 
   def handle_info(:tick, socket) do
@@ -99,8 +106,27 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
 
     socket
     |> assign(:projection, projection)
+    |> assign(:scvs, public_scvs(Activity.public_projection()))
     |> assign(:overall, overall(projection))
   end
+
+  defp public_scvs(entries) when is_list(entries) do
+    Enum.map(entries, fn entry ->
+      %{
+        id: entry["id"],
+        label: entry["label"],
+        status: public_scv_status(entry["status"]),
+        weight: entry["weight"],
+        tool: entry["tool"],
+        text: entry["text"]
+      }
+    end)
+  end
+
+  defp public_scvs(_entries), do: []
+
+  defp public_scv_status("running"), do: :running
+  defp public_scv_status(_status), do: :idle
 
   # Version divergence across reachable nodes IS the rollout visualization:
   # when a roll or hot deploy is sweeping the fleet, nodes disagree — surface
@@ -318,6 +344,25 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
             <% {:rolling, done, total} = rollout(@projection) %> Nodes are moving to a new version one at a time — {done}/{total} on the
             newest build. The cluster never drops below quorum during a roll.
           </.alert>
+
+          <.card id="status-scvs">
+            <h2>Active SCVs</h2>
+            <p class="status-forge__intro">
+              Follow the bounded public activity from SCVs that are running now.
+              Prompts, repository paths, command arguments, tool output, and reports
+              stay private.
+            </p>
+
+            <.empty :if={@scvs == []} id="status-no-scvs" title="No active SCVs">
+              The next admitted SCV run will appear here as it works.
+            </.empty>
+
+            <Graph.scv_streams
+              :if={@scvs != []}
+              id="public-scv-streams"
+              scvs={@scvs}
+            />
+          </.card>
 
           <div id="status-nodes" class="status-nodes">
             <.card

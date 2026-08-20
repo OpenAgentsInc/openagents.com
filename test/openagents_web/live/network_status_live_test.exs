@@ -10,8 +10,47 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
     assert html =~ "BEAM nodes"
     assert html =~ "node 1"
     assert has_element?(view, ".status-metric__label", "computers connected")
+    assert has_element?(view, "#status-scvs")
+    assert has_element?(view, "#status-no-scvs")
     # Content-free: the serving node's internal name never reaches the page.
     refute html =~ to_string(node())
+  end
+
+  test "renders bounded live SCV activity without private event content", %{conn: conn} do
+    run_id = Ecto.UUID.generate()
+
+    OpenAgents.SCV.Activity.observe(%{
+      schema: "openagents.scv.event.v1",
+      run_id: run_id,
+      type: "opencode_event",
+      event_type: "tool_use",
+      tool: "grep",
+      objective: "private parity objective",
+      repository: "/workspace/private-repository",
+      output: "private tool output"
+    })
+
+    _projection = OpenAgents.SCV.Activity.public_projection()
+
+    on_exit(fn ->
+      OpenAgents.SCV.Activity.observe(%{
+        schema: "openagents.scv.event.v1",
+        run_id: run_id,
+        type: "run_finished"
+      })
+
+      _projection = OpenAgents.SCV.Activity.public_projection()
+    end)
+
+    conn = put_req_header(conn, "accept", "text/html")
+    {:ok, view, html} = live(conn, ~p"/status")
+
+    assert has_element?(view, "#public-scv-streams")
+    assert html =~ "Searching repository context"
+    refute html =~ run_id
+    refute html =~ "private parity objective"
+    refute html =~ "/workspace/private-repository"
+    refute html =~ "private tool output"
   end
 
   test "legacy JSON pollers of /status keep the old health payload", %{conn: conn} do

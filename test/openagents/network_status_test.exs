@@ -36,6 +36,7 @@ defmodule OpenAgents.NetworkStatusTest do
     assert %{"machines_connected" => machines, "active_jobs" => jobs} = projection["counts"]
     assert is_nil(machines) or is_integer(machines)
     assert is_nil(jobs) or is_integer(jobs)
+    assert is_list(projection["scvs"])
   end
 
   test "an unreachable peer degrades to an honest per-node report, not a crash" do

@@ -8,8 +8,10 @@ defmodule OpenAgents.NetworkStatus do
   `:erpc` fan-out to its peers (short timeout each): cluster membership and
   quorum (`OpenAgents.Cluster`), Raft membership (`OpenAgents.Cluster.Ra`), and per-node
   release version, hot-load revision (`OpenAgents.BuildInfo`), relup marker, and
-  uptime. Counts only, never content: connected controller machines and
-  active work jobs appear as integers — no names, goals, ids, or addresses.
+  uptime. Public SCV activity includes only a pseudonymous label, lifecycle
+  state, admitted tool category, and normalized action. Connected controller
+  machines and active work jobs remain counts only. No names, goals, internal
+  ids, addresses, prompts, repository paths, tool output, or reports appear.
 
   Honesty rules the shape:
   - A peer that does not answer in time renders `"unreachable"` — the page
@@ -112,6 +114,7 @@ defmodule OpenAgents.NetworkStatus do
       },
       "nodes" => nodes,
       "counts" => counts(),
+      "scvs" => safely(fn -> OpenAgents.SCV.Activity.public_projection() end) || [],
       "forge" => forge_section(),
       "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }

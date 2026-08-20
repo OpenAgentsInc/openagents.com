@@ -392,6 +392,144 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       ]
     },
     %{
+      title: "Issues",
+      items: [
+        %{
+          slug: "issue-status",
+          title: "Issue status",
+          icon: "circle",
+          source: "OpenAgentsWeb.UI.Circle.issue_status/1",
+          summary: "Six category shapes, one of them a filled arc read from a number."
+        },
+        %{
+          slug: "issue-priority",
+          title: "Issue priority",
+          icon: "bar-chart",
+          source: "OpenAgentsWeb.UI.Circle.issue_priority/1",
+          summary: "Four ascending bars, plus an alarm that breaks the ramp on purpose."
+        },
+        %{
+          slug: "issue-label",
+          title: "Issue label",
+          icon: "tag",
+          source: "OpenAgentsWeb.UI.Circle.issue_label/1",
+          summary: "A dot and a word, toned from the ladder rather than a per-label colour."
+        },
+        %{
+          slug: "assignee",
+          title: "Assignee",
+          icon: "user",
+          source: "OpenAgentsWeb.UI.Circle.assignee/1",
+          summary: "Who owns an issue, including the drawn state for nobody."
+        },
+        %{
+          slug: "assignee-stack",
+          title: "Assignee stack",
+          icon: "group",
+          source: "OpenAgentsWeb.UI.Circle.assignee_stack/1",
+          summary: "Overlapping faces that separate on hover, with a count for the rest."
+        },
+        %{
+          slug: "issue-row",
+          title: "Issue row",
+          icon: "menu",
+          source: "OpenAgentsWeb.UI.Circle.issue_row/1",
+          summary: "The shape a tracker is mostly made of: scan column, title, trailing facts."
+        },
+        %{
+          slug: "issue-card",
+          title: "Issue card",
+          icon: "square-text",
+          source: "OpenAgentsWeb.UI.Circle.issue_card/1",
+          summary: "The same issue with width and no neighbours, for a board column."
+        },
+        %{
+          slug: "issue-group",
+          title: "Issue group",
+          icon: "stack",
+          source: "OpenAgentsWeb.UI.Circle.issue_group/1",
+          summary: "A named run of issues under a sticky header washed by its own status."
+        },
+        %{
+          slug: "issue-board",
+          title: "Issue board",
+          icon: "grid",
+          source: "OpenAgentsWeb.UI.Circle.issue_board/1",
+          summary: "Columns side by side, each scrolling on its own."
+        },
+        %{
+          slug: "filter-chip",
+          title: "Filter chip",
+          icon: "filter",
+          source: "OpenAgentsWeb.UI.Circle.filter_chip/1",
+          summary: "One filter read as subject, operator, value, each its own segment."
+        },
+        %{
+          slug: "filter-bar",
+          title: "Filter bar",
+          icon: "filter",
+          source: "OpenAgentsWeb.UI.Circle.filter_bar/1",
+          summary: "The applied filters, somewhere to add one, and a way to drop them all."
+        },
+        %{
+          slug: "view-tabs",
+          title: "View tabs",
+          icon: "category",
+          source: "OpenAgentsWeb.UI.Circle.view_tabs/1",
+          summary: "Saved views as pills; the current one carries aria-current, not just colour."
+        },
+        %{
+          slug: "issue-toolbar",
+          title: "Issue toolbar",
+          icon: "settings-slider",
+          source: "OpenAgentsWeb.UI.Circle.issue_toolbar/1",
+          summary: "What you are looking at on the left, what you can do to it on the right."
+        },
+        %{
+          slug: "command-palette",
+          title: "Command palette",
+          icon: "search",
+          source: "OpenAgentsWeb.UI.Circle.command_palette/1",
+          summary: "A native dialog on ⌘K, filtered as you type."
+        },
+        %{
+          slug: "command-group",
+          title: "Command group",
+          icon: "folders",
+          source: "OpenAgentsWeb.UI.Circle.command_group/1",
+          summary: "A titled run of commands that hides itself when filtering empties it."
+        },
+        %{
+          slug: "command-item",
+          title: "Command item",
+          icon: "keyboard-shortcut",
+          source: "OpenAgentsWeb.UI.Circle.command_item/1",
+          summary: "A glyph, a name, and the keys that reach it without the palette."
+        },
+        %{
+          slug: "project-row",
+          title: "Project row",
+          icon: "cube",
+          source: "OpenAgentsWeb.UI.Circle.project_row/1",
+          summary: "Name on the left, everything measurable in columns that line up."
+        },
+        %{
+          slug: "team-row",
+          title: "Team row",
+          icon: "members",
+          source: "OpenAgentsWeb.UI.Circle.team_row/1",
+          summary: "Identity, membership, and what a team owns."
+        },
+        %{
+          slug: "member-row",
+          title: "Member row",
+          icon: "avatar-profile",
+          source: "OpenAgentsWeb.UI.Circle.member_row/1",
+          summary: "Display name and handle together, with role, tenure, and teams."
+        }
+      ]
+    },
+    %{
       title: "Forge",
       items: [
         %{
@@ -427,7 +565,8 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       # is the host element and is demoed through the components that use it.
       OpenAgentsWeb.UI.Graph => [:graph_defs, :graph_surface],
       OpenAgentsWeb.Components.RepoHeader => [],
-      OpenAgentsWeb.UI.Landing => []
+      OpenAgentsWeb.UI.Landing => [],
+      OpenAgentsWeb.UI.Circle => []
     }
   end
 end

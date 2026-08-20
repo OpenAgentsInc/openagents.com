@@ -12,6 +12,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgentsWeb.ComponentCatalog
+  alias OpenAgentsWeb.UI.Circle
   alias OpenAgentsWeb.UI.Graph
   alias OpenAgentsWeb.UI.Landing
   alias OpenAgentsWeb.UI, as: UI
@@ -20,6 +21,87 @@ defmodule OpenAgentsWeb.ComponentsLive do
     %{id: 1, owner: "OpenAgentsInc", repo: "openagents.com", state: "open"},
     %{id: 2, owner: "OpenAgentsInc", repo: "openagents.com", state: "open"},
     %{id: 3, owner: "OpenAgentsInc", repo: "arcade", state: "closed"}
+  ]
+
+  # Six issues spanning every status category, every priority, assigned and
+  # unassigned. A demo that shows one happy row hides exactly the cases the
+  # component was built to keep legible.
+  @demo_issues [
+    %{
+      identifier: "OA-142",
+      title: "Placement refuses a node whose capability manifest has expired",
+      status_category: :started,
+      status_label: "In progress",
+      progress: 35,
+      priority: :urgent,
+      labels: [%{name: "Bug", tone: :danger}, %{name: "Cloud", tone: :info}],
+      project: "Managed nodes",
+      due: "Aug 22",
+      created: "Aug 12",
+      assignee: %{name: "Mason Carter", presence: :online}
+    },
+    %{
+      identifier: "OA-138",
+      title: "Bound every atom attribute so a bad call site fails at compile time",
+      status_category: :completed,
+      status_label: "Done",
+      priority: :high,
+      labels: [%{name: "Refactor", tone: :warning}],
+      created: "Aug 9",
+      assignee: %{name: "Priya Raman", presence: :away}
+    },
+    %{
+      identifier: "OA-151",
+      title: "Diff parser drops the enclosing-function hint on a truncated hunk",
+      status_category: :triage,
+      status_label: "Triage",
+      priority: :medium,
+      labels: [%{name: "Forge", tone: :success}],
+      created: "Aug 18",
+      assignee: nil
+    },
+    %{
+      identifier: "OA-119",
+      title: "Command palette should say which issue it is acting on",
+      status_category: :unstarted,
+      status_label: "Todo",
+      priority: :low,
+      labels: [%{name: "UI", tone: :primary}],
+      project: "Component library",
+      created: "Jul 30",
+      assignee: %{name: "Tomas Lindqvist", presence: :offline}
+    },
+    %{
+      identifier: "OA-102",
+      title: "Investigate whether receipts can be signed on the node itself",
+      status_category: :backlog,
+      status_label: "Backlog",
+      priority: :none,
+      labels: [],
+      created: "Jul 14",
+      assignee: nil
+    },
+    %{
+      identifier: "OA-097",
+      title: "Second theme selector, superseded by the token ladder",
+      status_category: :canceled,
+      status_label: "Cancelled",
+      priority: :none,
+      labels: [%{name: "Design", tone: :neutral}],
+      created: "Jul 2",
+      assignee: %{name: "Ada Okafor", presence: :none}
+    }
+  ]
+
+  @demo_people [
+    %{name: "Mason Carter"},
+    %{name: "Priya Raman"},
+    %{name: "Tomas Lindqvist"},
+    %{name: "Ada Okafor"},
+    %{name: "Jun Watanabe"},
+    %{name: "Fiona Bell"},
+    %{name: "Ravi Menon"},
+    %{name: "Lena Fischer"}
   ]
 
   # The catalog demonstrates the preferred vendored Apps SDK tier. Heroicons
@@ -194,7 +276,9 @@ defmodule OpenAgentsWeb.ComponentsLive do
      |> assign(:openagents_icons, @openagents_icons)
      |> assign(:demo_user, @demo_user)
      |> assign(:demo_swarm, @demo_swarm)
-     |> assign(:demo_streams, @demo_streams)}
+     |> assign(:demo_streams, @demo_streams)
+     |> assign(:demo_issues, @demo_issues)
+     |> assign(:demo_people, @demo_people)}
   end
 
   @impl true
@@ -286,6 +370,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
   attr :rows, :list, default: []
   attr :openagents_icons, :list, default: []
   attr :demo_user, :map, default: nil
+  attr :demo_issues, :list, default: []
+  attr :demo_people, :list, default: []
 
   defp component_demo(%{item: %{slug: "openagents-input"}} = assigns) do
     ~H"""
@@ -1421,6 +1507,617 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <div class="demo-frame demo-frame--lines">
         <Landing.layout_lines class="!absolute" />
         <p class="landing-heading">Content sits between them</p>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-status"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Six categories, five of them a vendored glyph and one — <code>:started</code>
+        — drawn in CSS from a percentage, because how far along the work is cannot come
+        out of a fixed icon set. Colour is assigned per category off the same ladder
+        <code>status_indicator/1</code>
+        uses, so activity is blue and completion is green everywhere in the product.
+      </p>
+      <div class="flex flex-wrap gap-x-6 gap-y-3">
+        <Circle.issue_status category={:triage} label="Triage" show_label />
+        <Circle.issue_status category={:backlog} label="Backlog" show_label />
+        <Circle.issue_status category={:unstarted} label="Todo" show_label />
+        <Circle.issue_status category={:started} label="In progress" progress={35} show_label />
+        <Circle.issue_status category={:started} label="In review" progress={70} show_label />
+        <Circle.issue_status category={:completed} label="Done" show_label />
+        <Circle.issue_status category={:canceled} label="Cancelled" show_label />
+      </div>
+      <p class="text-sm text-base-content/60">
+        The arc at four fractions of the same shape:
+      </p>
+      <div class="flex flex-wrap gap-4">
+        <Circle.issue_status
+          :for={pct <- [0, 25, 50, 80]}
+          category={:started}
+          label={"#{pct}% complete"}
+          progress={pct}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-priority"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The level reads from how much of the shape is lit, so the ordering survives
+        greyscale. No priority is three dashes rather than the bottom of the ramp,
+        because "nobody has decided" is not a degree of urgency, and urgent leaves the
+        ramp entirely so the eye cannot skip it.
+      </p>
+      <div class="flex flex-wrap gap-x-6 gap-y-3">
+        <Circle.issue_priority
+          :for={level <- [:none, :low, :medium, :high, :urgent]}
+          level={level}
+          show_label
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-label"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The source gives each label its own hex value chosen at creation. Six tones off
+        the token ladder cannot tell eleven labels apart by colour, which is why the
+        word here is never optional — the dot groups, it does not identify.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <Circle.issue_label name="Bug" tone={:danger} />
+        <Circle.issue_label name="Feature" tone={:success} />
+        <Circle.issue_label name="Documentation" tone={:info} />
+        <Circle.issue_label name="Refactor" tone={:warning} />
+        <Circle.issue_label name="Design" tone={:primary} />
+        <Circle.issue_label name="Testing" tone={:neutral} />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "assignee"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Unassigned is drawn rather than left blank: a gap in a column of faces reads as
+        a rendering failure, and "nobody has picked this up" is one of the more
+        actionable facts a triage view carries.
+      </p>
+      <div class="flex flex-wrap items-center gap-6">
+        <Circle.assignee name="Mason Carter" presence={:online} show_name />
+        <Circle.assignee name="Priya Raman" presence={:away} show_name />
+        <Circle.assignee name="Ada Okafor" show_name />
+        <Circle.assignee show_name />
+      </div>
+      <div class="flex flex-wrap items-center gap-6">
+        <Circle.assignee
+          :for={size <- [:sm, :default, :lg]}
+          name="Jun Watanabe"
+          size={size}
+          presence={:online}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "assignee-stack"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Overlapping faces say "a group"; the count says how big. Six faces without a
+        count would claim the team has six people. Hover separates them so the
+        individuals stay reachable.
+      </p>
+      <div class="flex flex-col gap-4">
+        <Circle.assignee_stack people={@demo_people} limit={5} />
+        <Circle.assignee_stack people={Enum.take(@demo_people, 3)} />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-row"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Priority, identifier, and status lead in a fixed-width scan column, so they form
+        a straight edge down the list instead of shifting with each title. The
+        discretionary fields collect at the trailing edge and drop by width from the
+        least load-bearing inwards; the scan column and the title never drop.
+      </p>
+      <div class="-mx-6 border-y border-border">
+        <Circle.issue_row
+          :for={issue <- @demo_issues}
+          identifier={issue.identifier}
+          title={issue.title}
+          status_category={issue.status_category}
+          status_label={issue.status_label}
+          progress={issue[:progress]}
+          priority={issue.priority}
+          labels={issue.labels}
+          project={issue[:project]}
+          due={issue[:due]}
+          created={issue.created}
+          assignee={issue.assignee}
+        />
+      </div>
+      <p class="text-sm text-base-content/60">Selected, and with a destination on the title:</p>
+      <div class="-mx-6 border-y border-border">
+        <Circle.issue_row
+          identifier="OA-142"
+          title="Placement refuses a node whose capability manifest has expired"
+          navigate={~p"/components/issue-row"}
+          status_category={:started}
+          status_label="In progress"
+          progress={35}
+          priority={:urgent}
+          selected
+          assignee={%{name: "Mason Carter", presence: :online}}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-card"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A card is not a row turned sideways. With width and no neighbours the title gets
+        two lines, the labels get their own band, and the assignee drops to the foot
+        where it reads as ownership of the card rather than one more trailing attribute.
+      </p>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <Circle.issue_card
+          :for={issue <- Enum.take(@demo_issues, 4)}
+          identifier={issue.identifier}
+          title={issue.title}
+          status_category={issue.status_category}
+          status_label={issue.status_label}
+          progress={issue[:progress]}
+          priority={issue.priority}
+          labels={issue.labels}
+          project={issue[:project]}
+          created={issue.created}
+          assignee={issue.assignee}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-group"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The header sticks and carries a wash mixed from its own category, which is the
+        only thing that says where one group ends once the header has scrolled past its
+        rows. The wash is mixed over the canvas rather than laid on with alpha, so rows
+        passing underneath are covered instead of showing through.
+      </p>
+      <div class="-mx-6 max-h-80 overflow-y-auto border-y border-border">
+        <Circle.issue_group
+          :for={
+            {category, label} <- [
+              {:started, "In progress"},
+              {:unstarted, "Todo"},
+              {:backlog, "Backlog"}
+            ]
+          }
+          label={label}
+          category={category}
+          count={Enum.count(@demo_issues, &(&1.status_category == category))}
+        >
+          <:glyph>
+            <Circle.issue_status category={category} label={label} progress={35} />
+          </:glyph>
+          <:actions>
+            <UI.text_button aria-label={"Add an issue to #{label}"}>
+              <UI.icon name="plus" />
+            </UI.text_button>
+          </:actions>
+          <Circle.issue_row
+            :for={issue <- Enum.filter(@demo_issues, &(&1.status_category == category))}
+            identifier={issue.identifier}
+            title={issue.title}
+            status_category={issue.status_category}
+            status_label={issue.status_label}
+            progress={issue[:progress]}
+            priority={issue.priority}
+            labels={issue.labels}
+            created={issue.created}
+            assignee={issue.assignee}
+          />
+          <UI.empty
+            :if={Enum.all?(@demo_issues, &(&1.status_category != category))}
+            title="Nothing here"
+          >
+            No issue is in this state.
+          </UI.empty>
+        </Circle.issue_group>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-board"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Columns side by side, each scrolling on its own — scrolling the board as one
+        surface would push every header off the top to read the bottom of one column.
+        The source adds drag-and-drop over this layout; the layout is the part worth
+        having on a server-rendered page.
+      </p>
+      <div class="h-96">
+        <Circle.issue_board class="h-full">
+          <Circle.issue_group
+            :for={
+              {category, label} <- [
+                {:started, "In progress"},
+                {:unstarted, "Todo"},
+                {:completed, "Done"}
+              ]
+            }
+            layout={:board}
+            label={label}
+            category={category}
+            count={Enum.count(@demo_issues, &(&1.status_category == category))}
+          >
+            <:glyph>
+              <Circle.issue_status category={category} label={label} progress={35} />
+            </:glyph>
+            <Circle.issue_card
+              :for={issue <- Enum.filter(@demo_issues, &(&1.status_category == category))}
+              identifier={issue.identifier}
+              title={issue.title}
+              status_category={issue.status_category}
+              status_label={issue.status_label}
+              progress={issue[:progress]}
+              priority={issue.priority}
+              labels={issue.labels}
+              created={issue.created}
+              assignee={issue.assignee}
+            />
+          </Circle.issue_group>
+        </Circle.issue_board>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "filter-chip"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Subject, operator, value, each its own segment. That division is what lets <code>is</code>
+        become <code>is not</code>
+        without the filter being removed and rebuilt, and it is what the source's filter
+        library spends most of its code on.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <Circle.filter_chip
+          subject="Status"
+          operator="is any of"
+          value="In progress, Todo"
+          icon="circle"
+        />
+        <Circle.filter_chip subject="Assignee" operator="is" value="Mason Carter" icon="user" />
+        <Circle.filter_chip
+          subject="Label"
+          operator="is not"
+          value="Documentation"
+          icon="tag"
+          on_remove={JS.hide(to: {:closest, ".filter-chip"})}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "filter-bar"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The applied filters, the control that adds one, and a way to drop them all. The
+        source hides this row entirely until a filter exists and keeps the entry point
+        in the toolbar, which is right — an empty filter bar is a permanent reminder of
+        a feature nobody is using. Rendering nothing when there are no chips stays the
+        caller's decision.
+      </p>
+      <div class="-mx-6">
+        <Circle.filter_bar on_clear={JS.hide(to: {:closest, ".filter-bar"})}>
+          <:add>
+            <UI.text_button><UI.icon name="filter" /> Filter</UI.text_button>
+          </:add>
+          <Circle.filter_chip
+            subject="Status"
+            operator="is any of"
+            value="In progress, Todo"
+            icon="circle"
+            on_remove={JS.hide(to: {:closest, ".filter-chip"})}
+          />
+          <Circle.filter_chip
+            subject="Priority"
+            operator="is"
+            value="Urgent"
+            icon="bar-chart"
+            on_remove={JS.hide(to: {:closest, ".filter-chip"})}
+          />
+        </Circle.filter_bar>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "view-tabs"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Pills rather than underlined tabs: these switch a filter, not a page, and an
+        underline promises a bigger change than actually happens. The current view
+        carries <code>aria-current</code>, so its state is not colour alone.
+      </p>
+      <Circle.view_tabs label="Issue views">
+        <:tab label="Active" navigate={~p"/components/view-tabs"} selected />
+        <:tab label="Backlog" navigate={~p"/components/view-tabs"} />
+        <:tab label="All issues" navigate={~p"/components/view-tabs"} />
+      </Circle.view_tabs>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "issue-toolbar"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        What you are looking at on the left, what you can do to it on the right. The
+        source splits this into two stacked rows; stacking two toolbars gives the same
+        arrangement without forcing a surface that has only options to carry an empty
+        navigation strip.
+      </p>
+      <div class="-mx-6">
+        <Circle.issue_toolbar>
+          <:leading>
+            <Circle.view_tabs label="Issue views">
+              <:tab label="Active" navigate={~p"/components/issue-toolbar"} selected />
+              <:tab label="Backlog" navigate={~p"/components/issue-toolbar"} />
+            </Circle.view_tabs>
+          </:leading>
+          <:actions>
+            <UI.text_button aria-label="Search issues"><UI.icon name="search" /></UI.text_button>
+            <UI.text_button aria-label="Notifications"><UI.icon name="bell" /></UI.text_button>
+          </:actions>
+        </Circle.issue_toolbar>
+        <Circle.issue_toolbar>
+          <:leading>
+            <span class="text-xs text-muted-foreground">6 issues</span>
+          </:leading>
+          <:actions>
+            <UI.text_button><UI.icon name="filter" /> Filter</UI.text_button>
+            <UI.text_button><UI.icon name="settings-slider" /> Display</UI.text_button>
+          </:actions>
+        </Circle.issue_toolbar>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "command-palette"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Press
+        <UI.kbd>⌘</UI.kbd>
+        <UI.kbd>K</UI.kbd>
+        or use the button. A native <code>&lt;dialog&gt;</code>
+        supplies the focus trap, the backdrop, and <UI.kbd>Esc</UI.kbd>; the one
+        colocated hook adds the shortcut, incremental filtering, and arrow-key
+        selection, which are the four things markup cannot express. Every command is a
+        real button and works without the hook.
+      </p>
+      <UI.button data-command-target="demo-command-palette">Open the palette</UI.button>
+      <Circle.command_palette
+        id="demo-command-palette"
+        context="OA-142 · Placement refuses an expired manifest"
+      >
+        <Circle.command_group heading="Issue">
+          <Circle.command_item label="Assign to…" icon="user-add" keys={["A"]} />
+          <Circle.command_item label="Change status…" icon="circle" keys={["S"]} />
+          <Circle.command_item label="Set priority…" icon="bar-chart" keys={["P"]} />
+          <Circle.command_item label="Change or add labels…" icon="tag" keys={["L"]} />
+          <Circle.command_item label="Set due date…" icon="calendar" keys={["⇧", "D"]} />
+        </Circle.command_group>
+        <Circle.command_group heading="Copy">
+          <Circle.command_item label="Copy issue ID" icon="clipboard" keys={["⌘", "."]} />
+          <Circle.command_item label="Copy issue URL" icon="link" keys={["⌘", "⇧", ","]} />
+          <Circle.command_item label="Copy branch name" icon="branch" keys={["⌘", "⇧", "."]} />
+        </Circle.command_group>
+        <Circle.command_group heading="Go to">
+          <Circle.command_item label="My issues" icon="user" keys={["G", "I"]} />
+          <Circle.command_item label="Projects" icon="cube" keys={["G", "P"]} />
+          <Circle.command_item label="Teams" icon="members" keys={["G", "T"]} />
+        </Circle.command_group>
+      </Circle.command_palette>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "command-group"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Headings keep a palette of forty commands readable, and they are what makes
+        filtering legible: a group whose commands have all been filtered out hides
+        itself rather than leaving a heading over a gap. Shown here outside a dialog so
+        the structure is visible.
+      </p>
+      <div class="command-palette__list rounded-lg border border-border">
+        <Circle.command_group heading="Issue">
+          <Circle.command_item label="Assign to…" icon="user-add" keys={["A"]} />
+          <Circle.command_item label="Change status…" icon="circle" keys={["S"]} />
+        </Circle.command_group>
+        <Circle.command_group heading="Copy">
+          <Circle.command_item label="Copy issue ID" icon="clipboard" keys={["⌘", "."]} />
+        </Circle.command_group>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "command-item"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A glyph, a name, and the keys that reach it directly. The chips are
+        documentation rather than bindings — the palette does not install them. Showing
+        them anyway is how a person stops needing the palette, which is the point of
+        having one. The label doubles as the filter key.
+      </p>
+      <div class="command-palette__list rounded-lg border border-border">
+        <Circle.command_item label="Assign to…" icon="user-add" keys={["A"]} />
+        <Circle.command_item label="Copy issue URL" icon="link" keys={["⌘", "⇧", ","]} />
+        <Circle.command_item label="Create new issue" icon="plus" />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "project-row"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Projects are read across rather than down — the question is which one is behind,
+        not what any one of them is called — so the trailing fields sit in fixed columns
+        that line up between rows. Health is a word: "at risk" and "off track" are
+        different claims, and no reader should have to learn which shade of amber means
+        which.
+      </p>
+      <div class="-mx-6 border-y border-border">
+        <Circle.project_row
+          name="Managed nodes"
+          health={:on_track}
+          priority={:high}
+          lead={%{name: "Priya Raman"}}
+          target="Sep 30"
+          issues={24}
+          status_category={:started}
+          status_label="In progress"
+          percent={62}
+          labels={[%{name: "Cloud", tone: :info}]}
+        />
+        <Circle.project_row
+          name="Component library"
+          navigate={~p"/components"}
+          health={:at_risk}
+          priority={:medium}
+          lead={%{name: "Ada Okafor"}}
+          target="Aug 29"
+          issues={11}
+          status_category={:started}
+          status_label="In progress"
+          percent={78}
+        />
+        <Circle.project_row
+          name="Taproot settlement"
+          health={:off_track}
+          priority={:urgent}
+          target="Oct 14"
+          issues={7}
+          status_category={:triage}
+          status_label="Triage"
+        />
+        <Circle.project_row
+          name="Second theme selector"
+          priority={:none}
+          issues={0}
+          status_category={:canceled}
+          status_label="Cancelled"
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "team-row"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The identifier sits beside the name rather than instead of it, because it is the
+        prefix on every issue key the team produces — <code>OA-142</code>
+        is only findable if somebody can connect <code>OA</code>
+        to a team.
+      </p>
+      <div class="-mx-6 border-y border-border">
+        <Circle.team_row
+          name="Core"
+          identifier="OA"
+          glyph="◆"
+          navigate={~p"/components/team-row"}
+          joined
+          members={@demo_people}
+          projects={6}
+          cycles={3}
+        />
+        <Circle.team_row
+          name="Cloud"
+          identifier="CLD"
+          glyph="▲"
+          members={Enum.take(@demo_people, 4)}
+          projects={3}
+          cycles={2}
+        />
+        <Circle.team_row
+          name="Design"
+          identifier="DSN"
+          members={Enum.take(@demo_people, 2)}
+          projects={1}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "member-row"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Two lines of identity rather than one. A display name is what a colleague
+        recognises and a handle is what appears in a mention; a directory that shows
+        only one of them fails whichever question is being asked.
+      </p>
+      <div class="-mx-6 border-y border-border">
+        <Circle.member_row
+          name="Mason Carter"
+          handle="mason.carter"
+          navigate={~p"/components/member-row"}
+          role="Admin"
+          role_tone={:accent}
+          joined="Mar 2024"
+          teams={["OA", "CLD", "DSN"]}
+          presence={:online}
+        />
+        <Circle.member_row
+          name="Priya Raman"
+          handle="priya.raman"
+          role="Member"
+          joined="Jun 2024"
+          teams={["OA"]}
+          presence={:away}
+        />
+        <Circle.member_row name="forge-bot" handle="forge.bot" role="Application" joined="Jan 2025" />
       </div>
     </div>
     """

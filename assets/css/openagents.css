@@ -5188,3 +5188,994 @@
     border-radius: 5px;
   }
 }
+
+/* ── Issues ───────────────────────────────────────────────────────────────── */
+
+/* Issue, project, and team surfaces, adapted from Circle (MIT, © 2025
+ * lndev-ui). The source assigns a hand-picked hex value to each of thirteen
+ * statuses and eleven labels; those colours are Linear's, and adopting them
+ * would put a second palette beside the one every other surface uses. Colour
+ * here is assigned per status CATEGORY off the same token ladder as
+ * .status-indicator: activity is --info, completion is --success, anything
+ * awaiting a decision is --warning, and both resting states are grey.
+ * See docs/2026-08-20-circle-ui-port.md. */
+
+@layer components {
+  /* One custom property carries the category colour, so every element that
+     tints itself from a status -- the glyph, the group header wash -- reads
+     the same value instead of repeating the mapping. */
+  .issue-status,
+  .issue-group {
+    --issue-tint: var(--text-muted);
+  }
+
+  .issue-status[data-category="triage"],
+  .issue-group[data-category="triage"] {
+    --issue-tint: var(--warning);
+  }
+
+  .issue-status[data-category="backlog"],
+  .issue-group[data-category="backlog"],
+  .issue-status[data-category="canceled"],
+  .issue-group[data-category="canceled"] {
+    --issue-tint: var(--text-dim);
+  }
+
+  .issue-status[data-category="started"],
+  .issue-group[data-category="started"] {
+    --issue-tint: var(--info);
+  }
+
+  .issue-status[data-category="completed"],
+  .issue-group[data-category="completed"] {
+    --issue-tint: var(--success);
+  }
+
+  .issue-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    color: var(--issue-tint);
+  }
+
+  .issue-status__glyph {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+  }
+
+  /* The one shape an icon set cannot carry: the fill is a number. A conic
+     gradient inside a ring is the whole drawing -- no SVG, no second glyph per
+     fraction, and it stays correct at any percentage the caller has. */
+  .issue-status__arc {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+  }
+
+  .issue-status__arc::after {
+    content: "";
+    position: absolute;
+    inset: 1.5px;
+    border-radius: 50%;
+    background: conic-gradient(currentColor calc(var(--issue-arc, 0) * 1%), transparent 0);
+  }
+
+  .issue-status__label {
+    color: var(--text-body);
+    font-size: 0.8125rem;
+  }
+
+  .issue-priority {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    color: var(--icon-tertiary);
+  }
+
+  .issue-priority[data-level="urgent"] {
+    color: var(--danger);
+  }
+
+  .issue-priority__alarm {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+  }
+
+  /* Bars rather than five pictures: one shape read at four levels, so the
+     ordering is visible without learning a legend. The unlit bars stay drawn
+     -- removing them would make "low" and "no priority" the same silhouette. */
+  .issue-priority__bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 1.5px;
+    width: 14px;
+    height: 14px;
+    padding-block: 1px;
+  }
+
+  .issue-priority__bar {
+    width: 3px;
+    border-radius: 1px;
+    background: currentColor;
+    opacity: 0.28;
+  }
+
+  .issue-priority__bar:nth-child(1) {
+    height: 50%;
+  }
+
+  .issue-priority__bar:nth-child(2) {
+    height: 75%;
+  }
+
+  .issue-priority__bar:nth-child(3) {
+    height: 100%;
+  }
+
+  /* No priority is three equal dashes at the midline: a shape of its own,
+     rather than the low end of the same ramp, because "nobody has decided" is
+     not a degree of urgency. */
+  .issue-priority[data-level="none"] .issue-priority__bar {
+    height: 2px;
+    opacity: 0.5;
+  }
+
+  .issue-priority[data-level="low"] .issue-priority__bar:nth-child(1),
+  .issue-priority[data-level="medium"] .issue-priority__bar:nth-child(-n + 2),
+  .issue-priority[data-level="high"] .issue-priority__bar {
+    opacity: 1;
+  }
+
+  .issue-priority__label {
+    color: var(--text-body);
+    font-size: 0.8125rem;
+  }
+
+  .issue-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    max-width: 14rem;
+    padding: 1px 8px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .issue-label__dot {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .issue-label__glyph {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    font-size: 12px;
+    color: var(--icon-tertiary);
+  }
+
+  .issue-label[data-tone="primary"] .issue-label__dot { background: var(--text-primary); }
+  .issue-label[data-tone="info"] .issue-label__dot { background: var(--info); }
+  .issue-label[data-tone="success"] .issue-label__dot { background: var(--success); }
+  .issue-label[data-tone="warning"] .issue-label__dot { background: var(--warning); }
+  .issue-label[data-tone="danger"] .issue-label__dot { background: var(--danger); }
+
+  .assignee {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+  }
+
+  .assignee__figure {
+    position: relative;
+    display: inline-flex;
+  }
+
+  /* Unassigned is drawn, not left blank. A gap in a column of faces reads as a
+     failure to render rather than as an unclaimed issue. */
+  .assignee__empty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 50%;
+    color: var(--icon-faint);
+    font-size: 13px;
+  }
+
+  .assignee[data-size="sm"] .assignee__empty {
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+  }
+
+  .assignee[data-size="lg"] .assignee__empty {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .assignee__presence {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--ink-surface);
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  .assignee__presence[data-presence="online"] { background: var(--success); }
+  .assignee__presence[data-presence="away"] { background: var(--warning); }
+
+  .assignee__name {
+    color: var(--text-body);
+    font-size: 0.8125rem;
+  }
+
+  /* Faces overlap until hovered, then separate. Overlapping is how a stack
+     says "a group" rather than "these five people"; separating on hover is how
+     the individuals stay reachable. */
+  .assignee-stack {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .assignee-stack__faces {
+    display: inline-flex;
+  }
+
+  .assignee-stack__faces .avatar {
+    margin-inline-start: -6px;
+    box-shadow: 0 0 0 2px var(--ink-surface);
+    transition: margin var(--motion-fast) var(--ease);
+  }
+
+  .assignee-stack__faces .avatar:first-child {
+    margin-inline-start: 0;
+  }
+
+  @media (hover: hover) {
+    .assignee-stack:hover .assignee-stack__faces .avatar {
+      margin-inline-start: 2px;
+    }
+
+    .assignee-stack:hover .assignee-stack__faces .avatar:first-child {
+      margin-inline-start: 0;
+    }
+  }
+
+  .assignee-stack__count {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── rows ──────────────────────────────────────────────────────────────── */
+
+  .issue-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding-inline: 16px;
+    border-block-end: 1px solid var(--line-faint);
+  }
+
+  @media (hover: hover) {
+    .issue-row:hover {
+      background: var(--wash-hover);
+    }
+  }
+
+  .issue-row[data-selected="true"] {
+    background: var(--wash-selected);
+  }
+
+  /* The three fields a person scans a list for, in a fixed order and at a
+     fixed width, so they form a column down the list rather than shifting with
+     each title's length. */
+  .issue-row__scan {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+  }
+
+  .issue-row__identifier {
+    width: 68px;
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .issue-row__title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    a.issue-row__title:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  .issue-row__trailing {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    margin-inline-start: auto;
+  }
+
+  .issue-row__chips {
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .issue-row__due {
+    color: var(--warning);
+    font-size: 0.75rem;
+  }
+
+  .issue-row__date {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Discretionary fields drop from the least load-bearing inwards. The scan
+     column and the title never drop: a row that cannot be identified is not a
+     narrower row, it is a broken one. */
+  @media (width >= 40rem) {
+    .issue-row {
+      gap: 12px;
+      padding-inline: 24px;
+    }
+
+    .issue-row__chips {
+      display: inline-flex;
+    }
+  }
+
+  .issue-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--ink-raised);
+    box-shadow: var(--shadow-l1);
+  }
+
+  .issue-card__head,
+  .issue-card__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .issue-card__scan {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .issue-card__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .issue-card__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* ── groups and boards ─────────────────────────────────────────────────── */
+
+  .issue-group__head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: 40px;
+    padding-inline: 24px;
+    border-block-end: 1px solid var(--line-faint);
+    /* The wash is mixed over the canvas rather than laid on it with alpha, so
+       rows scrolling underneath a sticky header are covered instead of showing
+       through it. */
+    background: color-mix(in oklab, var(--issue-tint) 7%, var(--ink-surface));
+  }
+
+  .issue-group__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .issue-group__label {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .issue-group__count {
+    color: var(--text-dim);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .issue-group__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
+
+  .issue-group[data-layout="board"] {
+    display: flex;
+    flex-direction: column;
+    width: 320px;
+    max-height: 100%;
+    flex: none;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--ink-void);
+  }
+
+  .issue-group[data-layout="board"] .issue-group__head {
+    padding-inline: 12px;
+  }
+
+  .issue-group[data-layout="board"] .issue-group__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  /* Each column scrolls on its own. Scrolling the board as one surface pushes
+     every header off the top to read the bottom of one column. */
+  .issue-board {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    overflow-x: auto;
+    padding-block-end: 4px;
+  }
+
+  /* ── filters ───────────────────────────────────────────────────────────── */
+
+  .filter-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 24px;
+    border-block-end: 1px solid var(--line);
+  }
+
+  .filter-bar__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-bar__clear {
+    flex: none;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: color var(--motion-fast) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .filter-bar__clear:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  /* Three segments divided by hairlines rather than three separate controls:
+     the chip is one filter, and splitting it visually is what says the
+     operator can change without the filter being rebuilt. */
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--ink-raised);
+    font-size: 0.75rem;
+  }
+
+  .filter-chip > * {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 100%;
+    padding-inline: 10px;
+  }
+
+  .filter-chip > * + * {
+    border-inline-start: 1px solid var(--line);
+  }
+
+  .filter-chip__subject {
+    color: var(--text-body);
+    font-weight: 500;
+  }
+
+  .filter-chip__operator {
+    color: var(--text-dim);
+  }
+
+  .filter-chip__value {
+    color: var(--text-primary);
+  }
+
+  .filter-chip__remove {
+    border: 0;
+    background: transparent;
+    color: var(--icon-tertiary);
+    cursor: pointer;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background var(--motion-fast) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .filter-chip__remove:hover {
+      background: var(--wash-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  /* ── headers ───────────────────────────────────────────────────────────── */
+
+  .view-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .view-tabs__tab {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding-inline: 10px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition:
+      color var(--motion-fast) var(--ease),
+      background var(--motion-fast) var(--ease),
+      border-color var(--motion-fast) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .view-tabs__tab:hover {
+      background: var(--wash-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  .view-tabs__tab[aria-current="page"] {
+    border-color: var(--line);
+    background: var(--wash-selected);
+    color: var(--text-primary);
+  }
+
+  .issue-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 40px;
+    padding: 4px 24px;
+    border-block-end: 1px solid var(--line);
+  }
+
+  .issue-toolbar__leading,
+  .issue-toolbar__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  /* ── command palette ───────────────────────────────────────────────────── */
+
+  /* A native dialog: the browser owns the focus trap, the backdrop, Escape,
+     and inertness of the page behind. Reimplementing those is where hand-built
+     palettes usually go wrong. */
+  .command-palette {
+    width: min(640px, calc(100vw - 32px));
+    max-width: none;
+    margin-block-start: 12vh;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-xl);
+    background: var(--ink-surface);
+    color: var(--text-body);
+    box-shadow: var(--shadow-l3);
+  }
+
+  .command-palette::backdrop {
+    background: color-mix(in oklab, #08090a 55%, transparent);
+  }
+
+  .command-palette__panel {
+    display: flex;
+    flex-direction: column;
+    max-height: min(70vh, 32rem);
+  }
+
+  .command-palette__context {
+    margin: 12px 12px 0;
+    padding: 4px 8px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--wash-hover);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .command-palette__search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-block-end: 1px solid var(--line);
+  }
+
+  .command-palette__glyph {
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  .command-palette__input {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    outline: none;
+  }
+
+  .command-palette__input::placeholder {
+    color: var(--text-dim);
+  }
+
+  .command-palette__list {
+    padding: 6px;
+    overflow-y: auto;
+  }
+
+  .command-palette__empty {
+    padding: 24px 12px;
+    color: var(--text-dim);
+    font-size: 0.8125rem;
+    text-align: center;
+  }
+
+  .command-group + .command-group {
+    margin-block-start: 4px;
+    padding-block-start: 4px;
+    border-block-start: 1px solid var(--line-faint);
+  }
+
+  .command-group__heading {
+    padding: 6px 10px;
+    color: var(--text-dim);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .command-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-body);
+    font-size: 0.875rem;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  /* Keyboard selection and pointer hover paint the same row the same way. Two
+     different highlights in one list means the reader has to work out which
+     one Enter will take. */
+  .command-item[data-active],
+  .command-item:focus-visible {
+    background: var(--wash-selected);
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  @media (hover: hover) {
+    .command-item:hover {
+      background: var(--wash-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  .command-item__glyph {
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  .command-item__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .command-item__keys {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
+
+  /* ── project, team, and member rows ────────────────────────────────────── */
+
+  .project-row,
+  .team-row,
+  .member-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 8px 24px;
+    border-block-end: 1px solid var(--line-faint);
+    font-size: 0.8125rem;
+  }
+
+  @media (hover: hover) {
+    .project-row:hover,
+    .team-row:hover,
+    .member-row:hover {
+      background: var(--wash-hover);
+    }
+  }
+
+  .project-row__name,
+  .team-row__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .project-row__icon,
+  .team-row__glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    border-radius: var(--radius-sm);
+    background: var(--wash-hover);
+    color: var(--icon-secondary);
+    font-size: 13px;
+  }
+
+  .project-row__link,
+  .team-row__link,
+  .member-row__name {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    a.project-row__link:hover,
+    a.team-row__link:hover,
+    a.member-row__name:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  .team-row__identifier {
+    flex: none;
+    color: var(--text-dim);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Health is a word. "At risk" and "off track" are different claims, and no
+     reader should have to learn which shade of amber means which. */
+  .project-row__health {
+    flex: none;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+  }
+
+  .project-row__health[data-health="on_track"] {
+    border-color: color-mix(in oklab, var(--success) 40%, transparent);
+    color: var(--success);
+  }
+
+  .project-row__health[data-health="at_risk"] {
+    border-color: color-mix(in oklab, var(--warning) 40%, transparent);
+    color: var(--warning);
+  }
+
+  .project-row__health[data-health="off_track"] {
+    border-color: color-mix(in oklab, var(--danger) 40%, transparent);
+    color: var(--danger);
+  }
+
+  .project-row__priority,
+  .project-row__lead,
+  .project-row__target,
+  .project-row__issues,
+  .project-row__status,
+  .team-row__membership,
+  .team-row__members,
+  .team-row__metric,
+  .member-row__role,
+  .member-row__joined,
+  .member-row__teams {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+
+  .project-row__status,
+  .member-row__role {
+    display: inline-flex;
+  }
+
+  .project-row__percent {
+    color: var(--text-body);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .team-row__joined {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+
+  .member-row__identity {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .member-row__names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .member-row__handle {
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .member-row__role {
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+
+  .member-row__role[data-tone="accent"] {
+    border-color: color-mix(in oklab, var(--info) 40%, transparent);
+    color: var(--info);
+  }
+
+  /* Fixed widths only once the columns exist. Below this the rows are name and
+     status, which is what a narrow screen can carry honestly. */
+  @media (width >= 48rem) {
+    .project-row__priority { display: inline-flex; width: 40px; }
+    .project-row__lead { display: inline-flex; width: 40px; }
+    .project-row__status { width: 96px; }
+    .team-row__members { display: inline-flex; width: 140px; }
+    .team-row__metric { display: inline-flex; width: 56px; }
+    .member-row__role { width: 96px; }
+    .member-row__teams { display: inline-flex; width: 160px; min-width: 0; }
+  }
+
+  @media (width >= 64rem) {
+    .project-row__health { min-width: 96px; text-align: center; }
+    .project-row__target { display: inline-flex; width: 96px; }
+    .project-row__issues { display: inline-flex; width: 48px; }
+    .team-row__membership { display: inline-flex; width: 96px; }
+    .member-row__joined { display: inline-flex; width: 88px; }
+  }
+}

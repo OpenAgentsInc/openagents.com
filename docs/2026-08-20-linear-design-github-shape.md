@@ -88,8 +88,11 @@ we have the first, and the UI calls it a milestone.
 
 ## What GitHub gives us that Linear's model does not
 
-Worth stating, because the constraint is not only subtractive. The current
-schema also carries:
+Worth stating, because the constraint is not only subtractive. GitHub's own
+schema carries these, and **ours does not yet** -- they are fields to grow
+into, not fields to render today. Read the distinction carefully: an earlier
+draft of this section said "the current schema", which was read as ours and
+is not true of it.
 
 - **`type`** — an issue type (bug, feature, task) with a colour, enabled per
   org. Circle's issue has no equivalent.
@@ -97,8 +100,9 @@ schema also carries:
   parent/child issues.
 - **`issue_dependencies_summary`** — blocking relationships.
 
-These are real GitHub fields, so they are all fair game, and Circle has no
-vocabulary for any of them. The progress arc in `issue_status/1` already fills
+These are real GitHub fields, so they are all fair game once we store them,
+and no competing tracker has vocabulary for any of them. Until a migration
+adds them, a page that renders them is rendering nothing. The progress arc in `issue_status/1` already fills
 from a number, which makes it the obvious renderer for
 `sub_issues_summary.percent_completed` — a Linear-derived control displaying a
 GitHub-native fact, which is exactly the shape this whole document is arguing

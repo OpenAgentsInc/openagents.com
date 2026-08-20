@@ -1,0 +1,10 @@
+{
+  "api_origin": "http://localhost:4011",
+  "cli_revision": "de8015d1e5",
+  "contract_sha256": "8ee2a118e15c7cbc6bc84d450a970724a4279fe2ae66fc3bd822770e92bebc02",
+  "created_commit_sha": "59683c2d1f0ec8c817678dd8431c108392664f7a",
+  "import_ref_digest": "4f09e44c56cfb58245e40b23f9f895157915d90d03dce7480dc46c2cd03ab1d8",
+  "secret_scan": "passed",
+  "server_revision": "cf04c00",
+  "test_count": 1
+}

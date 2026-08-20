@@ -2085,7 +2085,7 @@
   .sidebar-section {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
   }
 
   .sidebar-section__summary {
@@ -2095,6 +2095,21 @@
     cursor: pointer;
     list-style: none;
     user-select: none;
+    border-radius: 6px;
+    transition: color 150ms var(--ease);
+  }
+
+  @media (hover: hover) {
+    .sidebar-section__summary:hover {
+      color: var(--text-body);
+    }
+  }
+
+  /* The caret is a disclosure indicator, so it sits on the trailing edge where
+     the eye lands after reading the label, not before it. */
+  .sidebar-section__caret {
+    order: 2;
+    margin-left: auto;
   }
 
   /* Safari draws its own triangle unless this is removed. */
@@ -2123,7 +2138,14 @@
   .sidebar-section__items {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
+    /* Nested rows are one step shorter than the heading above them, which is
+       what makes the hierarchy readable without indenting everything. */
+    padding-block: 1px 6px;
+  }
+
+  .sidebar-section__items .sidebar-row {
+    min-height: 30px;
   }
 
   @media (prefers-reduced-motion: reduce) {

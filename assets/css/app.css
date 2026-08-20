@@ -265,12 +265,15 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  margin-inline: 6px;
-  padding-inline: 14px;
-  padding-block: 6px;
-  border-radius: 10px;
+  gap: 8px;
+  /* 32px rows sitting 1px apart. The previous 36px row with 6px of block
+     padding and 4px between rows spent roughly half the sidebar's height on
+     space between things rather than on the things. */
+  min-height: 32px;
+  margin-inline: 12px;
+  padding-inline: 8px;
+  padding-block: 0;
+  border-radius: 6px;
   /* Rest dim, brighten on hover. A sidebar is a list of places you are not, so
      at full brightness every row competes with the page for attention. The
      current row and the hovered row are the two that earn it. */
@@ -285,10 +288,10 @@
 
 @media (hover: hover) {
   .sidebar-row:hover {
-    background: var(--ink-raised);
-    /* Was a hardcoded #fff, which is white-on-near-white in light mode. The ink
-       token flips with the theme. */
-    color: var(--text-primary);
+    background: var(--wash-hover);
+    /* One step up from rest, not all the way to primary. Jumping straight to
+       the brightest ink made every hover look like a selection. */
+    color: var(--text-body);
   }
 }
 
@@ -367,14 +370,17 @@
   top: 0;
   display: flex;
   align-items: center;
-  min-height: 32px;
-  padding-inline: 16px;
+  /* A section heading is a row you can click, so it is sized like one: same
+     height, same type, sentence case. Uppercasing it with tracking made it
+     shout a word the reader already scanned past. */
+  min-height: 36px;
+  margin-inline: 12px;
+  padding-inline: 8px;
   background: var(--ink-surface);
   color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.25rem;
 }
 
 .sidebar-footer {
@@ -397,13 +403,13 @@
 
 .docs-sidebar {
   display: flex;
-  width: 260px;
+  width: 280px;
   flex: none;
   flex-direction: column;
-  gap: 12px;
-  border-right: 1px solid var(--ink-raised);
-  background: var(--ink-surface);
-  padding: 16px 0;
+  gap: 8px;
+  border-right: 1px solid var(--line);
+  background: var(--ink-void);
+  padding: 12px 0;
 }
 
 .docs-sidebar__header {
@@ -417,7 +423,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 20px;
+  gap: 2px;
   overflow-y: auto;
   overscroll-behavior: none;
 }
@@ -425,7 +431,7 @@
 .docs-sidebar__section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
 }
 
 .docs-sidebar__section-title {
@@ -460,7 +466,10 @@
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: none;
-  padding: 32px;
+  /* The column is centred in whatever space is left rather than pinned to the
+     sidebar. Text starting immediately against a rule reads as an overflow of
+     the sidebar rather than as its own column. */
+  padding: 40px 64px 96px;
 }
 
 /* Chat UI (OpenAgents) */

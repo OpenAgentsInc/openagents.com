@@ -21,7 +21,7 @@ The current `OpenAgentsWeb.UI` inventory is:
 | Component | Purpose |
 | --- | --- |
 | `button/1`, `text_button/1` | Boxed, link, chip, destructive, and primary actions |
-| `input/1`, `textarea/1`, `label/1`, `field/1` | Form-aware controls and labelled groups |
+| `input/1`, `textarea/1`, `label/1`, `field/1` | Form-aware controls and labeled groups |
 | `header/1`, `table/1`, `list/1` | Page headings and structured data |
 | `alert/1`, `badge/1`, `status_indicator/1` | Explicit feedback and semantic state |
 | `card/1`, `frame/1` | Bounded content and decorative framing |
@@ -32,8 +32,11 @@ The current `OpenAgentsWeb.UI` inventory is:
 
 `OpenAgentsWeb.Layouts` owns `app/1`, `flash_group/1`, `command_bar/1`,
 and `account_control/1`. Product templates begin with `Layouts.app` and never
-render `flash_group/1` directly. The staging palette is deliberately dark-only,
-so the application exposes no theme control or browser theme state.
+render `flash_group/1` directly. The command bar exposes one system, light, and
+dark preference control over exactly two owned palettes. The system choice
+stores no override and follows `prefers-color-scheme`. The synchronous theme
+bootstrap in `root.html.heex` applies an explicit choice before the first paint
+and synchronizes it across tabs.
 
 ## Specialized components
 
@@ -70,7 +73,8 @@ repository breadcrumbs, file rows, commit rows, and bounded diff panels.
 
 The compiled CSS contract test proves that Basecoat geometry precedes the
 OpenAgents style pack, every supported button variant survives compilation, no
-retired palette alias survives, and no theme selector enters the bundle.
+retired palette alias survives, both owned themes compile, the operating-system
+fallback compiles, and no third theme selector enters the bundle.
 
 See [the UI roadmap](issues-projects-ui-roadmap.md),
 [ADR 0005](decisions/0005-use-basecoat-and-one-component-system.md), and the

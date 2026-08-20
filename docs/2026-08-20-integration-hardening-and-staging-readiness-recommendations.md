@@ -444,6 +444,10 @@ records.
   Tailwind and proves that exactly two owned themes and the system fallback
   survive, Basecoat geometry precedes the OpenAgents style pack, and all eight
   governed button variants survive the cascade.
+- Reconciled `AGENTS.md`, UI-003, and the component guide with the later light
+  palette. The documentation check now refuses the superseded dark-only claims
+  in active contracts, and the component test enumerates the system, light, and
+  dark controls without treating the system preference as a third palette.
 - Migrated current glyph uses to the preferred vendored Apps SDK set. Retained
   Heroicons only as the owner-approved second tier, pinned it to immutable
   revision `0435d4ca364a608cc75e2f8683d374e55abbae26`, and recorded an empty

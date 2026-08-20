@@ -1511,23 +1511,28 @@ Basecoat's JavaScript is never loaded and the account menu uses the native
 popover API, so the identity control works without custom client-side script.
 Where Basecoat has no equivalent, the primitive wraps the browser's own control
 rather than reimplementing it: `audio_player/1` is a native `<audio controls>`
-in a OpenAgents-styled box, keyboard operable and announced by the user agent, and it
-requires an accessible name because a page of recordings is otherwise a page of
-identically announced players.
-The shared corner radius, the self-hosted Geist faces, the single dark theme,
-and the reserved semantic color meanings hold across every component. Depth is
-limited to the sanctioned lift, halo, and state-ring tokens.
+in an OpenAgents-styled box, keyboard operable and announced by the user agent,
+and it requires an accessible name because a page of recordings is otherwise a
+page of identically announced players.
+The shared corner radius, the self-hosted Geist faces, exactly two owned themes,
+and the reserved semantic color meanings hold across every component. The
+system preference selects light or dark through `prefers-color-scheme`; it does
+not introduce a third palette. Depth is limited to the sanctioned lift, halo,
+and state-ring tokens.
 Adopting an additional Basecoat component requires a
 `docs/component-library.md` change and an explicit per-component import. The
-application exposes no light/system theme control while the palette is
-dark-only. Apps SDK UI glyphs are preferred; the pinned Heroicons fallback has
-an explicit inventory and no current product call sites.
+application exposes one system, light, and dark preference control. A
+synchronous, content-free bootstrap applies the stored choice before first
+paint and synchronizes changes across tabs. Apps SDK UI glyphs are preferred;
+the pinned Heroicons fallback has an explicit inventory and no current product
+call sites.
 
 Evidence: `assets/vendor/basecoat/README.md`, `assets/css/openagents.css`,
 `priv/static/fonts`, `OpenAgentsWeb.UI`, `OpenAgentsWeb.ComponentCatalog`,
 `OpenAgentsWeb.UITest`, `OpenAgentsWeb.UIGalleryLiveTest`,
 `test/openagents_web/component_catalog_test.exs`,
-`test/openagents_web/icon_affordances_test.exs`, and
+`test/openagents_web/icon_affordances_test.exs`,
+`test/openagents_web/live/components_live_test.exs`, and
 `assets/test/css_contract_test.mjs`.
 
 ### LEADERBOARD-001 — The public board publishes one bounded projection

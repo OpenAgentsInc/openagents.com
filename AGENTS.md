@@ -42,17 +42,17 @@ custom classes must fully style the input
 
 - **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
 - **Never** use `@apply` when writing raw css
-- **There is exactly one component system: vendored Basecoat plus OpenAgents style pack.** Basecoat lives in `assets/vendor/basecoat/components/` and carries structure (display, padding, min-height); `assets/css/openagents.css` carries OpenAgents' identity (motion tokens, radius scale, colour, the notched variant, corner frames) and must stay the last import so its declarations win.
+- **There is exactly one component system: vendored Basecoat plus OpenAgents style pack.** Basecoat lives in `assets/vendor/basecoat/components/` and carries structure (display, padding, min-height); `assets/css/openagents.css` carries OpenAgents' identity (motion tokens, radius scale, color, the notched variant, corner frames) and must stay the last import so its declarations win.
   - **Reach for `OpenAgentsWeb.UI` first.** It wraps that CSS in 22 ready primitives — `button/1`, `card/1`, `badge/1`, `alert/1`, `input/1`, `textarea/1`, `label/1`, `field/1`, `header/1`, `table/1`, `list/1`, `avatar/1`, `menu/1`, `empty/1`, `kbd/1`, and the rest. Fall back to hand-written classes only when no primitive covers the shape.
   - **Variants are data attributes, not classes.** A control is `class="btn"` plus `data-variant="primary"` / `data-size="sm"` / `data-tone="danger"`. Never invent `btn-primary`-style variant classes; they defeat the whole point of the split.
-  - **Never add a second component library — DaisyUI above all.** DaisyUI was removed deliberately. It emitted flat `.btn` rules (setting background, colour, border) from a cascade layer that outranked every `.btn[data-variant=…]` in `openagents.css`, so all eight UI button variants rendered identically on staging. Any library with the same shape will do the same thing again.
+  - **Never add a second component library — DaisyUI above all.** DaisyUI was removed deliberately. It emitted flat `.btn` rules (setting background, color, border) from a cascade layer that outranked every `.btn[data-variant=…]` in `openagents.css`, so all eight UI button variants rendered identically on staging. Any library with the same shape will do the same thing again.
   - **Import Basecoat components individually**, one `@import "../vendor/basecoat/components/<name>.css"` per component a surface actually uses. Component CSS lands in `@layer components` and ships whether or not the class appears in markup, so the list is a budget. **Never** import `basecoat.css`, `basecoat-base.css`, or `basecoat-components.css` — each pulls in all 39 components at once.
-  - The palette is the token ladder at the top of `app.css` (`--ink-void` / `--ink-surface` / `--ink-raised`, the text and line tiers, and the four semantic colours). It is dark-only. Use the Basecoat utility names built on it — `bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, and `border-border`. The retired compatibility aliases no longer exist
+  - The palette is the two owned token ladders in `assets/css/openagents.css`. The interface supports only light and dark palettes; the system preference selects between them and is not a third palette. Use the Basecoat utility names built on these tokens — `bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, and `border-border`. The retired compatibility aliases no longer exist
 - Add custom Tailwind only when the design is unique to OpenAgents and no primitive fits.
 - Out of the box **only the app.js and app.css bundles are supported**
   - You cannot reference an external vendor'd script `src` or link `href` in the layouts
   - You must import the vendor deps into app.js and app.css to use them
-  - **Never write inline <script>custom js</script> tags within templates**
+  - **Never write inline `<script>` tags within templates.** The only exception is the synchronous, content-free theme bootstrap in `root.html.heex`, which must run before the first stylesheet paint. Put every other client behavior in `app.js` or a colocated LiveView hook
 
 ### UI and UX design guidelines
 

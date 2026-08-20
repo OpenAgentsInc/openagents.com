@@ -78,4 +78,34 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
 
     refute has_element?(view, ~s{a[href="/components/theme-toggle"]})
   end
+
+  test "the command bar exposes exactly the governed theme preferences" do
+    document =
+      OpenAgentsWeb.Layouts.theme_toggle(%{})
+      |> rendered_to_string()
+      |> LazyHTML.from_fragment()
+
+    assert document
+           |> LazyHTML.query(~s{.theme-toggle[role="group"][aria-label="Color theme"]})
+           |> LazyHTML.to_tree() != []
+
+    assert document
+           |> LazyHTML.query(
+             ~s{button[data-theme-option="system"][aria-label="Match system theme"]}
+           )
+           |> LazyHTML.to_tree() != []
+
+    assert document
+           |> LazyHTML.query(~s{button[data-theme-option="light"][aria-label="Light theme"]})
+           |> LazyHTML.to_tree() != []
+
+    assert document
+           |> LazyHTML.query(~s{button[data-theme-option="dark"][aria-label="Dark theme"]})
+           |> LazyHTML.to_tree() != []
+
+    assert document
+           |> LazyHTML.query(~s{button[data-theme-option]})
+           |> LazyHTML.to_tree()
+           |> length() == 3
+  end
 end

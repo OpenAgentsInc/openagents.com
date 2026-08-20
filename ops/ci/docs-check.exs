@@ -27,11 +27,19 @@ defmodule OpenAgents.DocsCheck do
     {~r{/home/[A-Za-z0-9._-]+/(?:work|code)(?:/|\b)}, "Linux developer path"}
   ]
 
+  @theme_contract_files ["AGENTS.md", "INVARIANTS.md", "docs/component-library.md"]
+  @retired_theme_claims [
+    {~r/\bdark-only\b/i, "retired dark-only theme claim"},
+    {~r/\bsingle dark theme\b/i, "retired single-theme claim"},
+    {~r/\bno theme selector enters the bundle\b/i, "retired selector-free theme claim"}
+  ]
+
   def run do
     errors =
       []
       |> check_markdown_links()
       |> check_current_language()
+      |> check_theme_contract()
       |> check_invariants()
 
     case Enum.reverse(errors) do
@@ -102,6 +110,12 @@ defmodule OpenAgents.DocsCheck do
         [{offset, _length} | _captures] ->
           ["#{file}:#{line_at(content, offset)} contains #{label}" | acc]
       end
+    end)
+  end
+
+  defp check_theme_contract(errors) do
+    Enum.reduce(@theme_contract_files, errors, fn file, acc ->
+      scan_terms(acc, file, File.read!(file), @retired_theme_claims)
     end)
   end
 

@@ -66,7 +66,13 @@ jq -e '
 ' "$run_root/sql.json" >/dev/null
 
 jq -e '
-  any(.[]; .name == "openagents_staging" and .type == "BUILT_IN")
+  any(
+    .[];
+    .name == "openagents_staging" and
+    .kind == "sql#user" and
+    .instance == "openagents-staging-postgres" and
+    .host == ""
+  )
 ' "$run_root/sql-users.json" >/dev/null
 
 jq -e '

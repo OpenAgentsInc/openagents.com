@@ -113,7 +113,7 @@ defmodule OpenAgents.MixProject do
         "deps.unlock --unused",
         "format",
         "assets.test",
-        "test"
+        "test --warnings-as-errors"
       ]
     ]
   end

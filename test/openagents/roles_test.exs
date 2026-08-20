@@ -130,7 +130,7 @@ defmodule OpenAgents.RolesTest do
   end
 
   test "a tampered selection cannot enter composition" do
-    selection = Roles.default_selection()
+    %Selection{} = selection = Roles.default_selection()
 
     tampered = %Selection{selection | reason: "sales_override"}
 

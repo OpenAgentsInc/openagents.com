@@ -8,7 +8,7 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
   use OpenAgents.SarahDataCase, async: false
   import Ecto.Query
 
-  alias OpenAgents.Forge.{MirrorWatch, Pushes, Repos}
+  alias OpenAgents.Forge.{MirrorWatch, Repos}
   alias OpenAgents.Repo
 
   setup do

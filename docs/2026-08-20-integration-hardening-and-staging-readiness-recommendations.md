@@ -90,6 +90,8 @@ Completed on 2026-08-20:
 - Added `npm test` in `assets/package.json` and the `mix assets.test` alias.
 - Added `mix assets.test` to `mix precommit`, so the standard repository gate
   fails when browser-side voice behavior regresses.
+- Removed the remaining test-compilation warnings and made
+  `mix test --warnings-as-errors` part of `mix precommit`.
 
 Gate 0 still requires the merged default and cluster coverage report, release
 startup proof against a disposable database, and an exact-SHA gate receipt.

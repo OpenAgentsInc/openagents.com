@@ -63,16 +63,24 @@ defmodule OpenAgentsWeb.ProjectController do
       ) do
     project = Projects.get_project_by_number!(String.to_integer(project_number))
 
-    case Projects.create_project_item(params, project.id) do
-      {:ok, item} ->
-        conn
-        |> put_status(:created)
-        |> render(:items, items: [item])
+    case cast_issue_number(params["issue_number"]) do
+      :error ->
+        unprocessable(conn, %{issue_number: ["is invalid"]})
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+      {:ok, issue_number} ->
+        params = Map.put(params, "issue_number", issue_number)
+
+        case Projects.create_project_item(params, project.id) do
+          {:ok, item} ->
+            conn
+            |> put_status(:created)
+            |> render(:items, items: [item])
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            conn
+            |> put_status(:unprocessable_entity)
+            |> render(:error, changeset: changeset)
+        end
     end
   rescue
     Ecto.NoResultsError ->
@@ -91,14 +99,18 @@ defmodule OpenAgentsWeb.ProjectController do
       ) do
     item = Projects.get_project_item!(String.to_integer(item_id))
 
-    case Projects.update_project_item(item, params) do
-      {:ok, item} ->
-        render(conn, :items, items: [item])
+    if is_map(Map.get(params, "values", %{})) do
+      case Projects.update_project_item(item, params) do
+        {:ok, item} ->
+          render(conn, :items, items: [item])
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        {:error, %Ecto.Changeset{} = changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> render(:error, changeset: changeset)
+      end
+    else
+      unprocessable(conn, %{values: ["is invalid"]})
     end
   rescue
     Ecto.NoResultsError ->
@@ -119,5 +131,22 @@ defmodule OpenAgentsWeb.ProjectController do
       conn
       |> put_status(:not_found)
       |> json(%{message: "Not Found"})
+  end
+
+  defp cast_issue_number(number) when is_integer(number), do: {:ok, number}
+
+  defp cast_issue_number(number) when is_binary(number) do
+    case Integer.parse(number) do
+      {parsed, ""} -> {:ok, parsed}
+      _ -> :error
+    end
+  end
+
+  defp cast_issue_number(_other), do: :error
+
+  defp unprocessable(conn, errors) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{errors: errors})
   end
 end

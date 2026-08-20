@@ -28,7 +28,7 @@ defmodule OpenAgents.SCV.CodexAccountsTest do
       File.rm_rf(root)
     end)
 
-    {:ok, root: root}
+    {:ok, credential_ref: hd(refs), root: root}
   end
 
   test "connects an individual operator account and persists only a credential reference", %{
@@ -127,6 +127,33 @@ defmodule OpenAgents.SCV.CodexAccountsTest do
 
     assert_receive {:scv_codex_accounts, {:account_ready, account_id}}, 5_000
     assert account_id == account.id
+  end
+
+  test "reuses a failed account slot for a new device login", %{credential_ref: credential_ref} do
+    operator = operator("codex-retry")
+    :ok = CodexAccounts.subscribe()
+
+    failed_account =
+      %DriverAccount{}
+      |> DriverAccount.create_changeset(%{
+        operator_id: operator.id,
+        label: "Failed Codex",
+        secret_ref: credential_ref
+      })
+      |> Repo.insert!()
+      |> DriverAccount.failed_changeset("account_not_ready")
+      |> Repo.update!()
+
+    assert {:ok, retried_account, _attempt, _ceremony} =
+             CodexAccounts.start_device_login(operator, %{"label" => "Retried Codex"})
+
+    assert retried_account.id == failed_account.id
+    assert retried_account.status == "pending"
+    assert retried_account.label == "Retried Codex"
+    assert retried_account.last_error_code == nil
+
+    assert_receive {:scv_codex_accounts, {:account_ready, account_id}}, 5_000
+    assert account_id == failed_account.id
   end
 
   defp operator(key) do

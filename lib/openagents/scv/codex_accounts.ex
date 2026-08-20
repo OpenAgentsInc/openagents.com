@@ -85,6 +85,11 @@ defmodule OpenAgents.SCV.CodexAccounts do
   end
 
   @doc false
+  def mark_login_completed(%DriverAccount{} = account, %DriverLoginAttempt{} = attempt) do
+    emit("device_login_completed", account.id, attempt.id)
+  end
+
+  @doc false
   def mark_ready(%DriverAccount{} = account, %DriverLoginAttempt{} = attempt, attributes) do
     Repo.transaction(fn ->
       ready =
@@ -153,35 +158,46 @@ defmodule OpenAgents.SCV.CodexAccounts do
 
   defp create_pending(operator, attributes) do
     Repo.transaction(fn ->
-      used_refs =
+      refs = credential_refs()
+
+      accounts_by_ref =
         Repo.all(
           from(account in DriverAccount,
-            where: account.status != "disconnected",
-            select: account.secret_ref,
+            where: account.secret_ref in ^refs,
             lock: "FOR UPDATE"
           )
         )
+        |> Map.new(&{&1.secret_ref, &1})
 
-      secret_ref =
-        credential_refs()
-        |> Enum.find(&(&1 not in used_refs))
+      account_slot =
+        refs
+        |> Enum.find_value(fn ref ->
+          available_account_slot(Map.get(accounts_by_ref, ref), ref)
+        end)
         |> case do
           nil -> Repo.rollback(:account_capacity_reached)
-          ref -> ref
+          slot -> slot
         end
 
-      account_id = Ecto.UUID.generate()
       label = normalized_label(Map.get(attributes, "label") || Map.get(attributes, :label))
 
       account =
-        %DriverAccount{}
-        |> DriverAccount.create_changeset(%{
-          id: account_id,
-          operator_id: operator.id,
-          label: label,
-          secret_ref: secret_ref
-        })
-        |> Repo.insert!()
+        case account_slot do
+          {:new, secret_ref} ->
+            %DriverAccount{}
+            |> DriverAccount.create_changeset(%{
+              id: Ecto.UUID.generate(),
+              operator_id: operator.id,
+              label: label,
+              secret_ref: secret_ref
+            })
+            |> Repo.insert!()
+
+          {:reuse, failed_account} ->
+            failed_account
+            |> DriverAccount.retry_changeset(operator.id, label)
+            |> Repo.update!()
+        end
 
       attempt =
         %DriverLoginAttempt{}
@@ -209,6 +225,13 @@ defmodule OpenAgents.SCV.CodexAccounts do
   end
 
   defp normalized_label(_value), do: "Operator Codex account"
+
+  defp available_account_slot(nil, ref), do: {:new, ref}
+
+  defp available_account_slot(%DriverAccount{status: "failed"} = account, _ref),
+    do: {:reuse, account}
+
+  defp available_account_slot(%DriverAccount{}, _ref), do: nil
 
   defp credential_refs do
     config()

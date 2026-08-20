@@ -37,6 +37,13 @@ defmodule OpenAgents.SCV.CodexAppServerTest do
                        "method" => "account/login/completed",
                        "params" => %{"success" => true}
                      }}}
+
+    assert_receive {:codex_app_server, ^server,
+                    {:notification,
+                     %{
+                       "method" => "account/updated",
+                       "params" => %{"authMode" => "chatgpt", "planType" => "plus"}
+                     }}}
   end
 
   defp fixture do

@@ -76,4 +76,27 @@ defmodule OpenAgents.SCV.DriverAccount do
     |> change(status: "failed", last_error_code: String.slice(code, 0, 80))
     |> check_constraint(:status, name: :scv_driver_accounts_status_check)
   end
+
+  @doc false
+  def retry_changeset(account, operator_id, label)
+      when is_binary(operator_id) and is_binary(label) do
+    account
+    |> change(
+      operator_id: operator_id,
+      label: label,
+      status: "pending",
+      credential_version: nil,
+      account_email: nil,
+      plan_type: nil,
+      available_models: [],
+      reasoning_efforts: [],
+      last_verified_at: nil,
+      last_error_code: nil,
+      disconnected_at: nil
+    )
+    |> validate_required([:operator_id, :label, :secret_ref])
+    |> validate_length(:label, min: 1, max: 80)
+    |> foreign_key_constraint(:operator_id)
+    |> check_constraint(:status, name: :scv_driver_accounts_status_check)
+  end
 end

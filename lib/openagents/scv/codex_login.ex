@@ -9,6 +9,8 @@ defmodule OpenAgents.SCV.CodexLogin do
 
   @required_model "gpt-5.6-luna"
   @maximum_auth_bytes 65_536
+  @verification_retry_delay_ms 250
+  @maximum_verification_attempts 40
 
   def child_spec(options) do
     attempt = Keyword.fetch!(options, :attempt)
@@ -52,7 +54,10 @@ defmodule OpenAgents.SCV.CodexLogin do
          ceremony: nil,
          codex_home: root,
          expiry_timer: nil,
-         login_id: nil
+         login_completed?: false,
+         login_id: nil,
+         verification_attempts: 0,
+         verification_timer: nil
        }}
     else
       _error -> {:stop, :login_home_failed}
@@ -98,14 +103,12 @@ defmodule OpenAgents.SCV.CodexLogin do
           }}},
         %{app_server: client, login_id: login_id} = state
       ) do
-    case complete_login(state) do
-      {:ok, updated} ->
-        {:stop, :normal, updated}
+    CodexAccounts.mark_login_completed(state.account, state.attempt)
 
-      {:error, code, updated} ->
-        CodexAccounts.mark_failed(updated.account, updated.attempt, code)
-        {:stop, :normal, updated}
-    end
+    {:noreply,
+     state
+     |> Map.put(:login_completed?, true)
+     |> schedule_verification()}
   end
 
   def handle_info(
@@ -120,6 +123,53 @@ defmodule OpenAgents.SCV.CodexLogin do
     code = if is_binary(params["error"]), do: params["error"], else: "login_failed"
     CodexAccounts.mark_failed(state.account, state.attempt, code)
     {:stop, :normal, state}
+  end
+
+  def handle_info(
+        {:codex_app_server, client,
+         {:notification,
+          %{
+            "method" => "account/updated",
+            "params" => %{"authMode" => "chatgpt"}
+          }}},
+        %{app_server: client, login_completed?: true} = state
+      ) do
+    {:noreply, trigger_verification(state)}
+  end
+
+  def handle_info(
+        {:codex_app_server, client,
+         {:notification,
+          %{
+            "method" => "account/updated",
+            "params" => %{"authMode" => auth_mode}
+          }}},
+        %{app_server: client, login_completed?: true} = state
+      )
+      when not is_nil(auth_mode) do
+    CodexAccounts.mark_failed(state.account, state.attempt, "chatgpt_account_required")
+    {:stop, :normal, state}
+  end
+
+  def handle_info(:verify_login, state) do
+    state = %{
+      state
+      | verification_attempts: state.verification_attempts + 1,
+        verification_timer: nil
+    }
+
+    case complete_login(state) do
+      {:ok, updated} ->
+        {:stop, :normal, updated}
+
+      {:error, :account_not_ready, updated}
+      when updated.verification_attempts < @maximum_verification_attempts ->
+        {:noreply, schedule_verification(updated)}
+
+      {:error, code, updated} ->
+        CodexAccounts.mark_failed(updated.account, updated.attempt, code)
+        {:stop, :normal, updated}
+    end
   end
 
   def handle_info(:expire, state) do
@@ -155,6 +205,7 @@ defmodule OpenAgents.SCV.CodexLogin do
   @impl true
   def terminate(_reason, state) do
     if is_reference(state.expiry_timer), do: Process.cancel_timer(state.expiry_timer)
+    if is_reference(state.verification_timer), do: Process.cancel_timer(state.verification_timer)
     if is_pid(state.app_server), do: CodexAppServer.stop(state.app_server)
     File.rm_rf(state.codex_home)
     :ok
@@ -265,6 +316,7 @@ defmodule OpenAgents.SCV.CodexLogin do
     {:ok, %{email: email, plan_type: plan_type}}
   end
 
+  defp account_metadata(%{"account" => nil}), do: {:error, :account_not_ready}
   defp account_metadata(_response), do: {:error, :chatgpt_account_required}
 
   defp model_metadata(%{"data" => models}) when is_list(models) do
@@ -324,6 +376,19 @@ defmodule OpenAgents.SCV.CodexLogin do
 
   defp snapshot_response(%{ceremony: ceremony}) when is_map(ceremony), do: {:ok, ceremony}
   defp snapshot_response(_state), do: {:error, :login_not_ready}
+
+  defp trigger_verification(state) do
+    if is_reference(state.verification_timer), do: Process.cancel_timer(state.verification_timer)
+    send(self(), :verify_login)
+    %{state | verification_timer: nil}
+  end
+
+  defp schedule_verification(%{verification_timer: nil} = state) do
+    timer = Process.send_after(self(), :verify_login, @verification_retry_delay_ms)
+    %{state | verification_timer: timer}
+  end
+
+  defp schedule_verification(state), do: state
 
   defp write_config(codex_home) do
     path = Path.join(codex_home, "config.toml")

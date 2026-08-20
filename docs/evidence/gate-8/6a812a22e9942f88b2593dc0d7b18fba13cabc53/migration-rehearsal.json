@@ -1,0 +1,25 @@
+{
+  "schema": "openagents.migration-rehearsal.v1",
+  "git_sha": "6a812a22e9942f88b2593dc0d7b18fba13cabc53",
+  "status": "passed",
+  "migration": "20260820085203_harden_async_runtime_boundaries",
+  "starting_version": 20260820082100,
+  "fixture_counts": {
+    "users": 1,
+    "visitors": 1,
+    "conversations": 1,
+    "machines": 1,
+    "legacy_delegation_jobs": 1
+  },
+  "checks": {
+    "forward_backfill": "passed",
+    "machine_authority_and_budget_binding": "passed",
+    "fenced_session_checkpoint_update": "passed",
+    "execution_identity_rewrite_refusal": "passed",
+    "reverse_data_preservation": "passed",
+    "second_forward_backfill": "passed"
+  },
+  "automatic_retries_in_successful_run": 0,
+  "database_class": "disposable",
+  "database_removed_after_run": true
+}

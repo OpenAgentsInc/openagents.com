@@ -43,6 +43,13 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     assert view |> element("#chat_message") |> render() =~
              ~r/<textarea[^>]*id="chat_message"[^>]*>\s*<\/textarea>/
+
+    assert eventually(fn ->
+             html = render(view)
+
+             html =~ "You said: The draft must not remain after send." and
+               not (html =~ ~s(id="cancel-turn"))
+           end)
   end
 
   test "the sidebar leads with Computers immediately above Memory", %{conn: conn} do
@@ -465,7 +472,10 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     |> form("#message-form", chat: %{message: "Toolbar please."})
     |> render_submit()
 
-    assert eventually(fn -> render(view) =~ "Toolbar please." end)
+    assert eventually(fn ->
+             html = render(view)
+             html =~ "You said: Toolbar please." and not (html =~ ~s(id="cancel-turn"))
+           end)
 
     # Copy actions are icon-only, so the accessible name lives on the control.
     assert has_element?(

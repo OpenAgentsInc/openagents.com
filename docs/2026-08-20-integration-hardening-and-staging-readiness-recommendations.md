@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–5 and 7 complete, Gate 6 application controls locally verified
+Status: In progress; Gates 0–5 and 7–8 complete, Gate 6 application controls locally verified
 
 ## Outcome
 
@@ -790,6 +790,49 @@ use fixed sleeps as the correctness mechanism.
 
 **Exit criteria:** Every asynchronous subsystem has tested interruption,
 recovery, idempotency, ownership, and bounded-failure behavior.
+
+### Gate 8 implementation status
+
+Completed on 2026-08-20:
+
+- Added the asynchronous recovery contract before the new recovery tests. The
+  contract defines durable authority, generation fencing, permitted resume
+  behavior, honest terminal failure, idempotency, and resource bounds for text,
+  voice, work, and semantic derivatives.
+- Added direct supervised-process tests for `TurnRecovery`, `VoiceRecovery`,
+  `WorkRecovery`, and `SemanticWorker`. The tests cover a killed streaming turn,
+  an admitted voice generation, live and orphaned work singletons, provider and
+  drain failure, worker death, expired-lease reclamation, and stale-result
+  fencing without fixed sleeps as the correctness mechanism.
+- Made provider mutation retries operation-specific. OpenAI response creation
+  and Realtime call creation now send one `POST` attempt, with direct adapter
+  tests that fail if the request repeats.
+- Added an accumulated assistant-message limit and a database hard ceiling for
+  every message. Recovery now records the bounded `runtime_restarted` error
+  code across the complete text-turn evidence chain.
+- Added bounded semantic-provider execution, reclaimable leases, attempt
+  fencing, and worker-level exception containment. Added composite database
+  constraints that prevent semantic jobs or embeddings from crossing their
+  source conversation.
+- Bound every machine delegation to its account-owned machine, immutable
+  admission-time authority, immutable execution request, and bounded budget.
+  Only the generation-fenced ACP session checkpoint may change after
+  admission. The worker reads machine, agent, working directory, and wall-clock
+  authority from those fields.
+- Rehearsed the Gate 8 migration forward, backward, and forward again on a
+  populated disposable database. The rehearsal preserved the legacy job,
+  rebuilt its machine, authority, and budget binding, admitted the session
+  checkpoint, and refused an execution-identity rewrite.
+- Exact implementation commit
+  `6a812a22e9942f88b2593dc0d7b18fba13cabc53` passed the owned baseline without
+  retries in 80 seconds: 1,295 default Elixir tests, all 9 distributed tests, 17
+  browser tests, 83.59% merged coverage, and the packaged production release
+  startup against a disposable PostgreSQL database. See the
+  [Gate 8 evidence](evidence/gate-8/6a812a22e9942f88b2593dc0d7b18fba13cabc53/README.md).
+
+Gate 8 is complete. Run only harmless delegated jobs against disposable
+repositories and machines when Gates 14 and 15 execute this coverage in
+staging. No staging or production environment was changed.
 
 ## Gate 9: Harden the forge build lane
 

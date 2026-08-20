@@ -819,6 +819,112 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
+  One file's diff: a header, its hunks, and every line numbered on both sides.
+
+  Adapted from Pierre's `FileDiff` (`@pierre/diffs`, Apache 2.0,
+  `pierrecomputer/pierre`). What carried over is the model rather than the
+  code -- see `docs/2026-08-20-pierre-code-surfaces-port.md`. Takes an
+  `OpenAgents.Diff.File`, which `OpenAgents.Diff.parse/1` produces from the
+  output of `git diff-tree -p -M`.
+
+  Unified rather than split. A split view needs roughly twice the width to say
+  the same thing, and on a narrow screen it either scrolls sideways or squeezes
+  both sides into columns too thin to read. The two line-number gutters carry
+  what the split layout is for: which line this was, and which line it is now.
+
+  Every line is addressable. A line's new-side number is a link to itself, so a
+  reader can point someone at a line rather than describing where it is. The
+  anchor is scoped by path, since one page holds many files.
+
+  Colour is not the only carrier of meaning: an inserted line is marked `+` and
+  a deleted one `-` in the gutter, so the diff survives greyscale and a reader
+  who cannot separate the two tints.
+
+  Collapsible through native `<details>`, open by default. A reviewer opening a
+  commit wants to see it, and a large file is the one they most want to fold
+  away -- so the control is there without costing a click on arrival.
+  """
+  attr :file, :map, required: true, doc: "an `OpenAgents.Diff.File`"
+  attr :open, :boolean, default: true
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def diff_file(assigns) do
+    assigns = assign(assigns, :slug, diff_slug(assigns.file.path))
+
+    ~H"""
+    <details id={"diff-#{@slug}"} class={["diff-file", @class]} open={@open} {@rest}>
+      <summary class="diff-file__header">
+        <.icon name="chevron-right" class="diff-file__caret" />
+        <span class="diff-file__path">
+          <span :if={@file.old_path} class="diff-file__from">{@file.old_path} →</span>
+          {@file.path}
+        </span>
+        <span class="diff-file__status" data-status={@file.status}>{@file.status}</span>
+        <span :if={@file.insertions > 0} class="diff-file__count" data-kind="insert">
+          +{@file.insertions}
+        </span>
+        <span :if={@file.deletions > 0} class="diff-file__count" data-kind="delete">
+          -{@file.deletions}
+        </span>
+      </summary>
+
+      <p :if={@file.binary?} class="diff-file__note">
+        Binary file. Nothing to show as text.
+      </p>
+
+      <p :if={not @file.binary? and @file.hunks == []} class="diff-file__note">
+        No content change.
+      </p>
+
+      <div :for={hunk <- @file.hunks} class="diff-hunk">
+        <p class="diff-hunk__header">
+          <span class="diff-hunk__range">
+            @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@
+          </span>
+          <span :if={hunk.heading} class="diff-hunk__heading">{hunk.heading}</span>
+        </p>
+
+        <table class="diff-lines">
+          <tbody>
+            <tr
+              :for={line <- hunk.lines}
+              id={line_id(@slug, line)}
+              class="diff-line"
+              data-kind={line.kind}
+            >
+              <td class="diff-line__number diff-line__number--old">{line.old_number}</td>
+              <td class="diff-line__number diff-line__number--new">
+                <a :if={line.new_number} href={"##{line_id(@slug, line)}"}>{line.new_number}</a>
+                <span :if={is_nil(line.new_number)}>{nil}</span>
+              </td>
+              <td class="diff-line__marker" aria-hidden="true">{marker(line.kind)}</td>
+              <td class="diff-line__text">
+                <pre><code>{line.text}</code></pre>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+    """
+  end
+
+  # A path is not a DOM id: slashes and dots make `#a/b.ex` an invalid
+  # fragment, so the anchor uses a flattened form. Path-scoped rather than
+  # global, because one page holds many files and `#L12` alone would be
+  # ambiguous across them.
+  defp diff_slug(path), do: String.replace(path, ~r/[^A-Za-z0-9]+/, "-")
+
+  defp line_id(slug, %{new_number: number}) when is_integer(number), do: "#{slug}-L#{number}"
+  defp line_id(slug, %{old_number: number}) when is_integer(number), do: "#{slug}-R#{number}"
+  defp line_id(_slug, _line), do: nil
+
+  defp marker(:insert), do: "+"
+  defp marker(:delete), do: "-"
+  defp marker(_kind), do: " "
+
+  @doc """
   The GitHub sign-in control.
 
   A real form POST, not a link: signing in starts an OAuth round-trip, and a

@@ -66,6 +66,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Ancestor trail ending in the current page, which is not a link."
         },
         %{
+          slug: "openagents-diff-file",
+          title: "Diff",
+          icon: "code",
+          source: "OpenAgentsWeb.UI.diff_file/1",
+          summary: "One file's diff: hunks, both line numbers, addressable lines."
+        },
+        %{
           slug: "openagents-github-login",
           title: "GitHub login",
           icon: "brand-github",

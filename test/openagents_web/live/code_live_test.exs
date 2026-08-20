@@ -287,7 +287,10 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert html =~ "docs/audit.md"
 
       # The ledger level publishes that a file changed, never its contents.
-      refute html =~ "diff --git"
+      # The diff is parsed now, so the absence to assert is the rendered
+      # component rather than git's header line, which no longer reaches the
+      # page in either case.
+      refute html =~ "diff-file"
       refute html =~ @audit_heading
     end
 
@@ -295,7 +298,8 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       browsable()
       {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
 
-      assert html =~ "diff --git"
+      assert html =~ "diff-file"
+      assert html =~ "diff-line"
       assert html =~ @audit_heading
     end
 

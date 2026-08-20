@@ -47,6 +47,8 @@ defmodule OpenAgentsWeb.CodeCommitLive do
         {nil, false}
       end
 
+    diff_files = OpenAgents.Diff.parse(diff)
+
     if connected?(socket) do
       Enum.each(
         ["forge:target", "forge:deploys"],
@@ -64,6 +66,8 @@ defmodule OpenAgentsWeb.CodeCommitLive do
      |> assign(:files, files)
      |> assign(:diff, diff)
      |> assign(:diff_truncated, diff_truncated)
+     |> assign(:diff_files, diff_files)
+     |> assign(:diff_totals, OpenAgents.Diff.totals(diff_files))
      |> assign(:receipts, Forge.receipts_for(repo, commit.sha))}
   end
 
@@ -224,7 +228,20 @@ defmodule OpenAgentsWeb.CodeCommitLive do
             <.alert :if={@diff_truncated} id="commit-diff-truncated" variant={:warning}>
               The diff is larger than the display bound; the tail is cut.
             </.alert>
-            <pre class="code-source code-diff"><code>{@diff}</code></pre>
+
+            <p :if={@diff_files != []} id="commit-diff-totals" class="diff-totals">
+              {@diff_totals.files} {ngettext("file", "files", @diff_totals.files)} changed,
+              <span data-kind="insert">+{@diff_totals.insertions}</span>
+              <span data-kind="delete">-{@diff_totals.deletions}</span>
+            </p>
+
+            <.diff_file :for={file <- @diff_files} file={file} />
+
+            <%!-- The parser returns [] for input it cannot read. Showing the
+            raw text then is better than showing nothing: the diff is a report
+            about a repository, and a shape this code has not seen should still
+            reach the reader. --%>
+            <pre :if={@diff_files == []} class="code-source code-diff"><code>{@diff}</code></pre>
           </.card>
 
           <footer class="code-footer">

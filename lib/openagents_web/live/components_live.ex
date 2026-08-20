@@ -958,6 +958,58 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "openagents-diff-file"}} = assigns) do
+    assigns =
+      assign(
+        assigns,
+        :files,
+        OpenAgents.Diff.parse(~S"""
+        diff --git a/lib/openagents/greeter.ex b/lib/openagents/greeter.ex
+        index 1111111..2222222 100644
+        --- a/lib/openagents/greeter.ex
+        +++ b/lib/openagents/greeter.ex
+        @@ -1,8 +1,9 @@ defmodule OpenAgents.Greeter do
+         defmodule OpenAgents.Greeter do
+        -  def hello(name) do
+        -    "Hello, " <> name
+        +  def hello(name) when is_binary(name) do
+        +    "Hello, " <> name <> "!"
+           end
+        +
+        +  def hello(_other), do: {:error, :not_a_name}
+         end
+        diff --git a/priv/static/logo.png b/priv/static/logo.png
+        index 4415be7..d9aaa46 100644
+        Binary files a/priv/static/logo.png and b/priv/static/logo.png differ
+        diff --git a/lib/old/name.ex b/lib/new/name.ex
+        similarity index 100%
+        rename from lib/old/name.ex
+        rename to lib/new/name.ex
+        """)
+      )
+
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Takes an <code>OpenAgents.Diff.File</code>, which the parser produces from <code>git diff-tree -p -M</code>. Unified rather than split: a split view needs
+        about twice the width to say the same thing, and the two number gutters already
+        carry what it is for — which line this was, and which line it is now.
+      </p>
+      <p class="text-sm text-base-content/60">
+        Every line with a new-side number is a link to itself, scoped by path, so a
+        reader can point at a line instead of describing where it is. Click one and the
+        row highlights. Colour is never the only signal: the marker column says <code>+</code>
+        and <code>-</code>, so the diff survives greyscale.
+      </p>
+      <UI.diff_file :for={file <- @files} file={file} />
+      <p class="text-sm text-base-content/60">
+        The last two show the cases that are not code: a binary file, which says so
+        rather than looking unchanged, and a rename with no content change.
+      </p>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "openagents-github-login"}} = assigns) do
     ~H"""
     <div class="space-y-3">

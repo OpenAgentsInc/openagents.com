@@ -99,17 +99,41 @@ highlighting to a correct structure than the reverse.
 
 Status is one of **done**, **next**, or **planned**.
 
-### 1. `diff_file/1` — a single file's diff — **next**
+### 1. `diff_file/1` — a single file's diff — **done**
 
-Adapted from `FileDiff`. Decomposes a unified diff into files, hunks, and lines
-carrying old and new numbers, and renders it with a file header, hunk headers,
-add/remove tinting, and per-line anchors. Collapsible per file through native
-`<details>`.
+Adapted from `FileDiff`. Landed as two pieces:
 
-Lands as a parser plus a component, catalogued and demoed, and replaces the
-raw `<pre>` on the commit page.
+- `OpenAgents.Diff` parses a unified diff into files, hunks, and lines, each
+  line carrying its number on **both** sides. That pairing is the whole reason
+  to parse rather than print: the two sides stop agreeing at the first change,
+  and a `<pre>` can never say where a line went.
+- `OpenAgentsWeb.UI.diff_file/1` renders one file: header with status and
+  counts, hunk headers including git's enclosing-function hint, held-back
+  add/remove tints, and a link on every new-side line number. Catalogued at
+  `/components/openagents-diff-file`.
 
-### 2. `code_file/1` — one blob, numbered and addressable — **planned**
+The commit page uses it in place of the raw `<pre>`, with a totals line
+counted from the parsed lines so it describes the diff actually shown even
+when the input was truncated. If the parser returns nothing — a shape it has
+not seen — the page falls back to the raw text rather than showing a reader
+nothing.
+
+Decisions worth keeping:
+
+- **Unified, not split.** A split view needs roughly twice the width to say
+  the same thing and collapses badly on a narrow screen. The two number
+  gutters carry what split is for.
+- **Colour is never the only signal.** The marker column says `+` and `-`, so
+  the diff survives greyscale and a reader who cannot separate the tints.
+- **Tolerant parsing.** A diff describes somebody else's repository and
+  arrives truncated by our own cap. Unrecognised lines become `:meta` and
+  render as themselves; nothing raises.
+
+Validated against `git diff-tree --numstat` on real commits — file counts and
+both line totals match exactly — plus sixteen unit tests covering renames,
+binaries, mid-hunk truncation, missing hunk counts, and quoted paths.
+
+### 2. `code_file/1` — one blob, numbered and addressable — **next**
 
 Adapted from `File`. Line numbers, line anchors and ranges (`#L12`,
 `#L12-L20`), a sticky filename header, copy and raw actions. Replaces the

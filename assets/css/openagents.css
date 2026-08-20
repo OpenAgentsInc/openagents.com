@@ -4595,3 +4595,254 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* ── Diff ─────────────────────────────────────────────────────────────────── */
+
+/* One file's diff. Adapted from Pierre's `FileDiff` (@pierre/diffs, Apache
+ * 2.0, pierrecomputer/pierre); the layout decisions carried over, the values
+ * are ours. See docs/2026-08-20-pierre-code-surfaces-port.md.
+ *
+ * A table, not a stack of flex rows: the gutters must align down the whole
+ * file regardless of how many digits a line number has, and that is what a
+ * table does without measuring anything. */
+
+@layer components {
+  .diff-file {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--ink-surface);
+  }
+
+  .diff-file + .diff-file {
+    margin-block-start: 12px;
+  }
+
+  .diff-file__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 12px;
+    background: var(--ink-raised);
+    font-size: 0.8125rem;
+  }
+
+  .diff-file__header::-webkit-details-marker {
+    display: none;
+  }
+
+  .diff-file__header:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  .diff-file__caret {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--icon-tertiary);
+    font-size: 14px;
+    transition: transform var(--motion-fast, 150ms) var(--ease);
+  }
+
+  .diff-file[open] .diff-file__caret {
+    transform: rotate(90deg);
+  }
+
+  .diff-file__path {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .diff-file__from {
+    color: var(--text-dim);
+  }
+
+  /* The status is a word, not a colour: "renamed" and "modified" are not
+     distinguishable as tints, and a reader should not have to learn a legend. */
+  .diff-file__status {
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 8px;
+    color: var(--text-dim);
+    font-size: 0.6875rem;
+    text-transform: lowercase;
+  }
+
+  .diff-file__count {
+    flex: none;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .diff-file__count[data-kind="insert"] { color: var(--success); }
+  .diff-file__count[data-kind="delete"] { color: var(--danger); }
+
+  .diff-file__note {
+    padding: 12px;
+    color: var(--text-dim);
+    font-size: 0.8125rem;
+  }
+
+  /* ── Hunks ──────────────────────────────────────────────────────────────── */
+
+  .diff-hunk + .diff-hunk {
+    border-top: 1px solid var(--line);
+  }
+
+  .diff-hunk__header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    border-block: 1px solid var(--line-faint);
+    background: var(--wash-hover);
+    padding: 4px 12px;
+    font-size: 0.75rem;
+  }
+
+  .diff-hunk__range {
+    flex: none;
+    color: var(--text-dim);
+    font-family: var(--font-mono, ui-monospace, monospace);
+  }
+
+  /* Git puts the enclosing function here, which is the cheapest orientation a
+     reader gets in a long file. */
+  .diff-hunk__heading {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Lines ──────────────────────────────────────────────────────────────── */
+
+  .diff-lines {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  .diff-line td {
+    padding: 0;
+    vertical-align: top;
+  }
+
+  /* Tints are held well back. A diff is read for its text, and a saturated row
+     fights the code sitting on it; the marker column carries the same
+     information without colour. */
+  .diff-line[data-kind="insert"] {
+    background: color-mix(in oklab, var(--success) 12%, transparent);
+  }
+
+  .diff-line[data-kind="delete"] {
+    background: color-mix(in oklab, var(--danger) 12%, transparent);
+  }
+
+  .diff-line[data-kind="meta"] {
+    background: var(--wash-hover);
+    color: var(--text-dim);
+  }
+
+  /* The addressed line, after following an anchor. */
+  .diff-line:target {
+    background: color-mix(in oklab, var(--info) 22%, transparent);
+  }
+
+  .diff-line__number {
+    width: 1%;
+    min-width: 44px;
+    padding-inline: 8px !important;
+    border-right: 1px solid var(--line-faint);
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .diff-line__number a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    .diff-line__number a:hover {
+      color: var(--text-primary);
+      text-decoration: underline;
+    }
+  }
+
+  .diff-line__marker {
+    width: 1%;
+    padding-inline: 6px !important;
+    color: var(--text-dim);
+    text-align: center;
+    user-select: none;
+  }
+
+  .diff-line[data-kind="insert"] .diff-line__marker { color: var(--success); }
+  .diff-line[data-kind="delete"] .diff-line__marker { color: var(--danger); }
+
+  /* The code scrolls inside the cell rather than widening the page: a long
+     line is normal in a diff, and a horizontal scrollbar on the document is
+     not. `pre` keeps the leading whitespace that indentation depends on. */
+  .diff-line__text {
+    width: 100%;
+    overflow-x: auto;
+    padding-inline: 10px !important;
+  }
+
+  .diff-line__text pre {
+    margin: 0;
+    color: var(--text-body);
+    font: inherit;
+    white-space: pre;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .diff-file__caret {
+      transition: none;
+    }
+  }
+}
+
+@layer components {
+  /* The count under a diff describes the diff above it, including when the
+     input was truncated -- it is derived from the parsed lines, not from git's
+     own summary of the whole commit. */
+  .diff-totals {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding-block: 8px;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .diff-totals [data-kind="insert"] {
+    color: var(--success);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .diff-totals [data-kind="delete"] {
+    color: var(--danger);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-variant-numeric: tabular-nums;
+  }
+}

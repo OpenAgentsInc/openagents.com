@@ -1,4 +1,4 @@
-defmodule OpenAgentsWeb.ChatToolActivity do
+defmodule OpenAgentsWeb.ToolActivity do
   @moduledoc """
   UI projection of durable tool-step activity: the collapsed event-header title
   says what actually ran, and the expansion carries the bounded durable details.

@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.ChatLive do
   alias OpenAgents.Voice.Config, as: VoiceConfig
   alias OpenAgents.Voice.Recordings
   alias OpenAgents.Work
-  alias OpenAgentsWeb.ChatToolActivity, as: ToolActivity
+  alias OpenAgentsWeb.ToolActivity
 
   # The sidebar's calls and work sections are bounded projections, not
   # unbounded lists: the last eight of each, recomputed on the same PubSub

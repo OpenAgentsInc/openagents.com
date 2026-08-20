@@ -114,7 +114,7 @@ run_stage compile env MIX_ENV=test mix compile --warnings-as-errors
 run_stage production_compile env MIX_ENV=prod mix compile --warnings-as-errors
 run_stage precommit env MIX_ENV=test mix precommit
 run_stage cluster env MIX_ENV=test mix test --warnings-as-errors --only cluster
-run_stage javascript npm --prefix assets test
+run_stage javascript env MIX_ENV=test npm --prefix assets test
 run_stage direct_transaction env MIX_ENV=test mix test --warnings-as-errors \
   test/openagents/forge/deployment_node_test.exs \
   test/openagents/forge/deployment_cluster_test.exs \

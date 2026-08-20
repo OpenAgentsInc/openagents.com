@@ -50,6 +50,7 @@ defmodule OpenAgents.StagingCandidateContractTest do
 
     assert startup =~ "instance_ip=$(metadata instance/network-interfaces/0/ip)"
     assert startup =~ "DNS_CLUSTER_QUERY=openagents-fleet.staging.internal"
+    assert startup =~ "OPENAGENTS_NODE_HOST=$instance_ip"
     assert startup =~ "RELEASE_NODE=openagents@$instance_ip"
     refute startup =~ "RELEASE_NODE=openagents@$instance_name.staging.internal"
     assert outputs =~ ~s("openagents@${instance_ip}" => instance_name)

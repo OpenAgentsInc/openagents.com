@@ -136,6 +136,7 @@ append_secret RELEASE_COOKIE openagents-staging-release-cookie /run/openagents/r
 cat >>/run/openagents/runtime.env <<EOF
 DNS_CLUSTER_QUERY=openagents-fleet.staging.internal
 OPENAGENTS_IMAGE_DIGEST=$image_digest
+OPENAGENTS_NODE_HOST=$instance_ip
 RELEASE_DISTRIBUTION=name
 RELEASE_NODE=openagents@$instance_ip
 EOF

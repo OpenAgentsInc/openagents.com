@@ -2,9 +2,9 @@
 
 Date: 2026-08-20
 
-Status: Proposed architecture; OpenCode is the designated first execution
-runtime and qualification workload;
-implementation and autonomous deployment remain disabled
+Status: Initial local OpenCode qualification adapter implemented; isolated
+worker scheduling, durable tool effects, and autonomous deployment remain
+disabled
 
 ## Outcome
 
@@ -42,6 +42,129 @@ OpenCode repository before using the same runtime to improve `openagents.com`.
 The recommended first autonomous milestone is staging-only deployment of a
 narrow, low-risk change class. Production autonomy is a later admission, not a
 configuration toggle hidden inside the first release.
+
+## Local implementation checkpoint
+
+The repository now contains a local, coarse-effect OpenCode adapter that proves
+the first runtime integration without enabling an SCV coordinator, repository
+write authority, worker registration, Forge promotion, or deployment:
+
+- `OpenAgents.SCV.Executor.OpenCode` starts one bounded OpenCode process with an
+  isolated home, XDG roots, SQLite database, operator-owned configuration, and
+  explicit permission profile.
+- `OpenAgents.SCV.OpenCodeEvents` normalizes content-free event counts, tool
+  outcomes, token classes, and estimated cost.
+- `OpenAgents.SCV.ResourceSampler` observes the direct OpenCode process from the
+  host and records RSS and CPU samples.
+- `mix openagents.scv.opencode` exposes the adapter for local qualification.
+- `ops/scv/images/opencode-core/Dockerfile` defines the first multi-architecture
+  worker toolchain with pinned Ubuntu, Node.js, Bun, and OpenCode inputs.
+
+The executor emits `openagents.scv.event.v1` records while the run is active.
+Callers can supply an `event_sink` function, and the executor also emits the
+same records through the `[:openagents, :scv, :event]` telemetry event. The Mix
+task prints lifecycle events, five-second resource heartbeats, and normalized
+OpenCode events to standard error. `--diagnostic-logs` also prints redacted
+OpenCode logs as OpenCode produces them. Final JSON remains on standard output,
+so an operator or process can consume the receipt without waiting blindly for
+the command to finish.
+
+The adapter writes the bounded prompt to a mode `0600` scratch file and gives
+that finite file to OpenCode as standard input. This keeps prompt content out of
+the process argument list and delivers EOF after the prompt. OpenCode reads a
+non-terminal standard input stream as additional prompt content and otherwise
+waits indefinitely when an Erlang port keeps that stream open. Keep the finite
+input wrapper as part of the adapter contract and retain its regression test.
+
+OpenCode treats `XDG_CONFIG_HOME` as a parent directory and
+`OPENCODE_CONFIG_DIR` as the OpenCode configuration directory itself. The
+adapter uses `<XDG_CONFIG_HOME>/opencode` for the latter. Pointing both variables
+at the parent creates two dependency locations and can trigger an unseeded
+background install. A trusted local `config_seed` may copy only dependency and
+lock files into the isolated directory; it never copies OpenCode configuration
+or authentication state.
+
+### Proven local run
+
+On 2026-08-20, the adapter ran installed OpenCode `1.18.5` against the inspected
+OpenCode `dev` commit `b155b15694dbcc6768f11d2f25cc2bdd1f738ab4` with model
+`openai/gpt-5.4-mini` and read-only permissions. The fixed task read
+`package.json` and `README.md` without changing the checkout.
+
+The terminal receipt recorded:
+
+- `succeeded` with exit status `0` in 7,845 milliseconds;
+- eight structured events across two model steps;
+- two completed `read` tool calls and no tool errors;
+- 7,981 input, 144 output, 74 reasoning, and 3,584 cache-read tokens;
+- an estimated cost of `$0.00723555`;
+- 622,215,168 bytes of peak direct-process RSS and 141.9% maximum sampled CPU;
+- 40,855 captured output bytes with no truncation.
+
+The run streamed lifecycle, diagnostic, tool, and resource events before it
+wrote the terminal summary. The summary and redacted event artifact use mode
+`0600`; the executor deletes its scratch home after termination. The supplied
+provider credential entered through silent terminal input and did not appear in
+the command arguments, summary, or artifact.
+
+A separate `workspace_write` proof ran only against a disposable Git fixture.
+It changed `message.txt` from `before` to `after`, emitted one completed
+`apply_patch` tool event, produced no malformed event lines, and left every
+other file unchanged. This validates local edit mechanics but does not admit the
+write profile for a durable or autonomous SCV.
+
+This proof does not satisfy the final worker boundary. It runs the Elixir
+controller and OpenCode process on the trusted development host, measures only
+the direct OpenCode process, terminates only that direct process, and treats the
+whole OpenCode session as one uncertain external effect. Before an SCV receives
+write authority, move this adapter into the admitted worker, enforce process
+groups or cgroups, replace reusable provider credentials with a run-scoped
+inference grant, and persist each tool effect before execution.
+
+### Run the local adapter
+
+Set `OPENAI_API_KEY` in the process environment without adding it to shell
+history, then run:
+
+```console
+OPENCODE_BIN=/absolute/path/to/opencode \
+OPENCODE_CONFIG_SEED=/absolute/path/to/trusted/opencode-config \
+mix openagents.scv.opencode \
+  --repo /absolute/path/to/target \
+  --model openai/gpt-5.4-mini \
+  --timeout-seconds 180 \
+  --diagnostic-logs \
+  --prompt 'Inspect the requested files without changing them.' \
+  --json
+```
+
+Omit `OPENCODE_CONFIG_SEED` when the isolated OpenCode installation can resolve
+its dependencies during an admitted setup phase. Do not use `--write` against a
+valuable checkout. The current write profile enables only OpenCode's edit tool;
+it does not yet provide the durable per-effect barrier required for candidate
+construction.
+
+### Proven image build
+
+Run `ops/scv/images/build-opencode-core.sh` to build the native architecture as
+`openagents/scv-opencode-core:local`. On 2026-08-20, the ARM64 build produced
+local image digest
+`sha256:d19e17c36f40cfa9dfb8123a9bfb93aec5d09deb1513ac0ceaf26b80a29360e3`
+and size 313,619,978 bytes. This local digest is evidence, not an admitted or
+published worker identity.
+
+The smoke test ran as UID and GID `10001` and verified OpenCode `1.18.5`, Bun
+`1.3.14`, Node.js `24.15.0`, npm `11.12.1`, Python `3.12.3`, Git `2.43.0`, and
+ripgrep `14.1.0`. The image contains neither a Docker client nor a mounted
+Docker socket. A live OpenCode session inside the image returned
+`SCV_IMAGE_OK`, emitted a start, text, and finish event, used 3,296 tokens, and
+reported `$0.00258825` estimated cost.
+
+The image currently supplies the first execution toolchain, not the final
+Elixir worker release or sidecar. The local Elixir adapter remains outside the
+container. Add the process-role-specific worker release, protocol client,
+cgroup collector, credential proxy, and read-only runtime mount before Forge
+admits the image.
 
 ## Goals
 

@@ -43,6 +43,7 @@ to Cloud Logging, writes one terminal result, and exits.
 
    - `SCV_OBJECTIVE` with a bounded read-only inspection request.
    - `SCV_MODEL` with the admitted model identifier.
+   - `SCV_REASONING_EFFORT=low` for the production-code-capable SCV baseline.
    - `SCV_REPOSITORY_REVISION` with the exact committed Git SHA.
    - `SCV_TIMEOUT_MS` and `SCV_HEARTBEAT_INTERVAL_MS` with bounded values.
    - `SCV_DIAGNOSTIC_LOGS=false`.
@@ -64,10 +65,11 @@ The Cloud Logging stream must contain these records for one run ID:
 - one `openagents.scv.worker.result.v1` terminal result.
 
 Verify that the result reports the `opencode` driver, `opencode-core`
-environment, `read_only` permission profile, exact source SHA, successful exit
-status, bounded duration, resource measurements, event counts, token totals,
-and no output truncation. Verify the deployed job uses the dedicated service
-account and contains no prohibited environment or secret references.
+environment, `openai/gpt-5.6-luna` model, `low` reasoning effort, `read_only`
+permission profile, exact source SHA, successful exit status, bounded duration,
+resource measurements, event counts, token totals, and no output truncation.
+Verify the deployed job uses the dedicated service account and contains no
+prohibited environment or secret references.
 
 Treat a successful execution as an environment qualification receipt only. Do
 not call it an isolated-staging pass or enable writes. Before an SCV can write,

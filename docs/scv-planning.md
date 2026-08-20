@@ -44,6 +44,18 @@ The recommended first autonomous milestone is staging-only deployment of a
 narrow, low-risk change class. Production autonomy is a later admission, not a
 configuration toggle hidden inside the first release.
 
+### Model capability boundary
+
+SCVs use `openai/gpt-5.6-luna` with `low` reasoning by default. You may select
+`none` for latency-sensitive, measured workloads. Do not run implementation or
+production-code tasks with GPT-5.4. GPT-5.6 is the minimum admitted model family
+for code generation by an SCV.
+
+Model capability does not grant infrastructure authority. A code-writing SCV
+must still use an isolated workspace, repository-scoped principal, durable
+effect records, required tests, and Forge promotion policy before its code can
+reach staging or production.
+
 ## SCV runtime boundary
 
 Define an SCV as the durable execution and supervision contract. Do not define
@@ -143,7 +155,22 @@ background install. A trusted local `config_seed` may copy only dependency and
 lock files into the isolated directory; it never copies OpenCode configuration
 or authentication state.
 
-### Proven local run
+### GPT-5.6 local qualification receipt
+
+On 2026-08-20, installed OpenCode `1.18.5` ran a read-only SCV against OpenCode
+commit `b155b15694dbcc6768f11d2f25cc2bdd1f738ab4` with
+`openai/gpt-5.6-luna` and `low` reasoning. The run read `package.json` and
+returned the package name and a one-sentence repository description without
+changing the checkout.
+
+SCV run `f4955a8b-d0a1-42ad-bc8b-acf4c6cb48b8` succeeded in 5,475
+milliseconds. It emitted six normalized events, completed one `read` call,
+used 6 input, 59 output, and 11 reasoning tokens, and reported no truncation.
+The terminal receipt recorded the exact model and reasoning effort. This run
+qualifies the local model-selection and event path. It does not authorize an SCV
+to write to a shared repository or deploy code.
+
+### Historical GPT-5.4 read-only run
 
 On 2026-08-20, the adapter ran installed OpenCode `1.18.5` against the inspected
 OpenCode `dev` commit `b155b15694dbcc6768f11d2f25cc2bdd1f738ab4` with model
@@ -190,7 +217,8 @@ OPENCODE_BIN=/absolute/path/to/opencode \
 OPENCODE_CONFIG_SEED=/absolute/path/to/trusted/opencode-config \
 mix openagents.scv.opencode \
   --repo /absolute/path/to/target \
-  --model openai/gpt-5.4-mini \
+  --model openai/gpt-5.6-luna \
+  --reasoning-effort low \
   --timeout-seconds 180 \
   --diagnostic-logs \
   --prompt 'Inspect the requested files without changing them.' \

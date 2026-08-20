@@ -63,6 +63,7 @@ run with these settings:
 | `SCV_ENVIRONMENT` | `opencode-core` |
 | `SCV_PERMISSION_PROFILE` | `read_only` |
 | `SCV_MODEL` | Admitted OpenCode model identifier |
+| `SCV_REASONING_EFFORT` | `low` by default; `none` is also admitted |
 | `SCV_REPOSITORY_REVISION` | Exact 40-character lowercase Git SHA baked into the image |
 | `SCV_RUN_ID` | Optional externally assigned UUID; the worker generates one when omitted |
 | `SCV_TIMEOUT_MS` | Wall-clock limit for the OpenCode process |

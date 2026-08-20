@@ -13,7 +13,9 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
   alias OpenAgents.SCV.ResourceSampler
 
   @schema "openagents.scv.opencode.run.v1"
-  @default_model "openai/gpt-5.4-mini"
+  @default_model "openai/gpt-5.6-luna"
+  @default_reasoning_effort "low"
+  @reasoning_efforts ~w(none low)
   @default_timeout_ms 5 * 60 * 1_000
   @maximum_timeout_ms 60 * 60 * 1_000
   @default_maximum_output_bytes 16 * 1_024 * 1_024
@@ -30,6 +32,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
          :ok <-
            emit_event(input, "run_preparing", %{
              model: input.model,
+             reasoning_effort: input.reasoning_effort,
              permission_profile: Atom.to_string(input.permissions)
            }),
          {:ok, paths} <- prepare_paths(input.output_root, input.run_id, input.config_seed) do
@@ -43,6 +46,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
 
   defp validate_input(repository, prompt, options) do
     model = Keyword.get(options, :model, @default_model)
+    reasoning_effort = Keyword.get(options, :reasoning_effort, @default_reasoning_effort)
     timeout_ms = Keyword.get(options, :timeout_ms, @default_timeout_ms)
 
     maximum_output_bytes =
@@ -68,6 +72,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
     with {:ok, repository} <- validate_directory(repository),
          :ok <- validate_prompt(prompt),
          :ok <- validate_model(model),
+         :ok <- validate_reasoning_effort(reasoning_effort),
          :ok <- validate_integer(timeout_ms, 1, @maximum_timeout_ms, :timeout_invalid),
          :ok <-
            validate_integer(
@@ -101,6 +106,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
          prompt: prompt,
          prompt_bytes: byte_size(prompt),
          model: model,
+         reasoning_effort: reasoning_effort,
          timeout_ms: timeout_ms,
          maximum_output_bytes: maximum_output_bytes,
          sample_interval_ms: sample_interval_ms,
@@ -586,6 +592,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
         adapter: "opencode",
         executable: input.executable,
         model: input.model,
+        reasoning_effort: input.reasoning_effort,
         diagnostic_logs: input.diagnostic_logs,
         config_seeded: not is_nil(input.config_seed),
         permission_profile: Atom.to_string(input.permissions),
@@ -649,6 +656,8 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
       "json",
       "--model",
       input.model,
+      "--variant",
+      input.reasoning_effort,
       "--dir",
       input.repository
     ]
@@ -804,6 +813,12 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
   end
 
   defp validate_model(_model), do: {:error, :model_invalid}
+
+  defp validate_reasoning_effort(reasoning_effort)
+       when reasoning_effort in @reasoning_efforts,
+       do: :ok
+
+  defp validate_reasoning_effort(_reasoning_effort), do: {:error, :reasoning_effort_invalid}
 
   defp validate_integer(value, minimum, maximum, _error)
        when is_integer(value) and value >= minimum and value <= maximum,

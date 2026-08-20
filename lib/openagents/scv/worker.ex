@@ -12,7 +12,8 @@ defmodule OpenAgents.SCV.Worker do
   alias OpenAgents.SCV.OpenCodeReport
   alias OpenAgents.SCV.Run
 
-  @default_model "openai/gpt-5.4-mini"
+  @default_model "openai/gpt-5.6-luna"
+  @default_reasoning_effort "low"
   @default_timeout_ms 300_000
   @default_output_root "/workspace/runs"
   @maximum_report_chunk_bytes 3_072
@@ -64,6 +65,13 @@ defmodule OpenAgents.SCV.Worker do
            fetch_value(environment, "SCV_ENVIRONMENT", "opencode-core", ["opencode-core"]),
          {:ok, permission_profile} <-
            fetch_value(environment, "SCV_PERMISSION_PROFILE", "read_only", ["read_only"]),
+         {:ok, reasoning_effort} <-
+           fetch_value(
+             environment,
+             "SCV_REASONING_EFFORT",
+             @default_reasoning_effort,
+             ["none", "low"]
+           ),
          {:ok, timeout_ms} <-
            fetch_integer(environment, "SCV_TIMEOUT_MS", @default_timeout_ms, 1..3_600_000),
          {:ok, heartbeat_interval_ms} <-
@@ -82,6 +90,7 @@ defmodule OpenAgents.SCV.Worker do
          environment: scv_environment,
          permission_profile: permission_profile,
          model: Map.get(environment, "SCV_MODEL", @default_model),
+         reasoning_effort: reasoning_effort,
          output_root: Map.get(environment, "SCV_OUTPUT_ROOT", @default_output_root),
          executable: Map.get(environment, "OPENCODE_BIN"),
          config_seed: optional_value(environment, "OPENCODE_CONFIG_SEED"),
@@ -103,6 +112,7 @@ defmodule OpenAgents.SCV.Worker do
         executable: input.executable,
         config_seed: input.config_seed,
         model: input.model,
+        reasoning_effort: input.reasoning_effort,
         output_root: input.output_root,
         timeout_ms: input.timeout_ms,
         heartbeat_interval_ms: input.heartbeat_interval_ms,
@@ -233,6 +243,8 @@ defmodule OpenAgents.SCV.Worker do
       status: result.status,
       driver: result.scv.driver,
       environment: result.scv.environment,
+      model: result.runtime.model,
+      reasoning_effort: result.runtime.reasoning_effort,
       repository_revision: result.repository.git_sha,
       duration_ms: result.duration_ms,
       event_count: result.events.event_count,

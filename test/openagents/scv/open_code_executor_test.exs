@@ -47,6 +47,8 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     assert result.status == "succeeded"
     assert result.exit_status == 0
     assert result.runtime.permission_profile == "read_only"
+    assert result.runtime.model == "openai/test-model"
+    assert result.runtime.reasoning_effort == "low"
     assert result.events.event_count == 4
     assert result.events.diagnostic_line_count == 0
     assert result.events.invalid_event_count == 0
@@ -158,6 +160,13 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
                "prompt",
                Keyword.put(shared_options(context), :api_key, nil)
              )
+
+    assert {:error, :reasoning_effort_invalid} =
+             OpenCode.run(
+               context.repository,
+               "prompt",
+               Keyword.put(shared_options(context), :reasoning_effort, "medium")
+             )
   end
 
   defp shared_options(context) do
@@ -182,6 +191,7 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     prompt=$(cat)
     if [ -z "$prompt" ]; then exit 30; fi
     if [ "$1" != "run" ]; then exit 26; fi
+    case " $* " in *" --variant low "*) :;; *) exit 32;; esac
     case " $* " in *" --auto "*) exit 27;; esac
     case " $* " in *" $prompt "*) exit 31;; esac
     if [ "${OPENCODE_CONFIG_DIR:-}" != "${XDG_CONFIG_HOME:-}/opencode" ]; then exit 28; fi

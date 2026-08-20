@@ -98,6 +98,7 @@ defmodule OpenAgents.SCV.RunTest do
       "SCV_ENVIRONMENT" => "opencode-core",
       "SCV_PERMISSION_PROFILE" => "read_only",
       "SCV_MODEL" => "openai/test-model",
+      "SCV_REASONING_EFFORT" => "none",
       "SCV_OUTPUT_ROOT" => context.output,
       "OPENAI_API_KEY" => "fixture-secret-key"
     }
@@ -110,6 +111,7 @@ defmodule OpenAgents.SCV.RunTest do
 
     assert result.status == "succeeded"
     assert result.runtime.permission_profile == "read_only"
+    assert result.runtime.reasoning_effort == "none"
     assert_receive {:worker_event, %{type: "process_started", driver: "opencode"}}
 
     assert {:error, {:environment_value_not_admitted, "SCV_PERMISSION_PROFILE"}} =
@@ -117,6 +119,9 @@ defmodule OpenAgents.SCV.RunTest do
 
     assert {:error, {:environment_missing, "OPENAI_API_KEY"}} =
              Worker.run(Map.delete(environment, "OPENAI_API_KEY"))
+
+    assert {:error, {:environment_value_not_admitted, "SCV_REASONING_EFFORT"}} =
+             Worker.run(Map.put(environment, "SCV_REASONING_EFFORT", "medium"))
   end
 
   test "emits bounded structured report chunks before the terminal result" do
@@ -129,6 +134,7 @@ defmodule OpenAgents.SCV.RunTest do
       duration_ms: 100,
       repository: %{git_sha: String.duplicate("a", 40)},
       scv: %{driver: "opencode", environment: "opencode-core"},
+      runtime: %{model: "openai/gpt-5.6-luna", reasoning_effort: "low"},
       events: %{event_count: 2, tool_calls: %{}, usage: %{}},
       resources: %{},
       artifacts: %{events_digest: String.duplicate("b", 64)},
@@ -145,6 +151,8 @@ defmodule OpenAgents.SCV.RunTest do
     chunks = Enum.drop(events, -1)
 
     assert terminal.type == "worker_finished"
+    assert terminal.model == "openai/gpt-5.6-luna"
+    assert terminal.reasoning_effort == "low"
     assert terminal.report.digest == digest
     assert terminal.report.chunk_count == length(chunks)
     refute Map.has_key?(terminal.report, :text)
@@ -168,6 +176,7 @@ defmodule OpenAgents.SCV.RunTest do
     if [ "${OPENAI_API_KEY:-}" != "fixture-secret-key" ]; then exit 21; fi
     prompt=$(cat)
     if [ -z "$prompt" ]; then exit 22; fi
+    case " $* " in *" --variant low "*|*" --variant none "*) :;; *) exit 23;; esac
     printf '%s\n' '{"type":"step_start","timestamp":1,"sessionID":"ses_scv","part":{"type":"step-start"}}'
     printf '%s\n' '{"type":"step_finish","timestamp":2,"sessionID":"ses_scv","part":{"type":"step-finish","cost":0.001,"tokens":{"input":4,"output":2,"reasoning":1,"cache":{"read":0,"write":0}}}}'
     """

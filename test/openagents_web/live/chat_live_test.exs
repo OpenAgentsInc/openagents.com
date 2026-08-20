@@ -855,7 +855,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     %{turn: inference.turn, receipt: inference.receipt, step: step}
   end
 
-  defp create_profile_memory(token, claim, category \\ "preference") do
+  defp create_profile_memory(token, claim, category) do
     assert {:ok, conversation} = Conversations.ensure_conversation(github_user(token))
     owner = Conversations.get_conversation_owner!(conversation)
 

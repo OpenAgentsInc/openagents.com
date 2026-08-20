@@ -261,6 +261,102 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       ]
     },
     %{
+      title: "Landing",
+      items: [
+        %{
+          slug: "landing-section",
+          title: "Section",
+          icon: "stack",
+          source: "OpenAgentsWeb.UI.Landing.section/1",
+          summary: "Page band: rhythm, measure, and a closing hairline."
+        },
+        %{
+          slug: "landing-hero",
+          title: "Hero",
+          icon: "sparkle",
+          source: "OpenAgentsWeb.UI.Landing.hero/1",
+          summary: "Eyebrow, headline, prose, actions, and a lit figure."
+        },
+        %{
+          slug: "landing-glow",
+          title: "Glow",
+          icon: "sun",
+          source: "OpenAgentsWeb.UI.Landing.glow/1",
+          summary: "Two-ellipse radial lift, in five positions."
+        },
+        %{
+          slug: "landing-beam",
+          title: "Beam",
+          icon: "bolt",
+          source: "OpenAgentsWeb.UI.Landing.beam/1",
+          summary: "Radial bloom behind a single element."
+        },
+        %{
+          slug: "landing-mockup",
+          title: "Mockup",
+          icon: "desktop",
+          source: "OpenAgentsWeb.UI.Landing.mockup/1",
+          summary: "Framed figure in a window or phone shape."
+        },
+        %{
+          slug: "landing-feature-grid",
+          title: "Feature grid",
+          icon: "grid",
+          source: "OpenAgentsWeb.UI.Landing.feature_grid/1",
+          summary: "Two-to-four column grid of capability statements."
+        },
+        %{
+          slug: "landing-stats",
+          title: "Stats",
+          icon: "chart",
+          source: "OpenAgentsWeb.UI.Landing.stats/1",
+          summary: "A row of figures with labels and captions."
+        },
+        %{
+          slug: "landing-pricing-column",
+          title: "Pricing column",
+          icon: "tag",
+          source: "OpenAgentsWeb.UI.Landing.pricing_column/1",
+          summary: "One plan, with a lit top rule and a featured state."
+        },
+        %{
+          slug: "landing-faq",
+          title: "FAQ",
+          icon: "info",
+          source: "OpenAgentsWeb.UI.Landing.faq/1",
+          summary: "Questions on native disclosure, no JavaScript."
+        },
+        %{
+          slug: "landing-cta",
+          title: "Call to action",
+          icon: "arrow-right",
+          source: "OpenAgentsWeb.UI.Landing.cta/1",
+          summary: "The closing ask, over a glow that rises on hover."
+        },
+        %{
+          slug: "landing-logo-wall",
+          title: "Logo wall",
+          icon: "star",
+          source: "OpenAgentsWeb.UI.Landing.logo_wall/1",
+          summary: "A row of names at one weight."
+        },
+        %{
+          slug: "landing-footer",
+          title: "Landing footer",
+          icon: "stack",
+          source: "OpenAgentsWeb.UI.Landing.landing_footer/1",
+          summary: "Mark, tagline, and columns of links."
+        },
+        %{
+          slug: "landing-layout-lines",
+          title: "Layout lines",
+          icon: "grid",
+          source: "OpenAgentsWeb.UI.Landing.layout_lines/1",
+          summary: "Dashed rules marking the content column."
+        }
+      ]
+    },
+    %{
       title: "Forge",
       items: [
         %{
@@ -295,7 +391,8 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       # renders nothing on its own, so it has no demoable page. graph_surface/1
       # is the host element and is demoed through the components that use it.
       OpenAgentsWeb.UI.Graph => [:graph_defs, :graph_surface],
-      OpenAgentsWeb.Components.RepoHeader => []
+      OpenAgentsWeb.Components.RepoHeader => [],
+      OpenAgentsWeb.UI.Landing => []
     }
   end
 end

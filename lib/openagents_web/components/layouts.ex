@@ -73,7 +73,11 @@ defmodule OpenAgentsWeb.Layouts do
           !@flush && "overflow-y-auto overscroll-none p-4",
           @current_scope && "bg-background"
         ]}>
-          <%= if @current_scope do %>
+          <%!-- A flush surface owns the whole area and sets its own measure,
+          so it is not wrapped either way. Signed out, an ordinary page is
+          centred in a reading column; signed in, the page has the sidebar
+          beside it and sets its own. --%>
+          <%= if @flush or @current_scope do %>
             {render_slot(@inner_block)}
           <% else %>
             <div class={["mx-auto space-y-4", @wide && "max-w-6xl", !@wide && "max-w-2xl"]}>

@@ -13,6 +13,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   alias OpenAgentsWeb.ComponentCatalog
   alias OpenAgentsWeb.UI.Graph
+  alias OpenAgentsWeb.UI.Landing
   alias OpenAgentsWeb.UI, as: UI
 
   @sample_rows [
@@ -937,6 +938,313 @@ defmodule OpenAgentsWeb.ComponentsLive do
         text="OpenAgentsWeb.UI.copy_button/1"
         label="Copy source"
       />
+    </div>
+    """
+  end
+
+  # ── Landing ───────────────────────────────────────────────────────────────
+  #
+  # These demo at reduced scale inside the documentation column. A hero is
+  # meant to own a viewport, so what a page here can honestly show is the
+  # composition and the type ramp, not the impression.
+
+  defp component_demo(%{item: %{slug: "landing-section"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The band every landing block sits in: horizontal padding, vertical rhythm that
+        grows with the viewport, a centred measure, and a closing hairline. Sections are
+        divided by a rule rather than by fill, so the page reads as one surface in parts.
+      </p>
+      <div class="demo-frame">
+        <Landing.section>
+          <p class="landing-heading">A section</p>
+        </Landing.section>
+        <Landing.section rule={false}>
+          <p class="landing-heading">The last one, with no rule</p>
+        </Landing.section>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-hero"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Eyebrow, headline, one line of prose, actions, and an optional figure lifted by a
+        glow. The figure is a slot rather than an image attribute, so a page can frame a
+        live surface instead of a screenshot of one.
+      </p>
+      <div class="demo-frame">
+        <Landing.hero
+          title="The Agent Forge"
+          description="Purpose-built for planning and shipping issues. Designed for the agent era."
+        >
+          <:eyebrow>
+            <UI.badge>New</UI.badge>
+          </:eyebrow>
+          <:actions>
+            <UI.button variant={:primary}>Get started</UI.button>
+            <UI.button>Read the docs</UI.button>
+          </:actions>
+          <:figure>
+            <Landing.mockup>
+              <div class="demo-screenshot">Your surface here</div>
+            </Landing.mockup>
+          </:figure>
+        </Landing.hero>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-glow"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Two stacked ellipses — a wide faint wash under a narrower dense core. One
+        gradient alone reads as a flat smudge; the pair reads as light. Decorative, so it
+        is hidden from assistive technology, and it carries less intensity in light mode
+        where the same value reads as a stain rather than a backdrop.
+      </p>
+      <div class="demo-glow-row">
+        <div :for={variant <- [:top, :center, :bottom]} class="demo-glow">
+          <Landing.glow variant={variant} />
+          <span class="demo-glow__label">{variant}</span>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-beam"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Where a glow is a band positioned against a section, a beam attaches to one
+        element and blooms from it — for lighting a single figure rather than a region.
+      </p>
+      <div class="demo-glow-row">
+        <Landing.beam :for={tone <- [:default, :bright]} tone={tone} class="demo-beam">
+          <UI.badge>{tone}</UI.badge>
+        </Landing.beam>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-mockup"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A second, wider border in a lighter fill is what reads as a device edge. Drawing
+        a literal laptop dates the page and fixes the aspect ratio of whatever goes
+        inside it.
+      </p>
+      <div class="demo-mockup-row">
+        <Landing.mockup type={:window}>
+          <div class="demo-screenshot">Window</div>
+        </Landing.mockup>
+        <Landing.mockup type={:phone} size={:large}>
+          <div class="demo-screenshot demo-screenshot--tall">Phone</div>
+        </Landing.mockup>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-feature-grid"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Four columns wide, two narrow. The cells carry no borders and no fills: a grid of
+        boxes competes with itself for attention, and the alignment already separates
+        them.
+      </p>
+      <div class="demo-frame">
+        <Landing.feature_grid title="Everything the work needs">
+          <:item title="Issues" icon="file-document">
+            Plan, assign and close, with the same API shape you already use.
+          </:item>
+          <:item title="Projects" icon="grid">
+            Group issues into work that has a beginning and an end.
+          </:item>
+          <:item title="Agents" icon="bolt">
+            Durable workers that pick up an issue and see it through.
+          </:item>
+          <:item title="Receipts" icon="check-circle">
+            Every run leaves evidence you can read afterwards.
+          </:item>
+        </Landing.feature_grid>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-stats"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The number is the largest thing in the cell. A statistic that has to be read to
+        be understood is not doing the job a statistic is for. The suffix stays a
+        separate element so the value and its unit can be sized apart.
+      </p>
+      <div class="demo-frame">
+        <Landing.stats>
+          <:stat label="over" value="1443">tests on every commit</:stat>
+          <:stat label="under" value="7" suffix="s">to run the web suite</:stat>
+          <:stat label="across" value="756">vendored glyphs</:stat>
+          <:stat label="in" value="1">component system</:stat>
+        </Landing.stats>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-pricing-column"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The price is a slot, not a number, so a column can say "Free" or "Usage-based"
+        without this component holding an opinion about currency. The featured state is a
+        brighter top rule and a lift — no accent fill and no scaling, which would make
+        the other columns look broken rather than merely quieter.
+      </p>
+      <div class="demo-pricing-row">
+        <Landing.pricing_column
+          name="Open source"
+          description="The whole application, AGPL-3.0."
+          price="Free"
+        >
+          <:action><UI.button class="w-full">Clone it</UI.button></:action>
+          <:feature>Every surface you see here</:feature>
+          <:feature>Self-hosted, your database</:feature>
+        </Landing.pricing_column>
+
+        <Landing.pricing_column
+          name="Hosted"
+          description="The same thing, run for you."
+          price="$20"
+          price_note="/month"
+          featured
+        >
+          <:action><UI.button variant={:primary} class="w-full">Start</UI.button></:action>
+          <:feature>Managed database and backups</:feature>
+          <:feature>Agents on our machines</:feature>
+          <:feature>Usage receipts</:feature>
+        </Landing.pricing_column>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-faq"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Native <code>&lt;details&gt;</code>, so the disclosure state lives in the element:
+        no JavaScript, no ARIA to keep in sync, and keyboard behaviour is the browser's.
+        A marketing page is the most likely thing to be read on a slow connection, so
+        nothing here should wait on a bundle.
+      </p>
+      <div class="demo-frame">
+        <Landing.faq title="Questions">
+          <:item question="Is this really the whole application?" open>
+            <p>Yes. The repository is AGPL-3.0 and this page is built from the same
+              component system as every other surface.</p>
+          </:item>
+          <:item question="Does the accordion need JavaScript?">
+            <p>No. It is a native disclosure element.</p>
+          </:item>
+        </Landing.faq>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-cta"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The closing ask. Its glow sits below the section rather than behind it and rises
+        on hover, so the light reads as something under the fold rather than behind the
+        text.
+      </p>
+      <div class="demo-frame">
+        <Landing.cta
+          title="Start shipping"
+          description="Open an issue and let an agent pick it up."
+        >
+          <:actions>
+            <UI.button variant={:primary}>Create an issue</UI.button>
+          </:actions>
+        </Landing.cta>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-logo-wall"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        One weight for every mark, so a heavier logo cannot dominate the row.
+      </p>
+      <div class="demo-frame">
+        <Landing.logo_wall title="Built with">
+          <:logo>Elixir</:logo>
+          <:logo>Phoenix</:logo>
+          <:logo>LiveView</:logo>
+          <:logo>PostgreSQL</:logo>
+        </Landing.logo_wall>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-footer"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A mark, a line about it, and columns of links.
+      </p>
+      <div class="demo-frame">
+        <Landing.landing_footer
+          tagline="Purpose-built for planning and shipping issues."
+          note="AGPL-3.0. Every surface here is in the repository."
+        >
+          <:column title="Product">
+            <.link navigate={~p"/docs"}>Documentation</.link>
+            <.link navigate={~p"/components"}>Components</.link>
+          </:column>
+          <:column title="Transparency">
+            <.link navigate={~p"/changelog"}>Changelog</.link>
+            <.link navigate={~p"/status"}>Status</.link>
+          </:column>
+          <:column title="Work">
+            <.link navigate={~p"/OpenAgentsInc/openagents.com/issues"}>Issues</.link>
+          </:column>
+        </Landing.landing_footer>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-layout-lines"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Faint dashed rules marking the content column's edges, fixed behind the page and
+        pointer-transparent. Purely decorative: it gives a long marketing page a spine to
+        read against, and removing it changes nothing about the content. Shown here
+        contained rather than fixed, which is the one thing this demo cannot be honest
+        about.
+      </p>
+      <div class="demo-frame demo-frame--lines">
+        <Landing.layout_lines class="!absolute" />
+        <p class="landing-heading">Content sits between them</p>
+      </div>
     </div>
     """
   end

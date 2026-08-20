@@ -630,8 +630,9 @@ resource "google_compute_instance" "fleet" {
     openagents-runtime-secret = google_secret_manager_secret.runtime["openagents-staging-fleet-config"].secret_id
     openagents-builder-secret = google_secret_manager_secret.runtime["openagents-staging-builder-config"].secret_id
     startup-script = templatefile("${path.module}/templates/fleet-startup.sh.tftpl", {
-      project_id = var.staging_project_id
-      region     = var.region
+      network_cidr = var.network_cidr
+      project_id   = var.staging_project_id
+      region       = var.region
     })
   }
 

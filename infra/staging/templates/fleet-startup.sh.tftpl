@@ -41,6 +41,14 @@ runtime_secret=$(metadata_attribute openagents-runtime-secret)
 builder_secret=$(metadata_attribute openagents-builder-secret)
 instance_ip=$(metadata instance/network-interfaces/0/ip)
 
+# Container-Optimized OS denies unsolicited host traffic by default. Match the
+# VPC admission rule locally so only the staging subnet can reach Phoenix,
+# EPMD, and the fixed Erlang distribution range.
+iptables -C INPUT -s "${network_cidr}" -p tcp -m multiport \
+  --dports 4000,4369,9100:9115 -j ACCEPT 2>/dev/null || \
+  iptables -I INPUT -s "${network_cidr}" -p tcp -m multiport \
+    --dports 4000,4369,9100:9115 -j ACCEPT
+
 if [ -z "$image" ] || [ -z "$image_digest" ] || [ -z "$source_sha" ]; then
   echo "No staging candidate is assigned; leaving the node fenced."
   exit 0

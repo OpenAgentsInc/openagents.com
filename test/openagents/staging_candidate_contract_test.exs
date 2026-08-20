@@ -45,10 +45,14 @@ defmodule OpenAgents.StagingCandidateContractTest do
   end
 
   test "fleet discovery and release identities use the same stable private addresses" do
+    terraform = File.read!("infra/staging/main.tf")
     startup = File.read!("infra/staging/templates/fleet-startup.sh.tftpl")
     outputs = File.read!("infra/staging/outputs.tf")
 
+    assert terraform =~ "network_cidr = var.network_cidr"
     assert startup =~ "instance_ip=$(metadata instance/network-interfaces/0/ip)"
+    assert startup =~ ~s(iptables -C INPUT -s "${network_cidr}")
+    assert startup =~ "--dports 4000,4369,9100:9115 -j ACCEPT"
     assert startup =~ "DNS_CLUSTER_QUERY=openagents-fleet.staging.internal"
     assert startup =~ "OPENAGENTS_NODE_HOST=$instance_ip"
     assert startup =~ "RELEASE_NODE=openagents@$instance_ip"

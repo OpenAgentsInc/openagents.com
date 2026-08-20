@@ -1,67 +1,113 @@
-# OpenAgents - The Agent Forge
+# OpenAgents
 
-OpenAgents is a source-code forge. We are building it to replace GitHub for our own projects, and then for customers. This repository is the public home of the project.
+OpenAgents is an AGPL-3.0 Phoenix application for building and operating
+agent-backed software in public. This repository contains the complete product:
+Sarah chat and voice, governed memory and tools, delegated work and connected
+computers, issues and projects, the Git forge, and the deployment control plane.
 
-## What we are building
+The current architecture and trust boundaries are documented in
+[docs/architecture.md](docs/architecture.md). The staged hardening work is
+tracked in the
+[integration hardening plan](docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).
 
-We are building the Agent Forge from scratch. This is a clean-room, independent implementation. It does not use code or design from any earlier internal or external forge.
+## Capability status
 
-The first public surface is an issue and project tracker. We will use the Agent Forge to build OpenAgents.com itself. Every change ships through the forge with live hot reload.
+No part of this repository is approved for production deployment yet.
 
-## Why start from scratch
+### Implemented and locally gated
 
-Starting fresh lets us build a forge that is open, contributor-friendly, and defined by its own runtime behavior rather than by compatibility with an existing platform. The BEAM runtime, Phoenix LiveView, and hot reload are the implementation choices.
+- GitHub OAuth, encrypted server-side GitHub token storage, sessions, and
+  account-scoped data rights.
+- Authenticated text chat with durable turns, provider receipts, tools, memory,
+  delegated work, and connected-computer orchestration.
+- Voice session, transcript, usage, recording, and operator-projection domains.
+- Issues, comments, labels, milestones, projects, public status, changelog, and
+  bounded source-browsing surfaces.
+- Git HTTP, push receipts, promotion targets, build receipts, and local BEAM
+  deployment primitives.
+- An owned local test gate covering browser JavaScript, the Phoenix application,
+  distributed cluster cases, merged coverage, and a disposable production
+  release smoke test.
 
-## What works now
+"Implemented" means the code and local tests exist. It does not mean the
+feature has passed staging, security review, failure injection, or a soak.
 
-- **Hot reload:** code changes reach the live cluster in seconds without a rolling restart.
-- **Release upgrades (relups):** deploys use Erlang/OTP release upgrade patterns for zero-downtime updates.
-- **Live surfaces:** pages update for every connected viewer at the same time through Phoenix PubSub.
+### Disabled by default or staging-only
 
-## Tech stack
+- Voice, recording, semantic recall, experimental program paths, and deployment
+  workers remain controlled by runtime configuration.
+- Direct BEAM loading, relup installation, rolling replacement, and boot
+  convergence require isolated three-node staging proof before they can be
+  enabled outside a disposable environment.
+- The self-hosted forge is being hardened, but GitHub remains the canonical Git
+  remote until the proof-gated cutover in ADR 0007.
 
-- **Elixir on the BEAM** — the runtime for hot reload, release upgrades, and live, concurrent page updates.
-- **Phoenix and Phoenix LiveView** — web framework and live UI layer.
-- **PostgreSQL** — primary database.
-- **Google Cloud** — hosting and infrastructure.
-- **Tailwind CSS** — styling.
-- **DaisyUI** — UI component library.
+### Planned or blocked on hardening
 
-## First deliverable: Issues and projects
+- Repository-backed tenant isolation for every issue and project record.
+- Complete route-authority, token-lifecycle, recovery, build-isolation, and
+  transactional fleet-deployment gates.
+- Separate web and distributed staging lanes, a full regression matrix,
+  failure-injection drills, and a 48-hour soak.
+- Any production rollout. Production remains explicitly out of scope until the
+  staging plan is complete and separately approved.
 
-The first public surface is an issue and project tracker. We will use it to run OpenAgents.com's own development. You can:
+## Architecture
 
-- Open issues.
-- Create and manage projects.
-- Watch updates appear live for everyone else on the page.
-- See the deploy receipts for each change.
+The browser connects to one Phoenix and LiveView application. PostgreSQL is the
+durable authority for product, authorization, work, and deployment state.
+Provider APIs and GitHub are server-side dependencies behind explicit adapters;
+their credentials never belong in browser state. BEAM processes, PubSub, and
+LiveView assigns are recoverable projections of durable records.
 
-## For contributors
+Sarah is a persona and behavior package in the OpenAgents application, not a
+private service boundary. Generic infrastructure uses the `OpenAgents`
+namespace, while persona artifacts retain Sarah-specific identities where that
+history is part of the contract.
 
-We want contributing to feel good. The first contributor features are:
+## Interface system
 
-- Log in with GitHub.
-- See a leaderboard of contributions.
-- Get credit for code that trains our agents, when we build that part.
+The product uses Tailwind CSS, pinned vendored Basecoat component styles, the
+OpenAgents style pack in `assets/css/openagents.css`, and reusable HEEx
+components in `OpenAgentsWeb.UI`. The live component inventory is available at
+`/components`; [docs/component-library.md](docs/component-library.md) records
+the current transition and extension rules.
 
-## What's next
+Fonts and icons are self-hosted. Do not add a remote font, icon font, second
+component library, or unreviewed browser script.
 
-After issues and projects, we will make it easy to import repositories into OpenAgents.com. The goal is to let you bring an existing project onto the forge and get the same live, receipted, hot-reload experience.
+## Local development
 
-## Roadmap
+The application requires Elixir/OTP, PostgreSQL with pgvector, and Node.js for
+the browser-side tests.
 
-| Phase | Work | Outcome |
-| --- | --- | --- |
-| 1 | Issues and projects | Public tracker for OpenAgents.com |
-| 2 | GitHub login and leaderboard | Contributor accounts and recognition |
-| 3 | Repository import | Move projects onto the forge |
-| 4 | Pull requests and reviews | Agent-native review flow |
-| 5 | Transparency tiers | Paid and public access levels |
+```sh
+mix setup
+mix phx.server
+```
 
-## Contributing
+Before committing, run the repository-owned gate:
 
-We are in the early phase. If you want to help, open an issue or watch for `good first issue` labels.
+```sh
+mix precommit
+```
+
+Distributed, merged-coverage, relup, and release-smoke checks live under
+`ops/` and are composed by the exact-SHA baseline gate while hardening is in
+progress. This repository deliberately has no hosted CI configuration.
+
+## Contributing and source control
+
+Read `AGENTS.md` before changing the application. GitHub is temporarily the
+canonical remote during staging hardening. The forge becomes canonical only
+after the durability, mirror, restore, and deployment proofs in ADR 0007 pass.
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0. See `LICENSE`.
+OpenAgents is licensed under the GNU Affero General Public License v3.0. See
+`LICENSE`.
+
+Vendored third-party material keeps its own license and notices. In particular,
+Basecoat is under `assets/vendor/basecoat/`, the Apps SDK icon set is under
+`priv/icons/`, and self-hosted font notices are under `priv/static/fonts/`.
+Review those notices when redistributing the application.

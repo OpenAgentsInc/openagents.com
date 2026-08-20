@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: Accepted; hardening required before staging
+Status: Accepted model; lifecycle hardening required before staging
 
 ## Context
 
@@ -19,10 +19,12 @@ operator-managed key, associate it with one active user, and never expose it to
 LiveView assigns, browser payloads, logs, receipts, or telemetry.
 
 Keep OpenAgents issue and project data in PostgreSQL; do not use a retained
-GitHub token as authority for OpenAgents-owned records. Revoke or delete the
-token when the user disconnects GitHub, deletes their data, or loses account
-access. Gate 6 must verify scopes, rotation, failure behavior, redaction, and
-the disclosures shown to users.
+GitHub token as authority for OpenAgents-owned records. The current callback
+stores encrypted ciphertext and logout clears only the browser session. Gate 6
+must add explicit disconnect/revocation behavior, define token removal during
+product-data deletion or account restriction, and verify scopes, rotation,
+failure behavior, redaction, and user disclosures. Those lifecycle actions are
+requirements, not claims about the current implementation.
 
 ## Consequences
 

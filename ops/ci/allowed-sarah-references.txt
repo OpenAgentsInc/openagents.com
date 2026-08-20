@@ -15,6 +15,7 @@
 ^docs/sarah-integration-plan\.md:
 
 # Current architecture and decisions discuss the Sarah persona boundary.
+^README\.md:[0-9]+:.*[Ss][Aa][Rr][Aa][Hh]
 ^docs/architecture\.md:
 ^docs/decisions/0001-integrate-the-complete-public-application\.md:
 ^docs/decisions/0002-model-sarah-as-an-openagents-persona\.md:

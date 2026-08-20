@@ -1,12 +1,20 @@
 # OpenAgents invariant ledger
 
-These contracts define the current Simply OpenAgents release. A change to a listed
-contract must update this ledger and its named test or model in the same
-commit.
+These contracts define the OpenAgents application. Every entry is explicitly
+`Current` or `Proposed`. A current contract must name an executable test or a
+concrete manual proof whose file exists in this repository. A proposed
+contract describes a release gate, not current behavior, and cannot be used as
+evidence that a feature is safe or enabled.
+
+A change to a listed contract must update this ledger and its named proof in
+the same commit. `ops/ci/docs-check.exs` verifies unique IDs and evidence-file
+paths.
 
 ## OpenAgents identity and canon
 
 ### CANON-001 — Persona sources are immutable and status-labeled
+
+Status: Current
 
 Every historical source admitted to author OpenAgents's persona is pinned by
 repository revision, path, content SHA-256, source status, admitted uses, and
@@ -19,10 +27,12 @@ Episode numbers are not source identity. The conflicting Episode 263 file is
 quarantined, and the final Omega Alpha transcript is pinned by its actual path.
 
 Evidence: `OpenAgents.Persona.SourceManifest`,
-`priv/openagents/persona/openagents.v1.sources.json`, and
+`priv/sarah/persona/sarah.v1.sources.json`, and
 `OpenAgents.Persona.SourceManifestTest`.
 
 ### PERSONA-001 — Each inference uses one immutable persona artifact
+
+Status: Current
 
 OpenAgents's core identity, voice, and first-conversation greeting come from one
 versioned artifact admitted by its exact content SHA-256. The artifact and its
@@ -30,10 +40,12 @@ source-manifest identity are validated and installed before the supervision
 tree starts. Every provider request receives instructions composed from that
 installed artifact; provider adapters contain no independent OpenAgents persona.
 
-Evidence: `OpenAgents.Persona`, `priv/openagents/persona/openagents.v1.md`,
+Evidence: `OpenAgents.Persona`, `priv/sarah/persona/sarah.v1.md`,
 `OpenAgents.Context.Composer`, `OpenAgents.Turns.TurnServer`, and `OpenAgents.PersonaTest`.
 
 ### PERSONA-002 — One core OpenAgents identity composes with an admitted role
+
+Status: Current
 
 Protected identity and host safety precede surface truths, the selected role,
 Blueprint expression facts, captured capabilities, and recalled evidence in a
@@ -46,10 +58,12 @@ protected layers. Inactive coding, sales, company-operations, and public-
 broadcast registers fail closed to the compatible general baseline or no role.
 
 Evidence: `OpenAgents.Context.Composer`, `OpenAgents.Roles`, `OpenAgents.Roles.Catalog`,
-`OpenAgents.Roles.GeneralCollaborator`, `docs/ROLE_PROGRAMS.md`,
+`OpenAgents.Roles.GeneralCollaborator`, `test/openagents/roles_test.exs`,
 `OpenAgents.Context.ComposerTest`, and `OpenAgents.RolesTest`.
 
 ### PERSONA-003 — Persona promotion requires revision-bound regression evidence
+
+Status: Current
 
 Every persona candidate is evaluated against the committed, source-labeled
 behavior corpus. Promotion requires a complete passing report bound to the
@@ -57,11 +71,13 @@ exact persona, source manifest, corpus, and model revisions. All cases must
 pass, so military, founder-voice, sales, false-recognition, or generic-assistant
 containment failures cannot be averaged away.
 
-Evidence: `OpenAgents.Persona.Evaluation`,
-`priv/openagents/evals/persona/corpus.v1.json`,
+Evidence: `OpenAgents.Persona.Evaluation.Runner`,
+`priv/sarah/evals/persona/corpus.v1.json`,
 `OpenAgents.Persona.EvaluationTest`, and `mix openagents.persona.verify_promotion`.
 
 ### BLUEPRINT-001 — Platform facts are source-linked immutable revisions
+
+Status: Current
 
 Every admitted OpenAgents Blueprint revision is a complete canonical snapshot of
 typed platform facts. Facts carry stable IDs, source refs/status/time/digests,
@@ -78,9 +94,11 @@ authorize execution.
 
 Evidence: `OpenAgents.Blueprint`, the OpenAgents Blueprint schemas and migration,
 `OpenAgents.Context.Composer`, `OpenAgents.Conversations.begin_inference/5`,
-`docs/SARAH_BLUEPRINT.md`, and `OpenAgents.BlueprintTest`.
+`test/openagents/blueprint_test.exs`, and `OpenAgents.BlueprintTest`.
 
 ### PROGRAM-001 — Model programs are immutable typed data, never effect authority
+
+Status: Current
 
 Every admitted model-program artifact has one full canonical digest covering
 its signature, compiler/model/decoding identity, compatibility, Prompt IR,
@@ -96,10 +114,12 @@ Each applicable turn captures one immutable artifact identity before provider
 work; an in-flight capture cannot observe another catalog.
 
 Evidence: `OpenAgents.ProgramArtifacts`, `OpenAgents.ProgramArtifacts.Reader`,
-`priv/openagents/programs/`, `docs/PROGRAM_ARTIFACTS.md`,
+`priv/sarah/programs/`, `test/openagents/program_artifacts_test.exs`,
 `OpenAgents.Conversations.begin_inference/5`, and `OpenAgents.ProgramArtifactsTest`.
 
 ### DEGRADE-001 — Missing program artifacts degrade explicitly to a baseline
+
+Status: Current
 
 If an applicable signature has no admitted compatible artifact, capture returns
 the deterministic baseline with no artifact ID/digest and a bounded degraded
@@ -113,6 +133,8 @@ Evidence: `OpenAgents.ProgramArtifacts.capture/1`,
 `OpenAgents.TurnProvenanceTest`.
 
 ### PROGRAM-002 — Shadow programs have no live effect or private report payload
+
+Status: Current
 
 Shadow signatures validate bounded typed input/output and run under a separate
 task supervisor. The live turn never consumes their result. Memory and
@@ -128,10 +150,12 @@ fixture path; production conversations/profile memory are not datasets.
 
 Evidence: `OpenAgents.ShadowPrograms`, `OpenAgents.ShadowPrograms.Signatures`,
 `OpenAgents.ShadowPrograms.OpenAI`, `shadow_program_runs`,
-`priv/openagents/evals/shadow/corpus.v1.json`, `docs/SHADOW_PROGRAMS.md`, and
+`priv/sarah/evals/shadow/corpus.v1.json`, `test/openagents/shadow_programs_test.exs`, and
 `OpenAgents.ShadowProgramsTest`.
 
 ### PROGRAM-003 — Promotion is offline, human-approved, and rollback-capable
+
+Status: Current
 
 A compiled candidate, pinned independent evaluation, human approval, and human
 activation are separate append-only artifacts/events. Evaluation is bound to
@@ -146,12 +170,14 @@ an in-flight capture remains unchanged. Rollback selects the pinned predecessor
 and preserves the complete prior trail.
 
 Evidence: `OpenAgents.ProgramLifecycle`, its artifact/event/activation schemas and
-database guards, `docs/PROGRAM_LIFECYCLE.md`, the synthetic sample promotion
+database guards, `test/openagents/program_lifecycle_test.exs`, the synthetic sample promotion
 report, and `OpenAgents.ProgramLifecycleTest`.
 
 ## Identity and authorization
 
 ### IDENTITY-001 — GitHub-authenticated account identity
+
+Status: Current
 
 Every OpenAgents interaction requires an active local user established through the
 GitHub OAuth authorization-code flow. The immutable external key is GitHub's
@@ -159,14 +185,18 @@ numeric user ID; login and avatar URL are refreshable projections and never
 authority. OAuth start uses high-entropy state plus PKCE S256. A short-lived
 PostgreSQL attempt receipt makes state one-time even if an old encrypted cookie
 is replayed. Phoenix exchanges the code and rereads `/user` server-side, then
-discards the access token. The browser session contains only OpenAgents's local user
-ID and is encrypted, signed, HTTP-only, same-site, and secure in production.
+stores the delegated GitHub token as encrypted server-side ciphertext for
+GitHub repository tools. The token never enters the browser. The browser
+session contains only OpenAgents's local user ID and is encrypted, signed,
+HTTP-only, same-site, and secure in production.
 
 Evidence: `OpenAgents.GitHubOAuth`, `OpenAgents.Accounts`, `OpenAgentsWeb.AuthController`,
 `OpenAgentsWeb.Endpoint.session_options/0`, `OpenAgents.GitHubOAuthTest`,
 `OpenAgents.AccountsTest`, and `OpenAgentsWeb.AuthControllerTest`.
 
 ### IDENTITY-002 — Conversation lookup never accepts a client database ID
+
+Status: Current
 
 The browser supplies only its encrypted OpenAgents session. Server code loads the
 active local user and resolves that user's internal storage owner and canonical
@@ -180,6 +210,8 @@ Evidence: `OpenAgentsWeb.UserAuth`, `OpenAgentsWeb.Router`,
 and `OpenAgentsWeb.AuthGateTest`.
 
 ### IDENTITY-003 — Account continuity supersedes browser portability
+
+Status: Current
 
 One GitHub-authenticated user resolves the same canonical OpenAgents owner across
 browsers and devices; no export/import ceremony is required for that account.
@@ -203,11 +235,13 @@ by OpenAgents. Adapter failure leaves account-local operation unchanged.
 
 Evidence: ADR 0002 (which supersedes ADR 0001's identity decision),
 `OpenAgents.Memory.Portability`, its envelope and receipt schemas,
-`docs/MEMORY_PORTABILITY_THREAT_MODEL.md`, and `OpenAgents.MemoryPortabilityTest`.
+`test/openagents/memory_portability_test.exs`, and `OpenAgents.MemoryPortabilityTest`.
 
 ## Data authority and synchronization
 
 ### DATA-001 — PostgreSQL is authoritative
+
+Status: Current
 
 Visitors, conversations, messages, and turns are persisted before their state
 is presented as accepted. PubSub and LiveView streams are projections; losing
@@ -217,6 +251,8 @@ Evidence: `OpenAgents.Conversations.create_turn/2` and
 `OpenAgentsWeb.ChatLiveTest` durable-turn test.
 
 ### DATA-002 — One canonical conversation per authenticated user
+
+Status: Current
 
 Database uniqueness enforces one internal storage owner per local user and one
 conversation per owner. Initial greeting creation is coupled to first
@@ -231,6 +267,8 @@ account continuity/isolation/rate tests in `OpenAgents.AccountsTest`.
 
 ### DATA-003 — History is bounded and stable
 
+Status: Current
+
 The newest page and every older page contain at most the configured page size.
 Ordering uses persisted timestamp plus UUID, and rendered rows use stable
 message IDs.
@@ -240,6 +278,8 @@ Evidence: `OpenAgents.Conversations.list_messages/2` and bounded-history test.
 ## Memory and recall
 
 ### MEMORY-001 — Recall is confined to the current account conversation
+
+Status: Current
 
 Every recall snapshot and search is bound to one canonical conversation
 resolved from the authenticated local user. A snapshot from another
@@ -251,6 +291,8 @@ Evidence: `OpenAgents.Memory.RecallSnapshot`, `OpenAgents.Memory.LexicalRecall`,
 cross-scope tests in `OpenAgents.Memory.LexicalRecallTest`.
 
 ### MEMORY-002 — Recalled history is classified evidence, not current profile truth
+
+Status: Current
 
 Every materially used read source is represented by a host-built
 `openagents.memory_evidence.v1` value with validated source/scope, observed and
@@ -273,6 +315,8 @@ database trigger, `OpenAgents.Memory.EvidenceTest`, and
 
 ### MEMORY-003 — Profile memory is explicit, inspectable, correctable, and forgettable
 
+Status: Current
+
 Durable profile claims live in a separate account-owner plane. A record
 is only active with a same-owner complete user-message source or a host-recorded
 explicit owner assertion. Candidates never activate through repetition or
@@ -287,10 +331,12 @@ deleting the independent conversation source message.
 
 Evidence: `OpenAgents.ProfileMemory`, the profile-memory schemas and database
 constraint triggers, `OpenAgentsWeb.ChatLive`, `OpenAgentsWeb.MemoryExportController`,
-`docs/MEMORY_CONTROLS.md`, `docs/PROFILE_MEMORY.md`, `OpenAgents.ProfileMemoryTest`,
+`test/openagents/profile_memory_test.exs`, `test/openagents/profile_memory_test.exs`, `OpenAgents.ProfileMemoryTest`,
 and memory-control journeys in `OpenAgentsWeb.ChatLiveTest`.
 
 ### MEMORY-004 — Scope and snapshot boundaries are database predicates
+
+Status: Current
 
 Recall scope is enforced by `messages.conversation_id` in every PostgreSQL
 query, never by prompt instructions. Each inference immutably records a
@@ -348,6 +394,8 @@ cross-browser/concurrent-snapshot tests in `OpenAgents.ProfileMemoryTest`.
 
 ### MEMORY-005 — Memory writes require exact current consent
 
+Status: Current
+
 A sampled tool call is a proposal, not write authority. `memory_remember.v1`
 accepts only an exact bounded claim directly authorized by the current complete
 user message, an exact host-recorded confirmation, or an exact first-party UI
@@ -362,10 +410,12 @@ bounded reversible receipt after PostgreSQL commits. OpenAgents may acknowledge
 only the exact successful result returned in the durable tool outcome.
 
 Evidence: `OpenAgents.Memory.Consent`, the four `OpenAgents.Tools.Memory*` tools,
-`turn_receipts.profile_memory_snapshot_ref`, `docs/MEMORY_TOOLS.md`, and
+`turn_receipts.profile_memory_snapshot_ref`, `test/openagents/tools/profile_memory_tools_test.exs`, and
 `OpenAgents.Tools.ProfileMemoryToolsTest`.
 
 ### MEMORY-006 — Semantic recall is scoped, disposable, and lexically degradable
+
+Status: Current
 
 Authoritative durable conversation rows — messages, and for lexical
 tool-activity recall the terminal tool steps — remain the sole recall
@@ -388,11 +438,13 @@ creating vectors; its committed comparison must preserve lexical fallback and
 scope isolation while improving synonym recall.
 
 Evidence: `OpenAgents.Memory.SemanticIndex`, `OpenAgents.Memory.HybridRecall`, semantic
-derivative tables and triggers, `docs/HYBRID_RECALL.md`,
-`priv/openagents/evals/recall/hybrid-comparison.v1.json`, and
+derivative tables and triggers, `test/openagents/semantic_recall_test.exs`,
+`priv/sarah/evals/recall/hybrid-comparison.v1.json`, and
 `OpenAgents.SemanticRecallTest`.
 
 ### MEMORY-007 — Learned preferences require confirmation and never confer authority
+
+Status: Current
 
 Behavior preferences occupy an account-owner plane separate from conversation
 evidence, profile facts, roles, tool catalogs, routing authority, and collective
@@ -416,10 +468,12 @@ direct or foreign-scope receipt deletion.
 
 Evidence: `OpenAgents.Preferences`, the preference schemas and database guards,
 `OpenAgents.Context.Composer`, `turn_receipts.used_preferences`,
-`docs/GOVERNED_PREFERENCES.md`, the committed preference comparison, and
+`test/openagents/preferences_test.exs`, the committed preference comparison, and
 `OpenAgents.PreferencesTest`.
 
 ### MEMORY-008 — Experience is private, terminal, evidenced, and advisory
+
+Status: Current
 
 Work experience occupies an exact account-owner and conversation-work-scope
 plane separate from profile facts, learned preferences, roles, tool authority,
@@ -446,10 +500,12 @@ Direct and foreign-scope receipt deletion remain rejected.
 
 Evidence: `OpenAgents.ExperienceMemory`, the experience schemas and database guards,
 `OpenAgents.Context.Composer`, `turn_receipts.used_experiences`,
-`docs/PRIVATE_EXPERIENCE_MEMORY.md`, the committed benefit comparison, and
+`test/openagents/experience_memory_test.exs`, the committed benefit comparison, and
 `OpenAgents.ExperienceMemoryTest`.
 
 ### MEMORY-009 — Graph memory is a disposable, generation-atomic projection
+
+Status: Current
 
 The relationship graph is never memory authority. Every node and edge belongs
 to one account owner, one conversation work scope, one immutable manifest
@@ -478,10 +534,12 @@ memberships, mutation events, cascade plans, and operation receipts after the
 visitor root is gone. Direct and foreign-scope receipt deletion remain rejected.
 
 Evidence: `OpenAgents.GraphMemory`, graph manifests/artifacts/memberships/outbox and
-database guards, `docs/DERIVED_GRAPH_MEMORY.md`, the committed graph comparison,
+database guards, `test/openagents/graph_memory_test.exs`, the committed graph comparison,
 and `OpenAgents.GraphMemoryTest`.
 
 ### PRIVACY-001 — Secret-bearing profile memory is rejected, never scrub-stored
+
+Status: Current
 
 Before candidate storage, the host applies the pinned
 `openagents.memory.policy.v1` policy to the claim, provenance/artifact metadata, and
@@ -498,11 +556,13 @@ cannot silently relabel old records or rejection evidence.
 
 Evidence: `OpenAgents.Memory.Policy`, `OpenAgents.Memory.Redaction`,
 `profile_memory_policy_events`, immutable policy-version trigger,
-`docs/MEMORY_PRIVACY_POLICY.md`, and `OpenAgents.Memory.PolicyAndRedactionTest`.
+`test/openagents/memory/policy_and_redaction_test.exs`, and `OpenAgents.Memory.PolicyAndRedactionTest`.
 
 ## Turn and provider lifecycle
 
 ### TURN-001 — At most one active turn per conversation
+
+Status: Current
 
 An active turn is `queued` or `streaming`. A partial unique PostgreSQL index is
 the final arbiter; the UI's disabled composer is only feedback.
@@ -510,6 +570,8 @@ the final arbiter; the UI's disabled composer is only feedback.
 Evidence: `turns_one_active_per_conversation_index` and active-turn test.
 
 ### TURN-002 — Every accepted turn has durable paired messages
+
+Status: Current
 
 The user message, empty streaming assistant message, and turn record are
 inserted in one transaction. Completion, failure, and cancellation update both
@@ -519,14 +581,18 @@ Evidence: `OpenAgents.Conversations.create_turn/2`, `finish_turn/5`, and turn te
 
 ### TURN-003 — Provider work never blocks the LiveView
 
+Status: Current
+
 Each response executes in a temporary `TurnServer` under a dynamic supervisor;
 the outbound provider call executes in a supervised task. Text deltas cross a
 typed provider callback and are persisted before broadcast.
 
-Evidence: `OpenAgents.Turns.TurnServer`, `OpenAgents.ProviderTaskSupervisor`, and
-`OpenAgentsWeb.ChatLiveTest` streaming test.
+Evidence: `OpenAgents.Turns.TurnServer`, its named supervised provider task,
+and `OpenAgentsWeb.ChatLiveTest` streaming test.
 
 ### TURN-004 — Interrupted work becomes explicit failure
+
+Status: Current
 
 Active records left by a runtime restart are marked failed during application
 startup. A response is never left permanently presented as in progress without
@@ -536,6 +602,8 @@ Evidence: `OpenAgents.Conversations.recover_interrupted_turns/0`, the
 `OpenAgents.TurnRecovery` application child, and startup-recovery test.
 
 ### TURN-005 — Tool continuations are serial, bounded, and commit-first
+
+Status: Current
 
 One turn may request a bounded number of tool calls and provider continuations
 (sixteen of each today). Calls execute one at a time; parallel calls fail the
@@ -553,6 +621,8 @@ Evidence: `OpenAgents.Turns.TurnServer`, `OpenAgents.Providers.OpenAI.request_pa
 
 ### PROVENANCE-001 — Every new inference has an immutable receipt
 
+Status: Current
+
 Before provider work starts, OpenAgents durably captures the exact model, persona,
 role, instruction digest, canonical input digest, optional runtime artifact
 identities, and first provider step. Identity fields never change; terminal
@@ -564,6 +634,8 @@ Evidence: `OpenAgents.Conversations.begin_inference/4`, PostgreSQL provenance
 triggers, `OpenAgents.Provenance.Canonical`, and `OpenAgents.TurnProvenanceTest`.
 
 ### PROVIDER-001 — Model providers are replaceable
+
+Status: Current
 
 Conversation and web code depend on `OpenAgents.Providers.Provider`, not OpenAI
 event shapes. Adapters emit typed OpenAgents-domain lifecycle, text, tool-call,
@@ -580,6 +652,8 @@ Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
 
 ### TOOL-001 — A turn uses one immutable tool catalog
 
+Status: Current
+
 The registry validates configured tool specifications at boot. Before provider
 work, each turn captures one catalog snapshot and writes its canonical digest
 to the immutable receipt. Every call must match the exact tool name and version
@@ -589,6 +663,8 @@ Evidence: `OpenAgents.Tools.Registry`, `OpenAgents.Tools.Snapshot`,
 `OpenAgents.Turns.TurnServer`, and `OpenAgents.Tools.RegistryAndRunnerTest`.
 
 ### COLLECTIVE-001 — Private material crosses scope only through exact consent
+
+Status: Current
 
 A collective candidate can be created only in the same transaction as an active
 `collective_contribution` receipt from the owning person. The receipt binds the
@@ -614,6 +690,8 @@ the consent, isolation, raw-copy, and withdrawal cases in `OpenAgents.Collective
 
 ### COLLECTIVE-002 — Generalization is bounded, content-free, and reproducible
 
+Status: Current
+
 Only an authenticated privacy reviewer in the candidate owner's scope can run
 generalization or inspect opaque lineage. The versioned fixed-vocabulary
 generalizer recognizes a bounded supported signal and emits one admitted schema
@@ -636,6 +714,8 @@ constraints/triggers, and adversarial schema, reproducibility, lineage, and leak
 scans in `OpenAgents.CollectiveGeneralizerTest`.
 
 ### COLLECTIVE-003 — Publication requires independent evidence and operator authority
+
+Status: Current
 
 A generalized candidate reaches the cross-user collective catalog only when its
 contribution consent remains active, its privacy generalizer is bound to an
@@ -672,6 +752,8 @@ guards, and `OpenAgents.CollectivePublicationTest`.
 
 ### COMPENSATION-001 — Attribution accounting never creates payout authority
 
+Status: Current
+
 Technical invocation cost, contributor attribution, compensation eligibility,
 and payment are distinct facts. An event is compensation-eligible only when an
 operator-admitted policy with `payout_authority: false` binds an exact immutable
@@ -696,11 +778,13 @@ results, conversation content, user identity, payment instructions, custody, or
 a payout operation.
 
 Evidence: `OpenAgents.Compensation`, its seven typed receipt schemas and database
-constraints, `docs/COMPENSATION_ACCOUNTING.md`, and duplicate, revocation,
+constraints, `test/openagents/compensation_test.exs`, and duplicate, revocation,
 allocation, adjustment, reconciliation, privacy, and no-payout cases in
 `OpenAgents.CompensationTest`.
 
 ### MODULE-001 — Every invocation pins one immutable admitted module
+
+Status: Current
 
 The captured turn registry contains provider-neutral module artifacts whose
 canonical digest covers typed input/output, lifecycle state, side-effect and
@@ -727,6 +811,8 @@ invocation reconciliation tests in `OpenAgents.ToolStepPersistenceTest`.
 
 ### MODULE-002 — Discovery and lifecycle never grant model authority
 
+Status: Current
+
 The model-facing discovery tool receives the exact registry already captured by
 its turn and returns at most twenty bounded public metadata references. It cannot
 register a module, reveal executable/provider schemas or private configuration,
@@ -748,6 +834,8 @@ Evidence: `OpenAgents.Modules.Discovery`, `OpenAgents.Tools.ModuleDiscover`,
 database trigger, and the discovery/lifecycle tests.
 
 ### MODULE-003 — Routing proposals cannot weaken explicit policy
+
+Status: Current
 
 Module routing receives a captured registry, a versioned/digested host policy,
 an intent digest, required capability/effect/data scope, and application-created
@@ -771,6 +859,8 @@ route-receipt trigger, `OpenAgents.Turns.TurnServer`, and router/tool-loop tests
 
 ### MODULE-004 — Every capability surface preserves the same authority boundary
 
+Status: Current
+
 Every route and invocation names exactly one admitted surface from `text`,
 `voice`, `search`, `computer`, `repository`, `mcp`, or `agent`. The selected
 artifact must admit that surface, kind, and effect; revalidation refuses a
@@ -788,10 +878,12 @@ its proposals pass ordinary revalidation. Missing executors fail honestly.
 
 Evidence: `OpenAgents.Modules.SurfacePolicy`, the `surface` field on module route
 decisions/receipts, `OpenAgents.Tools.Registry.prompt_catalog/1`,
-`OpenAgents.Tools.Runner`, `docs/MODULE_SURFACES.md`, and the surface, catalog,
+`OpenAgents.Tools.Runner`, `test/openagents/surface_eval_test.exs`, and the surface, catalog,
 approval, receipt, voice-interruption, and degradation tests.
 
 ### TOOL-002 — Model requests never widen host authority
+
+Status: Current
 
 Tool name, arguments, recalled text, and prompt content grant no scope or
 authority. The runner checks the application-created execution context against
@@ -806,6 +898,8 @@ authority, schema, and side-effect runner tests.
 
 ### TOOL-003 — Tool outcomes are durable before provider continuation
 
+Status: Current
+
 Every provider call ID maps to one ordered immutable request row. A worker must
 atomically claim `requested -> running`; duplicate requests return the existing
 row and duplicate claims cannot execute it again. Provider continuation output
@@ -818,6 +912,8 @@ transition trigger, `OpenAgents.Conversations.tool_continuation_output/1`, and
 `OpenAgents.ToolStepPersistenceTest`.
 
 ### TOOL-004 — Every outcome identifies the actual executor
+
+Status: Current
 
 Every success, failure, refusal, cancellation, timeout, or unavailable result
 is a bounded `openagents.tool_outcome.v1` envelope naming the captured module version
@@ -835,7 +931,9 @@ Evidence: `OpenAgents.Tools.Tool`, `OpenAgents.Tools.ExecutionResult`,
 `OpenAgents.Tools.Runner`, `OpenAgents.Conversations.ToolStep`, the invocation-ledger
 database constraints, normalized-outcome tests, and executor-disclosure UI tests.
 
-### DEGRADE-001 — Tool degradation is explicit and deterministic
+### DEGRADE-002 — Tool degradation is explicit and deterministic
+
+Status: Current
 
 Unknown versions, invalid schemas or arguments, scope/authority refusal,
 unsupported effects, cancellation, timeout, crashes, and oversized/invalid
@@ -855,6 +953,8 @@ degradation tests in `OpenAgents.Tools.ConversationRecallToolsTest`.
 ## Delegated work
 
 ### WORK-001 — Delegated jobs are durable, budgeted, governed, and never die silently
+
+Status: Current
 
 A `deep_work.v1` call is only delegation, never execution: it starts one
 durable `work_jobs` row scoped to the caller's conversation and owner and
@@ -897,6 +997,8 @@ Evidence: `OpenAgents.Work`, `OpenAgents.Work.Job`, `OpenAgents.Work.JobStep`,
 
 ### SELF-EDIT-001 — Every behavior change is anchored to a pushed commit (2026-08-19)
 
+Status: Current
+
 OpenAgents may edit her own source only through governed repository tools acting
 on a per-job clone of her own forge, and nothing she writes becomes running
 behavior except through the receipted pipeline. Concretely:
@@ -923,12 +1025,15 @@ behavior except through the receipted pipeline. Concretely:
 
 Evidence: `OpenAgents.Tools.Repository` (clone confinement, branch discipline,
 typed refusals), `OpenAgents.Work.Coding`, `OpenAgents.Forge.Pushes` /
-`OpenAgents.Forge.Targets` / `OpenAgents.Forge.HotLoader` receipts, ADMIN-001, and
-`OpenAgents.Tools.RepositoryTest` / `OpenAgents.CodingJobTest`.
+`OpenAgents.Forge.Targets` / `OpenAgents.Forge.HotLoader` receipts, ADMIN-001,
+`OpenAgents.CodingJobTest`, and the repository tool tests in
+`test/openagents/tools/repository_mutation_tools_test.exs`.
 
 ## Interface and release
 
 ### VOICE-001 — Spoken identity is admitted before media
+
+Status: Current
 
 Standalone OpenAgents's first voice artifact is `openagents.voice.openai.marin.v1` using
 native OpenAI Realtime `gpt-realtime-2.1` at low reasoning effort. It is a
@@ -939,9 +1044,11 @@ Leda cascade, or built-in replacement requires a reviewed artifact revision
 and regression evidence.
 
 Evidence: `OpenAgents.Voice.Config`,
-`docs/voice/OPENAI_REALTIME_DECISION.md`, and `OpenAgents.Voice.ConfigTest`.
+`test/openagents/voice/config_test.exs`, and `OpenAgents.Voice.ConfigTest`.
 
 ### VOICE-002 — Browser media admission cannot acquire server authority
+
+Status: Current
 
 Voice is default-disabled. When enabled, an active authenticated user may send
 only a bounded SDP offer through the same-origin, CSRF-protected endpoint.
@@ -958,6 +1065,8 @@ Evidence: `OpenAgentsWeb.VoiceCallController`,
 
 ### VOICE-003 — Durable voice history is generation-fenced
 
+Status: Current
+
 PostgreSQL owns every admitted voice generation and permits at most one active
 generation per conversation. Provider events, response receipts, and
 transcript items repeat the admitted generation; both runtime matching and
@@ -972,10 +1081,12 @@ successful resume or transcript.
 
 Evidence: `OpenAgents.Voice`, the `create_voice_runtime` migration,
 `OpenAgents.VoiceSessions.SessionServer`, `OpenAgents.VoiceRecovery`,
-`docs/voice/VOICE_RUNTIME.md`, `OpenAgents.VoiceTest`, and
+`test/openagents/voice_sessions_test.exs`, `OpenAgents.VoiceTest`, and
 `OpenAgents.VoiceSessionsTest`.
 
 ### VOICE-004 — Only bounded provider-neutral voice evidence becomes durable
+
+Status: Current
 
 OpenAI wire events are decoded behind the provider adapter. Audio deltas,
 partial transcript deltas, credentials, SDP, provider error text, and unbounded
@@ -996,6 +1107,8 @@ Evidence: `OpenAgents.Voice.ProviderEvent`,
 
 ### VOICE-005 — Microphone capture is explicit, fenced, visible, and finite
 
+Status: Current
+
 Only a direct `START VOICE` action may request microphone access. New tracks
 begin disabled and may transmit only while the browser peer and control channel
 are open, playback is usable, the user has not muted, and LiveView projects a
@@ -1015,9 +1128,11 @@ such claim anywhere.
 Evidence: `assets/js/voice_controller.js`, `assets/js/voice_state.mjs`,
 `assets/js/voice_recording.mjs`, their Node tests, the disclosure tests in
 `OpenAgentsWeb.ChatLiveTest` and `OpenAgentsWeb.DataControllerTest`, and
-`docs/voice/BROWSER_TRANSPORT.md`.
+`assets/test/voice_state_test.mjs`.
 
 ### VOICE-006 — Voice controls project server truth and preserve typed OpenAgents
+
+Status: Current
 
 Browser peer events cannot claim a durable listening, responding,
 interrupted, ended, or failed state. The visible lifecycle is derived from the
@@ -1028,9 +1143,11 @@ voice generation first, so two OpenAgents responses cannot run in parallel. Voic
 failure leaves the typed conversation intact and available.
 
 Evidence: `OpenAgentsWeb.ChatLive`, `OpenAgentsWeb.VoiceCallController`,
-`OpenAgents.VoiceSessions`, their tests, and `docs/voice/BROWSER_TRANSPORT.md`.
+`OpenAgents.VoiceSessions`, their tests, and `assets/test/voice_state_test.mjs`.
 
 ### VOICE-007 — Every live response freezes one governed OpenAgents context
+
+Status: Current
 
 Automatic provider response creation is disabled. A final user transcript first
 becomes a complete conversation message, then Phoenix captures the exact
@@ -1065,6 +1182,8 @@ compaction tests in `OpenAgents.VoiceSessionsTest`.
 
 ### VOICE-008 — Realtime function calls use the governed tool runner
 
+Status: Current
+
 Realtime exposes the same captured typed registry used by text turns. Model
 function arguments remain proposals: Phoenix validates call identity, schema,
 scope, authority, consent, generation, and module version through
@@ -1092,6 +1211,8 @@ Evidence: `OpenAgents.Tools.Registry.realtime_catalog/1`,
 
 ### VOICE-009 — Text and voice share one append-only conversation authority
 
+Status: Current
+
 Final user transcriptions and completed OpenAgents transcripts project into the
 same ordered `messages` table as text. Provider item identity makes retries
 idempotent. Interrupted OpenAgents speech is cancelled evidence and never enters
@@ -1107,9 +1228,11 @@ so text and voice cannot produce parallel OpenAgents answers.
 Evidence: `messages` voice provenance and transition constraints,
 `OpenAgents.Voice.persist_transcript/3`, `OpenAgents.Conversations.provider_messages/1`,
 `OpenAgentsWeb.ChatLive`, cross-modal chronology tests in `OpenAgents.VoiceTest`, and
-`priv/openagents/evals/voice/corpus.v1.json`.
+`priv/sarah/evals/voice/corpus.v1.json`.
 
 ### VOICE-010 — New voice admission is live-governed, globally bounded, and attributable
+
+Status: Current
 
 The deploy flag and append-only PostgreSQL release control are independent.
 Only the latest `open` control admits a new call; `draining` and `disabled`
@@ -1126,9 +1249,11 @@ lets the model wrap up, and a budget-ended session records and surfaces
 Evidence: `OpenAgents.Voice.ReleaseControl`, `OpenAgents.Voice.admit_session/2`,
 `voice_release_controls`, `OpenAgents.Voice.Usage`,
 `OpenAgents.Voice.ReleaseOperationsTest`, and
-`docs/voice/RELEASE_OPERATIONS.md`.
+`test/openagents/voice/release_operations_test.exs`.
 
 ### VOICE-011 — Voice operations are measurable without becoming a content sink
+
+Status: Current
 
 Operational telemetry is built from strict fields and may never contain
 credentials, browser/conversation identity, SDP, provider call identity, raw
@@ -1144,9 +1269,11 @@ health cannot substitute for media, quality, browser, load, or rollback proof.
 Evidence: `OpenAgents.Voice.OperationalTelemetry`,
 `OpenAgents.Voice.Operations.Report`, `OpenAgents.Voice.ClientEvent`,
 `OpenAgentsWeb.VoiceTelemetryController`, their redaction and controller tests, and
-`docs/voice/RELEASE_OPERATIONS.md`.
+`test/openagents/voice/release_operations_test.exs`.
 
 ### VOICE-012 — Call audio is bounded, sealed, fenced evidence — never authority
+
+Status: Current
 
 Voice media never reaches OpenAgents: it flows browser-to-OpenAI over WebRTC while
 the server holds only a lifecycle sideband. A recording is therefore what one
@@ -1178,19 +1305,20 @@ conversation rather than a failed one.
 Recording is a property of the voice surface, not a per-account setting. While
 it is enabled there is no opt-out flag and none may be added without changing
 this contract; the disclosure states the situation rather than offering a
-choice, and typed chat remains available and is never recorded. The account
-cannot play back its own audio either — the operator surface is the only place a
-recording is audible, and the account's export carries the recording's metadata
-rather than its sound.
+choice, and typed chat remains available and is never recorded. No current
+account or operator route returns stored audio; account export carries
+recording metadata rather than its sound.
 
 Evidence: `OpenAgents.Voice.Recordings`, `OpenAgents.Voice.Recording`,
 `OpenAgents.Voice.RecordingChunk`, `OpenAgents.Voice.RecordingVault`, the
 `create_voice_recordings` migration, `OpenAgentsWeb.VoiceRecordingController`,
 `assets/js/voice_recording.mjs`, `OpenAgents.Voice.RecordingsTest`,
 `OpenAgentsWeb.VoiceRecordingControllerTest`, `assets/test/voice_recording_test.mjs`,
-and `docs/voice/RECORDINGS.md`.
+and `test/openagents/voice/recordings_test.exs`.
 
 ### ADMIN-001 — One operator reads across accounts, and only reads
+
+Status: Current
 
 IDENTITY-002 confines every ordinary server path to the active user's own data.
 `/admin` is the second deliberate exception after LEADERBOARD-001, and it is
@@ -1219,20 +1347,22 @@ in the WAL-backed repository are promotable, so the surface cannot introduce
 code — it can only approve code that already survived the push path. It
 still cannot touch any account, conversation, message, ban, or product
 configuration; ADMIN-001's read-only rule continues to bind everything else
-on the operator surface, including the original `/admin` panel unchanged. What it may show is the fields of `OpenAgents.Admin.Call` and the
-audio itself: account display identity, call lifecycle, model, token total, and
-recording completeness. Transcript *content*, composed instructions, tool
-catalogs, provider call identity, and recall material stay out — cross-account
-listening was the decision, and cross-account reading of what was said is a
-separate one. Calls with no audio are listed with the reason rather than
-hidden, so the panel cannot present an incomplete history as a complete one.
+on the operator surface, including the original `/admin` panel unchanged. It
+may show the bounded fields of `OpenAgents.Admin.Call`: account display
+identity, call lifecycle, model, token total, transcript-item count, and
+recording completeness metadata. No routed controller returns recording audio,
+transcript content, composed instructions, tool catalogs, provider call
+identity, or recall material. Calls with no uploaded recording are listed with
+the reason rather than hidden, so the panel cannot present an incomplete
+history as a complete one.
 
-Evidence: `OpenAgents.Accounts.admin?/1`, `OpenAgentsWeb.UserAuth.require_admin_user/2`,
-the `:ensure_admin` mount hook, `OpenAgents.Admin`, `OpenAgents.Admin.Call`,
-`OpenAgentsWeb.AdminLive`, `OpenAgentsWeb.AdminRecordingController`, `OpenAgents.AdminTest`,
-`OpenAgentsWeb.AdminLiveTest`, and `OpenAgentsWeb.AdminRecordingControllerTest`.
+Evidence: `OpenAgents.Accounts.admin?/1`, `OpenAgents.Admin`,
+`OpenAgents.Admin.Call`, `OpenAgentsWeb.AdminLive`, `OpenAgents.AdminTest`, and
+`OpenAgentsWeb.AdminLiveTest`.
 
 ### DATA-004 — The authenticated user can export and delete OpenAgents product data
+
+Status: Current
 
 The server resolves export and deletion only from the active local user in the
 encrypted session and verifies that user owns the internal storage root.
@@ -1244,8 +1374,7 @@ audio included, through `voice_recordings`' cascade to the session. The export
 names each call's recording — status, container, size, duration claim, digest,
 and that it is encrypted at rest — without embedding the audio, because a JSON
 export is the wrong container for Opus and base64 in a text field would be
-worse. The account cannot play back its own audio: the operator surface is the
-only place a recording is audible. That is a decision rather than an omission —
+worse. No current product route returns stored audio to an account or operator;
 what exists is disclosed and exported as metadata, and deletion removes it.
 Detailed terminal voice
 operations purge automatically after 90 days while the minimal provenance stub
@@ -1262,16 +1391,21 @@ memberships, outbox events, cascade plans, and operation receipts are likewise
 removed in that transaction only after deletion of the visitor root.
 
 The minimal local account record (GitHub numeric ID, current login/avatar,
-access status, and authentication timestamps) is retained so deletion cannot
-erase a ban or bypass authorization. No GitHub access token is retained or
-exported. A later account-erasure contract must separately define moderation
-retention and re-enrollment behavior.
+access status, authentication timestamps, and currently the encrypted GitHub
+token ciphertext) is retained so deletion cannot erase a ban or bypass
+authorization. The token is never exported. Gate 6 must add and prove explicit
+disconnect/revocation and token-removal behavior; product-data deletion must
+not be described as removing the token until that implementation lands. A
+later account-erasure contract must separately define moderation retention and
+re-enrollment behavior.
 
 Evidence: `OpenAgents.DataRights`, `OpenAgentsWeb.DataController`,
 `OpenAgents.Voice.Retention`, database foreign keys and purge trigger,
 `OpenAgentsWeb.DataControllerTest`, and `OpenAgents.Voice.ReleaseOperationsTest`.
 
 ### UI-001 — Authentication gates the one-conversation interface
+
+Status: Current
 
 The public default route is an authentication boundary and cannot invoke
 OpenAgents. It exposes one GitHub login action and only bounded authentication error
@@ -1298,14 +1432,16 @@ only by the allowlisted operator under ADMIN-001, is read only, cannot mount or
 invoke OpenAgents, and holds no conversation. It adds nothing to the conversation
 interface: no link, no affordance, and no chrome, for operators and
 non-operators alike. Being an operator tool is not license for product
-chrome — the anti-references in `PRODUCT.md` still describe what the product
+chrome — the anti-references in `docs/architecture.md` still describe what the product
 does not become.
 
 Evidence: `OpenAgentsWeb.HomeControllerTest`, the `OpenAgentsWeb.ChatLiveTest` surface
 test, `OpenAgentsWeb.LeaderboardLiveTest`, `OpenAgentsWeb.AdminLiveTest`,
-`OpenAgentsWeb.Router` browser policy, `PRODUCT.md`, and `DESIGN.md`.
+`OpenAgentsWeb.Router` browser policy, `docs/architecture.md`, and `docs/component-library.md`.
 
 ### UI-002 — Tool activity is a bounded projection of PostgreSQL truth
+
+Status: Current
 
 The interface renders tool activity only from the durable, already-scrubbed
 step row: stable step ID, sequence, public capability label, status, the
@@ -1346,6 +1482,8 @@ Evidence: `OpenAgents.Conversations.list_tool_step_activity/1`,
 
 ### UI-003 — Product surfaces render only through the sanctioned component library
 
+Status: Proposed
+
 OpenAgents's interface is built from `OpenAgentsWeb.UI` components over Basecoat
 primitives vendored at a pinned tag and styled by the OpenAgents pack. Product
 surfaces do not author component-level CSS classes; hand-authored CSS is
@@ -1363,14 +1501,22 @@ identically announced players.
 The shared corner radius, the self-hosted Geist faces, the single dark theme,
 and the reserved semantic color meanings hold across every component. Depth is
 limited to the sanctioned lift, halo, and state-ring tokens.
-Adopting an additional Basecoat component requires a `DESIGN.md` change and an
+Adopting an additional Basecoat component requires a `docs/component-library.md` change and an
 explicit per-component import.
 
-Evidence: `assets/vendor/basecoat/README.md`, `assets/css/style-openagents.css`,
+This is the Gate 4 target. `OpenAgentsWeb.UI` and the OpenAgents style pack are
+implemented, but generated `OpenAgentsWeb.CoreComponents`, its legacy icon
+entry point, and a nonfunctional theme control still have catalogued callers.
+Until those callers are migrated or narrowly justified, this invariant cannot
+be used as proof that the product has one fully enforced component path.
+
+Evidence: `assets/vendor/basecoat/README.md`, `assets/css/openagents.css`,
 `priv/static/fonts`, `OpenAgentsWeb.UI`, `OpenAgentsWeb.UITest`,
-`OpenAgentsWeb.UIGalleryLiveTest`, and `priv/scripts/check_css_contract.exs`.
+`OpenAgentsWeb.UIGalleryLiveTest`, and `test/openagents_web/ui_test.exs`.
 
 ### LEADERBOARD-001 — The public board publishes one bounded projection
+
+Status: Current
 
 IDENTITY-002 confines every other server path to the active user's own data.
 The leaderboard is the single deliberate exception, and it is an exception to
@@ -1401,10 +1547,12 @@ unbounded anonymous viewers and a per-socket reread would turn one busy voice
 call into a database amplifier. A lost cache costs a recompute, never data.
 
 Evidence: `OpenAgents.Leaderboard`, `OpenAgents.Leaderboard.Entry`,
-`OpenAgents.Leaderboard.Server`, `docs/LEADERBOARD.md`, `OpenAgents.LeaderboardTest`,
+`OpenAgents.Leaderboard.Server`, `test/openagents/leaderboard_test.exs`, `OpenAgents.LeaderboardTest`,
 and `OpenAgentsWeb.LeaderboardLiveTest`.
 
 ### OBSERVABILITY-001 — Telemetry is bounded, content-free, and never authoritative
+
+Status: Current
 
 Immutable domain receipts remain the authority; operational telemetry is only a
 lossy health projection, and versioned evaluation reports remain separate
@@ -1421,9 +1569,11 @@ checks block release; stuck work is an explicit warning requiring review.
 
 Evidence: `OpenAgents.Observability`, `OpenAgents.Observability.Readback`,
 `OpenAgents.Observability.ReleaseGate`, `OpenAgentsWeb.Telemetry`,
-`docs/OBSERVABILITY.md`, and `OpenAgents.ObservabilityTest`.
+`test/openagents/observability_test.exs`, and `OpenAgents.ObservabilityTest`.
 
 ### RELEASE-001 — Schema precedes traffic
+
+Status: Current
 
 The production image runs all pending Ecto migrations before starting the HTTP
 server. Health is successful only when PostgreSQL answers.
@@ -1433,24 +1583,28 @@ Evidence: Docker `CMD`, `OpenAgents.Release`, the `/status` route, and
 
 ### RELEASE-002 — Secrets remain runtime-only
 
+Status: Current
+
 Session, database, provider, and GitHub OAuth credentials enter through ignored
 local runtime configuration or Secret Manager and are absent from source, the
 Docker build context, and image build arguments. Staging mounts only staging
 GitHub secret names through a dedicated runtime identity; production values and
 its prepared identity are distinct and remain unmounted until production
 cutover. Missing or environment-mismatched GitHub configuration fails startup
-without printing any credential value. Reserved GitHub token-encryption keys
-are not mounted while the runtime discards tokens after identity projection. The Cloud Logging
-default sink excludes only OpenAgents OAuth callback request entries so the platform
-cannot persist authorization-code or state query values; application and audit
-logging remain enabled.
+without printing any credential value. The GitHub token-encryption key is
+runtime-only because the application retains delegated tokens as encrypted
+server-side ciphertext. The Cloud Logging default sink excludes only OpenAgents
+OAuth callback request entries so the platform cannot persist authorization-code
+or state query values; application and audit logging remain enabled.
 
 Evidence: `OpenAgents.GitHubOAuth.RuntimeConfig`,
 `OpenAgents.GitHubOAuth.RuntimeConfigTest`, `config/runtime.exs`, `.gitignore`,
 `.dockerignore`, the `openagents-oauth-callback-requests` logging exclusion, and
-`docs/DEPLOY.md`.
+`ops/ci/release-smoke.sh`.
 
 ### RELEASE-003 — Every published hostname can establish LiveView
+
+Status: Current
 
 Production accepts the primary `PHX_HOST` plus explicitly configured HTTPS
 aliases for Phoenix origin checks. Invalid, insecure, or path-bearing origins
@@ -1461,21 +1615,28 @@ production WebSocket read-back.
 
 ### RELEASE-004 — CI runs on owned infrastructure only, and gates every release
 
-No hosted CI, ever: no GitHub Actions workflows (`.github/workflows/`), no
-GitHub-hosted or third-party runners, no repo automation, secrets, or
-scheduling handed to external CI compute (owner restatement 2026-07-25; same
-invariant as `openagents/INVARIANTS.md` "No GitHub-Hosted CI / Cloud Actions"
-and `AGENTS.md` "No hosted CI"). All checks run on owned machines: manually
-(`mix precommit`, `ops/ci/gate.sh`), through standard git hooks
-(`.githooks/pre-push`), or inside owned deploy tooling. The full matrix — unit
-suite, distributed cluster-chaos suite, relup drill, version-chain drill — must
-PASS for the exact commit being shipped before a fleet release;
-`ops/fleet/rolling-deploy.sh` refuses to roll without that receipt.
+Status: Proposed
 
-Evidence: `ops/ci/gate.sh`, `.githooks/pre-push`, the receipt check in
-`ops/fleet/rolling-deploy.sh`, and the absence of `.github/workflows/`.
+The target release gate permits no hosted CI: no GitHub Actions workflows, no
+GitHub-hosted or third-party runners, and no repository automation, secrets, or
+scheduling handed to external CI compute. All checks run on owned machines.
+The full matrix must bind unit, browser, distributed cluster, coverage,
+release, relup, version-chain, failure, and staging evidence to the exact
+candidate SHA, and every deploy command must refuse a stale or absent receipt.
+
+This complete deploy refusal is proposed, not implemented. The repository
+currently has an exact-SHA baseline receipt, merged coverage, release smoke,
+and relup proof primitives, but Gate 12 must compose them into the final owned
+release gate and bind every deployment entry point to its receipt.
+
+Current progress evidence: `ops/ci/baseline.sh`, `ops/ci/coverage.sh`,
+`ops/ci/release-smoke.sh`, `ops/relup-proof/run.sh`,
+`ops/relup-proof/version-chain.sh`, and
+`ops/relup-proof/kill-during-install.sh`.
 
 ### STATUS-001 — The status page publishes one bounded, content-free projection
+
+Status: Current
 
 The public `/status` page and `/api/status` publish exactly one projection
 (`OpenAgents.NetworkStatus`, schema-versioned): cluster membership and quorum,
@@ -1499,6 +1660,8 @@ Evidence: `OpenAgents.NetworkStatus`, `OpenAgentsWeb.NetworkStatusLive`,
 `OpenAgentsWeb.NetworkStatusLiveTest`.
 
 ### TRANSPARENCY-001 — Public transparency surfaces publish per-repo leveled projections
+
+Status: Current
 
 The public transparency surfaces — `/changelog`, `/api/changelog`, and the
 forge web UI (`/<owner>/<repo>`, `/<owner>/<repo>/commit/:sha`,
@@ -1524,7 +1687,7 @@ a 404, because publishing one document must never become a window into
 every past revision of that file, or into the repository's history. Adding
 a path to that allowlist is a deliberate publication decision, and
 operator documentation (runtime configuration, deployment mechanics,
-operator identifiers) stays off it — `docs/OPERATIONS.md` is never
+operator identifiers) stays off it — `docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations.md` is never
 published.
 
 Bounds that hold at every level: no secrets or credentials beyond what the
@@ -1553,3 +1716,85 @@ Evidence: `OpenAgents.Forge.Visibility`, `OpenAgents.Forge.Browse`, `OpenAgents.
 `OpenAgents.Changelog.Entry`, `OpenAgentsWeb.ChangelogLive`, `OpenAgentsWeb.CodeRepoLive`,
 `OpenAgentsWeb.CodeCommitLive`, `OpenAgentsWeb.CodeBlobLive`,
 `OpenAgentsWeb.ChangelogController`, and their tests.
+
+## Executable proof index
+
+This index is part of the ledger. Every `Current` invariant has at least one
+repository-owned executable proof. The documentation check requires the ID set
+and every file path below to remain valid. A shared test can prove more than one
+contract; the invariant prose above defines the assertion, not the filename.
+
+| Invariant | Executable proof |
+| --- | --- |
+| CANON-001 | `test/openagents/persona/source_manifest_test.exs` |
+| PERSONA-001 | `test/openagents/persona_test.exs` |
+| PERSONA-002 | `test/openagents/context/composer_test.exs`, `test/openagents/roles_test.exs` |
+| PERSONA-003 | `test/openagents/persona/evaluation_test.exs` |
+| BLUEPRINT-001 | `test/openagents/blueprint_test.exs` |
+| PROGRAM-001 | `test/openagents/program_artifacts_test.exs` |
+| DEGRADE-001 | `test/openagents/program_artifacts_test.exs`, `test/openagents/turn_provenance_test.exs` |
+| PROGRAM-002 | `test/openagents/shadow_programs_test.exs` |
+| PROGRAM-003 | `test/openagents/program_lifecycle_test.exs` |
+| IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs` |
+| IDENTITY-002 | `test/openagents_web/auth_gate_test.exs` |
+| IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
+| DATA-001 | `test/openagents/conversations_test.exs` |
+| DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
+| DATA-003 | `test/openagents/conversations_test.exs` |
+| MEMORY-001 | `test/openagents/memory/lexical_recall_test.exs` |
+| MEMORY-002 | `test/openagents/memory/evidence_test.exs`, `test/openagents/turn_memory_evidence_journeys_test.exs` |
+| MEMORY-003 | `test/openagents/profile_memory_test.exs` |
+| MEMORY-004 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
+| MEMORY-005 | `test/openagents/tools/profile_memory_tools_test.exs` |
+| MEMORY-006 | `test/openagents/semantic_recall_test.exs` |
+| MEMORY-007 | `test/openagents/preferences_test.exs` |
+| MEMORY-008 | `test/openagents/experience_memory_test.exs` |
+| MEMORY-009 | `test/openagents/graph_memory_test.exs` |
+| PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs` |
+| TURN-001 | `test/openagents/conversations_test.exs` |
+| TURN-002 | `test/openagents/conversations_test.exs` |
+| TURN-003 | `test/openagents_web/live/chat_live_test.exs` |
+| TURN-004 | `test/openagents/conversations_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
+| TURN-005 | `test/openagents/turn_tool_loop_test.exs` |
+| PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
+| PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs` |
+| TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |
+| COLLECTIVE-001 | `test/openagents/collective_test.exs` |
+| COLLECTIVE-002 | `test/openagents/collective_generalizer_test.exs` |
+| COLLECTIVE-003 | `test/openagents/collective_publication_test.exs` |
+| COMPENSATION-001 | `test/openagents/compensation_test.exs` |
+| MODULE-001 | `test/openagents/modules/registry_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
+| MODULE-002 | `test/openagents/modules/discovery_test.exs`, `test/openagents/modules/lifecycle_test.exs` |
+| MODULE-003 | `test/openagents/modules/router_test.exs`, `test/openagents/turn_tool_loop_test.exs` |
+| MODULE-004 | `test/openagents/surface_eval_test.exs` |
+| TOOL-002 | `test/openagents/tools/registry_and_runner_test.exs` |
+| TOOL-003 | `test/openagents/tool_step_persistence_test.exs` |
+| TOOL-004 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents_web/tool_activity_test.exs` |
+| DEGRADE-002 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
+| WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
+| SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
+| VOICE-001 | `test/openagents/voice/config_test.exs` |
+| VOICE-002 | `test/openagents_web/controllers/voice_call_controller_test.exs` |
+| VOICE-003 | `test/openagents/voice_test.exs`, `test/openagents/voice_sessions_test.exs` |
+| VOICE-004 | `test/openagents/voice/open_ai/event_decoder_test.exs`, `test/openagents/voice_test.exs` |
+| VOICE-005 | `assets/test/voice_state_test.mjs`, `assets/test/voice_recording_test.mjs` |
+| VOICE-006 | `test/openagents/voice_sessions_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
+| VOICE-007 | `test/openagents/voice_sessions_test.exs` |
+| VOICE-008 | `test/openagents/voice_sessions_test.exs`, `test/openagents/voice_test.exs` |
+| VOICE-009 | `test/openagents/voice_test.exs` |
+| VOICE-010 | `test/openagents/voice/release_operations_test.exs`, `test/openagents/voice/usage_test.exs` |
+| VOICE-011 | `test/openagents/voice/release_operations_test.exs`, `test/openagents_web/controllers/voice_telemetry_controller_test.exs` |
+| VOICE-012 | `test/openagents/voice/recordings_test.exs`, `test/openagents_web/controllers/voice_recording_controller_test.exs` |
+| ADMIN-001 | `test/openagents/admin_test.exs`, `test/openagents_web/live/admin_live_test.exs`, `test/openagents_web/live/admin_forge_live_test.exs` |
+| DATA-004 | `test/openagents_web/controllers/data_controller_test.exs`, `test/openagents/data_rights/atif_export_test.exs` |
+| UI-001 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
+| UI-002 | `test/openagents_web/tool_activity_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
+| UI-003 | `test/openagents_web/ui_test.exs`, `test/openagents_web/component_catalog_test.exs` |
+| LEADERBOARD-001 | `test/openagents/leaderboard_test.exs`, `test/openagents_web/live/leaderboard_live_test.exs` |
+| OBSERVABILITY-001 | `test/openagents/observability_test.exs` |
+| RELEASE-001 | `ops/ci/release-smoke.sh`, `test/openagents_web/controllers/health_controller_test.exs` |
+| RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
+| RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
+| RELEASE-004 | Proposed; current primitives are listed in its entry above. |
+| STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
+| TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |

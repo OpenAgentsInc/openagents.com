@@ -1,142 +1,86 @@
 # Component library
 
-Date: 2026-08-19
+Date: 2026-08-20
 
-This is the master list of reusable HEEx components for the Agent Forge UI.
+Status: Current inventory; consolidation continues in hardening Gate 4
 
-- **Shipped** components appear on `/components`.
-- **Planned** components come from the issues and projects UI roadmap
-  (`docs/issues-projects-ui-roadmap.md`) and the GitHub-shaped harvest
-  work in `sarah` (`docs/audits/2026-08-19-github-forge-atomic-components.md`,
-  `docs/audits/2026-08-19-github-clone-harvest-candidates.md`).
+The public catalog at `/components` is the executable inventory of reusable
+HEEx components. `OpenAgentsWeb.ComponentCatalog` supplies its navigation,
+`OpenAgentsWeb.ComponentsLive` renders every demo, and
+`test/openagents_web/component_catalog_test.exs` fails when a public component
+is absent from the catalog.
 
-Build new forge-only molecules and organisms in a dedicated module such as
-`OpenAgentsWeb.Code` or `OpenAgentsWeb.Issues`. Keep generic atoms in
-`OpenAgentsWeb.CoreComponents`. Add every new component to `/components`
-when it ships.
+## Sanctioned system
 
-Clone root: `~/work/projects/repos/githubclones/`.
+New product interface work starts in `OpenAgentsWeb.UI`. Its components wrap
+the pinned Basecoat styles imported by `assets/css/app.css` and receive product
+identity from `assets/css/openagents.css`.
 
-## What exists today
+The current `OpenAgentsWeb.UI` inventory is:
 
-These are the reusable function components on `origin/main`. The catalog
-at `/components` renders each one.
+| Component | Purpose |
+| --- | --- |
+| `button/1`, `text_button/1` | Boxed, link, chip, destructive, and primary actions |
+| `input/1`, `textarea/1`, `label/1`, `field/1` | Form controls and labelled groups |
+| `alert/1`, `badge/1`, `status_indicator/1` | Explicit feedback and semantic state |
+| `card/1`, `frame/1` | Bounded content and decorative framing |
+| `avatar/1`, `item/1`, `event_header/1` | Identity and activity rows |
+| `empty/1`, `kbd/1`, `menu/1` | Empty states, key hints, and native-popover menus |
+| `audio_player/1` | Accessible native audio control in the product frame |
+| `icon/1` | Glyphs from the vendored Apps SDK icon set |
 
-| Layer | Component | Module | Notes |
-| --- | --- | --- | --- |
-| Atom | `button/1` | `CoreComponents` | Soft default and `variant="primary"`; supports `navigate` |
-| Atom | `input/1` | `CoreComponents` | Text, checkbox, select, textarea, hidden |
-| Atom | `icon/1` | `CoreComponents` | Heroicons via `hero-*` class names |
-| Atom | `flash/1` | `CoreComponents` | Info and error toasts |
-| Molecule | `header/1` | `CoreComponents` | Title, subtitle, actions |
-| Molecule | `list/1` | `CoreComponents` | Titled description rows |
-| Organism | `table/1` | `CoreComponents` | Zebra table; supports LiveView streams |
-| Organism | `flash_group/1` | `Layouts` | Wraps page flashes; do not call outside layouts |
-| Organism | `app/1` | `Layouts` | Page chrome |
-| Atom | `theme_toggle/1` | `Layouts` | System, light, dark |
-| Organism | `repo_header/1` | `Components` | Owner lockup and repository subnavigation tabs |
+`OpenAgentsWeb.Layouts` owns `app/1`, `flash_group/1`, `command_bar/1`,
+`account_control/1`, and the currently catalogued theme control. Product
+templates begin with `Layouts.app` and never render `flash_group/1` directly.
 
-Phoenix also provides `<.form>`, `<.link>`, and `<.inputs_for>`. Use those
-instead of hand-rolled forms.
+## Transitional components
 
-## Planned atoms
+`OpenAgentsWeb.CoreComponents` still contains the Phoenix-generated `button`,
+`input`, `header`, `table`, `list`, `icon`, and `flash` components. The catalog
+shows these separately because their names overlap the OpenAgents primitives.
+They are compatibility surface, not a second design system. Gate 4 must either
+migrate each remaining caller to `OpenAgentsWeb.UI` or document a narrow reason
+to retain the generated helper.
 
-Generic or tiny forge-only spans. Reuse `button`, `input`, and `icon`
-where they already fit.
+`OpenAgentsWeb.Components.RepoHeader.repo_header/1` is the one catalogued
+forge-specific component. Surface-specific components can live in a focused
+module when they encode real domain composition rather than a generic control.
 
-| Build | Role | Harvest |
-| --- | --- | --- |
-| `badge/1` | Visibility, issue state, label color | DaisyUI `badge`; Primer `primer-view_components/app/components/primer/beta/label.rb` |
-| `avatar/1` | Owner and author faces | DaisyUI `avatar`; `gh-next/src/components/avatar.tsx` |
-| `sha/1` | Short commit id that links to `/commit/:sha` | `git.limo/apps/gitgud_web/lib/gitgud_web/live/commit_diff_live.html.heex` |
-| `ref_name/1` | Branch or tag pill | `primer-css/src/branch-name/branch-name.scss` |
-| `counter/1` | Count beside a nav word | `primer-view_components/app/components/primer/beta/counter.rb` |
-| `relative_time/1` | "3 hours ago" with a `datetime` | `primer-view_components/app/components/primer/beta/relative_time.rb` |
-| `clipboard_copy/1` | Copy a SHA or clone URL | `primer-view_components/app/components/primer/beta/clipboard_copy.rb` |
-| `truncate/1` | Single-line commit or issue title | `primer-view_components/app/components/primer/beta/truncate.rb` |
-| `empty/1` | Empty issues, compare, or repo | DaisyUI empty pattern; `CoreComponents` has no empty yet |
-| `kbd/1` | Keyboard hints | DaisyUI `kbd` |
+## Extension rules
 
-## Planned molecules
+1. Search `OpenAgentsWeb.UI` and `/components` before creating a component.
+2. Extend `OpenAgentsWeb.UI` for a reusable primitive; keep feature composition
+   in a feature module.
+3. Use an individually imported Basecoat component stylesheet only when the
+   component needs it. Never import the aggregate Basecoat bundles.
+4. Put OpenAgents-owned component styles in `assets/css/openagents.css`; do not
+   patch `assets/vendor/basecoat/`.
+5. Use `OpenAgentsWeb.UI.icon/1` and the vendored icon set. Do not add an icon
+   font, another glyph library, or handwritten SVG in a template.
+6. Give every icon-only action an accessible name. Decorative icons beside text
+   remain hidden from accessibility APIs.
+7. Add the component to `OpenAgentsWeb.ComponentCatalog`, add its demo to
+   `OpenAgentsWeb.ComponentsLive`, and add behavior/accessibility tests in the
+   same change.
+8. Keep forms on `Phoenix.Component.to_form/2`; use LiveView streams for
+   collections and stable DOM IDs for testable controls.
 
-| Build | Role | Harvest |
-| --- | --- | --- |
-| `owner_lockup/1` | Avatar + `owner/repo` links | `gh-next/src/app/(app)/[user]/[repository]/page.tsx`; `gitea/templates/repo/header.tmpl` |
-| `path_breadcrumb/1` | Path prefixes that `patch` | `git.limo/apps/gitgud_web/lib/gitgud_web/live/tree_browser_live.html.heex`; `primer-view_components/app/components/primer/beta/breadcrumbs.html.erb` |
-| `clone_field/1` | Readonly clone URL + copy | `git.limo/.../tree_browser_live.html.heex` (`#clone-repo`); `gitea/templates/repo/clone_panel.tmpl` |
-| `branch_picker/1` | Current ref + menu of refs | `git.limo/.../branch_select_live.ex`; `gitea/templates/repo/branch_dropdown.tmpl` |
-| `file_row/1` | Name, last commit, age (commit may be nil) | `gitea/templates/repo/view_list.tmpl`; `git.limo/.../tree_browser_live.html.heex` |
-| `commit_row/1` | SHA, subject, author, time | `gitea/templates/repo/commits_table.tmpl` |
-| `issue_row/1` | State, title, labels, author, comments | `gh-next/src/components/issues/issue-row.tsx`; `gitea/templates/repo/issue/list.tmpl` |
-| `ref_row/1` | Branch or tag + SHA | `gitea/templates/repo/branch/list.tmpl` |
-| `underline_nav/1` | Repo tabs with an active underline | `primer-view_components/app/components/primer/alpha/underline_nav.html.erb`; `gitea/templates/repo/navbar.tmpl` |
-| `label_badge/1` | Colored issue label | `gh-next/src/components/label-badge.tsx`; `gitea/templates/repo/issue/labels/label_list.tmpl` |
-| `assignee_stack/1` | Avatar group with overflow | `gh-next/src/components/issues/issue-row-avatar-stack.tsx` |
-| `compare_ends/1` | Base picker + `...` + head picker | `gitea/templates/repo/diff/compare.tmpl` |
-| `diff_stat/1` | File count and `+n` / `−n` | `gitea/templates/repo/diff/stats.tmpl` |
-| `comment_form/1` | Markdown body + submit | `git.limo/.../comment_form_live.html.heex`; `gitea/templates/repo/issue/comment_tab.tmpl` |
+## Current catalog gaps
 
-## Planned organisms
+Issue, project, and code surfaces currently compose generic controls directly.
+Create new domain components only when repeated behavior justifies them. Likely
+candidates are issue rows, comment threads, label controls, project columns,
+repository breadcrumbs, file rows, commit rows, and bounded diff panels.
 
-| Build | Role | Harvest |
-| --- | --- | --- |
-| `repo_subnav/1` | Code, Issues, Pull requests, Projects, Settings | `gitea/templates/repo/navbar.tmpl`; `gitea/templates/repo/issue/navbar.tmpl` |
-| `issue_list/1` | Open/closed tabs, filters, streamed rows | `gh-next/src/components/issues/issue-list.tsx`; `gitea/templates/repo/issue/list.tmpl` |
-| `issue_detail/1` | Title, state, body, sidebar metadata | `gh-next/src/app/(app)/[user]/[repository]/issues/[number]/page.tsx`; `gitea/templates/repo/issue/view.tmpl` |
-| `comment_thread/1` | Chronological comments | `gitea/templates/repo/issue/view_content.tmpl`; `git.limo/.../issue_live.html.heex` |
-| `issue_form/1` | New and edit issue | `gh-next/src/components/issues/new-issue-form.tsx`; `gitea/templates/repo/issue/new_form.tmpl` |
-| `label_manager/1` | Create, edit, delete labels | `gitea/templates/repo/issue/labels/label_list.tmpl` |
-| `milestone_list/1` | Progress cards | `gitea/templates/repo/issue/milestones.tmpl` |
-| `project_board/1` | Columns of items (no drag-and-drop at first) | GitHub Projects V2 REST in `docs/github-api-issues-projects-assessment.md` |
-| `file_table/1` | Directory listing | `gitea/templates/repo/view_list.tmpl`; `git.limo/.../tree_browser_live.ex` |
-| `blob_panel/1` | File view + actions | `gitea/templates/repo/view_file.tmpl`; `git.limo/.../blob_viewer_live.ex` |
-| `readme_panel/1` | Rendered README | `git.limo/.../tree_browser_live.html.heex` README card |
-| `commit_list/1` | Bounded log | `gitea/templates/repo/commits.tmpl` |
-| `diff_viewer/1` | Unified hunks | `gitea/templates/repo/diff/box.tmpl`; `section_unified.tmpl` |
-| `compare_panel/1` | Compare ends + diff | `gitea/templates/repo/diff/compare.tmpl` |
+The Gate 4 consolidation also owns these known transitional issues:
 
-## Planned pages
+- Remove the generated component/icon path after its callers are migrated.
+- Enforce the repository's final two-tier icon policy in code and tests.
+- Remove the nonfunctional light/system theme choice if the shipped palette
+  remains dark-only.
+- Prove component variants and semantic colors in compiled CSS rather than by
+  class-name assertions alone.
 
-Mount these on GitHub-shaped paths. See
-`docs/issues-projects-ui-roadmap.md` and the sarah harvest audit.
-
-| Page | Path | First organisms |
-| --- | --- | --- |
-| Owner | `/:owner` | Repo cards |
-| Repo home | `/:owner/:repo` | `repo_header`, `file_table`, `readme_panel` |
-| Issues | `/:owner/:repo/issues` | `repo_header`, `issue_list` |
-| Issue | `/:owner/:repo/issues/:number` | `issue_detail`, `comment_thread` |
-| New issue | `/:owner/:repo/issues/new` | `issue_form` |
-| Labels | `/:owner/:repo/labels` | `label_manager` |
-| Milestones | `/:owner/:repo/milestones` | `milestone_list` |
-| Projects | `/:owner/:repo/projects` | `project_board` |
-| Tree | `/:owner/:repo/tree/:ref/*path` | `file_table` |
-| Blob | `/:owner/:repo/blob/:ref/*path` | `blob_panel` |
-| Commit | `/:owner/:repo/commit/:sha` | `diff_viewer` |
-| Compare | `/:owner/:repo/compare/:base...:head` | `compare_panel` |
-| Catalog | `/components` | This page |
-
-## Build order
-
-1. Atoms that issues need first: `badge`, `avatar`, `relative_time`,
-   `empty`, `label_badge`.
-2. Molecules: `owner_lockup`, `issue_row`, `underline_nav`,
-   `comment_form`.
-3. Organisms: `repo_header`, `repo_subnav`, `issue_list`,
-   `issue_detail`, `comment_thread`.
-4. Pages on `/:owner/:repo/issues` as in the UI roadmap.
-5. Code surfaces (`file_table`, `blob_panel`, `diff_viewer`) after the
-   tracker dogfoods.
-6. `/api/v3` stays the machine API from
-   `docs/github-api-issues-projects-assessment.md`. It is not a
-   component.
-
-Do not add Octicons, Primer CSS as a runtime, or a second button
-system. DaisyUI plus `CoreComponents` is the kit.
-
-## See also
-
-- `/components` — live catalog of shipped components
-- `docs/issues-projects-ui-roadmap.md` — page-level UI plan
-- `docs/issues-projects-work-plan.md` — API epics
-- `docs/github-api-issues-projects-assessment.md` — GitHub REST subset
+See [the UI roadmap](issues-projects-ui-roadmap.md),
+[ADR 0005](decisions/0005-use-basecoat-and-one-component-system.md), and the
+[hardening plan](2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).

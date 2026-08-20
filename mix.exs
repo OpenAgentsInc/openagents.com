@@ -115,6 +115,7 @@ defmodule OpenAgents.MixProject do
         "deps.unlock --unused",
         "format",
         "cmd ops/ci/reference-check.sh",
+        "cmd elixir ops/ci/docs-check.exs",
         "assets.test",
         "test --warnings-as-errors"
       ]

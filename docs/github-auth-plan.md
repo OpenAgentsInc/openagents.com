@@ -1,119 +1,92 @@
-# GitHub authentication plan
+# GitHub authentication and token lifecycle
 
-Date: 2026-08-19
+Date: 2026-08-20
 
-Source: `~/work/sarah` GitHub OAuth implementation and the current OpenAgents issue tracker UI.
+Status: Authentication implemented; token-lifecycle hardening pending Gate 6
 
-OpenAgents needs a real, server-side GitHub OAuth flow so that issue and project pages can authenticate the visitor as a real GitHub user. This plan ports the proven auth stack from `sarah`, adapts it to the OpenAgents namespace, and drives every step out with a failing test first.
+Decision: [ADR 0004](decisions/0004-retain-scoped-github-access-tokens.md)
 
-## Goal
+## Current contract
 
-A visitor can sign in with GitHub and then access the issue tracker at `/:owner/:repo/issues` and `/:owner/:repo/issues/new`. There are no seeded users, no placeholder owners, and no fake tokens. The issue tracker keeps its own data; GitHub is only used for login and identity.
+GitHub serves two distinct roles:
 
-## What we are copying from `sarah`
+1. OAuth establishes the local OpenAgents account identity from GitHub's
+   immutable numeric user ID.
+2. A retained access token authorizes server-side GitHub repository tools with
+   the user's delegated rights.
 
-These `sarah` modules are the reference implementation:
+The application currently implements the second model. The callback stores the
+access token as AES-256-GCM ciphertext in the local user row. It does not
+discard the token after reading the GitHub profile. Documentation and data
+rights must not claim otherwise.
 
-- `lib/sarah/accounts.ex`
-- `lib/sarah/accounts/oauth_attempt.ex`
-- `lib/sarah/accounts/token_vault.ex`
-- `lib/sarah/accounts/user.ex`
-- `lib/sarah/github.ex`
-- `lib/sarah/github_oauth.ex`
-- `lib/sarah/github_oauth/runtime_config.ex`
-- `lib/sarah_web/controllers/auth_controller.ex`
-- `lib/sarah_web/router.ex` auth routes and `UserAuth` hooks
+## Implemented flow
 
-## New modules and changes
+1. `POST /auth/github` creates a high-entropy state value, a PKCE S256
+   challenge, and a short-lived PostgreSQL OAuth-attempt row.
+2. The encrypted browser session carries only the attempt reference and PKCE
+   verifier while GitHub handles authorization.
+3. `GET /auth/github/callback` consumes the attempt exactly once, exchanges the
+   code server-side, and reads the GitHub `/user` projection server-side.
+4. `OpenAgents.Accounts` upserts the local account by numeric GitHub ID and
+   refreshes the mutable login, name, and avatar projection.
+5. `OpenAgents.Accounts.TokenVault` encrypts the access token with the configured
+   key before `github_token_ciphertext` is stored.
+6. The authenticated session contains only the local user ID. Repository tools
+   unseal the token server-side when an explicit GitHub operation needs it.
+7. `DELETE /logout` clears the browser session but intentionally does not
+   revoke the retained GitHub grant.
 
-### Domain and persistence
+The token must never enter LiveView assigns, HTML, JSON responses, logs,
+telemetry, receipts, exception messages, build output, or exported account
+data.
 
-- `OpenAgents.Accounts` — upsert user, fetch active user, store and retrieve the encrypted GitHub token.
-- `OpenAgents.Accounts.User` — Ecto schema for `users` with `github_id`, `github_login`, `github_name`, `github_avatar_url`, `status`, `last_authenticated_at`, and `github_token_ciphertext`.
-- `OpenAgents.Accounts.OAuthAttempt` — Ecto schema for `github_oauth_attempts` with `state_digest`, `expires_at`, and `consumed_at`.
-- `OpenAgents.Accounts.TokenVault` — AES-256-GCM seal and unseal for the GitHub access token.
-- `OpenAgents.GitHub` — read-only GitHub REST wrapper that uses the user's token for repository operations such as listing owned repos. The issue tracker does not pull issue, label, milestone, or project data from GitHub.
-- `OpenAgents.GitHubOAuth` — PKCE authorize URL, state/attempt handling, code exchange, and profile fetch.
-- `OpenAgents.GitHubOAuth.RuntimeConfig` — validate `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_REDIRECT_URI`.
+## Current configuration
 
-### Web interface
-
-- `OpenAgentsWeb.AuthController` — `POST /auth/github`, `GET /auth/github/callback`, and `DELETE /logout`.
-- `OpenAgentsWeb.UserAuth` — `fetch_current_user/2`, `require_authenticated/2`, `mount_current_user/4`, and `ensure_authenticated/4`.
-- `OpenAgentsWeb.Router` — add auth routes, a `:browser` pipeline `fetch_current_user` plug, an `:authenticated` pipeline, and a `live_session :authenticated` `on_mount` hook around the `/:owner/:repo` issue and project routes.
-- `lib/openagents_web/components/layouts.ex` — show a **Sign in with GitHub** button or the signed-in user's avatar and a **Log out** link in the navbar.
-- `lib/openagents_web/live/home_live.ex` — add a sign-in CTA when the visitor is not authenticated.
-- `lib/openagents_web/live/issue_new_live.ex` and other `/:owner/:repo` LiveViews — move inside the authenticated live session.
-
-### Configuration and migrations
-
-- `config/dev.exs`, `config/test.exs`, and `config/runtime.exs` — add `github_oauth` and `github_token_encryption_key` config.
-- `priv/repo/migrations/..._create_users.exs` and `..._create_github_oauth_attempts.exs`.
-
-## TDD steps and test files
-
-For each step, write the test first, run `mix test <file>` to confirm it fails, then make it pass. Run `mix precommit` before moving on.
-
-1. **User persistence**
-   - `test/openagents/accounts_test.exs`
-   - Test `upsert_github_user/1` inserts and updates a user by `github_id`.
-   - Test `get_active_user/1` returns `{:ok, _}` for active and `{:error, :banned}` for banned.
-   - Test `store_github_token/2` seals a token and `github_token/1` unseals it.
-
-2. **OAuth attempt table**
-   - `test/openagents/accounts/oauth_attempt_test.exs`
-   - Test `create_oauth_attempt/2` and `consume_oauth_attempt/2` succeed only for valid, unexpired, unconsumed attempts.
-
-3. **Token vault**
-   - `test/openagents/accounts/token_vault_test.exs`
-   - Test `seal/1` and `open/1` round-trip; test tampered ciphertext fails.
-
-4. **GitHubOAuth flow**
-   - `test/openagents/github_oauth_test.exs`
-   - Test `begin_authorization/0` returns a URL with `client_id`, `code_challenge`, and `scope=read:user repo`.
-   - Test `consume_attempt/2` validates state, verifier, and expiry.
-   - Test `exchange_and_fetch/2` using a mocked `Req.post/2` and `Req.get/2` to return an access token and a profile.
-
-5. **Auth controller**
-   - `test/openagents_web/auth_controller_test.exs`
-   - Test `POST /auth/github` redirects to `github.com/login/oauth/authorize` and sets a session attempt.
-   - Test a valid `GET /auth/github/callback` creates the user, stores the token, sets `user_id` in the session, and redirects to `/`.
-   - Test an invalid callback clears the session and redirects with an `auth_error`.
-   - Test `DELETE /logout` clears the session and redirects.
-
-6. **User auth plug and live hooks**
-   - `test/openagents_web/plugs/user_auth_test.exs`
-   - Test `fetch_current_user` assigns `current_user` from `user_id`.
-   - Test `require_authenticated` redirects when there is no user.
-   - Test `OpenAgentsWeb.UserAuth.ensure_authenticated/4` halts an unauthenticated live view.
-
-7. **Protected issue pages**
-   - `test/openagents_web/live/issue_new_live_test.exs`
-   - Test an unauthenticated `GET /OpenAgents/openagents/issues/new` redirects to `/auth/github`.
-   - Test an authenticated user with a stored token can visit `/:owner/:repo/issues/new`.
-
-## Implementation order
-
-1. Add `users` and `github_oauth_attempts` migrations and schemas.
-2. Port `OpenAgents.Accounts` and `OpenAgents.Accounts.TokenVault` with tests.
-3. Port `OpenAgents.GitHubOAuth` and `OpenAgents.GitHubOAuth.RuntimeConfig` with tests.
-4. Add `OpenAgentsWeb.AuthController` and the `/auth/github`, `/auth/github/callback`, and `/logout` routes.
-5. Add `OpenAgentsWeb.UserAuth` and the `:authenticated` pipeline, then wrap the `/:owner/:repo` LiveViews in an authenticated `live_session`.
-6. Update `HomeLive` and `Layouts.app` to show the sign-in or user state.
-
-## Configuration
-
-Add these environment variables before running the app:
+Runtime configuration requires:
 
 - `GITHUB_CLIENT_ID`
 - `GITHUB_CLIENT_SECRET`
-- `GITHUB_REDIRECT_URI` — must be `http://localhost:4000/auth/github/callback` in development or an HTTPS callback in production.
-- `GITHUB_TOKEN_ENCRYPTION_KEY` — a Base64-encoded 32-byte AES key.
+- `GITHUB_REDIRECT_URI`
+- `GITHUB_TOKEN_ENCRYPTION_KEY`, a Base64-encoded 32-byte key
 
-## Acceptance
+Production-mode validation requires an HTTPS callback with the configured
+environment host. Tests use deterministic local configuration and fake Req
+responses; they do not require a live GitHub credential.
 
-- `/` shows **Sign in with GitHub** when no session exists.
-- After signing in, the navbar shows the GitHub login and a **Log out** link.
-- Visiting `/:owner/:repo/issues/new` without a session redirects to `/auth/github`.
-- Visiting `/:owner/:repo/issues/new` with a session renders the new issue form.
-- `mix test` and `mix precommit` pass after each step.
+## Hardening required before staging
+
+Gate 6 owns the remaining lifecycle and disclosure work:
+
+- Request and document the minimum scopes needed by the enabled GitHub tools.
+- Show a clear user disclosure that delegated repository access is retained
+  encrypted after sign-in.
+- Add an explicit disconnect operation that deletes the local ciphertext and,
+  where GitHub supports it for this OAuth application, revokes the grant.
+- Define what account data deletion does to the retained token. The current
+  product-data deletion keeps the minimal local account row, so token removal
+  must be implemented and tested rather than inferred.
+- Support encryption-key rotation with a versioned envelope and a rehearsed
+  rewrap path.
+- Fail closed when the key is missing, malformed, or belongs to the wrong
+  environment, without printing token or key material.
+- Normalize revoked/expired token failures and require reauthorization without
+  exposing GitHub response bodies.
+- Add log and telemetry scans for token, code, state, verifier, and callback
+  query leakage.
+- Document the token's presence as metadata in export/delete disclosures
+  without exporting the credential itself.
+
+## Executable evidence
+
+- `test/openagents/github_oauth_test.exs`
+- `test/openagents/github_oauth/runtime_config_test.exs`
+- `test/openagents/accounts_test.exs`
+- `test/openagents/accounts/token_vault_test.exs`
+- `test/openagents/github_test.exs`
+- `test/openagents/tools/github_repo_tools_test.exs`
+- `test/openagents_web/auth_controller_test.exs`
+- `test/openagents_web/auth_gate_test.exs`
+
+The complete route-authority and secret-handling acceptance criteria remain in
+[the hardening plan](2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).

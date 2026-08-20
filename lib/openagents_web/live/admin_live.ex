@@ -1,6 +1,7 @@
 defmodule OpenAgentsWeb.AdminLive do
   @moduledoc """
-  The operator surface: every voice call, newest first, with its audio.
+  The operator surface: every voice call, newest first, with bounded recording
+  metadata.
 
   Read-only by construction. `OpenAgents.Admin` exposes no write, so nothing here can
   ban an account, alter a conversation, or change configuration
@@ -8,12 +9,11 @@ defmodule OpenAgentsWeb.AdminLive do
 
   Two presentation rules are deliberate:
 
-    * Calls with no audio are listed with the reason. A panel that hid them would
-      look like an empty history instead of an honest one — every call from before
-      recording shipped has none.
+    * Calls with no uploaded recording are listed with the reason. A panel that
+      hid them would look like an empty history instead of an honest one.
     * Transcript *content* never appears, only whether a transcript exists. The
-      operator is here to listen, and cross-account reading of what was said is a
-      separate decision from cross-account listening.
+      operator has no recording-download route either; cross-account content
+      access requires a separate decision and implementation.
   """
 
   use OpenAgentsWeb, :openagents_live_view
@@ -165,14 +165,7 @@ defmodule OpenAgentsWeb.AdminLive do
                     </div>
                   </dl>
 
-                  <.audio_player
-                    :if={Call.playable?(call)}
-                    id={"admin-audio-#{call.session_id}"}
-                    src={"/admin/recordings/#{call.recording.id}/audio"}
-                    label={"Call with @#{call.github_login} on #{format_timestamp(call.started_at)}"}
-                  />
-
-                  <p :if={!Call.playable?(call)} class="admin-absence">
+                  <p :if={is_nil(call.recording)} class="admin-absence">
                     {Call.absence_reason(call)}
                   </p>
                 </div>
@@ -208,8 +201,7 @@ defmodule OpenAgentsWeb.AdminLive do
   end
 
   # The panel is paged rather than streamed: an operator scanning recent calls
-  # wants a bounded page, and every row carries an audio element the browser will
-  # ask metadata for.
+  # wants a bounded page and the recording projection remains metadata-only.
   defp page_size, do: 25
 
   defp page_label(offset, calls, total) do

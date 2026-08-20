@@ -31,6 +31,7 @@ awk 'NF && $1 !~ /^#/' "$allowlist" >"$patterns"
 
 rg --line-number --no-heading --color never --ignore-case \
   --glob '!ops/ci/allowed-sarah-references.txt' \
+  --glob '!ops/ci/docs-check.exs' \
   --glob '!ops/ci/reference-check.sh' \
   'sarah|/var/lib/sarah|/tmp/sarah|pro\.openagents\.com|api\.openagents\.com' \
   AGENTS.md INVARIANTS.md README.md assets config docs lib ops test >"$matches" || true

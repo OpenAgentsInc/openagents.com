@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gate 0 complete, amended with measured findings
+Status: In progress; Gates 0–3 complete, amended with measured findings
 
 ## Outcome
 
@@ -298,8 +298,8 @@ accident.
 - Close or archive `docs/2026-08-19-gap-implementation-plan.md` after moving each
   unresolved item into the current hardening plan.
 - Update `docs/component-library.md` and
-  `docs/issues-projects-ui-roadmap.md` for Basecoat, `SarahUI`, and the actual
-  component catalog.
+  `docs/issues-projects-ui-roadmap.md` for Basecoat, `OpenAgentsWeb.UI`, and the
+  actual component catalog.
 - Update `docs/github-auth-plan.md` after deciding whether GitHub access tokens
   remain stored.
 - Keep the test coverage audit as a dated measurement. Add a later audit instead
@@ -311,8 +311,9 @@ Review every invariant in `INVARIANTS.md` against code, schema, configuration,
 tests, and documentation.
 
 - Give every invariant a unique ID. Resolve the duplicate `DEGRADE-001` entries.
-- Correct nonexistent paths such as `priv/openagents`, `OpenAgentsWeb.UI`, and
-  `style-openagents.css`, or rename the implementation first.
+- Correct inherited or nonexistent paths such as `priv/openagents` and
+  `style-openagents.css`; use the generic `OpenAgentsWeb.UI` module established
+  by Gate 2.
 - Resolve the contradiction between discarding GitHub tokens and the current
   encrypted-token storage path.
 - Distinguish implemented invariants from proposed invariants. A proposed
@@ -337,6 +338,33 @@ Add an owned local check that:
 **Exit criteria:** Every current document agrees on product ownership,
 components, authentication, deployment maturity, and staging status, and all
 local references resolve.
+
+**Gate 3 status (2026-08-20): complete.**
+
+- Rewrote `README.md` around the integrated AGPL application and separated
+  locally implemented, disabled/staging-only, planned, and production-prohibited
+  capabilities. It now names the Basecoat/OpenAgents component system and
+  vendored license locations.
+- Converted the chat service split, source integration, and original gap plan
+  into closed historical records. Updated the component inventory, issue/project
+  UI roadmap, API assessment, API work record, GitHub token contract, and BEAM
+  deployment maturity narrative without rewriting the dated coverage audit.
+- Reconciled `INVARIANTS.md`: all 72 IDs are unique, every entry is explicitly
+  current or proposed, all 70 current entries map to executable repository-owned
+  proofs, artifact/style paths match the tree, retained encrypted GitHub tokens
+  are documented consistently, and missing admin recording routes are no longer
+  claimed.
+- Removed the dead operator recording playback affordance whose URL had no
+  controller or route; the current operator surface exposes bounded recording
+  metadata only. Added `.dockerignore` because RELEASE-002 named a build-context
+  safeguard that was absent.
+- Added `ops/ci/docs-check.exs` to `mix precommit`. It verifies relative Markdown
+  links, current-document terminology, developer-local paths, invariant IDs and
+  statuses, proof-index coverage, evidence paths, and referenced modules.
+- Verified 21 Markdown files with the documentation gate, 14 focused operator
+  LiveView tests, 15 browser tests, and 1,222 default Elixir tests with zero
+  failures. The nine distributed tests remain isolated for the owned baseline
+  gate and were unchanged by this documentation gate.
 
 ## Gate 4: Harden dependencies, assets, and the component system
 
@@ -1087,7 +1115,7 @@ each handoff.
 
 - [x] The repository has one accurate architecture narrative.
 - [x] Every remaining Sarah reference is intentional and specific.
-- [ ] All documentation links and invariant evidence resolve.
+- [x] All documentation links and invariant evidence resolve.
 - [ ] The application has one Markdown parser, component system, and documented
       two-tier icon policy.
 - [ ] The dark-only palette has no nonfunctional theme control.

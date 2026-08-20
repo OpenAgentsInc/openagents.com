@@ -2,11 +2,12 @@
 
 Date: 2026-08-19
 
-Status: Phase 3 complete
+Status: Design and partial local implementation; staging proof incomplete;
+production use prohibited
 
 ## Outcome
 
-OpenAgents will support three production deployment classes:
+OpenAgents is designed to support three deployment classes:
 
 1. Direct BEAM loading for allowlisted, code-only changes.
 2. OTP release upgrades, or relups, for versioned code and state migrations.
@@ -14,9 +15,19 @@ OpenAgents will support three production deployment classes:
 
 The deployment system will select the narrowest class that completely covers a change. It will never apply part of a candidate and call the candidate live. Every promotion, build, deployment, refusal, rollback, and boot-convergence attempt will produce an auditable receipt.
 
-This plan makes the production deployment capabilities described in `README.md` concrete. Phoenix development code reloading is unrelated to this plan.
+This document describes the target safety model and preserves the detailed
+implementation sequence. It is not a readiness receipt. Persistence, build,
+hot-load, relup, cluster, and proof-harness pieces exist locally, but the full
+classifier, transactional fleet path, reverse upgrade, rolling replacement,
+isolated staging matrix, failure injection, and soak have not passed on one
+candidate. Phoenix development code reloading is unrelated to this plan.
 
-## Success criteria
+The current authority is
+[`docs/architecture.md`](architecture.md) together with Gates 9–16 of the
+[integration hardening plan](2026-08-20-integration-hardening-and-staging-readiness-recommendations.md).
+Nothing in this historical phase sequence authorizes production deployment.
+
+## Target success criteria
 
 The work is complete when the system meets all of these conditions:
 
@@ -54,7 +65,7 @@ operator promotion
 target state machine
     |
     v
-isolated production build -----> immutable artifact and build receipt
+isolated release build --------> immutable artifact and build receipt
     |
     v
 deployment classifier
@@ -364,7 +375,10 @@ Keep the new processes disabled by default until the preceding phases pass.
 8. Run a router and LiveView change after adding `OpenAgentsWeb.` to the allowlist.
 9. Run a stateful relup, reverse relup, and kill-during-install recovery.
 10. Run a structural change and prove that the direct lane refuses it before rolling replacement succeeds.
-11. Enable the production workers and retain an immediate runtime kill switch.
+11. After every preceding staging proof passes, prepare an explicitly approved
+    candidate for a later production-readiness decision; retain an immediate
+    runtime kill switch. This plan does not authorize enabling production
+    workers.
 
 Do not broaden the allowlist based only on module naming. Add each namespace after its state, side effects, on-load behavior, and smoke checks have a completed drill.
 
@@ -468,4 +482,7 @@ Run the final drill on a three-node staging fleet:
 9. Confirm that every attempt has a complete receipt and that the public status surface contains no sensitive details.
 10. Run `mix precommit` and `ops/ci/gate.sh` at the final SHA.
 
-After this drill passes, direct BEAM deployment becomes the default for proven allowlisted changes, relup becomes the stateful code-upgrade path, and rolling replacement remains the universal fallback.
+After this drill, the evidence can be reviewed as a production-readiness
+candidate. Direct BEAM loading, relup, and rolling replacement remain disabled
+until a separate operator decision approves a specific configuration and
+candidate.

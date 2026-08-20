@@ -81,18 +81,17 @@ defmodule OpenAgentsWeb.AdminLiveTest do
   end
 
   describe "the panel" do
-    test "lists a recorded call with a player and the account it belongs to", %{conn: conn} do
+    test "lists recording metadata without exposing a playback route", %{conn: conn} do
       caller = github_user("admin-recorded-caller")
       session = recorded_call(caller)
-      recording = Recordings.for_session(session)
 
       conn = log_in_admin_user(conn, "admin-listener")
       {:ok, view, html} = live(conn, ~p"/admin")
 
       assert html =~ "@#{caller.github_login}"
       assert has_element?(view, "#admin-call-#{session.id}")
-      assert has_element?(view, ~s(audio[src="/admin/recordings/#{recording.id}/audio"]))
-      assert has_element?(view, "#admin-audio-#{session.id}[aria-label]")
+      refute has_element?(view, "audio")
+      refute html =~ "/admin/recordings/"
       assert html =~ "Complete upload"
     end
 

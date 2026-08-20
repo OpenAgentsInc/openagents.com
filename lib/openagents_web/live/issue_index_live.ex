@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Issues
+  alias OpenAgentsWeb.UI.Circle
   alias OpenAgents.Repositories
 
   def mount(_params, _session, socket) do
@@ -34,61 +35,40 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="bg-background border border-border rounded-lg overflow-hidden">
-        <div class="flex flex-wrap items-center gap-3 p-4 border-b border-border">
-          <div class="flex items-center gap-1">
-            <%!-- These two are the current filter, so the selected one carries
-            `aria-current` and the accent tone rather than a pressed-button
-            class; the style pack has no active state for a link. --%>
-            <.link
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="Issues" wide>
+      <Circle.issue_toolbar>
+        <:leading>
+          <Circle.view_tabs>
+            <:tab
+              label={"#{@open_count} Open"}
               patch={~p"/#{@owner}/#{@repo}/issues?state=open"}
-              class={["btn gap-1", @state == "open" && "text-foreground font-semibold"]}
-              data-variant="ghost"
-              data-size="sm"
-              aria-current={@state == "open" && "page"}
-            >
-              <.icon name="warning" class="size-4 text-success" />
-              <span class="font-semibold">{@open_count}</span> Open
-            </.link>
-            <.link
+              selected={@state == "open"}
+            />
+            <:tab
+              label={"#{@closed_count} Closed"}
               patch={~p"/#{@owner}/#{@repo}/issues?state=closed"}
-              class={["btn gap-1", @state == "closed" && "text-foreground font-semibold"]}
-              data-variant="ghost"
-              data-size="sm"
-              aria-current={@state == "closed" && "page"}
-            >
-              <.icon name="check-circle" class="size-4 text-muted-foreground" />
-              <span class="font-semibold">{@closed_count}</span> Closed
-            </.link>
-          </div>
+              selected={@state == "closed"}
+            />
+          </Circle.view_tabs>
+        </:leading>
 
-          <div class="flex-1 min-w-[12rem]">
-            <label class="input w-full max-w-xs flex items-center gap-2">
-              <.icon name="search" class="size-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search or filter results..."
-                class="grow bg-transparent outline-none"
-              />
-            </label>
-          </div>
-
-          <div class="flex items-center gap-1">
-            <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="tag" class="size-4" /> Labels
-            </button>
-            <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="flag" class="size-4" /> Milestones
-            </button>
-            <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="user" class="size-4" /> Assignees
-            </button>
-            <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="filter" class="size-4" /> Sort
-            </button>
-          </div>
-
+        <:actions>
+          <.link
+            navigate={~p"/#{@owner}/#{@repo}/labels"}
+            class="btn"
+            data-variant="ghost"
+            data-size="sm"
+          >
+            <.icon name="tag" /> Labels
+          </.link>
+          <.link
+            navigate={~p"/#{@owner}/#{@repo}/milestones"}
+            class="btn"
+            data-variant="ghost"
+            data-size="sm"
+          >
+            <.icon name="flag" /> Milestones
+          </.link>
           <.link
             navigate={~p"/#{@owner}/#{@repo}/issues/new"}
             class="btn"
@@ -97,94 +77,84 @@ defmodule OpenAgentsWeb.IssueIndexLive do
           >
             New issue
           </.link>
-        </div>
+        </:actions>
+      </Circle.issue_toolbar>
 
-        <%= if @issues_count == 0 do %>
-          <div class="p-8 text-center">
-            <.icon
-              name="clipboard"
-              class="size-12 mx-auto mb-3 text-muted-foreground/50"
-            />
-            <h3 class="text-lg font-medium mb-1">
-              No {if(@state == "open", do: "open", else: "closed")} issues
-            </h3>
-            <p class="text-sm text-muted-foreground">
-              Issues will show up here once they are created.
-            </p>
-          </div>
-        <% else %>
-          <div id="issues" phx-update="stream" class="divide-y divide-border">
-            <div
-              :for={{id, issue} <- @streams.issues}
-              id={id}
-              class="p-4 hover:bg-card"
-            >
-              <div class="flex items-start gap-4">
-                <.icon
-                  name={
-                    if(issue.state == "open",
-                      do: "warning",
-                      else: "check-circle"
-                    )
-                  }
-                  class={[
-                    "size-5 shrink-0",
-                    issue.state == "open" && "text-success",
-                    issue.state == "closed" && "text-muted-foreground"
-                  ]}
-                />
-                <div class="flex-1 min-w-0">
-                  <h3 class="font-semibold text-base">
-                    <.link
-                      navigate={~p"/#{@owner}/#{@repo}/issues/#{issue.number}"}
-                      class="btn px-0 text-base font-semibold"
-                      data-variant="link"
-                    >
-                      {issue.title}
-                    </.link>
-                    <span class="text-muted-foreground font-normal text-sm ml-1">
-                      #{issue.number}
-                    </span>
-                  </h3>
-                  <p class="text-sm text-muted-foreground mt-1">
-                    Opened on {Calendar.strftime(issue.inserted_at, "%b %d, %Y")} by {(issue.user &&
-                                                                                         issue.user[
-                                                                                           "login"
-                                                                                         ]) ||
-                      "anonymous"}
-                    <%= if issue.comments > 0 do %>
-                      <span class="inline-flex items-center gap-1 ml-2">
-                        <.icon name="comment" class="size-4" />
-                        {issue.comments}
-                      </span>
-                    <% end %>
-                  </p>
-                  <div class="flex flex-wrap gap-1 mt-2">
-                    <%= for label <- issue.labels || [] do %>
-                      <span
-                        class="badge rounded-full px-2 py-0.5"
-                        style={"background-color: ##{label["color"]}; color: #000;"}
-                      >
-                        {label["name"]}
-                      </span>
-                    <% end %>
-                  </div>
-                </div>
-                <div class="avatar-group shrink-0">
-                  <%= for assignee <- issue.assignees || [] do %>
-                    <span class="avatar size-6" title={assignee["login"]}>
-                      <span class="!text-xs">
-                        {assignee["login"] |> String.first() |> String.upcase()}
-                      </span>
-                    </span>
-                  <% end %>
-                </div>
-              </div>
-            </div>
-          </div>
-        <% end %>
+      <.empty
+        :if={@issues_count == 0}
+        id="issues-empty"
+        title={"No #{@state} issues"}
+      >
+        Issues will show up here once they are created.
+      </.empty>
+
+      <div :if={@issues_count > 0} id="issues" phx-update="stream" class="issue-list">
+        <Circle.issue_row
+          :for={{id, issue} <- @streams.issues}
+          id={id}
+          identifier={"##{issue.number}"}
+          title={issue.title}
+          navigate={~p"/#{@owner}/#{@repo}/issues/#{issue.number}"}
+          status_category={category(issue)}
+          status_label={status_label(issue)}
+          labels={labels(issue)}
+          assignee={assignee(issue)}
+          created={"opened #{relative(issue.inserted_at)} ago"}
+          author={author(issue)}
+          comments={issue.comments}
+        />
       </div>
     </Layouts.app>
     """
+  end
+
+  # GitHub's two states, and nothing invented on top of them. `not_planned` is
+  # the one close reason with a distinct reading, so it takes the cancelled
+  # glyph; every other close is a completion.
+  defp category(%{state: "closed", state_reason: "not_planned"}), do: :canceled
+  defp category(%{state: "closed"}), do: :completed
+  defp category(_issue), do: :unstarted
+
+  defp status_label(%{state: "closed", state_reason: "not_planned"}), do: "Closed as not planned"
+  defp status_label(%{state: "closed"}), do: "Closed"
+  defp status_label(_issue), do: "Open"
+
+  # A label carries a colour on GitHub; the row takes a tone from our ladder
+  # rather than that hex, so the list stays in one palette.
+  defp labels(%{labels: labels}) when is_list(labels) do
+    Enum.map(labels, fn label ->
+      %{name: label["name"] || label[:name] || "label", tone: :neutral}
+    end)
+  end
+
+  defp labels(_issue), do: []
+
+  # GitHub issues carry many assignees; the row shows the first, which is the
+  # one GitHub itself treats as `assignee`.
+  defp assignee(%{assignees: [first | _rest]}) when is_map(first) do
+    %{
+      name: first["login"] || first[:login],
+      src: first["avatar_url"] || first[:avatar_url],
+      presence: :none
+    }
+  end
+
+  defp assignee(_issue), do: nil
+
+  # GitHub prints who opened an issue beside when. An issue whose author is
+  # gone still has a history, so it says so rather than showing a blank.
+  defp author(%{user: %{} = user}), do: user["login"] || user[:login] || "anonymous"
+  defp author(_issue), do: "anonymous"
+
+  defp relative(nil), do: nil
+
+  defp relative(at) do
+    at = if is_struct(at, NaiveDateTime), do: DateTime.from_naive!(at, "Etc/UTC"), else: at
+
+    case DateTime.diff(DateTime.utc_now(), at, :second) do
+      s when s < 3_600 -> "#{max(div(s, 60), 1)}m"
+      s when s < 86_400 -> "#{div(s, 3_600)}h"
+      s -> "#{div(s, 86_400)}d"
+    end
   end
 end

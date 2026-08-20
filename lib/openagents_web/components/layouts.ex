@@ -184,8 +184,13 @@ defmodule OpenAgentsWeb.Layouts do
   def sidebar_brand(assigns) do
     ~H"""
     <header class="sidebar-brand">
+      <%!-- The application's own rail carries the wordmark; the docs and
+      component shells do not, because the section name beside the divider is
+      already doing that half of the job and "OpenAgents | Docs" said the brand
+      twice. Mark and word are one link, so the whole lockup goes home. --%>
       <.link navigate={~p"/"} class="sidebar-brand__mark" aria-label="OpenAgents home">
         <img src={~p"/favicon-32x32.png"} alt="" width="24" height="24" />
+        <span :if={is_nil(@title)} class="sidebar-brand__wordmark">OpenAgents</span>
       </.link>
       <span :if={@title} class="sidebar-brand__divider" aria-hidden="true"></span>
       <.link :if={@title} patch={@path} class="sidebar-brand__title">{@title}</.link>
@@ -213,6 +218,15 @@ defmodule OpenAgentsWeb.Layouts do
 
     ~H"""
     <footer class="sidebar-footer">
+      <.link navigate={~p"/docs"} class="sidebar-footer__link">
+        <UI.icon name="book" /> Documentation
+      </.link>
+      <.link :if={@components_link?} navigate={~p"/components"} class="sidebar-footer__link">
+        <UI.icon name="widget" /> Components
+      </.link>
+      <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
+        <UI.icon name="trophy-top" /> Leaderboard
+      </.link>
       <.link
         :if={@admin_link?}
         id="open-admin"
@@ -221,15 +235,6 @@ defmodule OpenAgentsWeb.Layouts do
         aria-label="Admin"
       >
         <UI.icon name="shield-lock" /> Admin
-      </.link>
-      <.link :if={@components_link?} navigate={~p"/components"} class="sidebar-footer__link">
-        <UI.icon name="widget" /> Components
-      </.link>
-      <.link navigate={~p"/docs"} class="sidebar-footer__link">
-        <UI.icon name="book" /> Documentation
-      </.link>
-      <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
-        <UI.icon name="trophy-top" /> Leaderboard
       </.link>
     </footer>
     """

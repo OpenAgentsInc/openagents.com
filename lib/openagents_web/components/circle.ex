@@ -191,7 +191,12 @@ defmodule OpenAgentsWeb.UI.Circle do
 
   def assignee(assigns) do
     ~H"""
-    <span class={["assignee", @class]} data-size={@size} {@rest}>
+    <span
+      class={["assignee", @class]}
+      data-size={@size}
+      title={@name || "Unassigned"}
+      {@rest}
+    >
       <span class="assignee__figure">
         <UI.avatar
           :if={@name}
@@ -268,6 +273,12 @@ defmodule OpenAgentsWeb.UI.Circle do
   attr :project, :string, default: nil
   attr :due, :string, default: nil, doc: "already formatted; overdue is the caller's judgement"
   attr :created, :string, default: nil
+  # GitHub-native facts the source had no vocabulary for. `comments` is on
+  # every issue payload and is the one number a reader scans a list for after
+  # the title; `author` is who opened it, which GitHub prints in the same
+  # breath as when.
+  attr :comments, :integer, default: nil
+  attr :author, :string, default: nil
   attr :assignee, :map, default: nil, doc: "`%{name:, src:, presence:}`; `nil` is unassigned"
   attr :selected, :boolean, default: false
   attr :class, :any, default: nil
@@ -297,7 +308,14 @@ defmodule OpenAgentsWeb.UI.Circle do
           </span>
         </span>
         <span :if={@due} class="issue-row__due">Due {@due}</span>
-        <span :if={@created} class="issue-row__date">{@created}</span>
+        <span :if={@created} class="issue-row__date">
+          {@created}<span :if={@author}> by {@author}</span>
+        </span>
+        <%!-- Absent rather than zero: "0 comments" is a fact nobody scans a
+        list for, and a column of zeroes is noise. --%>
+        <span :if={@comments && @comments > 0} class="issue-row__comments">
+          <UI.icon name="comment" /> {@comments}
+        </span>
         <.assignee
           name={@assignee && @assignee[:name]}
           src={@assignee && @assignee[:src]}
@@ -506,7 +524,12 @@ defmodule OpenAgentsWeb.UI.Circle do
 
   slot :tab, required: true do
     attr :label, :string, required: true
-    attr :navigate, :any, required: true
+    # `navigate` remounts; `patch` keeps the mount and lets `handle_params`
+    # answer. Tabs that filter one collection belong to the same LiveView, so
+    # they should patch -- but a tab that leads to a different view exists too,
+    # hence both.
+    attr :navigate, :any
+    attr :patch, :any
     attr :selected, :boolean
   end
 
@@ -515,7 +538,8 @@ defmodule OpenAgentsWeb.UI.Circle do
     <nav class={["view-tabs", @class]} aria-label={@label} {@rest}>
       <.link
         :for={tab <- @tab}
-        navigate={tab.navigate}
+        navigate={tab[:navigate]}
+        patch={tab[:patch]}
         class="view-tabs__tab"
         aria-current={tab[:selected] && "page"}
       >

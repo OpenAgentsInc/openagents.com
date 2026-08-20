@@ -6,6 +6,7 @@ defmodule OpenAgents.Forge.DeploymentNodeTest do
   alias OpenAgents.Forge.BuildProtocol
   alias OpenAgents.Forge.Deployment
   alias OpenAgents.Forge.DeploymentNode
+  alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target
 
   setup do
@@ -65,6 +66,12 @@ defmodule OpenAgents.Forge.DeploymentNodeTest do
 
     assert DeploymentNode.health()["ready"]
     assert DeploymentNode.health()["revision"] == request.sha
+  end
+
+  test "participant start APIs refuse a duplicate registered participant" do
+    pid = Process.whereis(DeploymentNode)
+    assert {:error, {:already_started, ^pid}} = DeploymentNode.start()
+    assert {:error, {:already_started, ^pid}} = DeploymentNode.start_link()
   end
 
   test "rollback restores and verifies exact prior object code" do
@@ -289,6 +296,20 @@ defmodule OpenAgents.Forge.DeploymentNodeTest do
              DeploymentNode.prepare(request(wrong_runtime))
   end
 
+  test "artifact cache refuses a digest-address collision" do
+    fixture = absent_version("CacheCollision")
+    request = request(fixture)
+
+    assert {:ok, %{"token" => token}} = DeploymentNode.prepare(request)
+    assert {:ok, %{"restored" => true}} = DeploymentNode.rollback(request.deployment_id, token)
+
+    cache_path = Path.join([Repos.data_dir(), "beams", request.artifact_digest <> ".tar"])
+    File.write!(cache_path, "tampered artifact")
+
+    assert {:error, :digest_collision} = DeploymentNode.prepare(request)
+    assert DeploymentNode.health()["ready"]
+  end
+
   test "fault injection is bounded and participant phase notifications are content-free" do
     fixture = absent_version("FaultBoundary")
     request = request(fixture)
@@ -485,6 +506,20 @@ defmodule OpenAgents.Forge.DeploymentNodeTest do
     assert undersized.error_code == "fleet_size_mismatch"
 
     Application.put_env(:openagents, :forge_expected_fleet_size, 1)
+
+    calls = :counters.new(1, [])
+
+    membership = fn ->
+      :counters.add(calls, 1, 1)
+
+      if :counters.get(calls, 1) == 1,
+        do: [Node.self()],
+        else: [Node.self(), :unexpected@node]
+    end
+
+    assert {:error, changed} = run_deployment(fixture, members: membership)
+    assert changed.error_code == "membership_changed"
+    assert changed.node_results[to_string(Node.self())] == "restored"
 
     :sys.replace_state(DeploymentNode, fn state ->
       %{state | divergence: "test_divergence"}

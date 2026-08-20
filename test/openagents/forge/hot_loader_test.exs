@@ -169,6 +169,54 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "live"}}
   end
 
+  test "a participant prepare refusal becomes a durable failed deployment", %{loader: loader} do
+    %{mod: mod, name: name, binary: binary} = compiled_scratch_module()
+    sha = unique_sha()
+    target = insert_target(sha, "built")
+    artifact = artifact([{name, binary}], sha)
+
+    :sys.replace_state(DeploymentNode, fn state ->
+      %{state | faults: %{prepare: :error}}
+    end)
+
+    Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
+
+    refute Code.ensure_loaded?(mod)
+    assert Repo.get!(Target, target.id).status == "failed"
+
+    receipt = deploy_receipt(sha)
+    assert receipt.result == "failed"
+    assert receipt.error_code == "prepare_failed"
+    assert receipt.rollback_verified == false
+
+    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "failed"}}
+  end
+
+  test "a finalize refusal keeps durable live authority while fencing readiness", %{
+    loader: loader
+  } do
+    %{mod: mod, name: name, revision: revision, binary: binary} = compiled_scratch_module()
+    sha = unique_sha()
+    target = insert_target(sha, "built")
+    artifact = artifact([{name, binary}], sha)
+
+    :sys.replace_state(DeploymentNode, fn state ->
+      %{state | faults: %{finalize: :error}}
+    end)
+
+    Phoenix.PubSub.subscribe(OpenAgents.PubSub, @deploys_topic)
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
+
+    assert Code.ensure_loaded?(mod)
+    assert mod.revision() == revision
+    assert Repo.get!(Target, target.id).status == "live"
+    assert deploy_receipt(sha).result == "live"
+    refute DeploymentNode.health()["ready"]
+
+    assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "live"}}
+  end
+
   test "allowlist refusal: off-allowlist module means needs_rolling_replace and no load", %{
     loader: loader
   } do
@@ -279,6 +327,27 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     refute HotLoader.allowlisted?("OpenAgents.Scratch", allowlist)
     refute HotLoader.allowlisted?("OpenAgents.Turns.Whatever", allowlist)
     refute HotLoader.allowlisted?("Anything", [])
+  end
+
+  test "extract!/1 verifies both successful and malformed artifacts" do
+    %{mod: mod, name: name, binary: binary} = compiled_scratch_module()
+    built = artifact([{name, binary}], unique_sha())
+
+    assert [{^mod, extracted_binary}] = HotLoader.extract!(built.artifact)
+    assert is_binary(extracted_binary)
+    assert {:ok, {^mod, _md5}} = :beam_lib.md5(extracted_binary)
+
+    malformed = malformed_artifact([{name, binary}])
+
+    assert_raise RuntimeError, ~r/artifact verification failed/, fn ->
+      HotLoader.extract!(malformed)
+    end
+  end
+
+  test "duplicate startup and unrelated messages leave the loader intact", %{loader: loader} do
+    assert {:error, {:already_started, ^loader}} = HotLoader.start_link()
+    send(loader, :unrelated_message)
+    assert :sys.get_state(loader) == %{}
   end
 
   test "OpenAgents.BuildInfo compiled-in revision is the boot image" do

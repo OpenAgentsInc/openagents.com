@@ -188,11 +188,14 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     orphan_digest = String.duplicate("a", 64)
     orphan_path = Path.join([Repos.data_dir(), "beams", orphan_digest <> ".tar"])
     File.write!(orphan_path, "obsolete-cache-entry")
+    unrelated_path = Path.join([Repos.data_dir(), "beams", "README"])
+    File.write!(unrelated_path, "operator note")
 
     assert %{"state" => "converged"} = BootConverge.converge(@repo)
     assert File.exists?(Path.join(Repos.data_dir(), current.details["artifact"]))
     assert File.exists?(Path.join(Repos.data_dir(), predecessor.details["artifact"]))
     refute File.exists?(orphan_path)
+    assert File.exists?(unrelated_path)
 
     :code.purge(current_module)
     :code.delete(current_module)
@@ -255,8 +258,8 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     previous_max = Application.get_env(:openagents, :forge_boot_retry_max_ms)
 
     Application.put_env(:openagents, :forge_boot_converge_enabled, true)
-    Application.put_env(:openagents, :forge_boot_retry_min_ms, 10)
-    Application.put_env(:openagents, :forge_boot_retry_max_ms, 20)
+    Application.put_env(:openagents, :forge_boot_retry_min_ms, 10_000)
+    Application.put_env(:openagents, :forge_boot_retry_max_ms, 20_000)
 
     name = Module.concat(__MODULE__, "Retry#{System.unique_integer([:positive])}")
 
@@ -272,8 +275,16 @@ defmodule OpenAgents.Forge.BootConvergeTest do
 
     refute convergence["ready"]
     assert convergence["state"] == "degraded"
-    assert convergence["retry_in_ms"] == 10
-    assert server_state.retry_ms == 20
+    assert convergence["retry_in_ms"] == 10_000
+    assert server_state.retry_ms == 20_000
+
+    send(name, :retry_convergence)
+    server_state = :sys.get_state(name)
+    convergence = BootConverge.state()
+
+    assert convergence["attempts"] == 2
+    assert convergence["retry_in_ms"] == 20_000
+    assert server_state.retry_ms == 20_000
 
     on_exit(fn ->
       restore_env(:forge_boot_converge_enabled, previous_enabled)
@@ -288,8 +299,8 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     previous_max = Application.get_env(:openagents, :forge_boot_retry_max_ms)
 
     Application.put_env(:openagents, :forge_boot_converge_enabled, true)
-    Application.put_env(:openagents, :forge_boot_retry_min_ms, 10)
-    Application.put_env(:openagents, :forge_boot_retry_max_ms, 20)
+    Application.put_env(:openagents, :forge_boot_retry_min_ms, 10_000)
+    Application.put_env(:openagents, :forge_boot_retry_max_ms, 20_000)
 
     name = Module.concat(__MODULE__, "Ready#{System.unique_integer([:positive])}")
 
@@ -301,13 +312,13 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     )
 
     assert %{"state" => "image", "ready" => true} = BootConverge.state()
-    assert :sys.get_state(name).retry_ms == 10
+    assert :sys.get_state(name).retry_ms == 10_000
 
     send(name, :retry_convergence)
-    assert :sys.get_state(name).retry_ms == 10
+    assert :sys.get_state(name).retry_ms == 10_000
 
     send(name, :irrelevant_message)
-    assert :sys.get_state(name).retry_ms == 10
+    assert :sys.get_state(name).retry_ms == 10_000
 
     on_exit(fn ->
       restore_env(:forge_boot_converge_enabled, previous_enabled)
@@ -318,6 +329,10 @@ defmodule OpenAgents.Forge.BootConvergeTest do
 
   test "image-matching legacy target remains ready without artifact metadata" do
     target = insert_target!("live", %{})
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+
+    on_exit(fn -> restore_env(:forge_boot_converge_enabled, previous_enabled) end)
 
     target
     |> Ecto.Changeset.change(%{sha: OpenAgents.BuildInfo.revision()})
@@ -329,6 +344,8 @@ defmodule OpenAgents.Forge.BootConvergeTest do
              "reason" => "image_matches_live",
              "sha" => "image"
            } = BootConverge.converge(@repo)
+
+    assert BootConverge.ready?(@repo)
   end
 
   test "an unreadable cache entry degrades with a bounded reason" do

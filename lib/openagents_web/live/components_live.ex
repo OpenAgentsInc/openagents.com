@@ -104,6 +104,95 @@ defmodule OpenAgentsWeb.ComponentsLive do
     %{name: "Lena Fischer"}
   ]
 
+  # This repository's own root, in the order `Browse.tree/3` returns it:
+  # directories above files, each group by name. The message and age on a row
+  # are what `git log -1 -- <path>` says about that path, and the sizes are the
+  # real ones. The composed repository demo is only worth reading if the
+  # composition is carrying real proportions -- invented data makes every
+  # column look comfortable.
+  @demo_repo_entries [
+    %{
+      name: "assets",
+      kind: "tree",
+      size: nil,
+      message: "Delete the CONNECTED bar from the conversation",
+      updated: "3 hours ago"
+    },
+    %{
+      name: "config",
+      kind: "tree",
+      size: nil,
+      message: "Connect staging fleet through Cloud SQL Auth Proxy",
+      updated: "1 hour ago"
+    },
+    %{
+      name: "docs",
+      kind: "tree",
+      size: nil,
+      message: "Specify repository creation and the OpenAgents CLI",
+      updated: "18 minutes ago"
+    },
+    %{
+      name: "infra",
+      kind: "tree",
+      size: nil,
+      message: "Connect staging fleet through Cloud SQL Auth Proxy",
+      updated: "1 hour ago"
+    },
+    %{
+      name: "lib",
+      kind: "tree",
+      size: nil,
+      message: "Group the agent's surfaces under her name",
+      updated: "15 minutes ago"
+    },
+    %{
+      name: "priv",
+      kind: "tree",
+      size: nil,
+      message: "Restore the power mark from v4 and v5 as the favicon",
+      updated: "3 hours ago"
+    },
+    %{
+      name: "test",
+      kind: "tree",
+      size: nil,
+      message: "Give the modal scrim a token, and drop the guard's exception",
+      updated: "5 hours ago"
+    },
+    %{
+      name: ".formatter.exs",
+      kind: "blob",
+      size: 225,
+      message: "Initialize Phoenix 1.8 application with latest dependencies",
+      updated: "yesterday"
+    },
+    %{
+      name: "AGENTS.md",
+      kind: "blob",
+      size: 28_064,
+      message: "Authorize the theme bootstrap with a CSP nonce",
+      updated: "9 hours ago"
+    },
+    %{
+      name: "mix.exs",
+      kind: "blob",
+      size: 4_252,
+      message: "Publish immutable staging candidate artifacts",
+      updated: "9 hours ago"
+    },
+    %{
+      name: "README.md",
+      kind: "blob",
+      size: 5_527,
+      message: "Build isolated staging infrastructure",
+      updated: "10 hours ago"
+    }
+  ]
+
+  # Everyone `git shortlog -sn` names on this repository, most commits first.
+  @demo_repo_contributors [%{name: "AtlantisPleb"}, %{name: "Christopher David"}]
+
   # The catalog demonstrates the preferred vendored Apps SDK tier. Heroicons
   # remains an exceptional fallback with an empty product-use inventory.
   @openagents_icons ~w(sparkle compass folder document user bell play star)
@@ -1122,6 +1211,131 @@ defmodule OpenAgentsWeb.ComponentsLive do
         are the point, and they only read as proportions when the segments share a
         length. Colours are a fixed six-step rotation off the ink ladder, so the chart
         stays in the palette instead of hashing a hue per language name.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "openagents-repo-tabs"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Seven links, not seven tabs. Each one changes the URL, so the selected entry
+        is marked with <code>aria-current="page"</code>
+        and the underline follows that attribute. Giving these a tab role would promise
+        panels that swap in place, and a reader who accepted the promise and reached for
+        the arrow keys would get nothing.
+      </p>
+      <UI.repo_tabs>
+        <:tab icon="code" href="#code" current>Code</:tab>
+        <:tab icon="empty-circle" href="#issues" count={12}>Issues</:tab>
+        <:tab icon="pull-request-open" href="#pulls" count={3}>Pull requests</:tab>
+        <:tab icon="cube" href="#projects">Projects</:tab>
+        <:tab icon="book-open" href="#wiki">Wiki</:tab>
+        <:tab icon="chart" href="#insights">Insights</:tab>
+        <:tab icon="settings-cog" href="#settings">Settings</:tab>
+      </UI.repo_tabs>
+      <p class="text-sm text-base-content/60">
+        The count sits in its own element rather than inside the word, so "Issues" stays
+        findable by that word alone, the number keeps its own weight, and a narrow screen
+        can drop it without anyone rewriting the label. The destinations here are page
+        anchors, because the catalog has nowhere real to send you.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "openagents-repo-view"}} = assigns) do
+    assigns =
+      assigns
+      |> assign(:entries, @demo_repo_entries)
+      |> assign(:contributors, @demo_repo_contributors)
+
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Everything above, assembled: the owner trail from <code>breadcrumb/1</code>, the sections from <code>repo_tabs/1</code>, the tree from <code>file_table/1</code>, and the rail from <code>repo_about/1</code>. The frame
+        itself is the only thing this component owns, which is why the three pieces arrive
+        as slots — a surface that wants a commit list where the tree usually goes passes
+        one, and no flag is added here.
+      </p>
+      <div class="-mx-6">
+        <UI.repo_view
+          owner="OpenAgentsInc"
+          repo="openagents.com"
+          owner_path={~p"/components/openagents-repo-view"}
+        >
+          <:tabs>
+            <UI.repo_tabs>
+              <:tab icon="code" href="#code" current>Code</:tab>
+              <:tab icon="empty-circle" href="#issues" count={12}>Issues</:tab>
+              <:tab icon="pull-request-open" href="#pulls" count={3}>Pull requests</:tab>
+              <:tab icon="cube" href="#projects">Projects</:tab>
+              <:tab icon="book-open" href="#wiki">Wiki</:tab>
+              <:tab icon="chart" href="#insights">Insights</:tab>
+              <:tab icon="settings-cog" href="#settings">Settings</:tab>
+            </UI.repo_tabs>
+          </:tabs>
+
+          <UI.file_table
+            owner="OpenAgentsInc"
+            repo="openagents.com"
+            ref="main"
+            entries={@entries}
+            branches={2}
+            tags={0}
+            commits={234}
+          >
+            <:actions>
+              <UI.input
+                id="demo-go-to-file"
+                type="text"
+                name="go-to-file"
+                placeholder="Go to file"
+                aria-label="Go to file"
+                class="input file-table__search"
+              />
+              <UI.button size={:sm}>Add file</UI.button>
+              <UI.button variant={:primary} size={:sm}>Code</UI.button>
+            </:actions>
+            <:commit>
+              <UI.avatar size={:sm} fallback="A" label="AtlantisPleb" />
+              <strong>AtlantisPleb</strong>
+              <span>Group the agent's surfaces under her name</span>
+              <code>86416fc</code>
+              <span>15 minutes ago</span>
+            </:commit>
+          </UI.file_table>
+
+          <:about>
+            <UI.repo_about description="The Agent Forge" license="AGPL-3.0" contributors={2}>
+              <:link icon="link" href="https://openagents.com">openagents.com</:link>
+              <:link icon="book" navigate="/docs">Readme</:link>
+              <:link icon="text" navigate="/changelog">Activity</:link>
+              <:stat icon="star">2 stars</:stat>
+              <:stat icon="eye">0 watching</:stat>
+              <:stat icon="branch">0 forks</:stat>
+              <:contributor :for={person <- @contributors} name={person.name} />
+              <:language percent={91.8}>Elixir</:language>
+              <:language percent={3.1}>CSS</:language>
+              <:language percent={3.1}>Shell</:language>
+              <:language percent={1.0}>JavaScript</:language>
+              <:language percent={1.0}>Other</:language>
+            </UI.repo_about>
+          </:about>
+        </UI.repo_view>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The tree, the commit subjects, the branch, the contributors, and the commit count
+        are this repository's own — each row's message is what <code>git log -1 -- &lt;path&gt;</code>
+        says about that path. A composed demo is only worth reading if the composition is
+        carrying real proportions; invented ones make every column look comfortable.
+      </p>
+      <p class="text-sm text-base-content/60">
+        The rail becomes a second column above 1024px and falls below the tree under it.
+        Source order is already the narrow order, so nothing reorders: what a repository
+        is, how it is licensed, and who wrote it are what a reader wants beside the file
+        list on a desktop and after it on a phone.
       </p>
     </div>
     """

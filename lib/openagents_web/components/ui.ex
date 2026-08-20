@@ -819,6 +819,51 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
+  The section bar under a repository's name: Code, Issues, Pull requests, and
+  whatever else that repository publishes.
+
+  Page navigation rather than a tab widget. Every entry changes the URL, so the
+  selected one carries `aria-current="page"` and none of them carries a tab
+  role -- a tab role promises panels that swap in place, and a reader who takes
+  that promise and reaches for the arrow keys gets nothing.
+
+  A count lives in its own element rather than inside the label, so "Issues"
+  stays findable by that word alone and the number can be toned down, or
+  dropped at a narrow width, without rewriting the string.
+  """
+  attr :label, :string, default: "Repository sections"
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  slot :tab, required: true do
+    attr :icon, :string
+    attr :count, :integer
+    attr :current, :boolean
+    attr :navigate, :string
+    attr :patch, :string
+    attr :href, :string
+  end
+
+  def repo_tabs(assigns) do
+    ~H"""
+    <nav class={["repo-tabs", @class]} aria-label={@label} {@rest}>
+      <.link
+        :for={tab <- @tab}
+        navigate={tab[:navigate]}
+        patch={tab[:patch]}
+        href={tab[:href]}
+        aria-current={tab[:current] && "page"}
+        class="repo-tabs__tab"
+      >
+        <.icon :if={tab[:icon]} name={tab.icon} />
+        <span class="repo-tabs__label">{render_slot(tab)}</span>
+        <span :if={tab[:count]} class="repo-tabs__count">{tab.count}</span>
+      </.link>
+    </nav>
+    """
+  end
+
+  @doc """
   A repository's file table: the ref bar, the latest commit, and the entries.
 
   Adapted from the GitHub-shaped clones catalogued in
@@ -835,22 +880,34 @@ defmodule OpenAgentsWeb.UI do
   looks like a row is the reason GitHub's own version of this reads oddly on
   first sight.
 
-  Per-row commit messages are deliberately absent. GitHub fills them by
-  walking history once per path, which is one process per file; when we have
-  that cheaply the slot is `meta` and it costs no markup change.
+  Per-row commit messages are optional, because GitHub fills them by walking
+  history once per path, which is one process per file. An entry that carries
+  `message` and `updated` gets them; when no entry does, those two columns are
+  not rendered at all rather than emitted empty, so the cheap tree keeps the
+  markup it already had.
   """
   attr :owner, :string, required: true
   attr :repo, :string, required: true
   attr :ref, :string, required: true
   attr :path, :string, default: ""
-  attr :entries, :list, required: true, doc: "`[%{name, kind, size}]` from `Browse.tree/3`"
+
+  attr :entries, :list,
+    required: true,
+    doc:
+      "`[%{name, kind, size}]` from `Browse.tree/3`, each optionally carrying " <>
+        "`message` and `updated` from that path's last commit"
+
   attr :branches, :integer, default: nil
   attr :tags, :integer, default: nil
+  attr :commits, :integer, default: nil, doc: "commits on this ref, shown beside the latest one"
   attr :class, :any, default: nil
   slot :commit, doc: "the latest commit, shown above the table"
   slot :actions, doc: "controls at the trailing edge of the ref bar"
 
   def file_table(assigns) do
+    assigns =
+      assign(assigns, :history?, Enum.any?(assigns.entries, &(&1[:message] || &1[:updated])))
+
     ~H"""
     <div class={["file-table", @class]}>
       <div class="file-table__bar">
@@ -866,7 +923,13 @@ defmodule OpenAgentsWeb.UI do
         <span :if={@actions != []} class="file-table__actions">{render_slot(@actions)}</span>
       </div>
 
-      <div :if={@commit != []} class="file-table__commit">{render_slot(@commit)}</div>
+      <div :if={@commit != [] or @commits} class="file-table__commit">
+        {render_slot(@commit)}
+        <span :if={@commits} class="file-table__commits">
+          <.icon name="history" />
+          <strong>{@commits}</strong> {plural(@commits, "Commit", "Commits")}
+        </span>
+      </div>
 
       <table class="file-table__list">
         <caption class="visually-hidden">
@@ -880,7 +943,11 @@ defmodule OpenAgentsWeb.UI do
                 {entry.name}
               </.link>
             </td>
+            <td :if={@history?} class="file-row__message" title={entry[:message]}>
+              {entry[:message]}
+            </td>
             <td class="file-row__size">{size_label(entry)}</td>
+            <td :if={@history?} class="file-row__age">{entry[:updated]}</td>
           </tr>
         </tbody>
       </table>
@@ -926,6 +993,11 @@ defmodule OpenAgentsWeb.UI do
   """
   attr :description, :string, default: nil
   attr :license, :string, default: nil
+
+  attr :contributors, :integer,
+    default: nil,
+    doc: "the total, when more people committed than there are faces to show"
+
   attr :class, :any, default: nil
 
   slot :link, doc: "one related destination" do
@@ -938,11 +1010,23 @@ defmodule OpenAgentsWeb.UI do
     attr :icon, :string
   end
 
+  slot :contributor, doc: "one contributor, drawn as a face" do
+    attr :name, :string, required: true
+    attr :src, :string
+  end
+
   slot :language, doc: "one language" do
     attr :percent, :float, required: true
   end
 
   def repo_about(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :overflow,
+        max((assigns.contributors || 0) - length(assigns.contributor), 0)
+      )
+
     ~H"""
     <aside class={["repo-about", @class]} aria-label="About this repository">
       <h2 class="repo-about__title">About</h2>
@@ -964,6 +1048,25 @@ defmodule OpenAgentsWeb.UI do
           <.icon :if={stat[:icon]} name={stat.icon} /> {render_slot(stat)}
         </li>
       </ul>
+
+      <div :if={@contributor != []} class="repo-about__contributors">
+        <h3>
+          Contributors <span class="repo-about__count">{@contributors || length(@contributor)}</span>
+        </h3>
+        <%!-- The count is the point. Six faces alone says the repository has
+        six contributors, which is usually wrong. --%>
+        <ul class="contributor-cluster">
+          <li :for={person <- @contributor}>
+            <.avatar
+              src={person[:src]}
+              fallback={String.first(person.name)}
+              size={:sm}
+              label={person.name}
+            />
+          </li>
+          <li :if={@overflow > 0} class="contributor-cluster__count">+{@overflow}</li>
+        </ul>
+      </div>
 
       <div :if={@language != []} class="repo-about__languages">
         <h3>Languages</h3>
@@ -987,6 +1090,72 @@ defmodule OpenAgentsWeb.UI do
     </aside>
     """
   end
+
+  @doc """
+  A repository's home page, assembled.
+
+  The pieces already exist on their own -- `breadcrumb/1` for the owner trail,
+  `repo_tabs/1` for the sections, `file_table/1` for the tree, `repo_about/1`
+  for the rail. This holds them in one frame so that a surface showing a
+  repository does not reassemble that frame by hand and drift from the next
+  surface that shows one.
+
+  The rail is a second grid column above 1024px and falls below the tree under
+  it. Provenance -- what this is, how it is licensed, who wrote it -- is what a
+  reader wants beside the file list on a desktop and after it on a phone, and
+  the source order is already the phone order.
+
+  Composition is by slot rather than by attribute, so this owns the frame and
+  nothing else: a caller that needs a tree with no rail, or a commit list where
+  the tree usually goes, passes that instead without a flag being added here.
+  """
+  attr :owner, :string, required: true
+  attr :repo, :string, required: true
+
+  attr :owner_path, :string,
+    default: nil,
+    doc: "where the owner's name leads; `/OWNER` by default"
+
+  attr :visibility, :atom, values: [:public, :private], default: :public
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  slot :tabs, doc: "the section bar, normally one `repo_tabs/1`"
+  slot :inner_block, required: true, doc: "the main column, normally one `file_table/1`"
+  slot :about, doc: "the trailing rail, normally one `repo_about/1`"
+
+  def repo_view(assigns) do
+    assigns = assign(assigns, :owner_path, assigns.owner_path || "/#{assigns.owner}")
+
+    ~H"""
+    <div class={["repo-page", @class]} {@rest}>
+      <header class="repo-page__identity">
+        <%!-- Decorative: the owner's name is the next thing in the trail, and an
+        initial announced ahead of it reads as a stray letter. --%>
+        <.avatar
+          fallback={String.upcase(String.first(@owner))}
+          tone={:accent}
+          aria-hidden="true"
+        />
+        <.breadcrumb class="repo-page__trail" label={"#{@owner} / #{@repo}"}>
+          <:item navigate={@owner_path}>{@owner}</:item>
+          <:item>{@repo}</:item>
+        </.breadcrumb>
+        <.badge variant={:dim}>{visibility_label(@visibility)}</.badge>
+      </header>
+
+      {render_slot(@tabs)}
+
+      <div class="repo-view">
+        <div class="repo-view__main">{render_slot(@inner_block)}</div>
+        <div :if={@about != []} class="repo-view__rail">{render_slot(@about)}</div>
+      </div>
+    </div>
+    """
+  end
+
+  defp visibility_label(:private), do: "Private"
+  defp visibility_label(_visibility), do: "Public"
 
   @doc """
   One file's diff: a header, its hunks, and every line numbered on both sides.

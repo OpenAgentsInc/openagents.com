@@ -185,6 +185,20 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "The rail beside a repository: description, licence, languages."
         },
         %{
+          slug: "openagents-repo-tabs",
+          title: "Repo tabs",
+          icon: "category",
+          source: "OpenAgentsWeb.UI.repo_tabs/1",
+          summary: "A repository's sections as links, the current one marked by aria-current."
+        },
+        %{
+          slug: "openagents-repo-view",
+          title: "Repository view",
+          icon: "folders",
+          source: "OpenAgentsWeb.UI.repo_view/1",
+          summary: "The whole repository home: identity, sections, tree, and rail in one frame."
+        },
+        %{
           slug: "openagents-status-indicator",
           title: "Status indicator",
           icon: "check-circle",

@@ -73,6 +73,25 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
     assert has_element?(view, "#component-form")
   end
 
+  test "the repository view page composes trail, sections, tree, and rail", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/components/openagents-repo-view")
+
+    assert has_element?(view, ".repo-page .breadcrumb__current", "openagents.com")
+    assert has_element?(view, ~s{.repo-tabs__tab[aria-current="page"]}, "Code")
+    assert has_element?(view, ".repo-view__main .file-table .file-row__message")
+    assert has_element?(view, ".repo-view__rail .repo-about__contributors")
+  end
+
+  test "repository sections are links, not a tab widget", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/components/openagents-repo-tabs")
+
+    # A tab role promises panels that swap in place. These change the URL, so
+    # the current one is marked by aria-current and nothing claims to be a tab.
+    assert has_element?(view, "nav.repo-tabs[aria-label]")
+    refute has_element?(view, ~s{.repo-tabs [role="tab"]})
+    assert has_element?(view, ".repo-tabs__tab .repo-tabs__count", "12")
+  end
+
   test "the catalog exposes no nonfunctional theme control", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/components")
 

@@ -11,85 +11,54 @@
     </nav>
 
     <nav class="docs-sidebar__nav" aria-label="Documentation">
-      <section class="docs-sidebar__section">
-        <h3 class="sidebar-section-label">Get started</h3>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Welcome"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="book" /></span>
-            <span class="sidebar-row__label">Welcome</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Quickstart"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="book-open" /></span>
-            <span class="sidebar-row__label">Quickstart</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Installation"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="book-closed" /></span>
-            <span class="sidebar-row__label">Installation</span>
-          </span>
-        </div>
-      </section>
+      <Layouts.sidebar_link
+        path={~p"/docs"}
+        label="Overview"
+        icon="book"
+        selected={@active_page == :index}
+        patchable={true}
+      />
 
-      <section class="docs-sidebar__section">
-        <h3 class="sidebar-section-label">Guides</h3>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Authentication"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="document" /></span>
-            <span class="sidebar-row__label">Authentication</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Agents"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="file-document" /></span>
-            <span class="sidebar-row__label">Agents</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Forge"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="folder" /></span>
-            <span class="sidebar-row__label">Forge</span>
-          </span>
-        </div>
-      </section>
-
-      <section class="docs-sidebar__section">
-        <h3 class="sidebar-section-label">Reference</h3>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="API"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="document" /></span>
-            <span class="sidebar-row__label">API</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="CLI"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="document" /></span>
-            <span class="sidebar-row__label">CLI</span>
-          </span>
-        </div>
-        <div class="sidebar-row">
-          <a href="#" class="sidebar-row__hit" aria-label="Config"></a>
-          <span class="sidebar-row__content">
-            <span class="sidebar-row__icon"><.icon name="document" /></span>
-            <span class="sidebar-row__label">Config</span>
-          </span>
-        </div>
-      </section>
+      <Layouts.sidebar_section
+        :for={section <- OpenAgentsWeb.DocsCatalog.sections()}
+        title={section.title}
+        open={Enum.any?(section.items, &(&1.slug == @active_page))}
+      >
+        <Layouts.sidebar_link
+          :for={item <- section.items}
+          path={~p"/docs/#{item.slug}"}
+          label={item.title}
+          icon={item.icon}
+          selected={@active_page == item.slug}
+          patchable={true}
+        />
+      </Layouts.sidebar_section>
     </nav>
   </aside>
 
-  <main class="docs-main">
-    <.flash_group flash={@flash} />
-    {@inner_content}
-  </main>
+  <div class="docs-column">
+    <header class="docs-header">
+      <UI.breadcrumb label="Documentation">
+        <:item navigate={~p"/docs"}>Docs</:item>
+        <:item :if={assigns[:section_title]}>{@section_title}</:item>
+        <:item :if={assigns[:page]}>{@page.item.title}</:item>
+      </UI.breadcrumb>
+
+      <div class="docs-header__controls">
+        <Layouts.theme_toggle />
+        <UI.copy_button
+          :if={assigns[:page]}
+          id="copy-docs-link"
+          text={"#{OpenAgentsWeb.Endpoint.url()}/docs/#{@page.item.slug}"}
+          label="Copy link"
+          copied_label="Copied"
+        />
+      </div>
+    </header>
+
+    <main class="docs-main">
+      <.flash_group flash={@flash} />
+      {@inner_content}
+    </main>
+  </div>
 </div>

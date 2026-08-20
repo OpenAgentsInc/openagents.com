@@ -26,6 +26,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/components/icons",
     "/components/:slug",
     "/docs",
+    "/docs/:slug",
     "/healthz"
   ]
 

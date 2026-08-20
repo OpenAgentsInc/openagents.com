@@ -2132,3 +2132,206 @@
     }
   }
 }
+
+/* ── Docs page: body and table of contents ────────────────────────────────── */
+
+/* Two columns: the prose, and the page's own headings. The rail is fixed-width
+ * and the prose is capped, because a measure much past ~70 characters costs
+ * more in return sweeps than it gains in fewer lines. */
+
+@layer components {
+  .docs-page {
+    display: flex;
+    align-items: flex-start;
+    gap: 48px;
+  }
+
+  .docs-prose {
+    min-width: 0;
+    max-width: 68ch;
+    flex: 1;
+    color: var(--text-body);
+  }
+
+  .docs-toc {
+    position: sticky;
+    top: 32px;
+    flex: none;
+    width: 200px;
+    border-left: 1px solid var(--line);
+    padding-left: 16px;
+  }
+
+  .docs-toc__title {
+    margin: 0 0 8px;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  .docs-toc ul {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .docs-toc a {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    text-decoration: none;
+    transition: color 150ms var(--ease);
+  }
+
+  @media (hover: hover) {
+    .docs-toc a:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  /* Depth by indent rather than by size: a nested heading is subordinate, not
+     less important, and shrinking it would say the wrong thing. */
+  .docs-toc li[data-level="3"] {
+    padding-left: 12px;
+  }
+
+  /* The rail costs more than it returns once it would crowd the prose. */
+  @media (max-width: 1100px) {
+    .docs-toc {
+      display: none;
+    }
+  }
+}
+
+/* ── Rendered Markdown ────────────────────────────────────────────────────── */
+
+@layer components {
+  .docs-prose h1 {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .docs-prose h2 {
+    margin: 40px 0 12px;
+    color: var(--text-primary);
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    scroll-margin-top: 24px;
+  }
+
+  .docs-prose h3 {
+    margin: 28px 0 8px;
+    color: var(--text-primary);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    scroll-margin-top: 24px;
+  }
+
+  .docs-prose p {
+    margin: 0 0 16px;
+    line-height: 1.7;
+  }
+
+  .docs-prose ul,
+  .docs-prose ol {
+    margin: 0 0 16px;
+    padding-left: 22px;
+    line-height: 1.7;
+  }
+
+  .docs-prose ul {
+    list-style: disc;
+  }
+
+  .docs-prose ol {
+    list-style: decimal;
+  }
+
+  .docs-prose li {
+    margin-bottom: 6px;
+  }
+
+  .docs-prose a {
+    color: var(--accent-bright);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  @media (hover: hover) {
+    .docs-prose a:hover {
+      text-decoration: none;
+    }
+  }
+
+  .docs-prose code {
+    padding: 1px 5px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--ink-raised);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8125em;
+  }
+
+  /* A fenced block is already a panel; the inline chrome would double it. */
+  .docs-prose pre {
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--ink-raised);
+  }
+
+  .docs-prose pre code {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+
+  .docs-prose blockquote {
+    margin: 0 0 16px;
+    padding-left: 16px;
+    border-left: 2px solid var(--line-strong);
+    color: var(--text-muted);
+  }
+
+  .docs-prose hr {
+    margin: 32px 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .docs-prose strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .docs-prose table {
+    width: 100%;
+    margin: 0 0 16px;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .docs-prose th,
+  .docs-prose td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+
+  .docs-prose th {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+}

@@ -74,6 +74,7 @@ defmodule OpenAgentsWeb.Router do
       layout: {OpenAgentsWeb.Layouts, :docs},
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/docs", DocsLive, :index
+      live "/docs/:slug", DocsLive, :show
     end
 
     post "/auth/github", AuthController, :start

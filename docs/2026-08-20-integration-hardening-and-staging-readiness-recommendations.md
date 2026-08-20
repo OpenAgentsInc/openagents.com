@@ -403,9 +403,10 @@ Remove the unused parser and update every related document in the same commit.
 - Reject any component library that emits generic component selectors into the
   Tailwind utilities layer or otherwise outranks the application component
   layer. Verify cascade behavior, not only dependency names.
-- Keep the product deliberately dark-only for staging. Hide or remove the theme
-  toggle while it has no visual effect; treat a light palette as a separate,
-  owner-approved design project.
+- Maintain exactly the two owned light and dark palettes, with a functional
+  system, light, and dark preference control. Keep explicit choices ahead of
+  the operating-system fallback, prevent a wrong-theme first paint, and reject
+  third-party theme tokens or an undeclared third palette.
 - Treat any style-pack rename as a controlled palette migration. Preserve the
   primitive token contract, run visual regression checks, and do not mistake a
   load-bearing palette file for a cosmetic filename.
@@ -421,8 +422,9 @@ Remove the unused parser and update every related document in the same commit.
 - Build an SBOM for the staging image and retain it with the staging evidence.
 
 **Exit criteria:** The application has one Markdown parser, one component
-system, one documented two-tier icon policy, no nonfunctional theme control, no
-unexplained dependency, and complete license records.
+system, one documented two-tier icon policy, exactly two governed themes with a
+functional preference control, no unexplained dependency, and complete license
+records.
 
 **Gate 4 status (2026-08-20): complete.**
 
@@ -436,11 +438,12 @@ unexplained dependency, and complete license records.
   Added form-aware input, heading, table, and list primitives; removed the
   generated compatibility module; and made `/components` an executable
   inventory of every public component.
-- Removed the browser theme script, theme control, theme selectors, and retired
-  palette aliases. The palette remains deliberately dark-only. The Node suite
-  now compiles Tailwind and proves that Basecoat geometry precedes the
-  OpenAgents style pack and that all eight governed button variants survive the
-  cascade.
+- Removed the retired palette aliases and restored an owner-directed light
+  palette alongside the neutral dark palette. The system, light, and dark
+  preference control resolves before first paint. The Node suite compiles
+  Tailwind and proves that exactly two owned themes and the system fallback
+  survive, Basecoat geometry precedes the OpenAgents style pack, and all eight
+  governed button variants survive the cascade.
 - Migrated current glyph uses to the preferred vendored Apps SDK set. Retained
   Heroicons only as the owner-approved second tier, pinned it to immutable
   revision `0435d4ca364a608cc75e2f8683d374e55abbae26`, and recorded an empty
@@ -1159,7 +1162,7 @@ Use two staging lanes until the intended fleet replaces the web-only lane:
 
 ### Web acceptance lane
 
-Use an isolated staging hostname such as `stage.openagents.com` for browser and
+Use the isolated `staging.openagents.com` hostname for browser and
 API acceptance. It needs:
 
 - A staging-only GitHub OAuth application and callback.
@@ -1316,12 +1319,30 @@ Implemented locally on 2026-08-20:
   build receipt, and deploy receipt probes remained present. Both the candidate
   application and the last-known-good application started against the migrated
   copy.
+- Added an exact-SHA staging publisher for the application image, isolated
+  builder image, release tar, CycloneDX SBOM, and one checksummed candidate
+  manifest. It resolves registry-reported manifest digests, verifies platform,
+  OCI labels, and packaged revisions, supports safe resume after a partial
+  push, and never creates a mutable convenience tag.
+- Enabled immutable Docker tags and Terraform deletion prevention on the
+  staging Artifact Registry. Pinned both base image manifests, Debian package
+  snapshots, Hex, Rebar3, Tailwind, esbuild, the target architecture, and the
+  build timestamp source. Distributed releases now refuse to start without an
+  explicit runtime cookie rather than falling back to the packaged
+  non-distributed placeholder.
+- Built and inspected both container targets locally. The dated Debian sources
+  and all executable checksums passed, both OCI labels and packaged build
+  revisions matched the source commit, the builder contained one release
+  archive, and a distributed boot without a runtime cookie failed closed. The
+  repository-wide precommit completed with 1,378 Elixir tests and 17 JavaScript
+  tests passing.
 
 The [staging migration-lineage runbook](operations/staging-migration-lineage.md)
 defines classification, copy rehearsal, snapshot, single-job migration,
 rollback compatibility, and evidence collection. Gate 13 remains open until
-the exact candidate image and release artifacts are retained and the selected
-path runs against the isolated staging target.
+the [immutable candidate runbook](operations/staging-candidate-artifacts.md)
+runs against the isolated staging registry and the selected migration path runs
+against the isolated staging target.
 
 ## Gate 14: Run the staging regression matrix
 
@@ -1579,7 +1600,8 @@ each handoff.
 - [x] All documentation links and invariant evidence resolve.
 - [x] The application has one Markdown parser, component system, and documented
       two-tier icon policy.
-- [x] The dark-only palette has no nonfunctional theme control.
+- [x] Exactly two owned palettes have a functional system, light, and dark
+      preference control and compiled cascade coverage.
 - [x] Runtime configuration is typed, redacted, and staging-specific.
 - [x] Every route has an explicit authority class.
 - [x] GitHub token behavior matches code, UI disclosure, and data rights.
@@ -1615,8 +1637,10 @@ Status: accepted and incorporated into the plan above
 The gate structure remains intact. The main plan now incorporates the measured
 Gate 0 baseline, the missing JavaScript suite, database isolation, migration
 lineage, configuration and authorization evidence, and recovery-test scope.
-It also adopts the owner's two-tier icon decision, makes the current dark-only
-palette explicit, and treats the style-pack rename as a palette migration.
+It also adopts the owner's two-tier icon decision, records the dark-only
+palette that existed when the addendum was measured, and treats the style-pack
+rename as a palette migration. The later owner-directed light-mode change is
+recorded in the current disposition below.
 This addendum remains as the measurement record. Everything here was verified
 directly at the SHA given, not inferred.
 
@@ -1631,7 +1655,7 @@ this disposition for the current plan:
 | A1, missing browser tests and incomplete baseline | Resolved by Gate 0. The owned baseline now runs the Node suites, merged Elixir coverage, and release smoke against an exact SHA. |
 | A2, staging shares a production database failure domain | Open and blocking Gates 12 and 15. Provision a separate staging database instance before any failure injection or soak. |
 | A3, incompatible migration lineage on a nonempty prior database | Mapped and rehearsed locally with a fail-closed release command. Each actual prior-lineage target still requires its own snapshot-copy rehearsal before Gate 13 deployment. |
-| A4, component, icon, and palette conflicts | Resolved by Gate 4 and its compiled CSS contract tests. |
+| A4, component, icon, and palette conflicts | Resolved by Gate 4 and its compiled CSS contract tests. The later owner-directed light-mode change supersedes only the addendum's historical dark-only palette decision. |
 | A5, silent runtime configuration failures | Resolved by Gate 5 and its fail-closed runtime readiness checks. |
 | A6, repository authorization violations | Resolved by Gate 7 in code, PostgreSQL constraints, and the populated migration rehearsal. |
 | A7, missing recovery-worker tests | Resolved by Gate 8 with direct supervised-process recovery tests. |
@@ -1751,17 +1775,21 @@ baseline map and rehearsal before deployment.
 ## A4. Four places the plan disagrees with a prior decision or current state
 
 These were originally flagged for deliberate choices. Gate 4 now records their
-disposition: retain the owner-approved Heroicons fallback, keep staging
-deliberately dark-only without a nonfunctional toggle, control the palette-file
-rename as a visual migration, and reject conflicting cascade-layer behavior.
+disposition: retain the owner-approved Heroicons fallback, govern the two owned
+palettes and functional preference control, control the palette-file rename as
+a visual migration, and reject conflicting cascade-layer behavior.
 
 **Heroicons, resolved.** Product surfaces now use Apps SDK glyphs. Heroicons
 remains the deliberate fallback, is pinned to an immutable revision, and has no
 current product call sites. `docs/ICONS.md` governs and inventories exceptions.
 
-**The palette is dark-only, resolved.** The application removed its theme
-control, browser theme state, and theme selectors. A light palette remains a
-separate owner-approved design project.
+**The palette finding is resolved and the original decision is superseded.**
+The application was dark-only when this addendum was measured. The later
+owner-directed palette change added one governed light palette, restored a
+system, light, and dark preference control, and replaced the old negative
+theme assertion with compiled positive contracts for both owned themes and the
+operating-system fallback. No third-party theme plugin or third palette was
+introduced.
 
 **The palette file, resolved.** `assets/css/openagents.css` owns the palette
 contract and loads after individually imported Basecoat structure. The retired

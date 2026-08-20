@@ -19,10 +19,17 @@ fi
 
 readonly source_commit="$(git rev-parse HEAD)"
 
-readonly image_digest="$(
-  docker image inspect "$image_reference" \
-    --format '{{index .RepoDigests 0}}' 2>/dev/null
-)"
+case "$image_reference" in
+  *@sha256:????????????????????????????????????????????????????????????????)
+    readonly image_digest="$image_reference"
+    ;;
+  *)
+    readonly image_digest="$(
+      docker image inspect "$image_reference" \
+        --format '{{index .RepoDigests 0}}' 2>/dev/null
+    )"
+    ;;
+esac
 
 if [[ -z "$image_digest" || "$image_digest" == "<no value>" ]]; then
   echo "image must be present locally with a resolved repository digest: $image_reference" >&2

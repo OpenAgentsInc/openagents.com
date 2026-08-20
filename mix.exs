@@ -47,6 +47,7 @@ defmodule OpenAgents.MixProject do
       [
         include_erts: true,
         include_src: false,
+        cookie: "openagents-nondistributed-placeholder",
         steps: [
           &OpenAgents.ReleaseAssembler.pre_assemble/1,
           :assemble,

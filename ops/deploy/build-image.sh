@@ -10,6 +10,8 @@ if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]; the
 fi
 
 git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
+source_date_epoch=$(git -C "$repo_root" show -s --format=%ct "$git_sha")
+platform=${OPENAGENTS_IMAGE_PLATFORM:-linux/amd64}
 tag=${1:-"openagents:$git_sha"}
 image_root="$repo_root/.git/openagents/images"
 result_path="$image_root/$git_sha.json"
@@ -21,10 +23,17 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+if [ "$platform" != "linux/amd64" ]; then
+  echo "OPENAGENTS_IMAGE_PLATFORM must be linux/amd64 for the staging fleet" >&2
+  exit 1
+fi
+
 "$repo_root/ops/ci/gate.sh" --verify
 
 docker build \
+  --platform "$platform" \
   --build-arg "OPENAGENTS_BUILD_REVISION=$git_sha" \
+  --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
   --iidfile "$iid_file" \
   --label "org.opencontainers.image.revision=$git_sha" \
   --tag "$tag" \
@@ -62,6 +71,9 @@ cat >"$result_path" <<EOF
   "schema": "openagents.local-image.v1",
   "git_sha": "$git_sha",
   "image_digest": "$image_digest",
+  "digest_scope": "local_config",
+  "platform": "$platform",
+  "source_date_epoch": $source_date_epoch,
   "tag": "$tag"
 }
 EOF

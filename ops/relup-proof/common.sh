@@ -29,7 +29,8 @@ proof_key() {
 }
 
 proof_root() {
-  printf '%s\n' "$repo_root/.git/openagents/relup-proof/$(proof_key)"
+  key=$(proof_key) || return $?
+  printf '%s\n' "$repo_root/.git/openagents/relup-proof/$key"
 }
 
 require_proof_artifacts() {

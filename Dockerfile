@@ -8,17 +8,42 @@
 ARG ELIXIR_VERSION=1.20.3
 ARG OTP_VERSION=29.0.5
 ARG DEBIAN_VERSION=trixie-20260803-slim
+ARG DEBIAN_SNAPSHOT=20260803T000000Z
+ARG HEX_VERSION=2.5.1
+ARG REBAR3_VERSION=3.25.1
+ARG REBAR3_SHA512=69073f6ad163f74971545015238614c327893960c1b3f26df5377df135c773a0716b48b65c2a48cef878f185dd92805abc69894adfa3fd27a90c62a64ba371e2
+ARG TAILWIND_VERSION=4.3.0
+ARG TAILWIND_SHA256=73f0e5459054e5cfaa8ab6f3b940f3fbe0f13cc7fd83bc24e7c655033c203400
+ARG ESBUILD_VERSION=0.25.4
+ARG ESBUILD_SHA256=93433b456cac3a454ee27403d3de9adce88d83e5439ba37e1471af54730c9ca7
 
-ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
-ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}"
+ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}@sha256:ae38be7cb19bffa78adedb04732d9e6ba83a507b4cfb06983cbe711edb49da54"
+ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258"
 
 FROM ${BUILDER_IMAGE} AS builder
 
 ARG OPENAGENTS_BUILD_REVISION="image"
+ARG SOURCE_DATE_EPOCH=0
+ARG DEBIAN_SNAPSHOT
+ARG HEX_VERSION
+ARG REBAR3_VERSION
+ARG REBAR3_SHA512
+ARG TAILWIND_VERSION
+ARG TAILWIND_SHA256
+ARG ESBUILD_VERSION
+ARG ESBUILD_SHA256
 ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 # install build dependencies
-RUN apt-get update \
+RUN sed -i \
+      "s|URIs: http://deb.debian.org/debian$|URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && sed -i \
+      "s|URIs: http://deb.debian.org/debian-security$|URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
   && apt-get install -y --no-install-recommends build-essential git \
   && rm -rf /var/lib/apt/lists/*
 
@@ -26,8 +51,11 @@ RUN apt-get update \
 WORKDIR /app
 
 # install hex + rebar
-RUN mix local.hex --force \
-  && mix local.rebar --force
+RUN mix local.hex "${HEX_VERSION}" --force \
+  && mix local.rebar rebar3 \
+      "https://github.com/erlang/rebar3/releases/download/${REBAR3_VERSION}/rebar3" \
+      --sha512 "${REBAR3_SHA512}" \
+      --force
 
 # set build ENV
 ENV MIX_ENV="prod"
@@ -44,7 +72,11 @@ COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
 
 # Install Tailwind and esbuild so assets can be built
-RUN mix assets.setup
+RUN mix assets.setup \
+  && printf '%s  %s\n' \
+      "${TAILWIND_SHA256}" "/app/_build/tailwind-linux-x64-${TAILWIND_VERSION}" \
+      "${ESBUILD_SHA256}" "/app/_build/esbuild-linux-x64" \
+    | sha256sum --check --strict
 
 COPY priv priv
 
@@ -77,7 +109,18 @@ CMD ["mix", "run", "--no-compile", "--no-start", "ops/forge/build-worker.exs"]
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
-RUN apt-get update \
+ARG DEBIAN_SNAPSHOT
+ARG SOURCE_DATE_EPOCH=0
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+
+RUN sed -i \
+      "s|URIs: http://deb.debian.org/debian$|URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && sed -i \
+      "s|URIs: http://deb.debian.org/debian-security$|URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}|" \
+      /etc/apt/sources.list.d/debian.sources \
+  && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
+  && apt-get update \
   && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates git \
   && rm -rf /var/lib/apt/lists/*
 

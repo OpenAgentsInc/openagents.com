@@ -26,11 +26,17 @@ The configuration creates these staging-only resources:
   Terraform never creates a secret version or stores a credential in state.
 - Separate buckets for forge artifacts, forge WAL, recordings, and evidence.
 - One Artifact Registry repository for digest-addressed application and builder
-  images.
+  images. Full-SHA tags are immutable, and Terraform cannot delete the
+  repository.
 
 The instances start fenced. They do not run an application until an operator
 assigns exact application and builder image digests and creates the required
 staging-only secret versions during Gate 13.
+
+After this boundary exists, use the
+[immutable candidate runbook](../../docs/operations/staging-candidate-artifacts.md)
+to publish the exact application image, builder image, release archive, SBOM,
+and candidate manifest for Gate 13.
 
 ## Prerequisites
 

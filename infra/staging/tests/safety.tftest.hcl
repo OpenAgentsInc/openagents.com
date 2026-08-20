@@ -43,6 +43,16 @@ run "isolated_topology" {
   }
 
   assert {
+    condition     = google_artifact_registry_repository.openagents.docker_config[0].immutable_tags
+    error_message = "Staging application and builder image tags must be immutable."
+  }
+
+  assert {
+    condition     = google_artifact_registry_repository.openagents.deletion_policy == "PREVENT"
+    error_message = "Terraform must not delete the staging artifact repository."
+  }
+
+  assert {
     condition     = length(google_secret_manager_secret.runtime) == 12
     error_message = "Every named staging credential and lane configuration needs its own secret resource."
   }

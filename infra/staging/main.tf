@@ -363,6 +363,11 @@ resource "google_artifact_registry_repository" "openagents" {
   labels        = local.labels
 
   cleanup_policy_dry_run = true
+  deletion_policy        = "PREVENT"
+
+  docker_config {
+    immutable_tags = true
+  }
 
   depends_on = [google_project_service.required]
 }

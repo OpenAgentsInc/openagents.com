@@ -18,9 +18,13 @@ config :openagents, :github_oauth,
   client_secret: System.get_env("GITHUB_CLIENT_SECRET") || "dev-client-secret",
   redirect_uri: "http://localhost:4000/auth/github/callback"
 
+# Overridable like the OAuth pair above: a real local GitHub app issues real
+# tokens, and encrypting them under a key checked into the repository would
+# make the vault decorative.
 config :openagents,
        :github_token_encryption_key,
-       Base.encode64("openagents-dev-token-vault-key32")
+       System.get_env("GITHUB_TOKEN_ENCRYPTION_KEY") ||
+         Base.encode64("openagents-dev-token-vault-key32")
 
 config :openagents, :github_token_encryption_key_id, "development-2026-08"
 config :openagents, :github_token_decryption_keys, %{}

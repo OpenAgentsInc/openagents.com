@@ -264,6 +264,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       title: "Landing",
       items: [
         %{
+          slug: "sidebar-footer",
+          title: "Sidebar footer",
+          icon: "stack",
+          source: "OpenAgentsWeb.Layouts.sidebar_footer/1",
+          summary: "Secondary destinations, gated by environment and role."
+        },
+        %{
           slug: "landing-section",
           title: "Section",
           icon: "stack",

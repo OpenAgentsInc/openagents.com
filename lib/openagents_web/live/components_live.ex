@@ -942,6 +942,22 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "sidebar-footer"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The foot of every sidebar. Two of its rows are conditional: the component
+        library is advertised outside production only, and Admin appears for an
+        operator. Shown here with no user, so Admin is absent — which is what a
+        visitor sees.
+      </p>
+      <div class="demo-frame">
+        <Layouts.sidebar_footer />
+      </div>
+    </div>
+    """
+  end
+
   # ── Landing ───────────────────────────────────────────────────────────────
   #
   # These demo at reduced scale inside the documentation column. A hero is

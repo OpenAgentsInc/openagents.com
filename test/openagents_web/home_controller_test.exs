@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     # not Sarah's. These assertions match the current product identity.
     assert html =~ "The Agent Forge"
     assert html =~ ~s(action="/auth/github?github_tools=enabled")
-    assert html =~ "Sign in and enable GitHub tools"
+    assert html =~ "Log in with GitHub"
 
     # The scope disclosure was removed from the hero at the owner's direction.
     # GitHub's own consent screen still states the scope before the grant is

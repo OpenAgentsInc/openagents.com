@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.VoiceSpikeLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <main id="voice-spike" class="app-shell">
         <header class="command-bar">
           <div class="brand-lockup"><span class="brand-name">SARAH / VOICE SPIKE</span></div>

@@ -274,7 +274,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <main id="network-status-page" class="app-shell status-shell">
         <Layouts.command_bar aria_label="OpenAgents network status" current_user={@current_user}>
           <:lockup>

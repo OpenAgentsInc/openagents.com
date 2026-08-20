@@ -90,7 +90,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <main id="changelog-page" class="app-shell changelog-shell">
         <Layouts.command_bar aria_label="OpenAgents changelog" current_user={@current_user}>
           <:lockup>

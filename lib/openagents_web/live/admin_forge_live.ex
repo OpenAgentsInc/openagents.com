@@ -109,7 +109,7 @@ defmodule OpenAgentsWeb.AdminForgeLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <main id="admin-forge-page" class="app-shell admin-shell">
         <section class="admin" aria-label="Forge deploy lane">
           <h1>Forge — {@repo}</h1>

@@ -104,7 +104,7 @@ defmodule OpenAgentsWeb.AdminScvAccountsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <main id="admin-scv-accounts-page" class="app-shell admin-shell">
         <Layouts.command_bar aria_label="SCV Codex account settings" current_user={@current_user}>
           <:lockup>

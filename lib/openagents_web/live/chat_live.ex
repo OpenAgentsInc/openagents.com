@@ -2,7 +2,6 @@ defmodule OpenAgentsWeb.ChatLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.{
-    Accounts,
     Conversations,
     DataRights,
     ProfileMemory,
@@ -17,6 +16,7 @@ defmodule OpenAgentsWeb.ChatLive do
   alias OpenAgents.Voice.Recordings
   alias OpenAgents.Work
   alias OpenAgentsWeb.ToolActivity
+  alias OpenAgentsWeb.UI
 
   # The sidebar's calls and work sections are bounded projections, not
   # unbounded lists: the last eight of each, recomputed on the same PubSub
@@ -80,6 +80,38 @@ defmodule OpenAgentsWeb.ChatLive do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    # The sidebar's Memory row is a link, not a chat-local event: it must work
+    # from any page, so the panel's state is addressable rather than private.
+    # Arriving by URL has to load what arriving by click loads -- a panel that
+    # opens empty depending on how you reached it is worse than no panel.
+    {:noreply, open_memory(socket, params["panel"] == "memory")}
+  end
+
+  defp open_memory(socket, true) do
+    socket
+    |> assign(:memory_open?, true)
+    |> assign(:pending_memory_action, nil)
+    |> assign(:memory_status, nil)
+    |> reload_memory()
+  end
+
+  defp open_memory(socket, false) do
+    # Closing restores the conversation, which means reloading it: the panel
+    # replaces the transcript rather than covering it, so coming back has to
+    # put the messages back whether you left by URL or by control.
+    {messages, has_older?} = Conversations.list_messages(socket.assigns.conversation)
+
+    socket
+    |> assign(:memory_open?, false)
+    |> assign(:pending_memory_action, nil)
+    |> assign(:memory_status, nil)
+    |> assign(:has_older?, has_older?)
+    |> assign(:oldest_message_id, first_id(messages))
+    |> stream(:messages, messages, reset: true)
+  end
+
+  @impl true
   def handle_event("send_message", %{"chat" => %{"message" => content}}, socket) do
     case voice_route(socket) do
       {:voice, voice_session} -> send_typed_message_into_voice(socket, voice_session, content)
@@ -137,24 +169,9 @@ defmodule OpenAgentsWeb.ChatLive do
 
   def handle_event("toggle_memory", _params, socket) do
     if socket.assigns.memory_open? do
-      {messages, has_older?} = Conversations.list_messages(socket.assigns.conversation)
-
-      {:noreply,
-       socket
-       |> assign(:memory_open?, false)
-       |> assign(:pending_memory_action, nil)
-       |> assign(:memory_status, nil)
-       |> assign(:has_older?, has_older?)
-       |> assign(:oldest_message_id, first_id(messages))
-       |> stream(:messages, messages, reset: true)
-       |> push_event("composer:focus", %{})}
+      {:noreply, socket |> open_memory(false) |> push_event("composer:focus", %{})}
     else
-      {:noreply,
-       socket
-       |> assign(:memory_open?, true)
-       |> assign(:pending_memory_action, nil)
-       |> assign(:memory_status, nil)
-       |> reload_memory()}
+      {:noreply, open_memory(socket, true)}
     end
   end
 
@@ -801,6 +818,29 @@ defmodule OpenAgentsWeb.ChatLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} title="Chat" current_scope={@current_scope} flush>
+      <%!-- Export is the conversation's action, so it belongs beside the
+      conversation's name rather than as a permanent sidebar row competing with
+      the places you can go. --%>
+      <:title_menu>
+        <.button
+          id="chat-actions-trigger"
+          variant={:ghost}
+          size={:sm}
+          class="chat-actions-trigger"
+          popovertarget="chat-actions-menu"
+          popovertargetaction="toggle"
+          aria-label="Conversation actions"
+        >
+          <.icon name="chevron-down" />
+        </.button>
+
+        <UI.menu id="chat-actions-menu" label="Conversation actions">
+          <a id="export-atif" href="/data/export/atif" download role="menuitem" class="menu__item">
+            <.icon name="download" /> Export JSON (ATIF)
+          </a>
+        </UI.menu>
+      </:title_menu>
+
       <:sidebar_extra>
         <.chat_sidebar_rows
           current_user={@current_user}
@@ -1289,68 +1329,6 @@ defmodule OpenAgentsWeb.ChatLive do
   # any future trailing control floats back above it at its own z-index.
   defp chat_sidebar_rows(assigns) do
     ~H"""
-    <nav id="sidebar-nav" class="sidebar-nav" aria-label="Chat">
-      <div class="sidebar-row">
-        <.link
-          id="open-computers"
-          navigate="/computers"
-          class="sidebar-row__hit"
-          aria-label="Computers"
-        ></.link>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon"><.icon name="desktop" /></span>
-          <span class="sidebar-row__label">Computers</span>
-        </span>
-      </div>
-
-      <div class="sidebar-row" data-selected={@memory_open?}>
-        <button
-          id="toggle-memory"
-          type="button"
-          class="sidebar-row__hit"
-          phx-click="toggle_memory"
-          aria-expanded={to_string(@memory_open?)}
-          aria-controls="memory-manager"
-          aria-label={if @memory_open?, do: "Return to conversation", else: "Memory"}
-        ></button>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon">
-            <.icon name={if @memory_open?, do: "arrow-left", else: "brain"} />
-          </span>
-          <span class="sidebar-row__label">
-            {if @memory_open?, do: "Return to conversation", else: "Memory"}
-          </span>
-        </span>
-      </div>
-
-      <div class="sidebar-row">
-        <.link
-          id="open-leaderboard"
-          navigate="/leaderboard"
-          class="sidebar-row__hit"
-          aria-label="Leaderboard"
-        ></.link>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon"><.icon name="trophy-top" /></span>
-          <span class="sidebar-row__label">Leaderboard</span>
-        </span>
-      </div>
-
-      <div class="sidebar-row">
-        <.link
-          id="export-atif"
-          href="/data/export/atif"
-          download
-          class="sidebar-row__hit"
-          aria-label="Export"
-        ></.link>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon"><.icon name="download" /></span>
-          <span class="sidebar-row__label">Export</span>
-        </span>
-      </div>
-    </nav>
-
     <%!-- Calls and work: bounded, durable-backed projections (last eight
             each), refreshed by the same PubSub broadcasts that drive the
             transcript. A row whose evidence is a durable transcript message is
@@ -1371,22 +1349,11 @@ defmodule OpenAgentsWeb.ChatLive do
       </section>
     </div>
 
-    <nav
-      :if={Accounts.admin?(@current_user) or @reset_enabled?}
-      id="sidebar-admin"
-      class="sidebar-nav"
-      aria-label="Administration and data"
-    >
-      <div :if={Accounts.admin?(@current_user)} class="sidebar-row">
-        <.link id="open-admin" navigate="/admin" class="sidebar-row__hit" aria-label="Admin"></.link>
-        <span class="sidebar-row__content">
-          <span class="sidebar-row__icon"><.icon name="shield-lock" /></span>
-          <span class="sidebar-row__label">Admin</span>
-        </span>
-      </div>
-
+    <%!-- Admin moved to the sidebar footer, where it is one row for an
+    operator on every page rather than a row that only exists on chat. What
+    stays here is the conversation's own data action. --%>
+    <nav :if={@reset_enabled?} id="sidebar-admin" class="sidebar-nav" aria-label="Data">
       <.form
-        :if={@reset_enabled?}
         for={%{}}
         id="reset-conversation-form"
         action="/data/reset"
@@ -2149,6 +2116,16 @@ defmodule OpenAgentsWeb.ChatLive do
           </p>
         </div>
         <div class="memory-header__actions">
+          <%!-- The way out of a panel belongs in the panel. This used to be a
+          sidebar row, which meant leaving depended on chrome outside the thing
+          you were leaving. --%>
+          <.text_button
+            id="toggle-memory"
+            phx-click="toggle_memory"
+            aria-label="Return to conversation"
+          >
+            <.icon name="arrow-left" /> Return to conversation
+          </.text_button>
           <.text_button id="export-all-data" href="/data/export" download>
             <.icon name="download" /> Export ALL DATA
           </.text_button>

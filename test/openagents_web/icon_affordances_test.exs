@@ -42,7 +42,7 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
       conn = log_in_github_user(conn, "icon-decorative-user")
       {:ok, view, _html} = live(conn, ~p"/chat")
 
-      for id <- ~w(load-older toggle-memory) do
+      for id <- ~w(load-older) do
         refute has_element?(view, "##{id} svg[aria-label]"),
                "the glyph in ##{id} announces itself alongside its text label"
       end
@@ -53,7 +53,7 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
       conn = log_in_github_user(conn, "icon-memory-user")
       {:ok, view, _html} = live(conn, ~p"/chat")
 
-      html = view |> element("#toggle-memory") |> render_click()
+      html = render_patch(view, ~p"/chat?panel=memory")
 
       assert html =~ "Export ALL DATA"
       assert html =~ "DELETE ALL DATA"

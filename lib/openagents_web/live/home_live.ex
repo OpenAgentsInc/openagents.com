@@ -42,6 +42,7 @@ defmodule OpenAgentsWeb.HomeLive do
               <.button
                 id="home-cta-browse"
                 navigate={~p"/OpenAgentsInc/openagents.com/issues"}
+                variant={:secondary}
                 size={:lg}
               >
                 View issues
@@ -55,10 +56,16 @@ defmodule OpenAgentsWeb.HomeLive do
                 class="m-0"
               >
                 <.button type="submit" variant={:primary} size={:lg} id="home-cta-signin">
-                  Sign in and enable GitHub tools
+                  <.icon name="brand-github" /> Log in with GitHub
                 </.button>
               </.form>
-              <.button navigate={~p"/docs"} size={:lg}>Read the docs</.button>
+              <%!-- Quieter than the action beside it. `variant` defaults to
+              `:primary`, so two filled buttons sat side by side stating that
+              both were the thing to do, which leaves a reader picking rather
+              than proceeding. --%>
+              <.button navigate={~p"/docs"} variant={:secondary} size={:lg}>
+                Read the docs
+              </.button>
             <% end %>
           </:actions>
 

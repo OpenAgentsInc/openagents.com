@@ -52,24 +52,15 @@ defmodule OpenAgentsWeb.ChatLiveTest do
            end)
   end
 
-  test "the sidebar leads with Computers immediately above Memory", %{conn: conn} do
+  test "the sidebar carries Computers, Memory and Leaderboard for everyone", %{conn: conn} do
     conn = log_in_github_user(conn, "computers-nav-browser")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
-    assert has_element?(view, ~s(#sidebar-nav #open-computers[aria-label="Computers"]))
-    assert has_element?(view, ~s(#sidebar-nav #open-computers[href="/computers"]))
-
-    assert has_element?(
-             view,
-             "#sidebar #sidebar-nav > .sidebar-row:first-child #open-computers"
-           )
-
-    assert has_element?(
-             view,
-             "#sidebar-nav .sidebar-row:has(#open-computers) + .sidebar-row #toggle-memory"
-           )
-
-    assert has_element?(view, ~s(#sidebar-nav #open-leaderboard[aria-label="Leaderboard"]))
+    # Computers, Memory and Leaderboard are destinations for everyone, so they
+    # sit in the application sidebar rather than appearing only on chat.
+    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/computers"]))
+    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat?panel=memory"]))
+    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/leaderboard"]))
   end
 
   test "chat contributes its rows to the one application sidebar", %{conn: conn} do
@@ -88,8 +79,15 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     # Every destination chat used to carry in its own rail is still reachable,
     # with an accessible name on each stretched hit target.
-    assert has_element?(view, ~s(#sidebar #toggle-memory[aria-label="Memory"]))
-    assert has_element?(view, "#sidebar a#export-atif[href='/data/export/atif'][download]")
+    # Export is the conversation's action, so it is in the conversation's
+    # header menu rather than a permanent sidebar row.
+    refute has_element?(view, "#sidebar #export-atif")
+
+    assert has_element?(
+             view,
+             "#chat-actions-menu a#export-atif[href='/data/export/atif'][download]"
+           )
+
     assert has_element?(view, "#sidebar #sidebar-sections")
 
     # Identity is the command bar's, once, rather than a second account
@@ -105,8 +103,9 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     conn = log_in_admin_user(recycle(conn), "admin-chip-visible-browser")
     {:ok, view, _html} = live(conn, ~p"/chat")
-    assert has_element?(view, ~s(#open-admin[aria-label="Admin"]))
-    assert has_element?(view, "#sidebar-admin .sidebar-row__label", "Admin")
+    # Admin is one row in the sidebar footer for an operator on every page,
+    # rather than a row that exists only on chat.
+    assert has_element?(view, ~s(#sidebar .sidebar-footer #open-admin[href="/admin"]))
   end
 
   test "the reset control renders only where it is enabled", %{conn: conn} do
@@ -200,7 +199,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     assert {:ok, view, _html} = live(conn, ~p"/chat")
     assert {:ok, _banned} = OpenAgents.Accounts.ban_user(user, "manual_abuse_review")
 
-    view |> element("#toggle-memory") |> render_click()
+    view |> form("#message-form", chat: %{message: "still here?"}) |> render_submit()
     assert_redirect(view, ~p"/")
   end
 
@@ -813,7 +812,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     conn = log_in_github_user(conn, token)
     assert {:ok, view, _html} = live(conn, ~p"/chat")
 
-    html = view |> element("#toggle-memory") |> render_click()
+    html = render_patch(view, ~p"/chat?panel=memory")
 
     assert html =~ ~s(id="memory-manager")
     assert html =~ ~s(aria-labelledby="memory-heading")
@@ -831,7 +830,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     assert has_element?(view, "#delete-data-form button#delete-all-data[type='submit']")
     refute has_element?(view, "#message-form")
 
-    view |> element("#toggle-memory") |> render_click()
+    render_patch(view, ~p"/chat")
     assert has_element?(view, "#message-form")
     assert render(view) =~ "Hello. I&#39;m Sarah—an OpenAgent. What are we working on?"
   end
@@ -843,8 +842,8 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     conn = log_in_github_user(conn, token)
     assert {:ok, first, _html} = live(conn, ~p"/chat")
     assert {:ok, second, _html} = live(conn, ~p"/chat")
-    first |> element("#toggle-memory") |> render_click()
-    second |> element("#toggle-memory") |> render_click()
+    render_patch(first, ~p"/chat?panel=memory")
+    render_patch(second, ~p"/chat?panel=memory")
 
     first
     |> form("#memory-record-#{record.id} form", %{"claim" => "I prefer concise, direct answers"})
@@ -870,7 +869,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     user = github_user(token)
     conn = log_in_github_user(conn, token)
     assert {:ok, view, _html} = live(conn, ~p"/chat")
-    view |> element("#toggle-memory") |> render_click()
+    render_patch(view, ~p"/chat?panel=memory")
 
     view |> element("#forget-record-#{record.id}") |> render_click()
     assert has_element?(view, "#memory-confirmation")
@@ -901,7 +900,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     user = github_user(token)
     conn = log_in_github_user(conn, token)
     assert {:ok, view, _html} = live(conn, ~p"/chat")
-    view |> element("#toggle-memory") |> render_click()
+    render_patch(view, ~p"/chat?panel=memory")
 
     view |> element("#forget-category-#{project.id}") |> render_click()
     assert render(view) =~ "Forget every active project memory in this account?"

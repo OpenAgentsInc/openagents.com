@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.AdminLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <main id="admin-page" class="app-shell admin-shell">
         <%!-- The same bar every other surface renders, so moving between them
               reads as one application. The lockup carries only the way back:

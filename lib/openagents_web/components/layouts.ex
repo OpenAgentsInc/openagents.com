@@ -47,6 +47,13 @@ defmodule OpenAgentsWeb.Layouts do
 
   slot :inner_block, required: true
 
+  slot :title_menu,
+    doc: """
+    Actions belonging to this page, rendered beside its name in the command
+    bar. Nested, never passed as an attribute: forwarding a slot as an attr
+    compiles and renders but loses change tracking.
+    """
+
   slot :sidebar_extra,
     doc: """
     Rows this page contributes to the application sidebar.
@@ -65,7 +72,9 @@ defmodule OpenAgentsWeb.Layouts do
       </.sidebar>
 
       <div class="flex-1 min-w-0 flex flex-col h-screen">
-        <.openagents_command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle} />
+        <.openagents_command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle}>
+          <:menu>{render_slot(@title_menu)}</:menu>
+        </.openagents_command_bar>
 
         <main class={[
           "flex-1 min-w-0",
@@ -95,6 +104,7 @@ defmodule OpenAgentsWeb.Layouts do
   attr :current_scope, :map, default: nil
   attr :title, :string, default: nil
   attr :subtitle, :string, default: nil
+  slot :menu, doc: "actions belonging to the current page"
 
   defp openagents_command_bar(assigns) do
     ~H"""
@@ -112,6 +122,7 @@ defmodule OpenAgentsWeb.Layouts do
               <p class="text-xs text-muted-foreground truncate">{@subtitle}</p>
             <% end %>
           </div>
+          {render_slot(@menu)}
         <% end %>
       </div>
 
@@ -121,7 +132,7 @@ defmodule OpenAgentsWeb.Layouts do
           <.account_dropdown current_scope={@current_scope} />
         <% else %>
           <.button navigate={~p"/#github-tools"} variant={:primary} size={:sm}>
-            Sign in with GitHub
+            <UI.icon name="brand-github" /> Log in with GitHub
           </.button>
         <% end %>
       </div>
@@ -189,12 +200,25 @@ defmodule OpenAgentsWeb.Layouts do
   The component library is advertised outside production only. It documents
   the parts a page is built from rather than anything a visitor came for.
   """
+  attr :current_user, :map, default: nil, doc: "used only to decide whether admin shows"
+
   def sidebar_footer(assigns) do
     assigns =
-      assign(assigns, :components_link?, OpenAgents.RuntimeConfig.internal_surfaces_visible?())
+      assigns
+      |> assign(:components_link?, OpenAgents.RuntimeConfig.internal_surfaces_visible?())
+      |> assign(:admin_link?, admin?(assigns[:current_user]))
 
     ~H"""
     <footer class="sidebar-footer">
+      <.link
+        :if={@admin_link?}
+        id="open-admin"
+        navigate={~p"/admin"}
+        class="sidebar-footer__link"
+        aria-label="Admin"
+      >
+        <UI.icon name="shield-lock" /> Admin
+      </.link>
       <.link :if={@components_link?} navigate={~p"/components"} class="sidebar-footer__link">
         <UI.icon name="widget" /> Components
       </.link>
@@ -524,16 +548,41 @@ defmodule OpenAgentsWeb.Layouts do
           icon="folder"
           patchable={false}
         />
+        <Layouts.sidebar_link
+          path={~p"/computers"}
+          label="Computers"
+          icon="desktop"
+          patchable={false}
+        />
+        <%!-- Memory is the conversation's, but reaching it should not require
+        knowing that: the row goes to chat with the panel open, which is where
+        it lives. --%>
+        <Layouts.sidebar_link
+          path={~p"/chat?panel=memory"}
+          label="Memory"
+          icon="brain"
+          patchable={false}
+        />
+        <Layouts.sidebar_link
+          path={~p"/leaderboard"}
+          label="Leaderboard"
+          icon="trophy-top"
+          patchable={false}
+        />
       </nav>
 
       <%!-- Rows the current page contributes. Chat's destinations, work
       projections and admin actions arrive here instead of in a second rail. --%>
       {render_slot(@extra)}
 
-      <Layouts.sidebar_footer />
+      <Layouts.sidebar_footer current_user={@current_scope} />
     </aside>
     """
   end
+
+  # A nil scope is not an operator. The footer renders on public pages too.
+  defp admin?(nil), do: false
+  defp admin?(user), do: OpenAgents.Accounts.admin?(user)
 
   defp account_display_name(%{github_name: name}) when is_binary(name) and name != "", do: name
   defp account_display_name(%{github_login: login}), do: "@" <> login

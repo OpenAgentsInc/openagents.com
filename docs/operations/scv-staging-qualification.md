@@ -92,3 +92,10 @@ Cloud Logging received lifecycle events, five two-second heartbeats, eight
 normalized OpenCode events, resource measurements, and the terminal worker
 result before the container exited with status `0`. This receipt proves the
 read-only image and event path. The safety limitation above remains in force.
+
+After the job pinned the provider secret to its numeric version, generation 2
+passed as execution `openagents-scv-staging-9gdhz`. SCV run
+`cc749000-8961-44a5-8d98-6569f6b1b925` completed in 11,207 milliseconds with
+two read calls, eight normalized events, 754,118,656 bytes of peak RSS, 45
+resource samples, no sampling errors, and no output truncation. This second
+receipt proves the currently deployed job configuration.

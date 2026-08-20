@@ -271,17 +271,24 @@
   padding-inline: 14px;
   padding-block: 6px;
   border-radius: 10px;
-  color: var(--text-primary);
+  /* Rest dim, brighten on hover. A sidebar is a list of places you are not, so
+     at full brightness every row competes with the page for attention. The
+     current row and the hovered row are the two that earn it. */
+  color: var(--text-muted);
   font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.25rem;
-  transition: background-color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 @media (hover: hover) {
   .sidebar-row:hover {
     background: var(--ink-raised);
-    color: #fff;
+    /* Was a hardcoded #fff, which is white-on-near-white in light mode. The ink
+       token flips with the theme. */
+    color: var(--text-primary);
   }
 }
 
@@ -291,6 +298,8 @@
 
 .sidebar-row[data-selected] {
   background: var(--ink-raised);
+  /* The place you are is the one row that stays bright without being hovered. */
+  color: var(--text-primary);
 }
 
 .sidebar-row--static,
@@ -301,7 +310,8 @@
 .sidebar-row--static:hover,
   .sidebar-row--empty:hover {
   background: transparent;
-  color: var(--text-primary);
+  /* Not a destination, so hovering it must not imply it is one. */
+  color: var(--text-muted);
 }
 
 .sidebar-row__hit {
@@ -430,16 +440,19 @@
 .docs-sidebar__link {
   padding: 6px 8px;
   border-radius: 8px;
-  color: var(--text-primary);
+  /* Same rest-dim/hover-bright rule as .sidebar-row, so the two sidebars in the
+     app read as one idea rather than two similar ones. */
+  color: var(--text-muted);
   font-size: 0.875rem;
   line-height: 1.25rem;
   text-decoration: none;
+  transition: color 150ms ease;
 }
 
 @media (hover: hover) {
   .docs-sidebar__link:hover {
     background: var(--ink-raised);
-    color: #fff;
+    color: var(--text-primary);
   }
 }
 

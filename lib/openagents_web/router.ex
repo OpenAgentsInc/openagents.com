@@ -68,7 +68,25 @@ defmodule OpenAgentsWeb.Router do
     post "/voice/calls/recording", VoiceRecordingController, :create
     post "/voice/calls/recording/complete", VoiceRecordingController, :complete
     delete "/voice/calls", VoiceCallController, :delete
+
+    get "/data/export", DataController, :show
+    get "/data/export/atif", DataController, :export_atif
+    delete "/data", DataController, :delete
+    delete "/data/reset", DataController, :reset
+
+    get "/api/computers", ComputersController, :index
+    post "/api/computers/pairings/:id/approve", ComputersController, :approve_pairing
+    delete "/api/computers/:id", ComputersController, :delete
+    post "/api/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
+    get "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :show
+    delete "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
+
+    get "/api/changelog", ChangelogController, :show
+    get "/api/status", NetworkStatusController, :show
+    get "/memory/export", MemoryExportController, :show
   end
+
+  forward "/git", OpenAgents.Forge.GitHTTP
 
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :api

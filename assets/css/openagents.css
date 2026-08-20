@@ -250,10 +250,11 @@
     padding: clamp(24px, 4vw, 44px) clamp(16px, 4vw, 36px) 56px;
     overflow-x: hidden;
     overflow-y: auto;
-    /* Flat. The indigo radial wash in this corner was the only place in the
-       application where a page tinted itself, and it read as a rendering
-       artefact rather than as design once the palette went monochrome. */
-    background: var(--ink-surface);
+    /* No fill. `--ink-surface` is the panel rung, and painting it on a
+       page-level element drew a lighter slab that stopped wherever the content
+       stopped. The page takes the main area's background like every other
+       surface; the indigo radial wash that used to sit in this corner is gone
+       for the same reason -- it was the only place a page tinted itself. */
     scrollbar-color: var(--icon-faint) transparent;
     scrollbar-width: thin;
   }

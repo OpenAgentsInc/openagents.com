@@ -361,7 +361,8 @@ defmodule OpenAgents.VoiceTest do
     {:ok, conversation} = Conversations.ensure_conversation("voice-recovery-browser")
     {:ok, session} = Voice.admit_session(conversation, enabled_config())
 
-    assert :ok = Voice.recover_interrupted_sessions()
+    recovery = start_supervised!({OpenAgents.VoiceRecovery, []})
+    _state = :sys.get_state(recovery)
 
     recovered = Repo.get!(Session, session.id)
     assert recovered.status == "failed"

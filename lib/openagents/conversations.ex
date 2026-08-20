@@ -847,12 +847,19 @@ defmodule OpenAgents.Conversations do
   end
 
   def append_assistant_delta(%Turn{} = turn, delta) when is_binary(delta) do
+    maximum_bytes = Application.fetch_env!(:openagents, :maximum_message_bytes)
+
     result =
       Repo.transaction(fn ->
         message = Repo.get_for_update!(Message, turn.assistant_message_id)
+        content = message.content <> delta
+
+        if byte_size(content) > maximum_bytes do
+          Repo.rollback(:assistant_message_limit_reached)
+        end
 
         message
-        |> Message.changeset(%{content: message.content <> delta})
+        |> Message.changeset(%{content: content})
         |> Repo.update!()
       end)
 
@@ -951,6 +958,7 @@ defmodule OpenAgents.Conversations do
             set: [
               status: "failed",
               error_message: "Sarah restarted before this response finished.",
+              error_code: "runtime_restarted",
               completed_at: now,
               updated_at: now
             ]

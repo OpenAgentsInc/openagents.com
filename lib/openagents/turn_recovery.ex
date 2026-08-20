@@ -8,8 +8,11 @@ defmodule OpenAgents.TurnRecovery do
   end
 
   @impl true
-  def init(_options) do
-    :ok = OpenAgents.Conversations.recover_interrupted_turns()
+  def init(options) do
+    recovery =
+      Keyword.get(options, :recovery, &OpenAgents.Conversations.recover_interrupted_turns/0)
+
+    :ok = recovery.()
     {:ok, %{}}
   end
 end

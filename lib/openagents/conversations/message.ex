@@ -6,6 +6,7 @@ defmodule OpenAgents.Conversations.Message do
 
   @roles ~w(user assistant system)
   @statuses ~w(streaming complete failed cancelled)
+  @maximum_content_bytes 1_048_576
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -46,12 +47,26 @@ defmodule OpenAgents.Conversations.Message do
     |> validate_inclusion(:role, @roles)
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:modality, ~w(text voice))
+    |> validate_content_bound()
     |> validate_voice_provenance()
     |> foreign_key_constraint(:conversation_id)
     |> foreign_key_constraint(:voice_session_id)
     |> unique_constraint([:voice_session_id, :provider_item_id, :role],
       name: :messages_voice_item_role_index
     )
+  end
+
+  defp validate_content_bound(changeset) do
+    case get_field(changeset, :content) do
+      content when is_binary(content) and byte_size(content) <= @maximum_content_bytes ->
+        changeset
+
+      content when is_binary(content) ->
+        add_error(changeset, :content, "exceeds #{@maximum_content_bytes} bytes")
+
+      _invalid ->
+        changeset
+    end
   end
 
   defp validate_voice_provenance(changeset) do

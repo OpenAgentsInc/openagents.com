@@ -1,7 +1,9 @@
 defmodule OpenAgents.Providers.ProviderContractTest do
   use ExUnit.Case, async: true
 
-  alias OpenAgents.Providers.{OpenAI, Test}
+  alias OpenAgents.Providers.{OpenAI, Request, Test}
+
+  setup {Req.Test, :verify_on_exit!}
 
   test "providers expose stable IDs and finite provider-neutral capabilities" do
     for provider <- [OpenAI, Test] do
@@ -14,6 +16,22 @@ defmodule OpenAgents.Providers.ProviderContractTest do
 
   test "text-only providers remain valid without advertising tool calls" do
     assert __MODULE__.TextOnlyProvider.capabilities() == [:text]
+  end
+
+  test "response creation does not retry a failed POST without an idempotency contract" do
+    Req.Test.expect(__MODULE__, fn conn -> Plug.Conn.send_resp(conn, 503, "unavailable") end)
+
+    request = %Request{
+      model_id: "test-model",
+      instructions: "Bounded test instructions",
+      input: [%{role: "user", content: "Hello"}]
+    }
+
+    assert {:error, {:http_status, 503}} =
+             OpenAI.stream(request, fn _event -> :ok end,
+               api_key: "test-secret",
+               request_options: [plug: {Req.Test, __MODULE__}]
+             )
   end
 
   defmodule TextOnlyProvider do

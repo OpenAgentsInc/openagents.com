@@ -146,6 +146,38 @@ defmodule OpenAgents.TurnProvenanceTest do
              Conversations.list_provider_steps(recovered_receipt)
   end
 
+  test "TurnRecovery finalizes durable evidence after the live server dies mid-stream" do
+    Application.put_env(:openagents, :test_provider_observer, self())
+    on_exit(fn -> Application.delete_env(:openagents, :test_provider_observer) end)
+
+    assert {:ok, conversation} = Conversations.ensure_conversation("turn-worker-recovery")
+    assert {:ok, records} = Conversations.create_turn(conversation, "[observe-request]")
+    assert {:ok, turn_server} = Turns.start(records.turn.id)
+    assert_receive {:provider_request, provider_task, _request}
+
+    server_ref = Process.monitor(turn_server)
+    Process.exit(turn_server, :kill)
+    assert_receive {:DOWN, ^server_ref, :process, ^turn_server, :killed}
+    provider_ref = Process.monitor(provider_task)
+    send(provider_task, :continue_provider)
+    assert_receive {:DOWN, ^provider_ref, :process, ^provider_task, _reason}, 1_000
+
+    recovery = start_supervised!({OpenAgents.TurnRecovery, []})
+    _state = :sys.get_state(recovery)
+
+    recovered_turn = Conversations.get_turn!(records.turn.id)
+    recovered_message = Repo.get!(OpenAgents.Conversations.Message, records.assistant_message.id)
+    {:ok, recovered_receipt} = Conversations.get_turn_receipt(recovered_turn)
+
+    assert recovered_turn.status == "failed"
+    assert recovered_turn.error_code == "runtime_restarted"
+    assert recovered_message.status == "failed"
+    assert recovered_receipt.status == "interrupted"
+
+    assert [%ProviderStep{status: "interrupted", error_code: "runtime_restarted"}] =
+             Conversations.list_provider_steps(recovered_receipt)
+  end
+
   test "legacy turns remain explicit instead of receiving fabricated provenance" do
     assert {:ok, conversation} = Conversations.ensure_conversation("legacy-browser")
     assert {:ok, records} = Conversations.create_turn(conversation, "Legacy turn.")

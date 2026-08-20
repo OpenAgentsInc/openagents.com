@@ -683,9 +683,9 @@ defmodule OpenAgents.Work do
   # computer — so the deep-work step summary is wrong and misleading for it. Give
   # it an honest, kind-aware report that names the interruption and how to resume.
   defp fallback_report(_repo, %Job{kind: "delegation"} = locked_job, status) do
-    params = locked_job.delegation || %{}
-    agent = params["agent_id"] || "the agent"
-    machine = params["machine_name"] || "the machine"
+    authority = locked_job.authority_snapshot || %{}
+    agent = authority["agent_id"] || "the agent"
+    machine = authority["machine_name"] || "the machine"
 
     case status do
       "interrupted" ->

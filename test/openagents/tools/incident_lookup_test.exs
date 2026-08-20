@@ -3,7 +3,7 @@ defmodule OpenAgents.Tools.IncidentLookupTest do
 
   alias OpenAgents.Incidents
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}
-  alias OpenAgents.{Accounts, Conversations, Repo}
+  alias OpenAgents.{Accounts, Conversations, Machines, Repo}
 
   setup do
     assert {:ok, snapshot} = Registry.build([OpenAgents.Tools.IncidentLookup])
@@ -63,6 +63,7 @@ defmodule OpenAgents.Tools.IncidentLookupTest do
 
   test "a newer job report is primary over a stale incident", %{snapshot: snapshot} do
     scope = owner_scope("incident-tool-stale")
+    machine = machine_for(scope.user)
 
     {:ok, _} =
       Incidents.record(%{
@@ -79,9 +80,30 @@ defmodule OpenAgents.Tools.IncidentLookupTest do
       OpenAgents.Work.create_job(%{
         conversation_id: scope.conversation.id,
         owner_visitor_id: scope.owner.id,
+        machine_id: machine.id,
         surface: "text",
         kind: "delegation",
-        goal: "Delegate to claude: input-bar refactor"
+        goal: "Delegate to claude: input-bar refactor",
+        delegation: %{
+          "agent_id" => "claude",
+          "machine_id" => machine.id,
+          "machine_name" => machine.name,
+          "prompt" => "input-bar refactor",
+          "cwd" => "/tmp/openagents-incidents",
+          "timeout_ms" => 3_600_000
+        },
+        authority_snapshot: %{
+          "machine_tier" => machine.tier,
+          "roots" => machine.roots,
+          "cwd" => "/tmp/openagents-incidents",
+          "agent_id" => "claude",
+          "machine_name" => machine.name
+        },
+        budget_snapshot: %{
+          "wall_clock_ms" => 3_600_000,
+          "maximum_prompt_bytes" => 8_000,
+          "maximum_report_bytes" => 8_000
+        }
       })
 
     {:ok, running} = OpenAgents.Work.mark_job_running(job, %{})
@@ -175,5 +197,19 @@ defmodule OpenAgents.Tools.IncidentLookupTest do
     {:ok, conversation} = Conversations.ensure_conversation(user)
     owner = Repo.get!(OpenAgents.Conversations.Visitor, conversation.visitor_id)
     %{user: user, owner: owner, conversation: conversation}
+  end
+
+  defp machine_for(user) do
+    {:ok, %{code: code}} =
+      Machines.start_pairing(%{
+        "name" => "incident-test-machine",
+        "tier" => "curated",
+        "platform" => "linux-x64",
+        "agent_version" => "0.1.0",
+        "roots" => ["/tmp/openagents-incidents"]
+      })
+
+    {:ok, machine} = Machines.approve_pairing(user, code)
+    machine
   end
 end

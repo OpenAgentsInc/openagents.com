@@ -21,31 +21,45 @@ defmodule OpenAgents.Providers.OpenAI do
 
   @impl true
   def stream(%Request{} = request, on_event) when is_function(on_event, 1) do
-    with {:ok, api_key} <- fetch_api_key(),
-         {:ok, response} <- request(api_key, request) do
+    stream(request, on_event, [])
+  end
+
+  @doc false
+  def stream(%Request{} = request, on_event, options)
+      when is_function(on_event, 1) and is_list(options) do
+    with {:ok, api_key} <- fetch_api_key(options),
+         {:ok, response} <- request(api_key, request, options) do
       consume_response(response, on_event)
     end
   end
 
-  defp fetch_api_key do
-    case OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key) do
-      {:ok, key} -> {:ok, key}
-      {:error, :not_configured} -> {:error, :missing_api_key}
+  defp fetch_api_key(options) do
+    case Keyword.fetch(options, :api_key) do
+      {:ok, key} when is_binary(key) and byte_size(key) > 0 ->
+        {:ok, key}
+
+      _not_supplied ->
+        case OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key) do
+          {:ok, key} -> {:ok, key}
+          {:error, :not_configured} -> {:error, :missing_api_key}
+        end
     end
   end
 
-  defp request(api_key, %Request{} = request) do
+  defp request(api_key, %Request{} = request, options) do
     payload = request_payload(request)
+    request_options = Keyword.get(options, :request_options, [])
 
-    case Req.post(@endpoint,
-           auth: {:bearer, api_key},
-           headers: [{"accept", "text/event-stream"}],
-           json: payload,
-           into: :self,
-           receive_timeout: 120_000,
-           retry: :transient,
-           max_retries: 2
-         ) do
+    base_options = [
+      auth: {:bearer, api_key},
+      headers: [{"accept", "text/event-stream"}],
+      json: payload,
+      into: :self,
+      receive_timeout: 120_000,
+      retry: false
+    ]
+
+    case Req.post(@endpoint, Keyword.merge(base_options, request_options)) do
       {:ok, response} ->
         {:ok, response}
 

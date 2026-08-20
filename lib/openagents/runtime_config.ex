@@ -726,7 +726,11 @@ defmodule OpenAgents.RuntimeConfig do
       is_integer(keyword_value(settings, :batch_size)) and
       keyword_value(settings, :batch_size) in 1..1_000 and
       is_integer(keyword_value(settings, :poll_interval_ms)) and
-      keyword_value(settings, :poll_interval_ms) in 100..60_000
+      keyword_value(settings, :poll_interval_ms) in 100..60_000 and
+      is_integer(keyword_value(settings, :provider_timeout_ms)) and
+      keyword_value(settings, :provider_timeout_ms) in 100..120_000 and
+      is_integer(keyword_value(settings, :lease_ms)) and
+      keyword_value(settings, :lease_ms) in keyword_value(settings, :provider_timeout_ms)..300_000
   end
 
   defp valid_semantic_config?(_settings), do: false

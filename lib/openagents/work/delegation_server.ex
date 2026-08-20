@@ -97,16 +97,18 @@ defmodule OpenAgents.Work.DelegationServer do
 
   defp start_delegation(job, ra_gen, resume_id) do
     params = job.delegation || %{}
+    authority = job.authority_snapshot || %{}
+    timeout_ms = timeout_ms(job)
 
     payload =
       %{
-        "agent_id" => params["agent_id"],
+        "agent_id" => authority["agent_id"],
         "prompt" => params["prompt"],
-        "timeout_ms" => timeout_ms(params)
+        "timeout_ms" => timeout_ms
       }
-      |> put_optional("cwd", params["cwd"])
+      |> put_optional("cwd", authority["cwd"])
       |> put_optional("resume_session_id", resume_id || params["resume_session_id"])
-      |> attach_inference_grant(job, params)
+      |> attach_inference_grant(job)
 
     # Checkpoint the ACP session id the moment the controller reports it — in
     # Ra (cluster-wide, for node-loss handoff) AND in the durable job row
@@ -128,9 +130,9 @@ defmodule OpenAgents.Work.DelegationServer do
         await_ms = if resume_id, do: 90_000, else: 0
 
         Computer.request_agent(
-          params["machine_id"],
+          job.machine_id,
           payload,
-          timeout_ms(params) + 15_000,
+          timeout_ms + 15_000,
           on_session: on_session,
           await_machine_ms: await_ms
         )
@@ -157,12 +159,12 @@ defmodule OpenAgents.Work.DelegationServer do
   # injects it into the probe process at spawn. Any other agent (which brings
   # its own credential) gets nothing. A mint failure degrades to a
   # grant-less delegation rather than blocking the work.
-  defp attach_inference_grant(payload, job, %{"agent_id" => "probe", "machine_id" => machine_id})
-       when is_binary(machine_id) do
+  defp attach_inference_grant(payload, %{authority_snapshot: %{"agent_id" => "probe"}} = job)
+       when is_binary(job.machine_id) do
     case OpenAgents.Inference.mint(%{
            owner_visitor_id: job.owner_visitor_id,
            conversation_id: job.conversation_id,
-           machine_id: machine_id
+           machine_id: job.machine_id
          }) do
       {:ok, _grant, token} ->
         payload
@@ -174,7 +176,7 @@ defmodule OpenAgents.Work.DelegationServer do
     end
   end
 
-  defp attach_inference_grant(payload, _job, _params), do: payload
+  defp attach_inference_grant(payload, _job), do: payload
 
   defp summarize({:ok, %{"status" => "completed"} = payload}, job) do
     {"completed", report_line(job, "completed", payload["output"], payload["detail"], payload)}
@@ -197,9 +199,9 @@ defmodule OpenAgents.Work.DelegationServer do
   end
 
   defp report_line(job, status, output, detail, payload) do
-    params = job.delegation || %{}
-    agent = params["agent_id"] || "agent"
-    machine = params["machine_name"] || "the machine"
+    authority = job.authority_snapshot || %{}
+    agent = authority["agent_id"] || "agent"
+    machine = authority["machine_name"] || "the machine"
     header = "Delegation to #{agent} on #{machine} — #{human_status(status)}."
 
     body =
@@ -282,8 +284,11 @@ defmodule OpenAgents.Work.DelegationServer do
     end
   end
 
-  defp timeout_ms(%{"timeout_ms" => value}) when is_integer(value) and value > 0, do: value
-  defp timeout_ms(_params), do: 3_600_000
+  defp timeout_ms(%{budget_snapshot: %{"wall_clock_ms" => value}})
+       when is_integer(value) and value > 0,
+       do: value
+
+  defp timeout_ms(_job), do: 3_600_000
 
   defp put_optional(payload, _key, value) when value in [nil, ""], do: payload
   defp put_optional(payload, key, value), do: Map.put(payload, key, value)
@@ -300,7 +305,7 @@ defmodule OpenAgents.Work.DelegationServer do
   defp write_incident(job, result, status) do
     code = incident_code(status)
     payload = incident_payload(result)
-    params = job.delegation || %{}
+    authority = job.authority_snapshot || %{}
     owner_user_id = incident_owner_user_id(job)
 
     Incidents.report(%{
@@ -313,9 +318,9 @@ defmodule OpenAgents.Work.DelegationServer do
       code: code,
       summary: "Delegation #{human_status(status)}: #{code}",
       context: %{
-        "cwd" => params["cwd"] || "",
-        "agent_id" => params["agent_id"] || "",
-        "machine_id" => params["machine_id"] || "",
+        "cwd" => authority["cwd"] || "",
+        "agent_id" => authority["agent_id"] || "",
+        "machine_id" => job.machine_id || "",
         "duration_ms" => payload["duration_ms"] || 0,
         "truncated" => payload["truncated"] || false,
         "session_id" => payload["session_id"] || ""

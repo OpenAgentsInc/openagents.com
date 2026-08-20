@@ -424,6 +424,10 @@ asynchronous derivatives bound to the source message, exact conversation,
 content digest, model/version manifest, and active generation. Hybrid queries
 repeat the conversation and frozen snapshot predicates in PostgreSQL and admit
 only ready rows whose digest still matches the authoritative complete message.
+Each asynchronous embedding claim has a bounded lease and attempt number. A
+provider task must finish before the lease, and a replacement worker may
+reclaim only an expired running claim. Attempt fencing prevents a stale worker
+from publishing a late derivative.
 Correction, deletion, and rebuild invalidate derivative rows and produce
 append-only receipts; a new manifest generation cannot read an older one.
 Receipts cannot be edited or deleted while their authoritative conversation
@@ -575,7 +579,9 @@ Status: Current
 
 The user message, empty streaming assistant message, and turn record are
 inserted in one transaction. Completion, failure, and cancellation update both
-assistant-message and turn terminal state.
+assistant-message and turn terminal state. PostgreSQL applies a one-megabyte
+hard ceiling to every message, and the configured, lower assistant-message
+ceiling applies to the complete accumulated stream rather than each delta.
 
 Evidence: `OpenAgents.Conversations.create_turn/2`, `finish_turn/5`, and turn tests.
 
@@ -596,10 +602,13 @@ Status: Current
 
 Active records left by a runtime restart are marked failed during application
 startup. A response is never left permanently presented as in progress without
-an executing turn process.
+an executing turn process. Recovery records the bounded provider-neutral
+`runtime_restarted` code, fails every active provider and tool step in the same
+transaction, and is idempotent.
 
 Evidence: `OpenAgents.Conversations.recover_interrupted_turns/0`, the
-`OpenAgents.TurnRecovery` application child, and startup-recovery test.
+`OpenAgents.TurnRecovery` application child, and the process-death recovery
+test in `OpenAgents.TurnProvenanceTest`.
 
 ### TURN-005 — Tool continuations are serial, bounded, and commit-first
 
@@ -642,7 +651,9 @@ event shapes. Adapters emit typed OpenAgents-domain lifecycle, text, tool-call,
 usage, completion, failure, and cancellation events. A response ID is persisted
 when announced, and matching explicit completion is required; stream closure
 alone cannot produce a completed turn. Provider-specific events, credentials,
-and raw errors never reach the receipt or browser.
+and raw errors never reach the receipt or browser. Response creation is a
+non-idempotent mutation and the adapter sends it exactly once; continuation is
+an explicit host decision backed by a committed tool outcome.
 
 Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
 `OpenAgents.Providers.OpenAI.StreamDecoderTest`, `OpenAgents.Providers.Test`, and
@@ -977,7 +988,12 @@ ends the job as explicit `budget_exhausted`. Every terminal path (`completed`,
 streamed report text is persisted as it arrives, and a job that dies before a
 narrative gets an honest host summary of its committed step evidence.
 PostgreSQL constrains status transitions and makes terminal jobs and terminal
-steps immutable. Startup recovery RESUMES orphaned active jobs (#97): it
+steps immutable. A delegation additionally binds one account-owned machine,
+its admission-time authority snapshot, its bounded execution budget, and its
+immutable request. Only the generation-fenced ACP session ID may change after
+admission; workers read machine, agent, working directory, and wall-clock
+authority from the immutable fields. Startup recovery RESUMES orphaned active
+jobs (#97): it
 restarts each job's supervised worker, which re-claims through the generation
 fence and continues — a delegation by its durably checkpointed ACP session id,
 deep work from its committed evidence. A job whose cluster singleton is still
@@ -992,7 +1008,7 @@ best-effort projection that can never rewrite the committed terminal state.
 
 Evidence: `OpenAgents.Work`, `OpenAgents.Work.Job`, `OpenAgents.Work.JobStep`,
 `OpenAgents.Work.JobServer`, `OpenAgents.WorkRecovery`, `OpenAgents.Tools.DeepWork`, the
-`create_work_jobs` migration triggers, `OpenAgents.WorkJobTest`, and
+work-job migration triggers, `OpenAgents.WorkJobTest`, and
 `OpenAgents.DeepWorkToolLoopTest`.
 
 ### SELF-EDIT-001 — Every behavior change is anchored to a pushed commit (2026-08-19)

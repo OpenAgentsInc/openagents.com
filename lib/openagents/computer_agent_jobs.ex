@@ -50,12 +50,29 @@ defmodule OpenAgents.ComputerAgentJobs do
         }
         |> put_optional("resume_session_id", resume_session_id)
 
+      authority_snapshot = %{
+        "machine_tier" => machine.tier,
+        "roots" => machine.roots,
+        "cwd" => cwd,
+        "agent_id" => agent_id,
+        "machine_name" => machine.name
+      }
+
+      budget_snapshot = %{
+        "wall_clock_ms" => @delegation_timeout_ms,
+        "maximum_prompt_bytes" => 8_000,
+        "maximum_report_bytes" => 8_000
+      }
+
       attributes = %{
         conversation_id: conversation.id,
         owner_visitor_id: owner.id,
+        machine_id: machine.id,
         surface: surface,
         goal: String.slice("Delegate to #{agent_id} on #{machine.name}: #{prompt}", 0, 2_000),
-        delegation: delegation
+        delegation: delegation,
+        authority_snapshot: authority_snapshot,
+        budget_snapshot: budget_snapshot
       }
 
       Work.start_delegation(attributes)

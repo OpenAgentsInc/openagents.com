@@ -8,8 +8,9 @@ defmodule OpenAgents.WorkRecovery do
   end
 
   @impl true
-  def init(_options) do
-    :ok = OpenAgents.Work.recover_interrupted_jobs()
+  def init(options) do
+    recovery = Keyword.get(options, :recovery, &OpenAgents.Work.recover_interrupted_jobs/0)
+    :ok = recovery.()
     {:ok, %{}}
   end
 end

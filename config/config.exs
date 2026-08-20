@@ -82,7 +82,9 @@ config :openagents,
     model_version: "2024-01",
     dimensions: 64,
     batch_size: 10,
-    poll_interval_ms: 2_000
+    poll_interval_ms: 2_000,
+    provider_timeout_ms: 15_000,
+    lease_ms: 30_000
   ],
   experience_memory: [
     enabled: false,

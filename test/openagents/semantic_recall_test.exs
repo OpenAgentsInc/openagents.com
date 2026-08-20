@@ -166,6 +166,35 @@ defmodule OpenAgents.SemanticRecallTest do
     assert hd(fallback.matches).source_ref == "message:#{source.id}"
   end
 
+  test "the database prevents moving a semantic job across conversation scope" do
+    first = conversation("semantic-job-scope-first")
+    second = conversation("semantic-job-scope-second")
+    source = message(first, "Keep this job in its source conversation.")
+
+    assert_raise Postgrex.Error, fn ->
+      Repo.update_all(
+        from(job in SemanticJob, where: job.message_id == ^source.id),
+        set: [conversation_id: second.id]
+      )
+    end
+  end
+
+  test "the database prevents moving an embedding across conversation scope" do
+    first = conversation("semantic-vector-scope-first")
+    second = conversation("semantic-vector-scope-second")
+    source = message(first, "Keep this vector in its source conversation.")
+
+    assert %{failed: 0, invalidated: 0} =
+             SemanticIndex.process_all(OpenAgents.Memory.SemanticTestProvider)
+
+    assert_raise Postgrex.Error, fn ->
+      Repo.query!(
+        "UPDATE message_semantic_embeddings SET conversation_id=$1::text::uuid WHERE message_id=$2::text::uuid",
+        [second.id, source.id]
+      )
+    end
+  end
+
   test "committed hybrid comparison improves synonym recall without weakening the lexical baseline",
        %{original_semantic_config: original} do
     conversation = conversation("semantic-release-eval")

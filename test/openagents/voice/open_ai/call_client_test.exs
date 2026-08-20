@@ -88,6 +88,19 @@ defmodule OpenAgents.Voice.OpenAI.CallClientTest do
              )
   end
 
+  test "call creation does not retry a failed POST without an idempotency contract" do
+    Req.Test.expect(__MODULE__, fn conn -> Plug.Conn.send_resp(conn, 503, "unavailable") end)
+
+    assert {:error, {:http_status, 503}} =
+             CallClient.create(
+               "v=0\r\no=no-retry-offer",
+               String.duplicate("d", 64),
+               enabled_config(),
+               api_key: "test-secret",
+               request_options: [plug: {Req.Test, __MODULE__}]
+             )
+  end
+
   defp enabled_config do
     Config.build!(
       enabled: true,

@@ -88,18 +88,20 @@ defmodule OpenAgents.Memory.SemanticIndex do
     )
   end
 
-  @spec process_next(module()) :: {:ok, :empty | :completed | :failed | :invalidated}
-  def process_next(provider) when is_atom(provider) do
-    case claim_job() do
+  @spec process_next(module(), keyword()) :: {:ok, :empty | :completed | :failed | :invalidated}
+  def process_next(provider, options \\ []) when is_atom(provider) and is_list(options) do
+    lease_ms = Keyword.get(options, :lease_ms, 30_000)
+
+    case claim_job(lease_ms) do
       nil -> {:ok, :empty}
-      job -> execute_job(job, provider)
+      job -> execute_job(job, provider, options)
     end
   end
 
-  @spec process_all(module(), pos_integer()) :: map()
-  def process_all(provider, limit \\ 100) do
+  @spec process_all(module(), pos_integer(), keyword()) :: map()
+  def process_all(provider, limit \\ 100, options \\ []) do
     Enum.reduce_while(1..limit, %{completed: 0, failed: 0, invalidated: 0}, fn _index, counts ->
-      case process_next(provider) do
+      case process_next(provider, options) do
         {:ok, :empty} -> {:halt, counts}
         {:ok, status} -> {:cont, Map.update!(counts, status, &(&1 + 1))}
       end
@@ -134,12 +136,16 @@ defmodule OpenAgents.Memory.SemanticIndex do
   def vector_literal(values) when is_list(values),
     do: "[" <> Enum.map_join(values, ",", &float_literal/1) <> "]"
 
-  defp claim_job do
+  defp claim_job(lease_ms) do
+    now = DateTime.utc_now()
+
     Repo.transaction(fn ->
       job =
         Repo.one(
           from(job in SemanticJob,
-            where: job.status == "pending" and job.available_at <= ^DateTime.utc_now(),
+            where:
+              job.status in ["pending", "running"] and
+                job.available_at <= ^now,
             order_by: [asc: job.inserted_at, asc: job.id],
             lock: "FOR UPDATE SKIP LOCKED",
             limit: 1
@@ -151,7 +157,10 @@ defmodule OpenAgents.Memory.SemanticIndex do
         |> SemanticJob.lifecycle_changeset(%{
           status: "running",
           attempts: job.attempts + 1,
-          started_at: DateTime.utc_now()
+          error_code: nil,
+          started_at: now,
+          completed_at: nil,
+          available_at: DateTime.add(now, lease_ms, :millisecond)
         })
         |> update_or_rollback()
       end
@@ -162,24 +171,24 @@ defmodule OpenAgents.Memory.SemanticIndex do
     end
   end
 
-  defp execute_job(job, provider) do
+  defp execute_job(job, provider, options) do
     message = Repo.get(Message, job.message_id)
 
     cond do
       is_nil(message) or message.status != "complete" -> finish_invalidated(job)
       Canonical.sha256(message.content) != job.content_digest -> finish_invalidated(job)
-      true -> call_provider(job, message, provider)
+      true -> call_provider(job, message, provider, options)
     end
   end
 
-  defp call_provider(job, message, provider) do
+  defp call_provider(job, message, provider, options) do
     config = %{
       model_id: job.model_id,
       model_version: job.model_version,
       dimensions: job.dimensions
     }
 
-    case provider.embed(message.content, config) do
+    case invoke_provider(provider, message.content, config, options) do
       {:ok, embedding} when is_list(embedding) and length(embedding) == job.dimensions ->
         persist_embedding(job, message, embedding)
 
@@ -194,48 +203,69 @@ defmodule OpenAgents.Memory.SemanticIndex do
     end
   end
 
+  defp invoke_provider(provider, content, config, options) do
+    timeout_ms = Keyword.get(options, :provider_timeout_ms, 15_000)
+
+    task =
+      Task.Supervisor.async_nolink(OpenAgents.ProviderTaskSupervisor, fn ->
+        provider.embed(content, config)
+      end)
+
+    case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      {:exit, _reason} -> {:error, :embedding_provider_failed}
+      nil -> {:error, :embedding_provider_timeout}
+    end
+  end
+
   defp persist_embedding(job, message, embedding) do
     Repo.transaction(fn ->
       locked = Repo.get_for_update!(SemanticJob, job.id)
       current_message = Repo.get!(Message, message.id)
       active = active_manifest()
 
-      if locked.status != "running" or is_nil(active) or active.id != locked.manifest_id or
-           Canonical.sha256(current_message.content) != locked.content_digest do
-        finish_invalidated_locked(locked)
-      else
-        id = Ecto.UUID.generate()
-        vector = vector_literal(embedding)
+      cond do
+        locked.status != "running" or locked.attempts != job.attempts ->
+          :superseded
 
-        _result =
-          Repo.query!(
-            "INSERT INTO message_semantic_embeddings (id,message_id,conversation_id,manifest_id,generation,model_id,model_version,dimensions,content_digest,status,embedding,inserted_at,updated_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5,$6,$7,$8,$9,'ready',$10::text::vector,now(),now()) ON CONFLICT (message_id,generation) DO UPDATE SET content_digest=EXCLUDED.content_digest, status='ready', embedding=EXCLUDED.embedding, updated_at=now()",
-            [
-              id,
-              locked.message_id,
-              locked.conversation_id,
-              locked.manifest_id,
-              locked.generation,
-              locked.model_id,
-              locked.model_version,
-              locked.dimensions,
-              locked.content_digest,
-              vector
-            ]
-          )
+        is_nil(active) or active.id != locked.manifest_id or
+            Canonical.sha256(current_message.content) != locked.content_digest ->
+          finish_invalidated_locked(locked)
 
-        locked
-        |> SemanticJob.lifecycle_changeset(%{
-          status: "completed",
-          error_code: nil,
-          completed_at: DateTime.utc_now()
-        })
-        |> update_or_rollback()
+        true ->
+          id = Ecto.UUID.generate()
+          vector = vector_literal(embedding)
 
-        :completed
+          _result =
+            Repo.query!(
+              "INSERT INTO message_semantic_embeddings (id,message_id,conversation_id,manifest_id,generation,model_id,model_version,dimensions,content_digest,status,embedding,inserted_at,updated_at) VALUES ($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5,$6,$7,$8,$9,'ready',$10::text::vector,now(),now()) ON CONFLICT (message_id,generation) DO UPDATE SET content_digest=EXCLUDED.content_digest, status='ready', embedding=EXCLUDED.embedding, updated_at=now()",
+              [
+                id,
+                locked.message_id,
+                locked.conversation_id,
+                locked.manifest_id,
+                locked.generation,
+                locked.model_id,
+                locked.model_version,
+                locked.dimensions,
+                locked.content_digest,
+                vector
+              ]
+            )
+
+          locked
+          |> SemanticJob.lifecycle_changeset(%{
+            status: "completed",
+            error_code: nil,
+            completed_at: DateTime.utc_now()
+          })
+          |> update_or_rollback()
+
+          :completed
       end
     end)
     |> case do
+      {:ok, :superseded} -> {:ok, :invalidated}
       {:ok, status} -> {:ok, status}
       {:error, _reason} -> finish_failed(job, "embedding_persist_failed")
     end
@@ -244,25 +274,44 @@ defmodule OpenAgents.Memory.SemanticIndex do
   defp finish_failed(job, reason) do
     error_code = reason |> String.replace(~r/[^a-z0-9_]/, "_") |> String.slice(0, 64)
 
-    job
-    |> SemanticJob.lifecycle_changeset(%{
-      status: "failed",
-      error_code: error_code,
-      completed_at: DateTime.utc_now()
-    })
-    |> Repo.update()
+    result =
+      Repo.transaction(fn ->
+        locked = Repo.get_for_update!(SemanticJob, job.id)
 
-    {:ok, :failed}
+        if locked.status == "running" and locked.attempts == job.attempts do
+          locked
+          |> SemanticJob.lifecycle_changeset(%{
+            status: "failed",
+            error_code: error_code,
+            completed_at: DateTime.utc_now()
+          })
+          |> update_or_rollback()
+        else
+          locked
+        end
+      end)
+
+    case result do
+      {:ok, %SemanticJob{status: "failed"}} -> {:ok, :failed}
+      {:ok, _superseded} -> {:ok, :invalidated}
+      {:error, reason} -> raise "semantic failure persistence failed: #{inspect(reason)}"
+    end
   end
 
   defp finish_invalidated(job) do
-    job
-    |> SemanticJob.lifecycle_changeset(%{
-      status: "invalidated",
-      error_code: "source_stale",
-      completed_at: DateTime.utc_now()
-    })
-    |> Repo.update()
+    Repo.transaction(fn ->
+      locked = Repo.get_for_update!(SemanticJob, job.id)
+
+      if locked.status == "running" and locked.attempts == job.attempts do
+        locked
+        |> SemanticJob.lifecycle_changeset(%{
+          status: "invalidated",
+          error_code: "source_stale",
+          completed_at: DateTime.utc_now()
+        })
+        |> update_or_rollback()
+      end
+    end)
 
     {:ok, :invalidated}
   end

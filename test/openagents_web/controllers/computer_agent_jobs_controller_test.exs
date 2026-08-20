@@ -67,6 +67,14 @@ defmodule OpenAgentsWeb.ComputerAgentJobsControllerTest do
     assert_receive {:DOWN, ^job_ref, :process, _pid, :normal}, 1_000
     job = Work.get_job!(job_id)
     assert job.status == "completed"
+    assert job.machine_id == machine.id
+    assert job.authority_snapshot["machine_tier"] == machine.tier
+    assert job.authority_snapshot["roots"] == machine.roots
+    assert job.authority_snapshot["cwd"] == @root
+    assert job.authority_snapshot["agent_id"] == "codex"
+    assert job.authority_snapshot["machine_name"] == machine.name
+    assert job.budget_snapshot["wall_clock_ms"] == 3_600_000
+    assert job.budget_snapshot["maximum_report_bytes"] == 8_000
     assert job.report =~ "connected"
     assert job.report =~ "Model: gpt-5.6-sol · Reasoning: medium · Mode: agent-full-access"
     assert is_binary(job.report_message_id)

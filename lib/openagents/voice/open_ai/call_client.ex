@@ -69,8 +69,7 @@ defmodule OpenAgents.Voice.OpenAI.CallClient do
         session: Jason.encode!(Config.session_payload(config))
       ],
       receive_timeout: 30_000,
-      retry: :transient,
-      max_retries: 1,
+      retry: false,
       decode_body: false
     ]
 

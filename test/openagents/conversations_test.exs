@@ -95,6 +95,22 @@ defmodule OpenAgents.ConversationsTest do
              Conversations.create_turn(conversation, String.duplicate("x", 8_001))
   end
 
+  test "assistant streaming stops before the accumulated message exceeds its byte budget" do
+    assert {:ok, conversation} = Conversations.ensure_conversation("assistant-bound-browser")
+    assert {:ok, records} = Conversations.create_turn(conversation, "Keep the reply bounded")
+    maximum = Application.fetch_env!(:openagents, :maximum_message_bytes)
+
+    assert {:ok, message} =
+             Conversations.append_assistant_delta(records.turn, String.duplicate("a", maximum))
+
+    assert byte_size(message.content) == maximum
+
+    assert {:error, :assistant_message_limit_reached} =
+             Conversations.append_assistant_delta(records.turn, "b")
+
+    assert byte_size(Repo.get!(Message, records.assistant_message.id).content) == maximum
+  end
+
   test "startup recovery makes interrupted turns explicitly failed" do
     assert {:ok, conversation} = Conversations.ensure_conversation("recovery-browser")
     assert {:ok, records} = Conversations.create_turn(conversation, "Do not leave this pending")

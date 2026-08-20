@@ -10,6 +10,8 @@ ARG REBAR3_SHA512=69073f6ad163f74971545015238614c327893960c1b3f26df5377df135c773
 ARG OPENAGENTS_BUILD_REVISION=image
 ARG SOURCE_DATE_EPOCH=0
 
+ENV HEX_HTTP_CONCURRENCY=2
+ENV HEX_HTTP_TIMEOUT=120
 ENV MIX_ENV=prod
 ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
@@ -34,8 +36,14 @@ RUN mix local.hex "${HEX_VERSION}" --force \
       --force
 
 COPY mix.exs mix.lock ./
-RUN mix deps.get --only prod \
-  && mkdir config
+RUN for attempt in 1 2 3; do \
+      if mix deps.get --only prod; then \
+        mkdir config; \
+        exit 0; \
+      fi; \
+      echo "Dependency fetch attempt ${attempt} failed" >&2; \
+    done; \
+    exit 1
 
 COPY config/config.exs config/prod.exs config/
 RUN mix deps.compile

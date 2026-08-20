@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.ComputerAgentJobsControllerTest do
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Machines

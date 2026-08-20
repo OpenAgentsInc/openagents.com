@@ -83,4 +83,18 @@ defmodule OpenAgentsWeb.UserAuth do
          |> Phoenix.LiveView.redirect(to: ~p"/")}
     end
   end
+
+  def require_authenticated_api_user(
+        %{assigns: %{current_user: %{status: "active"}}} = conn,
+        _options
+      ),
+      do: conn
+
+  def require_authenticated_api_user(conn, _options) do
+    conn
+    |> put_status(:unauthorized)
+    |> put_resp_header("cache-control", "no-store")
+    |> Phoenix.Controller.json(%{error: "authentication_required"})
+    |> halt()
+  end
 end

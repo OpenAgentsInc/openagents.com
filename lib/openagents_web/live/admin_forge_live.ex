@@ -11,30 +11,38 @@ defmodule OpenAgentsWeb.AdminForgeLive do
 
   use OpenAgentsWeb, :sarah_live_view
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Targets
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket) do
-      Enum.each(["forge:pushes", "forge:target", "forge:builds", "forge:deploys"], fn topic ->
-        Phoenix.PubSub.subscribe(OpenAgents.PubSub, topic)
-      end)
-    end
+    if Accounts.admin?(socket.assigns.current_user) do
+      if connected?(socket) do
+        Enum.each(["forge:pushes", "forge:target", "forge:builds", "forge:deploys"], fn topic ->
+          Phoenix.PubSub.subscribe(OpenAgents.PubSub, topic)
+        end)
+      end
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Operator · Forge")
-     |> assign(:repo, primary_repo())
-     |> load()}
+      {:ok,
+       socket
+       |> assign(:page_title, "Operator · Forge")
+       |> assign(:repo, primary_repo())
+       |> load()}
+    else
+      {:ok, redirect(socket, to: ~p"/")}
+    end
   end
 
   @impl true
   def handle_event("promote", %{"sha" => sha}, socket) do
-    operator = "operator:" <> to_string(socket.assigns.current_user.github_id)
+    unless Accounts.admin?(socket.assigns.current_user) do
+      {:noreply, redirect(socket, to: ~p"/")}
+    else
+      operator = "operator:" <> to_string(socket.assigns.current_user.github_id)
 
-    socket =
-      case Targets.promote(socket.assigns.repo, sha, operator) do
+      socket =
+        case Targets.promote(socket.assigns.repo, sha, operator, commit_store: &git_store/2) do
         {:ok, _target} ->
           put_flash(socket, :info, "Promoted #{String.slice(sha, 0, 12)} as the fleet target.")
 
@@ -49,7 +57,8 @@ defmodule OpenAgentsWeb.AdminForgeLive do
           put_flash(socket, :error, "Promotion failed.")
       end
 
-    {:noreply, load(socket)}
+      {:noreply, load(socket)}
+    end
   end
 
   @impl true
@@ -78,6 +87,16 @@ defmodule OpenAgentsWeb.AdminForgeLive do
 
   defp primary_repo do
     OpenAgents.Forge.Repos.allowed_repos() |> List.first() || "sarah"
+  end
+
+  defp git_store(repo, sha) do
+    OpenAgents.Forge.Sync.ensure_fresh(repo)
+    path = OpenAgents.Forge.Repos.bare_path(repo)
+
+    case OpenAgents.Forge.Repos.git(path, ["cat-file", "-e", sha <> "^{commit}"]) do
+      {_, 0} -> :ok
+      _ -> :error
+    end
   end
 
   defp short(sha) when is_binary(sha), do: String.slice(sha, 0, 12)

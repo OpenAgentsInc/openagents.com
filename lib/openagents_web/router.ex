@@ -23,6 +23,14 @@ defmodule OpenAgentsWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :authenticated_api do
+    plug :accepts, ["json"]
+    plug :fetch_session
+    plug :fetch_current_user
+    plug :protect_from_forgery
+    plug :require_authenticated_api_user
+  end
+
   pipeline :status_probe_compat do
     plug OpenAgentsWeb.Plugs.StatusProbeCompat
   end
@@ -102,14 +110,19 @@ defmodule OpenAgentsWeb.Router do
     delete "/data/reset", DataController, :reset
 
     get "/machines", ComputersController, :index
-    get "/api/computers", ComputersController, :index
-    post "/api/computers/pairings/:id/approve", ComputersController, :approve_pairing
-    delete "/api/computers/:id", ComputersController, :delete
-    post "/api/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
-    get "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :show
-    delete "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
 
     get "/memory/export", MemoryExportController, :show
+  end
+
+  scope "/api", OpenAgentsWeb do
+    pipe_through :authenticated_api
+
+    get "/computers", ComputersController, :index
+    post "/computers/pairings/:id/approve", ComputersController, :approve_pairing
+    delete "/computers/:id", ComputersController, :delete
+    post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
+    get "/computer-agent-jobs/:id", ComputerAgentJobsController, :show
+    delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
   end
 
   forward "/git", OpenAgents.Forge.GitHTTP

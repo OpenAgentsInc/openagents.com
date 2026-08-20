@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.ComputersControllerTest do
   use OpenAgentsWeb.SarahConnCase, async: false
-  @moduletag :skip
   alias OpenAgents.Computer
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Pairing

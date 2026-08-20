@@ -96,6 +96,7 @@ if config_env() == :prod do
 
   staging_gate = parse_integer.("OPENAGENTS_STAGING_GATE", 0..16)
   production_deploy_enabled = parse_boolean.("OPENAGENTS_PRODUCTION_DEPLOY_ENABLED")
+  staging_cleanup_enabled = parse_boolean.("OPENAGENTS_STAGING_CLEANUP_ENABLED")
   secure_cookies = parse_boolean.("OPENAGENTS_SECURE_COOKIES")
   migrate_on_boot = parse_boolean.("OPENAGENTS_MIGRATE_ON_BOOT")
   host = required_text.("PHX_HOST")
@@ -260,6 +261,7 @@ if config_env() == :prod do
   config :openagents,
     runtime_environment: runtime_environment,
     staging_gate: staging_gate,
+    staging_cleanup_enabled: staging_cleanup_enabled,
     production_deploy_enabled: production_deploy_enabled,
     build_revision: OpenAgents.BuildInfo.revision(),
     image_digest: optional_text.("OPENAGENTS_IMAGE_DIGEST"),

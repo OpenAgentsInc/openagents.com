@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–11 complete locally, Gate 12 cloud isolation proof pending
+Status: In progress; Gates 0–11 complete locally, Gate 12 cloud and live cleanup proof pending
 
 ## Outcome
 
@@ -1238,14 +1238,20 @@ Implemented locally on 2026-08-20:
   minimal private deployer BEAM node performs exact instance metadata updates
   and resets under the only identity that holds those permissions; it does not
   start the application, join Ra, open HTTP, or connect to PostgreSQL.
+- Added an immutable, manifest-scoped staging cleanup registry and one operator
+  command. The harness must register each disposable account, repository,
+  recording, and product machine before use. Cleanup refuses canonical or
+  administrator resources, online machines, active work or conversations, and
+  account-owned resources outside the manifest. It deletes one run in a
+  transaction and reports only bounded counts.
 
 The local infrastructure definition and mocked safety tests pass. The cloud
-apply, isolation receipt, and one-command disposable-run cleanup proof remain
-open; cloud work is blocked until the operator refreshes the expired Google
-Cloud CLI and Application Default Credentials. No staging or production cloud
-resource changed during this implementation step. See the [isolated staging
+apply, isolation receipt, and live disposable-run cleanup proof remain open;
+cloud work is blocked until the operator refreshes the expired Google Cloud CLI
+and Application Default Credentials. No staging or production cloud resource
+changed during this implementation step. See the [isolated staging
 infrastructure](../infra/staging/README.md) for the exact bootstrap, plan,
-apply, and validation procedure.
+apply, validation, and cleanup procedures.
 
 ## Gate 13: Deploy to staging reproducibly
 

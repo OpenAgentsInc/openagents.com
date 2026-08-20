@@ -112,10 +112,54 @@ writes a content-free receipt under
 `.git/openagents/staging-isolation/<full-sha>.json`. Do not commit Terraform
 plans, state, credentials, project inventory, IP addresses, or secret values.
 
+## Clean up a disposable test run
+
+Give each staging test run a unique lowercase identifier with 8 through 64
+letters, numbers, and hyphens. Before the test harness uses a disposable
+resource, register its database ID under that run:
+
+```elixir
+OpenAgents.StagingCleanup.register(run_id, :account, user.id)
+OpenAgents.StagingCleanup.register(run_id, :repository, repository.id)
+OpenAgents.StagingCleanup.register(run_id, :recording, recording.id)
+OpenAgents.StagingCleanup.register(run_id, :machine, machine.id)
+```
+
+Set `OPENAGENTS_STAGING_CLEANUP_ENABLED=true` only for the staging release at
+Gate 12 or later. The registration manifest is immutable. A resource can
+belong to only one run, and the cleanup command does not infer targets from
+names, timestamps, owners, or labels.
+
+Preview content-free counts before deletion:
+
+```sh
+ops/staging/cleanup-run.sh gate14-20260820-0001 check
+```
+
+Apply the same bounded manifest once you confirm the counts:
+
+```sh
+ops/staging/cleanup-run.sh gate14-20260820-0001 --apply
+```
+
+The command targets a fixed staging fleet node through Identity-Aware Proxy.
+It refuses the canonical repository, administrator accounts, online machines,
+machines with queued or running work, active text turns or voice sessions, and
+accounts that own an unregistered project, machine, or recording. It performs
+all database deletions in one transaction and removes the manifest only after
+the transaction succeeds. An interrupted or refused cleanup remains safe to
+preview and retry.
+
+The `repository` and `machine` kinds refer to product database records. This
+command never deletes Compute Engine fleet instances, Cloud SQL, Artifact
+Registry images, Terraform resources, or production data. Quiesce the test
+harness before you apply cleanup so it cannot create new run data concurrently.
+
 ## Complete Gate 12
 
-Gate 12 remains incomplete until the cloud apply, isolation validator, and
-manifest-scoped disposable-run cleanup command are proven. Do not populate
+Gate 12 remains incomplete until the cloud apply, isolation validator, and a
+live execution of the manifest-scoped disposable-run cleanup command are
+proven. Do not populate
 secrets, push an image, change DNS for `stage.openagents.com`, or deploy a
 candidate as part of the infrastructure apply. Gate 13 performs those steps on
 one exact, locally gated SHA after a separate review.

@@ -65,6 +65,30 @@ defmodule OpenAgents.RuntimeConfigTest do
              |> RuntimeConfig.validate()
   end
 
+  test "staging cleanup is admitted only at Gate 12 or later" do
+    exact_identity = %{
+      build_revision: String.duplicate("a", 40),
+      image_digest: "sha256:" <> String.duplicate("b", 64)
+    }
+
+    assert {:ok, _config} =
+             staging_settings()
+             |> Map.merge(exact_identity)
+             |> Map.merge(%{staging_gate: 12, staging_cleanup_enabled: true})
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :staging_cleanup_enabled}} =
+             staging_settings()
+             |> Map.merge(exact_identity)
+             |> Map.merge(%{staging_gate: 11, staging_cleanup_enabled: true})
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :staging_cleanup_enabled}} =
+             staging_settings()
+             |> Map.put(:staging_cleanup_enabled, "true")
+             |> RuntimeConfig.validate()
+  end
+
   test "fleet deployment requires the isolated GCP rolling provider" do
     settings =
       staging_settings()

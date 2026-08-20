@@ -67,6 +67,7 @@ defmodule OpenAgents.RuntimeConfig do
          :ok <- validate_database(settings, environment),
          :ok <- validate_github(settings, environment),
          {:ok, features} <- validate_features(settings, environment, staging_gate),
+         :ok <- validate_staging_cleanup(settings, environment, staging_gate),
          :ok <- validate_providers(settings, features),
          :ok <- validate_release_identity(settings, environment, staging_gate),
          {:ok, allowlist, examples} <- validate_forge(settings, environment, features),
@@ -147,6 +148,22 @@ defmodule OpenAgents.RuntimeConfig do
   end
 
   defp validate_production_lock(_settings, _environment), do: :ok
+
+  defp validate_staging_cleanup(settings, environment, staging_gate) do
+    case Map.get(settings, :staging_cleanup_enabled) do
+      false ->
+        :ok
+
+      true when environment == :staging and staging_gate >= 12 ->
+        :ok
+
+      true ->
+        error(:staging_cleanup_enabled, "is admitted only in staging at Gate 12 or later")
+
+      _invalid ->
+        error(:staging_cleanup_enabled, "must be a boolean")
+    end
+  end
 
   defp validate_release_identity(settings, environment, staging_gate) do
     required? = environment == :production or (environment == :staging and staging_gate >= 12)

@@ -53,6 +53,7 @@ URLs, receipts, or checked-in environment files.
 | --- | --- | --- |
 | Release | `OPENAGENTS_ENVIRONMENT` | `staging`; `production` remains separately locked |
 | Release | `OPENAGENTS_STAGING_GATE` | Integer `0` through `16`; feature admission is tied to it |
+| Release | `OPENAGENTS_STAGING_CLEANUP_ENABLED` | `true` only at staging Gate 12 or later; always `false` elsewhere |
 | Release | `OPENAGENTS_PRODUCTION_DEPLOY_ENABLED` | `false` until a later production decision |
 | Release | `OPENAGENTS_IMAGE_DIGEST` | Exact `sha256:` image digest at staging Gate 12 and later; empty before that gate |
 | Endpoint | `PHX_HOST` | Exactly `stage.openagents.com` in staging |

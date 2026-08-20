@@ -55,6 +55,13 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     assert result.events.tool_outcomes == %{"read:completed" => 1}
     assert result.events.text_event_count == 1
 
+    assert result.report == %{
+             schema: "openagents.scv.report.v1",
+             text: "done [REDACTED]",
+             bytes: 15,
+             truncated: false
+           }
+
     assert result.events.usage == %{
              input_tokens: 13,
              output_tokens: 8,
@@ -72,6 +79,7 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     refute File.read!(result.artifacts.events_path) =~ "fixture-secret-key"
     assert File.read!(result.artifacts.events_path) =~ "[REDACTED]"
     refute File.read!(result.summary_path) =~ "READ_ONLY"
+    refute File.read!(result.summary_path) =~ "fixture-secret-key"
     refute File.exists?(Path.join([Path.dirname(result.summary_path), "scratch"]))
 
     assert {:ok, %{mode: event_mode}} = File.stat(result.artifacts.events_path)
@@ -186,7 +194,7 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     printf '%s\n' '{"type":"step_start","timestamp":1,"sessionID":"ses_fixture","part":{"type":"step-start"}}'
     printf '%s\n' '{"type":"tool_use","timestamp":2,"sessionID":"ses_fixture","part":{"tool":"read","state":{"status":"completed","output":"fixture-secret-key"}}}'
     printf '%s\n' '{"type":"step_finish","timestamp":3,"sessionID":"ses_fixture","part":{"type":"step-finish","cost":0.00125,"tokens":{"input":13,"output":8,"reasoning":2,"cache":{"read":3,"write":1}}}}'
-    printf '%s\n' '{"type":"text","timestamp":4,"sessionID":"ses_fixture","part":{"type":"text","text":"done"}}'
+    printf '%s\n' '{"type":"text","timestamp":4,"sessionID":"ses_fixture","part":{"type":"text","text":"done fixture-secret-key"}}'
     sleep 0.05
     """
   end

@@ -9,6 +9,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
   """
 
   alias OpenAgents.SCV.OpenCodeEvents
+  alias OpenAgents.SCV.OpenCodeReport
   alias OpenAgents.SCV.ResourceSampler
 
   @schema "openagents.scv.opencode.run.v1"
@@ -239,6 +240,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
 
     state = %{
       events: OpenCodeEvents.new(),
+      report: OpenCodeReport.new(),
       line_buffer: "",
       observed_output_bytes: 0,
       captured_output_bytes: 0,
@@ -273,6 +275,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
         error_code: "process_start_failed",
         error_detail: Exception.message(error),
         events: OpenCodeEvents.new(),
+        report: OpenCodeReport.new(),
         observed_output_bytes: 0,
         captured_output_bytes: 0,
         output_truncated?: false,
@@ -404,20 +407,27 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
     pieces = :binary.split(state.line_buffer <> data, "\n", [:global])
     {buffer, complete_lines} = List.pop_at(pieces, -1)
 
-    events =
-      Enum.reduce(complete_lines, state.events, fn line, events ->
+    {events, report} =
+      Enum.reduce(complete_lines, {state.events, state.report}, fn line, {events, report} ->
         redacted = redact(line, redactions)
         :ok = IO.binwrite(events_io, redacted <> "\n")
         :ok = observe_output_line(state.input, redacted)
-        ingest_nonempty(events, redacted)
+        {ingest_nonempty(events, redacted), ingest_report(report, redacted)}
       end)
 
-    %{state | events: events, line_buffer: buffer || ""}
+    %{state | events: events, report: report, line_buffer: buffer || ""}
   end
 
   defp finish_collection(state, events_io, redactions, status, exit_status, error_code) do
-    {events, line_buffer} =
-      flush_line(state.input, state.events, state.line_buffer, events_io, redactions)
+    {events, report, line_buffer} =
+      flush_line(
+        state.input,
+        state.events,
+        state.report,
+        state.line_buffer,
+        events_io,
+        redactions
+      )
 
     :ok = :file.sync(events_io)
 
@@ -430,6 +440,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
 
     state
     |> Map.put(:events, events)
+    |> Map.put(:report, report)
     |> Map.put(:line_buffer, line_buffer)
     |> Map.put(:status, status)
     |> Map.put(:exit_status, exit_status)
@@ -437,17 +448,26 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
     |> Map.put(:error_detail, nil)
   end
 
-  defp flush_line(_input, events, "", _events_io, _redactions), do: {events, ""}
+  defp flush_line(_input, events, report, "", _events_io, _redactions),
+    do: {events, report, ""}
 
-  defp flush_line(input, events, line, events_io, redactions) do
+  defp flush_line(input, events, report, line, events_io, redactions) do
     redacted = redact(line, redactions)
     :ok = IO.binwrite(events_io, redacted)
     :ok = observe_output_line(input, redacted)
-    {ingest_nonempty(events, redacted), ""}
+
+    {
+      ingest_nonempty(events, redacted),
+      ingest_report(report, redacted),
+      ""
+    }
   end
 
   defp ingest_nonempty(events, ""), do: events
   defp ingest_nonempty(events, line), do: OpenCodeEvents.ingest(events, line)
+
+  defp ingest_report(report, ""), do: report
+  defp ingest_report(report, line), do: OpenCodeReport.ingest(report, line)
 
   defp observe_output_line(_input, ""), do: :ok
 
@@ -578,6 +598,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
         maximum_output_bytes: input.maximum_output_bytes
       },
       events: OpenCodeEvents.summary(execution.events),
+      report: OpenCodeReport.summary(execution.report),
       resources: %{
         wall_time_ms: duration_ms,
         sample_count: execution.sample_count,

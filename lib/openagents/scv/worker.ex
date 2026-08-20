@@ -201,7 +201,8 @@ defmodule OpenAgents.SCV.Worker do
       tool_calls: result.events.tool_calls,
       usage: result.events.usage,
       resources: result.resources,
-      artifact_digest: result.artifacts.events_digest
+      artifact_digest: result.artifacts.events_digest,
+      report: result.report
     }
   end
 

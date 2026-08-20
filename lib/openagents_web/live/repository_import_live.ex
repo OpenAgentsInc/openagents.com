@@ -60,7 +60,12 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Import from GitHub">
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      title="Import from GitHub"
+      sidebar_sections={assigns[:sidebar_sections]}
+    >
       <main id="repository-import" class="mx-auto w-full max-w-3xl space-y-8 px-4 py-10">
         <.header>
           Import from GitHub

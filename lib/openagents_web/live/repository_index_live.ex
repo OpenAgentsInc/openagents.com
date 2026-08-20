@@ -46,7 +46,13 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Repositories" wide>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      title="Repositories"
+      sidebar_sections={assigns[:sidebar_sections]}
+      wide
+    >
       <main id="repository-index" class="mx-auto w-full max-w-6xl space-y-8 px-4 py-10">
         <.header>
           Repositories

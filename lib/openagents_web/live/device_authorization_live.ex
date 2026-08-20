@@ -39,7 +39,12 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="Authorize CLI">
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      title="Authorize CLI"
+      sidebar_sections={assigns[:sidebar_sections]}
+    >
       <main id="device-authorization" class="mx-auto w-full max-w-xl space-y-8 px-4 py-12">
         <.header>
           Authorize OpenAgents CLI

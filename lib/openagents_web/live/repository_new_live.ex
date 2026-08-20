@@ -50,7 +50,12 @@ defmodule OpenAgentsWeb.RepositoryNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} title="New repository">
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      title="New repository"
+      sidebar_sections={assigns[:sidebar_sections]}
+    >
       <main id="repository-new" class="mx-auto w-full max-w-3xl space-y-8 px-4 py-10">
         <.header>
           New repository

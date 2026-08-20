@@ -104,6 +104,7 @@ FROM builder AS forge-builder
 
 COPY ops/forge ops/forge
 
+ENV OPENAGENTS_RUNTIME_ROLE=builder
 CMD ["mix", "run", "--no-compile", "--no-start", "ops/forge/build-worker.exs"]
 
 # start a new build stage so that the final image will only contain

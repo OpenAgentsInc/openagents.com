@@ -50,6 +50,7 @@ The setting accepts these values:
 | --- | --- |
 | `web` | Default. Validates the complete web release configuration and starts the endpoint, Repo, Forge, and enabled application services. |
 | `scv` | Staging-only qualification role. Requires a provider credential and starts one temporary `OpenAgents.SCV.Worker` task. It starts no endpoint, Repo, Forge service, or deployment coordinator. |
+| `builder` | Isolated Forge build-image role. Loads compiled modules for the queue worker without starting the application, endpoint, Repo, or deployment coordinator. |
 
 The current SCV process role admits only the `opencode` driver,
 `opencode-core` environment, and `read_only` permission profile. Configure one

@@ -24,6 +24,10 @@ The configuration creates these staging-only resources:
   builder lanes, plus one Secret Manager resource per credential in the
   staging secret inventory. The deployer can read only the release cookie.
   Terraform never creates a secret version or stores a credential in state.
+- Separate database URL secrets for the Cloud Run web lane and private Compute
+  Engine fleet. The web URL selects the managed Cloud SQL Unix socket. The
+  fleet URL selects a loopback TCP listener provided by a digest-pinned Cloud
+  SQL Auth Proxy, which uses private IP and encrypted PostgreSQL transport.
 - Separate buckets for forge artifacts, forge WAL, recordings, and evidence.
 - One Artifact Registry repository for digest-addressed application and builder
   images. Full-SHA tags are immutable, and Terraform cannot delete the

@@ -30,6 +30,7 @@ locals {
     "openagents-staging-fleet-config",
     "openagents-staging-builder-config",
     "openagents-staging-database-url",
+    "openagents-staging-fleet-database-url",
     "openagents-staging-secret-key-base",
     "openagents-staging-github-client-secret",
     "openagents-staging-github-vault-active",
@@ -41,7 +42,6 @@ locals {
   ])
 
   application_secrets = toset([
-    "openagents-staging-database-url",
     "openagents-staging-secret-key-base",
     "openagents-staging-github-client-secret",
     "openagents-staging-github-vault-active",
@@ -322,8 +322,20 @@ resource "google_secret_manager_secret_iam_member" "web_env" {
   member    = google_service_account.web.member
 }
 
+resource "google_secret_manager_secret_iam_member" "web_database" {
+  secret_id = google_secret_manager_secret.runtime["openagents-staging-database-url"].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.web.member
+}
+
 resource "google_secret_manager_secret_iam_member" "fleet_env" {
   secret_id = google_secret_manager_secret.runtime["openagents-staging-fleet-config"].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.fleet.member
+}
+
+resource "google_secret_manager_secret_iam_member" "fleet_database" {
+  secret_id = google_secret_manager_secret.runtime["openagents-staging-fleet-database-url"].id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.fleet.member
 }

@@ -86,6 +86,7 @@ runtime_role =
   case System.get_env("OPENAGENTS_RUNTIME_ROLE", "web") do
     "web" -> :web
     "scv" -> :scv
+    "builder" -> :builder
     _invalid -> raise "environment variable OPENAGENTS_RUNTIME_ROLE is not admitted"
   end
 

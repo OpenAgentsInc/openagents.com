@@ -30,6 +30,7 @@ mkdir -p \
   "$state_root/ra" \
   "$state_root/workspace/build" \
   "$state_root/workspace/build-queue"
+chown -R 65534:65534 "$state_root"
 
 image=$(metadata_attribute openagents-image)
 image_digest=$(metadata_attribute openagents-image-digest)
@@ -122,7 +123,7 @@ if grep -Eq '^(DATABASE_URL|SECRET_KEY_BASE|GITHUB_CLIENT_SECRET|GITHUB_TOKEN_EN
   exit 1
 fi
 
-append_secret DATABASE_URL openagents-staging-database-url /run/openagents/runtime.env
+append_secret DATABASE_URL openagents-staging-fleet-database-url /run/openagents/runtime.env
 append_secret SECRET_KEY_BASE openagents-staging-secret-key-base /run/openagents/runtime.env
 append_secret GITHUB_CLIENT_SECRET openagents-staging-github-client-secret /run/openagents/runtime.env
 append_secret GITHUB_TOKEN_ENCRYPTION_KEY openagents-staging-github-vault-active /run/openagents/runtime.env
@@ -143,6 +144,37 @@ export DOCKER_CONFIG=/run/openagents/docker-config
 mkdir -p "$DOCKER_CONFIG"
 chmod 0700 "$DOCKER_CONFIG"
 docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
+
+cloud_sql_proxy_image=gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:825d5e4ce70d38bd0006c9eea15a6a2e2983e87b31ac6924d33e2dba56eafc9f
+docker pull "$cloud_sql_proxy_image"
+docker rm --force openagents-cloud-sql-proxy 2>/dev/null || true
+docker run --detach \
+  --name openagents-cloud-sql-proxy \
+  --network host \
+  --restart always \
+  "$cloud_sql_proxy_image" \
+  --address 127.0.0.1 \
+  --health-check \
+  --http-address 127.0.0.1 \
+  --http-port 9090 \
+  --port 5432 \
+  --private-ip \
+  "${project_id}:${region}:openagents-staging-postgres"
+
+proxy_ready=false
+for _attempt in $(seq 1 60); do
+  if curl --fail --silent http://127.0.0.1:9090/readiness >/dev/null; then
+    proxy_ready=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$proxy_ready" != true ]; then
+  echo "Cloud SQL Auth Proxy did not become ready" >&2
+  exit 1
+fi
+
 docker pull "$image"
 docker rm --force openagents 2>/dev/null || true
 docker run --detach \

@@ -53,7 +53,7 @@ run "isolated_topology" {
   }
 
   assert {
-    condition     = length(google_secret_manager_secret.runtime) == 12
+    condition     = length(google_secret_manager_secret.runtime) == 13
     error_message = "Every named staging credential and lane configuration needs its own secret resource."
   }
 

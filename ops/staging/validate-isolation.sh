@@ -110,6 +110,7 @@ jq -e '
   all([
     "openagents-staging-builder-config",
     "openagents-staging-database-url",
+    "openagents-staging-fleet-database-url",
     "openagents-staging-fleet-config",
     "openagents-staging-forge-operator-token",
     "openagents-staging-github-client-secret",

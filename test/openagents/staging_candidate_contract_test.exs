@@ -34,6 +34,16 @@ defmodule OpenAgents.StagingCandidateContractTest do
              ~s(RELEASE_COOKIE:?RELEASE_COOKIE is required for a distributed node)
   end
 
+  test "the isolated builder loads runtime configuration without the web role" do
+    dockerfile = File.read!("Dockerfile")
+    runtime_config = File.read!("config/runtime.exs")
+
+    assert dockerfile =~ "FROM builder AS forge-builder"
+    assert dockerfile =~ "ENV OPENAGENTS_RUNTIME_ROLE=builder"
+    assert dockerfile =~ ~s(mix", "run", "--no-compile", "--no-start")
+    assert runtime_config =~ ~s("builder" -> :builder)
+  end
+
   test "candidate publication binds exact immutable registry and artifact identities" do
     publisher = File.read!("ops/staging/publish-candidate.sh")
     sbom = File.read!("ops/staging/generate-sbom.sh")

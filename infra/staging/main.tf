@@ -200,7 +200,7 @@ resource "google_compute_firewall" "iap_ssh" {
   priority  = 900
 
   source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["openagents-staging-fleet"]
+  target_tags   = ["openagents-staging-fleet", "openagents-staging-controller"]
 
   allow {
     protocol = "tcp"

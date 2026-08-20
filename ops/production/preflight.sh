@@ -41,8 +41,8 @@ if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
   exit 1
 fi
 
-if [ "$git_sha" != "$(git rev-parse --verify refs/remotes/origin/main)" ]; then
-  echo "production candidate must equal the fetched origin/main commit" >&2
+if ! git merge-base --is-ancestor "$git_sha" refs/remotes/origin/main; then
+  echo "production candidate must remain in the fetched origin/main history" >&2
   exit 1
 fi
 

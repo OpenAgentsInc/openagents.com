@@ -60,6 +60,20 @@ defmodule OpenAgents.StagingCandidateContractTest do
     assert outputs =~ ~s("openagents@${instance_ip}" => instance_name)
   end
 
+  test "IAP SSH reaches the fleet and deploy controller" do
+    terraform = File.read!("infra/staging/main.tf")
+
+    assert terraform =~
+             ~s(target_tags   = ["openagents-staging-fleet", "openagents-staging-controller"])
+  end
+
+  test "production preflight preserves a pinned candidate across later commits" do
+    preflight = File.read!("ops/production/preflight.sh")
+
+    assert preflight =~ ~s(git merge-base --is-ancestor "$git_sha" refs/remotes/origin/main)
+    refute preflight =~ "production candidate must equal the fetched origin/main commit"
+  end
+
   test "candidate publication binds exact immutable registry and artifact identities" do
     publisher = File.read!("ops/staging/publish-candidate.sh")
     sbom = File.read!("ops/staging/generate-sbom.sh")

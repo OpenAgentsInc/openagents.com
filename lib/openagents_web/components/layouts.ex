@@ -372,7 +372,10 @@ defmodule OpenAgentsWeb.Layouts do
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
+    <%!-- w-24 is load-bearing: the three buttons are w-1/3, so without an explicit
+    width this stretches to fill any block-level parent and the segments stretch
+    with it. 24 (6rem) is the natural content width: 3 buttons x (p-2 + size-4). --%>
+    <div class="card relative flex flex-row items-center w-24 shrink-0 border-2 border-base-300 bg-base-300 rounded-full">
       <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
 
       <button

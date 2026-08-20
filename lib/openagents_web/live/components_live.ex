@@ -12,6 +12,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgentsWeb.ComponentCatalog
+  alias OpenAgentsWeb.SarahUI, as: UI
 
   @sample_rows [
     %{id: 1, owner: "OpenAgentsInc", repo: "openagents.com", state: "open"},
@@ -23,6 +24,17 @@ defmodule OpenAgentsWeb.ComponentsLive do
     hero-information-circle hero-exclamation-circle hero-x-mark
     hero-arrow-path hero-sun-micro hero-moon-micro hero-computer-desktop-micro
   )
+
+  # SarahUI.icon/1 renders the vendored Apps SDK set, not heroicons.
+  @sarah_icons ~w(sparkle compass folder document user bell play star)
+
+  # account_control/1 and command_bar/1 read three fields off the current user.
+  # A plain map is enough and keeps the catalog page free of database access.
+  @demo_user %{
+    github_login: "openagents-demo",
+    github_name: "Demo Account",
+    github_avatar_url: nil
+  }
 
   @impl true
   def mount(_params, _session, socket) do
@@ -41,7 +53,9 @@ defmodule OpenAgentsWeb.ComponentsLive do
      socket
      |> assign(:form, form)
      |> assign(:rows, @sample_rows)
-     |> assign(:icons, @icons)}
+     |> assign(:icons, @icons)
+     |> assign(:sarah_icons, @sarah_icons)
+     |> assign(:demo_user, @demo_user)}
   end
 
   @impl true
@@ -93,10 +107,14 @@ defmodule OpenAgentsWeb.ComponentsLive do
     <div id="components-index" class="max-w-3xl">
       <h1 class="text-3xl font-semibold mb-4">Component library</h1>
       <p class="text-base-content/70 mb-8 text-pretty max-w-[68ch]">
-        Live examples of every reusable function component in this repository.
-        These controls come from <code>OpenAgentsWeb.CoreComponents</code>
-        and <code>OpenAgentsWeb.Layouts</code>, styled with DaisyUI. Planned
-        GitHub-shaped components are listed in <code>docs/component-library.md</code>.
+        Live examples of every reusable function component in this repository, drawn from
+        <code>OpenAgentsWeb.CoreComponents</code>
+        (the Phoenix set, styled with DaisyUI), <code>OpenAgentsWeb.SarahUI</code>
+        (the Sarah interface primitives), and <code>OpenAgentsWeb.Layouts</code>. <code>button</code>, <code>input</code>, and
+        <code>icon</code>
+        exist in both component sets, so the SarahUI entries are listed separately.
+        A test asserts this page covers every public component in those modules.
+        Planned GitHub-shaped components are listed in <code>docs/component-library.md</code>.
       </p>
 
       <section :for={section <- ComponentCatalog.sections()} class="mb-10">
@@ -138,6 +156,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
   attr :form, :any, default: nil
   attr :rows, :list, default: []
   attr :icons, :list, default: []
+  attr :sarah_icons, :list, default: []
+  attr :demo_user, :map, default: nil
 
   defp component_demo(%{item: %{slug: "button"}} = assigns) do
     ~H"""
@@ -259,6 +279,297 @@ defmodule OpenAgentsWeb.ComponentsLive do
       open_count={12}
       closed_count={148}
     />
+    """
+  end
+
+  # --- Sarah UI -------------------------------------------------------------
+  # SarahUI is imported by `sarah_html_helpers`, not by `:live_view`, so these
+  # are called with the full module prefix. That also documents provenance on a
+  # page whose whole job is showing where a component comes from.
+
+  defp component_demo(%{item: %{slug: "sarah-button"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <UI.button
+          :for={v <- ~w(primary secondary outline ghost destructive chip notched link)a}
+          variant={v}
+        >
+          {v |> Atom.to_string() |> String.capitalize()}
+        </UI.button>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <UI.button :for={sz <- ~w(xs sm default lg)a} size={sz}>{sz}</UI.button>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <UI.button tone={:danger}>Danger tone</UI.button>
+        <UI.button disabled>Disabled</UI.button>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-text-button"}} = assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-4">
+      <UI.text_button>Default</UI.text_button>
+      <UI.text_button tone={:danger}>Danger</UI.text_button>
+      <UI.text_button disabled>Disabled</UI.text_button>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-input"}} = assigns) do
+    ~H"""
+    <div class="space-y-3 max-w-sm">
+      <UI.input id="sarah-input-demo" name="demo" value="Ship the catalog" />
+      <UI.input id="sarah-input-demo-empty" name="demo_empty" placeholder="Placeholder text" />
+      <UI.input id="sarah-input-demo-disabled" name="demo_disabled" value="Disabled" disabled />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-textarea"}} = assigns) do
+    ~H"""
+    <div class="max-w-sm">
+      <UI.textarea
+        id="sarah-textarea-demo"
+        name="demo_body"
+        value="Multi-line text primitive."
+        rows="4"
+      />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-label"}} = assigns) do
+    ~H"""
+    <div class="space-y-2 max-w-sm">
+      <UI.label for="sarah-label-target">Repository name</UI.label>
+      <UI.input id="sarah-label-target" name="repo" value="openagents.com" />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-field"}} = assigns) do
+    ~H"""
+    <div class="max-w-sm space-y-4">
+      <UI.field>
+        <UI.label for="sarah-field-title">Title</UI.label>
+        <UI.input id="sarah-field-title" name="title" value="Ship the component catalog" />
+      </UI.field>
+      <UI.field>
+        <UI.label for="sarah-field-body">Body</UI.label>
+        <UI.textarea id="sarah-field-body" name="body" rows="3" />
+      </UI.field>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-alert"}} = assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <div class="space-y-3">
+        <p class="text-sm text-base-content/60">Variants (box appearance)</p>
+        <UI.alert :for={v <- ~w(info success warning danger)a} variant={v} label={Atom.to_string(v)}>
+          A {v} alert in the default box appearance.
+        </UI.alert>
+      </div>
+      <div class="space-y-3">
+        <p class="text-sm text-base-content/60">Appearances</p>
+        <UI.alert
+          :for={a <- ~w(box row notice)a}
+          appearance={a}
+          variant={:info}
+          label={Atom.to_string(a)}
+        >
+          The {a} appearance.
+        </UI.alert>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-badge"}} = assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-3">
+      <UI.badge :for={v <- ~w(default info success warning danger dim)a} variant={v}>
+        {v}
+      </UI.badge>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-card"}} = assigns) do
+    ~H"""
+    <div class="grid gap-4 sm:grid-cols-2">
+      <UI.card id="sarah-card-default">
+        <p class="font-medium">Default</p>
+        <p class="text-sm text-base-content/70">A plain content container.</p>
+      </UI.card>
+      <UI.card id="sarah-card-corners" frame={:corners}>
+        <p class="font-medium">Corner frame</p>
+        <p class="text-sm text-base-content/70">With bracket decoration.</p>
+      </UI.card>
+      <UI.card id="sarah-card-danger" variant={:danger}>
+        <p class="font-medium">Danger</p>
+        <p class="text-sm text-base-content/70">For destructive context.</p>
+      </UI.card>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-avatar"}} = assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-end gap-6">
+      <UI.avatar :for={sz <- ~w(sm default lg)a} size={sz} fallback="OA" label={"size #{sz}"} />
+      <UI.avatar tone={:accent} fallback="AC" label="accent tone" />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-item"}} = assigns) do
+    ~H"""
+    <div class="space-y-2">
+      <UI.item status="ok" label="Fleet node 1" detail="converged" />
+      <UI.item status="pending" label="Fleet node 2" detail="rolling" />
+      <UI.item status="error" label="Fleet node 3" detail="unreachable" />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-event-header"}} = assigns) do
+    ~H"""
+    <UI.event_header
+      id="sarah-event-header-demo"
+      status="ok"
+      title="repo_commit_push"
+      status_note="completed"
+      timestamp={~U[2026-08-19 21:51:00Z]}
+    >
+      <:chips>
+        <UI.badge variant={:dim}>tool</UI.badge>
+      </:chips>
+      <p class="text-sm text-base-content/70">Pushed 3 files to the forge.</p>
+    </UI.event_header>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-empty"}} = assigns) do
+    ~H"""
+    <UI.empty id="sarah-empty-demo" title="No delegations yet">
+      Work you delegate to a paired machine will appear here.
+    </UI.empty>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-kbd"}} = assigns) do
+    ~H"""
+    <p class="flex flex-wrap items-center gap-2 text-sm">
+      Press
+      <UI.kbd>⌘</UI.kbd>
+
+      <UI.kbd>K</UI.kbd>
+      to open the command bar, or
+      <UI.kbd>Esc</UI.kbd>
+      to dismiss it.
+    </p>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-menu"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <UI.button popovertarget="sarah-demo-menu" popovertargetaction="toggle">
+        Open menu
+      </UI.button>
+      <UI.menu id="sarah-demo-menu" label="Demo menu">
+        <UI.text_button>Profile</UI.text_button>
+        <UI.text_button>Settings</UI.text_button>
+        <UI.text_button tone={:danger}>Sign out</UI.text_button>
+      </UI.menu>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-frame"}} = assigns) do
+    ~H"""
+    <UI.frame>
+      <div class="p-6">
+        <p class="font-medium">Framed content</p>
+        <p class="text-sm text-base-content/70">Corner brackets wrap arbitrary children.</p>
+      </div>
+    </UI.frame>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-status-indicator"}} = assigns) do
+    ~H"""
+    <div class="flex flex-wrap items-center gap-6">
+      <UI.status_indicator state="ok" label="Healthy" />
+      <UI.status_indicator state="pending" label="Converging" />
+      <UI.status_indicator state="error" label="Degraded" />
+      <UI.status_indicator state="ok" label="Decorative" decorative />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-audio-player"}} = assigns) do
+    ~H"""
+    <div class="space-y-2">
+      <UI.audio_player
+        id="sarah-audio-demo"
+        src="/audio/does-not-exist.wav"
+        label="Voice recording (demo source, nothing to play)"
+      />
+      <p class="text-sm text-base-content/60">
+        The src is intentionally a dead path; this page has no recording to serve.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "sarah-icon"}} = assigns) do
+    ~H"""
+    <ul id="sarah-demo-icons" role="list" class="flex flex-wrap gap-4">
+      <li :for={name <- @sarah_icons} class="flex flex-col items-center gap-2 w-28">
+        <UI.icon name={name} class="size-6" />
+        <p class="text-center text-sm text-base-content/70">{name}</p>
+      </li>
+    </ul>
+    """
+  end
+
+  # --- Layout ---------------------------------------------------------------
+
+  defp component_demo(%{item: %{slug: "command-bar"}} = assigns) do
+    ~H"""
+    <Layouts.command_bar aria_label="Demo command bar" current_user={@demo_user}>
+      <:lockup>
+        <UI.badge variant={:dim}>demo</UI.badge>
+      </:lockup>
+      <:controls>
+        <UI.text_button>Controls slot</UI.text_button>
+      </:controls>
+    </Layouts.command_bar>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "account-control"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <div class="space-y-2">
+        <p class="text-sm text-base-content/60">Bar context</p>
+        <Layouts.account_control current_user={@demo_user} context={:bar} />
+      </div>
+      <p class="text-sm text-base-content/60 max-w-[68ch]">
+        Only one instance is shown. <code>account_control/1</code>
+        hard-codes the ids <code>account-menu</code>, <code>account-menu-trigger</code>, <code>logout-form</code>, and <code>logout</code>, so it can be rendered at most
+        once per page — rendering the <code>:row</code>
+        context alongside this one produces duplicate ids. That is fine for a layout,
+        which has a single account control, but it is a real constraint on reuse.
+      </p>
+    </div>
     """
   end
 end

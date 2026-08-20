@@ -3,6 +3,7 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
 
   import OpenAgents.AccountsFixtures
 
+  alias OpenAgents.AuditEvent
   alias OpenAgents.Forge.{Repos, WAL}
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.{Importer, Provisioner, ProvisioningOutbox, Repository}
@@ -54,6 +55,15 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     assert outbox.state == "completed"
     assert outbox.attempt_count == 1
 
+    assert audit_types(repository.id) ==
+             MapSet.new([
+               "repository.created",
+               "repository.membership.created",
+               "repository.provisioning.completed",
+               "repository.provisioning.pending",
+               "repository.provisioning.running"
+             ])
+
     assert {:ok, _generation, %{"entries" => [], "refs" => %{}}} =
              WAL.read_index(repository.storage_key)
 
@@ -90,6 +100,7 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     assert failed_repository.lifecycle_state == "failed"
     assert failed_repository.provision_error_code == "provisioning_failed"
     refute inspect(failed_outbox) =~ "fixture_secret_failure"
+    assert "repository.provisioning.failed" in audit_types(repository.id)
   end
 
   test "a one-time import persists a bundle that reconstructs after cache loss", %{test: _test} do
@@ -144,6 +155,9 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
 
     assert completed_import.state == "completed"
     assert completed_import.completed_at
+    assert "repository.import.completed" in audit_types(repository.id)
+    assert "repository.import.created" in audit_types(repository.id)
+    assert "repository.import.running" in audit_types(repository.id)
     assert {:ok, _generation, index} = WAL.read_index(repository.storage_key)
     assert [%{"format" => "git_bundle", "import_id" => import_id}] = WAL.entries(index)
     assert import_id == repository_import.id
@@ -187,4 +201,12 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
   defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
+
+  defp audit_types(repository_id) do
+    AuditEvent
+    |> where([event], event.repository_id == ^repository_id)
+    |> select([event], event.event_type)
+    |> OpenAgents.Repo.all()
+    |> MapSet.new()
+  end
 end

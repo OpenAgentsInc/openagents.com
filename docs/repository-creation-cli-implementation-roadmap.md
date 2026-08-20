@@ -458,15 +458,15 @@ result. Do not store tokens, local absolute paths, or repository content.
 | 0. Contract and safety boundaries | Complete | `INVARIANTS.md`, Phoenix contract artifact, CLI behavior contract |
 | 1. Namespace and lifecycle persistence | Complete | Lifecycle migrations and `repository_lifecycle_test.exs` |
 | 2. GitHub namespace projection | Complete | GitHub adapter, exact `repo` and `read:org` scopes, projection tests |
-| 3. Repository REST API | Complete | Repository controllers, JSON contract, idempotency and pagination tests |
-| 4. Durable provisioning | Complete | Provisioning outbox, reclaimable worker, and cache reconstruction tests |
+| 3. Repository REST API | Complete | Repository controllers, JSON contract, namespace quota, idempotency, and pagination tests |
+| 4. Durable provisioning | Complete | Provisioning outbox, reclaimable worker, bounded import timeout, crash-workspace recovery, audit events, and cache reconstruction tests |
 | 5. One-time GitHub import | Complete | Frozen refs, Git bundle WAL entry, cache-loss and no-later-sync tests |
-| 6. Repository Git HTTP authorization | Complete | Public reads, PAT writes, role refusal, and legacy-route tests |
+| 6. Repository Git HTTP authorization | Complete | Public reads, PAT writes, token reauthentication, role refusal, explicit machine grants, audited writes, and legacy-route tests |
 | 7. CLI device authorization | Complete | One-time device-code context, API, browser approval, and polling tests |
-| 8. Repository browser interface | Complete | List, create, import, empty, failed, private, and code-route LiveView tests |
+| 8. Repository browser interface | Complete | Paginated list, create, import, empty, failed, private, and code-route LiveView tests |
 | 9. CLI package scaffold | Complete | `@openagentsinc/cli`, Effect 4 command graph, build, and package inspection |
 | 10. CLI configuration and authentication | Complete | Profiles, persisted configuration precedence, custom origins, OS credential store, headless refusal, stable errors, and origin-isolated Git helper tests |
-| 11. CLI repository commands | Complete | Create, matching-namespace import, cursor list, view, clone, source remote, inference, and refusal tests |
+| 11. CLI repository commands | Complete | Create, matching-namespace import, idempotent transport retry, cursor list, view, clone, source remote, inference, signal cancellation, and refusal tests |
 | 12. Local cross-repository verification | In progress | The default-`4000` disposable suite passes on an alternate loopback port for create, push, clone, anonymous read, private concealment, viewer push refusal, cache reconstruction, exact import refs, and no later sync. See [`cf04c00-de8015d1e5.json`](evidence/repository-cli-local-e2e/cf04c00-de8015d1e5.json). Record the exact `localhost:4000` receipt when that port is available. |
 | 13. Staging and release | Not started | — |
 

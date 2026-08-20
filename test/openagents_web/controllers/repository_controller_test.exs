@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.RepositoryControllerTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   alias OpenAgents.ApiTokens
   alias OpenAgents.Repositories
@@ -173,6 +173,32 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
              |> authorize(user)
              |> get(~p"/api/v3/user/repos?namespace=another-owner&per_page=10")
              |> json_response(200)
+  end
+
+  test "creation enforces the namespace repository quota", %{conn: conn} do
+    previous = Application.get_env(:openagents, :repository_namespace_limit)
+    Application.put_env(:openagents, :repository_namespace_limit, 1)
+
+    on_exit(fn ->
+      if is_nil(previous),
+        do: Application.delete_env(:openagents, :repository_namespace_limit),
+        else: Application.put_env(:openagents, :repository_namespace_limit, previous)
+    end)
+
+    user = github_user("repository-api-quota", "quota-owner")
+
+    assert conn
+           |> authorize(user)
+           |> put_req_header("idempotency-key", "quota-first")
+           |> post(~p"/api/v3/user/repos", %{name: "first"})
+           |> json_response(202)
+
+    assert %{"code" => "repository_quota_exceeded"} =
+             conn
+             |> authorize(user)
+             |> put_req_header("idempotency-key", "quota-second")
+             |> post(~p"/api/v3/user/repos", %{name: "second"})
+             |> json_response(422)
   end
 
   defp authorize(conn, user) do

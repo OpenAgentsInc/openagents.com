@@ -24,8 +24,8 @@ defmodule OpenAgents.Forge.GitHTTP do
   import Ecto.Query
   import Plug.Conn
 
+  alias OpenAgents.{Audit, Repositories}
   alias OpenAgents.Forge.{Pushes, Repos, Sync}
-  alias OpenAgents.Repositories
 
   @max_body_bytes 512 * 1024 * 1024
   @read_chunk 8 * 1024 * 1024
@@ -109,6 +109,15 @@ defmodule OpenAgents.Forge.GitHTTP do
              git_protocol(conn)
            ) do
         {:ok, output} ->
+          Audit.record!(
+            "repository.git.write",
+            audit_actor(conn),
+            "repository",
+            repository.id || repository.storage_key,
+            repository_id: repository.id,
+            metadata: %{"operation" => "receive_pack"}
+          )
+
           conn
           |> put_resp_content_type("application/x-git-receive-pack-result")
           |> put_resp_header("cache-control", "no-cache")
@@ -205,7 +214,8 @@ defmodule OpenAgents.Forge.GitHTTP do
     case conn.assigns[:forge_principal] do
       nil -> authentication_required()
       %{kind: :user, user: user} -> member_read(repository, user)
-      %{kind: kind} when kind in [:operator, :machine] -> operational_access(repository)
+      %{kind: :operator} -> operational_access(repository)
+      %{kind: :machine, id: machine_id} -> machine_access(repository, machine_id, "read")
     end
   end
 
@@ -224,8 +234,11 @@ defmodule OpenAgents.Forge.GitHTTP do
           end
         end
 
-      %{kind: kind} when kind in [:operator, :machine] ->
+      %{kind: :operator} ->
         operational_access(repository)
+
+      %{kind: :machine, id: machine_id} ->
+        machine_access(repository, machine_id, "write")
     end
   end
 
@@ -237,6 +250,15 @@ defmodule OpenAgents.Forge.GitHTTP do
 
   defp operational_access(repository) do
     if repository.storage_key in Repos.allowed_repos(),
+      do: :ok,
+      else: {:error, 404, "unknown repository"}
+  end
+
+  defp machine_access(%{id: nil}, _machine_id, _operation),
+    do: {:error, 404, "unknown repository"}
+
+  defp machine_access(repository, machine_id, operation) do
+    if Repositories.machine_access?(repository, machine_id, operation),
       do: :ok,
       else: {:error, 404, "unknown repository"}
   end
@@ -268,6 +290,13 @@ defmodule OpenAgents.Forge.GitHTTP do
       %{kind: kind, id: id} -> "#{kind}:#{id}"
       %{kind: kind} -> to_string(kind)
       _ -> "unauthenticated"
+    end
+  end
+
+  defp audit_actor(conn) do
+    case conn.assigns[:forge_principal] do
+      %{kind: kind, id: id} when kind in [:user, :machine, :operator] -> {kind, id}
+      _principal -> :system
     end
   end
 

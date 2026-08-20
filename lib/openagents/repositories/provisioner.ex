@@ -8,7 +8,7 @@ defmodule OpenAgents.Repositories.Provisioner do
   require Logger
 
   alias OpenAgents.Forge.{Repos, WAL}
-  alias OpenAgents.Repo
+  alias OpenAgents.{Audit, Repo}
   alias OpenAgents.Repositories.{ProvisioningOutbox, Repository}
 
   @lease_seconds 120
@@ -91,16 +91,28 @@ defmodule OpenAgents.Repositories.Provisioner do
             nil
 
           %ProvisioningOutbox{} = claimed ->
-            claimed
-            |> ProvisioningOutbox.transition_changeset(%{
-              state: "running",
-              attempt_count: claimed.attempt_count + 1,
-              retry_at: now,
-              claimed_at: now,
-              completed_at: nil,
-              error_code: nil
-            })
-            |> Repo.update!()
+            running =
+              claimed
+              |> ProvisioningOutbox.transition_changeset(%{
+                state: "running",
+                attempt_count: claimed.attempt_count + 1,
+                retry_at: now,
+                claimed_at: now,
+                completed_at: nil,
+                error_code: nil
+              })
+              |> Repo.update!()
+
+            Audit.record!(
+              "repository.provisioning.running",
+              :system,
+              "provisioning_outbox",
+              running.id,
+              repository_id: running.repository_id,
+              metadata: %{"attempt_count" => running.attempt_count}
+            )
+
+            running
         end
       end)
 
@@ -180,6 +192,15 @@ defmodule OpenAgents.Repositories.Provisioner do
         error_code: nil
       })
       |> Repo.update!()
+
+      Audit.record!(
+        "repository.provisioning.completed",
+        :system,
+        "provisioning_outbox",
+        outbox.id,
+        repository_id: repository.id,
+        metadata: %{"attempt_count" => outbox.attempt_count, "operation" => outbox.operation}
+      )
     end)
 
     :ok
@@ -211,6 +232,15 @@ defmodule OpenAgents.Repositories.Provisioner do
         error_code: "provisioning_failed"
       })
       |> Repo.update!()
+
+      Audit.record!("repository.provisioning.failed", :system, "provisioning_outbox", outbox.id,
+        repository_id: repository.id,
+        metadata: %{
+          "attempt_count" => outbox.attempt_count,
+          "error_code" => "provisioning_failed",
+          "operation" => outbox.operation
+        }
+      )
     end)
 
     Logger.warning("repository_provisioning_failed code=provisioning_failed")

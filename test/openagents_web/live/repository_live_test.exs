@@ -38,6 +38,31 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     assert has_element?(view, "#import-repository")
   end
 
+  test "repository index loads bounded pages", %{conn: conn} do
+    user = github_user("repository-live-pagination", "pagination-owner")
+
+    Enum.each(1..21, fn number ->
+      assert {:ok, _repository, :created} =
+               Repositories.create_user_repository(
+                 user,
+                 %{name: "paged-#{String.pad_leading(to_string(number), 2, "0")}"},
+                 "pagination-#{number}"
+               )
+    end)
+
+    {:ok, view, _html} = live(log_in(conn, user), ~p"/repositories")
+    last_repository = Repositories.get_by_path!("pagination-owner", "paged-21")
+
+    assert has_element?(view, "#repositories-load-more")
+    assert has_element?(view, "#repositories")
+    refute has_element?(view, "#repositories-#{last_repository.id}")
+
+    view |> element("#repositories-load-more") |> render_click()
+
+    assert has_element?(view, "#repositories-#{last_repository.id}")
+    refute has_element?(view, "#repositories-load-more")
+  end
+
   test "new repository defaults private and normalizes its name", %{conn: conn} do
     user = github_user("repository-live-create", "create-owner")
     {:ok, view, _html} = live(log_in(conn, user), ~p"/repositories/new")

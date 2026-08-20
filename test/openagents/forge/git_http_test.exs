@@ -10,7 +10,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
 
   import OpenAgents.AccountsFixtures
 
-  alias OpenAgents.Forge
+  alias OpenAgents.{AuditEvent, Forge, Machines, Repo, Repositories}
   alias OpenAgents.Forge.{Repos, WAL}
 
   defmodule TestPipeline do
@@ -41,7 +41,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
       |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
       |> OpenAgents.Repo.update!()
 
-    {:ok, _api_token, plaintext} =
+    {:ok, api_token, plaintext} =
       OpenAgents.ApiTokens.create(user, %{
         name: "Git HTTP test",
         scopes: ["forge:write"],
@@ -61,6 +61,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
       base: base,
       port: port,
       repository: repository,
+      api_token: api_token,
       token: plaintext,
       url: "http://x:#{plaintext}@127.0.0.1:#{port}/git-http-owner/demo.git",
       user: user
@@ -128,6 +129,14 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     # Deploy signal fired.
     assert_receive {:forge_push, %{repo: storage_key, wal_seq: 0}}, 2_000
     assert storage_key == repository.storage_key
+
+    assert %AuditEvent{event_type: "repository.git.write", repository_id: repository_id} =
+             Repo.get_by(AuditEvent,
+               event_type: "repository.git.write",
+               repository_id: repository.id
+             )
+
+    assert repository_id == repository.id
 
     # A second clone sees the commit.
     verify = seed_clone!(base, url)
@@ -220,6 +229,32 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert output =~ "404" or output =~ "not found" or output =~ "unknown"
   end
 
+  test "Git RPC reauthenticates a token after ref advertisement", %{
+    api_token: api_token,
+    token: token,
+    user: user
+  } do
+    authorization = "Basic " <> Base.encode64("x:#{token}")
+
+    advertised =
+      :get
+      |> Plug.Test.conn("/git-http-owner/demo.git/info/refs?service=git-upload-pack")
+      |> Plug.Conn.put_req_header("authorization", authorization)
+      |> TestPipeline.call([])
+
+    assert advertised.status == 200
+    assert {:ok, _revoked} = OpenAgents.ApiTokens.revoke(user, api_token.id)
+
+    rpc =
+      :post
+      |> Plug.Test.conn("/git-http-owner/demo.git/git-upload-pack", "")
+      |> Plug.Conn.put_req_header("authorization", authorization)
+      |> TestPipeline.call([])
+
+    assert rpc.status == 401
+    assert Plug.Conn.get_resp_header(rpc, "www-authenticate") != []
+  end
+
   test "public repositories clone anonymously and private repositories issue a challenge", %{
     base: base,
     port: port,
@@ -282,6 +317,60 @@ defmodule OpenAgents.Forge.GitHTTPTest do
 
     assert status != 0
     assert output =~ "403" or output =~ "read only" or output =~ "unable to access"
+  end
+
+  test "a paired machine requires an explicit operation-scoped repository grant", %{
+    base: base,
+    port: port,
+    repository: repository,
+    user: user
+  } do
+    {:ok, pairing} =
+      Machines.start_pairing(%{
+        "name" => "git-machine",
+        "tier" => "probe",
+        "platform" => "linux",
+        "agent_version" => "0.1.0",
+        "roots" => []
+      })
+
+    assert {:ok, machine} = Machines.approve_pairing(user, pairing.code)
+
+    assert {:ok, %{token: machine_token}} =
+             Machines.claim_pairing(pairing.pairing.id, pairing.poll_secret)
+
+    machine_url =
+      "http://x:#{machine_token}@127.0.0.1:#{port}/git-http-owner/demo.git"
+
+    {ungranted_output, ungranted_status} =
+      System.cmd(
+        "git",
+        ["-c", "credential.helper=", "clone", machine_url, Path.join(base, "machine-ungranted")],
+        stderr_to_stdout: true,
+        env: [{"GIT_TERMINAL_PROMPT", "0"}]
+      )
+
+    assert ungranted_status != 0
+    assert ungranted_output =~ "404" or ungranted_output =~ "not found"
+
+    assert {:ok, _grant} = Repositories.grant_machine(repository, user, machine, ["read"])
+    machine_clone = seed_clone!(base, machine_url)
+    File.write!(Path.join(machine_clone, "machine.txt"), "machine\n")
+    sh!(machine_clone, "git", ["add", "machine.txt"])
+    sh!(machine_clone, "git", ["commit", "-m", "Machine commit"])
+
+    {_output, read_only_status} =
+      System.cmd("git", ["-c", "credential.helper=", "push", "origin", "HEAD:main"],
+        cd: machine_clone,
+        stderr_to_stdout: true
+      )
+
+    assert read_only_status != 0
+
+    assert {:ok, _grant} =
+             Repositories.grant_machine(repository, user, machine, ["read", "write"])
+
+    sh!(machine_clone, "git", ["push", "origin", "HEAD:main"])
   end
 
   test "the legacy initial repository path remains available", %{

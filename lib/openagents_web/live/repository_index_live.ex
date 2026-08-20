@@ -5,13 +5,41 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
 
   alias OpenAgents.Repositories
 
+  @per_page 20
+
   @impl true
   def mount(_params, _session, socket) do
-    repositories = Repositories.list_visible_repositories(socket.assigns.current_user)
+    {repositories, more?} =
+      Repositories.list_visible_repositories_page(
+        socket.assigns.current_user,
+        @per_page,
+        nil
+      )
 
     {:ok,
      socket
      |> assign(:page_title, "Repositories")
+     |> assign(:repository_cursor, cursor(List.last(repositories)))
+     |> assign(:repositories_more?, more?)
+     |> stream(:repositories, repositories)}
+  end
+
+  @impl true
+  def handle_event("load_more", _params, socket) do
+    {repositories, more?} =
+      Repositories.list_visible_repositories_page(
+        socket.assigns.current_user,
+        @per_page,
+        socket.assigns.repository_cursor
+      )
+
+    {:noreply,
+     socket
+     |> assign(
+       :repository_cursor,
+       cursor(List.last(repositories)) || socket.assigns.repository_cursor
+     )
+     |> assign(:repositories_more?, more?)
      |> stream(:repositories, repositories)}
   end
 
@@ -68,6 +96,12 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
             </div>
           </.card>
         </div>
+
+        <div :if={@repositories_more?} class="flex justify-center">
+          <.button id="repositories-load-more" phx-click="load_more" variant={:secondary}>
+            Load more
+          </.button>
+        </div>
       </main>
     </Layouts.app>
     """
@@ -76,4 +110,10 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
   defp status_variant("ready"), do: :success
   defp status_variant("failed"), do: :danger
   defp status_variant(_state), do: :info
+
+  defp cursor(nil), do: nil
+
+  defp cursor(repository) do
+    {repository.namespace.slug_key, repository.name_key, repository.id}
+  end
 end

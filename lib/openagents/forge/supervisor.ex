@@ -19,7 +19,10 @@ defmodule OpenAgents.Forge.Supervisor do
 
   defp repository_children do
     if Application.get_env(:openagents, :repository_provisioner_enabled, true) do
-      [{OpenAgents.Repositories.Provisioner, []}]
+      [
+        {OpenAgents.Repositories.Provisioner, []},
+        {OpenAgents.Repositories.ImportWorkspaceJanitor, []}
+      ]
     else
       []
     end

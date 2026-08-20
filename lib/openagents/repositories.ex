@@ -4,10 +4,12 @@ defmodule OpenAgents.Repositories do
   import Ecto.Query, warn: false
 
   alias OpenAgents.Accounts.User
-  alias OpenAgents.Repo
+  alias OpenAgents.{Audit, Repo}
+  alias OpenAgents.Machines.Machine
 
   alias OpenAgents.Repositories.{
     IdempotencyRequest,
+    MachineGrant,
     Membership,
     Namespace,
     NamespaceAlias,
@@ -19,6 +21,7 @@ defmodule OpenAgents.Repositories do
   @initial_owner "OpenAgentsInc"
   @initial_name "openagents.com"
   @writable_roles ~w(owner maintainer contributor)
+  @repository_namespace_limit 100
 
   def initial_path, do: {@initial_owner, @initial_name}
 
@@ -299,14 +302,86 @@ defmodule OpenAgents.Repositories do
   end
 
   def add_member(%Repository{} = repository, %User{} = user, role \\ "contributor") do
-    %Membership{}
-    |> Membership.changeset(%{repository_id: repository.id, user_id: user.id, role: role})
-    |> Repo.insert(
-      on_conflict: {:replace, [:role, :updated_at]},
-      conflict_target: [:repository_id, :user_id],
-      returning: true
+    Repo.transaction(fn ->
+      membership =
+        %Membership{}
+        |> Membership.changeset(%{repository_id: repository.id, user_id: user.id, role: role})
+        |> Repo.insert!(
+          on_conflict: {:replace, [:role, :updated_at]},
+          conflict_target: [:repository_id, :user_id],
+          returning: true
+        )
+
+      Audit.record!(
+        "repository.membership.updated",
+        {:user, user.id},
+        "membership",
+        membership_subject_id(membership),
+        repository_id: repository.id,
+        metadata: %{"role" => membership.role}
+      )
+
+      membership
+    end)
+  end
+
+  def grant_machine(%Repository{} = repository, %User{} = actor, %Machine{} = machine, operations)
+      when is_list(operations) do
+    with true <- machine.user_id == actor.id or {:error, :machine_not_owned},
+         role when role in ~w(owner maintainer) <- membership_role(repository, actor) do
+      Repo.transaction(fn ->
+        grant =
+          %MachineGrant{}
+          |> MachineGrant.changeset(%{
+            repository_id: repository.id,
+            machine_id: machine.id,
+            created_by_user_id: actor.id,
+            operations: operations |> Enum.uniq() |> Enum.sort()
+          })
+          |> Repo.insert!(
+            on_conflict: {:replace, [:operations, :created_by_user_id, :updated_at]},
+            conflict_target: [:repository_id, :machine_id],
+            returning: true
+          )
+
+        Audit.record!(
+          "repository.machine_grant.updated",
+          {:user, actor.id},
+          "machine_grant",
+          grant.id,
+          repository_id: repository.id,
+          metadata: %{"machine_id" => machine.id, "operations" => grant.operations}
+        )
+
+        grant
+      end)
+    else
+      nil -> {:error, :repository_not_allowed}
+      false -> {:error, :machine_not_owned}
+      {:error, reason} -> {:error, reason}
+      _role -> {:error, :repository_not_allowed}
+    end
+  rescue
+    error in Ecto.InvalidChangesetError -> {:error, error.changeset}
+  end
+
+  def machine_access?(%Repository{id: repository_id}, machine_id, operation)
+      when operation in ~w(read write) and is_binary(machine_id) do
+    now = DateTime.utc_now()
+
+    Repo.exists?(
+      from grant in MachineGrant,
+        join: machine in Machine,
+        on:
+          machine.id == grant.machine_id and machine.status == "active" and
+            machine.token_expires_at > ^now,
+        where:
+          grant.repository_id == ^repository_id and grant.machine_id == ^machine_id and
+            fragment("? = ANY(?)", ^operation, grant.operations)
     )
   end
+
+  def machine_access?(%Repository{}, _machine_id, _operation), do: false
 
   def ensure_initial_membership(%User{} = user) do
     add_member(initial_repository!(), user)
@@ -416,29 +491,75 @@ defmodule OpenAgents.Repositories do
          idempotency_key,
          request_digest
        ) do
+    lock_and_validate_quota!(namespace.id)
+
     repository =
       %Repository{}
       |> Repository.creation_changeset(attrs, namespace, user.id, provisioning_kind)
       |> Repo.insert!()
 
-    %Membership{}
-    |> Membership.changeset(%{repository_id: repository.id, user_id: user.id, role: "owner"})
-    |> Repo.insert!()
+    Audit.record!("repository.created", {:user, user.id}, "repository", repository.id,
+      repository_id: repository.id,
+      metadata: %{
+        "namespace_id" => namespace.id,
+        "provisioning_kind" => provisioning_kind,
+        "visibility" => repository.visibility
+      }
+    )
+
+    membership =
+      %Membership{}
+      |> Membership.changeset(%{repository_id: repository.id, user_id: user.id, role: "owner"})
+      |> Repo.insert!()
+
+    Audit.record!(
+      "repository.membership.created",
+      {:user, user.id},
+      "membership",
+      membership_subject_id(membership),
+      repository_id: repository.id,
+      metadata: %{"role" => "owner"}
+    )
 
     repository_import =
       if source do
-        %RepositoryImport{}
-        |> RepositoryImport.changeset(repository.id, source)
-        |> Repo.insert!()
+        created_import =
+          %RepositoryImport{}
+          |> RepositoryImport.changeset(repository.id, source)
+          |> Repo.insert!()
+
+        Audit.record!(
+          "repository.import.created",
+          {:user, user.id},
+          "repository_import",
+          created_import.id,
+          repository_id: repository.id,
+          metadata: %{
+            "provider" => created_import.provider,
+            "source_repository_id" => created_import.source_repository_id
+          }
+        )
+
+        created_import
       end
 
-    %ProvisioningOutbox{}
-    |> ProvisioningOutbox.changeset(
-      repository.id,
-      repository_import && repository_import.id,
-      operation
+    outbox =
+      %ProvisioningOutbox{}
+      |> ProvisioningOutbox.changeset(
+        repository.id,
+        repository_import && repository_import.id,
+        operation
+      )
+      |> Repo.insert!()
+
+    Audit.record!(
+      "repository.provisioning.pending",
+      {:user, user.id},
+      "provisioning_outbox",
+      outbox.id,
+      repository_id: repository.id,
+      metadata: %{"operation" => operation}
     )
-    |> Repo.insert!()
 
     %IdempotencyRequest{}
     |> IdempotencyRequest.changeset(
@@ -550,6 +671,33 @@ defmodule OpenAgents.Repositories do
     if collision?, do: Repo.rollback(:namespace_slug_conflict), else: :ok
   end
 
+  defp lock_and_validate_quota!(namespace_id) do
+    _namespace =
+      Repo.one!(
+        from namespace in Namespace, where: namespace.id == ^namespace_id, lock: "FOR UPDATE"
+      )
+
+    repository_count =
+      Repo.aggregate(
+        from(repository in Repository, where: repository.namespace_id == ^namespace_id),
+        :count
+      )
+
+    if repository_count >= repository_namespace_limit(),
+      do: Repo.rollback(:repository_quota_exceeded)
+  end
+
+  defp repository_namespace_limit do
+    case Application.get_env(
+           :openagents,
+           :repository_namespace_limit,
+           @repository_namespace_limit
+         ) do
+      limit when is_integer(limit) and limit > 0 -> limit
+      _invalid -> @repository_namespace_limit
+    end
+  end
+
   defp repository_path_query(owner_key, name_key) do
     from repository in Repository,
       join: namespace in assoc(repository, :namespace),
@@ -615,6 +763,9 @@ defmodule OpenAgents.Repositories do
       value -> value
     end
   end
+
+  defp membership_subject_id(membership),
+    do: "#{membership.repository_id}:#{membership.user_id}"
 
   defp unwrap_transaction({:ok, value}), do: {:ok, value}
   defp unwrap_transaction({:error, reason}), do: {:error, reason}

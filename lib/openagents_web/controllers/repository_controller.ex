@@ -177,6 +177,15 @@ defmodule OpenAgentsWeb.RepositoryController do
     do:
       error(conn, :conflict, "repository_name_conflict", "Repository name is unavailable", "name")
 
+  defp render_error(conn, :repository_quota_exceeded),
+    do:
+      error(
+        conn,
+        :unprocessable_entity,
+        "repository_quota_exceeded",
+        "The namespace repository quota is exhausted"
+      )
+
   defp render_error(conn, :not_found),
     do: error(conn, :not_found, "not_found", "Repository not found")
 

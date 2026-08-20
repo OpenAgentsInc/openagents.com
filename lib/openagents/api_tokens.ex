@@ -4,6 +4,7 @@ defmodule OpenAgents.ApiTokens do
   import Ecto.Query
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Audit
   alias OpenAgents.ApiTokens.ApiToken
   alias OpenAgents.Repo
 
@@ -21,16 +22,25 @@ defmodule OpenAgents.ApiTokens do
       secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
       plaintext = @prefix <> id <> "." <> secret
 
-      %ApiToken{id: id, user_id: user_id, token_digest: digest(plaintext)}
-      |> ApiToken.create_changeset(%{
-        name: name,
-        scopes: scopes,
-        expires_at: DateTime.add(DateTime.utc_now(), lifetime_days, :day)
-      })
-      |> Repo.insert()
+      Repo.transaction(fn ->
+        token =
+          %ApiToken{id: id, user_id: user_id, token_digest: digest(plaintext)}
+          |> ApiToken.create_changeset(%{
+            name: name,
+            scopes: scopes,
+            expires_at: DateTime.add(DateTime.utc_now(), lifetime_days, :day)
+          })
+          |> Repo.insert!()
+
+        Audit.record!("api_token.created", {:user, user_id}, "api_token", token.id,
+          metadata: %{"scopes" => scopes}
+        )
+
+        token
+      end)
       |> case do
         {:ok, token} -> {:ok, token, plaintext}
-        {:error, changeset} -> {:error, changeset}
+        {:error, reason} -> {:error, reason}
       end
     end
   end

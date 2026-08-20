@@ -145,6 +145,15 @@ defmodule OpenAgentsWeb.RepositoryImportController do
   defp render_error(conn, :idempotency_conflict),
     do: error(conn, :conflict, "idempotency_conflict", "The idempotency key is already in use")
 
+  defp render_error(conn, :repository_quota_exceeded),
+    do:
+      error(
+        conn,
+        :unprocessable_entity,
+        "repository_quota_exceeded",
+        "The namespace repository quota is exhausted"
+      )
+
   defp render_error(conn, :invalid_idempotency_key),
     do: error(conn, :bad_request, "invalid_idempotency_key", "Provide one Idempotency-Key header")
 

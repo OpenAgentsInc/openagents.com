@@ -40,6 +40,7 @@ defmodule OpenAgentsWeb.Router do
     post "/auth/github", AuthController, :start
     get "/auth/github/callback", AuthController, :callback
     delete "/logout", AuthController, :logout
+    get "/healthz", HealthController, :show
   end
 
   scope "/", OpenAgentsWeb do
@@ -60,6 +61,13 @@ defmodule OpenAgentsWeb.Router do
       live "/:owner/:repo/projects/:number", ProjectShowLive, :show
       live "/:owner/:repo/projects", ProjectIndexLive, :index
     end
+
+    post "/voice/calls", VoiceCallController, :create
+    post "/voice/calls/interrupt", VoiceCallController, :interrupt
+    post "/voice/telemetry", VoiceTelemetryController, :create
+    post "/voice/calls/recording", VoiceRecordingController, :create
+    post "/voice/calls/recording/complete", VoiceRecordingController, :complete
+    delete "/voice/calls", VoiceCallController, :delete
   end
 
   scope "/api/v3", OpenAgentsWeb do

@@ -106,6 +106,15 @@ defmodule OpenAgentsWeb.Layouts do
     """
   end
 
+  attr :current_user, :map, default: nil
+  attr :context, :atom, default: :bar
+
+  def account_control(assigns) do
+    ~H"""
+    <div class="account-control"></div>
+    """
+  end
+
   defp account_dropdown(assigns) do
     ~H"""
     <details class="dropdown dropdown-end">

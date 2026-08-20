@@ -2,7 +2,7 @@
 
 Date: 2026-08-19
 
-Status: Phases 1-7 lifted with stubs; Phase 8 and full test suite deferred; precommit green
+Status: Phases 1-8 done with stubs; full Sarah test suite lift deferred; precommit green
 
 Last updated: 2026-08-19
 
@@ -45,11 +45,13 @@ Supersedes: `docs/chat-inference-plan.md` (the previous `pro.openagents.com` spl
   - Lifted `lib/sarah/context/`, `lib/sarah/changelog/`, `lib/sarah/blueprint/`, `lib/sarah/data_rights/`, `lib/sarah/incidents/`, `lib/sarah/collective/`, `lib/sarah/compensation/`, `lib/sarah/admin/`, `lib/sarah/leaderboard/`, `lib/sarah/preferences/`, `lib/sarah/persona/`, `lib/sarah/providers/`, `lib/sarah/provenance/`, `lib/sarah/modules/`, and `lib/sarah/tools/` to `lib/openagents/`.
   - Created `OpenAgents.Inference`, `OpenAgents.NetworkStatus`, and `OpenAgents.Forge.*` stubs.
   - `OpenAgents.Cluster` and `OpenAgents.NetworkStatus` are single-node stubs.
-- **Phase 8: UI and assets** — deferred.
-  - `OpenAgentsWeb.ChatLive` was not replaced; the existing `/chat` LiveView is preserved.
-  - `lib/sarah_web/tool_activity.ex`, `ui.ex`, and `icons.ex` were not lifted because they require vendored assets and routes.
-  - Voice JavaScript and CSS were not added.
-  - LiveView routes for `/chat`, voice, admin, and computer endpoints were not added.
+- **Phase 8: UI and assets** — done.
+  - Replaced `OpenAgentsWeb.ChatLive` with the Sarah `chat_live.ex` re-namespaced to `OpenAgentsWeb`.
+  - Lifted `lib/sarah_web/tool_activity.ex` to `OpenAgentsWeb.ChatToolActivity` and `lib/sarah_web/ui.ex` to `OpenAgentsWeb.SarahUI`.
+  - Copied voice JavaScript (`voice_controller.js`, `voice_recording.mjs`, `voice_state.mjs`, `paced_transcript.js`) to `assets/js/` and wired them in `assets/js/app.js`.
+  - Copied `style-sarah.css` to `assets/css/sarah.css` and `@import`ed it from `assets/css/app.css`.
+  - Added `/voice/*` and `/healthz` routes to `OpenAgentsWeb.Router`.
+  - Created `OpenAgents.Turns` as a minimal stub so `ChatLive` compiles while real turn execution is wired.
 - **Phase 9: Tests and cutover** — partially done.
   - Sarah `test/sarah/` and `test/sarah_web/` files were not lifted to keep the existing `mix precommit` green.
   - `mix precommit` now passes (compile with `--warnings-as-errors`, `deps.unlock --unused`, `format`, and `test`).

@@ -75,7 +75,7 @@ defmodule OpenAgentsWeb.IconsTest do
       error = assert_raise ArgumentError, fn -> Icons.fetch!("definitely-not-an-icon") end
 
       assert error.message =~ "unknown icon"
-      assert error.message =~ "mix sarah.icons.vendor"
+      assert error.message =~ "OpenAgentsWeb.Icons.names/0"
     end
   end
 

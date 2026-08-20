@@ -1,6 +1,5 @@
 defmodule OpenAgents.PersonaTest do
   use ExUnit.Case, async: true
-  @moduletag :skip
   alias OpenAgents.Persona
   alias OpenAgents.Persona.SourceManifest
 
@@ -13,7 +12,7 @@ defmodule OpenAgents.PersonaTest do
     assert persona.greeting == "Hello. I'm Sarah—an OpenAgent. What are we working on?"
     assert persona.source_manifest_id == "sarah.persona.sources.v1"
     assert persona.source_manifest_digest == SourceManifest.load!()["manifest_sha256"]
-    assert persona.content =~ "You are OpenAgents."
+    assert persona.content =~ "You are Sarah."
     assert persona.content =~ "You are an OpenAgent"
   end
 

@@ -102,7 +102,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
           <.input field={@form[:description]} label="Description" />
         </div>
         <footer class="flex justify-end mt-2">
-          <.button variant={:primary}>Add milestone</.button>
+          <.button type="submit" variant={:primary}>Add milestone</.button>
         </footer>
       </.form>
 

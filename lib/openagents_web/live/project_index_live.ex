@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
       >
         <.input field={@form[:title]} label="Title" required />
         <footer class="flex justify-end mt-2">
-          <.button variant={:primary}>Add project</.button>
+          <.button type="submit" variant={:primary}>Add project</.button>
         </footer>
       </.form>
 

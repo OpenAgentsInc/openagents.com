@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.LabelIndexLive do
           <.input field={@form[:description]} label="Description" />
         </div>
         <footer class="flex justify-end mt-2">
-          <.button variant={:primary}>Add label</.button>
+          <.button type="submit" variant={:primary}>Add label</.button>
         </footer>
       </.form>
 

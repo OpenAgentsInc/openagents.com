@@ -32,32 +32,35 @@ defmodule OpenAgents.MigrationLineage do
          :ok <- validate_snapshot_ref(snapshot_ref) do
       map = load_map!()
 
-      repo.transaction(fn ->
-        _lock = SQL.query!(repo, "SELECT pg_advisory_xact_lock($1)", [@lock_id])
-        before = classify_repo(repo, map)
+      repo.transaction(
+        fn ->
+          _lock = SQL.query!(repo, "SELECT pg_advisory_xact_lock($1)", [@lock_id])
+          before = classify_repo(repo, map)
 
-        case before.classification do
-          "prior" ->
-            apply_bridge!(repo)
-            insert_baseline_versions!(repo, baseline_versions(map))
-            after_baseline = classify_repo(repo, map)
+          case before.classification do
+            "prior" ->
+              apply_bridge!(repo)
+              insert_baseline_versions!(repo, baseline_versions(map))
+              after_baseline = classify_repo(repo, map)
 
-            if after_baseline.classification != "prior_baselined" do
-              repo.rollback(:baseline_postcondition_failed)
-            end
+              if after_baseline.classification != "prior_baselined" do
+                repo.rollback(:baseline_postcondition_failed)
+              end
 
-            result(after_baseline, snapshot_ref, true)
+              result(after_baseline, snapshot_ref, true)
 
-          "prior_baselined" ->
-            result(before, snapshot_ref, false)
+            "prior_baselined" ->
+              result(before, snapshot_ref, false)
 
-          "prior_partial" ->
-            repo.rollback(:partial_lineage_forbidden)
+            "prior_partial" ->
+              repo.rollback(:partial_lineage_forbidden)
 
-          _other ->
-            repo.rollback(:lineage_not_baselineable)
-        end
-      end)
+            _other ->
+              repo.rollback(:lineage_not_baselineable)
+          end
+        end,
+        timeout: 120_000
+      )
       |> normalize_transaction()
     end
   end

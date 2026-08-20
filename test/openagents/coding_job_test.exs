@@ -149,7 +149,10 @@ defmodule OpenAgents.CodingJobTest do
     assert Enum.all?(steps, &(&1.status == "succeeded"))
 
     push_step = List.last(steps)
-    assert "forge-commit:openagents:#{sha}" in push_step.target_receipt_refs
+    # The middle segment is the forge repo the coding lane edits
+    # (`OpenAgents.Tools.Repository.repo/0`) — still `sarah`, the same name
+    # the push receipt below is looked up under.
+    assert "forge-commit:sarah:#{sha}" in push_step.target_receipt_refs
 
     # The push is WAL-receipted on the forge, on the job's own branch.
     assert [push_receipt | _rest] = Forge.recent_pushes("sarah")

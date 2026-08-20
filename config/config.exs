@@ -156,12 +156,17 @@ config :openagents,
   forge_wal_dir: nil,
   forge_wal_bucket: nil,
   forge_gcs_token_provider: nil,
+  # Hot-load allowlist: MODULE names, not repo paths. An entry ending in `.`
+  # is a prefix; any other entry is an exact module name (see
+  # `OpenAgents.Forge.HotLoader.allowlisted?/2`). The narrow list was never
+  # the safety — the canary node + smoke check + revert is — so the code-only
+  # web layer ships in seconds instead of a ~25 minute rolling replace.
   forge_hot_load_allowlist: [
-    "lib/openagents",
-    "lib/openagents_web",
-    "priv/sarah",
-    "config",
-    "mix.exs"
+    "OpenAgentsWeb.",
+    "OpenAgents.Forge.Browse",
+    "OpenAgents.Changelog",
+    "OpenAgents.Scratch.",
+    "OpenAgents.BuildInfo"
   ],
   forge_public_visibility: %{"sarah" => :l2},
   forge_repo_owners: %{"sarah" => "OpenAgentsInc"},

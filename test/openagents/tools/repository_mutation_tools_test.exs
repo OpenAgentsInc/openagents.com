@@ -225,8 +225,13 @@ defmodule OpenAgents.Tools.RepositoryMutationToolsTest do
     branch = pushed["result"]["branch"]
     assert branch == "sarah/job-11111111-2222-3333-4444-555555555555"
 
-    # The commit SHA is in the outcome receipt refs (SELF-EDIT-001).
-    assert "forge-commit:openagents:#{sha}" in pushed["target_receipt_refs"]
+    # The commit SHA is in the outcome receipt refs (SELF-EDIT-001). The
+    # middle segment is the forge repo the coding lane edits
+    # (`OpenAgents.Tools.Repository.repo/0`), which is still `sarah` — the
+    # same name this test uses for the branch, the push receipt, and the
+    # bare path below. Renaming the forge repo is a separate whole-repo
+    # change (config `forge_repos`, visibility, public paths, git URL).
+    assert "forge-commit:sarah:#{sha}" in pushed["target_receipt_refs"]
 
     # The push is receipted with a WAL sequence, and the ref exists on the
     # forge with exactly that sha.

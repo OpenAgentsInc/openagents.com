@@ -1,88 +1,86 @@
 defmodule OpenAgents.Forge.TargetsTest do
+  @moduledoc """
+  The two surfaces of `OpenAgents.Forge.Targets` that the end-to-end
+  lifecycle test (`OpenAgents.Forge.SarahTargetsTest`, which drives a real
+  bare repo) does not reach: the injectable `commit_store`, and the bounded
+  `details` map.
+
+  Promotability and the transition table are deliberately NOT re-asserted
+  here — they have one contract and one home. This file used to promote
+  never-pushed SHAs like `"abc123"` through a test-environment bypass, which
+  contradicted that contract ("only pushed commits are ever promotable") and
+  meant the precondition was never actually exercised anywhere.
+  """
+
   use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Forge.Target
   alias OpenAgents.Forge.Targets
 
-  test "promote a target" do
-    assert {:ok, %Target{} = target} =
-             Targets.promote("OpenAgents/openagents.com", "abc123", "operator-1")
+  @repo "OpenAgents/openagents.com"
 
-    assert target.repo == "OpenAgents/openagents.com"
-    assert target.sha == "abc123"
+  # A SHA that is well-formed but not in any repo, so only the injected
+  # store decides whether it is promotable.
+  defp sha, do: 20 |> :crypto.strong_rand_bytes() |> Base.encode16(case: :lower)
+
+  defp promote(attrs \\ []) do
+    Targets.promote(
+      Keyword.get(attrs, :repo, @repo),
+      Keyword.get(attrs, :sha, sha()),
+      Keyword.get(attrs, :operator, "operator-1"),
+      Keyword.take(attrs, [:commit_store, :details])
+      |> Keyword.put_new(:commit_store, fn _repo, _sha -> :ok end)
+    )
+  end
+
+  test "an accepting commit store promotes the commit" do
+    sha = sha()
+
+    assert {:ok, %Target{} = target} = promote(sha: sha)
+    assert target.repo == @repo
+    assert target.sha == sha
     assert target.promoted_by == "operator-1"
     assert target.status == "promoted"
   end
 
-  test "refuse promotion of an unknown SHA" do
-    bad_store = fn _repo, _sha -> :error end
-
-    assert {:error, :unknown_sha} =
-             Targets.promote(
-               "OpenAgents/openagents.com",
-               "badsha",
-               "operator-1",
-               commit_store: bad_store
-             )
+  test "a refusing commit store refuses the promotion" do
+    assert {:error, :unknown_sha} = promote(commit_store: fn _repo, _sha -> :error end)
   end
 
-  test "complete lifecycle from promoted to live" do
-    {:ok, target} = Targets.promote("OpenAgents/openagents.com", "abc123", "operator-1")
-
-    for status <- ["building", "built", "deploying", "live"] do
-      assert {:ok, %Target{} = updated} = Targets.transition(target.id, status)
-      assert updated.status == status
-    end
+  test "a commit store may name its own reason" do
+    store = fn _repo, _sha -> {:error, :mirror_behind} end
+    assert {:error, :mirror_behind} = promote(commit_store: store)
   end
 
-  test "refuse invalid transitions" do
-    {:ok, target} = Targets.promote("OpenAgents/openagents.com", "abc123", "operator-1")
+  test "a malformed SHA is refused before the store is consulted" do
+    store = fn _repo, _sha -> flunk("commit store must not be consulted") end
 
-    assert {:error, {:invalid_transition, "promoted", "live"}} =
-             Targets.transition(target.id, "live")
+    assert {:error, :invalid_sha} =
+             Targets.promote(@repo, "not-a-sha!", "operator-1", commit_store: store)
   end
 
-  test "refuse transitions out of a terminal state" do
-    {:ok, target} = Targets.promote("OpenAgents/openagents.com", "abc123", "operator-1")
-
-    assert {:ok, %Target{} = built} = Targets.transition(target.id, "building")
-    assert {:ok, %Target{} = built} = Targets.transition(built.id, "built")
-    assert {:ok, %Target{} = deploying} = Targets.transition(built.id, "deploying")
-    assert {:ok, %Target{} = live} = Targets.transition(deploying.id, "live")
-
-    assert {:error, {:terminal, "live"}} = Targets.transition(live.id, "reverted")
-  end
-
-  test "pinning back to an older SHA creates a new latest target" do
-    repo = "OpenAgents/openagents.com"
-
-    {:ok, first} = Targets.promote(repo, "sha-1", "operator-1")
-    {:ok, second} = Targets.promote(repo, "sha-2", "operator-1")
-    assert Targets.latest(repo).id == second.id
-
-    {:ok, third} = Targets.promote(repo, "sha-1", "operator-1")
-    assert Targets.latest(repo).id == third.id
-    assert third.sha == "sha-1"
-    refute third.id == first.id
-  end
-
-  test "bound details to 100 keys and 32KB" do
+  test "details are bounded to 100 keys and 32KB per value" do
     too_many = Map.new(0..100, fn i -> {"key#{i}", "value"} end)
 
-    assert {:error, {:invalid, %Ecto.Changeset{} = changeset}} =
-             Targets.promote("OpenAgents/openagents.com", "abc123", "operator-1",
-               details: too_many
-             )
-
+    assert {:error, {:invalid, %Ecto.Changeset{} = changeset}} = promote(details: too_many)
     assert "exceeds the 100-key bound" in errors_on(changeset).details
 
-    huge_string = String.duplicate("x", 40_000)
+    huge = String.duplicate("x", 40_000)
 
     assert {:error, {:invalid, %Ecto.Changeset{} = changeset}} =
-             Targets.promote("OpenAgents/openagents.com", "def456", "operator-1",
-               details: %{data: huge_string}
-             )
+             promote(details: %{data: huge})
 
     assert "exceeds the 32KB bound" in errors_on(changeset).details
+  end
+
+  test "latest/1 and transition/2 are the current/advance aliases" do
+    {:ok, first} = promote()
+    {:ok, second} = promote()
+
+    assert Targets.latest(@repo).id == second.id
+    assert {:ok, %Target{status: "building"}} = Targets.transition(first.id, "building")
+
+    assert {:error, {:invalid_transition, "promoted", "live"}} =
+             Targets.transition(second.id, "live")
   end
 end

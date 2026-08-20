@@ -25,6 +25,7 @@ defmodule OpenAgents.Forge.Target do
     target
     |> cast(attrs, [:repo, :sha, :promoted_by, :status, :details])
     |> validate_required([:repo, :sha, :promoted_by, :status])
+    |> validate_format(:sha, ~r/^[0-9a-f]{7,40}$/)
     |> validate_details()
     |> check_constraint(:status, name: :forge_fleet_target_status)
   end

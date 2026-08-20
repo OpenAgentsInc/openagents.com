@@ -55,6 +55,18 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
+# The forge runs for real in the test suite — real git over real HTTP against
+# a temporary data dir — so the pipeline is proven end to end without a network
+# or a hosted git server. `demo` is the throwaway repo the e2e tests push to.
+# The deploy lane is off by default: the tests that exercise it start
+# `OpenAgents.Forge.HotLoader` themselves.
+config :openagents,
+  forge_enabled: true,
+  forge_repos: ["sarah", "demo"],
+  forge_operator_token: "forge_test_operator_token_0123456789",
+  forge_deploy_lane_enabled: false,
+  forge_repo_owners: %{"sarah" => "OpenAgentsInc", "demo" => "OpenAgentsInc"}
+
 config :openagents, :migrate_on_boot, false
 config :openagents, :ra_enabled, false
 

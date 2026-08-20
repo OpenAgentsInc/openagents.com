@@ -25,16 +25,23 @@ defmodule OpenAgents.Forge.Targets do
   Promote a pushed commit as the fleet target for `repo`. `operator` is the
   promoting identity (immutable operator id or a test principal).
 
+  Verifies the SHA is actually in the WAL-backed repo — only pushed commits
+  are ever promotable (SELF-EDIT precondition, enforced from day one).
+
   `commit_store` is an optional `{repo, sha} -> :ok | :error | {:error, reason}`
-  function that enforces the "only pushed commits are promotable" rule. In test
-  it defaults to `:ok`, so tests can exercise promotion without cloning.
+  function that decides *existence*. It defaults to the real WAL-backed repo
+  check in every environment, test included: an env-dependent bypass would
+  mean the precondition is never actually exercised. The SHA *format* check
+  is not part of the store and always runs, so an injected store can never
+  widen what a well-formed SHA is.
   """
   def promote(repo, sha, operator, opts \\ [])
       when is_binary(repo) and is_binary(sha) and is_list(opts) do
-    commit_store = Keyword.get(opts, :commit_store, &default_commit_store/2)
+    commit_store = Keyword.get(opts, :commit_store, &commit_exists_store/2)
     details = Keyword.get(opts, :details, %{}) || %{}
 
-    with :ok <- with_commit_store(repo, sha, commit_store) do
+    with :ok <- validate_sha_format(sha),
+         :ok <- with_commit_store(repo, sha, commit_store) do
       %Target{}
       |> Target.changeset(%{
         repo: repo,
@@ -65,7 +72,7 @@ defmodule OpenAgents.Forge.Targets do
   def current(repo) do
     Target
     |> where([t], t.repo == ^repo)
-    |> order_by([t], desc: t.id)
+    |> order_by([t], desc: t.inserted_at)
     |> limit(1)
     |> Repo.one()
   end
@@ -104,19 +111,12 @@ defmodule OpenAgents.Forge.Targets do
             {:error, :not_found}
 
           %Target{status: current} = target ->
-            allowed = Map.get(@transitions, current, [])
-
-            cond do
-              allowed == [] ->
-                {:error, {:terminal, current}}
-
-              status in allowed ->
-                target
-                |> Target.status_changeset(status, bounded_details(details))
-                |> Repo.update()
-
-              true ->
-                {:error, {:invalid_transition, current, status}}
+            if status in Map.get(@transitions, current, []) do
+              target
+              |> Target.status_changeset(status, bounded_details(details))
+              |> Repo.update()
+            else
+              {:error, {:invalid_transition, current, status}}
             end
         end
       end)
@@ -145,28 +145,13 @@ defmodule OpenAgents.Forge.Targets do
     end
   end
 
-  # In test we skip the WAL-backed repo check so unit tests can exercise the
-  # lifecycle without cloning. In dev/prod we verify the commit exists in the
-  # bare repo before allowing promotion.
-  defp default_commit_store(repo, sha) do
-    if function_exported?(Mix, :env, 0) and Mix.env() == :test do
-      :ok
-    else
-      validate_git_commit(repo, sha)
-    end
+  defp validate_sha_format(sha) do
+    if Regex.match?(~r/^[0-9a-f]{7,40}$/, sha), do: :ok, else: {:error, :invalid_sha}
   end
 
-  defp validate_git_commit(repo, sha) do
-    cond do
-      not Regex.match?(~r/^[0-9a-f]{7,40}$/, sha) ->
-        {:error, :invalid_sha}
-
-      not commit_exists?(repo, sha) ->
-        {:error, :unknown_sha}
-
-      true ->
-        :ok
-    end
+  # The promotable set is exactly what the WAL-backed repo contains.
+  defp commit_exists_store(repo, sha) do
+    if commit_exists?(repo, sha), do: :ok, else: {:error, :unknown_sha}
   end
 
   defp commit_exists?(repo, sha) do

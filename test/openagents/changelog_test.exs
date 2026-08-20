@@ -9,7 +9,6 @@ defmodule OpenAgents.ChangelogTest do
   """
 
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Changelog
   alias OpenAgents.Changelog.{Backfill, Entry}
   alias OpenAgents.Forge.{DeployReceipt, PushReceipt}

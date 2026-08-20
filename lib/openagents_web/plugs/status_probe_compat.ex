@@ -1,16 +1,13 @@
 defmodule OpenAgentsWeb.Plugs.StatusProbeCompat do
   @moduledoc """
-  Deprecation shim for machine pollers of `GET /status` (#125).
+  Deprecation shim for machine pollers of `GET /status`.
 
-  `/status` is now the public network-status page, but unknown pollers hit the
-  old JSON contract on a ~15s cadence. Anything that does not ask for HTML —
+  `/status` is the public network-status page, but legacy pollers hit the old
+  JSON contract on a ~15s cadence. Anything that does not ask for HTML —
   probes, curl, uptime monitors (`Accept: application/json`, `*/*`, or none),
   or an explicit `?format=json` — still gets the legacy DB-checked payload,
   byte-shaped like before: `{"status":"ok","revision":...}` (503 on DB
-  failure). Browsers ask for `text/html` and fall through to the LiveView.
-
-  New integrations should use `/healthz` (probe) or `/api/status` (full
-  projection); this shim exists so nothing breaks while they migrate.
+  failure). Browsers asking for `text/html` fall through to the LiveView.
   """
 
   import Plug.Conn
@@ -24,14 +21,16 @@ defmodule OpenAgentsWeb.Plugs.StatusProbeCompat do
   def call(conn, _opts) do
     conn = fetch_query_params(conn)
 
-    if wants_html?(conn) do
-      conn
-    else
+    if status_path?(conn) and not wants_html?(conn) do
       conn
       |> legacy_health_response()
       |> halt()
+    else
+      conn
     end
   end
+
+  defp status_path?(conn), do: conn.method == "GET" and conn.request_path == "/status"
 
   defp wants_html?(conn) do
     format = conn.query_params["format"] || conn.params["format"]

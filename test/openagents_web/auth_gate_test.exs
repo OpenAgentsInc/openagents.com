@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.AuthGateTest do
   use OpenAgentsWeb.SarahConnCase, async: true
-  @moduletag :skip
   import Ecto.Query
 
   alias OpenAgents.Conversations.{Conversation, Visitor}

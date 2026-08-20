@@ -1,6 +1,5 @@
 defmodule OpenAgentsWeb.NetworkStatusLiveTest do
   use OpenAgentsWeb.SarahConnCase
-  @moduletag :skip
   import Phoenix.LiveViewTest
 
   test "renders publicly for an anonymous browser visitor", %{conn: conn} do

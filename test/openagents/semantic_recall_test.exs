@@ -25,7 +25,6 @@ end
 
 defmodule OpenAgents.SemanticRecallTest do
   use OpenAgents.SarahDataCase, async: false
-  @moduletag :skip
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Message
 

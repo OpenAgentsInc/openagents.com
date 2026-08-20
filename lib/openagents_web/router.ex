@@ -17,12 +17,16 @@ defmodule OpenAgentsWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :status_probe_compat do
+    plug OpenAgentsWeb.Plugs.StatusProbeCompat
+  end
+
   pipeline :authenticated do
     plug :require_authenticated_user
   end
 
   scope "/", OpenAgentsWeb do
-    pipe_through :browser
+    pipe_through [:status_probe_compat, :browser]
 
     live_session :public,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
@@ -100,7 +104,6 @@ defmodule OpenAgentsWeb.Router do
     delete "/api/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
 
     get "/api/changelog", ChangelogController, :show
-    get "/api/status", NetworkStatusController, :show
     get "/memory/export", MemoryExportController, :show
   end
 
@@ -108,6 +111,8 @@ defmodule OpenAgentsWeb.Router do
 
   scope "/", OpenAgentsWeb do
     pipe_through :api
+
+    get "/api/status", NetworkStatusController, :show
 
     post "/controller/pairings", ControllerPairingController, :create
     get "/controller/pairings/:id", ControllerPairingController, :show

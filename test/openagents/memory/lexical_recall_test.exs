@@ -1,6 +1,5 @@
 defmodule OpenAgents.Memory.LexicalRecallTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   alias OpenAgents.{Context.Composer, Conversations, Repo}
   alias OpenAgents.Conversations.Message

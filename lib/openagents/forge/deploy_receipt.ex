@@ -18,7 +18,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
   schema "forge_deploys" do
     field :repo, :string
     field :sha, :string
-    field :target_id, :id
+    field :target_id, :binary_id
     field :modules, {:array, :string}, default: []
     field :nodes, {:array, :string}, default: []
     field :result, :string

@@ -1,6 +1,5 @@
 defmodule OpenAgents.Tools.ConversationRecallToolsTest do
   use OpenAgents.SarahDataCase
-  @moduletag :skip
 
   alias OpenAgents.{Context.Composer, Conversations, Repo, Voice}
   alias OpenAgents.Conversations.Message

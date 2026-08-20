@@ -23,6 +23,11 @@ config :openagents,
        :github_token_encryption_key,
        Base.encode64("openagents-test-token-vault-key3")
 
+# Test fakes for providers and voice sideband so the suite never reaches the network.
+config :openagents, :provider, OpenAgents.Providers.Test
+config :openagents, :voice_call_provider, OpenAgents.Voice.TestCallProvider
+config :openagents, :voice_sideband_provider, OpenAgents.Voice.TestSidebandProvider
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :openagents, OpenAgentsWeb.Endpoint,

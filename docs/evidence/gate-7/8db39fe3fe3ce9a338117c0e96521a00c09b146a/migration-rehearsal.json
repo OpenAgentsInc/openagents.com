@@ -1,0 +1,26 @@
+{
+  "schema": "openagents.migration-rehearsal.v1",
+  "git_sha": "8db39fe3fe3ce9a338117c0e96521a00c09b146a",
+  "migration": "20260820082100_add_repository_tenant_scoping",
+  "environment": "disposable_test_database",
+  "status": "passed",
+  "steps": [
+    "rolled the migration down",
+    "inserted representative pre-scope user, label, milestone, issue, comment, project, and project-item rows",
+    "migrated up",
+    "validated the backfilled repository and relationships",
+    "rolled down and migrated up a second time",
+    "reset the disposable test database"
+  ],
+  "validation": {
+    "repository_id": "00000000-0000-4000-8000-000000000001",
+    "issue_label_relationships": 1,
+    "issue_assignee_relationships": 1,
+    "milestone_link_preserved": true,
+    "comment_author_preserved": true,
+    "project_owner_preserved": true,
+    "project_item_repository_preserved": true
+  },
+  "staging_changed": false,
+  "production_changed": false
+}

@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: In progress; Gates 0–5 complete, Gate 6 application controls locally verified
+Status: In progress; Gates 0–5 and 7 complete, Gate 6 application controls locally verified
 
 ## Outcome
 
@@ -680,6 +680,43 @@ then update the tests that currently pin them as existing behavior.
 
 **Exit criteria:** An owner or repository path can never read or mutate a row
 owned by another repository, and PostgreSQL enforces the boundary.
+
+### Gate 7 implementation status
+
+Completed on 2026-08-20:
+
+- Added a canonical repository entity with stable UUID, normalized owner/name,
+  visibility, default branch, and active role-bearing memberships. Public
+  lookup now excludes private repositories, and writes require owner,
+  maintainer, or contributor membership.
+- Added repository foreign keys throughout issues, labels, milestones,
+  comments, projects, project items, issue-label relationships, and
+  issue-assignee relationships. Issue and milestone numbers are unique within
+  a repository rather than across the application.
+- Scoped route-facing controller and LiveView queries by repository in the same
+  database lookup. Cross-repository identifiers now fail closed, and composite
+  database constraints enforce the same issue-label, issue-assignee,
+  issue-comment, issue-milestone, project-owner, and project-item boundaries.
+- Replaced the empty assignee endpoint and arbitrary-login mutation with the
+  active repository membership set. Fixed every project action that previously
+  ignored the username segment, including create ownership.
+- Added a reversible migration that backfills the existing rows into the
+  explicit `OpenAgentsInc/openagents.com` repository and preserves legacy
+  label, assignee, milestone, comment-author, project-owner, and project-item
+  relationships. Rehearsed the migration down/up against a populated
+  disposable test database, validated each relationship, then repeated the
+  down/up cycle and reset the test database.
+- Added multi-repository isolation, private-read, membership, controller,
+  project-path, and composite-constraint tests while retaining the established
+  Issues and Projects behavior coverage.
+- Exact implementation commit
+  `8db39fe3fe3ce9a338117c0e96521a00c09b146a` passed the owned baseline without
+  retries in 81 seconds: 1,283 default Elixir tests, all 9 distributed tests,
+  17 browser tests, 83.44% merged coverage, and the packaged production release
+  startup against a disposable PostgreSQL database. See the
+  [Gate 7 evidence](evidence/gate-7/8db39fe3fe3ce9a338117c0e96521a00c09b146a/README.md).
+
+Gate 7 is complete. No staging or production environment was changed.
 
 ## Gate 8: Harden chat, memory, work, machines, and voice
 

@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Projects
+  alias OpenAgentsWeb.UI.Circle
   alias OpenAgents.Projects.Project
   alias OpenAgents.Repositories
 
@@ -51,11 +52,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="text-2xl font-bold">Projects</h1>
-      </div>
-
+    <Layouts.app flash={@flash} current_scope={@current_scope} title="Projects" wide>
       <.form
         for={@form}
         id="new-project-form"
@@ -68,52 +65,35 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
         </footer>
       </.form>
 
-      <%= if @projects == [] do %>
-        <div class="alert" data-variant="info" role="status">
-          <.icon name="info-circle" class="size-5" />
-          <section>No projects yet.</section>
+      <div :if={@projects == []} class="alert" data-variant="info" role="status">
+        <.icon name="info-circle" class="size-5" />
+        <section>No projects yet.</section>
+      </div>
+
+      <div :if={@projects != []} class="project-list">
+        <div :for={project <- @projects} class="project-list__row">
+          <Circle.project_row
+            name={project.title}
+            navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
+            status_category={if project.state == "closed", do: :completed, else: :unstarted}
+            status_label={String.capitalize(project.state)}
+          />
+          <%!-- Deletion stays a control of its own rather than something the
+          row grew: the row is a link to a board, and a destructive action
+          inside a link target is how people delete things by accident. --%>
+          <button
+            class="btn project-list__delete"
+            data-variant="ghost"
+            data-size="sm"
+            data-tone="danger"
+            phx-click="delete"
+            phx-value-id={project.id}
+            data-confirm="Delete this project?"
+          >
+            Delete
+          </button>
         </div>
-      <% else %>
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <%= for project <- @projects do %>
-            <article class="card !m-0">
-              <header>
-                <h3 class="card-title">
-                  <.link
-                    navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
-                    class="btn px-0"
-                    data-variant="link"
-                  >
-                    {project.title}
-                  </.link>
-                </h3>
-                <p>{project.state}</p>
-              </header>
-              <footer class="flex justify-end gap-2 mt-4">
-                <.link
-                  navigate={~p"/#{@owner}/#{@repo}/projects/#{project.number}"}
-                  class="btn"
-                  data-variant="ghost"
-                  data-size="sm"
-                >
-                  View
-                </.link>
-                <button
-                  class="btn"
-                  data-variant="ghost"
-                  data-size="sm"
-                  data-tone="danger"
-                  phx-click="delete"
-                  phx-value-id={project.id}
-                  data-confirm="Delete this project?"
-                >
-                  Delete
-                </button>
-              </footer>
-            </article>
-          <% end %>
-        </div>
-      <% end %>
+      </div>
     </Layouts.app>
     """
   end

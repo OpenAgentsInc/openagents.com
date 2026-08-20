@@ -34,10 +34,13 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
              "Roadmap"
            )
 
+    # The row's name is the link to its board. A separate "View" control beside
+    # a row that already navigates is one more thing to aim at for the same
+    # destination.
     assert has_element?(
              view,
              ~s{a[href="/OpenAgentsInc/openagents.com/projects/#{project.number}"]},
-             "View"
+             project.title
            )
   end
 

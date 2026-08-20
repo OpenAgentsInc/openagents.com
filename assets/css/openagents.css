@@ -6160,3 +6160,60 @@
     .member-row__joined { display: inline-flex; width: 88px; }
   }
 }
+
+@layer components {
+  /* The lockup is one link, so the mark and the word sit on one baseline with
+     the same 10px the divider uses on its right -- the eye should read
+     "OpenAgents" as labelling the glyph, not as a separate control. */
+  .sidebar-brand__mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sidebar-brand__wordmark {
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  /* The comment count sits with the other trailing facts, quiet until there is
+     something to say. */
+  .issue-row__comments {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .issue-row__comments .icon {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+  }
+}
+
+@layer components {
+  /* A project row plus its own destructive control. The row fills the width and
+     the control sits outside it, so clicking the row can only ever navigate. */
+  .project-list__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .project-list__row > :first-child {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .project-list__delete {
+    flex: none;
+  }
+}

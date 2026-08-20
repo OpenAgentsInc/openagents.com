@@ -86,6 +86,8 @@ the production cutover. The first job is to make `mix test` honest again.
 - `OpenAgentsWeb.ControllerSocket` mounted at `/controller`.
 - Admin recording audio route and controller removed; audio recordings are not
   saved.
+- `/status`, `/computers`, and `/machines` routed; the admin recording test
+  deleted.
 
 ## Current test signal
 

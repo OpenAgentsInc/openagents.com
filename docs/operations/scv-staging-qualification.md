@@ -47,8 +47,8 @@ to Cloud Logging, writes one terminal result, and exits.
    - `SCV_TIMEOUT_MS` and `SCV_HEARTBEAT_INTERVAL_MS` with bounded values.
    - `SCV_DIAGNOSTIC_LOGS=false`.
 
-5. Map `OPENAI_API_KEY` from the staging secret at runtime. Do not print or
-   persist its value.
+5. Map `OPENAI_API_KEY` from a specific enabled numeric version of the staging
+   secret at runtime. Do not use `latest`, print the value, or persist it.
 6. Execute one job task and wait for its terminal state.
 
 ## Verify the execution

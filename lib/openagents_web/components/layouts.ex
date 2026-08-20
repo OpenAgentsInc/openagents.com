@@ -100,7 +100,7 @@ defmodule OpenAgentsWeb.Layouts do
           <.account_dropdown current_scope={@current_scope} />
         <% else %>
           <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
-            <.button type="submit" variant="primary" size="sm">Sign in with GitHub</.button>
+            <.button type="submit" variant={:primary} size={:sm}>Sign in with GitHub</.button>
           </.form>
         <% end %>
       </div>
@@ -214,7 +214,7 @@ defmodule OpenAgentsWeb.Layouts do
               type="submit"
               class="w-full rounded-md px-2 py-1.5 text-left flex items-center gap-2 hover:bg-muted"
             >
-              <.icon name="hero-arrow-right-start-on-rectangle" class="size-4" /> Log out
+              <.icon name="logout" class="size-4" /> Log out
             </button>
           </.form>
         </li>
@@ -350,7 +350,7 @@ defmodule OpenAgentsWeb.Layouts do
         hidden
       >
         {gettext("Attempting to reconnect")}
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
+        <.icon name="arrow-rotate-cw" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
 
       <.flash
@@ -365,53 +365,69 @@ defmodule OpenAgentsWeb.Layouts do
         hidden
       >
         {gettext("Attempting to reconnect")}
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
+        <.icon name="arrow-rotate-cw" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
     </div>
     """
   end
 
-  @doc """
-  The `data-theme` segmented control.
+  attr :id, :string, default: nil
+  attr :flash, :map, default: %{}
+  attr :title, :string, default: nil
+  attr :kind, :atom, values: [:info, :error], required: true
+  attr :rest, :global
+  slot :inner_block
 
-  The attribute plumbing in `root.html.heex` still runs, but since DaisyUI was
-  removed there is only one palette behind it: OpenAgents token ladder is
-  dark-only (`color-scheme: dark` in app.css) and ships no light variant. The
-  control therefore moves its indicator without repainting the page. Keep it or
-  remove it deliberately — do not reintroduce a second theme to make it work.
-  """
-  def theme_toggle(assigns) do
+  defp flash(assigns) do
+    assigns = assign_new(assigns, :id, fn -> "flash-#{assigns.kind}" end)
+
     ~H"""
-    <%!-- w-24 is load-bearing: the three buttons are w-1/3, so without an explicit
-    width this stretches to fill any block-level parent and the segments stretch
-    with it. 24 (6rem) is the natural content width: 3 buttons x (p-2 + size-4). --%>
-    <div class="relative flex flex-row items-center w-24 shrink-0 border-2 border-muted bg-muted rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-card bg-background brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
+    <div
+      :if={message = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
+      id={@id}
+      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      role="alert"
+      class="fixed top-4 right-4 z-50 flex flex-col items-end gap-2"
+      {@rest}
+    >
+      <UI.alert
+        class="w-80 max-w-80 text-wrap sm:w-96 sm:max-w-96"
+        variant={if(@kind == :error, do: :danger, else: :info)}
+        label={@title}
       >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
+        {message}
+        <:action>
+          <UI.button
+            type="button"
+            variant={:ghost}
+            size={:xs}
+            aria-label={gettext("Dismiss notice")}
+          >
+            <UI.icon name="x" />
+          </UI.button>
+        </:action>
+      </UI.alert>
     </div>
     """
+  end
+
+  defp show(js \\ %JS{}, selector) do
+    JS.show(js,
+      to: selector,
+      time: 300,
+      transition:
+        {"transition-all transform ease-out duration-300", "opacity-0 translate-y-4",
+         "opacity-100 translate-y-0"}
+    )
+  end
+
+  defp hide(js \\ %JS{}, selector) do
+    JS.hide(js,
+      to: selector,
+      time: 200,
+      transition:
+        {"transition-all transform ease-in duration-200", "opacity-100 translate-y-0",
+         "opacity-0 translate-y-4"}
+    )
   end
 end

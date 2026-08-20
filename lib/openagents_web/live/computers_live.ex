@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.ComputersLive do
   Approve controller pairing codes and manage this account's paired computers.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Computer
   alias OpenAgents.Machines

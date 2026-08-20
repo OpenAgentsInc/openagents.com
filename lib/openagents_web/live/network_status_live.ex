@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   full fleet to render — it is most useful precisely when something is down.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.NetworkStatus
 

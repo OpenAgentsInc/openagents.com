@@ -64,13 +64,13 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
       >
         <.input field={@form[:title]} label="Title" required />
         <footer class="flex justify-end mt-2">
-          <.button variant="primary">Add project</.button>
+          <.button variant={:primary}>Add project</.button>
         </footer>
       </.form>
 
       <%= if @projects == [] do %>
         <div class="alert" data-variant="info" role="status">
-          <.icon name="hero-information-circle" class="size-5" />
+          <.icon name="info-circle" class="size-5" />
           <section>No projects yet.</section>
         </div>
       <% else %>

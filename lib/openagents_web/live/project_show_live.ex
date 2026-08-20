@@ -105,7 +105,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
           />
         </div>
         <footer class="flex justify-end mt-2">
-          <.button variant="primary">Add to board</.button>
+          <.button variant={:primary}>Add to board</.button>
         </footer>
       </.form>
 

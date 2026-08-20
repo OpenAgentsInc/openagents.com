@@ -115,7 +115,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
             <button type="button" class="btn" data-variant="ghost" phx-click="toggle_edit">
               Cancel
             </button>
-            <.button variant="primary">Save</.button>
+            <.button variant={:primary}>Save</.button>
           </footer>
         </.form>
       <% else %>
@@ -208,7 +208,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
           >
             <.input field={@comment_form[:body]} type="textarea" label="Write a comment" />
             <footer class="flex justify-end mt-2">
-              <.button variant="primary">Comment</.button>
+              <.button variant={:primary}>Comment</.button>
             </footer>
           </.form>
         </div>

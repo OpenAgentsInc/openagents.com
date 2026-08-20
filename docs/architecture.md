@@ -117,6 +117,17 @@ Tests replace network providers with explicit fakes. A provider outage must
 produce a bounded durable failure outcome instead of abandoning an in-flight
 turn, work item, or voice session.
 
+## Untrusted Markdown boundary
+
+Assistant and repository Markdown enters HTML through
+`OpenAgents.Markdown.to_html/2` only. MDEx parses CommonMark with dangerous
+rendering disabled, Ammonia applies exact tag, attribute, and URL-scheme
+allowlists, and the application normalizes links before Phoenix marks the
+result safe. Independent input, syntax-tree nesting, and output limits produce
+a bounded escaped fallback instead of partial markup. The same function handles
+streaming completion and persisted text, so a completed message does not change
+when its durable projection replaces the stream.
+
 ## Forge planes
 
 The forge contains two separate planes within the `OpenAgents.Forge`

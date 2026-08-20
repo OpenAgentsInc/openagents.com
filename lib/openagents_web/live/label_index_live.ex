@@ -60,13 +60,13 @@ defmodule OpenAgentsWeb.LabelIndexLive do
           <.input field={@form[:description]} label="Description" />
         </div>
         <footer class="flex justify-end mt-2">
-          <.button variant="primary">Add label</.button>
+          <.button variant={:primary}>Add label</.button>
         </footer>
       </.form>
 
       <%= if @labels == [] do %>
         <div class="alert" data-variant="info" role="status">
-          <.icon name="hero-information-circle" class="size-5" />
+          <.icon name="info-circle" class="size-5" />
           <section>No labels yet.</section>
         </div>
       <% else %>

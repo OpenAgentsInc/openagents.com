@@ -1482,12 +1482,12 @@ Evidence: `OpenAgents.Conversations.list_tool_step_activity/1`,
 
 ### UI-003 — Product surfaces render only through the sanctioned component library
 
-Status: Proposed
+Status: Current
 
 OpenAgents's interface is built from `OpenAgentsWeb.UI` components over Basecoat
-primitives vendored at a pinned tag and styled by the OpenAgents pack. Product
-surfaces do not author component-level CSS classes; hand-authored CSS is
-confined to app-shell layout and the one sanctioned brand animation. No
+primitives vendored at a pinned tag and styled by the OpenAgents pack. Every
+web import exposes that one module; product surfaces compose its primitives
+with surface-specific layout classes from the sanctioned style pack. No
 component accepts provider identifiers or private recall content as an
 attribute; tool activity reaches `event_header` only as the bounded projection
 UI-002 sanctions, so UI-002 cannot be violated through a primitive.
@@ -1501,18 +1501,18 @@ identically announced players.
 The shared corner radius, the self-hosted Geist faces, the single dark theme,
 and the reserved semantic color meanings hold across every component. Depth is
 limited to the sanctioned lift, halo, and state-ring tokens.
-Adopting an additional Basecoat component requires a `docs/component-library.md` change and an
-explicit per-component import.
-
-This is the Gate 4 target. `OpenAgentsWeb.UI` and the OpenAgents style pack are
-implemented, but generated `OpenAgentsWeb.CoreComponents`, its legacy icon
-entry point, and a nonfunctional theme control still have catalogued callers.
-Until those callers are migrated or narrowly justified, this invariant cannot
-be used as proof that the product has one fully enforced component path.
+Adopting an additional Basecoat component requires a
+`docs/component-library.md` change and an explicit per-component import. The
+application exposes no light/system theme control while the palette is
+dark-only. Apps SDK UI glyphs are preferred; the pinned Heroicons fallback has
+an explicit inventory and no current product call sites.
 
 Evidence: `assets/vendor/basecoat/README.md`, `assets/css/openagents.css`,
-`priv/static/fonts`, `OpenAgentsWeb.UI`, `OpenAgentsWeb.UITest`,
-`OpenAgentsWeb.UIGalleryLiveTest`, and `test/openagents_web/ui_test.exs`.
+`priv/static/fonts`, `OpenAgentsWeb.UI`, `OpenAgentsWeb.ComponentCatalog`,
+`OpenAgentsWeb.UITest`, `OpenAgentsWeb.UIGalleryLiveTest`,
+`test/openagents_web/component_catalog_test.exs`,
+`test/openagents_web/icon_affordances_test.exs`, and
+`assets/test/css_contract_test.mjs`.
 
 ### LEADERBOARD-001 — The public board publishes one bounded projection
 

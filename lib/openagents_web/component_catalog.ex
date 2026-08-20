@@ -1,81 +1,18 @@
 defmodule OpenAgentsWeb.ComponentCatalog do
   @moduledoc """
-  The component catalog's table of contents.
+  The executable inventory for the OpenAgents component system.
 
-  Both the sidebar in `layouts/components.html.heex` and the pages rendered by
-  `OpenAgentsWeb.ComponentsLive` are generated from this list, so a component
-  cannot appear in one and be missing from the other. Adding a component means
-  adding an entry here and a matching `component_demo/1` clause in
-  `ComponentsLive`; `ComponentsLive` has a test that asserts every slug here
-  resolves to a page, and `ComponentCatalogTest` asserts the catalog covers
-  every public function component in the modules it claims to document.
+  The sidebar and demo pages both read this list. Tests require every public
+  function component in `OpenAgentsWeb.UI` and the documented layout modules to
+  appear here, so the catalog cannot drift behind the supported API.
 
-  Two component sets ship in this repo and they are catalogued separately:
-
-    * `OpenAgentsWeb.CoreComponents` — the Phoenix-generated set, restyled onto
-      basecoat. Imported by `use OpenAgentsWeb, :live_view`.
-    * `OpenAgentsWeb.UI` — the OpenAgents interface primitives, imported
-      separately via `openagents_html_helpers`. `button`, `input`, and `icon` exist
-      in both sets, which is why the UI slugs are prefixed `openagents-`.
-
-  Icon names are drawn from the vendored Apps SDK set (`OpenAgentsWeb.Icons`).
+  `OpenAgentsWeb.UI` is the only product component module. It combines the
+  vendored Basecoat structure with the OpenAgents style pack. Icon demos use the
+  preferred vendored Apps SDK set; see `docs/ICONS.md` for the exceptional
+  Heroicons fallback policy and current fallback inventory.
   """
 
   @sections [
-    %{
-      title: "Core components",
-      items: [
-        %{
-          slug: "button",
-          title: "Button",
-          icon: "cube",
-          source: "OpenAgentsWeb.CoreComponents.button/1",
-          summary: "Default, primary, navigation, and disabled variants."
-        },
-        %{
-          slug: "input",
-          title: "Input",
-          icon: "square-text",
-          source: "OpenAgentsWeb.CoreComponents.input/1",
-          summary: "Text, select, textarea, and checkbox fields inside a form."
-        },
-        %{
-          slug: "header",
-          title: "Header",
-          icon: "book",
-          source: "OpenAgentsWeb.CoreComponents.header/1",
-          summary: "Page title with an optional subtitle and action slot."
-        },
-        %{
-          slug: "table",
-          title: "Table",
-          icon: "table-cells-filled",
-          source: "OpenAgentsWeb.CoreComponents.table/1",
-          summary: "Row listing with column and action slots."
-        },
-        %{
-          slug: "list",
-          title: "List",
-          icon: "file-document",
-          source: "OpenAgentsWeb.CoreComponents.list/1",
-          summary: "Title and description pairs in a definition list."
-        },
-        %{
-          slug: "icon",
-          title: "Icon",
-          icon: "grid",
-          source: "OpenAgentsWeb.CoreComponents.icon/1",
-          summary: "Inline glyphs from the vendored icon set."
-        },
-        %{
-          slug: "flash",
-          title: "Flash",
-          icon: "bell",
-          source: "OpenAgentsWeb.CoreComponents.flash/1",
-          summary: "Info and error toasts rendered by the layout's flash group."
-        }
-      ]
-    },
     %{
       title: "OpenAgents UI",
       items: [
@@ -84,7 +21,7 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           title: "Button",
           icon: "cube",
           source: "OpenAgentsWeb.UI.button/1",
-          summary: "Eight variants, four sizes, and a danger tone."
+          summary: "Eight variants, four sizes, navigation, and a danger tone."
         },
         %{
           slug: "openagents-text-button",
@@ -98,28 +35,49 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           title: "Input",
           icon: "square-text",
           source: "OpenAgentsWeb.UI.input/1",
-          summary: "Bare text input primitive, unwrapped by a form field."
+          summary: "Form-aware text, select, textarea, checkbox, and raw inputs."
         },
         %{
           slug: "openagents-textarea",
           title: "Textarea",
           icon: "text",
           source: "OpenAgentsWeb.UI.textarea/1",
-          summary: "Multi-line text primitive."
+          summary: "Unwrapped multiline text primitive."
         },
         %{
           slug: "openagents-label",
           title: "Label",
           icon: "tag",
           source: "OpenAgentsWeb.UI.label/1",
-          summary: "Form label bound to a control by id."
+          summary: "Form label bound to a control by ID."
         },
         %{
           slug: "openagents-field",
           title: "Field",
           icon: "file-document",
           source: "OpenAgentsWeb.UI.field/1",
-          summary: "Wrapper that stacks a label and its control."
+          summary: "Wrapper that stacks a label, control, and validation message."
+        },
+        %{
+          slug: "openagents-header",
+          title: "Header",
+          icon: "book",
+          source: "OpenAgentsWeb.UI.header/1",
+          summary: "Page heading with supporting text and an action slot."
+        },
+        %{
+          slug: "openagents-table",
+          title: "Table",
+          icon: "table-cells-filled",
+          source: "OpenAgentsWeb.UI.table/1",
+          summary: "Responsive rows with regular-list and LiveView stream support."
+        },
+        %{
+          slug: "openagents-list",
+          title: "List",
+          icon: "file-document",
+          source: "OpenAgentsWeb.UI.list/1",
+          summary: "Title and description pairs."
         },
         %{
           slug: "openagents-alert",
@@ -182,7 +140,7 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           title: "Menu",
           icon: "menu",
           source: "OpenAgentsWeb.UI.menu/1",
-          summary: "Popover menu surface used by the account control."
+          summary: "Native popover menu surface used by the account control."
         },
         %{
           slug: "openagents-frame",
@@ -196,14 +154,14 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           title: "Status indicator",
           icon: "check-circle",
           source: "OpenAgentsWeb.UI.status_indicator/1",
-          summary: "Labelled state dot, optionally decorative."
+          summary: "Labeled state dot, optionally decorative."
         },
         %{
           slug: "openagents-audio-player",
           title: "Audio player",
           icon: "play",
           source: "OpenAgentsWeb.UI.audio_player/1",
-          summary: "Labelled audio element for recordings."
+          summary: "Labeled audio element for recordings."
         },
         %{
           slug: "openagents-icon",
@@ -218,13 +176,6 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       title: "Layout",
       items: [
         %{
-          slug: "theme-toggle",
-          title: "Theme toggle",
-          icon: "moon",
-          source: "OpenAgentsWeb.Layouts.theme_toggle/1",
-          summary: "System, light, and dark. The same control sits in the site header."
-        },
-        %{
           slug: "command-bar",
           title: "Command bar",
           icon: "compass",
@@ -236,7 +187,7 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           title: "Account control",
           icon: "user",
           source: "OpenAgentsWeb.Layouts.account_control/1",
-          summary: "Avatar trigger and popover menu for the signed-in user."
+          summary: "Avatar trigger and native popover menu for the signed-in user."
         }
       ]
     },
@@ -263,21 +214,15 @@ defmodule OpenAgentsWeb.ComponentCatalog do
   @doc "Every slug in the catalog."
   def slugs, do: Enum.map(items(), & &1.slug)
 
-  @doc "Look up one item by slug. Returns nil when the slug is unknown."
+  @doc "Looks up one item by slug. Returns `nil` when the slug is unknown."
   def fetch(slug), do: Enum.find(items(), &(&1.slug == slug))
 
-  @doc """
-  The modules this catalog claims to document, and the components in each that
-  are deliberately not given a page.
-
-  `OpenAgentsWeb.Layouts.app/1` and `flash_group/1` wrap the catalog page
-  itself, so they cannot be demoed inside it.
-  """
+  @doc "Modules covered by the executable catalog and deliberate exclusions."
   def documented_modules do
     %{
-      OpenAgentsWeb.CoreComponents => [],
       OpenAgentsWeb.UI => [],
-      OpenAgentsWeb.Layouts => [:app, :flash_group]
+      OpenAgentsWeb.Layouts => [:app, :flash_group],
+      OpenAgentsWeb.Components.RepoHeader => []
     }
   end
 end

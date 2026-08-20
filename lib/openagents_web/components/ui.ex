@@ -61,14 +61,15 @@ defmodule OpenAgentsWeb.UI do
   attr :class, :any, default: nil
 
   attr :rest, :global,
-    include: ~w(disabled form name value popovertarget popovertargetaction download href)
+    include:
+      ~w(disabled form name value popovertarget popovertargetaction download href navigate patch)
 
   slot :inner_block, required: true
 
   def button(assigns) do
     ~H"""
     <.link
-      :if={@rest[:href]}
+      :if={@rest[:href] || @rest[:navigate] || @rest[:patch]}
       class={["btn", @class]}
       data-variant={@variant}
       data-size={@size != :default && @size}
@@ -78,7 +79,7 @@ defmodule OpenAgentsWeb.UI do
       {render_slot(@inner_block)}
     </.link>
     <button
-      :if={!@rest[:href]}
+      :if={!(@rest[:href] || @rest[:navigate] || @rest[:patch])}
       type={@type}
       class={["btn", @class]}
       data-variant={@variant}
@@ -127,19 +128,150 @@ defmodule OpenAgentsWeb.UI do
     """
   end
 
-  @doc "A single-line text control."
-  attr :id, :string, default: nil
-  attr :name, :string, default: nil
-  attr :value, :string, default: nil
-  attr :type, :string, default: "text"
+  @doc "A form-aware input or an unwrapped single-line text control."
+  attr :id, :any, default: nil
+  attr :name, :any, default: nil
+  attr :label, :string, default: nil
+  attr :value, :any, default: nil
+
+  attr :type, :string,
+    default: "text",
+    values: ~w(checkbox color date datetime-local email file month number password
+               search select tel text textarea time url week hidden)
+
+  attr :field, Phoenix.HTML.FormField,
+    default: nil,
+    doc: "a form field struct retrieved from the form, for example: @form[:email]"
+
+  attr :errors, :list, default: []
+  attr :checked, :boolean, default: nil
+  attr :prompt, :string, default: nil
+  attr :options, :list, default: []
+  attr :multiple, :boolean, default: false
   attr :class, :any, default: nil
+  attr :error_class, :any, default: nil
 
   attr :rest, :global,
-    include: ~w(autocomplete disabled maxlength minlength pattern placeholder readonly required)
+    include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
+                multiple pattern placeholder readonly required rows size step)
+
+  def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do
+    errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
+
+    assigns
+    |> assign(field: nil, id: assigns.id || field.id)
+    |> assign(:errors, Enum.map(errors, &translate_error/1))
+    |> assign(
+      :name,
+      assigns.name || if(assigns.multiple, do: field.name <> "[]", else: field.name)
+    )
+    |> assign(:value, if(is_nil(assigns.value), do: field.value, else: assigns.value))
+    |> input()
+  end
+
+  def input(%{type: "hidden"} = assigns) do
+    ~H"""
+    <input type="hidden" id={@id} name={@name} value={@value} {@rest} />
+    """
+  end
+
+  def input(%{type: "checkbox"} = assigns) do
+    assigns =
+      assign_new(assigns, :checked, fn ->
+        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+      end)
+
+    ~H"""
+    <.field class="mb-2">
+      <input
+        type="hidden"
+        name={@name}
+        value="false"
+        disabled={@rest[:disabled]}
+        form={@rest[:form]}
+      />
+      <.label for={@id} class="inline-flex items-center gap-2">
+        <input
+          type="checkbox"
+          id={@id}
+          name={@name}
+          value="true"
+          checked={@checked}
+          class={@class || "size-4 shrink-0 accent-primary"}
+          {@rest}
+        />
+        {@label}
+      </.label>
+      <.error :for={message <- @errors}>{message}</.error>
+    </.field>
+    """
+  end
+
+  def input(%{type: "select"} = assigns) do
+    ~H"""
+    <.field class="mb-2">
+      <.label :if={@label} for={@id}>{@label}</.label>
+      <select
+        id={@id}
+        name={@name}
+        class={[@class || "input w-full", "aria-invalid:border-destructive", @error_class]}
+        aria-invalid={@errors != [] && "true"}
+        multiple={@multiple}
+        {@rest}
+      >
+        <option :if={@prompt} value="">{@prompt}</option>
+        {Phoenix.HTML.Form.options_for_select(@options, @value)}
+      </select>
+      <.error :for={message <- @errors}>{message}</.error>
+    </.field>
+    """
+  end
+
+  def input(%{type: "textarea"} = assigns) do
+    ~H"""
+    <.field class="mb-2">
+      <.label :if={@label} for={@id}>{@label}</.label>
+      <.textarea
+        id={@id}
+        name={@name}
+        value={Phoenix.HTML.Form.normalize_value("textarea", @value)}
+        class={[@class || "w-full", "aria-invalid:border-destructive", @error_class]}
+        aria-invalid={@errors != [] && "true"}
+        {@rest}
+      />
+      <.error :for={message <- @errors}>{message}</.error>
+    </.field>
+    """
+  end
+
+  def input(%{label: nil, errors: []} = assigns) do
+    ~H"""
+    <input
+      type={@type}
+      id={@id}
+      name={@name}
+      value={Phoenix.HTML.Form.normalize_value(@type, @value)}
+      class={["input", @class]}
+      {@rest}
+    />
+    """
+  end
 
   def input(assigns) do
     ~H"""
-    <input type={@type} id={@id} name={@name} value={@value} class={["input", @class]} {@rest} />
+    <.field class="mb-2">
+      <.label :if={@label} for={@id}>{@label}</.label>
+      <input
+        type={@type}
+        id={@id}
+        name={@name}
+        value={Phoenix.HTML.Form.normalize_value(@type, @value)}
+        class={[@class || "input w-full", "aria-invalid:border-destructive", @error_class]}
+        aria-invalid={@errors != [] && "true"}
+        {@rest}
+      />
+      <.error :for={message <- @errors}>{message}</.error>
+    </.field>
     """
   end
 
@@ -178,6 +310,105 @@ defmodule OpenAgentsWeb.UI do
   def field(assigns) do
     ~H"""
     <div class={["field", @class]} {@rest}>{render_slot(@inner_block)}</div>
+    """
+  end
+
+  @doc "A page heading with optional supporting text and actions."
+  slot :inner_block, required: true
+  slot :subtitle
+  slot :actions
+
+  def header(assigns) do
+    ~H"""
+    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
+      <div>
+        <h1 class="text-lg font-semibold leading-8">{render_slot(@inner_block)}</h1>
+        <p :if={@subtitle != []} class="text-sm text-muted-foreground">
+          {render_slot(@subtitle)}
+        </p>
+      </div>
+      <div class="flex-none">{render_slot(@actions)}</div>
+    </header>
+    """
+  end
+
+  @doc "A responsive table for regular lists or LiveView streams."
+  attr :id, :string, required: true
+  attr :rows, :list, required: true
+  attr :row_id, :any, default: nil
+  attr :row_click, :any, default: nil
+  attr :row_item, :any, default: &Function.identity/1
+
+  slot :col, required: true do
+    attr :label, :string
+  end
+
+  slot :action
+
+  def table(assigns) do
+    assigns =
+      with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
+        assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
+      end
+
+    ~H"""
+    <div class="table-container">
+      <table class="table text-sm">
+        <thead>
+          <tr>
+            <th :for={column <- @col} class="px-3 py-2 text-left text-muted-foreground">
+              {column[:label]}
+            </th>
+            <th :if={@action != []} class="px-3 py-2"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
+          <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="hover:bg-muted/40">
+            <td
+              :for={column <- @col}
+              phx-click={@row_click && @row_click.(row)}
+              class={["px-3 py-2", @row_click && "hover:cursor-pointer"]}
+            >
+              {render_slot(column, @row_item.(row))}
+            </td>
+            <td :if={@action != []} class="w-0 px-3 py-2 font-semibold">
+              <div class="flex gap-4">
+                <%= for action <- @action do %>
+                  {render_slot(action, @row_item.(row))}
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    """
+  end
+
+  @doc "A title and description list."
+  slot :item, required: true do
+    attr :title, :string, required: true
+  end
+
+  def list(assigns) do
+    ~H"""
+    <ul class="divide-y divide-border">
+      <li :for={item <- @item} class="flex items-start gap-4 py-3">
+        <div class="min-w-0 grow">
+          <div class="font-semibold">{item.title}</div>
+          <div class="text-muted-foreground">{render_slot(item)}</div>
+        </div>
+      </li>
+    </ul>
+    """
+  end
+
+  defp error(assigns) do
+    ~H"""
+    <p class="mt-1.5 flex items-center gap-2 text-sm text-destructive">
+      <.icon name="warning" class="size-5" />
+      {render_slot(@inner_block)}
+    </p>
     """
   end
 
@@ -546,11 +777,13 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
-  One glyph from the vendored Apps SDK UI set.
+  One glyph from the governed two-tier icon set.
 
   Renders inline SVG at `1em` in `currentColor`, so a glyph takes the size and
-  color of the text around it. Icons come only from `priv/icons`; adding one is
-  a re-vendor, never inline SVG in a surface. See `docs/ICONS.md`.
+  color of the text around it. Apps SDK UI glyphs come from `priv/icons`.
+  `hero-*` names are the documented fallback when that set has no suitable
+  concept. Adding a preferred glyph is a re-vendor, never inline SVG in a
+  surface. See `docs/ICONS.md`.
 
   Decorative by default. Most glyphs sit beside a word that already names the
   control, and announcing both is noise, so an icon with no `label` is hidden
@@ -569,6 +802,19 @@ defmodule OpenAgentsWeb.UI do
   attr :class, :any, default: nil
   attr :rest, :global
 
+  def icon(%{name: "hero-" <> _} = assigns) do
+    ~H"""
+    <span
+      class={[@name, "icon", @class]}
+      role={@label && "img"}
+      aria-label={@label}
+      aria-hidden={is_nil(@label) && "true"}
+      data-icon={@name}
+      {@rest}
+    />
+    """
+  end
+
   def icon(assigns) do
     {view_box, inner} = OpenAgentsWeb.Icons.fetch!(assigns.name)
 
@@ -585,8 +831,17 @@ defmodule OpenAgentsWeb.UI do
       aria-label={@label}
       aria-hidden={is_nil(@label) && "true"}
       focusable="false"
+      data-icon={@name}
       {@rest}
     >{Phoenix.HTML.raw(@inner)}</svg>
     """
+  end
+
+  defp translate_error({message, options}) do
+    if count = options[:count] do
+      Gettext.dngettext(OpenAgentsWeb.Gettext, "errors", message, message, count, options)
+    else
+      Gettext.dgettext(OpenAgentsWeb.Gettext, "errors", message, options)
+    end
   end
 end

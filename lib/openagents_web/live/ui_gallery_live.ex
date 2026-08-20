@@ -13,7 +13,7 @@ defmodule OpenAgentsWeb.UIGalleryLive do
   fallback, and a visible focus ring on every control.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   @statuses ~w(idle connected requested running succeeded failed cancelled interrupted refused unavailable)
   @voice_states ~w(idle requesting connecting listening speaking interrupted reconnecting muted blocked failed ending)

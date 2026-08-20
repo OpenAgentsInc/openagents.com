@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ChatLive do
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.{
     Accounts,

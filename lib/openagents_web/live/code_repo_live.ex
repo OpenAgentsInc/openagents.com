@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   projections; data comes from `OpenAgents.Forge.Browse`'s bounded plumbing.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.{Browse, Visibility}

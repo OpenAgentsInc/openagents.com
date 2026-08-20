@@ -20,16 +20,16 @@ defmodule OpenAgentsWeb.DocsLive do
       </p>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <.card title="Get started" description="Install, configure, and run your first agent." />
-        <.card title="Guides" description="Authentication, agents, and the forge pipeline." />
-        <.card title="API reference" description="HTTP endpoints and schemas." />
-        <.card title="CLI reference" description="Mix tasks and release commands." />
+        <.docs_card title="Get started" description="Install, configure, and run your first agent." />
+        <.docs_card title="Guides" description="Authentication, agents, and the forge pipeline." />
+        <.docs_card title="API reference" description="HTTP endpoints and schemas." />
+        <.docs_card title="CLI reference" description="Mix tasks and release commands." />
       </div>
     </div>
     """
   end
 
-  defp card(assigns) do
+  defp docs_card(assigns) do
     ~H"""
     <%!-- `.card` brings its own padding and lift; the surrounding grid supplies
     the gaps, so the panel margin is dropped here. --%>

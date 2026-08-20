@@ -25,7 +25,7 @@ defmodule OpenAgentsWeb.HomeLive do
                 <.button
                   id="home-cta-create"
                   navigate={~p"/OpenAgents/openagents/issues/new"}
-                  variant="primary"
+                  variant={:primary}
                 >
                   Create new issue
                 </.button>
@@ -34,7 +34,7 @@ defmodule OpenAgentsWeb.HomeLive do
                 </.button>
               <% else %>
                 <.form for={%{}} as={:auth} action={~p"/auth/github"} method="post" class="m-0">
-                  <.button type="submit" variant="primary" id="home-cta-signin">
+                  <.button type="submit" variant={:primary} id="home-cta-signin">
                     Sign in with GitHub
                   </.button>
                 </.form>

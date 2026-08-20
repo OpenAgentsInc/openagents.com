@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.Icons do
 
   Each glyph is stored as a complete standalone SVG so the file stays viewable
   and diffable on its own. This module splits it into the viewBox and the inner
-  markup so `OpenAgentsWeb.CoreComponents.icon/1` can render a fresh root element
+  markup so `OpenAgentsWeb.UI.icon/1` can render a fresh root element
   with the accessibility and sizing attributes the call site needs.
   """
 

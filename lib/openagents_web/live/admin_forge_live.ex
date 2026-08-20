@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.AdminForgeLive do
   live off the forge PubSub topics.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Accounts
   alias OpenAgents.Forge

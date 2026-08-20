@@ -10,7 +10,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
   off the forge PubSub — a hot-load appears here seconds after it lands.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Changelog
 

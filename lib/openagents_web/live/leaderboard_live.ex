@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.LeaderboardLive do
   be rendered here by accident.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Leaderboard
   alias OpenAgents.Leaderboard.Entry

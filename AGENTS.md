@@ -25,8 +25,8 @@ All text in this repo — docs, README, `AGENTS.md`, commit messages, and agent 
   - You failed to follow the Authenticated Routes guidelines, or you failed to pass `current_scope` to `<Layouts.app>`
   - **Always** fix the `current_scope` error by moving your routes to the proper `live_session` and ensure you pass `current_scope` as needed
 - Phoenix v1.8 moved the `<.flash_group>` component to the `Layouts` module. You are **forbidden** from calling `<.flash_group>` outside of the `layouts.ex` module
-- Out of the box, `core_components.ex` imports an `<.icon name="hero-x-mark" class="w-5 h-5"/>` component for hero icons. **Always** use the `<.icon>` component for icons, **never** use `Heroicons` modules or similar
-- **Always** use the imported `<.input>` component for form inputs from `core_components.ex` when available. `<.input>` is imported and using it will save steps and prevent errors
+- Render icons only through `OpenAgentsWeb.UI.icon/1`. Prefer the vendored Apps SDK set. Use a `hero-*` fallback only when `docs/ICONS.md` records why the preferred set has no suitable glyph
+- **Always** use the imported `OpenAgentsWeb.UI.input/1` component for form inputs. It accepts `Phoenix.HTML.FormField` values and unwrapped raw controls
 - If you override the default input classes (`<.input class="myclass px-2 py-1 rounded-lg">)`) class with your own values, no default classes are inherited, so your
 custom classes must fully style the input
 
@@ -43,11 +43,11 @@ custom classes must fully style the input
 - **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
 - **Never** use `@apply` when writing raw css
 - **There is exactly one component system: vendored Basecoat plus OpenAgents style pack.** Basecoat lives in `assets/vendor/basecoat/components/` and carries structure (display, padding, min-height); `assets/css/openagents.css` carries OpenAgents' identity (motion tokens, radius scale, colour, the notched variant, corner frames) and must stay the last import so its declarations win.
-  - **Reach for `OpenAgentsWeb.UI` first.** It wraps that CSS in nineteen ready primitives — `button/1`, `card/1`, `badge/1`, `alert/1`, `input/1`, `textarea/1`, `label/1`, `field/1`, `avatar/1`, `menu/1`, `empty/1`, `kbd/1`, and the rest. Fall back to hand-written classes only when no primitive covers the shape.
+  - **Reach for `OpenAgentsWeb.UI` first.** It wraps that CSS in 22 ready primitives — `button/1`, `card/1`, `badge/1`, `alert/1`, `input/1`, `textarea/1`, `label/1`, `field/1`, `header/1`, `table/1`, `list/1`, `avatar/1`, `menu/1`, `empty/1`, `kbd/1`, and the rest. Fall back to hand-written classes only when no primitive covers the shape.
   - **Variants are data attributes, not classes.** A control is `class="btn"` plus `data-variant="primary"` / `data-size="sm"` / `data-tone="danger"`. Never invent `btn-primary`-style variant classes; they defeat the whole point of the split.
   - **Never add a second component library — DaisyUI above all.** DaisyUI was removed deliberately. It emitted flat `.btn` rules (setting background, colour, border) from a cascade layer that outranked every `.btn[data-variant=…]` in `openagents.css`, so all eight UI button variants rendered identically on staging. Any library with the same shape will do the same thing again.
   - **Import Basecoat components individually**, one `@import "../vendor/basecoat/components/<name>.css"` per component a surface actually uses. Component CSS lands in `@layer components` and ships whether or not the class appears in markup, so the list is a budget. **Never** import `basecoat.css`, `basecoat-base.css`, or `basecoat-components.css` — each pulls in all 39 components at once.
-  - The palette is the token ladder at the top of `app.css` (`--ink-void` / `--ink-surface` / `--ink-raised`, the text and line tiers, and the four semantic colours). It is dark-only. Prefer the Basecoat utility names built on it — `bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `border-border` — over the older `base-100`/`base-content` aliases, which are kept only so unconverted surfaces keep resolving.
+  - The palette is the token ladder at the top of `app.css` (`--ink-void` / `--ink-surface` / `--ink-raised`, the text and line tiers, and the four semantic colours). It is dark-only. Use the Basecoat utility names built on it — `bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, and `border-border`. The retired compatibility aliases no longer exist
 - Add custom Tailwind only when the design is unique to OpenAgents and no primitive fits.
 - Out of the box **only the app.js and app.css bundles are supported**
   - You cannot reference an external vendor'd script `src` or link `href` in the layouts

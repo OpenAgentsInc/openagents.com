@@ -42,14 +42,39 @@ defmodule OpenAgents.MarkdownTest do
       assert html("> quoted") =~ "<blockquote>"
       assert html("~~gone~~") =~ "<del>"
     end
+
+    test "renders tables and malformed Markdown without crashing" do
+      table = html("| A | B |\n|---|---|\n| 1 | 2 |")
+
+      assert table =~ "<table>"
+      assert table =~ "<th>A</th>"
+      assert table =~ "<td>2</td>"
+
+      malformed = html("[unfinished **link](https://example.com and `code")
+
+      assert is_binary(malformed)
+      refute malformed =~ "<script"
+    end
+
+    test "complete persisted content is stable through the streaming path" do
+      persisted = """
+      ## Result
+
+      - **Safe** [link](https://example.com)
+      - `mix precommit`
+      """
+
+      assert html(persisted, streaming: true) == html(persisted)
+    end
   end
 
   describe "untrusted input" do
-    test "raw HTML is escaped, never emitted" do
+    test "raw HTML is refused while its harmless text remains" do
       rendered = html("before <script>alert(1)</script> after")
 
       refute rendered =~ "<script>"
-      assert rendered =~ "&lt;script&gt;"
+      refute rendered =~ "&lt;script&gt;"
+      assert rendered =~ "alert(1)"
     end
 
     test "an event-handler attribute cannot survive" do
@@ -77,6 +102,13 @@ defmodule OpenAgents.MarkdownTest do
       assert rendered =~ ~s(target="_blank")
     end
 
+    test "relative, fragment, mail, and protocol-relative links are normalized safely" do
+      assert html("[path](/docs)") =~ ~s(href="/docs")
+      assert html("[section](#part)") =~ ~s(href="#part")
+      assert html("[mail](mailto:team@example.com)") =~ ~s(href="mailto:team@example.com")
+      assert html("[cdn](//example.com/x)") =~ ~s(href="https://example.com/x")
+    end
+
     test "a bare domain is resolved as https rather than relative to Sarah" do
       assert html("[site](example.com)") =~ ~s(href="https://example.com")
     end
@@ -85,6 +117,33 @@ defmodule OpenAgents.MarkdownTest do
       rendered = html(~s|[x](https://example.com/"onmouseover="alert(1))|)
 
       refute rendered =~ ~s(onmouseover=")
+    end
+
+    test "oversized input returns a bounded escaped fallback" do
+      rendered = html(String.duplicate("<", 1_000_001))
+
+      assert rendered =~ "Markdown rendering limited."
+      assert rendered =~ "input exceeds 1000000 bytes"
+      assert byte_size(rendered) < 400_000
+      refute rendered =~ "<script"
+    end
+
+    test "excessive nesting returns a bounded fallback" do
+      # Blockquotes produce real nested AST nodes and exercise the structural
+      # limit independently of raw input size.
+      rendered = html(String.duplicate("> ", 40) <> "deep")
+
+      assert rendered =~ "Markdown rendering limited."
+      assert rendered =~ "nesting exceeds 32 levels"
+      assert rendered =~ "deep"
+    end
+
+    test "render expansion is bounded independently of input size" do
+      rendered = html(String.duplicate("&", 500_000))
+
+      assert rendered =~ "Markdown rendering limited."
+      assert rendered =~ "rendered output exceeds 2000000 bytes"
+      assert byte_size(rendered) < 400_000
     end
   end
 

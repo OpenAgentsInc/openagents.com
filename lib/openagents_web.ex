@@ -60,24 +60,6 @@ defmodule OpenAgentsWeb do
     end
   end
 
-  def openagents_live_view do
-    quote do
-      use Phoenix.LiveView
-
-      unquote(openagents_html_helpers())
-
-      import OpenAgentsWeb.Components.RepoHeader
-    end
-  end
-
-  def openagents_html do
-    quote do
-      use Phoenix.Component
-
-      unquote(openagents_html_helpers())
-    end
-  end
-
   def live_component do
     quote do
       use Phoenix.LiveComponent
@@ -104,22 +86,6 @@ defmodule OpenAgentsWeb do
       # Translation
       use Gettext, backend: OpenAgentsWeb.Gettext
 
-      # HTML escaping functionality
-      import Phoenix.HTML
-      # Core UI components
-      import OpenAgentsWeb.CoreComponents
-
-      # Common modules used in templates
-      alias Phoenix.LiveView.JS
-      alias OpenAgentsWeb.Layouts
-
-      # Routes generation with the ~p sigil
-      unquote(verified_routes())
-    end
-  end
-
-  defp openagents_html_helpers do
-    quote do
       # HTML escaping functionality
       import Phoenix.HTML
       # OpenAgents interface primitives

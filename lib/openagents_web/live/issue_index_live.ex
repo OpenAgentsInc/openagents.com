@@ -45,7 +45,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
               data-size="sm"
               aria-current={@state == "open" && "page"}
             >
-              <.icon name="hero-exclamation-circle" class="size-4 text-success" />
+              <.icon name="warning" class="size-4 text-success" />
               <span class="font-semibold">{@open_count}</span> Open
             </.link>
             <.link
@@ -55,14 +55,14 @@ defmodule OpenAgentsWeb.IssueIndexLive do
               data-size="sm"
               aria-current={@state == "closed" && "page"}
             >
-              <.icon name="hero-check-circle" class="size-4 text-muted-foreground" />
+              <.icon name="check-circle" class="size-4 text-muted-foreground" />
               <span class="font-semibold">{@closed_count}</span> Closed
             </.link>
           </div>
 
           <div class="flex-1 min-w-[12rem]">
             <label class="input w-full max-w-xs flex items-center gap-2">
-              <.icon name="hero-magnifying-glass" class="size-4 text-muted-foreground" />
+              <.icon name="search" class="size-4 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search or filter results..."
@@ -73,16 +73,16 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
           <div class="flex items-center gap-1">
             <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="hero-tag" class="size-4" /> Labels
+              <.icon name="tag" class="size-4" /> Labels
             </button>
             <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="hero-flag" class="size-4" /> Milestones
+              <.icon name="flag" class="size-4" /> Milestones
             </button>
             <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="hero-user" class="size-4" /> Assignees
+              <.icon name="user" class="size-4" /> Assignees
             </button>
             <button class="btn gap-1" data-variant="ghost" data-size="sm">
-              <.icon name="hero-bars-arrow-down" class="size-4" /> Sort
+              <.icon name="filter" class="size-4" /> Sort
             </button>
           </div>
 
@@ -99,7 +99,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
         <%= if @issues_count == 0 do %>
           <div class="p-8 text-center">
             <.icon
-              name="hero-clipboard-document-list"
+              name="clipboard"
               class="size-12 mx-auto mb-3 text-muted-foreground/50"
             />
             <h3 class="text-lg font-medium mb-1">
@@ -120,8 +120,8 @@ defmodule OpenAgentsWeb.IssueIndexLive do
                 <.icon
                   name={
                     if(issue.state == "open",
-                      do: "hero-exclamation-circle",
-                      else: "hero-check-circle"
+                      do: "warning",
+                      else: "check-circle"
                     )
                   }
                   class={[
@@ -151,7 +151,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
                       "anonymous"}
                     <%= if issue.comments > 0 do %>
                       <span class="inline-flex items-center gap-1 ml-2">
-                        <.icon name="hero-chat-bubble-left" class="size-4" />
+                        <.icon name="comment" class="size-4" />
                         {issue.comments}
                       </span>
                     <% end %>

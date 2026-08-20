@@ -71,8 +71,8 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
   test "the comment count only renders once an issue has comments", %{conn: conn} do
     {:ok, issue} = Issues.create_issue(%{"title" => "Chatty"})
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
-    refute html =~ "hero-chat-bubble-left"
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+    refute has_element?(view, ~s{svg[data-icon="comment"]})
 
     {:ok, _} =
       Issues.create_comment(%{
@@ -81,8 +81,8 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
         user: %{"login" => "ada"}
       })
 
-    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
-    assert html =~ "hero-chat-bubble-left"
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+    assert has_element?(view, ~s{svg[data-icon="comment"]})
   end
 
   test "patching to the closed filter swaps the stream and the current marker", %{conn: conn} do

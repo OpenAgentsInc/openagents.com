@@ -101,7 +101,7 @@ defmodule OpenAgentsWeb.IssueNewLive do
           <.link navigate={~p"/#{@owner}/#{@repo}/issues"} class="btn" data-variant="ghost">
             Cancel
           </.link>
-          <.button variant="primary">Create issue</.button>
+          <.button variant={:primary}>Create issue</.button>
         </footer>
       </.form>
     </Layouts.app>

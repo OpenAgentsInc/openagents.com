@@ -28,7 +28,7 @@ defmodule OpenAgentsWeb.AssigneeIndexLive do
 
       <%= if @assignees == [] do %>
         <div class="alert" data-variant="info" role="status">
-          <.icon name="hero-information-circle" class="size-5" />
+          <.icon name="info-circle" class="size-5" />
           <section>No assignees have been assigned to issues yet.</section>
         </div>
       <% else %>

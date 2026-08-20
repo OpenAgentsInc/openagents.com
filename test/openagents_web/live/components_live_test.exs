@@ -42,7 +42,7 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
   end
 
   test "the sidebar is present on component pages", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/components/button")
+    {:ok, view, _html} = live(conn, ~p"/components/openagents-button")
 
     assert has_element?(view, ~s{nav[aria-label="Component library"]})
     assert has_element?(view, ~s{a[href="/components/icons"]})
@@ -61,25 +61,21 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
   end
 
   test "the button page renders the button variants", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/components/button")
+    {:ok, view, _html} = live(conn, ~p"/components/openagents-button")
 
     assert has_element?(view, "#demo-button-primary", "Primary")
     assert has_element?(view, "#demo-button-disabled")
   end
 
   test "the input page renders the demo form", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/components/input")
+    {:ok, view, _html} = live(conn, ~p"/components/openagents-input")
 
     assert has_element?(view, "#component-form")
   end
 
-  test "info flash action shows the flash", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/components/flash")
+  test "the catalog exposes no nonfunctional theme control", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/components")
 
-    view
-    |> element("#demo-flash-info")
-    |> render_click()
-
-    assert render(view) =~ "This is the info flash from CoreComponents."
+    refute has_element?(view, ~s{a[href="/components/theme-toggle"]})
   end
 end

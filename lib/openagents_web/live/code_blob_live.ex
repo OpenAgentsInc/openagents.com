@@ -8,12 +8,12 @@ defmodule OpenAgentsWeb.CodeBlobLive do
   Served straight from the bare repo through `OpenAgents.Forge.Browse` (bounded
   git plumbing, WAL-fresh), gated by the repo's disclosure level
   (`OpenAgents.Forge.Visibility`, TRANSPARENCY-001 — files need :l3). Markdown
-  renders through `OpenAgents.Markdown`'s allowlist walk; everything else is an
+  renders through `OpenAgents.Markdown`'s bounded MDEx sanitizer; everything else is an
   escaped code block; binaries are named, never rendered. Public posture as
   the leaderboard: read-only, no session required, cannot invoke OpenAgents.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forge.{Browse, Visibility}
 

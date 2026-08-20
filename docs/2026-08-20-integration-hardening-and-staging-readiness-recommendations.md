@@ -370,10 +370,10 @@ local references resolve.
 
 ### Complete the Markdown parser migration
 
-The integration plan says MDEx replaced Earmark, while the application still
-depends on and calls Earmark. Hex marks Earmark as retired and no longer
-maintained. Migrate to MDEx or another maintained parser before staging, then
-verify sanitization, security history, and output compatibility.
+At the initial audit, the integration plan said MDEx replaced Earmark while the
+application still depended on and called the retired parser. Gate 4 replaces
+that implementation with MDEx and verifies sanitization, maintained status,
+and output compatibility.
 
 Whichever parser remains must pass tests for:
 
@@ -391,8 +391,8 @@ Remove the unused parser and update every related document in the same commit.
 - Choose the final generic module name: preferably `OpenAgentsWeb.UI` once the
   source-project migration is complete.
 - Move all product surfaces onto that component system.
-- Keep `CoreComponents` only as a temporary compatibility layer with an explicit
-  removal list.
+- Remove the generated compatibility component module after migrating every
+  caller. Do not recreate a parallel component surface.
 - Remove DaisyUI aliases and compatibility tokens after every surface has
   migrated.
 - Use one documented icon policy: Apps SDK icons are preferred, and Heroicons
@@ -423,6 +423,37 @@ Remove the unused parser and update every related document in the same commit.
 **Exit criteria:** The application has one Markdown parser, one component
 system, one documented two-tier icon policy, no nonfunctional theme control, no
 unexplained dependency, and complete license records.
+
+**Gate 4 implementation status (2026-08-20): complete; exact-image SBOM
+evidence pending.**
+
+- Replaced the retired parser with MDEx and removed its stale lock entry.
+  `OpenAgents.Markdown` disables dangerous rendering, applies an exact Ammonia
+  allowlist, normalizes links, and independently bounds input, syntax-tree
+  nesting, output, and escaped fallback size. The focused suite covers raw
+  HTML, scripts and handlers, unsafe schemes, supported structures, malformed
+  input, streaming stability, and every limit.
+- Consolidated all web imports and product surfaces on `OpenAgentsWeb.UI`.
+  Added form-aware input, heading, table, and list primitives; removed the
+  generated compatibility module; and made `/components` an executable
+  inventory of every public component.
+- Removed the browser theme script, theme control, theme selectors, and retired
+  palette aliases. The palette remains deliberately dark-only. The Node suite
+  now compiles Tailwind and proves that Basecoat geometry precedes the
+  OpenAgents style pack and that all eight governed button variants survive the
+  cascade.
+- Migrated current glyph uses to the preferred vendored Apps SDK set. Retained
+  Heroicons only as the owner-approved second tier, pinned it to immutable
+  revision `0435d4ca364a608cc75e2f8683d374e55abbae26`, and recorded an empty
+  fallback-use inventory in `docs/ICONS.md`.
+- Added a direct-dependency purpose and license ledger, release notices for
+  Basecoat, icons, fonts, and the brand mark, and digest-pinned Syft SBOM
+  tooling. `mix precommit` now runs Hex retirement, MixAudit vulnerability, and
+  unused-lock checks. All three checks pass locally.
+- The remaining evidence item is the CycloneDX SBOM for the exact staging image
+  digest. `ops/staging/generate-sbom.sh` is ready, but Gate 4 does not claim the
+  artifact until an exact committed candidate is built and scanned. Retain its
+  JSON and receipt with staging evidence before advancing this gate.
 
 ## Gate 5: Make runtime configuration explicit and fail closed
 
@@ -1116,9 +1147,9 @@ each handoff.
 - [x] The repository has one accurate architecture narrative.
 - [x] Every remaining Sarah reference is intentional and specific.
 - [x] All documentation links and invariant evidence resolve.
-- [ ] The application has one Markdown parser, component system, and documented
+- [x] The application has one Markdown parser, component system, and documented
       two-tier icon policy.
-- [ ] The dark-only palette has no nonfunctional theme control.
+- [x] The dark-only palette has no nonfunctional theme control.
 - [ ] Runtime configuration is typed, redacted, and staging-specific.
 - [ ] Every route has an explicit authority class.
 - [ ] GitHub token behavior matches code, UI disclosure, and data rights.
@@ -1271,27 +1302,18 @@ disposition: retain the owner-approved Heroicons fallback, keep staging
 deliberately dark-only without a nonfunctional toggle, control the palette-file
 rename as a visual migration, and reject conflicting cascade-layer behavior.
 
-**Heroicons.** Gate 4 says "Remove Heroicons and its dependency after the
-remaining issue and layout surfaces use vendored icons." The owner's ruling on
-2026-08-19 was Apps SDK icons **preferred, heroicons as backup** — i.e. retained
-deliberately. `{:heroicons, ...}` is still in `mix.exs`. One of the two should
-move; the plan should not quietly overwrite a stated decision.
+**Heroicons, resolved.** Product surfaces now use Apps SDK glyphs. Heroicons
+remains the deliberate fallback, is pinned to an immutable revision, and has no
+current product call sites. `docs/ICONS.md` governs and inventories exceptions.
 
-**The palette is dark-only, today.** Gate 4's UI consolidation does not mention
-it, but removing DaisyUI removed the only light theme in the application. Sarah's
-palette has no light variant. `data-theme` still runs and the toggle still
-switches, but it no longer repaints anything. This is a live user-visible state,
-not a pending task, and `theme_toggle/1`'s docstring now says so. Inventing a
-light Sarah palette is a design decision that needs an owner.
+**The palette is dark-only, resolved.** The application removed its theme
+control, browser theme state, and theme selectors. A light palette remains a
+separate owner-approved design project.
 
-**Basecoat is load-bearing for the palette, not just components.** Gate 4 says to
-"rename the style pack after generic application components no longer depend on
-the Sarah name." Worth knowing before that rename: `sarah.css` now defines the
-palette *primitives* (`--accent`, `--ink-void`, `--text-primary`, `--line-strong`,
-…), not merely aliases. Prior to the DaisyUI removal it only aliased them and
-nothing defined them — the entire Sarah palette silently resolved to nothing and
-DaisyUI's theme was carrying every colour. Renaming that file is therefore a
-palette migration, not a cosmetic rename.
+**The palette file, resolved.** `assets/css/openagents.css` owns the palette
+contract and loads after individually imported Basecoat structure. The retired
+compatibility aliases are gone. Future renames remain controlled palette
+migrations, not cosmetic changes.
 
 **Why DaisyUI had to be removed rather than layered under.** Recording this so a
 similar library is not reintroduced under a different name: DaisyUI emits
@@ -1304,6 +1326,10 @@ There is no layer ordering that fixes this. **Any component library that emits
 into `utilities` cannot coexist beneath a design system** — that is the
 acceptance test for Gate 4's "one component system", not merely counting the
 libraries in `mix.exs`.
+
+**Cascade behavior, resolved.** `assets/test/css_contract_test.mjs` compiles the
+actual bundle and checks selector order, variant survival, retired aliases, and
+theme absence. The gate now verifies behavior rather than dependency names.
 
 ## A5. Evidence for Gate 5, from failures already observed
 

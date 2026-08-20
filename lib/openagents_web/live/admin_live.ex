@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.AdminLive do
       access requires a separate decision and implementation.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Accounts
   alias OpenAgents.Admin

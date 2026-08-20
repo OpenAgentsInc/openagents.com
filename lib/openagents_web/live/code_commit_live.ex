@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.CodeCommitLive do
   the other projections: read-only, sessionless, cannot invoke OpenAgents.
   """
 
-  use OpenAgentsWeb, :openagents_live_view
+  use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.{Browse, Visibility}

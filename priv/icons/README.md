@@ -12,7 +12,7 @@ Generated files. **Do not edit these by hand.**
 
 Upstream ships one React component per glyph under
 `src/components/Icon/svg/`, each drawing a `currentColor` SVG sized at `1em`.
-Sarah has no React and no `node_modules`, so the components cannot be consumed
+OpenAgents does not ship React in its Phoenix bundle, so the components cannot be consumed
 as published. `mix openagents.icons.vendor <path-to-apps-sdk-ui>` converts them:
 
 - JSX attribute names become their SVG spelling (`fillRule` → `fill-rule`, and

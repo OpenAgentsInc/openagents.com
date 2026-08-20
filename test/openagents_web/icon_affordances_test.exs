@@ -66,21 +66,13 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
     test "no surface hand-writes an svg outside the vendored set" do
       # Every glyph must come from `priv/icons` through `icon/1`. A pasted
       # `<svg>` in a template is how a second, unmanaged icon set starts.
-      # The exempt files implement the vendored set. `icons.ex` holds the
-      # embedded SVG markup, while `ui.ex` and `core_components.ex` render it.
-      # The assertions below fail if an exemption stops being icon plumbing.
-      renderers = ["lib/openagents_web/components/core_components.ex"]
-
-      for renderer <- renderers do
-        assert File.read!(renderer) =~ "OpenAgentsWeb.Icons.fetch!",
-               "the inline-SVG exemption for #{renderer} is stale; it no longer renders the vendored set"
-      end
+      # The exempt files implement the vendored set. `icons.ex` holds embedded
+      # markup and `ui.ex` renders the one governed root element.
 
       offenders =
         "lib/openagents_web/**/*.{ex,heex}"
         |> Path.wildcard()
         |> Enum.reject(&String.ends_with?(&1, ["ui.ex", "icons.ex"]))
-        |> Enum.reject(&(&1 in renderers))
         |> Enum.filter(fn path -> path |> File.read!() |> String.contains?("<svg") end)
 
       assert offenders == [],

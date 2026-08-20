@@ -71,7 +71,8 @@ The product uses Tailwind CSS, pinned vendored Basecoat component styles, the
 OpenAgents style pack in `assets/css/openagents.css`, and reusable HEEx
 components in `OpenAgentsWeb.UI`. The live component inventory is available at
 `/components`; [docs/component-library.md](docs/component-library.md) records
-the current transition and extension rules.
+the supported primitives and extension rules. Follow the
+[icon policy](docs/ICONS.md) for the governed glyph tiers.
 
 Fonts and icons are self-hosted. Do not add a remote font, icon font, second
 component library, or unreviewed browser script.
@@ -110,4 +111,5 @@ OpenAgents is licensed under the GNU Affero General Public License v3.0. See
 Vendored third-party material keeps its own license and notices. In particular,
 Basecoat is under `assets/vendor/basecoat/`, the Apps SDK icon set is under
 `priv/icons/`, and self-hosted font notices are under `priv/static/fonts/`.
-Review those notices when redistributing the application.
+Review [the dependency and license inventory](docs/dependencies-and-licenses.md)
+and `priv/licenses/THIRD_PARTY_NOTICES.md` when redistributing the application.

@@ -20,12 +20,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
     %{id: 3, owner: "OpenAgentsInc", repo: "arcade", state: "closed"}
   ]
 
-  @icons ~w(
-    hero-information-circle hero-exclamation-circle hero-x-mark
-    hero-arrow-path hero-sun-micro hero-moon-micro hero-computer-desktop-micro
-  )
-
-  # UI.icon/1 renders the vendored Apps SDK set, not heroicons.
+  # The catalog demonstrates the preferred vendored Apps SDK tier. Heroicons
+  # remains an exceptional fallback with an empty product-use inventory.
   @openagents_icons ~w(sparkle compass folder document user bell play star)
 
   # account_control/1 and command_bar/1 read three fields off the current user.
@@ -53,7 +49,6 @@ defmodule OpenAgentsWeb.ComponentsLive do
      socket
      |> assign(:form, form)
      |> assign(:rows, @sample_rows)
-     |> assign(:icons, @icons)
      |> assign(:openagents_icons, @openagents_icons)
      |> assign(:demo_user, @demo_user)}
   end
@@ -93,42 +88,30 @@ defmodule OpenAgentsWeb.ComponentsLive do
     {:noreply, put_flash(socket, :info, "Demo form submitted. Nothing was saved.")}
   end
 
-  def handle_event("flash-info", _params, socket) do
-    {:noreply, put_flash(socket, :info, "This is the info flash from CoreComponents.")}
-  end
-
-  def handle_event("flash-error", _params, socket) do
-    {:noreply, put_flash(socket, :error, "This is the error flash from CoreComponents.")}
-  end
-
   @impl true
   def render(%{live_action: :index} = assigns) do
     ~H"""
     <div id="components-index" class="max-w-3xl">
       <h1 class="text-3xl font-semibold mb-4">Component library</h1>
-      <p class="text-base-content/70 mb-8 text-pretty max-w-[68ch]">
-        Live examples of every reusable function component in this repository, drawn from
-        <code>OpenAgentsWeb.CoreComponents</code>
-        (the Phoenix set, restyled onto basecoat), <code>OpenAgentsWeb.UI</code>
-        (the OpenAgents interface primitives), and <code>OpenAgentsWeb.Layouts</code>. <code>button</code>, <code>input</code>, and
-        <code>icon</code>
-        exist in both component sets, so the UI entries are listed separately.
-        A test asserts this page covers every public component in those modules.
+      <p class="text-muted-foreground mb-8 text-pretty max-w-[68ch]">
+        Live examples of every supported function component in <code>OpenAgentsWeb.UI</code>, <code>OpenAgentsWeb.Layouts</code>, and the
+        repository header. A test asserts this page covers every public component
+        in those modules.
         Planned GitHub-shaped components are listed in <code>docs/component-library.md</code>.
       </p>
 
       <section :for={section <- ComponentCatalog.sections()} class="mb-10">
-        <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
           {section.title}
         </h2>
         <div class="grid gap-4 sm:grid-cols-2">
           <.link
             :for={item <- section.items}
             navigate={~p"/components/#{item.slug}"}
-            class="card bg-base-200 border border-base-300 p-4 hover:border-base-content/30"
+            class="card bg-card border border-border p-4 hover:border-foreground/30"
           >
             <h3 class="text-lg font-medium mb-1">{item.title}</h3>
-            <p class="text-sm text-base-content/70">{item.summary}</p>
+            <p class="text-sm text-muted-foreground">{item.summary}</p>
           </.link>
         </div>
       </section>
@@ -141,11 +124,11 @@ defmodule OpenAgentsWeb.ComponentsLive do
     <div id={"component-#{@item.slug}"} class="max-w-3xl space-y-6">
       <header class="space-y-1">
         <h1 class="text-3xl font-semibold">{@item.title}</h1>
-        <p class="text-sm text-base-content/70"><code>{@item.source}</code></p>
-        <p class="text-base text-base-content/70 text-pretty max-w-[68ch]">{@item.summary}</p>
+        <p class="text-sm text-muted-foreground"><code>{@item.source}</code></p>
+        <p class="text-base text-muted-foreground text-pretty max-w-[68ch]">{@item.summary}</p>
       </header>
 
-      <div class="rounded-box border border-base-300 bg-base-100 p-6">
+      <div class="rounded-lg border border-border bg-background p-6">
         <.component_demo {assigns} />
       </div>
     </div>
@@ -155,22 +138,10 @@ defmodule OpenAgentsWeb.ComponentsLive do
   attr :item, :map, required: true
   attr :form, :any, default: nil
   attr :rows, :list, default: []
-  attr :icons, :list, default: []
   attr :openagents_icons, :list, default: []
   attr :demo_user, :map, default: nil
 
-  defp component_demo(%{item: %{slug: "button"}} = assigns) do
-    ~H"""
-    <div class="flex flex-wrap items-center gap-3">
-      <.button id="demo-button-default">Default</.button>
-      <.button id="demo-button-primary" variant="primary">Primary</.button>
-      <.button id="demo-button-navigate" navigate={~p"/"}>Navigate home</.button>
-      <.button id="demo-button-disabled" disabled>Disabled</.button>
-    </div>
-    """
-  end
-
-  defp component_demo(%{item: %{slug: "input"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-input"}} = assigns) do
     ~H"""
     <.form
       for={@form}
@@ -197,25 +168,25 @@ defmodule OpenAgentsWeb.ComponentsLive do
         <.input field={@form[:public]} type="checkbox" label="Public repository" />
       </div>
       <div class="flex items-end">
-        <.button type="submit" variant="primary">Save demo</.button>
+        <.button type="submit" variant={:primary}>Save demo</.button>
       </div>
     </.form>
     """
   end
 
-  defp component_demo(%{item: %{slug: "header"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-header"}} = assigns) do
     ~H"""
     <.header>
       Repository issues
       <:subtitle>Open and closed issues for this repository.</:subtitle>
       <:actions>
-        <.button variant="primary">New issue</.button>
+        <.button variant={:primary}>New issue</.button>
       </:actions>
     </.header>
     """
   end
 
-  defp component_demo(%{item: %{slug: "table"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-table"}} = assigns) do
     ~H"""
     <.table id="demo-table" rows={@rows}>
       <:col :let={row} label="Owner">{row.owner}</:col>
@@ -230,45 +201,13 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
-  defp component_demo(%{item: %{slug: "list"}} = assigns) do
+  defp component_demo(%{item: %{slug: "openagents-list"}} = assigns) do
     ~H"""
     <.list>
       <:item title="Flash">Toast alerts for info and error.</:item>
       <:item title="Button">Primary and soft variants, plus navigation.</:item>
       <:item title="Input">Text, select, textarea, and checkbox.</:item>
     </.list>
-    """
-  end
-
-  defp component_demo(%{item: %{slug: "icon"}} = assigns) do
-    ~H"""
-    <ul id="demo-icons" role="list" class="flex flex-wrap gap-4">
-      <li :for={name <- @icons} class="flex flex-col items-center gap-2 w-28">
-        <.icon name={name} class="size-6" />
-        <p class="text-center text-sm text-base-content/70">{name}</p>
-      </li>
-    </ul>
-    """
-  end
-
-  defp component_demo(%{item: %{slug: "flash"}} = assigns) do
-    ~H"""
-    <p class="text-pretty text-base text-base-content/70 max-w-[68ch] mb-4">
-      Flash renders through <code>Layouts.flash_group/1</code>
-      at the corner of the page. Trigger a sample message:
-    </p>
-    <div class="flex flex-wrap gap-3">
-      <.button id="demo-flash-info" phx-click="flash-info">Show info flash</.button>
-      <.button id="demo-flash-error" phx-click="flash-error">Show error flash</.button>
-    </div>
-    """
-  end
-
-  defp component_demo(%{item: %{slug: "theme-toggle"}} = assigns) do
-    ~H"""
-    <div id="demo-theme-toggle">
-      <Layouts.theme_toggle />
-    </div>
     """
   end
 
@@ -285,9 +224,6 @@ defmodule OpenAgentsWeb.ComponentsLive do
   end
 
   # --- OpenAgents UI -------------------------------------------------------------
-  # UI is imported by `openagents_html_helpers`, not by `:live_view`, so these
-  # are called with the full module prefix. That also documents provenance on a
-  # page whose whole job is showing where a component comes from.
 
   defp component_demo(%{item: %{slug: "openagents-button"}} = assigns) do
     ~H"""
@@ -295,6 +231,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <div class="flex flex-wrap items-center gap-3">
         <UI.button
           :for={v <- ~w(primary secondary outline ghost destructive chip notched link)a}
+          id={"demo-button-#{v}"}
           variant={v}
         >
           {v |> Atom.to_string() |> String.capitalize()}
@@ -305,7 +242,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <UI.button tone={:danger}>Danger tone</UI.button>
-        <UI.button disabled>Disabled</UI.button>
+        <UI.button id="demo-button-disabled" disabled>Disabled</UI.button>
       </div>
     </div>
     """
@@ -317,16 +254,6 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <UI.text_button>Default</UI.text_button>
       <UI.text_button tone={:danger}>Danger</UI.text_button>
       <UI.text_button disabled>Disabled</UI.text_button>
-    </div>
-    """
-  end
-
-  defp component_demo(%{item: %{slug: "openagents-input"}} = assigns) do
-    ~H"""
-    <div class="space-y-3 max-w-sm">
-      <UI.input id="openagents-input-demo" name="demo" value="Ship the catalog" />
-      <UI.input id="openagents-input-demo-empty" name="demo_empty" placeholder="Placeholder text" />
-      <UI.input id="openagents-input-demo-disabled" name="demo_disabled" value="Disabled" disabled />
     </div>
     """
   end
@@ -372,13 +299,13 @@ defmodule OpenAgentsWeb.ComponentsLive do
     ~H"""
     <div class="space-y-6">
       <div class="space-y-3">
-        <p class="text-sm text-base-content/60">Variants (box appearance)</p>
+        <p class="text-sm text-muted-foreground">Variants (box appearance)</p>
         <UI.alert :for={v <- ~w(info success warning danger)a} variant={v} label={Atom.to_string(v)}>
           A {v} alert in the default box appearance.
         </UI.alert>
       </div>
       <div class="space-y-3">
-        <p class="text-sm text-base-content/60">Appearances</p>
+        <p class="text-sm text-muted-foreground">Appearances</p>
         <UI.alert
           :for={a <- ~w(box row notice)a}
           appearance={a}
@@ -407,15 +334,15 @@ defmodule OpenAgentsWeb.ComponentsLive do
     <div class="grid gap-4 sm:grid-cols-2">
       <UI.card id="openagents-card-default">
         <p class="font-medium">Default</p>
-        <p class="text-sm text-base-content/70">A plain content container.</p>
+        <p class="text-sm text-muted-foreground">A plain content container.</p>
       </UI.card>
       <UI.card id="openagents-card-corners" frame={:corners}>
         <p class="font-medium">Corner frame</p>
-        <p class="text-sm text-base-content/70">With bracket decoration.</p>
+        <p class="text-sm text-muted-foreground">With bracket decoration.</p>
       </UI.card>
       <UI.card id="openagents-card-danger" variant={:danger}>
         <p class="font-medium">Danger</p>
-        <p class="text-sm text-base-content/70">For destructive context.</p>
+        <p class="text-sm text-muted-foreground">For destructive context.</p>
       </UI.card>
     </div>
     """
@@ -452,7 +379,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <:chips>
         <UI.badge variant={:dim}>tool</UI.badge>
       </:chips>
-      <p class="text-sm text-base-content/70">Pushed 3 files to the forge.</p>
+      <p class="text-sm text-muted-foreground">Pushed 3 files to the forge.</p>
     </UI.event_header>
     """
   end
@@ -499,7 +426,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     <UI.frame>
       <div class="p-6">
         <p class="font-medium">Framed content</p>
-        <p class="text-sm text-base-content/70">Corner brackets wrap arbitrary children.</p>
+        <p class="text-sm text-muted-foreground">Corner brackets wrap arbitrary children.</p>
       </div>
     </UI.frame>
     """
@@ -524,7 +451,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
         src="/audio/does-not-exist.wav"
         label="Voice recording (demo source, nothing to play)"
       />
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-muted-foreground">
         The src is intentionally a dead path; this page has no recording to serve.
       </p>
     </div>
@@ -536,7 +463,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
     <ul id="openagents-demo-icons" role="list" class="flex flex-wrap gap-4">
       <li :for={name <- @openagents_icons} class="flex flex-col items-center gap-2 w-28">
         <UI.icon name={name} class="size-6" />
-        <p class="text-center text-sm text-base-content/70">{name}</p>
+        <p class="text-center text-sm text-muted-foreground">{name}</p>
       </li>
     </ul>
     """
@@ -561,10 +488,10 @@ defmodule OpenAgentsWeb.ComponentsLive do
     ~H"""
     <div class="space-y-4">
       <div class="space-y-2">
-        <p class="text-sm text-base-content/60">Bar context</p>
+        <p class="text-sm text-muted-foreground">Bar context</p>
         <Layouts.account_control current_user={@demo_user} context={:bar} />
       </div>
-      <p class="text-sm text-base-content/60 max-w-[68ch]">
+      <p class="text-sm text-muted-foreground max-w-[68ch]">
         Only one instance is shown. <code>account_control/1</code>
         hard-codes the ids <code>account-menu</code>, <code>account-menu-trigger</code>, <code>logout-form</code>, and <code>logout</code>, so it can be rendered at most
         once per page — rendering the <code>:row</code>

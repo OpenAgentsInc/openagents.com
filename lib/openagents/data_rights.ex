@@ -25,7 +25,7 @@ defmodule OpenAgents.DataRights do
   @doc "Whether the one-click full reset control is enabled (development and staging only)."
   @spec reset_enabled?() :: boolean()
   def reset_enabled? do
-    Application.get_env(:sarah, :conversation_reset_enabled, false) == true
+    Application.get_env(:openagents, :conversation_reset_enabled, false) == true
   end
 
   @spec export(User.t(), Visitor.t(), Conversation.t()) :: {:ok, map()} | {:error, term()}

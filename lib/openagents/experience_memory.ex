@@ -195,7 +195,7 @@ defmodule OpenAgents.ExperienceMemory do
 
   @spec capture_for_turn(Visitor.t(), Turn.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def capture_for_turn(%Visitor{} = owner, %Turn{} = turn, query) when is_binary(query) do
-    config = Application.fetch_env!(:sarah, :experience_memory)
+    config = Application.fetch_env!(:openagents, :experience_memory)
 
     if Keyword.fetch!(config, :enabled),
       do: freeze_bank(owner, turn, query, config),

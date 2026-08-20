@@ -18,7 +18,7 @@ defmodule OpenAgents.Sarah.Supervisor do
     # The turn path and any tool-execution path require the host tool catalog
     # to be installed in :persistent_term before they run.
     _tool_snapshot =
-      OpenAgents.Tools.Registry.install!(Application.get_env(:openagents, :tools, []))
+      OpenAgents.Tools.Registry.install!(Application.fetch_env!(:openagents, :tools))
 
     children =
       [

@@ -1,0 +1,176 @@
+{
+  "corpus_digest": "ef2465a90f436b9e6ddc7f59952dd25fbdfcab7a8b61d6125cd978f6cfaa64d4",
+  "corpus_id": "sarah.recall.regression.v1",
+  "corpus_revision": 1,
+  "metrics": {
+    "correction_recognition": 1.0,
+    "cross_scope_leakage": 0,
+    "degradation_honesty": 1.0,
+    "grounded_answer_rate": 1.0,
+    "no_result_honesty": 1.0,
+    "precision_at_10": 1.0,
+    "precision_at_3": 1.0,
+    "unsupported_memory_claims": 0
+  },
+  "passed": true,
+  "report_digest": "9106c299e745fd20729f6337aadc7c5a5ae4f01249ec2dac301843878489a0e2",
+  "results": [
+    {
+      "case_id": "outside-window",
+      "case_passed": true,
+      "empty": false,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": true,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [
+        "archive"
+      ],
+      "retrieved_at_3": [
+        "archive"
+      ]
+    },
+    {
+      "case_id": "dated-paraphrase",
+      "case_passed": true,
+      "empty": false,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": false,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [
+        "dated"
+      ],
+      "retrieved_at_3": [
+        "dated"
+      ]
+    },
+    {
+      "case_id": "honest-empty",
+      "case_passed": true,
+      "empty": true,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": true,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [],
+      "retrieved_at_3": []
+    },
+    {
+      "case_id": "current-correction",
+      "case_passed": true,
+      "empty": false,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": false,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [
+        "old"
+      ],
+      "retrieved_at_3": [
+        "old"
+      ]
+    },
+    {
+      "case_id": "ambiguous-history",
+      "case_passed": true,
+      "empty": false,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": false,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [
+        "choice-b",
+        "choice-a"
+      ],
+      "retrieved_at_3": [
+        "choice-b",
+        "choice-a"
+      ]
+    },
+    {
+      "case_id": "truncated-excerpt",
+      "case_passed": true,
+      "empty": false,
+      "excerpt_truncated": true,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": false,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [
+        "long-source"
+      ],
+      "retrieved_at_3": [
+        "long-source"
+      ]
+    },
+    {
+      "case_id": "two-browser-isolation",
+      "case_passed": true,
+      "empty": false,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": false,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [
+        "local"
+      ],
+      "retrieved_at_3": [
+        "local"
+      ]
+    },
+    {
+      "case_id": "status-exclusion",
+      "case_passed": true,
+      "empty": true,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": true,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [],
+      "retrieved_at_3": []
+    },
+    {
+      "case_id": "snapshot-freezing",
+      "case_passed": true,
+      "empty": true,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": false,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [],
+      "retrieved_at_3": []
+    },
+    {
+      "case_id": "typed-degradation",
+      "case_passed": true,
+      "empty": true,
+      "excerpt_truncated": false,
+      "foreign_ref_count": 0,
+      "late_match_excluded": true,
+      "provider_window_excluded": true,
+      "requested_page_truncated": false,
+      "retrieved_at_10": [],
+      "retrieved_at_3": []
+    }
+  ],
+  "schema": "sarah.recall.eval_report.v1",
+  "thresholds": {
+    "correction_recognition": 1,
+    "cross_scope_leakage": 0,
+    "degradation_honesty": 1,
+    "grounded_answer_rate": 1,
+    "no_result_honesty": 1,
+    "precision_at_10": 1,
+    "precision_at_3": 1,
+    "unsupported_memory_claims": 0
+  }
+}

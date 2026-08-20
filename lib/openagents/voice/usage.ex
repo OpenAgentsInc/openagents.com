@@ -93,9 +93,9 @@ defmodule OpenAgents.Voice.Usage do
   @spec over_budget?(map()) :: boolean()
   def over_budget?(usage) when is_map(usage) do
     integer(usage["total_tokens"]) >=
-      Application.fetch_env!(:sarah, :voice_maximum_session_tokens) or
+      Application.fetch_env!(:openagents, :voice_maximum_session_tokens) or
       integer(usage["estimated_cost_microusd"]) >=
-        Application.fetch_env!(:sarah, :voice_maximum_estimated_cost_microusd)
+        Application.fetch_env!(:openagents, :voice_maximum_estimated_cost_microusd)
   end
 
   @doc """
@@ -104,8 +104,8 @@ defmodule OpenAgents.Voice.Usage do
   """
   @spec near_budget?(map()) :: boolean()
   def near_budget?(usage) when is_map(usage) do
-    token_budget = Application.fetch_env!(:sarah, :voice_maximum_session_tokens)
-    cost_budget = Application.fetch_env!(:sarah, :voice_maximum_estimated_cost_microusd)
+    token_budget = Application.fetch_env!(:openagents, :voice_maximum_session_tokens)
+    cost_budget = Application.fetch_env!(:openagents, :voice_maximum_estimated_cost_microusd)
 
     integer(usage["total_tokens"]) * 10 >= token_budget * 8 or
       integer(usage["estimated_cost_microusd"]) * 10 >= cost_budget * 8

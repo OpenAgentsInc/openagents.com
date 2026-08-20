@@ -17,11 +17,11 @@ defmodule OpenAgents.Cluster.Ra do
   alias OpenAgents.Cluster.SessionRegistry
 
   @system :default
-  @cluster :sarah_sessions
+  @cluster :openagents_sessions
   @machine {:module, SessionRegistry, %{}}
   @timeout 5_000
 
-  @doc "The Ra server id for a node: `{:sarah_sessions, node}`."
+  @doc "The Ra server id for a node: `{:openagents_sessions, node}`."
   def server_id(node \\ node()), do: {@cluster, node}
 
   @doc """

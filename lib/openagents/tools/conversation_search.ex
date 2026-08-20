@@ -72,7 +72,7 @@ defmodule OpenAgents.Tools.ConversationSearch do
   end
 
   defp recall_backend,
-    do: Application.fetch_env!(:sarah, :recall_search_backend)
+    do: Application.fetch_env!(:openagents, :recall_search_backend)
 
   defp search_options(arguments) do
     with {:ok, before} <- parse_time(Map.get(arguments, "before")),

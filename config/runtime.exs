@@ -109,9 +109,15 @@ if config_env() == :prod do
       nil ->
         # Cloud Run + Cloud SQL socket configuration used by staging.
         user = System.get_env("DB_USER") || raise("environment variable DB_USER is missing")
-        password = System.get_env("DB_PASSWORD") || raise("environment variable DB_PASSWORD is missing")
+
+        password =
+          System.get_env("DB_PASSWORD") || raise("environment variable DB_PASSWORD is missing")
+
         database = System.get_env("DB_NAME") || raise("environment variable DB_NAME is missing")
-        socket_dir = System.get_env("INSTANCE_UNIX_SOCKET") || raise("environment variable INSTANCE_UNIX_SOCKET is missing")
+
+        socket_dir =
+          System.get_env("INSTANCE_UNIX_SOCKET") ||
+            raise("environment variable INSTANCE_UNIX_SOCKET is missing")
 
         [
           username: user,

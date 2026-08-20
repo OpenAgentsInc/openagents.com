@@ -1,0 +1,30 @@
+{
+  "schema": "sarah.graph_relationship_benefit.v1",
+  "purpose": "Require relationship retrieval benefit over source-record search before graph traversal enters Sarah's default context.",
+  "arms": [
+    {
+      "id": "source_records_only",
+      "graph_enabled": false,
+      "authority": "authoritative private experience records"
+    },
+    {
+      "id": "derived_graph",
+      "graph_enabled": true,
+      "authority": "same authoritative private experience records",
+      "required_evidence": ["exact_scope", "source_membership", "manifest_generation", "policy_identity"]
+    }
+  ],
+  "tasks": [
+    "recover approaches connected to the same objective",
+    "surface conflicting success and failure outcomes without collapsing them",
+    "follow correction and pattern-support relationships"
+  ],
+  "activation_gate": {
+    "default_enabled": false,
+    "requires_material_relationship_benefit": true,
+    "minimum_paired_tasks": 30,
+    "maximum_scope_leaks": 0,
+    "maximum_missing_source_memberships": 0,
+    "requires_source_record_fallback": true
+  }
+}

@@ -23,13 +23,13 @@ defmodule OpenAgents.Tools.Repository do
 
   @doc "The baked source root (the running code's own tree)."
   def source_dir do
-    Application.get_env(:sarah, :sarah_source_dir, File.cwd!())
+    Application.get_env(:openagents, :sarah_source_dir, File.cwd!())
   end
 
   @doc "The workspace root that holds all per-job clones."
   def jobs_dir do
     Application.get_env(
-      :sarah,
+      :openagents,
       :coding_jobs_dir,
       Path.join(System.tmp_dir!(), "sarah-coding-jobs")
     )
@@ -194,7 +194,7 @@ defmodule OpenAgents.Tools.Repository do
 
   @doc "Where `repo_commit_push` pushes: the forge's own endpoint, never GitHub."
   def push_url do
-    Application.get_env(:sarah, :forge_self_push_url)
+    Application.get_env(:openagents, :forge_self_push_url)
   end
 
   @doc "Run git in `dir` with prompts disabled; returns {output, status}."

@@ -1,0 +1,125 @@
+{
+  "schema": "sarah.model_program_artifact.v1",
+  "artifact_id": "sarah.program.memory_intent.shadow.v1",
+  "artifact_digest": "35c030b15c57aeb43f36a8ed9ca327a6e02f9eaab8e8db82e1b598e440c4a1ea",
+  "signature": {
+    "id": "sarah.memory.intent.v1",
+    "version": 1,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "current_user_text": {"type": "string", "maxLength": 2000}
+      },
+      "required": ["current_user_text"],
+      "additionalProperties": false
+    },
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "intent": {"enum": ["remember", "forget", "list", "none"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "proposal": {"type": ["object", "null"]}
+      },
+      "required": ["intent", "confidence", "proposal"],
+      "additionalProperties": false
+    },
+    "output_kind": "proposal"
+  },
+  "compiler": {
+    "id": "ds-effect-portable-compiler",
+    "version": "1.0.0",
+    "source_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "model": {
+    "provider": "openai",
+    "model": "gpt-5.6-luna"
+  },
+  "decoding": {
+    "temperature": 0,
+    "max_output_tokens": 256,
+    "seed_policy": "provider_deterministic_when_available"
+  },
+  "compatibility": {
+    "runtime_min": 1,
+    "runtime_max": 1
+  },
+  "prompt_ir": {
+    "version": 1,
+    "blocks": [
+      {
+        "id": "task",
+        "kind": "instruction",
+        "content": "Classify only explicit memory-management intent in the current user text. Return a proposal; never perform a write."
+      },
+      {
+        "id": "contract",
+        "kind": "output_contract",
+        "content": "Return exactly the typed output schema. A proposal has no runtime authority."
+      }
+    ]
+  },
+  "parameters": {
+    "explicit_intent_only": true,
+    "recalled_text_is_ineligible": true,
+    "minimum_confidence": 0.9
+  },
+  "datasets": {
+    "train": {
+      "id": "sarah-memory-intent-train",
+      "revision": "synthetic.v1",
+      "content_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "purpose": "train",
+      "source_kind": "synthetic",
+      "consent_receipt": null
+    },
+    "validation": {
+      "id": "sarah-memory-intent-validation",
+      "revision": "synthetic.v1",
+      "content_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+      "purpose": "validation",
+      "source_kind": "synthetic",
+      "consent_receipt": null
+    },
+    "holdout": {
+      "id": "sarah-memory-intent-holdout",
+      "revision": "synthetic.v1",
+      "content_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+      "purpose": "true_holdout",
+      "source_kind": "synthetic",
+      "consent_receipt": null
+    }
+  },
+  "optimizer": {
+    "id": "bounded-prompt-search",
+    "version": "1.0.0",
+    "budget": {
+      "max_trials": 20,
+      "max_model_calls": 500,
+      "max_cost_usd": 25.0
+    }
+  },
+  "evaluator": {
+    "id": "sarah-memory-intent-evaluator",
+    "version": "1.0.0",
+    "digest": "5555555555555555555555555555555555555555555555555555555555555555"
+  },
+  "metrics": {
+    "baseline": {"status": "contract_fixture", "measured": false},
+    "candidate": {"status": "contract_fixture", "measured": false},
+    "uncertainty": {"status": "not_measured", "reason": "shadow reader boundary only"}
+  },
+  "provenance": {
+    "source_revision": "OpenAgentsInc/sarah@9ca3cb1",
+    "compiled_at": "2026-08-16T22:00:00Z",
+    "compiled_by": "offline-release-fixture",
+    "receipt": {"kind": "initial-language-neutral-reader-fixture", "private_production_data": false}
+  },
+  "approval": {
+    "status": "approved",
+    "approved_by": "release-fixture-review",
+    "approved_at": "2026-08-16T22:05:00Z",
+    "receipt": {"scope": "shadow-only", "runtime_effect": false}
+  },
+  "predecessor": null,
+  "activation_status": "shadow"
+}

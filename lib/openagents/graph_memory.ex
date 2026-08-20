@@ -60,7 +60,7 @@ defmodule OpenAgents.GraphMemory do
   end
 
   def traverse(%Visitor{} = owner, work_scope, start_node_id, options \\ []) do
-    config = Application.fetch_env!(:sarah, :graph_memory)
+    config = Application.fetch_env!(:openagents, :graph_memory)
 
     with true <- Keyword.fetch!(config, :enabled) or {:error, :graph_memory_disabled},
          {:ok, _} <- owned_scope(owner.id, work_scope),
@@ -97,7 +97,8 @@ defmodule OpenAgents.GraphMemory do
 
   def export(%Visitor{} = owner, work_scope) do
     maximum =
-      Application.fetch_env!(:sarah, :graph_memory) |> Keyword.fetch!(:maximum_export_artifacts)
+      Application.fetch_env!(:openagents, :graph_memory)
+      |> Keyword.fetch!(:maximum_export_artifacts)
 
     with {:ok, _} <- owned_scope(owner.id, work_scope),
          %Manifest{} = manifest <- current_manifest(owner.id, work_scope) do
@@ -272,7 +273,7 @@ defmodule OpenAgents.GraphMemory do
   end
 
   defp build(owner, work_scope, operation) do
-    config = Application.fetch_env!(:sarah, :graph_memory)
+    config = Application.fetch_env!(:openagents, :graph_memory)
 
     with true <- Keyword.fetch!(config, :enabled) or {:error, :graph_memory_disabled},
          {:ok, _} <- owned_scope(owner.id, work_scope) do

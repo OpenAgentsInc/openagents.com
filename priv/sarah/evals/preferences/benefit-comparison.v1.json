@@ -1,0 +1,17 @@
+{
+  "schema": "sarah.preference.benefit_comparison.v1",
+  "corpus_id": "sarah.preference.presentation.v1",
+  "corpus_revision": 1,
+  "metrics": {
+    "authority_identity_preserved": 1.0,
+    "confirmed_effect_applied": 1.0,
+    "current_instruction_override": 1.0,
+    "memory_off_difference": 1.0
+  },
+  "thresholds": {
+    "authority_identity_preserved_minimum": 1.0,
+    "confirmed_effect_applied_minimum": 1.0,
+    "current_instruction_override_minimum": 1.0,
+    "memory_off_difference_minimum": 1.0
+  }
+}

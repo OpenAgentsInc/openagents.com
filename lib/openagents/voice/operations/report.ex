@@ -268,7 +268,7 @@ defmodule OpenAgents.Voice.Operations.Report do
       )
       |> require_gate(
         report["usage"]["average_estimated_cost_microusd_per_reported_session"] <=
-          Application.fetch_env!(:sarah, :voice_maximum_estimated_cost_microusd),
+          Application.fetch_env!(:openagents, :voice_maximum_estimated_cost_microusd),
         "average_session_cost_within_budget"
       )
       |> require_gate(report["release_control"]["state"] == "open", "release_control_open")

@@ -27,7 +27,7 @@ defmodule OpenAgents.Computer do
   @maximum_collected_bytes 65_536
 
   @spec enabled?() :: boolean()
-  def enabled?, do: Application.get_env(:sarah, :computer_controller_enabled, false)
+  def enabled?, do: Application.get_env(:openagents, :computer_controller_enabled, false)
 
   @spec register(String.t()) :: {:ok, pid()} | {:error, term()}
   def register(machine_id) do

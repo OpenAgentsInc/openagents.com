@@ -8,7 +8,7 @@ defmodule OpenAgents.Memory.SemanticWorker do
 
   @impl true
   def init(_options) do
-    config = Application.fetch_env!(:sarah, :semantic_index)
+    config = Application.fetch_env!(:openagents, :semantic_index)
 
     if Keyword.fetch!(config, :enabled) do
       _manifest = SemanticIndex.ensure_manifest!(Map.new(config))

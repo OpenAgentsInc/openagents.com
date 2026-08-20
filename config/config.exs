@@ -34,7 +34,89 @@ config :openagents,
   voice_maximum_response_output_tokens: 4_096,
   voice_maximum_estimated_cost_microusd: 20_000_000,
   voice_operational_retention_days: 90,
-  voice_compaction_input_token_threshold: 16_000
+  voice_compaction_input_token_threshold: 16_000,
+  provider: OpenAgents.Providers.OpenAI,
+  openai_model: "gpt-5.6-luna",
+  shadow_programs: [
+    enabled: false,
+    provider: OpenAgents.ShadowPrograms.OpenAI,
+    timeout_ms: 5_000
+  ],
+  voice_call_provider: OpenAgents.Voice.OpenAI.CallClient,
+  voice_sideband_provider: OpenAgents.Voice.OpenAI.Sideband,
+  recall_search_backend: OpenAgents.Memory.LexicalRecall,
+  semantic_index: [
+    enabled: false,
+    provider: OpenAgents.Memory.OpenAIEmbeddings,
+    model_id: "text-embedding-3-small",
+    model_version: "2024-01",
+    dimensions: 64,
+    batch_size: 10,
+    poll_interval_ms: 2_000
+  ],
+  experience_memory: [
+    enabled: false,
+    maximum_records: 6,
+    maximum_patterns: 3,
+    maximum_bytes: 4_000
+  ],
+  graph_memory: [
+    enabled: false,
+    maximum_nodes: 50,
+    maximum_depth: 3,
+    maximum_export_artifacts: 500
+  ],
+  memory_portability: [enabled: false],
+  tool_discovery: [
+    embeddings_enabled: false,
+    provider: OpenAgents.Memory.OpenAIEmbeddings,
+    model_id: "text-embedding-3-small",
+    model_version: "2024-01",
+    dimensions: 64,
+    top_k: 12
+  ],
+  tools: [
+    OpenAgents.Tools.ModuleDiscover,
+    OpenAgents.Tools.GitHubRepoList,
+    OpenAgents.Tools.GitHubRepoRead,
+    OpenAgents.Tools.ConversationSearch,
+    OpenAgents.Tools.ConversationRead,
+    OpenAgents.Tools.MemoryList,
+    OpenAgents.Tools.MemorySearch,
+    OpenAgents.Tools.MemoryRemember,
+    OpenAgents.Tools.MemoryCorrect,
+    OpenAgents.Tools.MemoryForget,
+    OpenAgents.Tools.ComputerList,
+    OpenAgents.Tools.ComputerProbe,
+    OpenAgents.Tools.ComputerRun,
+    OpenAgents.Tools.ComputerDevin,
+    OpenAgents.Tools.ComputerAgent,
+    OpenAgents.Tools.DeepWork,
+    OpenAgents.Tools.IncidentLookup,
+    OpenAgents.Tools.RepoRead,
+    OpenAgents.Tools.RepoGrep,
+    OpenAgents.Tools.RepoList,
+    OpenAgents.Tools.CodeCheck,
+    OpenAgents.Tools.RepoEdit,
+    OpenAgents.Tools.RepoWrite,
+    OpenAgents.Tools.RepoCommitPush
+  ],
+  conversation_reset_enabled: false,
+  github_api: [
+    base_url: "https://api.github.com",
+    request_options: []
+  ],
+  voice_recording: [
+    enabled: true,
+    timeslice_ms: 5_000,
+    maximum_chunk_bytes: 1_048_576,
+    maximum_chunks: 1_024,
+    maximum_bytes: 25_165_824,
+    late_chunk_grace_seconds: 120,
+    retention_days: 30
+  ],
+  leaderboard_limit: 100,
+  leaderboard_refresh_interval_ms: 1_000
 
 # Configure the endpoint
 config :openagents, OpenAgentsWeb.Endpoint,

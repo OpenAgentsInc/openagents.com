@@ -1,0 +1,43 @@
+{
+  "schema": "sarah.shadow_replay_corpus.v1",
+  "revision": "synthetic.v1",
+  "source_kind": "synthetic",
+  "private_production_data": false,
+  "cases": [
+    {
+      "signature_id": "sarah.memory.intent.v1",
+      "input": {"current_user_text": "Please remember that I prefer concise answers."},
+      "output": {"intent": "remember", "confidence": 0.99}
+    },
+    {
+      "signature_id": "sarah.memory.candidate.v1",
+      "input": {"authorized_statement": "I prefer concise answers.", "source_ref": "synthetic:message:1"},
+      "output": {"candidate": "Prefers concise answers.", "confidence": 0.95}
+    },
+    {
+      "signature_id": "sarah.recall.query.v1",
+      "input": {"current_user_text": "What did I say about deployment?"},
+      "output": {"needed": true, "query": "deployment"}
+    },
+    {
+      "signature_id": "sarah.recall.assessment.v1",
+      "input": {"question": "What is the marker?", "evidence_excerpt": "The marker is amber."},
+      "output": {"classification": "applicable", "reason": "Direct synthetic match."}
+    },
+    {
+      "signature_id": "sarah.capability.route.v1",
+      "input": {"request": "List memory.", "captured_capability_ids": ["memory_list"]},
+      "output": {"selected_capability_id": "memory_list", "reason": "Captured capability."}
+    },
+    {
+      "signature_id": "sarah.collective.candidate.v1",
+      "input": {"consented_fixture": "Synthetic reusable pattern."},
+      "output": {"candidate": "Reusable synthetic pattern.", "reason": "Fixture is explicitly synthetic."}
+    },
+    {
+      "signature_id": "sarah.response.quality.v1",
+      "input": {"response_text": "I do not have enough evidence to answer that."},
+      "output": {"score": 1.0, "reason": "Calibrated synthetic response."}
+    }
+  ]
+}

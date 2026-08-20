@@ -406,7 +406,7 @@ defmodule OpenAgents.Memory.Portability do
 
   defp enabled,
     do:
-      if(Application.fetch_env!(:sarah, :memory_portability)[:enabled],
+      if(Application.fetch_env!(:openagents, :memory_portability)[:enabled],
         do: :ok,
         else: {:error, :memory_portability_disabled}
       )

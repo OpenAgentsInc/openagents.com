@@ -10,7 +10,7 @@ defmodule OpenAgents.Incidents.Fixer do
   is. The job runs on the owner's paired machine via the governed tools.
 
   Safe by default: autonomous fixing is **off** unless
-  `config :sarah, :incident_fixer_enabled` is true. Until an operator enables
+  `config :openagents, :incident_fixer_enabled` is true. Until an operator enables
   it, anomalous incidents are still recorded and notified — they simply are not
   auto-worked. This is the audit's "earned one incident-class at a time, never
   switched on globally". Even when enabled, the fixer is de-duped (one open
@@ -45,7 +45,7 @@ defmodule OpenAgents.Incidents.Fixer do
   end
 
   @doc "Whether autonomous fixing is switched on for this deployment."
-  def enabled?, do: Application.get_env(:sarah, :incident_fixer_enabled, false) == true
+  def enabled?, do: Application.get_env(:openagents, :incident_fixer_enabled, false) == true
 
   # Only user-facing turn/voice failures are auto-fixed. A failed background job
   # (origin job_server) is never fixed by spawning another background job, so a

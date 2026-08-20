@@ -23,7 +23,7 @@ defmodule OpenAgents.Tools.Embeddings do
   @doc "Whether embedding-backed discovery is switched on and configured."
   @spec enabled?() :: boolean()
   def enabled? do
-    config = Application.get_env(:sarah, :tool_discovery, [])
+    config = Application.get_env(:openagents, :tool_discovery, [])
     Keyword.get(config, :embeddings_enabled, false) == true and not is_nil(provider())
   end
 
@@ -130,7 +130,7 @@ defmodule OpenAgents.Tools.Embeddings do
   end
 
   defp embed_config do
-    config = Application.get_env(:sarah, :tool_discovery, [])
+    config = Application.get_env(:openagents, :tool_discovery, [])
 
     %{
       model_id: Keyword.get(config, :model_id, "text-embedding-3-small"),

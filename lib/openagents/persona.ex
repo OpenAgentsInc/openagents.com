@@ -111,7 +111,7 @@ defmodule OpenAgents.Persona do
   end
 
   defp artifact_path do
-    case :code.priv_dir(:sarah) do
+    case :code.priv_dir(:openagents) do
       path when is_list(path) -> {:ok, Path.join(List.to_string(path), @artifact_path)}
       {:error, reason} -> {:error, {:priv_dir_unavailable, reason}}
     end
@@ -161,7 +161,6 @@ defmodule OpenAgents.Persona do
     normalized_instructions = String.replace(instructions, ~r/\s+/, " ")
 
     required_statements = [
-      "You are OpenAgents.",
       "You are an OpenAgent",
       "You are an AI",
       "Current evidence outranks remembered evidence.",

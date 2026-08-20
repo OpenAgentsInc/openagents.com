@@ -418,13 +418,13 @@ defmodule OpenAgents.DataRights.AtifExport do
     %{
       "name" => @agent_name,
       "version" => application_version(),
-      "model_name" => Application.fetch_env!(:sarah, :openai_model),
+      "model_name" => Application.fetch_env!(:openagents, :openai_model),
       "tool_definitions" => tool_definitions()
     }
   end
 
   defp application_version do
-    case Application.spec(:sarah, :vsn) do
+    case Application.spec(:openagents, :vsn) do
       version when is_list(version) -> List.to_string(version)
       _unknown -> "unknown"
     end

@@ -52,7 +52,7 @@ defmodule OpenAgents.Voice.Retention do
 
   @spec purge_expired(DateTime.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def purge_expired(now \\ DateTime.utc_now()) do
-    retention_days = Application.fetch_env!(:sarah, :voice_operational_retention_days)
+    retention_days = Application.fetch_env!(:openagents, :voice_operational_retention_days)
     cutoff = DateTime.add(now, -retention_days, :day)
 
     session_ids =

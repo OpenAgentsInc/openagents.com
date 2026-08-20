@@ -36,7 +36,7 @@ defmodule OpenAgents.Machines.TokenVault do
 
   defp key do
     with encoded when is_binary(encoded) <-
-           Application.get_env(:sarah, :github_token_encryption_key),
+           Application.get_env(:openagents, :github_token_encryption_key),
          {:ok, key} when byte_size(key) == 32 <- Base.decode64(encoded) do
       {:ok, key}
     else

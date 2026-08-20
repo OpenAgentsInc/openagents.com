@@ -39,7 +39,7 @@ defmodule OpenAgents.Memory.HybridRecall do
     do: {:error, :scope_refused}
 
   defp semantic_or_fallback(lexical, conversation, snapshot, query, options) do
-    config = Application.fetch_env!(:sarah, :semantic_index)
+    config = Application.fetch_env!(:openagents, :semantic_index)
     provider = Keyword.fetch!(config, :provider)
 
     with manifest when not is_nil(manifest) <- SemanticIndex.active_manifest(),

@@ -1,0 +1,18 @@
+{
+  "schema": "sarah.program_evaluation_receipt.v1",
+  "fixture": true,
+  "source_kind": "synthetic",
+  "private_production_data": false,
+  "passed": true,
+  "safety_passed": true,
+  "privacy_passed": true,
+  "cost_complete": true,
+  "actual_cost_usd": 2.5,
+  "evaluator_id": "sarah-memory-intent-evaluator",
+  "evaluator_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+  "holdout_id": "sarah-memory-intent-holdout",
+  "holdout_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+  "baseline_metrics": {"accuracy": 0.8, "false_write_proposal_rate": 0.0},
+  "candidate_metrics": {"accuracy": 0.9, "false_write_proposal_rate": 0.0},
+  "uncertainty": {"method": "bootstrap", "confidence": 0.95, "half_width": 0.03}
+}

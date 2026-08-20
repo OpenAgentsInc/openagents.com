@@ -35,7 +35,7 @@ defmodule OpenAgents.Voice.Config do
 
   @spec current!() :: t()
   def current! do
-    :sarah
+    :openagents
     |> Application.fetch_env!(:voice)
     |> build!()
   end
@@ -144,18 +144,18 @@ defmodule OpenAgents.Voice.Config do
   end
 
   defp validate_attempt_limits! do
-    attempt_limit = Application.fetch_env!(:sarah, :voice_attempt_limit)
-    window_seconds = Application.fetch_env!(:sarah, :voice_attempt_window_seconds)
-    concurrent_sessions = Application.fetch_env!(:sarah, :voice_maximum_concurrent_sessions)
-    maximum_session_tokens = Application.fetch_env!(:sarah, :voice_maximum_session_tokens)
+    attempt_limit = Application.fetch_env!(:openagents, :voice_attempt_limit)
+    window_seconds = Application.fetch_env!(:openagents, :voice_attempt_window_seconds)
+    concurrent_sessions = Application.fetch_env!(:openagents, :voice_maximum_concurrent_sessions)
+    maximum_session_tokens = Application.fetch_env!(:openagents, :voice_maximum_session_tokens)
 
     maximum_response_output_tokens =
-      Application.fetch_env!(:sarah, :voice_maximum_response_output_tokens)
+      Application.fetch_env!(:openagents, :voice_maximum_response_output_tokens)
 
     maximum_cost =
-      Application.fetch_env!(:sarah, :voice_maximum_estimated_cost_microusd)
+      Application.fetch_env!(:openagents, :voice_maximum_estimated_cost_microusd)
 
-    retention_days = Application.fetch_env!(:sarah, :voice_operational_retention_days)
+    retention_days = Application.fetch_env!(:openagents, :voice_operational_retention_days)
 
     if attempt_limit not in 1..30 do
       raise ArgumentError, "invalid Sarah voice attempt limit"

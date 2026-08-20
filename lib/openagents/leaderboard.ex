@@ -50,7 +50,7 @@ defmodule OpenAgents.Leaderboard do
 
   @doc "How many accounts the public board publishes."
   @spec limit() :: pos_integer()
-  def limit, do: Application.get_env(:sarah, :leaderboard_limit, @default_limit)
+  def limit, do: Application.get_env(:openagents, :leaderboard_limit, @default_limit)
 
   @doc """
   Subscribe to computed board updates.

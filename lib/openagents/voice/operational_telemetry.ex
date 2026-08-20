@@ -21,7 +21,7 @@ defmodule OpenAgents.Voice.OperationalTelemetry do
       estimated_cost_microusd: safe_integer(session.usage["estimated_cost_microusd"])
     }
 
-    :telemetry.execute([:sarah, :voice, event], %{count: 1}, metadata)
+    :telemetry.execute([:openagents, :voice, event], %{count: 1}, metadata)
 
     log =
       metadata
@@ -49,7 +49,7 @@ defmodule OpenAgents.Voice.OperationalTelemetry do
          else: "other"
 
     metadata = %{reason: code}
-    :telemetry.execute([:sarah, :voice, :admission_refused], %{count: 1}, metadata)
+    :telemetry.execute([:openagents, :voice, :admission_refused], %{count: 1}, metadata)
 
     Logger.info(
       "voice_operation " <>

@@ -100,10 +100,11 @@ defmodule OpenAgents.Leaderboard.Server do
   end
 
   defp interval_ms,
-    do: Application.get_env(:sarah, :leaderboard_refresh_interval_ms, @default_interval_ms)
+    do: Application.get_env(:openagents, :leaderboard_refresh_interval_ms, @default_interval_ms)
 
   # Tests drive the board explicitly so a debounced recompute cannot outlive the
   # database sandbox that owns its rows. The end-to-end path stays covered by
   # turning this back on for the test that asserts it.
-  defp auto_refresh?, do: Application.get_env(:sarah, :leaderboard_auto_refresh_enabled, true)
+  defp auto_refresh?,
+    do: Application.get_env(:openagents, :leaderboard_auto_refresh_enabled, true)
 end

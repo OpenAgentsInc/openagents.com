@@ -1,0 +1,17 @@
+{
+  "schema": "sarah.recall.hybrid_comparison.v1",
+  "corpus_id": "sarah.recall.hybrid.synonym.v1",
+  "corpus_revision": 1,
+  "activation_default": "lexical",
+  "metrics": {
+    "lexical_synonym_recall": 0.0,
+    "hybrid_synonym_recall": 1.0,
+    "cross_scope_leakage": 0,
+    "fallback_lexical_parity": 1.0
+  },
+  "thresholds": {
+    "hybrid_synonym_recall_minimum": 1.0,
+    "cross_scope_leakage_maximum": 0,
+    "fallback_lexical_parity_minimum": 1.0
+  }
+}

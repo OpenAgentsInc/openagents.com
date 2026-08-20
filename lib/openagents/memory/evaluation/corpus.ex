@@ -16,7 +16,7 @@ defmodule OpenAgents.Memory.Evaluation.Corpus do
 
   @spec load() :: {:ok, map()} | {:error, term()}
   def load do
-    with path when is_list(path) <- :code.priv_dir(:sarah),
+    with path when is_list(path) <- :code.priv_dir(:openagents),
          {:ok, contents} <- File.read(Path.join(List.to_string(path), @path)),
          {:ok, corpus} <- Jason.decode(contents),
          :ok <- validate(corpus) do

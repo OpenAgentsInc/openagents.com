@@ -158,7 +158,7 @@ defmodule OpenAgents.ProgramArtifacts do
   end
 
   defp priv_dir! do
-    case :code.priv_dir(:sarah) do
+    case :code.priv_dir(:openagents) do
       path when is_list(path) -> List.to_string(path)
       {:error, reason} -> raise "Sarah priv directory unavailable: #{inspect(reason)}"
     end

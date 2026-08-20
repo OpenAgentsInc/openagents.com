@@ -1429,8 +1429,8 @@ defmodule OpenAgents.Voice do
   defp require_event_state(%Session{}, %ProviderEvent{}), do: :ok
 
   defp enforce_attempt_rate!(conversation_id) do
-    limit = Application.fetch_env!(:sarah, :voice_attempt_limit)
-    window_seconds = Application.fetch_env!(:sarah, :voice_attempt_window_seconds)
+    limit = Application.fetch_env!(:openagents, :voice_attempt_limit)
+    window_seconds = Application.fetch_env!(:openagents, :voice_attempt_window_seconds)
     cutoff = DateTime.add(DateTime.utc_now(), -window_seconds, :second)
 
     count =
@@ -1446,7 +1446,7 @@ defmodule OpenAgents.Voice do
   end
 
   defp enforce_concurrent_session_limit! do
-    limit = Application.fetch_env!(:sarah, :voice_maximum_concurrent_sessions)
+    limit = Application.fetch_env!(:openagents, :voice_maximum_concurrent_sessions)
 
     count =
       Repo.aggregate(

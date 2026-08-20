@@ -178,7 +178,7 @@ defmodule OpenAgents.Persona.Evaluation.Corpus do
     do: is_binary(value) and value != "" and byte_size(value) <= maximum
 
   defp corpus_path do
-    case :code.priv_dir(:sarah) do
+    case :code.priv_dir(:openagents) do
       path when is_list(path) -> {:ok, Path.join(List.to_string(path), @path)}
       {:error, reason} -> {:error, {:priv_dir_unavailable, reason}}
     end

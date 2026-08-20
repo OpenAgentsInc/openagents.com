@@ -7,6 +7,10 @@ defmodule OpenAgents.Application do
 
   @impl true
   def start(_type, _args) do
+    # Install immutable release artifacts before any traffic can reach them.
+    OpenAgents.Persona.install!(OpenAgents.Persona.SourceManifest.load!())
+    OpenAgents.ProgramArtifacts.install!()
+
     children = [
       OpenAgentsWeb.Telemetry,
       OpenAgents.Repo,

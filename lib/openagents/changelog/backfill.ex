@@ -18,7 +18,7 @@ defmodule OpenAgents.Changelog.Backfill do
 
   @doc "Boot entrypoint: seed if configured, never raise."
   def boot do
-    if Application.get_env(:sarah, :changelog_backfill_on_boot, false) do
+    if Application.get_env(:openagents, :changelog_backfill_on_boot, false) do
       run()
     end
 

@@ -64,7 +64,7 @@ defmodule OpenAgents.Voice.Recordings do
           retention_days: pos_integer()
         }
   def config do
-    settings = Application.fetch_env!(:sarah, :voice_recording)
+    settings = Application.fetch_env!(:openagents, :voice_recording)
     sealed? = RecordingVault.configured?()
 
     %{

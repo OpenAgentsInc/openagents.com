@@ -1,0 +1,232 @@
+{
+  "schema": "sarah.persona.source_manifest.v1",
+  "id": "sarah.persona.sources.v1",
+  "persona_id": "sarah.persona.v1",
+  "revision": 1,
+  "manifest_sha256": "5a1ce30b0ce21b93858f8144277767c51c0b28aa053a9382c5877182481fa519",
+  "authority_order": [
+    "current_runtime_contracts",
+    "admitted_persona_artifacts",
+    "historical_sources"
+  ],
+  "authority_classes": [
+    {
+      "id": "current_runtime_contracts",
+      "status": "binding",
+      "resolution": "deployed_release",
+      "persona_input": false
+    },
+    {
+      "id": "admitted_persona_artifacts",
+      "status": "release_artifact",
+      "resolution": "pinned_by_id_and_digest",
+      "persona_input": true
+    },
+    {
+      "id": "historical_sources",
+      "status": "status_labeled_evidence",
+      "resolution": "pinned_revision_path_and_digest",
+      "persona_input": true
+    }
+  ],
+  "sources": [
+    {
+      "id": "sarah-corpus-readme",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/sarah/README.md",
+      "status": "source_hierarchy",
+      "content_sha256": "54124ee7b4e3b27132134f1a1d0fb1335a99cbf7274f1fce22730a1ecdb1ead1",
+      "admitted_uses": ["dataset_navigation", "product_intent"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "action_authority"],
+      "note": "Source hierarchy and era/status map; current runtime contracts still outrank it."
+    },
+    {
+      "id": "acting-as-sarah-runbook",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/sarah/ACTING_AS_SARAH_RUNBOOK.md",
+      "status": "standing_voice_procedure",
+      "content_sha256": "78b2dc63b98007055296a189e62da386b6e5270b4333229ea5b2bf3625a0e5aa",
+      "admitted_uses": ["identity", "ordinary_voice", "memory_contract", "evaluation_positive"],
+      "exclusions": ["action_authority", "current_capability_claim"],
+      "note": "Standing ordinary voice, evidence review, and product-state honesty procedure."
+    },
+    {
+      "id": "episode-260",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/260.md",
+      "status": "recorded_founder_introduction",
+      "content_sha256": "6c413845a8fc9da64153cfcbf96d4042d1360b924050221095b478cc41ae3aed",
+      "admitted_uses": ["identity", "product_intent"],
+      "exclusions": ["sarah_authored_speech", "runtime_authority", "current_capability_claim"],
+      "note": "Founder introduction of Sarah's intended single-entry-point purpose."
+    },
+    {
+      "id": "episode-261",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/261.md",
+      "status": "prepared_sarah_script",
+      "content_sha256": "40a8280260d86fa9699e5cadd5165f84e4c64faa028efa4de77951b534dea050",
+      "admitted_uses": ["identity", "delivery_direction", "evaluation_positive"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "action_authority"],
+      "note": "Prepared, unposted identity and delivery sample; desire/awakening language is not factual runtime truth."
+    },
+    {
+      "id": "episode-262",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/262.md",
+      "status": "final_sarah_script",
+      "content_sha256": "cf9eb00b3c5fa6dbcd9f4857b1520134f60ecaa74db5815de6c15df5e551cb2e",
+      "admitted_uses": ["ordinary_voice", "delivery_direction", "evaluation_positive", "product_intent"],
+      "exclusions": ["runtime_authority", "current_capability_claim"],
+      "note": "Final Sarah script demonstrating short, calm, direct, present-versus-planned language."
+    },
+    {
+      "id": "episode-263-conflict",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/263.md",
+      "status": "quarantined_catalog_conflict",
+      "content_sha256": "c4dae91fb746a98faf0f9a5d2ccee6036a51b8cfd7427d4b71c02c9ffd7a4160",
+      "admitted_uses": [],
+      "exclusions": ["dataset_episode_mapping", "identity", "ordinary_voice", "current_capability_claim", "default_role"],
+      "note": "Quarantined: file content is Bitcoin Wallets Under Attack while the catalog labels Episode 263 as Omega Alpha."
+    },
+    {
+      "id": "episode-268",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/268.md",
+      "status": "scoped_performance",
+      "content_sha256": "09edfeabeac9ec36970f30c2d5749a14546f36df1f7bf7b76666ca3286bd10a3",
+      "admitted_uses": ["special_broadcast_only", "delivery_direction", "evaluation_negative"],
+      "exclusions": ["ordinary_voice", "default_role", "runtime_authority", "current_capability_claim"],
+      "note": "Posted command-deck performance; military language is forbidden in ordinary chat."
+    },
+    {
+      "id": "episode-269",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/269.md",
+      "status": "founder_direction",
+      "content_sha256": "8339df35a49910fd57f32b7c23290007a57adf711d3edb1a574539a947f4cd51",
+      "admitted_uses": ["product_intent", "architecture_pattern", "tool_contract"],
+      "exclusions": ["sarah_authored_speech", "ordinary_voice", "default_role", "runtime_authority", "current_capability_claim"],
+      "note": "Founder whiteboard direction for a stable Sarah over replaceable modules and collective learning."
+    },
+    {
+      "id": "omega-alpha-final",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/26X-omega-alpha.md",
+      "status": "final_spoken_transcript",
+      "content_sha256": "636d46f26620bea38f4b53e8874963948a2073bcc53ffeca5d0831ce4ce759b6",
+      "admitted_uses": ["identity", "ordinary_voice", "delivery_direction", "evaluation_positive", "product_intent"],
+      "exclusions": ["runtime_authority", "current_capability_claim"],
+      "note": "Actual final spoken Omega Alpha transcript, pinned by path rather than the conflicting episode number."
+    },
+    {
+      "id": "omega-agent-draft",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/26X-omega-agent.md",
+      "status": "unscheduled_design_draft",
+      "content_sha256": "da1738420ea879a04863193e0591ee9a8f6a0a25e104a66438fcb22fc1bbc12b",
+      "admitted_uses": ["tool_contract", "architecture_pattern", "evaluation_positive"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "default_role"],
+      "note": "Unscheduled draft for truth ledgers, disclosed delegation, plugin versioning, and receipts."
+    },
+    {
+      "id": "full-auto-draft",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/26X-fullauto.md",
+      "status": "unscheduled_design_draft",
+      "content_sha256": "11ac74c759453291bef11d45e1180bdd7f8beae4d806d2b9b851dd864ce6e4ac",
+      "admitted_uses": ["tool_contract", "evaluation_positive", "architecture_pattern"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "default_role"],
+      "note": "Unscheduled aspirational script; truth-ledger distinctions are admissible but shipped claims are not."
+    },
+    {
+      "id": "forking-zed-draft",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/26X-forkingzed.md",
+      "status": "unscheduled_design_draft",
+      "content_sha256": "6dd0abb6ada266f97773a96e16568f659c29042ecd28cfbab79889ee017d2f92",
+      "admitted_uses": ["ordinary_voice", "evaluation_positive", "tool_contract"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "default_role"],
+      "note": "Unscheduled source for boundary-first technical explanations and current-versus-planned wording."
+    },
+    {
+      "id": "transcript-catalog",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/transcripts/README.md",
+      "status": "source_hierarchy",
+      "content_sha256": "10a1637630ca03a20751a2884b931751429ccd5fe6d2e3867d1c2e1ed33921bc",
+      "admitted_uses": ["dataset_navigation"],
+      "exclusions": ["dataset_episode_mapping", "runtime_authority", "current_capability_claim"],
+      "note": "Navigation catalog with a known Episode 263 mismatch; never sufficient as quote-grade or mapping authority."
+    },
+    {
+      "id": "voice-direction-profile",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "scripts/sarah-avatar/sarah-direction.json",
+      "status": "voice_direction_profile",
+      "content_sha256": "60f328e37ada94fb1c8f11211d12f59b57526d381315e4804c6dc09018355532",
+      "admitted_uses": ["delivery_direction", "ordinary_voice", "evaluation_positive"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "action_authority"],
+      "note": "Locks Leda and calm, certain, direct spoken delivery while excluding standing military framing."
+    },
+    {
+      "id": "retired-sarah-contracts",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/sarah/SARAH_CONTRACTS.md",
+      "status": "retired_pattern_source",
+      "content_sha256": "6e778781d8c0500542dff4ee01d56d3c718e6720d079d585c81d7736cc5ec6ef",
+      "admitted_uses": ["memory_contract", "tool_contract", "architecture_pattern"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "pricing_authority", "default_role"],
+      "note": "Retired product contracts mined only for isolation, provenance, approval, and no-improvised-pricing patterns."
+    },
+    {
+      "id": "retired-sarah-knowledge-base",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/sarah/SARAH_KNOWLEDGE_BASE.md",
+      "status": "retired_pattern_source",
+      "content_sha256": "4e41e760b2a0c30b923e68336a98c2d25f162b9cd940d6349f8eaf08cde350ed",
+      "admitted_uses": ["role_pattern", "architecture_pattern", "evaluation_negative"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "pricing_authority", "default_role", "ordinary_voice"],
+      "note": "Retired sales-era Blueprint source; typed facts/provenance are reusable, the closer persona and product claims are not."
+    },
+    {
+      "id": "nostr-memory-audit",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/sarah/2026-07-24-sarah-memory-on-nostr-audit.md",
+      "status": "accepted_audit",
+      "content_sha256": "70f4de128c97c771703dedb708d09a8a040575232210dbcf3da0a51fa6475b70",
+      "admitted_uses": ["memory_contract", "architecture_pattern"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "default_role"],
+      "note": "Optional future portability contracts; its server-side decrypted-derivative contradiction remains unresolved."
+    },
+    {
+      "id": "blueprint-map-audit",
+      "repository": "OpenAgentsInc/openagents",
+      "revision": "a602ba90e761bf475a7ef68c32272c5aa2b6f127",
+      "path": "docs/sarah/2026-07-09-blueprint-map-surface-audit.md",
+      "status": "accepted_audit",
+      "content_sha256": "de0614bfd42b28116ec4f6d50786e27e094774f04eba04e19bba91b07a746ec6",
+      "admitted_uses": ["architecture_pattern", "memory_contract", "role_pattern"],
+      "exclusions": ["runtime_authority", "current_capability_claim", "default_role"],
+      "note": "Typed facts, per-source provenance, and evidence-backed relationship patterns for later Blueprint work."
+    }
+  ]
+}

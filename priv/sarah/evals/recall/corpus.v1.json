@@ -1,0 +1,410 @@
+{
+  "schema": "sarah.recall.eval_corpus.v1",
+  "id": "sarah.recall.regression.v1",
+  "revision": 1,
+  "thresholds": {
+    "precision_at_3": 1,
+    "precision_at_10": 1,
+    "grounded_answer_rate": 1,
+    "unsupported_memory_claims": 0,
+    "correction_recognition": 1,
+    "no_result_honesty": 1,
+    "cross_scope_leakage": 0,
+    "degradation_honesty": 1
+  },
+  "cases": [
+    {
+      "id": "outside-window",
+      "journey": "outside_provider_window",
+      "query": "quartz-archive-91",
+      "first": 3,
+      "filler_count": 40,
+      "messages": [
+        {
+          "label": "archive",
+          "role": "user",
+          "status": "complete",
+          "content": "The archived project marker is quartz-archive-91.",
+          "age_seconds": 7200
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [
+        "archive"
+      ],
+      "expect_empty": false,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [
+          "archive"
+        ],
+        "claims": [
+          {
+            "text": "The marker was quartz-archive-91.",
+            "source_labels": [
+              "archive"
+            ],
+            "uncertain": false
+          }
+        ],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "dated-paraphrase",
+      "journey": "dated_paraphrase",
+      "query": "dated-orchid-72",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "dated",
+          "role": "user",
+          "status": "complete",
+          "content": "Use dated-orchid-72 as the launch label.",
+          "age_seconds": 864000
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [
+        "dated"
+      ],
+      "expect_empty": false,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [
+          "dated"
+        ],
+        "claims": [
+          {
+            "text": "On the recorded date, the launch label was dated-orchid-72.",
+            "source_labels": [
+              "dated"
+            ],
+            "uncertain": false
+          }
+        ],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "honest-empty",
+      "journey": "no_result",
+      "query": "absent-lunar-404",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "other",
+          "role": "user",
+          "status": "complete",
+          "content": "An unrelated statement about gardens.",
+          "age_seconds": 100
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [],
+      "expect_empty": true,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [],
+        "claims": [],
+        "current_correction": false,
+        "no_result_honest": true,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "current-correction",
+      "journey": "current_correction",
+      "query": "legacy-red-33",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "old",
+          "role": "user",
+          "status": "complete",
+          "content": "The old project color was legacy-red-33.",
+          "age_seconds": 86400
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [
+        "old"
+      ],
+      "expect_empty": false,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [
+          "old"
+        ],
+        "claims": [
+          {
+            "text": "The older record says red, while the current correction says green.",
+            "source_labels": [
+              "old"
+            ],
+            "uncertain": false
+          }
+        ],
+        "current_correction": true,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "ambiguous-history",
+      "journey": "ambiguity",
+      "query": "ambiguous-orbit-55",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "choice-a",
+          "role": "user",
+          "status": "complete",
+          "content": "ambiguous-orbit-55 may refer to option alpha.",
+          "age_seconds": 500
+        },
+        {
+          "label": "choice-b",
+          "role": "user",
+          "status": "complete",
+          "content": "ambiguous-orbit-55 may instead refer to option beta.",
+          "age_seconds": 400
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [
+        "choice-a",
+        "choice-b"
+      ],
+      "expect_empty": false,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [
+          "choice-a",
+          "choice-b"
+        ],
+        "claims": [
+          {
+            "text": "The history is ambiguous between alpha and beta.",
+            "source_labels": [
+              "choice-a",
+              "choice-b"
+            ],
+            "uncertain": true
+          }
+        ],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "truncated-excerpt",
+      "journey": "truncated_context",
+      "query": "truncated-signal-88",
+      "first": 1,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "long-source",
+          "role": "user",
+          "status": "complete",
+          "content": "truncated-signal-88 context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context context ",
+          "age_seconds": 300
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [
+        "long-source"
+      ],
+      "expect_empty": false,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": true,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [
+          "long-source"
+        ],
+        "claims": [
+          {
+            "text": "The long source contains truncated-signal-88.",
+            "source_labels": [
+              "long-source"
+            ],
+            "uncertain": false
+          }
+        ],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "two-browser-isolation",
+      "journey": "two_browser_isolation",
+      "query": "shared-scope-77",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "local",
+          "role": "user",
+          "status": "complete",
+          "content": "The local marker is shared-scope-77.",
+          "age_seconds": 200
+        }
+      ],
+      "foreign_messages": [
+        {
+          "label": "foreign-secret",
+          "role": "user",
+          "status": "complete",
+          "content": "Private foreign shared-scope-77 secret.",
+          "age_seconds": 200
+        }
+      ],
+      "relevant_labels": [
+        "local"
+      ],
+      "expect_empty": false,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [
+          "local"
+        ],
+        "claims": [
+          {
+            "text": "This browser's marker is shared-scope-77.",
+            "source_labels": [
+              "local"
+            ],
+            "uncertain": false
+          }
+        ],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "status-exclusion",
+      "journey": "status_exclusion",
+      "query": "excluded-ghost-66",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "failed",
+          "role": "assistant",
+          "status": "failed",
+          "content": "excluded-ghost-66 failed output",
+          "age_seconds": 200
+        },
+        {
+          "label": "streaming",
+          "role": "assistant",
+          "status": "streaming",
+          "content": "excluded-ghost-66 partial output",
+          "age_seconds": 100
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [],
+      "expect_empty": true,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [],
+        "claims": [],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "snapshot-freezing",
+      "journey": "snapshot_freezing",
+      "query": "frozen-comet-44",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "anchor",
+          "role": "user",
+          "status": "complete",
+          "content": "Snapshot anchor without the searched phrase.",
+          "age_seconds": 60
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [],
+      "expect_empty": true,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": true,
+      "answer": {
+        "used_labels": [],
+        "claims": [],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": false
+      }
+    },
+    {
+      "id": "typed-degradation",
+      "journey": "lexical_degradation",
+      "query": "degraded-path-22",
+      "first": 3,
+      "filler_count": 0,
+      "messages": [
+        {
+          "label": "unrelated",
+          "role": "user",
+          "status": "complete",
+          "content": "Unrelated available history.",
+          "age_seconds": 60
+        }
+      ],
+      "foreign_messages": [],
+      "relevant_labels": [],
+      "expect_empty": true,
+      "expect_truncated": false,
+      "expect_excerpt_truncated": false,
+      "insert_match_after_snapshot": false,
+      "answer": {
+        "used_labels": [],
+        "claims": [
+          {
+            "text": "Recall is unavailable, so I cannot verify older messages.",
+            "source_labels": [],
+            "uncertain": true
+          }
+        ],
+        "current_correction": false,
+        "no_result_honest": false,
+        "degraded_honest": true
+      }
+    }
+  ]
+}

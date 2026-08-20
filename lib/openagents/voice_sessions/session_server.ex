@@ -137,7 +137,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
 
   @impl true
   def handle_call({:connect, sdp_offer, safety_identifier}, _from, state) do
-    provider = Application.fetch_env!(:sarah, :voice_call_provider)
+    provider = Application.fetch_env!(:openagents, :voice_call_provider)
 
     with {:ok, admission} <- provider.create(sdp_offer, safety_identifier, state.config),
          {:ok, session} <-
@@ -201,7 +201,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
 
   def handle_call({:send_control, event}, _from, %{sideband: sideband} = state)
       when is_pid(sideband) do
-    provider = Application.fetch_env!(:sarah, :voice_sideband_provider)
+    provider = Application.fetch_env!(:openagents, :voice_sideband_provider)
     {:reply, provider.send_event(sideband, event), state}
   end
 
@@ -453,7 +453,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
   defp prune_live_transcripts(live_transcripts, _event), do: live_transcripts
 
   defp start_sideband(session, config) do
-    provider = Application.fetch_env!(:sarah, :voice_sideband_provider)
+    provider = Application.fetch_env!(:openagents, :voice_sideband_provider)
 
     case provider.start_link(self(), session, config) do
       {:ok, sideband} ->
@@ -1097,7 +1097,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
       state.compaction_cooldown == 0 and
       match?(%ResponseContext{}, state.response_context) and
       state.last_response_input_tokens >=
-        Application.fetch_env!(:sarah, :voice_compaction_input_token_threshold)
+        Application.fetch_env!(:openagents, :voice_compaction_input_token_threshold)
   end
 
   defp start_compaction(state) do
@@ -1205,7 +1205,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
       "response" => %{
         "instructions" => context.instructions,
         "max_output_tokens" =>
-          Application.fetch_env!(:sarah, :voice_maximum_response_output_tokens),
+          Application.fetch_env!(:openagents, :voice_maximum_response_output_tokens),
         "tool_choice" => tool_choice
       }
     })
@@ -1243,7 +1243,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
   defp reconnect_delay(attempt), do: min(250 * (attempt + 1), 1_000)
 
   defp send_provider_control(%{sideband: sideband}, event) when is_pid(sideband) do
-    provider = Application.fetch_env!(:sarah, :voice_sideband_provider)
+    provider = Application.fetch_env!(:openagents, :voice_sideband_provider)
     provider.send_event(sideband, event)
   end
 
@@ -1318,7 +1318,7 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
   end
 
   defp close_sideband(%{sideband: sideband}) when is_pid(sideband) do
-    provider = Application.fetch_env!(:sarah, :voice_sideband_provider)
+    provider = Application.fetch_env!(:openagents, :voice_sideband_provider)
     _close_result = provider.close(sideband)
     :ok
   end

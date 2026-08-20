@@ -163,7 +163,7 @@ defmodule OpenAgents.Persona.SourceManifest do
   def source(_manifest, _source_id), do: {:error, :not_found}
 
   defp manifest_path do
-    case :code.priv_dir(:sarah) do
+    case :code.priv_dir(:openagents) do
       path when is_list(path) -> {:ok, Path.join(List.to_string(path), @manifest_path)}
       {:error, reason} -> {:error, {:priv_dir_unavailable, reason}}
     end

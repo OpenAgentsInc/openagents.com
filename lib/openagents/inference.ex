@@ -158,7 +158,7 @@ defmodule OpenAgents.Inference do
   @doc "The proxy endpoint URL a probe delegation should target."
   @spec proxy_url() :: String.t()
   def proxy_url do
-    Application.get_env(:sarah, :inference_proxy_url) || default_proxy_url()
+    Application.get_env(:openagents, :inference_proxy_url) || default_proxy_url()
   end
 
   # ── budget ──────────────────────────────────────────────────────────────
@@ -249,23 +249,23 @@ defmodule OpenAgents.Inference do
 
   defp now, do: DateTime.utc_now()
 
-  defp model_id, do: Application.fetch_env!(:sarah, :openai_model)
+  defp model_id, do: Application.fetch_env!(:openagents, :openai_model)
 
   defp max_total_tokens,
-    do: Application.get_env(:sarah, :inference_grant_max_total_tokens, 2_000_000)
+    do: Application.get_env(:openagents, :inference_grant_max_total_tokens, 2_000_000)
 
-  defp max_calls, do: Application.get_env(:sarah, :inference_grant_max_calls, 64)
+  defp max_calls, do: Application.get_env(:openagents, :inference_grant_max_calls, 64)
 
   defp max_cost_microusd,
-    do: Application.get_env(:sarah, :inference_grant_max_cost_microusd, 5_000_000)
+    do: Application.get_env(:openagents, :inference_grant_max_cost_microusd, 5_000_000)
 
-  defp grant_ttl_seconds, do: Application.get_env(:sarah, :inference_grant_ttl_seconds, 900)
+  defp grant_ttl_seconds, do: Application.get_env(:openagents, :inference_grant_ttl_seconds, 900)
 
   defp input_price_microusd,
-    do: Application.get_env(:sarah, :inference_input_price_microusd_per_ktoken, 1_250)
+    do: Application.get_env(:openagents, :inference_input_price_microusd_per_ktoken, 1_250)
 
   defp output_price_microusd,
-    do: Application.get_env(:sarah, :inference_output_price_microusd_per_ktoken, 10_000)
+    do: Application.get_env(:openagents, :inference_output_price_microusd_per_ktoken, 10_000)
 
   defp default_proxy_url do
     endpoint = OpenAgentsWeb.Endpoint.url()

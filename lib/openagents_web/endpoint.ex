@@ -8,8 +8,13 @@ defmodule OpenAgentsWeb.Endpoint do
     store: :cookie,
     key: "_openagents_key",
     signing_salt: "fq1woUNS",
-    same_site: "Lax"
+    same_site: "Lax",
+    secure: Application.compile_env(:openagents, :secure_cookies, false),
+    max_age: 60 * 60 * 24 * 365
   ]
+
+  @doc false
+  def session_options, do: @session_options
 
   socket "/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [session: @session_options]],

@@ -35,4 +35,49 @@ defmodule OpenAgentsWeb.ConnCase do
     OpenAgents.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  def github_user(key) when is_binary(key) do
+    digest = :crypto.hash(:sha256, key)
+    github_id = digest |> binary_part(0, 7) |> :binary.decode_unsigned()
+    login_suffix = digest |> Base.encode16(case: :lower) |> binary_part(0, 12)
+
+    {:ok, user} =
+      OpenAgents.Accounts.upsert_github_user(%{
+        github_id: github_id,
+        github_login: "test-#{login_suffix}",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/#{github_id}?v=4"
+      })
+
+    user
+  end
+
+  def log_in_github_user(conn, key) when is_binary(key) do
+    user = github_user(key)
+    Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+  end
+
+  @doc """
+  Logs in an account and grants it operator access for the duration of the test.
+  """
+  def log_in_admin_user(conn, key) when is_binary(key) do
+    user = github_user(key)
+    grant_operator(user)
+    Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+  end
+
+  def grant_operator(%OpenAgents.Accounts.User{github_id: github_id}) do
+    original = Application.get_env(:openagents, :admin_github_ids, [])
+    Application.put_env(:openagents, :admin_github_ids, [github_id | original])
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.put_env(:openagents, :admin_github_ids, original)
+    end)
+
+    :ok
+  end
+
+  def revoke_operator do
+    Application.put_env(:openagents, :admin_github_ids, [])
+    :ok
+  end
 end

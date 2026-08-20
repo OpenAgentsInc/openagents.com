@@ -101,22 +101,37 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
-  database_url =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      environment variable DATABASE_URL is missing.
-      For example: ecto://USER:PASS@HOST/DATABASE
-      """
-
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
+  pool_size = String.to_integer(System.get_env("POOL_SIZE") || "10")
 
-  config :openagents, OpenAgents.Repo,
-    # ssl: true,
-    url: database_url,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-    # For machines with several cores, consider starting multiple pools of `pool_size`
-    # pool_count: 4,
-    socket_options: maybe_ipv6
+  repo_config =
+    case System.get_env("DATABASE_URL") do
+      nil ->
+        # Cloud Run + Cloud SQL socket configuration used by staging.
+        user = System.get_env("DB_USER") || raise("environment variable DB_USER is missing")
+        password = System.get_env("DB_PASSWORD") || raise("environment variable DB_PASSWORD is missing")
+        database = System.get_env("DB_NAME") || raise("environment variable DB_NAME is missing")
+        socket_dir = System.get_env("INSTANCE_UNIX_SOCKET") || raise("environment variable INSTANCE_UNIX_SOCKET is missing")
+
+        [
+          username: user,
+          password: password,
+          database: database,
+          socket_dir: socket_dir,
+          pool_size: pool_size,
+          socket_options: maybe_ipv6
+        ]
+
+      database_url ->
+        [
+          # ssl: true,
+          url: database_url,
+          pool_size: pool_size,
+          socket_options: maybe_ipv6
+        ]
+    end
+
+  config :openagents, OpenAgents.Repo, repo_config
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

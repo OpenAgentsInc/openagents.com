@@ -6,6 +6,7 @@ source "${repo_root}/ops/scv/images/versions.env"
 
 project=${SCV_GCP_PROJECT:?Set SCV_GCP_PROJECT to the staging Google Cloud project}
 region=${SCV_GCP_REGION:-us-central1}
+build_service_account=${SCV_BUILD_SERVICE_ACCOUNT:-oa-cloud-image-builder@${project}.iam.gserviceaccount.com}
 git_sha=${SCV_BUILD_REVISION:-$(git -C "${repo_root}" rev-parse HEAD)}
 source_date_epoch=$(git -C "${repo_root}" show -s --format=%ct "${git_sha}")
 image=${SCV_IMAGE:-${region}-docker.pkg.dev/${project}/openagents-scv-staging/opencode-core:${git_sha}}
@@ -36,4 +37,5 @@ gcloud builds submit "${repo_root}" \
   --config="${repo_root}/ops/scv/images/cloudbuild-opencode-core.yaml" \
   --project="${project}" \
   --region="${region}" \
+  --service-account="projects/${project}/serviceAccounts/${build_service_account}" \
   --substitutions="${substitution_csv}"

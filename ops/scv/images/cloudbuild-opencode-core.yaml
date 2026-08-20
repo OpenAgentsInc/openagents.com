@@ -38,5 +38,6 @@ steps:
 images:
   - ${_IMAGE}
 options:
+  logging: CLOUD_LOGGING_ONLY
   machineType: E2_HIGHCPU_8
 timeout: 1800s

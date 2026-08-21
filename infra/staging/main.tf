@@ -755,7 +755,7 @@ resource "google_compute_instance" "deployer" {
       project_id             = var.staging_project_id
       region                 = var.region
       rolling_instances_json = jsonencode({ for instance, ip in local.nodes : "openagents@${ip}" => instance })
-      zone                    = var.zone
+      zone                   = var.zone
     })
   }
 

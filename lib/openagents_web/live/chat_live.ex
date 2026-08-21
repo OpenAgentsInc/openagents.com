@@ -70,7 +70,7 @@ defmodule OpenAgentsWeb.ChatLive do
       |> assign(:paced_voice_items, MapSet.new())
       |> assign(:delegation, nil)
       |> assign(:delegation_summaries, [])
-      |> assign(:delegation_collapsed, false)
+      |> assign(:rail_collapsed, false)
       |> stream(:messages, messages)
 
     {:ok, socket}
@@ -144,9 +144,10 @@ defmodule OpenAgentsWeb.ChatLive do
   # Collapse state is a server assign, not a client attribute toggle: the rail
   # re-renders on every streamed chunk, so a DOM-only `data-collapsed` snapped
   # back open on the next patch. Holding it here keeps the rail collapsed until
-  # the reader expands it again.
-  def handle_event("toggle_delegation_rail", _params, socket) do
-    {:noreply, assign(socket, :delegation_collapsed, !socket.assigns.delegation_collapsed)}
+  # the reader expands it again. It is deliberately not persisted: the rail is
+  # a view of what is happening now, so every visit starts open.
+  def handle_event("toggle_rail", _params, socket) do
+    {:noreply, assign(socket, :rail_collapsed, !socket.assigns.rail_collapsed)}
   end
 
   @impl true
@@ -811,14 +812,18 @@ defmodule OpenAgentsWeb.ChatLive do
           </footer>
         </main>
 
-        <%!-- Desktop only (≥1280px): the slim live delegation rail, the shell's
-              third grid column. Ephemeral chrome — rendered only while a
-              delegation is in flight or recently finished, never permanent. --%>
-        <.delegation_rail
-          :if={@delegation != nil or @delegation_summaries != []}
+        <%!-- Desktop only (≥1280px): the work rail, the shell's second column.
+              The chat column keeps one job — transcript above, composer pinned
+              under it — and everything about running work moves out here, where
+              a streamed log has the width to be read. Below the breakpoint the
+              rail is gone and the same two projections render in the navigation
+              sidebar and at the transcript tail. --%>
+        <.chat_rail
+          :if={@recent_jobs != [] or @delegation != nil or @delegation_summaries != []}
+          recent_jobs={@recent_jobs}
           delegation={@delegation}
           summaries={@delegation_summaries}
-          collapsed={@delegation_collapsed}
+          collapsed={@rail_collapsed}
         />
       </div>
 
@@ -1173,17 +1178,17 @@ defmodule OpenAgentsWeb.ChatLive do
             a stretched anchor to it; a row with no target is stated, not
             linked. Empty sections keep their labels and say so honestly. --%>
     <div id="sidebar-sections" class="sidebar-sections">
-      <section :if={@recent_jobs != []} id="sidebar-work" class="sidebar-section" aria-label="Work">
+      <%!-- The narrow-viewport placement of the work projection. Above 1280px
+      the work rail beside the transcript states it instead, so the stylesheet
+      hides this one; one projection, two placements, exactly one shown. --%>
+      <section
+        :if={@recent_jobs != []}
+        id="sidebar-work"
+        class="sidebar-section chat-sidebar-work"
+        aria-label="Work"
+      >
         <h2 class="sidebar-section-label scroll-edge-hairline">WORK</h2>
-        <.sidebar_status_row
-          :for={job <- @recent_jobs}
-          id={"sidebar-job-#{job.id}"}
-          target_message_id={job.report_message_id}
-          dot_state={job_dot_state(job)}
-          title={job_title(job)}
-          meta={job_meta(job)}
-          data-status={job.status}
-        />
+        <.work_rows id_prefix="sidebar-job" recent_jobs={@recent_jobs} />
       </section>
     </div>
 
@@ -1213,6 +1218,26 @@ defmodule OpenAgentsWeb.ChatLive do
         </span>
       </.form>
     </nav>
+    """
+  end
+
+  attr :id_prefix, :string, required: true
+  attr :recent_jobs, :list, required: true
+
+  # The work projection's rows, shared by its two placements. Only the DOM id
+  # prefix differs, because both placements are in the document at once and the
+  # stylesheet — not the server — decides which one the viewport shows.
+  defp work_rows(assigns) do
+    ~H"""
+    <.sidebar_status_row
+      :for={job <- @recent_jobs}
+      id={"#{@id_prefix}-#{job.id}"}
+      target_message_id={job.report_message_id}
+      dot_state={job_dot_state(job)}
+      title={job_title(job)}
+      meta={job_meta(job)}
+      data-status={job.status}
+    />
     """
   end
 
@@ -1320,108 +1345,126 @@ defmodule OpenAgentsWeb.ChatLive do
 
   defp duration_label(seconds), do: "#{div(seconds, 3600)}h #{seconds |> rem(3600) |> div(60)}m"
 
+  attr :recent_jobs, :list, required: true
   attr :delegation, :map, default: nil
   attr :summaries, :list, required: true
   attr :collapsed, :boolean, default: false
 
-  # The live delegation rail (issue #85): a slim ephemeral right rail shown
-  # only while a computer delegation is in flight or recently finished. It is
-  # a projection of the PubSub stream, never chrome and never authority — the
-  # transcript's durable event header remains the record. One live panel at a
-  # time; superseded and finished delegations collapse to summary lines. The
-  # rolling log is owned by the .DelegationLog hook (phx-update="ignore"), so
-  # chunk text never rides an assign.
-  defp delegation_rail(assigns) do
+  # The work rail: the chat surface's right-hand column on wide screens, and
+  # the only place running work is stated there. It carries two projections —
+  # the bounded work list, and the live delegation (issue #85) — and neither is
+  # chrome or authority: the transcript's durable event headers remain the
+  # record. The rail scrolls on its own so the transcript never moves for it,
+  # and the rolling log is owned by the .DelegationLog hook
+  # (phx-update="ignore"), so chunk text never rides an assign.
+  defp chat_rail(assigns) do
     ~H"""
     <aside
-      id="delegation-rail"
-      class="delegation-rail"
+      id="chat-rail"
+      class="chat-rail"
       data-collapsed={to_string(@collapsed)}
-      aria-label="Live delegation"
+      aria-label="Work"
     >
-      <header class="delegation-rail__header">
-        <h2 class="delegation-rail__label">LIVE DELEGATION</h2>
+      <header class="chat-rail__header">
+        <h2 class="chat-rail__label">WORK</h2>
         <.button
-          id="delegation-rail-toggle"
+          id="chat-rail-toggle"
           variant={:ghost}
           size={:sm}
-          class="delegation-rail__toggle"
-          aria-label="Toggle delegation panel"
+          class="chat-rail__toggle"
+          aria-label="Toggle work panel"
           aria-expanded={to_string(!@collapsed)}
-          aria-controls="delegation-rail"
-          phx-click="toggle_delegation_rail"
+          aria-controls="chat-rail-body"
+          phx-click="toggle_rail"
         >
-          <.icon name="sidebar-collapse-right" class="delegation-rail__glyph-collapse" />
-          <.icon name="sidebar-open-right" class="delegation-rail__glyph-expand" />
+          <.icon name="sidebar-collapse-right" class="chat-rail__glyph-collapse" />
+          <.icon name="sidebar-open-right" class="chat-rail__glyph-expand" />
         </.button>
       </header>
 
-      <div class="delegation-rail__body">
-        <div
-          :if={@delegation && @delegation.state == :running}
-          id="delegation-live"
-          class="delegation-live"
-          data-status="running"
+      <div id="chat-rail-body" class="chat-rail__body">
+        <%!-- The wide-viewport placement of the work projection; the navigation
+              sidebar states it below the breakpoint. --%>
+        <%!-- No accessible name of its own: the rail's own heading already
+              names it, and a second "Work" landmark inside a "Work" one only
+              adds a level for a screen reader to walk through. --%>
+        <section :if={@recent_jobs != []} id="rail-work" class="rail-section">
+          <.work_rows id_prefix="rail-job" recent_jobs={@recent_jobs} />
+        </section>
+
+        <section
+          :if={@delegation != nil or @summaries != []}
+          id="delegation-rail"
+          class="rail-section delegation-rail"
+          aria-label="Live delegation"
         >
-          <div class="delegation-live__header">
-            <.status_indicator state="running" label="RUNNING" />
-            <span class="delegation-live__machine">{@delegation.machine_name}</span>
-            <span class="delegation-live__subject">{delegation_subject(@delegation)}</span>
-            <time
-              id={"delegation-elapsed-#{@delegation.ref}"}
-              class="delegation-live__elapsed"
-              datetime={DateTime.to_iso8601(@delegation.started_at)}
-              data-started-at={DateTime.to_iso8601(@delegation.started_at)}
-              phx-hook=".DelegationClock"
+          <h3 class="rail-section__label">LIVE DELEGATION</h3>
+          <div
+            :if={@delegation && @delegation.state == :running}
+            id="delegation-live"
+            class="delegation-live"
+            data-status="running"
+          >
+            <div class="delegation-live__header">
+              <.status_indicator state="running" label="RUNNING" />
+              <span class="delegation-live__machine">{@delegation.machine_name}</span>
+              <span class="delegation-live__subject">{delegation_subject(@delegation)}</span>
+              <time
+                id={"delegation-elapsed-#{@delegation.ref}"}
+                class="delegation-live__elapsed"
+                datetime={DateTime.to_iso8601(@delegation.started_at)}
+                data-started-at={DateTime.to_iso8601(@delegation.started_at)}
+                phx-hook=".DelegationClock"
+                phx-update="ignore"
+              ></time>
+              <.button
+                id="cancel-delegation"
+                variant={:ghost}
+                size={:xs}
+                class="delegation-live__cancel"
+                aria-label="Cancel delegation"
+                phx-click="cancel_delegation"
+              >
+                <.icon name="stop" />
+              </.button>
+            </div>
+            <div
+              id={"delegation-log-rail-#{@delegation.ref}"}
+              class="delegation-log"
+              data-ref={@delegation.ref}
+              phx-hook=".DelegationLog"
               phx-update="ignore"
-            ></time>
+            >
+            </div>
+            <.badge :if={@delegation.truncated?} variant={:dim} class="delegation-truncated">
+              TRUNCATED
+            </.badge>
+          </div>
+
+          <.delegation_summary_row
+            :if={@delegation && @delegation.state == :terminal}
+            id="delegation-terminal"
+            delegation={@delegation}
+          >
             <.button
-              id="cancel-delegation"
+              id="delegation-dismiss"
               variant={:ghost}
               size={:xs}
-              class="delegation-live__cancel"
-              aria-label="Cancel delegation"
-              phx-click="cancel_delegation"
+              class="delegation-summary__dismiss"
+              aria-label="Dismiss"
+              phx-click="dismiss_delegation"
             >
-              <.icon name="stop" />
+              <.icon name="x" />
             </.button>
-          </div>
-          <div
-            id={"delegation-log-rail-#{@delegation.ref}"}
-            class="delegation-log"
-            data-ref={@delegation.ref}
-            phx-hook=".DelegationLog"
-            phx-update="ignore"
-          >
-          </div>
-          <.badge :if={@delegation.truncated?} variant={:dim} class="delegation-truncated">
-            TRUNCATED
-          </.badge>
-        </div>
+          </.delegation_summary_row>
 
-        <.delegation_summary_row
-          :if={@delegation && @delegation.state == :terminal}
-          id="delegation-terminal"
-          delegation={@delegation}
-        >
-          <.button
-            id="delegation-dismiss"
-            variant={:ghost}
-            size={:xs}
-            class="delegation-summary__dismiss"
-            aria-label="Dismiss"
-            phx-click="dismiss_delegation"
-          >
-            <.icon name="x" />
-          </.button>
-        </.delegation_summary_row>
-
-        <.delegation_summary_row
-          :for={summary <- @summaries}
-          id={"delegation-summary-#{summary.ref}"}
-          delegation={summary}
-          class="delegation-summary--superseded"
-        />
+          <.delegation_summary_row
+            :for={summary <- @summaries}
+            id={"delegation-summary-#{summary.ref}"}
+            delegation={summary}
+            class="delegation-summary--superseded"
+          />
+        </section>
       </div>
     </aside>
     """

@@ -9,10 +9,11 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
   # 65,536-byte cumulative cap.
   @maximum_event_bytes 16_384
 
-  test "no delegation means no rail and no inline panel", %{conn: conn} do
+  test "no work and no delegation means no rail at all", %{conn: conn} do
     conn = log_in_github_user(conn, "delegation-idle-browser")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
+    refute has_element?(view, "#chat-rail")
     refute has_element?(view, "#delegation-rail")
     refute has_element?(view, "#delegation-inline")
   end
@@ -31,7 +32,9 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     # arrives, the start event has necessarily been applied too.
     assert_push_event(view, "delegation:chunk", %{text: "hello from the machine"}, 1_000)
 
-    # Desktop rail: header facts, running state, the hook-owned log and clock.
+    # Desktop rail: the delegation is a section of the work rail beside the
+    # transcript, never a block under the composer.
+    assert has_element?(view, "#chat-rail #chat-rail-body #delegation-rail")
     assert has_element?(view, "#delegation-rail #delegation-live[data-status='running']")
     assert has_element?(view, "#delegation-live .delegation-live__machine", "rail-box")
     assert has_element?(view, "#delegation-live .delegation-live__subject", "claude")
@@ -41,17 +44,17 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
 
     assert has_element?(
              view,
-             ~s(#delegation-rail-toggle[aria-label="Toggle delegation panel"])
+             ~s(#chat-rail-toggle[aria-label="Toggle work panel"][aria-controls="chat-rail-body"])
            )
 
     # Collapse is a server assign so it survives the rail re-rendering on every
     # streamed chunk: the toggle flips it and it stays flipped.
-    assert has_element?(view, ~s(#delegation-rail[data-collapsed="false"]))
-    view |> element("#delegation-rail-toggle") |> render_click()
-    assert has_element?(view, ~s(#delegation-rail[data-collapsed="true"]))
-    assert has_element?(view, ~s(#delegation-rail-toggle[aria-expanded="false"]))
-    view |> element("#delegation-rail-toggle") |> render_click()
-    assert has_element?(view, ~s(#delegation-rail[data-collapsed="false"]))
+    assert has_element?(view, ~s(#chat-rail[data-collapsed="false"]))
+    view |> element("#chat-rail-toggle") |> render_click()
+    assert has_element?(view, ~s(#chat-rail[data-collapsed="true"]))
+    assert has_element?(view, ~s(#chat-rail-toggle[aria-expanded="false"]))
+    view |> element("#chat-rail-toggle") |> render_click()
+    assert has_element?(view, ~s(#chat-rail[data-collapsed="false"]))
 
     # Narrow-viewport variant: the same projection as an expandable
     # event-header section at the transcript tail, live log inside.
@@ -78,10 +81,12 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     assert has_element?(view, ~s(#delegation-dismiss[aria-label="Dismiss"]))
 
     # Dismissing clears the whole ephemeral projection; the durable event
-    # header in the transcript remains the record.
+    # header in the transcript remains the record. With no work either, the
+    # rail has nothing left to state and goes with it.
     view |> element("#delegation-dismiss") |> render_click()
     refute has_element?(view, "#delegation-rail")
     refute has_element?(view, "#delegation-inline")
+    refute has_element?(view, "#chat-rail")
   end
 
   test "the capped stream renders an explicit truncation marker", %{conn: conn} do

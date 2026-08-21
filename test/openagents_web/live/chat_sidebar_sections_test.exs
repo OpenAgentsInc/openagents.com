@@ -49,6 +49,35 @@ defmodule OpenAgentsWeb.ChatSidebarSectionsTest do
            )
   end
 
+  test "work has two placements: the navigation sidebar and the wide-screen rail",
+       %{conn: conn} do
+    user = github_user("sidebar-sections-rail-browser")
+    conn = log_in_github_user(conn, "sidebar-sections-rail-browser")
+
+    {:ok, conversation} = Conversations.ensure_conversation(user)
+    owner = Conversations.get_conversation_owner!(conversation)
+
+    {:ok, job} =
+      Work.create_job(%{
+        conversation_id: conversation.id,
+        owner_visitor_id: owner.id,
+        surface: "text",
+        goal: "Rebuild the staging index"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    # Both placements are in the document and the stylesheet shows exactly one:
+    # the sidebar section below 1280px, the rail above it.
+    assert has_element?(view, "#sidebar-work.chat-sidebar-work #sidebar-job-#{job.id}")
+    assert has_element?(view, "#chat-rail #chat-rail-body #rail-work #rail-job-#{job.id}")
+
+    # The rail is the conversation column's sibling, not something stacked
+    # under the composer, so the transcript keeps the height it is given.
+    assert has_element?(view, ".chat-shell > .app-main")
+    assert has_element?(view, ".chat-shell > #chat-rail")
+  end
+
   test "job lifecycle broadcasts refresh the work section without polling", %{conn: conn} do
     user = github_user("sidebar-sections-job-broadcast-browser")
     conn = log_in_github_user(conn, "sidebar-sections-job-broadcast-browser")

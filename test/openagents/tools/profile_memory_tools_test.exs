@@ -61,6 +61,63 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
     end
   end
 
+  test "record forget accepts an explicit qualified subject without widening authority", %{
+    snapshot: snapshot
+  } do
+    assert {:ok, %{kind: "current_message"}} =
+             Consent.forget(
+               "Forget my permanent staging qualification shape and remove that lasting profile preference.",
+               "record",
+               "The user's permanent staging qualification shape is square"
+             )
+
+    assert {:error, :memory_consent_mismatch} =
+             Consent.forget(
+               "Forget my permanent staging qualification shape and remove that lasting profile preference.",
+               "record",
+               "The user's permanent deployment preference is canary"
+             )
+
+    assert {:error, :memory_consent_mismatch} =
+             Consent.forget(
+               "Forget my name and remove that memory.",
+               "record",
+               "My name is Chris"
+             )
+
+    scope = browser("memory-qualified-forget")
+
+    record =
+      remember(
+        snapshot,
+        scope,
+        "preference",
+        "The user's permanent staging qualification shape is square"
+      )
+
+    message =
+      user_message(
+        scope.conversation,
+        "Forget my permanent staging qualification shape and remove that lasting profile preference."
+      )
+
+    assert {:ok, outcome} =
+             Runner.run(
+               snapshot,
+               call("memory_forget", %{
+                 "mode" => "record",
+                 "record_id" => record.id,
+                 "category" => "",
+                 "claim" => record.claim,
+                 "expected_generation" => record.generation
+               }),
+               context(scope, message)
+             )
+
+    assert outcome["result"]["receipt"]["disposition"] == "forgotten"
+    assert {:ok, []} = ProfileMemory.list_current(scope.owner)
+  end
+
   test "secret-bearing explicit consent is still refused without echo or storage", %{
     snapshot: snapshot
   } do

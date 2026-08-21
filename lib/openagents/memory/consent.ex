@@ -3,6 +3,8 @@ defmodule OpenAgents.Memory.Consent do
 
   @remember ~r/\A\s*(?:please\s+)?(?:remember|store|save)\s+(?:that\s+)?(.+?)\s*[.!]?\s*\z/iu
   @forget ~r/\A\s*(?:please\s+)?forget\s+(?:that\s+)?(.+?)\s*[.!]?\s*\z/iu
+  @forget_action_suffix ~r/\s+and\s+(?:remove|delete|erase|clear|forget)\s+(?:that|this|the)\s+(?:(?:lasting|stored)\s+)?(?:profile\s+)?(?:preference|memory|record)\z/u
+  @subject_stop_words MapSet.new(~w(a an is my s the this user users your))
 
   def remember(message, claim, context_consent \\ nil) do
     with {:ok, submitted} <- bounded(claim),
@@ -85,7 +87,38 @@ defmodule OpenAgents.Memory.Consent do
   defp forget_all?(normalized), do: Regex.match?(@forget_all, normalized)
 
   defp forget_matches?("all", _target, "all"), do: true
+  defp forget_matches?("record", target, claim), do: record_matches?(target, claim)
   defp forget_matches?(_mode, target, claim), do: equivalent?(target, claim)
+
+  defp record_matches?(target, claim) do
+    equivalent?(target, claim) or qualified_subject_matches?(target, claim)
+  end
+
+  # A record selector already carries one owner-scoped ID and its exact
+  # generation. Let an explicit forget request identify that record by a
+  # qualified subject without requiring the user to repeat its stored value.
+  # Three significant words prevent short or ambiguous requests from widening
+  # deletion authority.
+  defp qualified_subject_matches?(target, claim) do
+    requested =
+      claim
+      |> normalize()
+      |> then(&Regex.replace(@forget_action_suffix, &1, ""))
+      |> significant_words()
+
+    stored = significant_words(target)
+
+    MapSet.size(requested) >= 3 and MapSet.subset?(requested, stored)
+  end
+
+  defp significant_words(value) do
+    value
+    |> normalize()
+    |> then(&Regex.scan(~r/[\p{L}\p{N}]+/u, &1))
+    |> List.flatten()
+    |> MapSet.new()
+    |> MapSet.difference(@subject_stop_words)
+  end
 
   defp equivalent?(left, right), do: normalize(left) == normalize(right)
 

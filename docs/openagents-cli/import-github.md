@@ -66,6 +66,45 @@ The CLI waits up to 300 seconds by default. Pass `--wait-timeout 0` to return
 after the server accepts the durable import. A client timeout does not cancel
 the server-side import.
 
+## Verify the first production import
+
+Use a small private GitHub repository for the first production import. Include
+a second branch and an annotated tag so you can verify the accepted ref
+snapshot. If the repository uses Git LFS, expect OpenAgents to preserve the
+pointer files without copying the LFS objects.
+
+1. Install the qualified CLI version:
+
+   ```sh
+   npm install --global @openagentsinc/cli@0.1.0
+   ```
+
+2. Sign in to production and confirm the selected account:
+
+   ```sh
+   openagents --profile production auth login
+   openagents --profile production auth status
+   ```
+
+3. Start one private import and wait for the durable result:
+
+   ```sh
+   openagents --profile production repo import OWNER/REPOSITORY --private --wait-timeout 300
+   ```
+
+4. Confirm that the repository is ready, then clone it:
+
+   ```sh
+   openagents --profile production repo view OWNER/REPOSITORY
+   openagents --profile production repo clone OWNER/REPOSITORY
+   ```
+
+5. Compare the cloned branches and tags with the accepted GitHub snapshot.
+   Confirm that a later GitHub commit does not appear in the OpenAgents copy.
+
+The release process does not create a production repository automatically.
+An authenticated operator starts the first production import explicitly.
+
 ## What the import copies
 
 | Copied | Not copied |
@@ -103,4 +142,3 @@ git push
 
 - [Clone, push, and pull](git.md)
 - [CLI command reference](command-reference.md)
-

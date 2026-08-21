@@ -1,10 +1,7 @@
 # Install the OpenAgents CLI
 
 The npm package is `@openagentsinc/cli`, and it installs the `openagents`
-command. The package requires Node.js 24 or later.
-
-The production npm release remains gated. The install command below applies
-after the package is published.
+command. The package requires Node.js 24.15 or later.
 
 ## Install with npm
 
@@ -150,4 +147,3 @@ hosts and never places a token in a Git URL or process argument.
 - [Create a repository](create-repository.md)
 - [Clone, push, and pull](git.md)
 - [CLI command reference](command-reference.md)
-

@@ -4,8 +4,8 @@ The OpenAgents CLI (`openagents`) manages OpenAgents-hosted Git repositories
 from a terminal. It uses the same repository API as the OpenAgents web
 interface and leaves Git data transfer to standard Git.
 
-The CLI is implemented and locally verified. The production release remains
-gated while OpenAgents completes staging qualification.
+The CLI is available from npm. OpenAgents qualified repository imports on
+staging before deploying the same server revision to the production fleet.
 
 ## What you can do
 
@@ -71,4 +71,3 @@ access.
 - [Import a GitHub repository](import-github.md)
 - [Clone, push, and pull](git.md)
 - [CLI command reference](command-reference.md)
-

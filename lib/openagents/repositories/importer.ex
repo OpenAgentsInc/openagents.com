@@ -5,7 +5,7 @@ defmodule OpenAgents.Repositories.Importer do
 
   alias OpenAgents.{Accounts, Audit, GitHubOAuth, Repo}
   alias OpenAgents.Forge.{Repos, Sync, WAL}
-  alias OpenAgents.Repositories.{Repository, RepositoryImport}
+  alias OpenAgents.Repositories.{GitFailure, Repository, RepositoryImport}
 
   @maximum_append_attempts 3
   @default_import_timeout_ms 6 * 60 * 60 * 1_000
@@ -220,8 +220,13 @@ defmodule OpenAgents.Repositories.Importer do
       ]
 
       case git_runner.(source_repository, args, env: environment) do
-        {_output, 0} -> :ok
-        {_output, _status} -> {:error, :source_fetch_failed}
+        {_output, 0} ->
+          :ok
+
+        {output, status} ->
+          reason = GitFailure.classify(output, :source_fetch_failed)
+          log_git_failure("fetch_source", status, reason)
+          {:error, reason}
       end
     end
   end
@@ -319,8 +324,10 @@ defmodule OpenAgents.Repositories.Importer do
             {:error, :bundle_unavailable}
         end
 
-      {_output, _status} ->
-        {:error, :bundle_creation_failed}
+      {output, status} ->
+        reason = GitFailure.classify(output, :bundle_creation_failed)
+        log_git_failure("create_payload", status, reason)
+        {:error, reason}
     end
   end
 
@@ -532,6 +539,8 @@ defmodule OpenAgents.Repositories.Importer do
   defp error_code(:github_token_missing), do: "github_connection_required"
   defp error_code(:import_timeout), do: "import_timeout"
   defp error_code(:import_too_large), do: "import_too_large"
+  defp error_code(:insufficient_storage), do: "insufficient_storage"
+  defp error_code(:temporary_storage_unavailable), do: "temporary_storage_unavailable"
   defp error_code(_reason), do: "import_failed"
 
   defp import_stage(repository, repository_import, stage, operation) do
@@ -582,6 +591,15 @@ defmodule OpenAgents.Repositories.Importer do
     do: " error_code=#{reason |> Atom.to_string() |> String.slice(0, 80)}"
 
   defp diagnostic_error(_reason), do: " error_code=unexpected_error"
+
+  defp log_git_failure(command, status, reason) do
+    Logger.warning(
+      "repository_import_git_failure" <>
+        " command=#{command}" <>
+        " exit_status=#{status}" <>
+        " error_code=#{reason}"
+    )
+  end
 
   defp put_payload(storage_key, seq, {:file, path}),
     do: WAL.put_entry_file(storage_key, seq, path)

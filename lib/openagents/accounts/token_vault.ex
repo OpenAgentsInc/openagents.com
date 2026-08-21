@@ -4,7 +4,7 @@ defmodule OpenAgents.Accounts.TokenVault do
   @version 2
   @legacy_version 1
   @aad_prefix "openagents.github_access_token.v2:"
-  @legacy_aad "openagents.github_access_token.v1"
+  @legacy_aads ["sarah.github_access_token.v1", "openagents.github_access_token.v1"]
   @nonce_bytes 12
   @tag_bytes 16
   @maximum_token_bytes 512
@@ -59,10 +59,12 @@ defmodule OpenAgents.Accounts.TokenVault do
 
       keys ->
         case Enum.find_value(keys, fn key ->
-               case decrypt(key, nonce, ciphertext, @legacy_aad, tag) do
-                 {:ok, token} -> {:ok, token}
-                 {:error, :token_unsealable} -> nil
-               end
+               Enum.find_value(@legacy_aads, fn aad ->
+                 case decrypt(key, nonce, ciphertext, aad, tag) do
+                   {:ok, token} -> {:ok, token}
+                   {:error, :token_unsealable} -> nil
+                 end
+               end)
              end) do
           {:ok, token} -> {:ok, token}
           nil -> {:error, :token_unsealable}

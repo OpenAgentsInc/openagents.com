@@ -69,4 +69,25 @@ defmodule OpenAgents.Accounts.TokenVaultTest do
     assert {:ok, new_envelope} = TokenVault.seal("gho_new")
     assert {:ok, "staging-current"} = TokenVault.key_id(new_envelope)
   end
+
+  test "opens retained Sarah version 1 tokens" do
+    encoded_key = Application.fetch_env!(:openagents, :github_token_encryption_key)
+    {:ok, key} = Base.decode64(encoded_key)
+    token = "gho_retained_legacy_token"
+    nonce = :crypto.strong_rand_bytes(12)
+
+    {ciphertext, tag} =
+      :crypto.crypto_one_time_aead(
+        :aes_256_gcm,
+        key,
+        nonce,
+        token,
+        "sarah.github_access_token.v1",
+        true
+      )
+
+    envelope = <<1, nonce::binary, tag::binary, ciphertext::binary>>
+
+    assert {:ok, ^token} = TokenVault.open(envelope)
+  end
 end

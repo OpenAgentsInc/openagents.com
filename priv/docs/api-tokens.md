@@ -8,6 +8,10 @@ device authorization and stores it in the operating-system credential store.
 See [Install the CLI](/docs/install-cli) when you do not need to create a token
 manually.
 
+`OPENAGENTS_TOKEN` must contain an OpenAgents user token that starts with
+`oa_pat_`. `OPENAGENTS_AGENT_TOKEN` is for an internal agent runtime and does
+not authenticate repository API or Git operations.
+
 ## Creating a token
 
 Create a token and copy it immediately. Only a hash is stored, so the value

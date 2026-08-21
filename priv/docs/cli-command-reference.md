@@ -36,6 +36,8 @@ Setting `NO_COLOR` also disables ANSI output.
 | Command | Description |
 | --- | --- |
 | `openagents auth login` | Start browser-assisted device authorization and store the token. |
+| `openagents auth login --headless` | Return an authorization URL, user code, and resume command without waiting. |
+| `openagents auth login --resume` | Complete the pending device authorization after approval. |
 | `openagents auth login --token-stdin` | Read and store a token from standard input. |
 | `openagents auth token-stdin` | Read and store a token from standard input. |
 | `openagents auth status` | Show the selected API, account, namespaces, expiry, and helper state. |
@@ -119,13 +121,22 @@ With `--json`, stdout contains machine-readable output. Human progress and
 errors do not contaminate a successful JSON response. Responses never include
 an API token or token digest.
 
-In a noninteractive process:
+In a noninteractive process, `auth login` returns the authorization URL, user
+code, and resume command immediately. Surface the URL and code to the user.
+After approval, run `auth login --resume`. Use `--headless` to select the same
+behavior in a terminal.
 
-- Set `OPENAGENTS_TOKEN` or provide an existing credential-store entry.
-- Pass every ambiguous value as an argument or flag.
-- Do not use browser login or global Git-helper setup.
-- Handle `SIGINT` and `SIGTERM` as exit code `130`. The CLI cancels in-flight
-  HTTP work and terminates its child Git process.
+```sh
+openagents --json auth login
+openagents --json auth login --resume
+```
+
+You can also set `OPENAGENTS_TOKEN` to an `oa_pat_` user token or provide an
+existing credential-store entry. Repository endpoints do not accept
+`OPENAGENTS_AGENT_TOKEN`. Pass every ambiguous value as an argument or flag.
+Do not use global Git-helper setup in a noninteractive process. Handle
+`SIGINT` and `SIGTERM` as exit code `130`; the CLI cancels in-flight HTTP work
+and terminates its child Git process.
 
 ## Handle exit codes
 

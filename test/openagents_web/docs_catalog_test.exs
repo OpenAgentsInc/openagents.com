@@ -70,10 +70,13 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     end
   end
 
-  test "published CLI docs cover npm, npx, imports, and persistent Git authentication" do
+  test "published CLI docs cover agent login, npm, npx, imports, and persistent Git authentication" do
     assert {:ok, install} = DocsCatalog.render("install-cli")
     assert install.markdown =~ "npm install --global @openagentsinc/cli"
     assert install.markdown =~ "npx --yes @openagentsinc/cli@latest"
+    assert install.markdown =~ "openagents auth login --resume"
+    assert install.markdown =~ "returns immediately"
+    assert install.markdown =~ "`OPENAGENTS_AGENT_TOKEN` is an internal agent-runtime credential"
     assert install.markdown =~ "Do not run `auth setup-git` through `npx`"
 
     assert {:ok, import} = DocsCatalog.render("import-github")

@@ -35,7 +35,7 @@ npx --yes @openagentsinc/cli@latest repo list
 Pin a version for a reproducible run:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.3 --version
+npx --yes @openagentsinc/cli@0.1.4 --version
 ```
 
 Place all CLI arguments after the package name:
@@ -67,15 +67,37 @@ Start the browser-assisted device authorization flow:
 openagents auth login
 ```
 
-The CLI prints a verification URL and user code, opens the URL when your
-operating system supports it, and waits for approval. Complete the flow with
-the GitHub account connected to OpenAgents.
+In an interactive terminal, the CLI prints a verification URL and user code,
+opens the URL when your operating system supports it, and waits for approval.
+Complete the flow with the GitHub account connected to OpenAgents. If the
+browser does not open, use the printed URL.
 
-In a headless or noninteractive agent process, the command prints the complete
-authorization URL and user code to standard error and waits. Have the agent
-surface both values to you. Open the URL in any browser, review the request,
-and approve it. The waiting command then stores the OpenAgents token and
-continues; the agent never receives your GitHub token.
+In a headless or noninteractive agent process, the command returns immediately
+with the complete authorization URL, user code, and resume command. This
+behavior works with shell tools that do not stream command output. Have the
+agent surface the URL and code to you. After you approve the request in any
+browser, have the agent run:
+
+```sh
+openagents auth login --resume
+```
+
+Use `--headless` to force the resumable flow in an interactive terminal. Use
+`openagents --json auth login` and `openagents --json auth login --resume`
+when an agent needs structured output. The agent never receives your GitHub
+token or the issued OpenAgents token.
+
+The two-step flow also works without a global installation:
+
+```sh
+npx --yes @openagentsinc/cli@latest --json auth login
+# After approval:
+npx --yes @openagentsinc/cli@latest --json auth login --resume
+```
+
+The CLI stores the pending request in a private mode-`0600` local file. It
+removes the request after successful authorization or when it detects that the
+request expired.
 
 The CLI stores the resulting `oa_pat_` token for the selected API origin:
 
@@ -113,6 +135,10 @@ For an agent or CI process, set the token in the environment for the process:
 ```sh
 OPENAGENTS_TOKEN="oa_pat_..." openagents --json repo list
 ```
+
+`OPENAGENTS_TOKEN` must contain an OpenAgents user token that starts with
+`oa_pat_`. `OPENAGENTS_AGENT_TOKEN` is an internal agent-runtime credential.
+Repository endpoints do not accept it.
 
 Do not put a token in a Git URL, configuration file, shell history, or process
 argument.

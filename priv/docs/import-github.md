@@ -78,7 +78,7 @@ npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
 Pin the package version for a reproducible qualification run:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.3 \
+npx --yes @openagentsinc/cli@0.1.4 \
   --profile staging \
   repo import OWNER/REPOSITORY \
   --private \
@@ -88,6 +88,17 @@ npx --yes @openagentsinc/cli@0.1.3 \
 You can use `npx` for the import and the CLI-managed clone. Install the CLI
 globally before you run `auth setup-git`, because a persistent Git helper
 cannot call the temporary executable after `npx` exits.
+
+In a headless agent process, start the resumable login before the import:
+
+```sh
+npx --yes @openagentsinc/cli@latest --json auth login
+# The agent shows you the URL and code. After you approve the request:
+npx --yes @openagentsinc/cli@latest --json auth login --resume
+```
+
+The first command returns immediately, so the agent does not need streaming
+shell output.
 
 ## Import a large repository
 

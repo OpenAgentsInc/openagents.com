@@ -75,18 +75,24 @@ npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
 Pin the package version for a reproducible qualification run:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.3 \
+npx --yes @openagentsinc/cli@0.1.4 \
   --profile staging \
   repo import OWNER/REPOSITORY \
   --private \
   --wait-timeout 300
 ```
 
-In a headless agent process, `auth login` prints the complete approval URL and
-user code, then waits. The agent can surface both values while you approve the
-request in any browser. Install the CLI globally before you run
-`auth setup-git`; a saved Git helper cannot call the temporary executable after
-`npx` exits.
+In a headless agent process, start the resumable login before the import:
+
+```sh
+npx --yes @openagentsinc/cli@latest --json auth login
+# The agent shows you the URL and code. After you approve the request:
+npx --yes @openagentsinc/cli@latest --json auth login --resume
+```
+
+The first command returns immediately, so the agent does not need streaming
+shell output. Install the CLI globally before you run `auth setup-git`; a saved
+Git helper cannot call the temporary executable after `npx` exits.
 
 ## Import a large repository
 
@@ -125,7 +131,7 @@ pointer files without copying the LFS objects.
 1. Install the qualified CLI version:
 
    ```sh
-   npm install --global @openagentsinc/cli@0.1.0
+   npm install --global @openagentsinc/cli@0.1.4
    ```
 
 2. Sign in to production and confirm the selected account:

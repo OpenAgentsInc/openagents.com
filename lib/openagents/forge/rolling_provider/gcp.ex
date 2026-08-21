@@ -16,6 +16,21 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
   alias OpenAgents.Forge.RollingProvider.Gcp.Compute
 
   @impl true
+  def members do
+    with {:ok, config} <- config() do
+      configured = config |> Keyword.fetch!(:instances) |> Map.keys() |> MapSet.new()
+
+      config
+      |> Keyword.get(:node_list, &connected_nodes/0)
+      |> then(& &1.())
+      |> Enum.filter(&MapSet.member?(configured, to_string(&1)))
+      |> Enum.sort()
+    else
+      {:error, _reason} -> []
+    end
+  end
+
+  @impl true
   def remove_readiness(node, _context) do
     with {:ok, config} <- config(),
          :ok <- rpc(config, node, Admission, :remove, []) do
@@ -121,9 +136,22 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
   defp probe(config, node, expected_fleet_size) do
     case rpc(config, node, RollingNodeProbe, :status, [expected_fleet_size]) do
       %{member: true} = result -> {:ok, result}
+      {:error, :noconnection} -> {:ok, unavailable_probe()}
       {:error, reason} -> {:error, reason}
       other -> {:error, {:invalid_node_probe, other}}
     end
+  end
+
+  defp unavailable_probe do
+    %{
+      member: false,
+      ready: false,
+      boot_converged: false,
+      database_ready: false,
+      sha: nil,
+      image_digest: nil,
+      ra_quorum: false
+    }
   end
 
   defp rpc(config, node, module, function, arguments, call_timeout \\ nil) do
@@ -135,6 +163,8 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
     end
   catch
     :exit, reason -> {:error, {:rpc_exit, reason}}
+    :error, {:erpc, :noconnection} -> {:error, :noconnection}
+    :error, reason -> {:error, {:rpc_error, reason}}
   end
 
   defp instance(config, node) do
@@ -145,6 +175,7 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
   end
 
   defp driver(config), do: Keyword.get(config, :driver, Compute)
+  defp connected_nodes, do: Enum.uniq(Node.list() ++ Node.list(:hidden))
   defp timeout(config), do: Keyword.get(config, :rpc_timeout_ms, 5_000)
   defp compute_timeout(config), do: Keyword.get(config, :compute_timeout_ms, 300_000)
 

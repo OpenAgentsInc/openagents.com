@@ -137,6 +137,12 @@ not deployment identity. Pass only the digest to the replacement provider.
 infrastructure. Keep machine inventory, credentials, addresses, and provider
 resource names outside the repository.
 
+The provider reports its exact connected infrastructure inventory through
+`members/0`. A hidden controller must not include itself or a temporary RPC
+client in that inventory. The GCP provider intersects connected Erlang nodes
+with its configured three-node instance map, so every membership check uses
+the same bounded fleet identity.
+
 For each node, the coordinator performs this sequence:
 
 1. Verify the exact-SHA release receipt and exact initial member set.
@@ -148,6 +154,11 @@ For each node, the coordinator performs this sequence:
 6. Wait for exact BEAM membership, readiness, boot convergence, database
    access, source SHA, and image digest.
 7. Recheck exact fleet membership before selecting another node.
+
+An Erlang distribution disconnect is an expected transient state while a VM
+reboots. The GCP provider reports that node as unavailable so the coordinator
+continues its bounded readiness polling. Other RPC errors fail the rollout
+closed.
 
 If a node does not rejoin, the coordinator asks the provider to restore the
 last-known-good SHA and digest, waits for that node's full health, records the

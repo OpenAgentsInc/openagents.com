@@ -105,6 +105,34 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
     assert {:ok, %{ready: 2, quorum: false}} = Gcp.capacity(tl(@nodes), context())
   end
 
+  test "reports a rebooting node as unavailable when Erlang distribution disconnects" do
+    rpc = fn _node, RollingNodeProbe, :status, [_expected], _timeout ->
+      :erlang.error({:erpc, :noconnection})
+    end
+
+    put_config(rpc)
+
+    assert {:ok,
+            %{
+              member: false,
+              ready: false,
+              boot_converged: false,
+              database_ready: false,
+              sha: nil,
+              image_digest: nil
+            }} = Gcp.status(hd(@nodes), context())
+  end
+
+  test "reports only connected nodes in the configured fleet inventory" do
+    rpc = fn _node, _module, _function, _arguments, _timeout -> :ok end
+
+    put_config(rpc,
+      node_list: fn -> [hd(@nodes), :unknown@fleet, Enum.at(@nodes, 2)] end
+    )
+
+    assert Gcp.members() == [hd(@nodes), Enum.at(@nodes, 2)]
+  end
+
   defp context do
     %{
       sha: @sha,

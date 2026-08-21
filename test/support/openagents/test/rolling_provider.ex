@@ -12,6 +12,9 @@ defmodule OpenAgents.Test.RollingProvider do
   def events, do: Agent.get(__MODULE__, &Enum.reverse(&1.events))
 
   @impl true
+  def members, do: Agent.get(__MODULE__, & &1.members)
+
+  @impl true
   def remove_readiness(node, _context) do
     event({:remove_readiness, node})
     :ok

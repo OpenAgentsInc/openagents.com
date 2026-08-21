@@ -21,7 +21,7 @@ defmodule OpenAgents.Forge.RollingReplacement do
     with :ok <- validate_request(request),
          {:ok, _receipt} <- gate_verify(request.sha, opts),
          {:ok, provider} <- provider(opts),
-         :ok <- initial_membership(request, opts) do
+         :ok <- initial_membership(request, provider, opts) do
       replace_nodes(request.expected_nodes, request, provider, opts, %{})
     end
   end
@@ -83,7 +83,7 @@ defmodule OpenAgents.Forge.RollingReplacement do
   defp replace_drained_node(node, request, provider, context, opts) do
     with :ok <- provider.replace(node, request.image_digest, context),
          :ok <- wait_for_target(provider, node, request, context, opts),
-         :ok <- exact_membership(request, opts) do
+         :ok <- exact_membership(request, provider, opts) do
       {:ok, "ready"}
     else
       {:error, reason} ->
@@ -234,16 +234,17 @@ defmodule OpenAgents.Forge.RollingReplacement do
     end
   end
 
-  defp initial_membership(request, opts), do: exact_membership(request, opts)
+  defp initial_membership(request, provider, opts),
+    do: exact_membership(request, provider, opts)
 
-  defp exact_membership(request, opts) do
-    if members(opts) == request.expected_nodes,
+  defp exact_membership(request, provider, opts) do
+    if members(provider, opts) == request.expected_nodes,
       do: :ok,
       else: {:error, :fleet_membership_mismatch}
   end
 
-  defp members(opts) do
-    Keyword.get(opts, :members, &OpenAgents.Cluster.members/0).()
+  defp members(provider, opts) do
+    Keyword.get(opts, :members, &provider.members/0).()
     |> Enum.sort()
   end
 

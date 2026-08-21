@@ -16,6 +16,7 @@ defmodule OpenAgents.Forge.RollingProvider do
         }
 
   @callback remove_readiness(node(), context()) :: :ok | {:error, term()}
+  @callback members() :: [node()]
   @callback restore_readiness(node(), context()) :: :ok | {:error, term()}
   @callback drain(node(), context()) :: {:ok, non_neg_integer()} | {:error, term()}
   @callback capacity([node()], context()) ::

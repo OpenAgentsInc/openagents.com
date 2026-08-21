@@ -26,6 +26,18 @@ defmodule OpenAgents.Forge.RollingReplacementTest do
            ]
   end
 
+  test "uses the provider's exact infrastructure inventory by default" do
+    start_provider(nil)
+
+    assert {:ok, %{status: "live"}} =
+             RollingReplacement.run(request(),
+               provider: RollingProvider,
+               gate_verifier: fn @sha -> {:ok, %{}} end,
+               wait_attempts: 1,
+               wait_interval_ms: 0
+             )
+  end
+
   test "restores the prior image and aborts before another replacement when rejoin fails" do
     start_provider(:second@local)
 
@@ -88,6 +100,7 @@ defmodule OpenAgents.Forge.RollingReplacementTest do
          capacity: capacity,
          events: [],
          fail_node: fail_node,
+         members: @nodes,
          previous_sha: @previous_sha,
          rolled_back: MapSet.new(),
          digests: Map.new(@nodes, &{&1, @previous})

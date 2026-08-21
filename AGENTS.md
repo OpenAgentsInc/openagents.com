@@ -26,8 +26,15 @@ mirror; pushing to it directly leaves the forge behind a mirror it does not
 know about, and nothing reports the divergence until a clone disagrees with
 the site. Automatic mirroring to GitHub is not configured today, so GitHub
 stays at whatever was last pushed to it. `ops/ci/push-remote-check.sh` refuses
-a non-forge push, and `.githooks/pre-push` runs it. See `INVARIANTS.md`,
-REPOSITORY-002.
+a non-forge push. Install it once per clone, on every machine:
+
+```sh
+sh ops/dev/install-push-guard.sh
+```
+
+One install covers every worktree of that clone. Where `core.hooksPath` points
+at `.githooks`, its `pre-push` runs the same guard ahead of the release gate.
+See `INVARIANTS.md`, REPOSITORY-002.
 
 ## Project guidelines
 

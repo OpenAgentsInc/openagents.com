@@ -122,6 +122,11 @@ run "isolated_topology" {
     condition     = google_secret_manager_secret_iam_member.deployer_cookie.role == "roles/secretmanager.secretAccessor"
     error_message = "The deployer identity may read only the cluster cookie secret."
   }
+
+  assert {
+    condition     = google_service_account_iam_member.deployer_fleet_act_as.role == "roles/iam.serviceAccountUser"
+    error_message = "The deployer may act as only the exact staging fleet service account required by Compute metadata updates."
+  }
 }
 
 run "rejects_production_project" {

@@ -282,6 +282,16 @@ resource "google_project_iam_member" "deployer" {
   member  = google_service_account.deployer.member
 }
 
+# Compute requires actAs on an instance's attached service account when the
+# deployer replaces metadata. Scope that permission to the staging fleet
+# identity; the deployer has no instance-creation or service-account mutation
+# permission.
+resource "google_service_account_iam_member" "deployer_fleet_act_as" {
+  service_account_id = google_service_account.fleet.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = google_service_account.deployer.member
+}
+
 resource "google_project_iam_member" "deployer_runtime" {
   for_each = toset([
     "roles/artifactregistry.reader",

@@ -16,6 +16,7 @@ ARG TAILWIND_VERSION=4.3.0
 ARG TAILWIND_SHA256=73f0e5459054e5cfaa8ab6f3b940f3fbe0f13cc7fd83bc24e7c655033c203400
 ARG ESBUILD_VERSION=0.25.4
 ARG ESBUILD_SHA256=93433b456cac3a454ee27403d3de9adce88d83e5439ba37e1471af54730c9ca7
+ARG NODE_VERSION=24.15.0
 ARG CODEX_VERSION=0.147.0
 
 ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}@sha256:ae38be7cb19bffa78adedb04732d9e6ba83a507b4cfb06983cbe711edb49da54"
@@ -33,6 +34,8 @@ ARG TAILWIND_VERSION
 ARG TAILWIND_SHA256
 ARG ESBUILD_VERSION
 ARG ESBUILD_SHA256
+ARG NODE_VERSION
+ARG TARGETARCH
 ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
@@ -45,8 +48,23 @@ RUN sed -i \
       /etc/apt/sources.list.d/debian.sources \
   && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
   && apt-get update \
-  && apt-get install -y --no-install-recommends build-essential git \
+  && apt-get install -y --no-install-recommends build-essential ca-certificates curl git xz-utils \
   && rm -rf /var/lib/apt/lists/*
+
+# Install a checksum-pinned Node.js toolchain for JavaScript asset dependencies.
+RUN set -eu; \
+  case "${TARGETARCH:-amd64}" in \
+    amd64) node_arch=x64; checksum=472655581fb851559730c48763e0c9d3bc25975c59d518003fc0849d3e4ba0f6 ;; \
+    arm64) node_arch=arm64; checksum=f3d5a797b5d210ce8e2cb265544c8e482eaedcb8aa409a8b46da7e8595d0dda0 ;; \
+    *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+  esac; \
+  archive="node-v${NODE_VERSION}-linux-${node_arch}.tar.xz"; \
+  curl -fsSL --retry 3 -o "/tmp/${archive}" "https://nodejs.org/dist/v${NODE_VERSION}/${archive}"; \
+  echo "${checksum}  /tmp/${archive}" | sha256sum --check --strict; \
+  tar -xJf "/tmp/${archive}" -C /usr/local --strip-components=1; \
+  rm "/tmp/${archive}"; \
+  node --version; \
+  npm --version
 
 # prepare build dir
 WORKDIR /app
@@ -71,6 +89,11 @@ RUN mkdir config
 # to be re-compiled.
 COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
+
+# Install JavaScript dependencies before copying the rest of the asset tree so
+# dependency downloads remain cached when application assets change.
+COPY assets/package.json assets/package-lock.json ./assets/
+RUN npm ci --prefix assets --ignore-scripts --no-audit --no-fund
 
 # Install Tailwind and esbuild so assets can be built
 RUN mix assets.setup \

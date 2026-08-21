@@ -81,7 +81,7 @@ Out of scope for this effort:
 
 - Session replay and self-driving (explicitly skipped).
 - Error tracking. Note that the Elixir package enables exception capture by default; step 2 disables it so scope stays controlled. Revisit later as its own decision.
-- Feature flags, surveys, revenue analytics, warehouse sources. Feature flags are the most likely follow-up; the SDK support comes free once step 2 is done.
+- Feature flags, surveys, revenue analytics, warehouse sources. Feature flags are the most likely follow-up; the SDK support comes free once step 2 is done, and flag creation, evaluation testing, and rollout are all manageable through the PostHog MCP (`create-feature-flag` and related tools) when that decision lands.
 - Installing the PostHog MCP server into coding agents. Useful later, unrelated to instrumentation.
 
 ### Prerequisites
@@ -268,29 +268,49 @@ Deliberate omissions:
 - API read endpoints (`GET`) stay uninstrumented except where they represent product activation. Volume without signal costs money per event.
 - Never capture message bodies, objective text, token material, ciphertexts, or raw query strings. The `$current_url` property contains query parameters; rely on the wrapper's redaction and keep sensitive routes out of custom properties.
 
-### Step 8: Build the starter dashboards
+### Step 8: Build the starter dashboards through the PostHog MCP
 
-Create these in the PostHog app after the first events land:
+Build every dashboard from your coding agent through the PostHog MCP server instead of clicking in the web app. Dashboard, insight, and annotation objects are all writable through MCP tools, so this step becomes a scripted session you can rerun and review like code.
 
-1. **Web overview**: visitors, pageviews, sessions, bounce rate, top pages, referrers, UTMs, devices.
-2. **Activation funnel**: `$pageview` → `auth_started` → `user_signed_up` → `chat_message_sent`.
-3. **Engagement**: weekly active chatters, median `chat_turn_completed` duration, delegated-work completion rate.
-4. **Product adoption**: issues and projects created per week, pushes received.
-5. **Volume sanity**: total events per day by name, to catch runaway capture early.
+Connect the MCP server first if your client does not already have it. The wizard's `mcp add` command edits AI-client configuration only and works regardless of project language, so it is safe to use here even though the wizard's integration flow itself does not support Phoenix:
+
+```console
+npx @posthog/wizard mcp add
+```
+
+Then drive the whole step through MCP tools:
+
+1. **Create the containers.** Call `dashboard-create` once per dashboard below, or browse `dashboard-templates-list` and create from a template with `use_template` when one matches. Add section headers with `dashboard-create-text-tile`.
+2. **Test each chart before saving it.** Run the underlying query with the read-only query tools: `query-trends`, `query-funnel`, `query-stickiness`, `query-web-overview`, and `query-web-stats`. Confirm the series names and volumes look right while the data is still cheap to inspect.
+3. **Save passing queries as insights.** Call `insight-create` with the tested query and pass the dashboard IDs in its `dashboards` field. Re-run later with `dashboard-insights-run` to confirm rendering.
+4. **Mark the rollout.** Call `annotation-create` with the integration date so later trend breaks are attributable to the instrumentation itself.
+
+The five dashboards, mapped to their queries:
+
+| Dashboard | Tiles | Query source |
+| --- | --- | --- |
+| Web overview | visitors, pageviews, sessions, bounce rate, top pages, referrers, UTMs, devices | `query-web-overview` plus `query-web-stats` breakdowns |
+| Activation funnel | `$pageview` → `auth_started` → `user_signed_up` → `chat_message_sent` | `query-funnel` |
+| Engagement | weekly active chatters, `chat_turn_completed` duration, delegated-work completion rate | `query-stickiness` on `chat_message_sent`, `query-trends` with a median aggregate, `query-funnel` |
+| Product adoption | issues and projects created per week, pushes received | `query-trends` broken down by event name |
+| Volume sanity | total events per day by name | `query-trends`, total count, breakdown by event |
+
+Keep the dashboard definitions in the agent session transcript or commit them as a script; because creation goes through MCP calls, recreating the set in staging or after a project reset is mechanical.
 
 ### Step 9: Verify
 
-Work through this checklist in staging:
+Work through this checklist in staging. Browser-side checks stay manual; every server-side or ingestion check runs through the PostHog MCP against the events table, which beats tailing the web UI:
 
-1. Cold load of `/` produces a `$pageview`; navigating to `/docs` through a LiveView link produces a second one with the correct `$current_url`.
-2. Autocapture shows click events in the live events tail.
-3. Complete a GitHub OAuth login: `auth_started`, `user_signed_up` (or `user_signed_in`), and the identify merge are visible; the person shows both the anonymous pre-login events and the identified ones.
+1. Cold load of `/` produces a `$pageview`; navigating to `/docs` through a LiveView link produces a second one with the correct `$current_url`. Confirm in the browser and then with an `execute-sql` query filtering `event = '$pageview'` ordered by timestamp.
+2. Autocapture lands click events. Query the last hour of events where `event LIKE '$autocapture%'`.
+3. Complete a GitHub OAuth login: `auth_started`, `user_signed_up` (or `user_signed_in`) arrive, and the identified person shows both the anonymous pre-login events and the identified ones. Check person merging with a persons query on the distinct ID.
 4. Send a chat message: `chat_message_sent` on the client and `chat_turn_completed` on the server attach to the same person.
 5. Create an issue through the web UI and through the JSON API: both produce `issue_created` with a `surface` property distinguishing them.
-6. Search captured event properties for token-shaped strings and message content; find nothing.
+6. Search captured event properties for token-shaped strings and message content; find nothing. An `execute-sql` scan over recent event properties catches this faster than the UI.
 7. Stop the app with `OPENAGENTS_POSTHOG_PROJECT_TOKEN` unset: boot succeeds and no network calls go to PostHog.
 8. Run the test suite: `test_mode` drops events and no test asserts on outbound PostHog traffic.
 9. Check the browser console for CSP violations against the ingest host; fix `connect-src` if any appear.
+10. Confirm each taxonomy event registered as an event definition with `read-data-schema`, so typos surface as missing definitions rather than silent zero-volume charts.
 
 ### Rollout order
 
@@ -307,3 +327,4 @@ Work through this checklist in staging:
 - [Phoenix guide](https://posthog.com/docs/libraries/phoenix)
 - [JavaScript Web SDK](https://posthog.com/docs/libraries/js)
 - [Identifying users](https://posthog.com/docs/getting-started/identify-users)
+- [PostHog MCP server](https://posthog.com/docs/model-context-protocol)

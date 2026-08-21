@@ -2,7 +2,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
-  alias OpenAgents.{Accounts, Conversations}
+  alias OpenAgents.{Accounts, Conversations, Repo, Repositories}
 
   setup {Req.Test, :verify_on_exit!}
 
@@ -70,6 +70,21 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     assert redirected_to(replay) == ~p"/?auth_error=failed"
     assert get_session(replay, "user_id") == nil
     assert attempt["id"]
+  end
+
+  test "GitHub callback authenticates before the first repository exists", %{conn: conn} do
+    conn = start_login(conn)
+    {_attempt, state} = attempt_and_state(conn)
+    expect_github(502, "empty-repository-person")
+    Repositories.initial_repository!() |> Repo.delete!()
+
+    authenticated =
+      conn
+      |> recycle()
+      |> get(~p"/auth/github/callback?code=valid-code&state=#{state}")
+
+    assert redirected_to(authenticated) == ~p"/chat"
+    assert {:ok, _user} = authenticated |> get_session("user_id") |> Accounts.get_active_user()
   end
 
   test "mismatched state never reaches GitHub", %{conn: conn} do

@@ -234,7 +234,7 @@ Public and authentication:
 | `user_signed_in` | `AuthController.callback` on returning user | `github_login` |
 | `user_logged_out` | `AuthController.logout` | none |
 
-Chat and Sarah:
+Chat and delegated work:
 
 | Event | Where | Properties |
 | --- | --- | --- |

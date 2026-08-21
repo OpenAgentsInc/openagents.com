@@ -2,7 +2,8 @@
 
 Date: 2026-08-20
 
-Status: Implemented and locally proven; keep both lanes disabled until the Gate 12 isolated staging fleet exists
+Status: Implemented. The isolated staging fleet uses the coordinated rolling
+lane, and production uses the same one-node-at-a-time health boundary.
 
 ## Purpose
 
@@ -15,9 +16,9 @@ classifier must choose one strategy for the complete candidate:
   configuration, migration, module-deletion, or otherwise unclassified
   changes.
 
-Neither lane is production-approved. Gate 12 must connect the provider-neutral
-coordinators to an isolated three-node staging fleet and retain staging-only
-receipts before anyone enables a deployment worker.
+The relup lane is not production-approved. Use rolling replacement in
+production only with explicit operator authority, an immutable image digest,
+two remaining healthy nodes, and exact revision checks after each replacement.
 
 ## Local release gate
 
@@ -207,5 +208,5 @@ evidence for:
   node;
 - additive migration compatibility while both application versions run.
 
-Production remains out of scope until the later staging, rollback, and soak
-gates pass and receive separate approval.
+Production rolling replacement requires explicit operator authority. Do not
+infer that authority from a successful staging rollout.

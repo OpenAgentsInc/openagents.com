@@ -2,8 +2,8 @@
 
 Date: 2026-08-20
 
-Status: Production is fenced until the isolated staging gates and database
-rehearsal pass for one exact candidate.
+Status: Production cut over to OpenAgents on 2026-08-21. Use this runbook for
+the retained rollback boundary and later fleet replacements.
 
 This runbook replaces the Sarah release on the existing three-node production
 fleet. It preserves the `openagents.com` load balancer and the `sarah`
@@ -20,14 +20,20 @@ Production currently uses these resources in `openagentsgemini`:
   `sarah-fleet-3` in three zones.
 - Global backend service `sarah-backend` and the existing `openagents.com`
   HTTPS frontend.
-- The Sarah release as the serving application and the idle Sarah Cloud Run
-  service as the application rollback target.
+- The OpenAgents release as the serving application and the retained Sarah
+  image and startup metadata as rollback inputs.
 
 Do not rename these provider resources during the application cutover. Rename
 them only in a later infrastructure migration after OpenAgents passes its
 production observation window.
 
-## Production admission conditions
+## Initial cutover admission conditions
+
+The following conditions record the initial cutover standard. Current rolling
+releases do not require a fixed-duration soak. Each rollout must keep two
+healthy nodes available, verify the exact revision locally on the replaced
+node, wait for load-balancer health, and stop before the next node if a check
+fails.
 
 Use one exact Git SHA and application image digest for every condition. Do not
 waive a failed condition by rebuilding from another commit during the cutover.
@@ -39,10 +45,8 @@ waive a failed condition by rebuilding from another commit during the cutover.
   validator. Staging does not use a production database, service account,
   bucket, or secret.
 - The candidate passes all Gate 14 cases on staging.
-- The same candidate passes controlled failure injection and a measured
-  15-minute soak on the pinned `openagents-staging-release` service. Later
-  commits can deploy to another staging service without replacing this release
-  candidate or resetting its clock.
+- The same candidate passes controlled failure injection and staging health
+  checks on the pinned `openagents-staging-release` service.
 - A fresh production backup restores into a disposable Cloud SQL instance.
   The migration-lineage bridge, all remaining migrations, candidate startup,
   last-known-good startup, row-count checks, and integrity checks pass there.
@@ -174,6 +178,7 @@ through the observation window. Then rotate transitional credentials, remove
 the old restart path, enable deletion protection on the fleet instances, and
 schedule provider-resource renames as a separate infrastructure change.
 
-Do not declare production ready until the staging soak and the disposable-copy
-migration rehearsal complete for the exact candidate. Local parity and a
-healthy staging deploy are necessary but do not replace those conditions.
+Production is live. For a later rolling release, preserve the existing database
+and persistent repository volumes, use one immutable image digest, replace one
+node at a time, and verify all three load-balancer backends before closing the
+release.

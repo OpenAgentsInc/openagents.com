@@ -13,7 +13,12 @@ set -eu
 
 export GITHUB_OAUTH_SCOPES="repo,read:org"
 export GITHUB_REDIRECT_URI="https://staging.openagents.com/auth/github/callback"
-export GITHUB_TOKEN_DECRYPTION_KEYS_JSON="${GITHUB_TOKEN_DECRYPTION_KEYS_JSON:-{}}"
+# Written as an explicit default rather than ${VAR:-{}}: POSIX expansion ends
+# at the first `}`, so a preset value came back corrupted with a trailing
+# brace and failed JSON validation downstream.
+if [ -z "${GITHUB_TOKEN_DECRYPTION_KEYS_JSON:-}" ]; then
+  export GITHUB_TOKEN_DECRYPTION_KEYS_JSON='{}'
+fi
 export OPENAGENTS_ALLOWED_ORIGINS="https://staging.openagents.com"
 export OPENAGENTS_CODING_JOBS_DIR="/var/lib/openagents/coding-jobs"
 export OPENAGENTS_DATABASE_IPV6="false"

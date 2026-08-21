@@ -32,13 +32,13 @@ After this audit was measured, two claims moved:
    boot convergence satisfied, process uptimes unbroken. The operator assembled
    and applied the artifact manually; no receipted automated deploy exists yet.
 2. **"Nothing needs re-implementing" holds for the hot-load loop only.** The
-   general relup path remains unconnected: `BuildArtifact` classifies only
-   `direct_candidate` and `needs_rolling_replace` and can never emit a relup
-   class, and `RelupDeployment` accepts only the fixed `0.1.0 → 0.2.0`
-   proof transition while production runs `0.2.0`. Closing that lane is
-   recorded as future work in
-   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md), which
-   is also the enablement runbook for the automated loop.
+   general relup path was, at measurement time, unconnected: `BuildArtifact`
+   classifies only `direct_candidate` and `needs_rolling_replace`, and
+   `RelupDeployment` accepted only the fixed `0.1.0 → 0.2.0` proof transition.
+   Later the same day the relup lane was connected for general version pairs —
+   coordinator admission, appup generation, packaging, and install proofs; see
+   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md).
+   Production approval for the lane remains an open operator decision.
 
 ---
 

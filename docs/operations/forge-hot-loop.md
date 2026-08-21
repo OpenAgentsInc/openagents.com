@@ -126,17 +126,43 @@ human reaction time.
 A `reverted` outcome still warrants checking fleet convergence even though
 this design captures each node's prior object code for exact rollback.
 
-## What relups still need (out of scope here)
+## The relup lane is now connected
 
-Getting hot loads running requires nothing below. Recording it ends the
-documentation drift about the third lane:
+As of 2026-08-21 (later), the three gaps recorded below are closed in code:
 
-1. The classifier needs a `needs_relup` class with version-boundary reasons;
-   today it can never emit one.
-2. `RelupDeployment` needs general from/to version admission driven by the
-   packaged appup, replacing the fixed proof-transition pins.
-3. The lane needs its own gate evidence and production approval per
-   `docs/operations/release-deployment-fallbacks.md`.
+1. **Coordinator admission is general.** `RelupDeployment` admits any distinct
+   `X.Y.Z` pair whose state versions stay within `[1, 2]` and never regress —
+   matching what `RelupNode` already enforced per node. The packaged appup on
+   the target nodes remains the real gate: `check_install_release` refuses
+   honestly when no relup can be produced between two versions.
+2. **Appup generation works for any admitted pair.** `rel/openagents.appup.exs`
+   generates forward and reverse instructions from `RELUP_FROM`/`RELUP_TO`
+   for arbitrary distinct versions instead of raising outside the proof
+   transition.
+3. **Packaging and install proofs exist as tools.**
+   `ops/forge/package-relup.sh --from-version A --to-version B [--from-rev]
+   [--to-rev]` builds both releases in isolated worktrees, generates the
+   two-way relup, embeds it, and emits digest-addressed tarballs plus a
+   `package.json` ready for deployment requests.
+   `ops/relup-proof/install-proof.sh` then proves the pair against a live
+   single-node release: forward install, permanent commit, reverse rollback,
+   and re-upgrade, asserting `ReleaseState` observations survive every
+   transition. Both were executed successfully for `0.2.0 → 0.3.0`.
+
+Still required before the lane carries production traffic — operator work,
+not engineering work:
+
+- Production approval recorded against
+  [`docs/operations/release-deployment-fallbacks.md`](release-deployment-fallbacks.md),
+  which remains the authority that relups are not production-approved.
+- Wiring `package-relup.sh` into automation so a promoted SHA packages and
+  deploys without manual steps. Until then the lane is driven by the same
+  commands above, which are safe to rehearse on staging.
+
+Note on scope: hot-load diffs and relups remain different artifact classes.
+A BEAM-diff artifact cannot drive `release_handler`; only a full release
+package can. That is why the build lane's classification stays two-class and
+the relup lane consumes its own packages.
 
 ## References
 

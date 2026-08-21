@@ -77,6 +77,48 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
              "refs/heads/trunk"
   end
 
+  test "each provisioning transition is announced on the repository's own topic" do
+    user = repository_user_fixture("provisioner-announce-owner")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(user, %{name: "announced"}, "announce-key")
+
+    :ok = Repositories.subscribe_provisioning(repository.id)
+    other = Ecto.UUID.generate()
+    :ok = Repositories.subscribe_provisioning(other)
+
+    provisioner = start_supervised!({Provisioner, name: nil, poll_interval_ms: 60_000})
+    assert {:ok, 1} = Provisioner.drain(provisioner)
+
+    # The claim and the completion, in that order: a browser sees "queued"
+    # become "running" and then "ready" without asking.
+    assert_receive {:repository_provisioning, id}, 1_000
+    assert id == repository.id
+    assert_receive {:repository_provisioning, id}, 1_000
+    assert id == repository.id
+    refute_received {:repository_provisioning, ^other}
+
+    assert OpenAgents.Repo.get!(Repository, repository.id).lifecycle_state == "ready"
+  end
+
+  test "a failing repository announces its failure too" do
+    user = repository_user_fixture("provisioner-announce-failure")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(user, %{name: "announced-failure"}, "announce-2")
+
+    :ok = Repositories.subscribe_provisioning(repository.id)
+
+    assert :processed = Provisioner.run_once(fn _work -> {:error, :fixture_failure} end)
+
+    assert_receive {:repository_provisioning, id}, 1_000
+    assert id == repository.id
+    assert_receive {:repository_provisioning, id}, 1_000
+    assert id == repository.id
+
+    assert OpenAgents.Repo.get!(Repository, repository.id).lifecycle_state == "failed"
+  end
+
   test "a stale running lease is reclaimed and an injected failure stays bounded" do
     user = repository_user_fixture("provisioner-recovery-owner")
 
@@ -145,10 +187,17 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
                "import-provision-key"
              )
 
+    :ok = Repositories.subscribe_provisioning(repository.id)
+
     assert :processed =
              Provisioner.run_once(fn work ->
                Importer.import(work.repository, source_url: source)
              end)
+
+    # The outbox claim, the import going running, the import completing, and
+    # the provisioning completing. Each is a durable transition, and each is
+    # what a watching browser renders as the next stage.
+    assert_announcements(repository.id, 4)
 
     completed_import =
       OpenAgents.Repo.get!(OpenAgents.Repositories.RepositoryImport, repository_import.id)
@@ -278,6 +327,16 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
   defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
+
+  # Waits for exactly `expected` announcements about one repository, and for no
+  # more than that.
+  defp assert_announcements(repository_id, expected) do
+    Enum.each(1..expected, fn _ ->
+      assert_receive {:repository_provisioning, ^repository_id}, 1_000
+    end)
+
+    refute_receive {:repository_provisioning, ^repository_id}, 50
+  end
 
   defp audit_types(repository_id) do
     AuditEvent

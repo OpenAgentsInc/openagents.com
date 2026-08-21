@@ -602,6 +602,12 @@ defmodule OpenAgentsWeb.Layouts do
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
         <Layouts.sidebar_link path={~p"/"} label="Home" icon="home" patchable={false} />
         <Layouts.sidebar_link
+          path={~p"/repositories"}
+          label="Repositories"
+          icon="branch"
+          patchable={false}
+        />
+        <Layouts.sidebar_link
           path={~p"/OpenAgentsInc/openagents.com/issues"}
           label="Issues"
           icon="bug"

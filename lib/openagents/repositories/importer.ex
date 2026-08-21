@@ -399,6 +399,7 @@ defmodule OpenAgents.Repositories.Importer do
       running
     end)
     |> elem(1)
+    |> announce()
   end
 
   defp mark_completed!(repository_import) do
@@ -418,6 +419,7 @@ defmodule OpenAgents.Repositories.Importer do
       completed
     end)
     |> elem(1)
+    |> announce()
   end
 
   defp mark_failed!(repository_import, error_code) do
@@ -437,6 +439,16 @@ defmodule OpenAgents.Repositories.Importer do
       failed
     end)
     |> elem(1)
+    |> announce()
+  end
+
+  # Every import transition is announced on the repository's own topic once the
+  # transaction holding it has committed. A copy from GitHub is the longest
+  # thing a repository does before it is usable, and the browser has no other
+  # way to learn that it moved from queued to copying.
+  defp announce(%RepositoryImport{} = repository_import) do
+    OpenAgents.Repositories.broadcast_provisioning(repository_import.repository_id)
+    repository_import
   end
 
   defp audit_import_transition!(repository_import) do

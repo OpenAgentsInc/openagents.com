@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.Repositories
   alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
@@ -41,10 +42,19 @@ defmodule OpenAgentsWeb.CodeRepoLive do
         _ -> []
       end
 
+    # A repository that is still provisioning is the one state this page cannot
+    # render usefully, and it is also the one state that ends on its own. The
+    # provisioner and the importer announce each transition, so the page hears
+    # them instead of telling the reader to keep pressing refresh.
+    if connected?(socket) and repository.lifecycle_state != "ready" do
+      :ok = Repositories.subscribe_provisioning(repository.id)
+    end
+
     {:ok,
      socket
      |> assign(:page_title, "#{repository.name} · code")
      |> assign(:repository, repository)
+     |> assign(:repository_import, repository.repository_import)
      |> assign(:repo, repository.name)
      |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
@@ -55,6 +65,25 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:clone_url, RepositoryAccess.clone_url(repository))}
   rescue
     Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
+  end
+
+  @impl true
+  def handle_info({:repository_provisioning, repository_id}, socket) do
+    case Repositories.get_visible_repository(repository_id, socket.assigns.current_user) do
+      nil ->
+        {:noreply, socket}
+
+      %{lifecycle_state: "ready"} ->
+        # Ready means there is now a head, a README, commits, and refs to read.
+        # Remounting the route loads them the one way this page knows how.
+        {:noreply, push_navigate(socket, to: socket.assigns.base)}
+
+      repository ->
+        {:noreply,
+         socket
+         |> assign(:repository, repository)
+         |> assign(:repository_import, repository.repository_import)}
+    end
   end
 
   defp short(sha), do: String.slice(sha, 0, 12)
@@ -95,7 +124,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             variant={:info}
             title="Repository provisioning is in progress"
           >
-            Refresh this page after the repository becomes ready for Git operations.
+            This page updates itself when the repository becomes ready for Git operations.
           </.alert>
 
           <.alert
@@ -106,6 +135,44 @@ defmodule OpenAgentsWeb.CodeRepoLive do
           >
             Error code: <code>{@repository.provision_error_code || "provisioning_failed"}</code>
           </.alert>
+
+          <%!-- REPOSITORY-001: an import freezes one authorized ref map and
+          schedules no later synchronization, so this states the source, what
+          was accepted, and that nothing keeps the two in step. Never labelled
+          synced or mirrored. --%>
+          <.card :if={@repository_import} id="repo-import-provenance">
+            <h2>Imported once from GitHub</h2>
+            <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+              <dt class="text-muted-foreground">Source</dt>
+              <dd><code>{@repository_import.source_full_name}</code></dd>
+
+              <dt :if={@repository_import.source_head_sha} class="text-muted-foreground">
+                Accepted snapshot
+              </dt>
+              <dd :if={@repository_import.source_head_sha}>
+                <code>{short(@repository_import.source_head_sha)}</code>
+              </dd>
+
+              <dt class="text-muted-foreground">State</dt>
+              <dd>{@repository_import.state}</dd>
+
+              <dt :if={@repository_import.completed_at} class="text-muted-foreground">Completed</dt>
+              <dd :if={@repository_import.completed_at}>
+                <time datetime={DateTime.to_iso8601(@repository_import.completed_at)}>
+                  {Calendar.strftime(@repository_import.completed_at, "%Y-%m-%d %H:%M UTC")}
+                </time>
+              </dd>
+
+              <dt :if={@repository_import.error_code} class="text-muted-foreground">Error code</dt>
+              <dd :if={@repository_import.error_code}>
+                <code>{@repository_import.error_code}</code>
+              </dd>
+            </dl>
+            <p class="mt-3 text-sm text-muted-foreground">
+              OpenAgents copied this snapshot once and is now the source of truth for it.
+              Later commits on GitHub do not appear here.
+            </p>
+          </.card>
 
           <.card :if={@repository.lifecycle_state == "ready"} id="repo-clone">
             <h2>Clone</h2>

@@ -250,6 +250,70 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
       assert repository.lifecycle_state == "provisioning"
     end
+
+    test "an imported repository states one-time GitHub provenance", %{conn: conn} do
+      owner = github_user("import-provenance-owner", "import-provenance-owner")
+
+      assert {:ok, repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "copied-repository", visibility: "private"},
+                 "import-provenance-repository"
+               )
+
+      head = String.duplicate("b", 40)
+
+      repository
+      |> Ecto.Changeset.change(provisioning_kind: "github_import")
+      |> Repo.update!()
+
+      %OpenAgents.Repositories.RepositoryImport{}
+      |> OpenAgents.Repositories.RepositoryImport.changeset(repository.id, %{
+        source_repository_id: 4242,
+        source_owner_id: 99,
+        source_full_name: "acme/source-project",
+        source_default_branch: "main",
+        source_ref_digest: String.duplicate("a", 64),
+        source_head_sha: head,
+        source_refs: %{"refs/heads/main" => head}
+      })
+      |> Repo.insert!()
+      |> OpenAgents.Repositories.RepositoryImport.transition_changeset(%{
+        state: "completed",
+        attempt_count: 1,
+        completed_at: DateTime.utc_now()
+      })
+      |> Repo.update!()
+
+      member_conn = Plug.Test.init_test_session(conn, %{"user_id" => owner.id})
+      {:ok, view, html} = live(member_conn, "/import-provenance-owner/copied-repository")
+
+      assert has_element?(view, "#repo-import-provenance")
+      assert html =~ "Imported once from GitHub"
+      assert html =~ "acme/source-project"
+      assert html =~ String.slice(head, 0, 12)
+
+      # REPOSITORY-001: OpenAgents owns the snapshot; nothing keeps it in step
+      # with GitHub, so the page must never claim otherwise.
+      refute html =~ "mirror"
+      refute html =~ "Synced"
+    end
+
+    test "a repository created empty shows no import provenance", %{conn: conn} do
+      owner = github_user("no-provenance-owner", "no-provenance-owner")
+
+      assert {:ok, _repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "plain-repository", visibility: "private"},
+                 "no-provenance-repository"
+               )
+
+      member_conn = Plug.Test.init_test_session(conn, %{"user_id" => owner.id})
+      {:ok, view, _html} = live(member_conn, "/no-provenance-owner/plain-repository")
+
+      refute has_element?(view, "#repo-import-provenance")
+    end
   end
 
   describe "/code/:repo/blob/:ref/*path" do

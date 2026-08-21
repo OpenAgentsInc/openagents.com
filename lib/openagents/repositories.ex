@@ -23,6 +23,12 @@ defmodule OpenAgents.Repositories do
   @writable_roles ~w(owner maintainer contributor)
   @repository_namespace_limit 100
 
+  # The two durable receipts that say where a repository is in provisioning:
+  # the outbox row is the work, the import row is the GitHub snapshot. Both are
+  # `has_one`, so they are preloaded together wherever a surface renders
+  # progress or provenance.
+  @provisioning_assocs [:repository_import, :provisioning_outbox]
+
   def initial_path, do: {@initial_owner, @initial_name}
 
   def initial_repository! do
@@ -279,9 +285,86 @@ defmodule OpenAgents.Repositories do
       |> apply_namespace_filter(namespace_key)
       |> apply_repository_cursor(after_cursor)
 
-    rows = Repo.all(from row in query, limit: ^(per_page + 1))
+    rows =
+      from(row in query, limit: ^(per_page + 1))
+      |> Repo.all()
+      |> Repo.preload(@provisioning_assocs)
+
     {Enum.take(rows, per_page), length(rows) > per_page}
   end
+
+  @doc """
+  One repository the user may see, by id, with its provisioning receipts.
+
+  The list page's per-row counterpart: a surface that has already rendered a
+  row and then hears the repository changed reloads exactly that row rather
+  than the whole page. Returns `nil` rather than raising, because a repository
+  can stop being visible between the broadcast and the read.
+  """
+  def get_visible_repository(id, user)
+
+  def get_visible_repository(id, nil) when is_binary(id) do
+    visible_repository(
+      from repository in Repository,
+        join: namespace in assoc(repository, :namespace),
+        where: repository.id == ^id,
+        where: repository.visibility == "public" and repository.lifecycle_state == "ready",
+        preload: [namespace: namespace]
+    )
+  end
+
+  def get_visible_repository(id, %User{id: user_id}) when is_binary(id) do
+    visible_repository(
+      from repository in Repository,
+        join: namespace in assoc(repository, :namespace),
+        left_join: membership in Membership,
+        on: membership.repository_id == repository.id and membership.user_id == ^user_id,
+        where: repository.id == ^id,
+        where:
+          (repository.visibility == "public" and repository.lifecycle_state == "ready") or
+            (not is_nil(membership.user_id) and
+               membership.role in ^~w(owner maintainer contributor viewer)),
+        preload: [namespace: namespace]
+    )
+  end
+
+  defp visible_repository(query) do
+    case Repo.one(query) do
+      nil -> nil
+      %Repository{} = repository -> Repo.preload(repository, @provisioning_assocs)
+    end
+  end
+
+  @doc """
+  Subscribes the caller to one repository's provisioning transitions.
+
+  DATA-001: PostgreSQL stays authoritative. The message carries the repository
+  id and nothing else, so a subscriber re-reads through its own visibility
+  predicate and can never be handed a row the database would not have given it.
+  """
+  def subscribe_provisioning(repository_id) when is_binary(repository_id),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, provisioning_topic(repository_id))
+
+  @doc "Stops the caller hearing about one repository, once it has settled."
+  def unsubscribe_provisioning(repository_id) when is_binary(repository_id),
+    do: Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, provisioning_topic(repository_id))
+
+  @doc """
+  Announces that one repository's provisioning or import state moved.
+
+  Called after the owning transaction commits, never inside it: a subscriber
+  re-reads immediately, and a message sent from inside the transaction races
+  the commit and hands it the old row.
+  """
+  def broadcast_provisioning(repository_id) when is_binary(repository_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      provisioning_topic(repository_id),
+      {:repository_provisioning, repository_id}
+    )
+  end
+
+  defp provisioning_topic(repository_id), do: "repository:" <> repository_id
 
   defp apply_namespace_filter(query, nil), do: query
 

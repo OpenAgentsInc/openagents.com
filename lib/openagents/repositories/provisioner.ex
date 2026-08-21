@@ -117,6 +117,9 @@ defmodule OpenAgents.Repositories.Provisioner do
       end)
 
     if work do
+      # After the claim commits: a browser watching this repository moves from
+      # "queued" to "running" the moment the row does.
+      OpenAgents.Repositories.broadcast_provisioning(work.repository_id)
       Repo.preload(work, repository: [:created_by_user, :repository_import])
     end
   end
@@ -203,6 +206,7 @@ defmodule OpenAgents.Repositories.Provisioner do
       )
     end)
 
+    OpenAgents.Repositories.broadcast_provisioning(work.repository_id)
     :ok
   end
 
@@ -243,6 +247,7 @@ defmodule OpenAgents.Repositories.Provisioner do
       )
     end)
 
+    OpenAgents.Repositories.broadcast_provisioning(work.repository_id)
     Logger.warning("repository_provisioning_failed code=provisioning_failed")
     :ok
   end

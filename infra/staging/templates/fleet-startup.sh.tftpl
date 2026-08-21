@@ -190,10 +190,15 @@ fi
 
 docker pull "$image"
 docker rm --force openagents 2>/dev/null || true
+# Codex creates a nested Bubblewrap user namespace for each repository command.
+# COS blocks that setup through Docker's default profiles. Remove only those
+# profiles; keep the container unprivileged and add no Linux capabilities.
 docker run --detach \
   --name openagents \
   --network host \
   --restart always \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
   --env-file /run/openagents/runtime.env \
   --volume "$state_root:$state_root" \
   "$image"

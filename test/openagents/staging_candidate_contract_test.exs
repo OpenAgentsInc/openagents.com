@@ -40,10 +40,19 @@ defmodule OpenAgents.StagingCandidateContractTest do
     assert dockerfile =~ ~s(archive="codex-package-${codex_arch}-unknown-linux-musl.tar.gz")
     assert dockerfile =~ ~r/amd64\).*checksum=[0-9a-f]{64}/
     assert dockerfile =~ ~r/arm64\).*checksum=[0-9a-f]{64}/
-    assert dockerfile =~ "/opt/codex/bin/codex-code-mode-host"
-    assert dockerfile =~ "test -x /opt/codex/codex-resources/bwrap"
-    assert dockerfile =~ "test -x /opt/codex/codex-path/rg"
+    assert dockerfile =~ "/usr/local/lib/codex-package/bin/codex-code-mode-host"
+    assert dockerfile =~ "test -x /usr/local/lib/codex-package/codex-resources/bwrap"
+    assert dockerfile =~ "test -x /usr/local/lib/codex-package/codex-path/rg"
     assert dockerfile =~ "codex-code-mode-host --help"
+  end
+
+  test "the staging fleet admits nested Codex sandbox namespaces without privilege" do
+    startup = File.read!("infra/staging/templates/fleet-startup.sh.tftpl")
+
+    assert startup =~ "--security-opt seccomp=unconfined"
+    assert startup =~ "--security-opt apparmor=unconfined"
+    refute startup =~ "--privileged"
+    refute startup =~ "--cap-add"
   end
 
   test "the isolated builder loads runtime configuration without the web role" do

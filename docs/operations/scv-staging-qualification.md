@@ -85,29 +85,34 @@ service account until this path passes.
 
 1. Deploy the exact candidate SHA and immutable image digest to every staging
    fleet node.
-2. Confirm that the connected account advertises `gpt-5.6-luna` and at least
+2. Confirm that the fleet starts the application container with
+   `seccomp=unconfined` and `apparmor=unconfined`, without `--privileged` or
+   added Linux capabilities. Confirm that the complete Codex package lives
+   under `/usr/local/lib/codex-package` so the repository-scoped sandbox can
+   read it.
+3. Confirm that the connected account advertises `gpt-5.6-luna` and at least
    one of the admitted reasoning efforts, `low` or `none`.
-3. Resolve the public repository, its node-local Forge storage key, and the
+4. Resolve the public repository, its node-local Forge storage key, and the
    exact candidate SHA. Do not use a mutable branch name for the run.
-4. Call `OpenAgents.SCV.CodexRuns.start/5` on one fleet node with the account
+5. Call `OpenAgents.SCV.CodexRuns.start/5` on one fleet node with the account
    ID, repository record, exact SHA, bounded read-only objective, and optional
    issue ID.
-5. Observe `/status` while the SCV runs. The stream must advance through the
+6. Observe `/status` while the SCV runs. The stream must advance through the
    Codex runtime, session, turn, tool or report, and terminal persistence
    phases without showing the objective, repository path, command, output,
    account identity, or credential data.
-6. Call `OpenAgents.SCV.CodexRuns.await/2` with a bounded timeout. Require a
+7. Call `OpenAgents.SCV.CodexRuns.await/2` with a bounded timeout. Require a
    terminal `succeeded` row, a nonempty `openagents.scv.report.v1` report, its
    SHA-256 digest, exact repository SHA, Codex thread and turn IDs, event count,
    usage, and resources.
-7. Query `scv_run_events` for that run. Require `driver_started`,
+8. Query `scv_run_events` for that run. Require `driver_started`,
    `driver_session_started`, `turn_started`, at least one successful
    `tool_started` and `tool_completed` pair, `turn_finished`, and
    `run_finished`. A message-only report does not prove repository access and
    does not qualify the SCV runtime.
-8. Confirm that no disposable workspace or temporary `CODEX_HOME` remains and
+9. Confirm that no disposable workspace or temporary `CODEX_HOME` remains and
    that the connected account remains **Ready**.
-9. Scan the bounded event payloads, application logs, and public status
+10. Scan the bounded event payloads, application logs, and public status
    response for credential patterns and raw protocol content. Any match fails
    qualification.
 

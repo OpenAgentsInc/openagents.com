@@ -483,7 +483,9 @@ For one admitted account runtime:
 1. Resolve a digest-pinned worker image and complete Codex package. The package
    must include the app-server entry point, `codex-code-mode-host`, and its
    packaged `bwrap`, `rg`, and `zsh` resources. Installing only the `codex`
-   binary disables code-mode tools and does not qualify an SCV runtime.
+   binary disables code-mode tools and does not qualify an SCV runtime. Install
+   the package under `/usr/local/lib/codex-package` so the `:minimal`
+   filesystem policy can read the executable and its packaged resources.
 2. Materialize the account secret or credential home into its isolated
    compartment.
 3. Generate host-owned Codex configuration. Ignore repository-controlled user
@@ -510,6 +512,14 @@ disabled unless a later driver revision adds protocol fixtures and downgrade
 behavior for it. Refuse the run instead of falling back to the legacy
 full-filesystem read-only sandbox when the pinned runtime cannot activate the
 profile.
+
+On Container-Optimized OS, Docker's default seccomp and AppArmor profiles block
+the nested Bubblewrap user namespace. The staging fleet removes those two
+Docker profiles from the application container without using `--privileged` or
+adding Linux capabilities. Bubblewrap must still drop every capability, disable
+network access, and mount only the minimal runtime paths plus the repository.
+Treat these host settings as staging-specific. Do not carry them into a
+production SCV runtime without a separate containment review.
 
 ### SCV run sequence
 

@@ -142,13 +142,13 @@ RUN set -eu; \
   curl -fsSL --retry 3 -o "/tmp/${archive}" \
     "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/${archive}"; \
   echo "${checksum}  /tmp/${archive}" | sha256sum --check --strict; \
-  install -d -m 0755 /opt/codex; \
-  tar -xzf "/tmp/${archive}" -C /opt/codex; \
-  ln -s /opt/codex/bin/codex /usr/local/bin/codex; \
-  ln -s /opt/codex/bin/codex-code-mode-host /usr/local/bin/codex-code-mode-host; \
+  install -d -m 0755 /usr/local/lib/codex-package; \
+  tar -xzf "/tmp/${archive}" -C /usr/local/lib/codex-package; \
+  ln -s /usr/local/lib/codex-package/bin/codex /usr/local/bin/codex; \
+  ln -s /usr/local/lib/codex-package/bin/codex-code-mode-host /usr/local/bin/codex-code-mode-host; \
   rm "/tmp/${archive}"; \
-  test -x /opt/codex/codex-resources/bwrap; \
-  test -x /opt/codex/codex-path/rg; \
+  test -x /usr/local/lib/codex-package/codex-resources/bwrap; \
+  test -x /usr/local/lib/codex-package/codex-path/rg; \
   codex --version; \
   codex-code-mode-host --help >/dev/null
 

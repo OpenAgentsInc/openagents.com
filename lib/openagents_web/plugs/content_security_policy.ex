@@ -27,7 +27,9 @@ defmodule OpenAgentsWeb.Plugs.ContentSecurityPolicy do
       [
         "default-src 'self'",
         "base-uri 'self'",
-        "connect-src 'self' ws: wss:",
+        # The PostHog ingest and asset hosts carry browser analytics batches
+        # (docs/2026-08-21-posthog-integration-runbook.md).
+        "connect-src 'self' ws: wss: https://us.i.posthog.com https://us-assets.i.posthog.com",
         "frame-ancestors 'none'",
         "img-src 'self' data: https://avatars.githubusercontent.com",
         "object-src 'none'",

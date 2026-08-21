@@ -23,7 +23,11 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   end
 
   def handle_event("save", %{"milestone" => milestone_params}, socket) do
-    case Milestones.create_milestone(socket.assigns.repository, milestone_params) do
+    case Milestones.create_milestone(
+           socket.assigns.repository,
+           milestone_params,
+           socket.assigns.current_user
+         ) do
       {:ok, _milestone} ->
         {:noreply,
          socket

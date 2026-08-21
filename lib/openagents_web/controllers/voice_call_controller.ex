@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.VoiceCallController do
 
   import Plug.Conn
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Conversations
   alias OpenAgents.Voice.Config
   alias OpenAgents.Voice.OperationalTelemetry
@@ -19,6 +20,8 @@ defmodule OpenAgentsWeb.VoiceCallController do
          :ok <- require_no_active_text_turn(conversation),
          {:ok, _session, admission} <-
            VoiceSessions.connect(conversation, sdp_offer, safety_identifier, config) do
+      Analytics.capture("voice_call_started", Analytics.distinct_id(user))
+
       conn
       |> put_resp_content_type("application/sdp")
       |> put_resp_header("cache-control", "no-store")
@@ -74,7 +77,11 @@ defmodule OpenAgentsWeb.VoiceCallController do
     with %{status: "active"} = user <- conn.assigns.current_user,
          {:ok, conversation} <- Conversations.ensure_conversation(user),
          session when not is_nil(session) <- OpenAgents.Voice.active_session(conversation),
-         {:ok, _ended_session} <- VoiceSessions.end_session(session) do
+         {:ok, ended_session} <- VoiceSessions.end_session(session) do
+      Analytics.capture("voice_call_ended", Analytics.distinct_id(user), %{
+        "duration_ms" => session_duration_ms(ended_session)
+      })
+
       send_resp(conn, :no_content, "")
     else
       nil ->
@@ -116,6 +123,15 @@ defmodule OpenAgentsWeb.VoiceCallController do
     :sha256
     |> :crypto.hash(user_id)
     |> Base.encode16(case: :lower)
+  end
+
+  defp session_duration_ms(session) do
+    started_at = Map.get(session, :started_at)
+    ended_at = Map.get(session, :ended_at)
+
+    if is_nil(started_at) or is_nil(ended_at),
+      do: nil,
+      else: DateTime.diff(ended_at, started_at, :millisecond)
   end
 
   defp require_no_active_text_turn(conversation) do

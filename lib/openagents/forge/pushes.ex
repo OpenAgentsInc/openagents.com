@@ -20,6 +20,7 @@ defmodule OpenAgents.Forge.Pushes do
 
   require Logger
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Forge.{GitHTTP, PushReceipt, Repos, Sync, WAL}
   alias OpenAgents.Repo
 
@@ -56,7 +57,15 @@ defmodule OpenAgents.Forge.Pushes do
         case persist(repo, body, refs_after, principal) do
           {:ok, seq} ->
             Repos.record_applied_seq!(repo, seq)
-            record_receipt(repo, seq, refs_before, refs_after, principal, started_at)
+
+            capture_push_received(
+              repo,
+              record_receipt(repo, seq, refs_before, refs_after, principal, started_at),
+              refs_before,
+              refs_after,
+              started_at
+            )
+
             broadcast(repo, seq, refs_after)
             mirror_async(repo)
             {:ok, output}
@@ -75,6 +84,18 @@ defmodule OpenAgents.Forge.Pushes do
         end
     end
   end
+
+  # Live-push analytics only. Crash-recovery reconciliation reuses
+  # `record_receipt/5` without capturing, so recovered rows never double count.
+  defp capture_push_received(repo, {:ok, _receipt}, refs_before, refs_after, started_at) do
+    Analytics.capture("git_push_received", Analytics.system_distinct_id("forge"), %{
+      "repo" => repo,
+      "refs_changed" => Enum.count(refs_after, fn {name, sha} -> refs_before[name] != sha end),
+      "duration_ms" => System.monotonic_time(:millisecond) - started_at
+    })
+  end
+
+  defp capture_push_received(_repo, :error, _before, _after, _started_at), do: :ok
 
   # ── WAL persist (ack barrier) ───────────────────────────────────────────
 

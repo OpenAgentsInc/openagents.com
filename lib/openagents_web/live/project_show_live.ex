@@ -41,7 +41,8 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
     case Projects.create_project_item(
            %{"issue_number" => number, "values" => %{"Status" => status}},
-           project
+           project,
+           socket.assigns.current_user
          ) do
       {:ok, _item} ->
         {:noreply,

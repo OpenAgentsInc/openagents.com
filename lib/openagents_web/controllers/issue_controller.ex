@@ -57,7 +57,7 @@ defmodule OpenAgentsWeb.IssueController do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
     issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
 
-    case Issues.update_issue(issue, params) do
+    case Issues.update_issue(issue, params, conn.assigns.current_user) do
       {:ok, %Issue{} = issue} ->
         render(conn, :show, issue: issue, owner: owner, repo: repo)
 

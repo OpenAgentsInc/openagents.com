@@ -3,5 +3,8 @@
   "private": true,
   "scripts": {
     "test": "node --test test/*.mjs"
+  },
+  "dependencies": {
+    "posthog-js": "^1.418.10"
   }
 }

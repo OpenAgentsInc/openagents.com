@@ -2,13 +2,19 @@
 
 Date: 2026-08-21
 
-Status: Proposed
+Status: Implemented in code; staging enablement, dashboards, and live verification remain
 
 PostHog ships an agentic installer, the [AI wizard](https://github.com/PostHog/wizard), that wires PostHog into a codebase end to end. The wizard does not support Phoenix or Elixir: the framework is registered as "coming soon" in PostHog's own documentation, so running `npx @posthog/wizard` against this repository would not produce a usable integration.
 
 This document is the manual replacement. Part 1 records what the wizard does so we know the full surface we are replicating. Part 2 turns that into a concrete runbook for this Phoenix application: server-side capture from Elixir, browser analytics through our asset bundle, pageviews that survive LiveView navigation, user identification, and an event taxonomy covering every product surface. Session replay and self-driving are out of scope.
 
-Use this document as the single checklist for the integration work. Nothing in it requires the wizard.
+Steps 1 through 7 of part 2 are implemented. What remains is operational:
+
+1. Set `OPENAGENTS_POSTHOG_PROJECT_TOKEN` (and optionally `OPENAGENTS_POSTHOG_API_HOST`) in the staging environment.
+2. Build the starter dashboards through the PostHog MCP (step 8).
+3. Run the verification checklist against a live staging deployment (step 9).
+
+Use this document as the single checklist for that work. Nothing in it requires the wizard.
 
 ## Part 1: What the PostHog wizard does
 
@@ -90,125 +96,100 @@ Out of scope for this effort:
 2. Confirm the ingest host: `https://us.i.posthog.com`.
 3. Decide the rollout environment. Staging first; production remains locked behind the existing staging gate, so the integration lands in staging configuration before any production decision.
 
-### Step 1: Route credentials through runtime configuration
+### Step 1: Route credentials through runtime configuration (implemented)
 
-Follow the `OpenAgents.RuntimeConfig` pattern documented in [runtime-configuration.md](runtime-configuration.md):
+The settings follow the same optional-text pattern the rest of `config/runtime.exs` uses for optional credentials; they are not part of the strict `OpenAgents.RuntimeConfig` validator, because analytics must never block a boot:
 
 | Setting | Requirement |
 | --- | --- |
-| `OPENAGENTS_POSTHOG_PROJECT_TOKEN` | `phc_...` public project token; empty disables all capture |
-| `OPENAGENTS_POSTHOG_API_HOST` | Defaults to `https://us.i.posthog.com` |
+| `OPENAGENTS_POSTHOG_PROJECT_TOKEN` | `phc_...` public project token; absent or empty disables all capture |
+| `OPENAGENTS_POSTHOG_API_HOST` | Optional; defaults to `https://us.i.posthog.com` |
 
-When the token is empty, the application boots normally with capture fully disabled. This keeps local development and tests free of network calls without extra flags.
+When the token is absent, the application boots normally with capture fully disabled: no PostHog supervision tree starts and every capture call is a no-op. Local development and tests stay free of network calls without extra flags.
 
-### Step 2: Add the Elixir SDK
+### Step 2: The Elixir SDK (implemented)
 
-Add the dependency in `mix.exs`:
-
-```elixir
-{:posthog, "~> 2.0"}
-```
-
-Configure it in `config/config.exs` with values supplied at runtime:
+`mix.exs` carries `{:posthog, "~> 2.0"}`. Configuration lives in `config/config.exs` with values supplied at runtime:
 
 ```elixir
 config :posthog,
-  enable: true,
-  api_host: {:system, "OPENAGENTS_POSTHOG_API_HOST", "https://us.i.posthog.com"},
-  api_key: {:system, "OPENAGENTS_POSTHOG_PROJECT_TOKEN", nil},
+  enable: false,
+  api_host: "https://us.i.posthog.com",
+  api_key: nil,
   in_app_otp_apps: [:openagents],
   enable_error_tracking: false
 ```
 
-Notes:
+Deviations from a plain install, all deliberate:
 
+- The package's default supervisor stays off. `OpenAgents.Application` starts `{PostHog.Supervisor, config}` only when a project token was configured at boot, so an unconfigured environment runs zero PostHog processes.
 - `enable_error_tracking: false` keeps `$exception` capture off until error tracking is a separate approved decision.
-- In `config/test.exs`, set `test_mode: true` so events are dropped instead of sent.
+- `config/test.exs` sets `test_mode: true` so events are dropped instead of sent.
 - The package batches events and flushes them from its own supervision tree; captures do not block request handling.
 
-### Step 3: Create one capture boundary
+### Step 3: One capture boundary (implemented)
 
-Add a single wrapper module, for example `OpenAgents.Analytics`, and route every server-side capture through it. The wrapper exists to enforce policy in one place:
+Every server-side event goes through `OpenAgents.Analytics.capture/3`. The boundary enforces policy in one place:
 
-- No-op when the project token is unset.
-- Merge standard properties onto every event: `environment` (from `OPENAGENTS_ENVIRONMENT`), `app_version`, and `surface` (`web`, `api`, `live`).
-- Never raise: a capture failure must not fail the caller. Rescue, log, and continue.
-- Redact by default: reject property keys matching a denylist (`token`, `secret`, `password`, `ciphertext`, `credential`) and drop oversized values.
+- No-op when the project token is unset (including blank strings).
+- Merges standard properties onto every event: `environment` (from the runtime environment), `app_revision`, and `surface` (`server` unless the caller passes one).
+- Drops property keys on a sensitive denylist (`token`, `secret`, `password`, `ciphertext`, `credential`, plus `_token`/`_secret`/... suffixes), truncates oversized values to `[truncated]`, bounds maps and lists by depth and count, and drops structs.
+- Never raises: a sink failure logs `analytics_capture_failed` and returns `:ok`.
 
-```elixir
-OpenAgents.Analytics.capture("user_signed_up", distinct_id, %{
-  github_login: login
-})
-```
+Identity helpers live on the same module:
 
-Passing `distinct_id` explicitly beats relying on process context. The package supports `PostHog.set_context/1` via logger metadata when explicit passing is awkward, but explicit arguments keep call sites greppable.
+- `Analytics.distinct_id(user_or_id)` derives the canonical `user_<uuid>` ID; already-prefixed values pass through unchanged.
+- `Analytics.system_distinct_id(surface)` gives operational events a stable synthetic person per surface (`system_forge`).
+- `Analytics.browser_distinct_id(conn)` reads the `X-PostHog-Distinct-Id` tracing header when present, falling back to `"anonymous"`.
 
-### Step 4: Add posthog-js to the browser bundle
+A test sink (`Application.put_env(:openagents, :analytics_sink, ...)`) lets tests observe captures without the network; see `test/openagents/analytics_test.exs`.
 
-Install into the existing asset pipeline:
+### Step 4: posthog-js in the browser bundle (implemented)
 
-```console
-npm install --prefix assets posthog-js
-```
+`posthog-js` is installed into `assets/package.json` and bundled into `app.js` by esbuild — no snippet tag, so the CSP script policy is untouched. `OpenAgentsWeb.Plugs.PostHogBootstrap` assigns the boot configuration and session identity, and the root layout renders them as body data attributes; `app.js` initializes only when `data-posthog-enabled="true"`.
 
-Initialize in `assets/js/app.js`:
+Initialization options, as shipped:
 
 ```javascript
-import posthog from "posthog-js"
-
-if (window.POSTHOG_CONFIG.enabled) {
-  posthog.init(window.POSTHOG_CONFIG.token, {
-    api_host: window.POSTHOG_CONFIG.api_host,
-    defaults: '2026-05-30',
-    autocapture: true,
-  })
-}
+posthog.init(token, {
+  api_host: host,
+  defaults: "2026-05-30",
+  autocapture: true,
+  capture_pageview: false,        // pageviews are explicit; see step 5
+  capture_exceptions: false,      // error tracking is out of scope
+  disable_session_recording: true, // replay is out of scope
+  tracing_headers: [window.location.hostname], // links server events to sessions
+})
 ```
-
-Inject the config from the root layout so no token is hardcoded in JS:
-
-```heex
-<body data-posthog-enabled={@posthog_enabled}
-      data-posthog-token={@posthog_token}
-      data-posthog-api-host={@posthog_api_host}>
-```
-
-Read the data attributes in `app.js` before initializing. When disabled, render empty attributes and skip initialization entirely.
 
 Two constraints specific to this repository:
 
-- **No inline scripts.** The CSP allows exactly one nonce-bearing script (the theme bootstrap). Bundling `posthog-js` through esbuild satisfies the policy; do not add the copy-paste snippet.
-- **CSP `connect-src`.** `lib/openagents_web/plugs/content_security_policy.ex` currently allows only `'self' ws: wss:`. Extend `connect-src` with the ingest hosts `https://us.i.posthog.com` and `https://us-assets.i.posthog.com`, or autocapture batches will silently fail to send.
+- **No inline scripts.** The CSP allows exactly one nonce-bearing script (the theme bootstrap). Bundling satisfies the policy; do not add the copy-paste snippet.
+- **CSP `connect-src`.** The policy now allows `https://us.i.posthog.com` and `https://us-assets.i.posthog.com`; without them autocapture batches silently fail to send.
 
-### Step 5: Capture pageviews, including LiveView navigation
+### Step 5: Pageviews, including LiveView navigation (implemented)
 
-`posthog-js` records full page loads automatically. LiveView navigations change the URL without a reload, so add the documented listener after initialization:
+Automatic history tracking is disabled (`capture_pageview: false`) so exactly one producer owns each `$pageview`:
 
-```javascript
-window.addEventListener("phx:navigate", ({ detail: { href } }) => {
-  if (window.posthog?.__loaded) {
-    posthog.capture("$pageview", { $current_url: href })
-  }
-})
-```
+1. `app.js` captures one on initial load with the current URL.
+2. A `phx:navigate` listener captures one per LiveView navigation with the target `href`.
 
-Without this listener, every authenticated LiveView surface (chat, issues, projects, memory, computers) appears as one long session on the landing URL, which corrupts traffic and funnel analysis.
+Without the listener, every authenticated LiveView surface (chat, issues, projects, memory, computers) appears as one long session on the landing URL, which corrupts traffic and funnel analysis. With both producers explicit, no navigation double counts.
 
-### Step 6: Identify users with one canonical ID
+### Step 6: Identification with one canonical ID (implemented)
 
-Choose the canonical `distinct_id` now: `user_<id>` where `<id>` is the database user ID. Every producer, client and server, uses exactly this string.
+The canonical distinct ID is `user_<uuid>` where `<uuid>` is the database user ID; `OpenAgents.Analytics.distinct_id/1` is the single derivation point.
+
+Server side:
+
+1. `AuthController.callback` distinguishes sign-up from sign-in by comparing the upserted row's `inserted_at` and `updated_at`: equality means the row was just created. It then captures `user_signed_up` or `user_signed_in`.
+2. The same callback writes a `posthog_identity` session key (`distinct_id` plus `login`). `logout` reads it before dropping the session to capture `user_logged_out`.
+3. `plug PostHog.Integrations.Plug` sits immediately before the router in the endpoint, attaching request metadata and reading tracing headers.
 
 Client side:
 
-1. Render the current user's `distinct_id` and stable profile properties (`github_login`, `github_id`) as data attributes in the root layout when a session exists.
-2. After `posthog.init`, if a distinct ID attribute is present, call:
-
-```javascript
-posthog.identify(distinctId, {
-  github_login: login,
-})
-```
-
+1. The root layout renders the session identity as data attributes through `PostHogBootstrap` — no database query on the render path.
+2. After initialization, if a distinct ID attribute is present, `app.js` calls `posthog.identify(distinctId, { github_login })` once per browser session (guarded in `sessionStorage`). Identifying merges the anonymous pre-login events into the account's person.
 Calling `identify` merges the anonymous ID that autocapture assigned before login into the identified person, so pre-authentication pageviews connect to the account. Guard the call so it fires once per browser session.
 
 Server side:
@@ -218,11 +199,11 @@ Server side:
 3. For requests, add `plug PostHog.Integrations.Plug` immediately before `plug OpenAgentsWeb.Router` in the endpoint. It attaches `$current_url`, method, and user-agent metadata to events captured during the request, and reads `X-PostHog-Distinct-Id` and `X-PostHog-Session-Id` headers when present.
 4. Configure `posthog-js` tracing headers so browser fetches to this app carry those headers, linking server-side events to the originating browser session. Tracing headers are client-controlled analytics hints, never authorization input; server-side code must derive identity from the session, not from these headers.
 
-For background processes (deployment workers, delegated work) there is no browser session: pass the owning `user_<id>` explicitly, or use a system distinct ID such as `system_<worker>` for unowned operational events.
+For background processes (deployment workers, forge pushes) there is no browser session: events attribute to the owning account's `user_<uuid>` when one is known, or a stable system person such as `system_forge` for unowned operational events.
 
-### Step 7: Instrument the event taxonomy
+### Step 7: The event taxonomy (implemented)
 
-Naming convention: snake_case, past tense, `object_verb` (`issue_created`, `chat_message_sent`). Every event gets the standard properties from step 3 plus the listed ones. Instrument domain contexts rather than individual controllers where one context serves both the LiveView UI and the GitHub-compatible JSON API, so both surfaces produce identical events.
+Naming convention: snake_case, past tense, `object_verb` (`issue_created`, `chat_message_sent`). Every event gets the standard properties from step 3 plus the listed ones. Domain contexts rather than individual controllers carry the instrumentation wherever one context serves both the LiveView UI and the GitHub-compatible JSON API, so both surfaces produce identical events. Contexts that lacked an actor parameter gained an optional trailing actor argument (defaulting to `nil`, attributed to the surface's system person), and their call sites now pass the signed-in user.
 
 Public and authentication:
 
@@ -234,39 +215,42 @@ Public and authentication:
 | `user_signed_in` | `AuthController.callback` on returning user | `github_login` |
 | `user_logged_out` | `AuthController.logout` | none |
 
+Anonymous funnel events (`auth_started`, `auth_failed`) attribute to the browser tracing header when present, else `"anonymous"`.
+
 Chat and delegated work:
 
 | Event | Where | Properties |
 | --- | --- | --- |
-| `chat_opened` | `ChatLive.mount` | none |
-| `chat_message_sent` | turn submission handler | `length_bucket`, `tools_available` |
-| `chat_turn_completed` | turn completion (server) | `duration_ms`, `model`, `tool_count`, `outcome` |
-| `memory_saved` | memory write path | `kind` |
-| `memory_viewed` | `MemoryLive.mount` | none |
-| `delegated_work_created` | delegated-work creation path | `objective_kind` |
-| `delegated_work_completed` | worker terminal result | `outcome`, `duration_ms` |
-| `computer_paired` | pairing approval | none |
-| `agent_job_created` | `ComputerAgentJobsController.create` | none |
-| `voice_call_started` / `voice_call_completed` | voice call lifecycle | `duration_ms` on completion |
+| `chat_opened` | `ChatLive.mount` on connected mount | none |
+| `chat_message_sent` | `ChatLive.launch_turn` | `length_bucket` |
+| `chat_turn_completed` | terminal `turn_updated` broadcast in `ChatLive` | `outcome`: `completed`, `failed`, `cancelled`; `duration_ms` from turn timestamps |
+| `memory_saved` | `ProfileMemory.remember_explicit` | `disposition`: `stored`, `already_active` |
+| `memory_viewed` | `MemoryLive.mount` on connected mount | none |
+| `computer_paired` | `ComputersController.approve_pairing` success | `tier` |
+| `agent_job_created` | `ComputerAgentJobsController.create` success | `machine_tier` |
+| `voice_call_started` / `voice_call_ended` | `VoiceCallController` create/delete success | `duration_ms` on end |
 
 Issues, projects, and forge:
 
 | Event | Where | Properties |
 | --- | --- | --- |
-| `issue_created` | issue creation context | `owner`, `repo`, `has_labels`, `has_assignees` |
-| `issue_updated` | issue update context | `fields_changed` count |
-| `issue_commented` | comment creation context | none |
+| `issue_created` | `Issues.create_issue` | `owner`, `repo`, `has_labels`, `has_assignees` |
+| `issue_updated` | `Issues.update_issue` | `owner`, `repo`, `state` |
+| `issue_commented` | `Issues.create_comment` | `issue_number` |
 | `label_created`, `milestone_created`, `project_created` | respective contexts | `owner`, `repo` |
-| `project_item_added` | project item creation | none |
-| `git_push_received` | push receipt path | `repo`, `commits_bucket` |
-| `release_promoted` | promotion target path | `repo` |
-| `deployment_started` / `deployment_completed` | deployment coordinator | `outcome`, `duration_ms` on completion |
+| `project_item_added` | `Projects.create_project_item` | `project_number`, `has_issue` |
+| `git_push_received` | `Forge.Pushes` live push path | `repo`, `refs_changed`, `duration_ms` |
+| `release_promoted` | `Forge.Targets.promote` | `repo` |
+| `deployment_started` / `deployment_completed` | `Forge.Deployment.run` | `repo`, `deployment_id`; completion adds `outcome`, `duration_ms` |
 
-Deliberate omissions:
+Scoping decisions worth remembering:
 
-- Admin surfaces stay uninstrumented. They are operator-only, low volume, and would add noise to activation funnels.
-- API read endpoints (`GET`) stay uninstrumented except where they represent product activation. Volume without signal costs money per event.
-- Never capture message bodies, objective text, token material, ciphertexts, or raw query strings. The `$current_url` property contains query parameters; rely on the wrapper's redaction and keep sensitive routes out of custom properties.
+- Forge pushes and deployments attribute to `system_forge`. Push capture sits only on the live receive-pack path; crash-recovery receipt reconciliation never captures, so recovered rows cannot double count.
+- Delegated work started inside a conversation turn is represented by the chat turn events; the computers API path is covered by `agent_job_created`. A separate `delegated_work_created` would double count one of those surfaces.
+- Memory owners without a linked account attribute to a synthetic `visitor_<id>` person.
+- Admin surfaces stay uninstrumented: operator-only, low volume.
+- API read endpoints (`GET`) stay uninstrumented except where they represent product activation.
+- Never capture message bodies, objective text, token material, ciphertexts, or raw query strings. `$current_url` contains query parameters; rely on the wrapper's redaction denylist and keep sensitive routes out of custom properties.
 
 ### Step 8: Build the starter dashboards through the PostHog MCP
 
@@ -314,10 +298,10 @@ Work through this checklist in staging. Browser-side checks stay manual; every s
 
 ### Rollout order
 
-1. Steps 1-4: foundation (config, SDKs, wrapper, client init). No taxonomy yet.
-2. Step 5-6: pageviews and identification. Verify the auth funnel end to end.
-3. Step 7: taxonomy, starting with authentication and chat, then issues and forge.
-4. Step 8: dashboards.
+1. Steps 1-6 are implemented and covered by the test suite; they activate the moment a project token is configured.
+2. Set `OPENAGENTS_POSTHOG_PROJECT_TOKEN` in staging and confirm boot with capture live.
+3. Step 7 events flow automatically; watch volume in the first days.
+4. Step 8: build dashboards through the MCP.
 5. Step 9 gates each stage; do not stack stages without verification.
 
 ## References

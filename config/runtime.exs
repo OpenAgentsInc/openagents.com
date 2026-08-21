@@ -427,6 +427,21 @@ if config_env() == :prod and runtime_role == :scv do
 end
 
 if runtime_role == :web do
+  # Product analytics. An absent token disables capture entirely: no PostHog
+  # supervision tree starts and OpenAgents.Analytics becomes a no-op.
+  posthog_project_token = optional_text.("OPENAGENTS_POSTHOG_PROJECT_TOKEN")
+  posthog_api_host = optional_text.("OPENAGENTS_POSTHOG_API_HOST")
+
+  config :openagents,
+    posthog_project_token: posthog_project_token,
+    posthog_api_host: posthog_api_host || "https://us.i.posthog.com"
+
+  config :posthog, api_key: posthog_project_token
+
+  if posthog_api_host do
+    config :posthog, api_host: posthog_api_host
+  end
+
   github_oauth = Application.get_env(:openagents, :github_oauth, [])
 
   github_oauth =

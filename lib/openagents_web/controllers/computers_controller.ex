@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.ComputersController do
 
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Computer
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Machine
@@ -23,8 +24,17 @@ defmodule OpenAgentsWeb.ComputersController do
   def approve_pairing(conn, %{"id" => pairing_id, "code" => code}) do
     if Computer.enabled?() do
       case Machines.approve_pairing(conn.assigns.current_user, pairing_id, code) do
-        {:ok, machine} -> json(conn, %{"computer" => computer_projection(machine)})
-        {:error, reason} -> pairing_error(conn, reason)
+        {:ok, machine} ->
+          Analytics.capture(
+            "computer_paired",
+            Analytics.distinct_id(conn.assigns.current_user),
+            %{"tier" => machine.tier}
+          )
+
+          json(conn, %{"computer" => computer_projection(machine)})
+
+        {:error, reason} ->
+          pairing_error(conn, reason)
       end
     else
       error(conn, :not_found, "computer_controller_disabled")

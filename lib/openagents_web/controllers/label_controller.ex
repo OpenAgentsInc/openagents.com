@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.LabelController do
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
 
-    case Labels.create_label(repository, params) do
+    case Labels.create_label(repository, params, conn.assigns.current_user) do
       {:ok, %Label{} = label} ->
         conn
         |> put_status(:created)

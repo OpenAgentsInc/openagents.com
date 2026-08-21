@@ -19,6 +19,7 @@ defmodule OpenAgentsWeb.MemoryLive do
 
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Conversations
   alias OpenAgents.DataRights
   alias OpenAgents.ProfileMemory
@@ -29,7 +30,11 @@ defmodule OpenAgentsWeb.MemoryLive do
     {:ok, conversation} = Conversations.ensure_conversation(current_user)
     owner = Conversations.get_conversation_owner!(conversation)
 
-    if connected?(socket), do: :ok = ProfileMemory.subscribe(owner)
+    if connected?(socket) do
+      :ok = ProfileMemory.subscribe(owner)
+
+      Analytics.capture("memory_viewed", Analytics.distinct_id(current_user))
+    end
 
     {:ok,
      socket

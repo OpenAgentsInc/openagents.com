@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.LabelIndexLive do
   end
 
   def handle_event("save", %{"label" => label_params}, socket) do
-    case Labels.create_label(socket.assigns.repository, label_params) do
+    case Labels.create_label(socket.assigns.repository, label_params, socket.assigns.current_user) do
       {:ok, _label} ->
         {:noreply,
          socket

@@ -681,6 +681,25 @@ defmodule OpenAgentsWeb.Layouts do
     end
   end
 
+  @doc """
+  One browser analytics identity field from the session-written map, or nil.
+
+  The root layout renders these as data attributes for `app.js`; a missing or
+  malformed identity renders nothing rather than raising.
+  """
+  def posthog_identity(assigns, key) when is_atom(key) do
+    case assigns[:posthog_identity] do
+      %{} = identity ->
+        case identity[Atom.to_string(key)] do
+          value when is_binary(value) and value != "" -> value
+          _other -> nil
+        end
+
+      _absent ->
+        nil
+    end
+  end
+
   defp account_display_name(%{github_name: name}) when is_binary(name) and name != "", do: name
   defp account_display_name(%{github_login: login}), do: "@" <> login
 

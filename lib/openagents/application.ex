@@ -41,22 +41,19 @@ defmodule OpenAgents.Application do
     tool_snapshot = OpenAgents.Tools.Registry.install!(tool_modules)
     :ok = OpenAgents.RuntimeConfig.verify_startup!(runtime_config, tool_snapshot)
 
-    children = [
-      OpenAgentsWeb.Telemetry,
-      OpenAgents.Repo,
-      OpenAgents.ReleaseState,
-      # Deployment identity and boot convergence must settle before cluster
-      # discovery or the endpoint can make this node externally reachable.
-      OpenAgents.Forge.DeploymentNode,
-      OpenAgents.Forge.BootConverge,
-      {DNSCluster, query: Application.get_env(:openagents, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: OpenAgents.PubSub},
-      OpenAgents.RuntimeSupervisor,
-      # Start a worker by calling: OpenAgents.Worker.start_link(arg)
-      # {OpenAgents.Worker, arg},
-      # Start to serve requests, typically the last entry
-      OpenAgentsWeb.Endpoint
-    ]
+    children =
+      [
+        OpenAgentsWeb.Telemetry,
+        OpenAgents.Repo,
+        OpenAgents.ReleaseState,
+        # Deployment identity and boot convergence must settle before cluster
+        # discovery or the endpoint can make this node externally reachable.
+        OpenAgents.Forge.DeploymentNode,
+        OpenAgents.Forge.BootConverge,
+        {DNSCluster, query: Application.get_env(:openagents, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: OpenAgents.PubSub},
+        OpenAgents.RuntimeSupervisor
+      ] ++ analytics_children() ++ [OpenAgentsWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
@@ -89,6 +86,29 @@ defmodule OpenAgents.Application do
     }
 
     Supervisor.start_link([child], strategy: :one_for_one, name: OpenAgents.SCV.Supervisor)
+  end
+
+  # The analytics supervision tree starts only when a project token was
+  # configured at boot; without one, OpenAgents.Analytics is a no-op and no
+  # PostHog process exists. See docs/2026-08-21-posthog-integration-runbook.md.
+  defp analytics_children do
+    case posthog_config() do
+      nil -> []
+      config -> [{PostHog.Supervisor, config}]
+    end
+  end
+
+  defp posthog_config do
+    case Application.get_env(:posthog, :api_key) do
+      key when is_binary(key) and key != "" ->
+        :posthog
+        |> Application.get_env([])
+        |> Keyword.put(:enable, false)
+        |> PostHog.Config.validate!()
+
+      _missing ->
+        nil
+    end
   end
 
   defp run_scv_worker do

@@ -15,6 +15,7 @@ defmodule OpenAgents.Forge.Targets do
 
   import Ecto.Query
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Forge.Target
@@ -58,6 +59,10 @@ defmodule OpenAgents.Forge.Targets do
       |> Repo.insert()
       |> case do
         {:ok, target} ->
+          Analytics.capture("release_promoted", Analytics.system_distinct_id("forge"), %{
+            "repo" => repo
+          })
+
           broadcast_promotion(target)
           {:ok, target}
 

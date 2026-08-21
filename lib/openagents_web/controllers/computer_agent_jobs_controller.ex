@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.ComputerAgentJobsController do
 
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Analytics
   alias OpenAgents.ComputerAgentJobs
   alias OpenAgents.Conversations
   alias OpenAgents.Machines
@@ -15,6 +16,10 @@ defmodule OpenAgentsWeb.ComputerAgentJobsController do
     with {:ok, machine} <- Machines.get_machine(user.id, machine_id),
          {:ok, conversation} <- Conversations.ensure_conversation(user),
          {:ok, job} <- ComputerAgentJobs.start(user, machine, conversation, params) do
+      Analytics.capture("agent_job_created", Analytics.distinct_id(user), %{
+        "machine_tier" => machine.tier
+      })
+
       conn
       |> put_status(:accepted)
       |> json(%{"job" => job_projection(job)})

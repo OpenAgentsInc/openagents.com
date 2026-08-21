@@ -85,7 +85,7 @@ defmodule OpenAgentsWeb.ProjectController do
       {:ok, issue_number} ->
         params = Map.put(params, "issue_number", issue_number)
 
-        case Projects.create_project_item(params, project) do
+        case Projects.create_project_item(params, project, conn.assigns.current_user) do
           {:ok, item} ->
             conn
             |> put_status(:created)

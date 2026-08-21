@@ -9,11 +9,21 @@ defmodule OpenAgents.Forge.Deployment do
   exact rollback on every participant that issued a token.
   """
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Forge.BuildArtifact
   alias OpenAgents.Forge.BuildProtocol
   alias OpenAgents.Forge.DeploymentNode
 
   @default_timeout_ms 15_000
+
+  defp capture_deployment_completed(base, outcome, started_at) do
+    Analytics.capture("deployment_completed", Analytics.system_distinct_id("forge"), %{
+      "repo" => base.repo,
+      "deployment_id" => base.deployment_id,
+      "outcome" => outcome,
+      "duration_ms" => DateTime.diff(DateTime.utc_now(), started_at, :millisecond)
+    })
+  end
 
   @doc "Run through fleet commit, retaining tokens until `finalize/1`."
   def run(build, verified, artifact_bytes, opts \\ []) do
@@ -36,6 +46,11 @@ defmodule OpenAgents.Forge.Deployment do
       node_results: %{}
     }
 
+    Analytics.capture("deployment_started", Analytics.system_distinct_id("forge"), %{
+      "repo" => base.repo,
+      "deployment_id" => deployment_id
+    })
+
     result =
       with {:ok, session} <- snapshot_fleet(base, opts),
            {:ok, session} <- prepare_fleet(session, artifact_bytes, opts),
@@ -54,9 +69,11 @@ defmodule OpenAgents.Forge.Deployment do
 
     case result do
       {:ok, session} ->
+        capture_deployment_completed(base, "committed", base.started_at)
         {:ok, public_session(session)}
 
       {:error, reason, session} ->
+        capture_deployment_completed(base, "rolled_back", base.started_at)
         rollback_failure(session, reason, opts)
     end
   end

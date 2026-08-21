@@ -89,7 +89,14 @@
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
   </head>
-  <body class="h-screen overflow-hidden overscroll-none">
+  <body
+    class="h-screen overflow-hidden overscroll-none"
+    data-posthog-enabled={Atom.to_string(assigns[:posthog_enabled] == true)}
+    data-posthog-token={assigns[:posthog_token]}
+    data-posthog-api-host={assigns[:posthog_api_host]}
+    data-posthog-distinct-id={posthog_identity(assigns, :distinct_id)}
+    data-posthog-login={posthog_identity(assigns, :login)}
+  >
     {@inner_content}
   </body>
 </html>

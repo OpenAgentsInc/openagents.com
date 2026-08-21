@@ -4,6 +4,7 @@ defmodule OpenAgents.Issues do
   import Ecto.Query, warn: false
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Analytics
   alias OpenAgents.Issues.{Comment, Issue}
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
@@ -89,12 +90,25 @@ defmodule OpenAgents.Issues do
           {:error, changeset}
         end
 
+      {:ok, issue} ->
+        Analytics.capture("issue_created", issue_distinct_id(normalized), %{
+          "owner" => repository.owner,
+          "repo" => repository.name,
+          "has_labels" => has_labels?(normalized),
+          "has_assignees" => has_assignees?(normalized)
+        })
+
+        {:ok, issue}
+
       result ->
         result
     end
   end
 
-  def update_issue(%Issue{} = issue, attrs) do
+  def update_issue(issue, attrs, actor \\ nil)
+
+  def update_issue(%Issue{} = issue, attrs, actor)
+      when is_nil(actor) or is_struct(actor, User) do
     repository = %Repository{id: issue.repository_id}
 
     Repo.transaction(fn ->
@@ -113,6 +127,21 @@ defmodule OpenAgents.Issues do
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
+    |> case do
+      {:ok, updated} ->
+        repository = Repo.get(Repository, issue.repository_id)
+
+        Analytics.capture("issue_updated", actor_distinct_id(actor), %{
+          "owner" => repository && repository.owner,
+          "repo" => repository && repository.name,
+          "state" => updated.state
+        })
+
+        {:ok, updated}
+
+      result ->
+        result
+    end
   end
 
   def change_issue(%Issue{} = issue, attrs \\ %{}) do
@@ -259,6 +288,17 @@ defmodule OpenAgents.Issues do
         {_, _} -> Repo.rollback(%Comment{})
       end
     end)
+    |> case do
+      {:ok, comment} ->
+        Analytics.capture("issue_commented", issue_distinct_id(normalized), %{
+          "issue_number" => issue.number
+        })
+
+        {:ok, comment}
+
+      result ->
+        result
+    end
   end
 
   def update_comment(%Comment{} = comment, attrs) do
@@ -407,6 +447,22 @@ defmodule OpenAgents.Issues do
     |> Map.put("author_user_id", author.id)
     |> Map.put("user", user_json(author))
   end
+
+  defp issue_distinct_id(%{"author_user_id" => author_id}) when is_integer(author_id),
+    do: Analytics.distinct_id(author_id)
+
+  defp issue_distinct_id(_attrs), do: Analytics.system_distinct_id("api")
+
+  defp actor_distinct_id(nil), do: Analytics.system_distinct_id("api")
+  defp actor_distinct_id(%User{} = actor), do: Analytics.distinct_id(actor)
+
+  defp has_labels?(%{"labels" => labels}) when is_list(labels), do: labels != []
+  defp has_labels?(_attrs), do: false
+
+  defp has_assignees?(%{"assignees" => assignees}) when is_list(assignees),
+    do: assignees != []
+
+  defp has_assignees?(_attrs), do: false
 
   defp dump_repository_ids(rows) do
     Enum.map(rows, fn row ->

@@ -61,5 +61,11 @@ defmodule OpenAgentsWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+
+  # Attaches request metadata ($current_url, method, user agent) to analytics
+  # events captured during the request and reads browser tracing headers.
+  # Analytics hints only; identity still comes from the session.
+  plug PostHog.Integrations.Plug
+
   plug OpenAgentsWeb.Router
 end

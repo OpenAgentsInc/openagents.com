@@ -16,6 +16,8 @@ defmodule OpenAgentsWeb.Router do
 
     plug OpenAgentsWeb.Plugs.ContentSecurityPolicy
 
+    plug OpenAgentsWeb.Plugs.PostHogBootstrap
+
     plug :fetch_current_user
     plug OpenAgentsWeb.Plugs.SidebarSections
   end

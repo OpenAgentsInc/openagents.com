@@ -35,6 +35,10 @@ config :openagents, :provider, OpenAgents.Providers.Test
 config :openagents, :voice_call_provider, OpenAgents.Voice.TestCallProvider
 config :openagents, :voice_sideband_provider, OpenAgents.Voice.TestSidebandProvider
 
+# No project token is configured in tests, so OpenAgents.Analytics is a no-op.
+# test_mode additionally drops any event that reaches the package directly.
+config :posthog, test_mode: true
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :openagents, OpenAgentsWeb.Endpoint,

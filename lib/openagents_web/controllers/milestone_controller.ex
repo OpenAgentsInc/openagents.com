@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.MilestoneController do
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
 
-    case Milestones.create_milestone(repository, params) do
+    case Milestones.create_milestone(repository, params, conn.assigns.current_user) do
       {:ok, %Milestone{} = milestone} ->
         conn
         |> put_status(:created)

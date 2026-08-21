@@ -65,7 +65,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
     issue = socket.assigns.issue
     attrs = %{"title" => issue_params["title"], "body" => issue_params["body"]}
 
-    case Issues.update_issue(issue, attrs) do
+    case Issues.update_issue(issue, attrs, socket.assigns.current_user) do
       {:ok, updated} ->
         {:noreply,
          socket
@@ -138,7 +138,9 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   defp set_state(socket, state, reason) do
     attrs = %{"state" => state, "state_reason" => reason}
-    {:ok, updated} = Issues.update_issue(socket.assigns.issue, attrs)
+
+    {:ok, updated} =
+      Issues.update_issue(socket.assigns.issue, attrs, socket.assigns.current_user)
 
     flash = if state == "closed", do: "Issue closed", else: "Issue reopened"
 

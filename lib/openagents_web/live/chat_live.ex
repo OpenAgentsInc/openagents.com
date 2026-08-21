@@ -2,6 +2,7 @@ defmodule OpenAgentsWeb.ChatLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.{
+    Analytics,
     Conversations,
     DataRights,
     ProfileMemory,
@@ -43,6 +44,8 @@ defmodule OpenAgentsWeb.ChatLive do
       :ok = Voice.subscribe(conversation)
       :ok = Work.subscribe(conversation.id)
       :ok = ComputerActivity.subscribe(conversation.id)
+
+      Analytics.capture("chat_opened", Analytics.distinct_id(current_user))
     end
 
     socket =
@@ -176,6 +179,8 @@ defmodule OpenAgentsWeb.ChatLive do
 
   def handle_info({:turn_updated, turn}, socket) do
     if turn.status in ["completed", "failed", "cancelled"] do
+      capture_turn_completed(turn, socket)
+
       # The active turn ended: clear it, surface any error, and immediately start
       # the next queued message so a stacked run continues without the owner
       # re-sending.
@@ -374,6 +379,12 @@ defmodule OpenAgentsWeb.ChatLive do
       {:ok, records} ->
         _ = Turns.start(records.turn.id)
 
+        Analytics.capture(
+          "chat_message_sent",
+          Analytics.distinct_id(socket.assigns.current_user),
+          %{"length_bucket" => length_bucket(content)}
+        )
+
         socket =
           socket
           |> stream_insert(:messages, records.user_message)
@@ -502,6 +513,34 @@ defmodule OpenAgentsWeb.ChatLive do
 
   defp first_id([message | _messages]), do: message.id
   defp first_id([]), do: nil
+
+  # Terminal turn broadcasts arrive once per turn; the duration comes from the
+  # turn's own lifecycle timestamps, so no extra query is needed.
+  defp capture_turn_completed(turn, socket) do
+    duration_ms =
+      if is_nil(turn.started_at) or is_nil(turn.completed_at),
+        do: nil,
+        else: DateTime.diff(turn.completed_at, turn.started_at, :millisecond)
+
+    Analytics.capture(
+      "chat_turn_completed",
+      Analytics.distinct_id(socket.assigns.current_user),
+      %{
+        "outcome" => turn.status,
+        "duration_ms" => duration_ms
+      }
+    )
+  end
+
+  defp length_bucket(content) when is_binary(content) do
+    cond do
+      byte_size(content) < 100 -> "under_100"
+      byte_size(content) < 1_000 -> "under_1k"
+      byte_size(content) < 8_000 -> "under_8k"
+      true -> "over_8k"
+    end
+  end
+
   defp tool_activity(nil, nil), do: []
 
   defp tool_activity(turn, _voice_session) when not is_nil(turn),

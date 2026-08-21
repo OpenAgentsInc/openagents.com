@@ -4,6 +4,8 @@ defmodule OpenAgents.Labels do
   """
 
   import Ecto.Query, warn: false
+  alias OpenAgents.Accounts.User
+  alias OpenAgents.Analytics
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
@@ -80,9 +82,10 @@ defmodule OpenAgents.Labels do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_label(attrs), do: create_label(Repositories.initial_repository!(), attrs)
+  def create_label(attrs), do: create_label(Repositories.initial_repository!(), attrs, nil)
 
-  def create_label(%Repository{} = repository, attrs) do
+  def create_label(%Repository{} = repository, attrs, actor \\ nil)
+      when is_nil(actor) or is_struct(actor, User) do
     attrs =
       attrs
       |> Enum.into(%{}, fn {key, value} -> {to_string(key), value} end)
@@ -91,7 +94,22 @@ defmodule OpenAgents.Labels do
     %Label{}
     |> Label.changeset(attrs)
     |> Repo.insert()
+    |> case do
+      {:ok, label} ->
+        Analytics.capture("label_created", actor_distinct_id(actor), %{
+          "owner" => repository.owner,
+          "repo" => repository.name
+        })
+
+        {:ok, label}
+
+      result ->
+        result
+    end
   end
+
+  defp actor_distinct_id(nil), do: Analytics.system_distinct_id("api")
+  defp actor_distinct_id(%User{} = actor), do: Analytics.distinct_id(actor)
 
   @doc """
   Updates a label.

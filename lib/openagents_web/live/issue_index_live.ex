@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   end
 
   defp write(socket, id, attrs) do
-    {:ok, _updated} = Issues.update_issue(issue!(socket, id), attrs)
+    {:ok, _updated} = Issues.update_issue(issue!(socket, id), attrs, socket.assigns.current_user)
     {:noreply, load(socket)}
   end
 

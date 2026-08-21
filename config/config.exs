@@ -49,6 +49,8 @@ config :openagents,
   computer_controller_enabled: false,
   machine_token_ttl_seconds: 2_592_000,
   coding_jobs_dir: "/var/lib/openagents/coding-jobs",
+  posthog_project_token: nil,
+  posthog_api_host: "https://us.i.posthog.com",
   work_workers_enabled: false,
   work: [enabled: false],
   scv_codex: [
@@ -270,6 +272,17 @@ config :phoenix_live_view,
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
 config :openagents, OpenAgents.Mailer, adapter: Swoosh.Adapters.Local
+
+# Product analytics (docs/2026-08-21-posthog-integration-runbook.md). The
+# default supervisor stays off; OpenAgents.Application starts PostHog.Supervisor
+# only when a project token was configured at boot. Error tracking is a
+# separate, unapproved decision, so exception capture is off.
+config :posthog,
+  enable: false,
+  api_host: "https://us.i.posthog.com",
+  api_key: nil,
+  in_app_otp_apps: [:openagents],
+  enable_error_tracking: false
 
 # Configure esbuild (the version is required)
 config :esbuild,

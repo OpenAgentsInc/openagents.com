@@ -4,6 +4,8 @@ defmodule OpenAgents.Milestones do
   """
 
   import Ecto.Query, warn: false
+  alias OpenAgents.Accounts.User
+  alias OpenAgents.Analytics
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
@@ -79,15 +81,23 @@ defmodule OpenAgents.Milestones do
 
   """
   def create_milestone(attrs \\ %{}),
-    do: create_milestone(Repositories.initial_repository!(), attrs)
+    do: create_milestone(Repositories.initial_repository!(), attrs, nil)
 
-  def create_milestone(%Repository{} = repository, attrs) do
+  def create_milestone(%Repository{} = repository, attrs, actor \\ nil)
+      when is_nil(actor) or is_struct(actor, User) do
     normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}
     explicit_number? = Map.has_key?(normalized, "number")
-    create_milestone_with_number(repository, normalized, explicit_number?, 20)
+
+    create_milestone_with_number(repository, normalized, explicit_number?, actor, 20)
   end
 
-  defp create_milestone_with_number(repository, normalized, explicit_number?, attempts_remaining) do
+  defp create_milestone_with_number(
+         repository,
+         normalized,
+         explicit_number?,
+         actor,
+         attempts_remaining
+       ) do
     number = next_milestone_number(repository.id)
 
     %Milestone{}
@@ -104,16 +114,28 @@ defmodule OpenAgents.Milestones do
             repository,
             normalized,
             explicit_number?,
+            actor,
             attempts_remaining - 1
           )
         else
           {:error, changeset}
         end
 
+      {:ok, milestone} ->
+        Analytics.capture("milestone_created", actor_distinct_id(actor), %{
+          "owner" => repository.owner,
+          "repo" => repository.name
+        })
+
+        {:ok, milestone}
+
       result ->
         result
     end
   end
+
+  defp actor_distinct_id(nil), do: Analytics.system_distinct_id("api")
+  defp actor_distinct_id(%User{} = actor), do: Analytics.distinct_id(actor)
 
   defp next_milestone_number(repository_id) do
     case Repo.aggregate(

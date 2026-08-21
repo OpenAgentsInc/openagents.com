@@ -24,8 +24,50 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/openagents"
 import topbar from "../vendor/topbar"
+import posthog from "posthog-js"
 import VoiceController from "./voice_controller"
 import PacedTranscript from "./paced_transcript"
+
+// Browser analytics (docs/2026-08-21-posthog-integration-runbook.md). The
+// root layout carries the boot configuration and the session identity as data
+// attributes; when capture is unconfigured nothing initializes and no request
+// to PostHog is made.
+const initAnalytics = () => {
+  const attributes = document.body?.dataset
+  if (!attributes || attributes.posthogEnabled !== "true") return
+  if (!attributes.posthogToken) return
+
+  posthog.init(attributes.posthogToken, {
+    api_host: attributes.posthogApiHost || "https://us.i.posthog.com",
+    defaults: "2026-05-30",
+    autocapture: true,
+    // Pageviews are captured explicitly: once for the initial load here, then
+    // one per LiveView navigation. Automatic history tracking would double
+    // count against the phx:navigate listener.
+    capture_pageview: false,
+    // Error tracking and session replay are separate, unapproved decisions.
+    capture_exceptions: false,
+    disable_session_recording: true,
+    // Lets server-side events link back to the browser session. Hostname only.
+    tracing_headers: [window.location.hostname],
+  })
+
+  posthog.capture("$pageview", { $current_url: window.location.href })
+
+  window.addEventListener("phx:navigate", ({ detail: { href } }) => {
+    posthog.capture("$pageview", { $current_url: href })
+  })
+
+  const distinctId = attributes.posthogDistinctId
+  if (distinctId && !sessionStorage.getItem("posthog:identified")) {
+    posthog.identify(distinctId, {
+      github_login: attributes.posthogLogin || undefined,
+    })
+    sessionStorage.setItem("posthog:identified", "true")
+  }
+}
+
+initAnalytics()
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

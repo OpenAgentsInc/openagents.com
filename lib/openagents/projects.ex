@@ -4,6 +4,7 @@ defmodule OpenAgents.Projects do
   import Ecto.Query, warn: false
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Analytics
   alias OpenAgents.Issues.Issue
   alias OpenAgents.ProjectFields.ProjectField
   alias OpenAgents.ProjectItems.ProjectItem
@@ -85,10 +86,16 @@ defmodule OpenAgents.Projects do
       |> Map.put("repository_id", repository.id)
       |> put_owner(owner_user)
 
-    create_project_with_number(repository, normalized, explicit_number?, 20)
+    create_project_with_number(repository, normalized, explicit_number?, owner_user, 20)
   end
 
-  defp create_project_with_number(repository, normalized, explicit_number?, attempts_remaining) do
+  defp create_project_with_number(
+         repository,
+         normalized,
+         explicit_number?,
+         owner_user,
+         attempts_remaining
+       ) do
     normalized = Map.put_new(normalized, "number", next_project_number(repository.id))
 
     %Project{}
@@ -98,15 +105,33 @@ defmodule OpenAgents.Projects do
       {:error, changeset} when not explicit_number? and attempts_remaining > 1 ->
         if number_conflict?(changeset) do
           normalized = Map.delete(normalized, "number")
-          create_project_with_number(repository, normalized, false, attempts_remaining - 1)
+
+          create_project_with_number(
+            repository,
+            normalized,
+            false,
+            owner_user,
+            attempts_remaining - 1
+          )
         else
           {:error, changeset}
         end
+
+      {:ok, project} ->
+        Analytics.capture("project_created", actor_distinct_id(owner_user), %{
+          "owner" => repository.owner,
+          "repo" => repository.name
+        })
+
+        {:ok, project}
 
       result ->
         result
     end
   end
+
+  defp actor_distinct_id(nil), do: Analytics.system_distinct_id("api")
+  defp actor_distinct_id(%User{} = actor), do: Analytics.distinct_id(actor)
 
   def update_project(%Project{} = project, attrs) do
     attrs = attrs |> to_string_map() |> Map.drop(["repository_id", "owner_user_id"])
@@ -178,40 +203,58 @@ defmodule OpenAgents.Projects do
     )
   end
 
-  def create_project_item(attrs, project_id) when is_integer(project_id) do
+  def create_project_item(attrs, project, actor \\ nil)
+
+  def create_project_item(attrs, project_id, actor)
+      when is_integer(project_id) do
     project = get_project!(project_id)
-    create_project_item(attrs, project)
+    create_project_item(attrs, project, actor)
   end
 
-  def create_project_item(attrs, %Project{} = project) do
+  def create_project_item(attrs, %Project{} = project, actor)
+      when is_nil(actor) or is_struct(actor, User) do
     attrs = to_string_map(attrs)
     values = Map.get(attrs, "values", %{})
 
-    case Map.get(attrs, "issue_number") do
-      nil ->
-        %ProjectItem{}
-        |> ProjectItem.changeset(%{
-          "project_id" => project.id,
-          "repository_id" => project.repository_id,
-          "values" => values
-        })
-        |> Ecto.Changeset.apply_action(:insert)
+    result =
+      case Map.get(attrs, "issue_number") do
+        nil ->
+          %ProjectItem{}
+          |> ProjectItem.changeset(%{
+            "project_id" => project.id,
+            "repository_id" => project.repository_id,
+            "values" => values
+          })
+          |> Ecto.Changeset.apply_action(:insert)
 
-      issue_number ->
-        issue =
-          Repo.get_by!(Issue,
-            repository_id: project.repository_id,
-            number: issue_number
-          )
+        issue_number ->
+          issue =
+            Repo.get_by!(Issue,
+              repository_id: project.repository_id,
+              number: issue_number
+            )
 
-        %ProjectItem{}
-        |> ProjectItem.changeset(%{
-          "project_id" => project.id,
-          "issue_id" => issue.id,
-          "repository_id" => project.repository_id,
-          "values" => values
+          %ProjectItem{}
+          |> ProjectItem.changeset(%{
+            "project_id" => project.id,
+            "issue_id" => issue.id,
+            "repository_id" => project.repository_id,
+            "values" => values
+          })
+          |> Repo.insert()
+      end
+
+    case result do
+      {:ok, item} ->
+        Analytics.capture("project_item_added", actor_distinct_id(actor), %{
+          "project_number" => project.number,
+          "has_issue" => match?(%ProjectItem{issue_id: id} when id != nil, item)
         })
-        |> Repo.insert()
+
+        {:ok, item}
+
+      result ->
+        result
     end
   end
 

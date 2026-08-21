@@ -9,6 +9,7 @@ defmodule OpenAgents.ProfileMemory do
 
   import Ecto.Query
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Conversations.{Message, Visitor}
   alias OpenAgents.Memory.{Policy, Redaction}
   alias OpenAgents.ProfileMemory.{Record, Scope, Snapshot, SnapshotRecord, Source}
@@ -68,6 +69,16 @@ defmodule OpenAgents.ProfileMemory do
           end
         end)
       end
+
+    case result do
+      {:ok, %{disposition: disposition}} ->
+        Analytics.capture("memory_saved", owner_distinct_id(owner), %{
+          "disposition" => disposition
+        })
+
+      _other ->
+        :ok
+    end
 
     broadcast_result(owner, result)
   end
@@ -955,4 +966,11 @@ defmodule OpenAgents.ProfileMemory do
   end
 
   defp broadcast_result(_owner, error), do: error
+
+  # Memory owners are account-scoped visitors; an owner without a user row is
+  # a browser-scoped visitor and gets its own synthetic person.
+  defp owner_distinct_id(%Visitor{user_id: user_id}) when is_integer(user_id),
+    do: Analytics.distinct_id(user_id)
+
+  defp owner_distinct_id(%Visitor{id: id}), do: "visitor_#{id}"
 end

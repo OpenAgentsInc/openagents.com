@@ -74,6 +74,7 @@ defmodule OpenAgents.Forge.Browse do
 
   @doc "The default branch head, if the repo has one."
   def head(repo) do
+    _ = freshen(repo)
     refs = Repos.refs(storage_key(repo))
 
     case Map.fetch(refs, "refs/heads/#{default_branch(repo)}") do

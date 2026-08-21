@@ -352,6 +352,7 @@ if config_env() == :prod and runtime_role == :web do
     inference_proxy_url: optional_text.("OPENAGENTS_INFERENCE_PROXY_URL"),
     forge_enabled: forge_enabled,
     forge_deploy_lane_enabled: forge_deploy_enabled,
+    repository_provisioner_enabled: forge_deploy_enabled,
     forge_boot_converge_enabled: boot_convergence_enabled,
     forge_rolling_provider: forge_rolling_provider,
     forge_repos: forge_repos,

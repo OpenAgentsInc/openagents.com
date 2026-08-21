@@ -532,6 +532,12 @@ resource "google_storage_bucket_iam_member" "fleet_wal" {
   member = google_service_account.fleet.member
 }
 
+resource "google_storage_bucket_iam_member" "web_wal" {
+  bucket = google_storage_bucket.wal.name
+  role   = "roles/storage.objectViewer"
+  member = google_service_account.web.member
+}
+
 resource "google_storage_bucket_iam_member" "web_recordings" {
   bucket = google_storage_bucket.recordings.name
   role   = "roles/storage.objectAdmin"

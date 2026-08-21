@@ -1,7 +1,8 @@
 defmodule OpenAgents.Forge.SyncTest do
   use ExUnit.Case, async: false
 
-  alias OpenAgents.Forge.{Repos, Sync, WAL}
+  alias OpenAgents.Forge.{Browse, Repos, Sync, WAL}
+  alias OpenAgents.Repositories.Repository
 
   setup do
     root =
@@ -63,7 +64,9 @@ defmodule OpenAgents.Forge.SyncTest do
              "refs/heads/trunk"
 
     File.rm_rf!(Repos.bare_path("storage-key"))
-    assert :ok = Sync.ensure_fresh("storage-key", "trunk")
+    repository = %Repository{storage_key: "storage-key", default_branch: "trunk"}
+
+    assert {:ok, ^sha} = Browse.head(repository)
     assert Repos.refs("storage-key") == refs
 
     assert String.trim(git_bare!(Repos.bare_path("storage-key"), ["show", "trunk:README.md"])) ==

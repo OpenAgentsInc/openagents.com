@@ -103,6 +103,17 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
       assert comment.author_user_id != nil
     end
 
+    test "cannot post to a conversation locked after the page opened", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(%{"title" => "Lock this thread"})
+      {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      {:ok, _locked} = Issues.update_issue(issue, %{"locked" => true})
+
+      html = render_submit(view, "add_comment", %{"comment" => %{"body" => "Too late"}})
+
+      assert html =~ "This conversation is locked"
+      assert Issues.list_comments(issue) == []
+    end
+
     test "get no triage controls anywhere on the issue page", %{conn: conn} do
       {:ok, issue} = Issues.create_issue(%{"title" => "Not yours to close"})
       {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")

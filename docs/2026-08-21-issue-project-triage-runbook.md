@@ -43,7 +43,7 @@ Reading and writing split cleanly, GitHub-style:
 | Signed in, not a member | Public repositories | Yes | Yes | No |
 | An issue's author | Their issue | Already filed | Yes | Edit title/body, close, reopen their own |
 | Repository member with write role | All visible repositories | Yes | Yes | Yes |
-| `viewer` member | Including private repositories | On public only | On public only | No |
+| `viewer` member | Including private repositories | Yes | Yes | No |
 
 Rules the server enforces, regardless of what any client renders:
 
@@ -168,8 +168,8 @@ Deliberately not built yet, in priority order:
 | --- | --- |
 | `owner` | Everything, including managing members |
 | `maintainer` | Triage: label, assign, set milestones, close, edit any issue |
-| `contributor` | File and comment on issues; push if granted Git access |
-| `viewer` | Read private-repository content; join public conversations |
+| `contributor` | Triage, file and comment on issues, and push Git changes |
+| `viewer` | Read visible repositories and join their issue conversations |
 
 ### One-time setup for this repository
 
@@ -181,14 +181,21 @@ so give it the default vocabulary once. Either use the Labels page
 TOKEN=oa_pat_your_token   # created at /settings/api-tokens, forge:write scope
 BASE=https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/labels
 
-for spec in bug:d73a4a documentation:0075ca duplicate:cfd3d7 \
-  enhancement:a2eeef "good first issue:7057ff" help wanted:008672 \
-  invalid:e4e669 question:d876e3 wontfix:ffffff; do
-  name=${spec%%:*}; color=${spec#*:}
+while IFS='|' read -r name color; do
   curl -s -X POST "$BASE" -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"name\": \"$name\", \"color\": \"$color\"}" >/dev/null
-done
+done <<'LABELS'
+bug|d73a4a
+documentation|0075ca
+duplicate|cfd3d7
+enhancement|a2eeef
+good first issue|7057ff
+help wanted|008672
+invalid|e4e669
+question|d876e3
+wontfix|ffffff
+LABELS
 ```
 
 Repositories created from now on get these labels automatically.
@@ -314,9 +321,10 @@ curl -s -X PATCH "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.c
   -d '{"state": "closed", "state_reason": "not_planned"}'
 ```
 
-Label and assign in one update: `labels` takes names (creating missing ones),
+Label and assign in one issue update: `labels` takes existing names,
 `assignees` takes logins, and both replace the full set, so send the complete
-desired lists.
+desired lists. Use `POST .../issues/{issue_number}/labels` when you want a
+missing label to be created as it is added.
 
 ### Measuring triage health
 

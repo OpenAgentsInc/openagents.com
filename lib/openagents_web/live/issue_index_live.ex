@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
       user = socket.assigns.current_user
       can_write = Repositories.writable?(repository, user)
+      filters = read_filters(params)
 
       socket =
         socket
@@ -39,16 +40,11 @@ defmodule OpenAgentsWeb.IssueIndexLive do
         |> assign(:can_participate, Repositories.issue_participant?(repository, user))
         |> assign(:state, normalize_state(params["state"]))
         |> assign(:page, Issues.parse_page(params["page"]))
-        |> assign(:filters, read_filters(params))
-        |> assign(:label_options, if(can_write, do: Labels.list_labels(repository), else: []))
-        |> assign(
-          :assignable,
-          if(can_write, do: Repositories.list_assignable_users(repository), else: [])
-        )
-        |> assign(
-          :milestone_options,
-          if(can_write, do: Milestones.list_milestones(repository), else: [])
-        )
+        |> assign(:filters, filters)
+        |> assign(:filter_form, to_form(filters, as: :filter))
+        |> assign(:label_options, Labels.list_labels(repository))
+        |> assign(:assignable, Repositories.list_assignable_users(repository))
+        |> assign(:milestone_options, Milestones.list_milestones(repository))
         |> load()
 
       {:noreply, socket}
@@ -70,7 +66,10 @@ defmodule OpenAgentsWeb.IssueIndexLive do
     apply_filters(socket, filters)
   end
 
-  def handle_event("set_state", %{"id" => id, "state" => state} = params, socket) do
+  def handle_event("set_state", %{"id" => id, "state" => state} = params, socket)
+      when state in ~w(open closed) do
+    socket = refresh_authority(socket)
+
     if socket.assigns.can_write do
       attrs =
         case state do
@@ -86,6 +85,8 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   end
 
   def handle_event("toggle_assignee", %{"id" => id, "login" => login}, socket) do
+    socket = refresh_authority(socket)
+
     if socket.assigns.can_write do
       issue = issue!(socket, id)
 
@@ -101,13 +102,26 @@ defmodule OpenAgentsWeb.IssueIndexLive do
     end
   end
 
+  def handle_event(_unsupported_event, _params, socket) do
+    {:noreply, put_flash(socket, :error, "That issue action is not available.")}
+  end
+
   # Live updates: any committed issue write in this repository re-reads the
   # current page through this viewer's own authorization, so two people
   # triaging together converge instead of drifting.
   def handle_info({:issues_changed, repository_id}, socket) do
     if repository_id == socket.assigns.repository.id,
-      do: {:noreply, load(socket)},
+      do: {:noreply, socket |> refresh_authority() |> load()},
       else: {:noreply, socket}
+  end
+
+  defp refresh_authority(socket) do
+    repository = socket.assigns.repository
+    user = socket.assigns.current_user
+
+    socket
+    |> assign(:can_write, Repositories.writable?(repository, user))
+    |> assign(:can_participate, Repositories.issue_participant?(repository, user))
   end
 
   defp apply_filters(socket, filters) do
@@ -235,7 +249,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
       </Circle.issue_toolbar>
 
       <div class="issue-filters">
-        <.form for={%{}} as={:filter} phx-change="filter" id="issue-filter-form">
+        <.form for={@filter_form} phx-change="filter" id="issue-filter-form">
           <.input
             type="search"
             name="q"

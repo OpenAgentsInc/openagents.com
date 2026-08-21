@@ -595,86 +595,97 @@ defmodule OpenAgents.Repositories do
   @doc "The acting owner's view of one member row: add by GitHub login."
   def add_member_by_login(%Repository{} = repository, %User{} = actor, login, role)
       when is_binary(login) and role in @all_roles do
-    case active_user_by_login(login) do
-      %User{} = user ->
-        case Repo.transaction(fn ->
-               membership = upsert_membership!(repository, user, role)
-               audit_membership(repository, actor, user, "added", role)
-               membership
-             end) do
-          {:ok, membership} -> {:ok, membership}
-          {:error, reason} -> {:error, reason}
-        end
+    with_owner_memberships(repository, actor, fn _memberships ->
+      case active_user_by_login(login) do
+        %User{} = user ->
+          membership = upsert_membership!(repository, user, role)
+          audit_membership(repository, actor, user, "added", role)
+          membership
 
-      nil ->
-        {:error, :unknown_user}
-    end
+        nil ->
+          Repo.rollback(:unknown_user)
+      end
+    end)
   end
 
   def change_member_role(%Repository{} = repository, %User{} = actor, user_id, role)
       when role in @all_roles do
-    with %User{} = user <- Repo.get(User, user_id) || {:error, :unknown_member},
-         %Membership{} <-
-           Repo.get_by(Membership, repository_id: repository.id, user_id: user.id) ||
-             {:error, :unknown_member},
-         :ok <- guard_last_owner(repository, user, role) do
-      Repo.transaction(fn ->
-        updated = upsert_membership!(repository, user, role)
-        audit_membership(repository, actor, user, "role changed", role)
-        updated
-      end)
-      |> case do
-        {:ok, membership} -> {:ok, membership}
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      {:error, reason} -> {:error, reason}
-    end
+    with_owner_memberships(repository, actor, fn memberships ->
+      user = Repo.get(User, user_id)
+      membership = Enum.find(memberships, &(&1.user_id == user_id))
+
+      if is_nil(user) or is_nil(membership), do: Repo.rollback(:unknown_member)
+      guard_last_owner!(memberships, membership, role)
+
+      updated = upsert_membership!(repository, user, role)
+      audit_membership(repository, actor, user, "role changed", role)
+      updated
+    end)
   end
 
   def remove_member(%Repository{} = repository, %User{} = actor, user_id) do
-    with %User{} = user <- Repo.get(User, user_id) || {:error, :unknown_member},
-         %Membership{} = membership <-
-           Repo.get_by(Membership, repository_id: repository.id, user_id: user.id) ||
-             {:error, :unknown_member},
-         :ok <- guard_last_owner(repository, user, nil) do
-      Repo.transaction(fn ->
-        Repo.delete!(membership)
+    case with_owner_memberships(repository, actor, fn memberships ->
+           user = Repo.get(User, user_id)
+           membership = Enum.find(memberships, &(&1.user_id == user_id))
 
-        Audit.record!(
-          "repository.membership.removed",
-          {:user, actor.id},
-          "membership",
-          membership_subject_id(membership),
-          repository_id: repository.id,
-          metadata: %{"login" => user.github_login}
-        )
-      end)
+           if is_nil(user) or is_nil(membership), do: Repo.rollback(:unknown_member)
+           guard_last_owner!(memberships, membership, nil)
+           Repo.delete!(membership)
 
-      :ok
-    else
+           Audit.record!(
+             "repository.membership.removed",
+             {:user, actor.id},
+             "membership",
+             membership_subject_id(membership),
+             repository_id: repository.id,
+             metadata: %{"login" => user.github_login}
+           )
+
+           :ok
+         end) do
+      {:ok, :ok} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
 
+  # Serialize membership administration per repository. This makes both the
+  # owner check and the last-owner rule true at the instant of the write, even
+  # when an owner keeps an old LiveView open or two owners act concurrently.
+  defp with_owner_memberships(%Repository{id: repository_id}, %User{id: actor_id}, operation) do
+    Repo.transaction(fn ->
+      memberships =
+        Repo.all(
+          from membership in Membership,
+            where: membership.repository_id == ^repository_id,
+            order_by: [asc: membership.user_id],
+            lock: "FOR UPDATE"
+        )
+
+      active_actor? =
+        Repo.exists?(
+          from user in User,
+            where: user.id == ^actor_id and user.status == "active"
+        )
+
+      actor_owns? =
+        Enum.any?(memberships, &(&1.user_id == actor_id and &1.role == "owner"))
+
+      if active_actor? and actor_owns? do
+        operation.(memberships)
+      else
+        Repo.rollback(:forbidden)
+      end
+    end)
+  end
+
   # A repository with no owner cannot be administered any more, so the last
-  # owner cannot be demoted or removed, including by themselves.
-  defp guard_last_owner(%Repository{id: repository_id}, %User{id: user_id}, new_role) do
-    owner_count =
-      Repo.one!(
-        from membership in Membership,
-          where: membership.repository_id == ^repository_id and membership.role == "owner",
-          select: count()
-      )
+  # owner cannot be demoted or removed, including by themselves. The caller
+  # holds row locks over every membership in this repository.
+  defp guard_last_owner!(memberships, %Membership{} = membership, new_role) do
+    leaving_owner? = membership.role == "owner" and new_role != "owner"
+    owner_count = Enum.count(memberships, &(&1.role == "owner"))
 
-    leaving_owner? =
-      membership_role(%Repository{id: repository_id}, %User{id: user_id}) == "owner"
-
-    still_owner? = new_role == "owner"
-
-    if leaving_owner? and not still_owner? and owner_count <= 1,
-      do: {:error, :last_owner},
-      else: :ok
+    if leaving_owner? and owner_count <= 1, do: Repo.rollback(:last_owner)
   end
 
   defp upsert_membership!(repository, user, role) do
@@ -824,17 +835,21 @@ defmodule OpenAgents.Repositories do
   edit) stay behind writability and are not governed by this predicate.
   """
   def issue_participant?(%Repository{}, nil), do: false
-  def issue_participant?(%Repository{visibility: "public"}, %User{}), do: true
 
-  def issue_participant?(%Repository{} = repository, %User{} = user),
-    do: member?(repository, user)
+  def issue_participant?(%Repository{} = repository, %User{} = user) do
+    active_user?(user) and (public?(repository) or member?(repository, user))
+  end
 
   @doc "Whether the user holds the repository's `owner` role."
   def owner?(%Repository{} = repository, %User{} = user) do
-    membership_role(repository, user) == "owner"
+    active_user?(user) and membership_role(repository, user) == "owner"
   end
 
   def owner?(%Repository{}, nil), do: false
+
+  defp active_user?(%User{id: user_id}) do
+    Repo.exists?(from user in User, where: user.id == ^user_id and user.status == "active")
+  end
 
   @doc "Subscribes the caller to one repository's issue activity."
   def subscribe_issues(repository_id),

@@ -35,6 +35,13 @@ defmodule OpenAgents.IssuesQueryTest do
     assert hd(issues).id == closed.id or hd(issues).id == open.id
   end
 
+  test "page parsing rejects trailing text and bounds public offsets" do
+    assert Issues.parse_page("2") == 2
+    assert Issues.parse_page("2junk") == 1
+    assert Issues.parse_page("-1") == 1
+    assert Issues.parse_page(String.duplicate("9", 100)) == 10_000
+  end
+
   test "the state filter matches the tab it drives", %{repository: repository} do
     {open_issues, open_total} = Issues.list_issues_page(repository, state: "open")
     {closed_issues, closed_total} = Issues.list_issues_page(repository, state: "closed")

@@ -78,110 +78,137 @@ defmodule OpenAgentsWeb.IssueShowLive do
      |> load(issue)}
   end
 
-  def handle_event("toggle_edit", _params, socket) when socket.assigns.can_edit do
-    issue = socket.assigns.issue
+  def handle_event("toggle_edit", _params, socket) do
+    with_authority(socket, :can_edit, "You can no longer edit this issue.", fn socket ->
+      issue = socket.assigns.issue
 
-    {:noreply,
-     socket
-     |> assign(:editing, !socket.assigns.editing)
-     |> assign(:form, to_form(Issues.change_issue(issue)))}
+      {:noreply,
+       socket
+       |> assign(:editing, !socket.assigns.editing)
+       |> assign(:form, to_form(Issues.change_issue(issue)))}
+    end)
   end
 
-  def handle_event("save", %{"issue" => issue_params}, socket) when socket.assigns.can_edit do
-    issue = socket.assigns.issue
-    attrs = %{"title" => issue_params["title"], "body" => issue_params["body"]}
+  def handle_event("save", %{"issue" => issue_params}, socket) do
+    with_authority(socket, :can_edit, "You can no longer edit this issue.", fn socket ->
+      issue = socket.assigns.issue
+      attrs = %{"title" => issue_params["title"], "body" => issue_params["body"]}
 
-    case Issues.update_issue(issue, attrs, socket.assigns.current_user) do
-      {:ok, updated} ->
-        {:noreply,
-         socket
-         |> assign(:editing, false)
-         |> put_flash(:info, "Issue updated")
-         |> load(updated)}
+      case Issues.update_issue(issue, attrs, socket.assigns.current_user) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:editing, false)
+           |> put_flash(:info, "Issue updated")
+           |> load(updated)}
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
-    end
+        {:error, changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
+    end)
   end
 
   # A viewer without authority who hand-crafts an event gets a refusal rather
   # than a silent success; the UI never shows them the control in the first
   # place.
-  def handle_event("close", _params, socket) when socket.assigns.can_edit,
-    do: set_state(socket, "closed", "completed")
+  def handle_event("close", _params, socket),
+    do: with_edit_authority(socket, &set_state(&1, "closed", "completed"))
 
-  def handle_event("reopen", _params, socket) when socket.assigns.can_edit,
-    do: set_state(socket, "open", nil)
+  def handle_event("reopen", _params, socket),
+    do: with_edit_authority(socket, &set_state(&1, "open", nil))
 
   # The rail's state menu picks a close reason as well as a state, which the
   # header's two buttons cannot. Both end in the same write.
-  def handle_event("set_state", %{"state" => "open"}, socket) when socket.assigns.can_edit,
-    do: set_state(socket, "open", nil)
+  def handle_event("set_state", %{"state" => "open"}, socket),
+    do: with_edit_authority(socket, &set_state(&1, "open", nil))
 
-  def handle_event("set_state", %{"state" => "closed"} = params, socket)
-      when socket.assigns.can_edit,
-      do: set_state(socket, "closed", params["reason"] || "completed")
+  def handle_event("set_state", %{"state" => "closed"} = params, socket),
+    do: with_edit_authority(socket, &set_state(&1, "closed", params["reason"] || "completed"))
 
-  def handle_event("toggle_label", %{"name" => name}, socket) when socket.assigns.can_write do
-    issue = socket.assigns.issue
+  def handle_event("toggle_label", %{"name" => name}, socket) do
+    with_authority(
+      socket,
+      :can_write,
+      "Only repository members can change issue labels.",
+      fn socket ->
+        issue = socket.assigns.issue
 
-    {:ok, updated} =
-      if Enum.any?(issue.labels || [], &(&1["name"] == name)) do
-        Issues.remove_label(issue, name)
-      else
-        Issues.add_labels(issue, [name])
+        {:ok, updated} =
+          if Enum.any?(issue.labels || [], &(&1["name"] == name)) do
+            Issues.remove_label(issue, name)
+          else
+            Issues.add_labels(issue, [name])
+          end
+
+        {:noreply, load(socket, updated)}
       end
-
-    {:noreply, load(socket, updated)}
+    )
   end
 
-  def handle_event("toggle_assignee", %{"login" => login}, socket)
-      when socket.assigns.can_write do
-    issue = socket.assigns.issue
+  def handle_event("toggle_assignee", %{"login" => login}, socket) do
+    with_authority(
+      socket,
+      :can_write,
+      "Only repository members can change issue assignees.",
+      fn socket ->
+        issue = socket.assigns.issue
 
-    {:ok, updated} =
-      if Enum.any?(issue.assignees || [], &(&1["login"] == login)) do
-        Issues.remove_assignees(issue, [login])
-      else
-        Issues.add_assignees(issue, [login])
+        {:ok, updated} =
+          if Enum.any?(issue.assignees || [], &(&1["login"] == login)) do
+            Issues.remove_assignees(issue, [login])
+          else
+            Issues.add_assignees(issue, [login])
+          end
+
+        {:noreply, load(socket, updated)}
       end
-
-    {:noreply, load(socket, updated)}
+    )
   end
 
-  def handle_event("set_milestone", %{"number" => number}, socket)
-      when socket.assigns.can_write do
-    {:ok, updated} = Issues.set_milestone(socket.assigns.issue, number_or_nil(number))
-    {:noreply, load(socket, updated)}
+  def handle_event("set_milestone", %{"number" => number}, socket) do
+    with_authority(
+      socket,
+      :can_write,
+      "Only repository members can change issue milestones.",
+      fn socket ->
+        {:ok, updated} = Issues.set_milestone(socket.assigns.issue, number_or_nil(number))
+        {:noreply, load(socket, updated)}
+      end
+    )
   end
 
-  def handle_event("add_comment", %{"comment" => %{"body" => body}}, socket)
-      when socket.assigns.can_participate do
-    issue = socket.assigns.issue
+  def handle_event("add_comment", %{"comment" => %{"body" => body}}, socket) do
+    with_authority(socket, :can_participate, "Sign in to comment on this issue.", fn socket ->
+      issue = socket.assigns.issue
 
-    case Issues.create_comment(issue, %{body: body}, socket.assigns.current_user) do
-      {:ok, _comment} ->
-        {:noreply,
-         socket
-         |> assign(:comment_form, to_form(Comment.changeset(%Comment{}, %{})))
-         |> put_flash(:info, "Comment added")
-         |> load(%{issue | comments: issue.comments + 1})}
+      if issue.locked do
+        {:noreply, put_flash(socket, :error, "This conversation is locked.")}
+      else
+        case Issues.create_comment(issue, %{body: body}, socket.assigns.current_user) do
+          {:ok, _comment} ->
+            {:noreply,
+             socket
+             |> assign(:comment_form, to_form(Comment.changeset(%Comment{}, %{})))
+             |> put_flash(:info, "Comment added")
+             |> load(%{issue | comments: issue.comments + 1})}
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :comment_form, to_form(changeset))}
-    end
+          {:error, changeset} ->
+            {:noreply, assign(socket, :comment_form, to_form(changeset))}
+        end
+      end
+    end)
+  end
+
+  def handle_event(_unsupported_event, _params, socket) do
+    {:noreply, put_flash(socket, :error, "That issue action is not available.")}
   end
 
   # Live updates: someone else's write re-reads this issue through the same
   # visibility check the mount used.
   def handle_info({:issues_changed, repository_id}, socket)
       when repository_id == socket.assigns.repository.id do
-    issue = Issues.get_issue_by_number!(socket.assigns.repository, socket.assigns.issue.number)
-
-    {:noreply,
-     socket
-     |> assign(:can_edit, socket.assigns.can_write || author?(issue, socket.assigns.current_user))
-     |> load(issue)}
+    socket = refresh_authority(socket)
+    {:noreply, load(socket, socket.assigns.issue)}
   end
 
   def handle_info({:issues_changed, _other_repository}, socket), do: {:noreply, socket}
@@ -204,6 +231,40 @@ defmodule OpenAgentsWeb.IssueShowLive do
      socket
      |> put_flash(:info, flash)
      |> load(updated)}
+  end
+
+  defp with_edit_authority(socket, operation) do
+    with_authority(socket, :can_edit, "You can no longer change this issue's state.", operation)
+  end
+
+  defp with_authority(socket, permission, message, operation) do
+    socket = refresh_authority(socket)
+
+    if socket.assigns[permission] do
+      operation.(socket)
+    else
+      {:noreply, put_flash(socket, :error, message)}
+    end
+  end
+
+  defp refresh_authority(socket) do
+    user = socket.assigns.current_user
+
+    visible_repository = Repositories.get_visible_repository(socket.assigns.repository.id, user)
+    repository = visible_repository || socket.assigns.repository
+    visible? = not is_nil(visible_repository)
+    can_write = visible? and Repositories.writable?(repository, user)
+    can_participate = visible? and Repositories.issue_participant?(repository, user)
+    issue = Issues.get_issue!(socket.assigns.issue.id)
+    can_edit = can_write || (can_participate and author?(issue, user))
+
+    socket
+    |> assign(:repository, repository)
+    |> assign(:issue, issue)
+    |> assign(:can_write, can_write)
+    |> assign(:can_participate, can_participate)
+    |> assign(:can_edit, can_edit)
+    |> assign(:editing, socket.assigns.editing and can_edit)
   end
 
   # One place rebuilds everything derived from the issue, so a write cannot

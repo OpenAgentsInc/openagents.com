@@ -72,7 +72,19 @@ defmodule OpenAgents.Labels do
         {:ok, label}
 
       nil ->
-        create_label(repository, %{"name" => decoded, "color" => generated_color()}, actor)
+        case create_label(repository, %{"name" => decoded, "color" => generated_color()}, actor) do
+          {:error, %Ecto.Changeset{}} = error ->
+            # Another request can create the same label after the read above.
+            # Return that committed row instead of turning a harmless race
+            # into a 500 response.
+            case Repo.get_by(Label, repository_id: repository.id, name: decoded) do
+              %Label{} = label -> {:ok, label}
+              nil -> error
+            end
+
+          result ->
+            result
+        end
     end
   end
 

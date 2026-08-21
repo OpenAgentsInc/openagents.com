@@ -33,7 +33,7 @@ defmodule OpenAgentsWeb.IssueLabelController do
       {:error, %Ecto.Changeset{} = changeset} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{errors: Ecto.Changeset.traverse_errors(changeset, & &1)})
+        |> json(%{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)})
     end
   rescue
     Ecto.NoResultsError ->
@@ -74,5 +74,11 @@ defmodule OpenAgentsWeb.IssueLabelController do
       conn
       |> put_status(:not_found)
       |> json(%{message: "Not Found"})
+  end
+
+  defp translate_error({message, options}) do
+    Regex.replace(~r/%{(\w+)}/, message, fn _, key ->
+      options |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+    end)
   end
 end

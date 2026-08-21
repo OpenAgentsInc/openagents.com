@@ -48,6 +48,10 @@ defmodule OpenAgentsWeb.MemberIndexLive do
          |> assign(:repo, repo)
          |> assign(:repository, repository)
          |> assign(:roles, @roles)
+         |> assign(
+           :member_form,
+           to_form(%{"login" => "", "role" => "contributor"}, as: :member)
+         )
          |> stream(:members, Repositories.list_members(repository),
            dom_id: &"member-#{&1.user_id}",
            reset: true
@@ -68,6 +72,10 @@ defmodule OpenAgentsWeb.MemberIndexLive do
       {:ok, _membership} ->
         {:noreply,
          socket
+         |> assign(
+           :member_form,
+           to_form(%{"login" => "", "role" => "contributor"}, as: :member)
+         )
          |> reload()
          |> put_flash(:info, "@#{login} added as #{role}")}
 
@@ -78,6 +86,9 @@ defmodule OpenAgentsWeb.MemberIndexLive do
            :error,
            "No OpenAgents account found for @#{login}. They need to sign in once first."
          )}
+
+      {:error, :forbidden} ->
+        {:noreply, owner_required(socket)}
     end
   end
 
@@ -97,6 +108,12 @@ defmodule OpenAgentsWeb.MemberIndexLive do
 
       {:error, :last_owner} ->
         {:noreply, put_flash(socket, :error, "A repository must keep at least one owner.")}
+
+      {:error, :forbidden} ->
+        {:noreply, owner_required(socket)}
+
+      {:error, :unknown_member} ->
+        {:noreply, put_flash(socket, :error, "That repository member no longer exists.")}
     end
   end
 
@@ -114,7 +131,21 @@ defmodule OpenAgentsWeb.MemberIndexLive do
 
       {:error, :last_owner} ->
         {:noreply, put_flash(socket, :error, "A repository must keep at least one owner.")}
+
+      {:error, :forbidden} ->
+        {:noreply, owner_required(socket)}
+
+      {:error, :unknown_member} ->
+        {:noreply, put_flash(socket, :error, "That repository member no longer exists.")}
     end
+  end
+
+  def handle_event(_unsupported_event, _params, socket) do
+    {:noreply, put_flash(socket, :error, "That membership action is not available.")}
+  end
+
+  defp owner_required(socket) do
+    put_flash(socket, :error, "Only repository owners can manage members.")
   end
 
   defp reload(socket) do
@@ -139,20 +170,19 @@ defmodule OpenAgentsWeb.MemberIndexLive do
         <h1 class="text-2xl font-bold">Members</h1>
       </div>
 
-      <.form for={%{}} as={:member} phx-submit="add_member" id="add-member-form">
+      <.form for={@member_form} phx-submit="add_member" id="add-member-form">
         <div class="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-4 items-end card !m-0 mb-6 p-4">
           <.input
-            name="member[login]"
+            field={@member_form[:login]}
             label="GitHub login"
             placeholder="their-github-login"
             required
           />
           <.input
-            name="member[role]"
+            field={@member_form[:role]}
             type="select"
             label="Role"
             options={Enum.map(@roles, &{String.capitalize(&1), &1})}
-            value="contributor"
           />
           <.button type="submit" variant={:primary}>Add member</.button>
         </div>
@@ -181,17 +211,15 @@ defmodule OpenAgentsWeb.MemberIndexLive do
               class="flex items-center gap-2"
             >
               <input type="hidden" name="user_id" value={membership.user_id} />
-              <select
+              <.input
                 name="role"
+                type="select"
                 aria-label={"Role for #{membership.user.github_login}"}
                 class="input !py-1.5"
                 data-member-role={membership.role}
-              >
-                {Phoenix.HTML.Form.options_for_select(
-                  Enum.map(@roles, &{String.capitalize(&1), &1}),
-                  membership.role
-                )}
-              </select>
+                options={Enum.map(@roles, &{String.capitalize(&1), &1})}
+                value={membership.role}
+              />
             </form>
             <button
               phx-click="remove_member"

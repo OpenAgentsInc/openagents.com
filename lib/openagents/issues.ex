@@ -15,6 +15,7 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Repositories.Repository
 
   @issues_per_page 25
+  @maximum_page 10_000
 
   @doc "How many issues one index page shows."
   def per_page, do: @issues_per_page
@@ -25,7 +26,7 @@ defmodule OpenAgents.Issues do
   def list_issues(%Repository{id: repository_id}, opts) when is_list(opts) do
     repository_id
     |> issue_query(opts)
-    |> order_by(desc: :inserted_at)
+    |> order_by([issue], desc: issue.inserted_at, desc: issue.id)
     |> Repo.all()
   end
 
@@ -44,7 +45,7 @@ defmodule OpenAgents.Issues do
 
     issues =
       query
-      |> order_by(desc: :inserted_at)
+      |> order_by([issue], desc: issue.inserted_at, desc: issue.id)
       |> limit(@issues_per_page)
       |> offset(^((page - 1) * @issues_per_page))
       |> Repo.all()
@@ -55,12 +56,13 @@ defmodule OpenAgents.Issues do
   def count_issues(%Repository{} = repository, opts) when is_list(opts),
     do: repository.id |> issue_query(opts) |> Repo.aggregate(:count)
 
-  def parse_page(page) when is_integer(page), do: page
+  def parse_page(page) when is_integer(page), do: page |> max(1) |> min(@maximum_page)
 
   def parse_page(page) when is_binary(page) do
     case Integer.parse(page) do
-      {number, _rest} -> number
+      {number, ""} -> parse_page(number)
       :error -> 1
+      {_number, _trailing} -> 1
     end
   end
 
@@ -215,14 +217,23 @@ defmodule OpenAgents.Issues do
   def add_labels(%Issue{} = issue, names) when is_list(names) do
     repository = repository_stub(issue.repository_id)
 
-    new_labels =
-      Enum.map(names, fn name ->
-        {:ok, label} = Labels.get_or_create_label_by_name(repository, name)
-        label_json(label)
-      end)
+    with {:ok, new_labels} <- resolve_or_create_labels(repository, names) do
+      labels = ((issue.labels || []) ++ new_labels) |> Enum.uniq_by(& &1["name"])
+      update_issue(issue, %{"labels" => labels})
+    end
+  end
 
-    labels = ((issue.labels || []) ++ new_labels) |> Enum.uniq_by(& &1["name"])
-    update_issue(issue, %{"labels" => labels})
+  defp resolve_or_create_labels(repository, names) do
+    Enum.reduce_while(names, {:ok, []}, fn name, {:ok, labels} ->
+      case Labels.get_or_create_label_by_name(repository, name) do
+        {:ok, label} -> {:cont, {:ok, [label_json(label) | labels]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, labels} -> {:ok, Enum.reverse(labels)}
+      error -> error
+    end
   end
 
   def remove_label(%Issue{} = issue, name) when is_binary(name) do

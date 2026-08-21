@@ -145,6 +145,21 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
              ).color == ""
     end
 
+    test "POST .../issues/:issue_number/labels rejects an empty label without crashing", %{
+      conn: conn,
+      issue: issue
+    } do
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels",
+          %{labels: [""]}
+        )
+
+      assert %{"errors" => %{"name" => [_message]}} = json_response(conn, 422)
+      assert Issues.get_issue_by_number!(issue.number).labels == []
+    end
+
     test "POST .../issues/:issue_number/labels returns 404 for a missing issue", %{conn: conn} do
       conn =
         post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/labels", %{

@@ -79,6 +79,33 @@ defmodule OpenAgents.RepositoriesMembershipTest do
     end
   end
 
+  test "membership administration rejects a non-owner actor", %{
+    repository: repository,
+    owner: owner
+  } do
+    contributor = plain_user("membership-non-owner")
+    recruit = plain_user("membership-recruit")
+    {:ok, _} = Repositories.add_member(repository, contributor, "contributor")
+    {:ok, _} = Repositories.add_member(repository, recruit, "viewer")
+
+    assert {:error, :forbidden} =
+             Repositories.add_member_by_login(
+               repository,
+               contributor,
+               "membership-recruit",
+               "maintainer"
+             )
+
+    assert {:error, :forbidden} =
+             Repositories.change_member_role(repository, contributor, recruit.id, "maintainer")
+
+    assert {:error, :forbidden} =
+             Repositories.remove_member(repository, contributor, recruit.id)
+
+    assert Repositories.membership_role(repository, recruit) == "viewer"
+    assert Repositories.membership_role(repository, owner) == "owner"
+  end
+
   test "change_member_role updates an existing membership", %{
     repository: repository,
     owner: owner

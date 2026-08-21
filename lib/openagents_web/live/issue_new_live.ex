@@ -61,29 +61,39 @@ defmodule OpenAgentsWeb.IssueNewLive do
   end
 
   def handle_event("save", %{"issue" => issue_params}, socket) do
-    title = issue_params["title"]
-    body = issue_params["body"]
-    milestone = if(socket.assigns.can_write, do: issue_params["milestone"] || "", else: "")
-    labels = if(socket.assigns.can_write, do: issue_params["labels"] || [], else: [])
+    repository = socket.assigns.repository
+    user = socket.assigns.current_user
+    can_participate = Repositories.issue_participant?(repository, user)
+    can_write = Repositories.writable?(repository, user)
+    socket = assign(socket, :can_write, can_write)
 
-    case Issues.create_issue(
-           socket.assigns.repository,
-           %{"title" => title, "body" => body},
-           socket.assigns.current_user
-         ) do
-      {:ok, issue} ->
-        issue = apply_metadata(issue, labels, milestone)
+    if can_participate do
+      title = issue_params["title"]
+      body = issue_params["body"]
+      milestone = if(can_write, do: issue_params["milestone"] || "", else: "")
+      labels = if(can_write, do: issue_params["labels"] || [], else: [])
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "Issue created")
-         |> push_navigate(
-           to: ~p"/#{socket.assigns.owner}/#{socket.assigns.repo}/issues/#{issue.number}"
-         )}
+      case Issues.create_issue(repository, %{"title" => title, "body" => body}, user) do
+        {:ok, issue} ->
+          issue = apply_metadata(issue, labels, milestone)
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+          {:noreply,
+           socket
+           |> put_flash(:info, "Issue created")
+           |> push_navigate(
+             to: ~p"/#{socket.assigns.owner}/#{socket.assigns.repo}/issues/#{issue.number}"
+           )}
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "You can no longer open an issue here.")}
     end
+  end
+
+  def handle_event(_unsupported_event, _params, socket) do
+    {:noreply, put_flash(socket, :error, "That issue action is not available.")}
   end
 
   defp apply_metadata(issue, labels, milestone) do

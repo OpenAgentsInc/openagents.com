@@ -6,7 +6,9 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
   import OpenAgents.LabelsFixtures
   import OpenAgents.MilestonesFixtures
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Issues
+  alias OpenAgents.Repositories
 
   setup %{conn: conn} do
     {:ok, conn: log_in_github_user(conn, "issue-show")}
@@ -123,6 +125,20 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     |> element(~s{#issue-label-menu button}, "bug")
     |> render_click()
 
+    assert Issues.get_issue!(issue.id).labels == []
+  end
+
+  test "a member who loses write access cannot triage through an open page", %{conn: conn} do
+    user = Accounts.get_user(Plug.Conn.get_session(conn, "user_id"))
+    issue = issue!(%{"title" => "Authority changed"})
+    repository = Repositories.initial_repository!()
+
+    {:ok, view, _html} = live(conn, path(issue))
+    {:ok, _} = Repositories.add_member(repository, user, "viewer")
+
+    html = render_click(view, "toggle_label", %{"name" => "bug"})
+
+    assert html =~ "Only repository members can change issue labels"
     assert Issues.get_issue!(issue.id).labels == []
   end
 

@@ -24,31 +24,12 @@ defmodule OpenAgentsWeb.CodeRepoLive do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
-    head =
-      case Browse.head(repository) do
-        {:ok, sha} -> sha
-        _ -> nil
-      end
-
-    readme =
-      case head && Browse.readme(repository, head) do
-        {:ok, name, blob} -> %{name: name, blob: blob}
-        _ -> nil
-      end
-
-    commits =
-      case head && Browse.log(repository, head, 20) do
-        {:ok, commits} -> commits
-        _ -> []
-      end
-
-    entries =
-      case head && Browse.tree(repository, head) do
-        {:ok, entries} -> entries
-        _ -> []
-      end
-
-    refs = if head, do: Browse.refs(repository), else: []
+    overview = Browse.overview(repository, 20)
+    head = overview.head
+    readme = overview.readme
+    commits = overview.commits
+    entries = overview.entries
+    refs = overview.refs
 
     delete_allowed? =
       Repositories.membership_role(repository, socket.assigns.current_user) == "owner"
@@ -223,44 +204,6 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             Error code: <code>{@repository.provision_error_code || "provisioning_failed"}</code>
           </.alert>
 
-          <%!-- REPOSITORY-001: an import freezes one authorized ref map and
-          schedules no later synchronization, so this states the source, what
-          was accepted, and that nothing keeps the two in step. Never labelled
-          synced or mirrored. --%>
-          <.card :if={@repository_import} id="repo-import-provenance">
-            <h2>Imported once from GitHub</h2>
-            <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-              <dt class="text-muted-foreground">Source</dt>
-              <dd><code>{@repository_import.source_full_name}</code></dd>
-
-              <dt :if={@repository_import.source_head_sha} class="text-muted-foreground">
-                Accepted snapshot
-              </dt>
-              <dd :if={@repository_import.source_head_sha}>
-                <code>{short(@repository_import.source_head_sha)}</code>
-              </dd>
-
-              <dt class="text-muted-foreground">State</dt>
-              <dd>{@repository_import.state}</dd>
-
-              <dt :if={@repository_import.completed_at} class="text-muted-foreground">Completed</dt>
-              <dd :if={@repository_import.completed_at}>
-                <time datetime={DateTime.to_iso8601(@repository_import.completed_at)}>
-                  {Calendar.strftime(@repository_import.completed_at, "%Y-%m-%d %H:%M UTC")}
-                </time>
-              </dd>
-
-              <dt :if={@repository_import.error_code} class="text-muted-foreground">Error code</dt>
-              <dd :if={@repository_import.error_code}>
-                <code>{@repository_import.error_code}</code>
-              </dd>
-            </dl>
-            <p class="mt-3 text-sm text-muted-foreground">
-              OpenAgents copied this snapshot once and is now the source of truth for it.
-              Later commits on GitHub do not appear here.
-            </p>
-          </.card>
-
           <.empty
             :if={@repository.lifecycle_state == "ready" and is_nil(@head)}
             id="repo-empty"
@@ -416,6 +359,47 @@ defmodule OpenAgentsWeb.CodeRepoLive do
                 {@tag_count} {if @tag_count == 1, do: "tag", else: "tags"}
               </:stat>
             </.repo_about>
+
+            <%!-- REPOSITORY-001: an import freezes one authorized ref map and
+            schedules no later synchronization. Keep that provenance beside
+            the repository metadata instead of interrupting the code tree. --%>
+            <section
+              :if={@repository_import}
+              id="repo-import-provenance"
+              class="repo-import-provenance"
+              aria-labelledby="repo-import-provenance-title"
+            >
+              <h2 id="repo-import-provenance-title">Imported from GitHub</h2>
+              <dl>
+                <div>
+                  <dt>Source</dt>
+                  <dd><code>{@repository_import.source_full_name}</code></dd>
+                </div>
+                <div :if={@repository_import.source_head_sha}>
+                  <dt>Snapshot</dt>
+                  <dd><code>{short(@repository_import.source_head_sha)}</code></dd>
+                </div>
+                <div>
+                  <dt>State</dt>
+                  <dd>{@repository_import.state}</dd>
+                </div>
+                <div :if={@repository_import.completed_at}>
+                  <dt>Completed</dt>
+                  <dd>
+                    <time datetime={DateTime.to_iso8601(@repository_import.completed_at)}>
+                      {Calendar.strftime(@repository_import.completed_at, "%Y-%m-%d %H:%M UTC")}
+                    </time>
+                  </dd>
+                </div>
+                <div :if={@repository_import.error_code}>
+                  <dt>Error code</dt>
+                  <dd><code>{@repository_import.error_code}</code></dd>
+                </div>
+              </dl>
+              <p>
+                OpenAgents copied this snapshot once. Later GitHub commits do not appear here.
+              </p>
+            </section>
           </:about>
         </.repo_view>
       </main>

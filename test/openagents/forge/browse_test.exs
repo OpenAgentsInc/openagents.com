@@ -215,6 +215,17 @@ defmodule OpenAgents.Forge.BrowseTest do
     assert oldest.subject == "First commit"
   end
 
+  test "overview/2 returns repository-home data after one bounded read", %{second: second} do
+    overview = Browse.overview("openagents.com", 1)
+
+    assert overview.head == second
+    assert overview.readme.name == "README.md"
+    assert overview.readme.blob.content =~ "Fixture readme."
+    assert [%{sha: ^second}] = overview.commits
+    assert Enum.map(overview.entries, & &1.name) == ["docs", "README.md", "file.txt"]
+    assert %{name: "main", sha: second, kind: :branch} in overview.refs
+  end
+
   describe "shape gates" do
     test "valid_ref?/1 rejects flag-shaped, traversing, and range refs" do
       assert Browse.valid_ref?("main")

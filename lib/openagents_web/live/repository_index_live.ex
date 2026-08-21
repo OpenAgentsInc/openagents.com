@@ -47,6 +47,14 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
         nil
       )
 
+    socket =
+      if connected?(socket) do
+        :ok = Repositories.subscribe_repository_changes()
+        socket
+      else
+        socket
+      end
+
     {:ok,
      socket
      |> assign(:page_title, "Repositories")
@@ -99,6 +107,27 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
     end
   end
 
+  def handle_info({:repository_changed, repository_id}, socket) do
+    socket = watch_id(socket, repository_id)
+
+    case Repositories.get_visible_repository(repository_id, socket.assigns.current_user) do
+      nil ->
+        {:noreply,
+         socket
+         |> stream_delete_by_dom_id(:repositories, "repositories-#{repository_id}")
+         |> unwatch(repository_id)}
+
+      repository ->
+        socket = stream_insert(socket, :repositories, repository)
+
+        if repository.lifecycle_state == "provisioning" do
+          {:noreply, socket}
+        else
+          {:noreply, unwatch(socket, repository_id)}
+        end
+    end
+  end
+
   # Subscribing only to repositories that can still change. A ready repository
   # never transitions again, and a list of a hundred of them would otherwise
   # open a hundred topics that never carry a message.
@@ -107,12 +136,20 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
       Enum.reduce(repositories, socket, fn repository, socket ->
         if repository.lifecycle_state == "provisioning" and
              repository.id not in socket.assigns.watching do
-          :ok = Repositories.subscribe_provisioning(repository.id)
-          assign(socket, :watching, MapSet.put(socket.assigns.watching, repository.id))
+          watch_id(socket, repository.id)
         else
           socket
         end
       end)
+    else
+      socket
+    end
+  end
+
+  defp watch_id(socket, repository_id) do
+    if connected?(socket) and repository_id not in socket.assigns.watching do
+      :ok = Repositories.subscribe_provisioning(repository_id)
+      assign(socket, :watching, MapSet.put(socket.assigns.watching, repository_id))
     else
       socket
     end

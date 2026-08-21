@@ -33,7 +33,9 @@ defmodule OpenAgentsWeb.Plugs.ContentSecurityPolicy do
         "frame-ancestors 'none'",
         "img-src 'self' data: https://avatars.githubusercontent.com",
         "object-src 'none'",
-        "script-src 'self' 'nonce-#{nonce}'",
+        # `posthog-js` is bundled, but it loads optional browser modules from
+        # PostHog's versioned asset host after it receives remote configuration.
+        "script-src 'self' 'nonce-#{nonce}' https://us-assets.i.posthog.com",
         "style-src 'self' 'unsafe-inline'"
       ],
       "; "

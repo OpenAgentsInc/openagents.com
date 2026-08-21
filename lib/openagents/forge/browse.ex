@@ -42,11 +42,7 @@ defmodule OpenAgents.Forge.Browse do
   def resolve_commit(repo, ref) do
     with :ok <- check(repo, ref) do
       freshen(repo)
-
-      case git(repo, ["rev-parse", "--verify", "--end-of-options", ref <> "^{commit}"]) do
-        {output, 0} -> {:ok, String.trim(output)}
-        _ -> {:error, :not_found}
-      end
+      resolve_commit_from_cache(repo, ref)
     end
   end
 
@@ -75,6 +71,29 @@ defmodule OpenAgents.Forge.Browse do
   @doc "The default branch head, if the repo has one."
   def head(repo) do
     _ = freshen(repo)
+    head_from_cache(repo)
+  end
+
+  @doc "Read all repository-home data after one cache-freshness check."
+  def overview(repo, log_limit \\ 20) do
+    _ = freshen(repo)
+
+    head =
+      case head_from_cache(repo) do
+        {:ok, sha} -> sha
+        _ -> nil
+      end
+
+    %{
+      head: head,
+      readme: overview_readme(repo, head),
+      commits: overview_commits(repo, head, log_limit),
+      entries: overview_entries(repo, head),
+      refs: if(head, do: refs_from_cache(repo), else: [])
+    }
+  end
+
+  defp head_from_cache(repo) do
     refs = Repos.refs(storage_key(repo))
 
     case Map.fetch(refs, "refs/heads/#{default_branch(repo)}") do
@@ -85,7 +104,9 @@ defmodule OpenAgents.Forge.Browse do
   end
 
   @doc "Branches and tags as `[%{name, sha, kind}]`, bounded."
-  def refs(repo) do
+  def refs(repo), do: refs_from_cache(repo)
+
+  defp refs_from_cache(repo) do
     repo
     |> storage_key()
     |> Repos.refs()
@@ -98,6 +119,42 @@ defmodule OpenAgents.Forge.Browse do
     end)
     |> Enum.sort_by(&{&1.kind, &1.name})
     |> Enum.take(@list_cap)
+  end
+
+  defp resolve_commit_from_cache(repo, ref) do
+    case git(repo, ["rev-parse", "--verify", "--end-of-options", ref <> "^{commit}"]) do
+      {output, 0} -> {:ok, String.trim(output)}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp overview_readme(_repo, nil), do: nil
+
+  defp overview_readme(repo, head) do
+    Enum.find_value(["README.md", "README"], fn name ->
+      case blob_from_cache(repo, head, name) do
+        {:ok, blob} -> %{name: name, blob: blob}
+        _ -> nil
+      end
+    end)
+  end
+
+  defp overview_commits(_repo, nil, _limit), do: []
+
+  defp overview_commits(repo, head, limit) do
+    case log_from_cache(repo, head, limit) do
+      {:ok, commits} -> commits
+      _ -> []
+    end
+  end
+
+  defp overview_entries(_repo, nil), do: []
+
+  defp overview_entries(repo, head) do
+    case tree_from_cache(repo, head, "") do
+      {:ok, entries} -> entries
+      _ -> []
+    end
   end
 
   @doc """
@@ -177,8 +234,15 @@ defmodule OpenAgents.Forge.Browse do
 
   @doc "Directory listing at `ref`/`path` as `[%{name, kind, size}]`, bounded."
   def tree(repo, ref, path \\ "") do
-    with {:ok, full} <- resolve_commit(repo, ref),
+    with :ok <- check(repo, ref),
          :ok <- check_path(path, allow_empty: true) do
+      _ = freshen(repo)
+      tree_from_cache(repo, ref, path)
+    end
+  end
+
+  defp tree_from_cache(repo, ref, path) do
+    with {:ok, full} <- resolve_commit_from_cache(repo, ref) do
       spec = if path == "", do: full, else: full <> ":" <> path
 
       case git(repo, ["ls-tree", "-l", "--end-of-options", spec]) do
@@ -210,8 +274,15 @@ defmodule OpenAgents.Forge.Browse do
   `{:ok, %{content, truncated, binary, size}}`.
   """
   def blob(repo, ref, path) do
-    with {:ok, full} <- resolve_commit(repo, ref),
+    with :ok <- check(repo, ref),
          :ok <- check_path(path) do
+      _ = freshen(repo)
+      blob_from_cache(repo, ref, path)
+    end
+  end
+
+  defp blob_from_cache(repo, ref, path) do
+    with {:ok, full} <- resolve_commit_from_cache(repo, ref) do
       spec = full <> ":" <> path
 
       with {size_out, 0} <- git(repo, ["cat-file", "-s", spec]),
@@ -244,9 +315,16 @@ defmodule OpenAgents.Forge.Browse do
 
   @doc "Bounded commit list from `ref` as commit maps (no diffs)."
   def log(repo, ref, limit \\ 30) do
+    with :ok <- check(repo, ref) do
+      _ = freshen(repo)
+      log_from_cache(repo, ref, limit)
+    end
+  end
+
+  defp log_from_cache(repo, ref, limit) do
     limit = min(limit, 100)
 
-    with {:ok, full} <- resolve_commit(repo, ref) do
+    with {:ok, full} <- resolve_commit_from_cache(repo, ref) do
       format = "%H%x00%an%x00%cI%x00%s%x01"
 
       case git(repo, [

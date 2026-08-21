@@ -38,6 +38,45 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     assert has_element?(view, "#import-repository")
   end
 
+  test "repository index discovers a repository created after mount", %{conn: conn} do
+    user = github_user("repository-live-discovery", "discovery-owner")
+    {:ok, view, _html} = live(log_in(conn, user), ~p"/repositories")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(
+               user,
+               %{name: "appeared-live", visibility: "private"},
+               "appeared-live"
+             )
+
+    assert has_element?(view, "#repositories-#{repository.id}")
+    assert has_element?(view, "#repositories-#{repository.id}-stage")
+  end
+
+  test "repository index removes a repository deleted after mount", %{conn: conn} do
+    user = github_user("repository-live-removal", "removal-owner")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(
+               user,
+               %{name: "removed-live", visibility: "private"},
+               "removed-live"
+             )
+
+    {:ok, view, _html} = live(log_in(conn, user), ~p"/repositories")
+    assert has_element?(view, "#repositories-#{repository.id}")
+
+    assert {:ok, _deleted} =
+             Repositories.delete_owned_repository(
+               "removal-owner",
+               "removed-live",
+               user,
+               surface: "test"
+             )
+
+    refute has_element?(view, "#repositories-#{repository.id}")
+  end
+
   test "repository index loads bounded pages", %{conn: conn} do
     user = github_user("repository-live-pagination", "pagination-owner")
 

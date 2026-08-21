@@ -292,8 +292,8 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       member_conn = Plug.Test.init_test_session(conn, %{"user_id" => owner.id})
       {:ok, view, html} = live(member_conn, "/import-provenance-owner/copied-repository")
 
-      assert has_element?(view, "#repo-import-provenance")
-      assert html =~ "Imported once from GitHub"
+      assert has_element?(view, ".repo-view__rail #repo-import-provenance")
+      assert html =~ "Imported from GitHub"
       assert html =~ "acme/source-project"
       assert html =~ String.slice(head, 0, 12)
 

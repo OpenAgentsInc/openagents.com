@@ -97,6 +97,39 @@ defmodule OpenAgents.Forge.SyncTest do
     assert Repos.refs("empty-authority") == %{}
   end
 
+  test "cluster warming materializes the local cache and every connected peer" do
+    test_process = self()
+    peer = :"peer@127.0.0.1"
+
+    rpc = fn target, module, function, arguments, timeout ->
+      send(test_process, {:cluster_warm_rpc, target, module, function, arguments, timeout})
+      :ok
+    end
+
+    assert :ok =
+             Sync.ensure_cluster_fresh("cluster-warm", "trunk",
+               members: fn -> [node(), peer] end,
+               rpc: rpc,
+               timeout_ms: 5_000
+             )
+
+    assert_received {:cluster_warm_rpc, ^peer, Sync, :ensure_fresh, ["cluster-warm", "trunk"],
+                     5_000}
+  end
+
+  test "cluster warming reports a peer failure" do
+    peer = :"peer@127.0.0.1"
+
+    assert {:error, :noconnection} =
+             Sync.ensure_cluster_fresh("cluster-warm-failure", "main",
+               members: fn -> [peer] end,
+               rpc: fn _target, _module, _function, _arguments, _timeout ->
+                 {:error, :noconnection}
+               end,
+               timeout_ms: 5_000
+             )
+  end
+
   defp git!(directory, args) do
     {output, 0} = System.cmd("git", args, cd: directory, stderr_to_stdout: true)
     output

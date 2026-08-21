@@ -5286,6 +5286,51 @@
     font-weight: 400;
   }
 
+  .repo-import-provenance {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-block-start: 18px;
+    border-block-start: 1px solid var(--line);
+  }
+
+  .repo-import-provenance h2 {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .repo-import-provenance dl {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .repo-import-provenance dl > div {
+    display: grid;
+    grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+
+  .repo-import-provenance dt {
+    color: var(--text-dim);
+  }
+
+  .repo-import-provenance dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .repo-import-provenance p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
   /* A wrapped cluster rather than a column: the group reads as one fact about
      the repository, not as a list to be gone through name by name. Each face
      still carries its own accessible name. */

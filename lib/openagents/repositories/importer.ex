@@ -165,7 +165,7 @@ defmodule OpenAgents.Repositories.Importer do
            end),
          :ok <-
            import_stage(repository, repository_import, "materialize_cache", fn ->
-             Sync.ensure_fresh(repository.storage_key, repository.default_branch)
+             Sync.ensure_cluster_fresh(repository.storage_key, repository.default_branch)
            end) do
       :ok
     end

@@ -9,7 +9,10 @@ defmodule OpenAgents.Forge.Sync do
 
   require Logger
 
+  alias OpenAgents.Cluster
   alias OpenAgents.Forge.{GitHTTP, Repos, WAL}
+
+  @default_cluster_warm_timeout_ms 10 * 60 * 1_000
 
   @doc """
   Bring the local bare repo up to the WAL. Returns `:ok` (fresh, replayed,
@@ -31,6 +34,37 @@ defmodule OpenAgents.Forge.Sync do
 
         :ok
     end
+  end
+
+  @doc "Bring every connected node's disposable bare-repository cache up to date."
+  def ensure_cluster_fresh(repo, default_branch \\ "main", options \\ []) do
+    members = Keyword.get(options, :members, &Cluster.members/0).() |> Enum.uniq()
+    rpc = Keyword.get(options, :rpc, &:erpc.call/5)
+
+    timeout_ms =
+      Keyword.get(
+        options,
+        :timeout_ms,
+        Application.get_env(
+          :openagents,
+          :repository_cluster_warm_timeout_ms,
+          @default_cluster_warm_timeout_ms
+        )
+      )
+
+    members
+    |> Task.async_stream(
+      fn target -> warm_node(target, repo, default_branch, rpc, timeout_ms) end,
+      ordered: false,
+      timeout: timeout_ms + 1_000,
+      on_timeout: :kill_task,
+      max_concurrency: max(1, length(members))
+    )
+    |> Enum.reduce_while(:ok, fn
+      {:ok, :ok}, :ok -> {:cont, :ok}
+      {:ok, {:error, reason}}, :ok -> {:halt, {:error, reason}}
+      {:exit, reason}, :ok -> {:halt, {:error, reason}}
+    end)
   end
 
   @doc "Replay WAL entries the local repo has not applied. Used by reads and boot."
@@ -127,5 +161,20 @@ defmodule OpenAgents.Forge.Sync do
 
   defp run_receive_pack(path, payload) do
     GitHTTP.run_git_service("receive-pack", [path], payload, nil)
+  end
+
+  defp warm_node(target, repo, default_branch, _rpc, _timeout_ms) when target == node(),
+    do: ensure_fresh(repo, default_branch)
+
+  defp warm_node(target, repo, default_branch, rpc, timeout_ms) do
+    case rpc.(target, __MODULE__, :ensure_fresh, [repo, default_branch], timeout_ms) do
+      :ok -> :ok
+      {:error, reason} -> {:error, reason}
+      _other -> {:error, :invalid_cluster_warm_result}
+    end
+  rescue
+    _error -> {:error, :cluster_warm_exception}
+  catch
+    :exit, reason -> {:error, reason}
   end
 end

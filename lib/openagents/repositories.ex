@@ -291,6 +291,8 @@ defmodule OpenAgents.Repositories do
 
       case result do
         {:ok, deleted} = success ->
+          broadcast_repository_change(deleted.id)
+
           Analytics.capture("repository_deleted", Analytics.distinct_id(user), %{
             "repository_id" => deleted.id,
             "provisioning_kind" => deleted.provisioning_kind,
@@ -474,6 +476,10 @@ defmodule OpenAgents.Repositories do
   def subscribe_provisioning(repository_id) when is_binary(repository_id),
     do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, provisioning_topic(repository_id))
 
+  @doc "Subscribes a repository index to repository creation and deletion events."
+  def subscribe_repository_changes,
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, repository_changes_topic())
+
   @doc "Stops the caller hearing about one repository, once it has settled."
   def unsubscribe_provisioning(repository_id) when is_binary(repository_id),
     do: Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, provisioning_topic(repository_id))
@@ -493,7 +499,17 @@ defmodule OpenAgents.Repositories do
     )
   end
 
+  @doc "Announces that a repository entered or left the visible repository collection."
+  def broadcast_repository_change(repository_id) when is_binary(repository_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      repository_changes_topic(),
+      {:repository_changed, repository_id}
+    )
+  end
+
   defp provisioning_topic(repository_id), do: "repository:" <> repository_id
+  defp repository_changes_topic, do: "repositories:changes"
 
   defp apply_namespace_filter(query, nil), do: query
 
@@ -686,8 +702,19 @@ defmodule OpenAgents.Repositories do
       end)
 
     case result do
-      {:ok, value} -> value
-      {:error, reason} -> {:error, reason}
+      {:ok, {:ok, %Repository{} = repository, :created} = value} ->
+        broadcast_repository_change(repository.id)
+        value
+
+      {:ok, {:ok, %Repository{} = repository, %RepositoryImport{}, :created} = value} ->
+        broadcast_repository_change(repository.id)
+        value
+
+      {:ok, value} ->
+        value
+
+      {:error, reason} ->
+        {:error, reason}
     end
   rescue
     error in Ecto.InvalidChangesetError -> {:error, error.changeset}

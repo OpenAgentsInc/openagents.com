@@ -74,6 +74,9 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     refute first_nonce == second_nonce
     refute first_policy =~ ~r/script-src[^;]*'unsafe-inline'/
 
+    assert first_policy =~
+             "script-src 'self' 'nonce-#{first_nonce}' https://us-assets.i.posthog.com"
+
     document = first |> html_response(200) |> LazyHTML.from_document()
 
     assert document

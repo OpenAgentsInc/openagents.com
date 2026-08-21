@@ -53,7 +53,7 @@ while IFS= read -r line; do
         grep -q '":minimal" = "read"' "${CODEX_HOME}/config.toml"
         if grep -q 'fixture-secret' "${CODEX_HOME}/config.toml"; then exit 43; fi
       fi
-      printf '{"id":%s,"result":{"thread":{"id":"thr_fixture","turns":[],"activePermissionProfile":{"id":"scv-read-only","description":"SCV repository-scoped read access.","allowed":true}},"model":"gpt-5.6-luna"}}\n' "${id}"
+      printf '{"id":%s,"result":{"thread":{"id":"thr_fixture","turns":[]},"model":"gpt-5.6-luna","activePermissionProfile":{"id":"scv-read-only","extends":null}}}\n' "${id}"
       printf '%s\n' '{"method":"thread/started","params":{"thread":{"id":"thr_fixture","turns":[]}}}'
       ;;
     *'"method":"turn/start"'*)

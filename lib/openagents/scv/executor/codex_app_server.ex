@@ -238,10 +238,8 @@ defmodule OpenAgents.SCV.Executor.CodexAppServer do
     case Client.request(client, "thread/start", params, 30_000) do
       {:ok,
        %{
-         "thread" => %{
-           "id" => thread_id,
-           "activePermissionProfile" => %{"id" => "scv-read-only"}
-         },
+         "thread" => %{"id" => thread_id},
+         "activePermissionProfile" => %{"id" => "scv-read-only"},
          "model" => @model
        }}
       when is_binary(thread_id) ->

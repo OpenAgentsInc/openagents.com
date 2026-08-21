@@ -8,6 +8,7 @@
 ^docs/2026-08-19-gap-implementation-plan\.md:
 ^docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations\.md:
 ^docs/2026-08-20-test-coverage-audit\.md:
+^docs/2026-08-21-hot-deploy-gap-audit\.md:
 ^docs/chat-inference-plan\.md:
 ^docs/component-library\.md:
 ^docs/github-auth-plan\.md:

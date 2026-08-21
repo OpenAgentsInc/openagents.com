@@ -12,6 +12,7 @@ defmodule OpenAgents.Work do
   """
 
   import Ecto.Query
+  require Logger
 
   alias Ecto.Multi
   alias OpenAgents.Conversations
@@ -537,27 +538,100 @@ defmodule OpenAgents.Work do
   the live ACP session by its durably checkpointed id. On a fleet node this is
   also safe for jobs still running elsewhere — the Horde singleton answers
   `already_started` and nothing is disturbed. A restart is still recorded as a
-  degraded incident (queryable evidence of "what happened here"), and only a
-  job whose worker cannot even start is finalized `interrupted` (the old
-  behavior, now the last resort).
+  degraded incident (queryable evidence of "what happened here"). A transient
+  worker startup failure retries in the supervised background while Horde and
+  Raft converge. Only a job that exhausts the bounded recovery window becomes
+  `interrupted`.
   """
-  def recover_interrupted_jobs do
+  def recover_interrupted_jobs(options \\ []) do
+    start_worker = Keyword.get(options, :start_worker, &start_worker/2)
+    schedule_retry = Keyword.get(options, :schedule_retry, &schedule_recovery_retry/3)
     jobs = Repo.all(from(job in Job, where: job.status in ^@active_statuses))
 
     Enum.each(jobs, fn job ->
       _incident = record_interruption_incident(job)
 
-      case start_worker(worker_module(job.kind), job.id) do
+      case start_worker.(worker_module(job.kind), job.id) do
         {:ok, _pid_or_ignore} ->
           :ok
 
-        {:error, _reason} ->
-          {:ok, _job} = finish_job(job.id, "interrupted", error_code: "runtime_restarted")
+        {:error, reason} ->
+          schedule_retry.(job, reason, start_worker)
       end
     end)
 
     :ok
   end
+
+  @recovery_retry_delays_ms [250, 500, 1_000, 2_000, 4_000, 8_000, 15_000]
+
+  defp schedule_recovery_retry(job, reason, start_worker) do
+    Logger.warning(
+      "work_recovery_retry_scheduled job_id=#{job.id} kind=#{job.kind} " <>
+        "error_code=#{recovery_error_code(reason)}"
+    )
+
+    case Task.Supervisor.start_child(OpenAgents.ProviderTaskSupervisor, fn ->
+           retry_recovery(job.id, job.kind, start_worker, @recovery_retry_delays_ms)
+         end) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, task_reason} ->
+        Logger.error(
+          "work_recovery_retry_start_failed job_id=#{job.id} kind=#{job.kind} " <>
+            "error_code=#{recovery_error_code(task_reason)}"
+        )
+
+        {:ok, _job} = finish_job(job.id, "interrupted", error_code: "runtime_restarted")
+        :ok
+    end
+  end
+
+  defp retry_recovery(job_id, kind, start_worker, [delay_ms | remaining_delays]) do
+    receive do
+    after
+      delay_ms -> :ok
+    end
+
+    case get_job(job_id) do
+      %Job{status: status} when status in @active_statuses ->
+        case start_worker.(worker_module(kind), job_id) do
+          {:ok, _pid_or_ignore} ->
+            Logger.info("work_recovery_resumed job_id=#{job_id} kind=#{kind}")
+            :ok
+
+          {:error, reason} when remaining_delays != [] ->
+            Logger.warning(
+              "work_recovery_retry job_id=#{job_id} kind=#{kind} " <>
+                "error_code=#{recovery_error_code(reason)}"
+            )
+
+            retry_recovery(job_id, kind, start_worker, remaining_delays)
+
+          {:error, reason} ->
+            Logger.error(
+              "work_recovery_exhausted job_id=#{job_id} kind=#{kind} " <>
+                "error_code=#{recovery_error_code(reason)}"
+            )
+
+            {:ok, _job} =
+              finish_job(job_id, "interrupted", error_code: "runtime_restarted")
+
+            :ok
+        end
+
+      _terminal_or_missing ->
+        :ok
+    end
+  end
+
+  defp recovery_error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+
+  defp recovery_error_code({reason, _detail}) when is_atom(reason),
+    do: Atom.to_string(reason)
+
+  defp recovery_error_code(_reason), do: "worker_start_failed"
 
   defp worker_module("delegation"), do: OpenAgents.Work.DelegationServer
   defp worker_module(_kind), do: OpenAgents.Work.JobServer

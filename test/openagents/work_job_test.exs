@@ -153,6 +153,41 @@ defmodule OpenAgents.WorkJobTest do
     refute final.status == "interrupted"
   end
 
+  test "startup recovery schedules transient cluster startup failures without burying the job" do
+    {_conversation, job} = create_job("work-recovery-retry", "recover after cluster startup")
+    job_id = job.id
+    test_process = self()
+
+    start_worker = fn _worker_module, job_id ->
+      send(test_process, {:recovery_start_failed, job_id})
+      {:error, :cluster_starting}
+    end
+
+    schedule_retry = fn scheduled_job, reason, scheduled_start_worker ->
+      send(
+        test_process,
+        {:recovery_retry_scheduled, scheduled_job.id, reason, scheduled_start_worker}
+      )
+
+      :ok
+    end
+
+    assert :ok =
+             Work.recover_interrupted_jobs(
+               start_worker: start_worker,
+               schedule_retry: schedule_retry
+             )
+
+    assert_receive {:recovery_start_failed, ^job_id}
+
+    assert_receive {:recovery_retry_scheduled, ^job_id, :cluster_starting, ^start_worker}
+
+    recovered = Work.get_job!(job.id)
+    assert recovered.status == "queued"
+    assert recovered.error_code == nil
+    assert recovered.report == nil
+  end
+
   defp wait_for_terminal(job_id, timeout_ms \\ 10_000) do
     job = Work.get_job!(job_id)
 

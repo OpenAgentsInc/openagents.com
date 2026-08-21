@@ -16,6 +16,7 @@ defmodule OpenAgentsWeb.CodeBlobLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forge.Browse
+  alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
@@ -68,6 +69,17 @@ defmodule OpenAgentsWeb.CodeBlobLive do
      |> assign(:sha, sha)
      |> assign(:path, path)
      |> assign(:blob, blob)
+     |> assign(
+       :og,
+       OG.meta(
+         OG.blob(repository.namespace.slug, repository.name, path, %{
+           ref: ref,
+           size: blob.size,
+           lines: if(blob.binary, do: nil, else: blob.content |> String.split("\n") |> length()),
+           truncated: blob.truncated
+         })
+       )
+     )
      |> assign(:browsable, RepositoryAccess.full_source?(repository, socket.assigns.current_user))
      |> assign(:markdown?, markdown?(path) and not plain and not blob.binary)}
   rescue

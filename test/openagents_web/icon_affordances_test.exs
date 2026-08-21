@@ -78,7 +78,12 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
       # test defends is "one icon set", not "no vector output", and a graph node
       # is not an icon. Any glyph *inside* a graph surface still goes through
       # `icon/1`.
-      exempt = ["ui.ex", "icons.ex", "graph.ex"]
+      #
+      # `og/templates.ex` is exempt for the same class of reason: it emits
+      # whole Open Graph card *images* (1200x630 SVG documents rasterized to
+      # PNG for crawlers), never in-page affordances. Nothing it draws appears
+      # in the product UI.
+      exempt = ["ui.ex", "icons.ex", "graph.ex", "templates.ex"]
 
       offenders =
         "lib/openagents_web/**/*.{ex,heex}"

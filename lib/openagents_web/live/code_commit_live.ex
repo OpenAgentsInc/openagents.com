@@ -16,6 +16,7 @@ defmodule OpenAgentsWeb.CodeCommitLive do
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
+  alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
@@ -68,6 +69,12 @@ defmodule OpenAgentsWeb.CodeCommitLive do
      |> assign(:base, base)
      |> assign(:commit, commit)
      |> assign(:files, files)
+     |> assign(
+       :og,
+       OG.meta(
+         OG.commit(repository.namespace.slug, repository.name, commit, files && length(files))
+       )
+     )
      |> assign(:diff, diff)
      |> assign(:diff_truncated, diff_truncated)
      |> assign(:diff_files, diff_files)

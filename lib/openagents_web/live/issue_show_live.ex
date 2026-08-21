@@ -33,6 +33,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Markdown
   alias OpenAgents.Milestones
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.UI.Circle
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
@@ -74,6 +75,10 @@ defmodule OpenAgentsWeb.IssueShowLive do
      |> assign(
        :assignable,
        if(can_write, do: Repositories.list_assignable_users(repository), else: [])
+     )
+     |> assign(
+       :og,
+       OG.meta(OG.issue(repository.namespace.slug, repository.name, issue))
      )
      |> load(issue)}
   end

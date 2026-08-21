@@ -12,6 +12,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
 
   @impl true
@@ -59,6 +60,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:branch_count, Enum.count(refs, &(&1.kind == :branch)))
      |> assign(:tag_count, Enum.count(refs, &(&1.kind == :tag)))
      |> assign(:open_issue_count, open_issue_count(repository))
+     |> assign(:og, OG.meta(OG.repo_card_for(repository)))
      |> assign(:clone_url, RepositoryAccess.clone_url(repository))
      |> assign(:delete_allowed?, delete_allowed?)
      |> assign(:delete_error, nil)

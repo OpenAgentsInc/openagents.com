@@ -14,6 +14,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   alias OpenAgents.Labels
   alias OpenAgents.Milestones
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.UI.Circle
 
   @filter_keys ~w(label assignee milestone q)
@@ -46,6 +47,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
         |> assign(:assignable, Repositories.list_assignable_users(repository))
         |> assign(:milestone_options, Milestones.list_milestones(repository))
         |> load()
+        |> assign(:og, OG.meta(OG.repo_card_for(repository)))
 
       {:noreply, socket}
     else

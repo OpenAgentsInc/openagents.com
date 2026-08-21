@@ -305,6 +305,18 @@ defmodule OpenAgentsWeb.Router do
     end
   end
 
+  # Open Graph card images: content-versioned, HMAC-signed, public-only.
+  # The version segment is advisory cache-busting; the signature gates the
+  # endpoint against third-party rendering abuse; private and missing
+  # repositories are indistinguishable 404s.
+  scope "/og", OpenAgentsWeb do
+    get "/static/card.png", OgImageController, :static
+    get "/v/:version/repos/:owner/:repo", OgImageController, :repo
+    get "/v/:version/repos/:owner/:repo/issues/:number", OgImageController, :issue
+    get "/v/:version/repos/:owner/:repo/commit/:sha", OgImageController, :commit
+    get "/v/:version/repos/:owner/:repo/blob/:ref/*path", OgImageController, :blob
+  end
+
   # Keep repository-shaped routes last. Every fixed product, API, operator,
   # Git, and development route above wins before a GitHub-backed namespace can
   # be interpreted from the first path segment.

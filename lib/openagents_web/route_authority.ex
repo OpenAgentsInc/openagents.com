@@ -202,6 +202,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: path, verb: verb}) do
     cond do
+      String.starts_with?(path, "/og/") and verb in [:get, :head] ->
+        # Card images are public by construction (they describe only what
+        # anonymous pages already show) and mutate nothing.
+        declaration(:public_read, "anonymous crawler", "published:og-card", false)
+
       Enum.any?(@authenticated_browser_prefixes, &String.starts_with?(path, &1)) ->
         declaration(
           :authenticated_browser,

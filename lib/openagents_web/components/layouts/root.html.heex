@@ -12,6 +12,7 @@
     which applies it to `default` as well: a page with no title of its own
     rendered the brand twice. --%>
     <.live_title default="OpenAgents" phx-no-format>{page_title(assigns)}</.live_title>
+    <Layouts.og_tags og={assigns[:og]} />
     <%!-- The faces the first paint actually uses, fetched in parallel with the
     stylesheet instead of after it. Every face is `font-display: swap`, so one
     arriving late re-lays-out text that is already on screen -- and the hero

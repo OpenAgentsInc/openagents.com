@@ -636,7 +636,9 @@ defmodule OpenAgentsWeb.ComponentCatalog do
   def documented_modules do
     %{
       OpenAgentsWeb.UI => [],
-      OpenAgentsWeb.Layouts => [:app, :flash_group],
+      # og_tags renders head metadata for crawlers, not a visible surface, so
+      # it has no demoable page.
+      OpenAgentsWeb.Layouts => [:app, :flash_group, :og_tags],
       # graph_defs/1 emits marker definitions into a parent graph surface; it
       # renders nothing on its own, so it has no demoable page. graph_surface/1
       # is the host element and is demoed through the components that use it.

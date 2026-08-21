@@ -2,9 +2,12 @@
 
 Date: 2026-08-21
 
-Status: Proposed. This document records what GitHub's card system actually
-does, measured from production responses, and specifies how OpenAgents builds
-its own version with strictly more information per card.
+Status: Implemented. Meta tags ship on every public page; the signed,
+content-versioned card endpoint serves repository, issue, blob, and commit
+cards; rasterization runs through librsvg with a committed fallback card when
+the binary is absent. One operations requirement remains: fleet images need
+`librsvg2-bin` (and, for exact brand type, the Geist TTFs) installed — until
+then nodes serve the fallback card by design.
 
 ## What links to our pages look like today
 
@@ -187,14 +190,26 @@ the anonymous page already displayed.
 
 ## Delivery sequence
 
-1. **Meta tags plus the static brand card.** No new dependencies, immediate
-   improvement everywhere links are shared. Ships alone.
-2. **Repository and issue cards.** Lands the SVG pipeline, the signed
-   endpoint, the rasterizer requirement in the release image, and the two
-   highest-value templates.
-3. **Blob and commit cards.** The beyond-GitHub information layer.
+All three phases shipped together on 2026-08-21: the meta-tag layer, the
+signed endpoint with the SVG-to-PNG pipeline, and the deep-surface cards.
+The implementation notes below record what landed and where.
 
-Phase 2 is gated on the release-image change shipping to staging first,
-since a node without `rsvg-convert` silently serves the fallback card — a
-degradation worth catching in a staging check rather than in production
-analytics.
+1. **Meta tags plus the static brand card.** `Layouts.og_tags/1` renders the
+   block in the root layout; views without a card get honest site-level
+   tags pointing at the committed brand PNG.
+2. **Repository and issue cards.** `OpenAgentsWeb.OG` builds cards from page
+   data, signs content-versioned URLs, and
+   `OpenAgentsWeb.OgImageController` renders them through
+   `OG.Templates` + `OG.Rasterizer` (librsvg port, concurrency-limited,
+   hard timeout).
+3. **Blob and commit cards.** The beyond-GitHub information layer: language,
+   size, line count, and ref for files; subject, author, and changed-file
+   count for commits.
+
+Remaining operations work, tracked here so it cannot be forgotten:
+
+* Add `librsvg2-bin` (and optionally the Geist TTF faces) to the release
+  image. Until that lands, production nodes serve the fallback card for all
+  dynamic URLs — correct, branded, but generic.
+* The staging check should assert a dynamic card URL returns bytes other
+  than the committed fallback, proving rasterization end to end.

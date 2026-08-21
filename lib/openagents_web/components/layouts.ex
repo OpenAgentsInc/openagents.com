@@ -685,6 +685,47 @@ defmodule OpenAgentsWeb.Layouts do
   end
 
   @doc """
+  The `og:*` / `twitter:*` block for the root layout.
+
+  Views that build an `OpenAgentsWeb.OG` card assign `:og` (via `OG.meta/2`)
+  and this renders it; every other page gets honest site-level tags rather
+  than nothing. Crawlers read the initial server-rendered HTML, so these tags
+  ride the first paint only — exactly where they are consumed.
+  """
+  attr :og, :map, default: nil, doc: "an `OpenAgentsWeb.OG.meta/2` map"
+
+  def og_tags(assigns) do
+    og =
+      assigns[:og] ||
+        %{
+          title: "OpenAgents",
+          description: "Code hosting, issues, and projects on the agent-native forge.",
+          type: "website",
+          url: OpenAgentsWeb.OG.site_url(),
+          image_url: OpenAgentsWeb.OG.static_card_url(),
+          alt: "OpenAgents — code hosting, issues, and projects."
+        }
+
+    assigns = assign(assigns, :og, og)
+
+    ~H"""
+    <meta property="og:site_name" content="OpenAgents" />
+    <meta property="og:type" content={@og.type} />
+    <meta property="og:title" content={@og.title} />
+    <meta property="og:description" content={@og.description} />
+    <meta property="og:url" content={@og.url} />
+    <meta property="og:image" content={@og.image_url} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={@og.alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={@og.title} />
+    <meta name="twitter:description" content={@og.description} />
+    <meta name="twitter:image" content={@og.image_url} />
+    """
+  end
+
+  @doc """
   One browser analytics identity field from the session-written map, or nil.
 
   The root layout renders these as data attributes for `app.js`; a missing or

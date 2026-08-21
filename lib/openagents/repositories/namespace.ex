@@ -8,7 +8,7 @@ defmodule OpenAgents.Repositories.Namespace do
   @foreign_key_type :binary_id
   @timestamps_opts [type: :utc_datetime_usec]
   @reserved_slugs ~w(
-    admin api assets auth changelog chat components computers controller data dev device docs git
+    admin api assets auth changelog chat components computers controller data dev device docs git og
     health healthz leaderboard machines memory repositories settings status voice
   )
 

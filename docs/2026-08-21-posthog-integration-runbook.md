@@ -296,6 +296,20 @@ Work through this checklist in staging. Browser-side checks stay manual; every s
 9. Check the browser console for CSP violations against the ingest host; fix `connect-src` if any appear.
 10. Confirm each taxonomy event registered as an event definition with `read-data-schema`, so typos surface as missing definitions rather than silent zero-volume charts.
 
+## Operator analytics surface
+
+`/admin/analytics` gives operators the trailing-24-hour picture without opening PostHog. It pulls computed results from the PostHog REST API at request time through `OpenAgents.PostHog` (a personal API key over HogQL), so it adds no second aggregation authority: the numbers match what the PostHog app answers for the same window.
+
+Settings (all optional; absent credentials disable the read path only, independently of capture):
+
+| Setting | Requirement |
+| --- | --- |
+| `OPENAGENTS_POSTHOG_PERSONAL_API_KEY` | A `phx_...` personal API key created for this integration |
+| `OPENAGENTS_POSTHOG_PROJECT_ID` | The numeric PostHog project id |
+| `OPENAGENTS_POSTHOG_APP_HOST` | Optional; defaults to `https://us.posthog.com`. This is the app/API host, not the ingest host |
+
+The page renders four bounded projections — activation funnel, chat turn outcomes and durations, event volume, top pages — plus its non-happy states as first-class UI: unconfigured credentials, an unanswered query (with retry, never stale numbers), and loading. It shows aggregates only; no conversation content is reachable from it. The route is operator-gated like the rest of `/admin` and classified in the route authority inventory as `analytics:read`.
+
 ### Rollout order
 
 1. Steps 1-6 are implemented and covered by the test suite; they activate the moment a project token is configured.

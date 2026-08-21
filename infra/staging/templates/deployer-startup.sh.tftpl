@@ -85,6 +85,7 @@ docker run --detach \
     exec /app/erts-*/bin/erl \
       -boot_var RELEASE_LIB /app/lib \
       -boot "/app/releases/$release_version/start_clean" \
+      -hidden \
       -name openagents-deployer@openagents-deployer.staging.internal \
       -kernel inet_dist_listen_min 9100 inet_dist_listen_max 9115 \
       -noshell \

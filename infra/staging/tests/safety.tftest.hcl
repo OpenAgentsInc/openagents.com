@@ -39,6 +39,14 @@ run "isolated_topology" {
   }
 
   assert {
+    condition = strcontains(
+      google_compute_instance.deployer.metadata["startup-script"],
+      "-hidden"
+    )
+    error_message = "The staging deployer must use a hidden Erlang node so it can probe every fleet member without joining the global cluster."
+  }
+
+  assert {
     condition     = google_sql_database_instance.staging.deletion_protection
     error_message = "The staging database must keep Terraform deletion protection enabled."
   }

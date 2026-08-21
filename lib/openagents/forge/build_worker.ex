@@ -491,7 +491,8 @@ defmodule OpenAgents.Forge.BuildWorker do
       BuildProtocol.atomic_write(
         Path.join([queue, "responses", response["build_id"] <> ".json"]),
         encoded,
-        mode: 0o640
+        mode: 0o640,
+        inherit_parent_owner: true
       )
     end
   end

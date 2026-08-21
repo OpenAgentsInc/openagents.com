@@ -48,6 +48,11 @@ defmodule OpenAgents.Forge.BuildWorkerTest do
     assert {:ok, response} = response_path |> File.read!() |> BuildProtocol.decode_response()
     assert response["status"] == "ok"
     assert response["build_id"] == build_id
+    assert {:ok, response_stat} = File.stat(response_path)
+    assert {:ok, response_dir_stat} = File.stat(Path.dirname(response_path))
+    assert Bitwise.band(response_stat.mode, 0o777) == 0o640
+    assert response_stat.uid == response_dir_stat.uid
+    assert response_stat.gid == response_dir_stat.gid
 
     artifact_path = Path.join(artifacts, response["artifact_ref"])
 

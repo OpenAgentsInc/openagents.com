@@ -149,12 +149,14 @@ defmodule OpenAgents.Forge.BuildProtocol do
   @spec atomic_write(Path.t(), iodata(), keyword()) :: :ok | {:error, term()}
   def atomic_write(path, contents, opts \\ []) do
     mode = Keyword.get(opts, :mode, 0o600)
+    inherit_parent_owner? = Keyword.get(opts, :inherit_parent_owner, false)
     tmp = path <> ".tmp-" <> Base.url_encode64(:crypto.strong_rand_bytes(12), padding: false)
     lock = path <> ".publish-lock"
 
     with :ok <- File.mkdir_p(Path.dirname(path)),
          :ok <- File.write(tmp, contents, [:binary]),
          :ok <- File.chmod(tmp, mode),
+         :ok <- maybe_inherit_parent_owner(tmp, path, inherit_parent_owner?),
          {:ok, lock_io} <- File.open(lock, [:write, :exclusive]) do
       try do
         if File.exists?(path),
@@ -170,6 +172,14 @@ defmodule OpenAgents.Forge.BuildProtocol do
         if reason == :eexist, do: {:error, :destination_exists}, else: error
     end
     |> tap(fn _result -> File.rm(tmp) end)
+  end
+
+  defp maybe_inherit_parent_owner(_tmp, _path, false), do: :ok
+
+  defp maybe_inherit_parent_owner(tmp, path, true) do
+    with {:ok, %{uid: uid, gid: gid}} <- File.stat(Path.dirname(path)) do
+      with :ok <- File.chown(tmp, uid), do: File.chgrp(tmp, gid)
+    end
   end
 
   @doc "Canonical JSON used by signed/digested protocol documents."

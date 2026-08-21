@@ -477,6 +477,53 @@ defmodule OpenAgentsWeb.CodeLiveTest do
     end
   end
 
+  describe "/code/:repo/tree/:ref/*path" do
+    test "renders a repository directory and links its children", %{conn: conn} do
+      browsable()
+
+      {:ok, view, _html} =
+        live(conn, "/OpenAgentsInc/openagents.com/tree/main/docs")
+
+      assert has_element?(view, "#code-tree-page")
+
+      assert has_element?(
+               view,
+               ~s(a[href="/OpenAgentsInc/openagents.com/blob/main/docs/audit.md"])
+             )
+    end
+
+    test "follows a directory link emitted by the repository home", %{conn: conn} do
+      browsable()
+      {:ok, home, _html} = live(conn, "/OpenAgentsInc/openagents.com")
+
+      assert has_element?(
+               home,
+               ~s(a[href="/OpenAgentsInc/openagents.com/tree/main/docs"])
+             )
+
+      {:ok, tree, _html} =
+        live(conn, "/OpenAgentsInc/openagents.com/tree/main/docs")
+
+      assert has_element?(tree, ~s([data-kind="blob"]), "audit.md")
+    end
+
+    test "a directory remains concealed when the repository source is not browsable", %{
+      conn: conn
+    } do
+      assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+        live(conn, "/OpenAgentsInc/openagents.com/tree/main/docs")
+      end
+    end
+
+    test "a missing directory 404s", %{conn: conn} do
+      browsable()
+
+      assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+        live(conn, "/OpenAgentsInc/openagents.com/tree/main/missing")
+      end
+    end
+  end
+
   describe "/code/:repo/commit/:sha" do
     test "renders subject, trailers, and changed files — but no diff below :l3", %{
       conn: conn,

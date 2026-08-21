@@ -269,7 +269,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp repository_browser_path?(path) do
     path == "/:owner/:repo" or
-      String.starts_with?(path, ["/:owner/:repo/commit/", "/:owner/:repo/blob/"])
+      String.starts_with?(path, [
+        "/:owner/:repo/commit/",
+        "/:owner/:repo/tree/",
+        "/:owner/:repo/blob/"
+      ])
   end
 
   defp mutation_verb?(_path), do: true

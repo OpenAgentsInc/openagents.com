@@ -322,6 +322,7 @@ defmodule OpenAgentsWeb.Router do
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/:owner/:repo", CodeRepoLive, :index
       live "/:owner/:repo/commit/:sha", CodeCommitLive, :index
+      live "/:owner/:repo/tree/:ref/*path", CodeTreeLive, :index
       live "/:owner/:repo/blob/:ref/*path", CodeBlobLive, :index
     end
   end

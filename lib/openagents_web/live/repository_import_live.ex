@@ -24,7 +24,17 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
     repository =
       Enum.find(socket.assigns.source_repositories, &(&1["full_name"] == params["source"]))
 
-    params = if repository, do: Map.put(params, "name", repository["name"]), else: params
+    source_changed? = params["source"] != socket.assigns.form.params["source"]
+
+    params =
+      if is_map(repository) and source_changed? do
+        params
+        |> Map.put("name", repository["name"])
+        |> Map.put("private", to_string(repository["private"]))
+      else
+        params
+      end
+
     {:noreply, assign(socket, :form, to_form(params, as: :repository_import))}
   end
 
@@ -192,7 +202,7 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
       %{
         "source" => repository["full_name"],
         "name" => repository["name"],
-        "private" => "true"
+        "private" => to_string(repository["private"])
       },
       as: :repository_import
     )

@@ -876,8 +876,8 @@ Import rules:
 - `--namespace` can state that matching owner explicitly. It cannot copy the
   source into an unrelated namespace in the first release.
 - `--name` defaults to the source repository name.
-- The destination defaults to private. `--public` requires an explicit flag,
-  including for a public source.
+- The destination keeps the source repository's GitHub visibility unless you
+  provide `--public` or `--private` as an explicit override.
 - The command submits one idempotent import, polls until `ready` or `failed`,
   and reports the accepted source head SHA.
 - The command exits after the bounded `--wait-timeout` without canceling a

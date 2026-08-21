@@ -96,7 +96,7 @@ defmodule OpenAgentsWeb.RepositoryImportController do
   defp source_repository(_params), do: {:error, :invalid_import}
 
   defp import_attrs(params, github_repository) do
-    private? = Map.get(params, "private", true)
+    private? = Map.get(params, "private", github_repository["private"])
     name = params["name"] || github_repository["name"]
 
     if is_boolean(private?) do

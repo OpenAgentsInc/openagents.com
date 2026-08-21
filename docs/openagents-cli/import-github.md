@@ -41,6 +41,9 @@ Import a repository into its matching namespace:
 openagents repo import OpenAgentsInc/example
 ```
 
+By default, the destination keeps the source repository's GitHub visibility. Use
+`--public` or `--private` only when you want to override it.
+
 Choose a different destination name:
 
 ```sh

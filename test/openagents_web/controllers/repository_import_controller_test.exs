@@ -72,6 +72,24 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
            |> json_response(404)
   end
 
+  test "an import inherits the GitHub repository visibility when omitted", %{conn: conn} do
+    user = github_user("repository-public-import-api", "octavia")
+    assert {:ok, user} = Accounts.store_github_token(user, "gho_public_import_fixture")
+    main_sha = String.duplicate("c", 40)
+
+    expect_import_source(user, main_sha, nil, false)
+
+    response =
+      conn
+      |> authorize(user)
+      |> put_req_header("idempotency-key", "public-import-key")
+      |> post(~p"/api/v3/user/repos/imports", %{
+        source: %{provider: "github", repository: "octavia/source-project"}
+      })
+
+    assert %{"private" => false, "visibility" => "public"} = json_response(response, 202)
+  end
+
   test "organization creation requires an active GitHub administrator membership", %{conn: conn} do
     user = github_user("repository-org-api")
     assert {:ok, user} = Accounts.store_github_token(user, "gho_org_fixture")
@@ -106,7 +124,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
            } = json_response(created, 202)
   end
 
-  defp expect_import_source(user, main_sha, tag_sha) do
+  defp expect_import_source(user, main_sha, tag_sha, private? \\ true) do
     Req.Test.expect(__MODULE__, fn github_conn ->
       assert github_conn.request_path == "/repos/octavia/source-project"
 
@@ -115,7 +133,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
         "node_id" => "R_501",
         "name" => "source-project",
         "full_name" => "octavia/source-project",
-        "private" => true,
+        "private" => private?,
         "default_branch" => "main",
         "owner" => %{
           "id" => user.github_id,
@@ -141,9 +159,12 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
       assert github_conn.request_path ==
                "/repos/octavia/source-project/git/matching-refs/tags/"
 
-      Req.Test.json(github_conn, [
-        %{"ref" => "refs/tags/v1.0.0", "object" => %{"type" => "tag", "sha" => tag_sha}}
-      ])
+      tags =
+        if tag_sha,
+          do: [%{"ref" => "refs/tags/v1.0.0", "object" => %{"type" => "tag", "sha" => tag_sha}}],
+          else: []
+
+      Req.Test.json(github_conn, tags)
     end)
 
     Req.Test.expect(__MODULE__, fn github_conn ->

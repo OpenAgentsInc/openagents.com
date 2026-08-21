@@ -257,6 +257,23 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     assert repository_import.source_refs == %{"refs/heads/main" => main_sha}
   end
 
+  test "one-time import picker defaults to the GitHub repository visibility", %{conn: conn} do
+    user = github_user("repository-live-public-import", "import-owner")
+    assert {:ok, user} = Accounts.store_github_token(user, "gho_live_public_import")
+    main_sha = String.duplicate("c", 40)
+
+    Req.Test.stub(__MODULE__, fn github_conn ->
+      github_import_response(github_conn, user, main_sha, false)
+    end)
+
+    {:ok, view, _html} = live(log_in(conn, user), ~p"/repositories/import/github")
+
+    assert has_element?(
+             view,
+             "#repository-import-form input[name='repository_import[private]']:not([checked])"
+           )
+  end
+
   defp log_in(conn, user), do: Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
   # A repository copied from GitHub, written through the same receipts the
@@ -298,13 +315,13 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     |> Repo.update!()
   end
 
-  defp repository_payload(user, main_sha) do
+  defp repository_payload(user, main_sha, private?) do
     %{
       "id" => 901,
       "node_id" => "R_901",
       "name" => "source-project",
       "full_name" => "import-owner/source-project",
-      "private" => true,
+      "private" => private?,
       "fork" => false,
       "archived" => false,
       "default_branch" => "main",
@@ -324,16 +341,16 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     }
   end
 
-  defp github_import_response(github_conn, user, main_sha) do
+  defp github_import_response(github_conn, user, main_sha, private? \\ true) do
     case github_conn.request_path do
       "/user/memberships/orgs" ->
         Req.Test.json(github_conn, [])
 
       "/user/repos" ->
-        Req.Test.json(github_conn, [repository_payload(user, main_sha)])
+        Req.Test.json(github_conn, [repository_payload(user, main_sha, private?)])
 
       "/repos/import-owner/source-project" ->
-        Req.Test.json(github_conn, repository_payload(user, main_sha))
+        Req.Test.json(github_conn, repository_payload(user, main_sha, private?))
 
       "/repos/import-owner/source-project/git/matching-refs/heads/" ->
         Req.Test.json(github_conn, [

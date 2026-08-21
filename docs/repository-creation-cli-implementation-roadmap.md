@@ -54,7 +54,7 @@ All of these statements require direct evidence before this roadmap can move to
 - The browser and CLI create private or public repositories through the same
   Phoenix context operation.
 - The browser and CLI import an authorized GitHub repository once, including
-  its accepted branches, tags, and reachable Git objects.
+  its accepted branch and tag tips and depth-1 Git objects.
 - A later GitHub update does not change the imported OpenAgents repository.
 - The repository API returns stable JSON and error envelopes from a versioned
   Phoenix-owned contract artifact.
@@ -251,14 +251,14 @@ does not change deployment targets.
 1. Resolve and persist the immutable GitHub source repository and owner IDs,
    default branch, permissions, branch and tag map, ref digest, and default head
    before the database transaction.
-2. Fetch the accepted refs into a unique temporary bare repository.
+2. Fetch the accepted refs at depth 1 into a unique temporary bare repository.
 3. Supply the retained GitHub token through a server-owned Git credential
    callback or askpass boundary. Never place it in a URL, argv, environment
    dump, Git config, log, or import record.
 4. Verify that the fetched refs match the accepted digest. Fail with a stable
    source-change code if the snapshot cannot be reproduced.
-5. Convert the imported objects and refs into the destination WAL and
-   materialize the destination cache.
+5. Convert the imported objects, shallow boundaries, and refs into the
+   destination WAL and materialize the destination cache.
 6. Set the symbolic default branch, accepted head SHA, import completion time,
    and repository readiness atomically at the final database transition.
 7. Remove temporary workspaces after success, expected failure, interruption,
@@ -460,7 +460,7 @@ result. Do not store tokens, local absolute paths, or repository content.
 | 2. GitHub namespace projection | Complete | GitHub adapter, exact `repo` and `read:org` scopes, projection tests |
 | 3. Repository REST API | Complete | Repository controllers, JSON contract, namespace quota, idempotency, and pagination tests |
 | 4. Durable provisioning | Complete | Provisioning outbox, reclaimable worker, bounded import timeout, crash-workspace recovery, audit events, and cache reconstruction tests |
-| 5. One-time GitHub import | Complete | Frozen refs, Git bundle WAL entry, cache-loss and no-later-sync tests |
+| 5. One-time GitHub import | Complete | Frozen refs, depth-1 Git bundle WAL entry, preserved shallow boundaries, cache-loss, and no-later-sync tests |
 | 6. Repository Git HTTP authorization | Complete | Public reads, PAT writes, token reauthentication, role refusal, explicit machine grants, audited writes, and legacy-route tests |
 | 7. CLI device authorization | Complete | One-time device-code context, API, browser approval, and polling tests |
 | 8. Repository browser interface | Complete | Paginated list, create, import, empty, failed, private, and code-route LiveView tests |

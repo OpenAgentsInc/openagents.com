@@ -84,8 +84,11 @@ openagents repo import [flags] <github-owner/repository>
 | `--private` | Create a private destination, which is the default. |
 | `--wait-timeout SECONDS` | Wait for import. The default is `300`; `0` does not wait. |
 
-This command performs one import. It does not start synchronization. A client
-timeout does not cancel the accepted server-side import.
+This command performs one depth-1 import of every accepted branch and tag. It
+does not copy older history or start synchronization. A client timeout does not
+cancel the accepted server-side import. While create and import commands wait,
+they write state changes, elapsed time, and a five-second heartbeat to standard
+error.
 
 ## List repositories
 

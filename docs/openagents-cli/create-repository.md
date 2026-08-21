@@ -42,7 +42,9 @@ openagents repo create my-project \
 
 The CLI waits up to 300 seconds for provisioning by default. Pass
 `--wait-timeout 0` to return after the server accepts the durable request. The
-repository continues provisioning on the server.
+repository continues provisioning on the server. While it waits, the CLI
+writes the current lifecycle state, elapsed time, and a five-second heartbeat
+to standard error.
 
 Run one create command without a global installation:
 

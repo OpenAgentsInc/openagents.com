@@ -146,14 +146,22 @@ defmodule OpenAgents.Repositories.Importer do
            import_stage(repository, repository_import, "verify_snapshot", fn ->
              verify_snapshot(source_repository, repository_import)
            end),
-         {:ok, payload, format, payload_bytes} <-
+         {:ok, payload, format, payload_bytes, shallow_boundaries} <-
            import_stage(repository, repository_import, "create_payload", fn ->
              create_payload(source_repository, refs, temporary_directory)
            end),
          :ok <- log_payload_ready(repository, repository_import, payload_bytes),
          :ok <-
            import_stage(repository, repository_import, "append_wal", fn ->
-             append_import(repository, repository_import, payload, format, refs, 0)
+             append_import(
+               repository,
+               repository_import,
+               payload,
+               format,
+               refs,
+               shallow_boundaries,
+               0
+             )
            end),
          :ok <-
            import_stage(repository, repository_import, "materialize_cache", fn ->
@@ -203,6 +211,8 @@ defmodule OpenAgents.Repositories.Importer do
         "fetch",
         "--force",
         "--prune",
+        "--depth=1",
+        "--no-tags",
         "--no-recurse-submodules",
         source_url,
         "+refs/heads/*:refs/heads/*",
@@ -286,7 +296,7 @@ defmodule OpenAgents.Repositories.Importer do
   end
 
   defp create_payload(_source_repository, refs, _temporary_directory) when map_size(refs) == 0,
-    do: {:ok, "", "empty_import", 0}
+    do: {:ok, "", "empty_import", 0, []}
 
   defp create_payload(source_repository, _refs, temporary_directory) do
     bundle_path = Path.join(temporary_directory, "snapshot.bundle")
@@ -296,7 +306,8 @@ defmodule OpenAgents.Repositories.Importer do
         case File.stat(bundle_path) do
           {:ok, %File.Stat{type: :regular, size: size}} ->
             if size <= maximum_bundle_bytes() do
-              {:ok, {:file, bundle_path}, "git_bundle", size}
+              {:ok, {:file, bundle_path}, "git_bundle", size,
+               shallow_boundaries(source_repository)}
             else
               {:error, :import_too_large}
             end
@@ -319,27 +330,58 @@ defmodule OpenAgents.Repositories.Importer do
          _payload,
          _format,
          _refs,
+         _shallow_boundaries,
          attempt
        )
        when attempt >= @maximum_append_attempts,
        do: {:error, :wal_cas_conflict}
 
-  defp append_import(repository, repository_import, payload, format, refs, attempt) do
+  defp append_import(
+         repository,
+         repository_import,
+         payload,
+         format,
+         refs,
+         shallow_boundaries,
+         attempt
+       ) do
     result =
       :global.trans({{:repository_import, repository.storage_key}, self()}, fn ->
-        append_import_once(repository, repository_import, payload, format, refs)
+        append_import_once(
+          repository,
+          repository_import,
+          payload,
+          format,
+          refs,
+          shallow_boundaries
+        )
       end)
 
     case result do
       {:error, :cas_conflict} ->
-        append_import(repository, repository_import, payload, format, refs, attempt + 1)
+        append_import(
+          repository,
+          repository_import,
+          payload,
+          format,
+          refs,
+          shallow_boundaries,
+          attempt + 1
+        )
 
       other ->
         other
     end
   end
 
-  defp append_import_once(repository, repository_import, payload, format, refs) do
+  defp append_import_once(
+         repository,
+         repository_import,
+         payload,
+         format,
+         refs,
+         shallow_boundaries
+       ) do
     with {:ok, expected, index} <- read_or_create_index(repository.storage_key),
          :missing <- import_entry(index, repository_import.id),
          true <- WAL.refs(index) == %{} or {:error, :destination_not_empty},
@@ -351,6 +393,7 @@ defmodule OpenAgents.Repositories.Importer do
            "format" => format,
            "import_id" => repository_import.id,
            "refs" => refs,
+           "shallow" => shallow_boundaries,
            "principal" => "github-import:#{repository_import.id}",
            "pushed_at" => DateTime.to_iso8601(DateTime.utc_now())
          },
@@ -511,6 +554,10 @@ defmodule OpenAgents.Repositories.Importer do
         log_stage(repository, repository_import, stage, "completed")
         result
 
+      {:ok, _value, _metadata, _measurement, _details} = result ->
+        log_stage(repository, repository_import, stage, "completed")
+        result
+
       {:error, reason} = result ->
         log_stage(repository, repository_import, stage, "failed", reason)
         result
@@ -562,6 +609,29 @@ defmodule OpenAgents.Repositories.Importer do
          ) do
       value when is_integer(value) and value > 0 -> value
       _invalid -> @default_maximum_bundle_bytes
+    end
+  end
+
+  defp shallow_boundaries(source_repository) do
+    source_repository
+    |> Path.join("shallow")
+    |> File.read()
+    |> case do
+      {:ok, contents} ->
+        contents
+        |> String.split("\n", trim: true)
+        |> Enum.filter(&Regex.match?(~r/\A[0-9a-f]{40,64}\z/, &1))
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      {:error, :enoent} ->
+        []
+
+      {:error, reason} ->
+        raise File.Error,
+          reason: reason,
+          action: "read shallow boundaries",
+          path: source_repository
     end
   end
 

@@ -63,9 +63,10 @@ openagents repo import OpenAgentsInc/example --namespace OpenAgentsInc
 The `--namespace` value must match the GitHub source owner in this release. You
 cannot import `SOURCE/repository` directly into an unrelated namespace.
 
-The CLI waits up to 300 seconds by default. Pass `--wait-timeout 0` to return
-after the server accepts the durable import. A client timeout does not cancel
-the server-side import.
+The CLI waits up to 300 seconds by default. It writes state changes, elapsed
+time, and a five-second heartbeat to standard error while it waits. Pass
+`--wait-timeout 0` to return after the server accepts the durable import.
+A client timeout does not cancel the server-side import.
 
 ## Import once with npx
 
@@ -78,7 +79,7 @@ npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
 Pin the package version for a reproducible qualification run:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.4 \
+npx --yes @openagentsinc/cli@0.1.5 \
   --profile staging \
   repo import OWNER/REPOSITORY \
   --private \
@@ -102,10 +103,16 @@ shell output.
 
 ## Import a large repository
 
-OpenAgents keeps large Git bundles on disk and streams them to and from the
-durable forge WAL in 1 MiB chunks. The application does not read the complete
-bundle into the BEAM heap. The default server limits allow a bundle up to 20
-GiB and an import to run for up to six hours.
+OpenAgents imports every accepted branch and tag at depth 1 by default. This
+shallow snapshot preserves each current tip and its files without copying the
+source repository's full history. It makes repositories with years of history
+available much faster and bounds the first transfer by current content rather
+than commit count.
+
+OpenAgents keeps the resulting Git bundle on disk and streams it to and from
+the durable forge WAL in 1 MiB chunks. The application does not read the
+complete bundle into the BEAM heap. The default server limits allow a bundle
+up to 20 GiB and an import to run for up to six hours.
 
 The CLI's `--wait-timeout` controls only how long that client waits. It does
 not change or cancel the server import. For a large repository, accept the
@@ -121,11 +128,8 @@ Server logs record every stage and the bundle byte count. A bundle over the
 server limit fails with `import_too_large`; an operation over the server time
 limit fails with `import_timeout`.
 
-Large imports still need enough temporary disk for the fetched Git objects and
-the bundle. Git LFS objects remain outside the import. Start an environment's
-first import with a small repository so you can qualify authentication,
-lifecycle reporting, storage, and clone behavior before spending the time and
-bandwidth of a large transfer.
+Large imports still need enough temporary disk for the shallow Git objects and
+the bundle. Git LFS objects remain outside the import.
 
 ## Verify an import
 
@@ -154,7 +158,8 @@ files without copying LFS objects.
    openagents repo clone OWNER/REPOSITORY
    ```
 
-4. Compare the cloned branches and tags with the accepted GitHub snapshot.
+4. Compare the cloned branch and tag tips with the accepted GitHub snapshot.
+   Confirm that the clone contains one commit of history per imported tip.
 5. Add a later commit on GitHub and confirm that it does not appear in the
    OpenAgents copy.
 
@@ -165,15 +170,17 @@ must start each import explicitly.
 
 | Copied | Not copied |
 | --- | --- |
-| Git history reachable from accepted refs | GitHub Issues |
+| Current commit and file tree at every accepted ref, with depth 1 | Full Git history before each accepted tip |
 | `refs/heads/*` branches | Pull requests and reviews |
 | `refs/tags/*` tags | Actions runs and secrets |
 | The source default branch | Releases and repository settings |
 | Submodule pointer commits | Wikis and Git LFS objects |
 
 OpenAgents freezes the accepted branch and tag map before copying data. It
-verifies the same ref snapshot before marking the repository ready. A GitHub
-commit created after acceptance is not part of the import.
+verifies that same ref snapshot before marking the repository ready. The
+destination records those commits as shallow boundaries, so normal cloning and
+new commits work without the omitted ancestry. A GitHub commit created after
+acceptance is not part of the import.
 
 Git LFS pointer files remain in Git history, but OpenAgents does not copy the
 referenced LFS objects. Download or migrate those objects separately before

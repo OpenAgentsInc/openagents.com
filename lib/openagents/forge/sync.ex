@@ -57,7 +57,7 @@ defmodule OpenAgents.Forge.Sync do
         {_output, 0} = run_receive_pack(path, payload)
 
       "git_bundle" ->
-        :ok = unbundle_entry(repo, path, object)
+        :ok = unbundle_entry(repo, path, object, entry["shallow"] || [])
 
       "empty_import" ->
         :ok
@@ -77,7 +77,7 @@ defmodule OpenAgents.Forge.Sync do
     end
   end
 
-  defp unbundle_entry(repo, path, object) do
+  defp unbundle_entry(repo, path, object, shallow_boundaries) do
     temporary_path =
       Path.join(
         Application.get_env(:openagents, :repository_import_temp_dir, System.tmp_dir!()),
@@ -88,12 +88,40 @@ defmodule OpenAgents.Forge.Sync do
       with :ok <- WAL.get_entry_file(repo, object, temporary_path),
            :ok <- File.chmod(temporary_path, 0o600) do
         case Repos.git(path, ["bundle", "unbundle", temporary_path]) do
-          {_output, 0} -> :ok
+          {_output, 0} -> write_shallow_boundaries(path, shallow_boundaries)
           {_output, _status} -> raise "repository bundle could not be materialized"
         end
       end
     after
       File.rm(temporary_path)
+    end
+  end
+
+  defp write_shallow_boundaries(path, []) do
+    shallow_path = Path.join(path, "shallow")
+
+    case File.rm(shallow_path) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> raise File.Error, reason: reason, action: "remove", path: shallow_path
+    end
+  end
+
+  defp write_shallow_boundaries(path, shallow_boundaries) do
+    valid? =
+      Enum.all?(shallow_boundaries, fn boundary ->
+        is_binary(boundary) and Regex.match?(~r/\A[0-9a-f]{40,64}\z/, boundary)
+      end)
+
+    if valid? do
+      File.write!(
+        Path.join(path, "shallow"),
+        Enum.join(shallow_boundaries, "\n") <> "\n"
+      )
+
+      :ok
+    else
+      raise "repository bundle has invalid shallow boundaries"
     end
   end
 

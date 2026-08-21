@@ -99,8 +99,9 @@ The first release follows these decisions:
   commands but does not replace Git.
 - The CLI uses the server-provided clone URL instead of constructing one from a
   hard-coded host.
-- The first release imports Git repository history, branches, and tags from
-  GitHub as a one-time copy. It does not maintain a mirror or two-way sync.
+- The first release imports the current tip of every GitHub branch and tag at
+  depth 1 as a one-time copy. It does not copy older ancestry or maintain a
+  mirror or two-way sync.
 - Pull requests, rulesets, SSH keys, apps, and OpenAgents-native team sharing
   remain future slices.
 
@@ -305,16 +306,17 @@ The record never stores a GitHub access token, authenticated clone URL, local
 path, raw Git diagnostic, or repository content.
 
 At import acceptance, resolve the source through the GitHub API and freeze the
-advertised `refs/heads/*` and `refs/tags/*` map. The import copies the objects
-reachable from that map and verifies the same ref digest before it marks the
-destination ready. GitHub changes after the accepted snapshot are not part of
-the import.
+advertised `refs/heads/*` and `refs/tags/*` map. The import fetches each tip at
+depth 1, copies the tip's commit and file-tree objects, preserves the shallow
+boundaries in the destination, and verifies the same ref digest before it marks
+the destination ready. GitHub changes after the accepted snapshot are not part
+of the import.
 
-The first release imports standard Git history, branches, tags, the default
-branch, and submodule pointer commits. It does not import GitHub Issues, pull
-requests, reviews, Actions runs or secrets, releases, repository settings,
-wikis, or Git LFS objects. Git LFS pointer files remain ordinary Git content;
-the UI and CLI must warn when the source uses LFS.
+The first release imports branches, tags, the default branch, current file
+trees, and submodule pointers at the accepted tips. It does not import older
+Git ancestry, GitHub Issues, pull requests, reviews, Actions runs or secrets,
+releases, repository settings, wikis, or Git LFS objects. Git LFS pointer files
+remain ordinary Git content; the UI and CLI must warn when the source uses LFS.
 
 ### Authority split
 
@@ -352,11 +354,11 @@ a transactional outbox and an idempotent provisioner.
    outbox record.
 4. Commit before any filesystem, Git, or object-store operation begins.
 5. Initialize an empty durable WAL namespace using `repository.storage_key`.
-6. For an import, fetch the accepted GitHub refs into an isolated temporary
-   repository, verify the frozen ref digest, and ingest the accepted objects and
-   refs into the destination WAL. Use a server-owned credential adapter that
-   never places the GitHub token in a URL, argv, log, receipt, or repository
-   configuration.
+6. For an import, fetch the accepted GitHub refs at depth 1 into an isolated
+   temporary repository, verify the frozen ref digest, and ingest the accepted
+   objects, shallow boundaries, and refs into the destination WAL. Use a
+   server-owned credential adapter that never places the GitHub token in a URL,
+   argv, log, receipt, or repository configuration.
 7. Materialize or initialize the bare-repository cache with the selected
    symbolic default branch.
 8. Verify that upload-pack and receive-pack resolve the same repository UUID.
@@ -1250,7 +1252,7 @@ The first repository and import slice is complete when:
   as the repository row.
 - A repeat request with the same idempotency key cannot create a duplicate.
 - The browser and CLI can import an authorized GitHub repository's accepted
-  history, branches, and tags into the matching GitHub namespace.
+  branch and tag tips at depth 1 into the matching GitHub namespace.
 - An imported repository records its source and exact accepted snapshot without
   retaining a GitHub credential.
 - A GitHub commit created after import acceptance does not appear in OpenAgents
@@ -1258,7 +1260,8 @@ The first repository and import slice is complete when:
 - A public repository clones anonymously.
 - A private repository is hidden from a nonmember.
 - A permitted user can push and a read-only or unrelated user cannot.
-- Deleting the node-local bare cache does not lose accepted Git history.
+- Deleting the node-local bare cache does not lose the accepted shallow
+  snapshot or later OpenAgents history.
 - Creating a repository cannot make it deployable.
 - The CLI works in attended and noninteractive modes without placing a token in
   argv, logs, JSON, or a clone URL.

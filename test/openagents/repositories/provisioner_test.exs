@@ -152,6 +152,9 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     git!(source, ["init", "--initial-branch=main"])
     git!(source, ["config", "user.email", "test@example.com"])
     git!(source, ["config", "user.name", "Import test"])
+    File.write!(Path.join(source, "HISTORY.md"), "older history\n")
+    git!(source, ["add", "HISTORY.md"])
+    git!(source, ["commit", "-m", "Older history"])
     File.write!(Path.join(source, "README.md"), "accepted snapshot\n")
     git!(source, ["add", "README.md"])
     git!(source, ["commit", "-m", "Accepted snapshot"])
@@ -208,13 +211,22 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     assert "repository.import.created" in audit_types(repository.id)
     assert "repository.import.running" in audit_types(repository.id)
     assert {:ok, _generation, index} = WAL.read_index(repository.storage_key)
-    assert [%{"format" => "git_bundle", "import_id" => import_id}] = WAL.entries(index)
+
+    assert [
+             %{
+               "format" => "git_bundle",
+               "import_id" => import_id,
+               "shallow" => [_boundary]
+             }
+           ] = WAL.entries(index)
+
     assert import_id == repository_import.id
     assert WAL.refs(index) == refs
 
     File.rm_rf!(Repos.bare_path(repository.storage_key))
     assert :ok = OpenAgents.Forge.Sync.ensure_fresh(repository.storage_key, "main")
     assert Repos.refs(repository.storage_key) == refs
+    assert String.trim(bare_git!(repository.storage_key, ["rev-list", "--count", "main"])) == "1"
 
     assert String.trim(bare_git!(repository.storage_key, ["show", "main:README.md"])) ==
              "accepted snapshot"

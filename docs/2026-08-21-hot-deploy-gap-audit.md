@@ -22,6 +22,24 @@ Meanwhile every production deploy rides the structural class: one immutable imag
 
 Closing the gap is operator work, not engineering work: apply the staging Terraform, run Gates 12–15 against the real builder image, pin the builder digest into fleet metadata, flip the feature flags, then extend the runbooks with the consolidated decision table and drill lessons listed in section 5.
 
+### Addendum: post-measurement production events (2026-08-21, later)
+
+After this audit was measured, two claims moved:
+
+1. **The direct-load transaction now works on production.** Commit `fa4b792`
+   (a code-only router fix) was loaded across all three nodes through the real
+   transaction protocol — `live` Forge target and deployment receipt recorded,
+   boot convergence satisfied, process uptimes unbroken. The operator assembled
+   and applied the artifact manually; no receipted automated deploy exists yet.
+2. **"Nothing needs re-implementing" holds for the hot-load loop only.** The
+   general relup path remains unconnected: `BuildArtifact` classifies only
+   `direct_candidate` and `needs_rolling_replace` and can never emit a relup
+   class, and `RelupDeployment` accepts only the fixed `0.1.0 → 0.2.0`
+   proof transition while production runs `0.2.0`. Closing that lane is
+   recorded as future work in
+   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md), which
+   is also the enablement runbook for the automated loop.
+
 ---
 
 ## 1. What Sarah proved
@@ -92,7 +110,7 @@ Verified in this repository at `eda094c`:
 | Build lane producing normalized-BEAM changed-set artifacts | `lib/openagents/forge/build_worker.ex`, `build_artifact.ex` | Hardened rewrite: JSON queue contract, digest-addressed artifacts, `:beam_lib.strip/1` stable hashing (the fix for Sarah's hash-instability defect), structural-reason classifier for mix.lock/config/assets/NIF paths |
 | Isolated builder container, credential-free queue | `docs/operations/forge-build-lane.md`, `Dockerfile` forge-builder target, `ops/forge/build-worker.exs` | Stronger than Sarah's root sidecar: no compiler in the serving image, askpass-based credentials, mode-separated queue files |
 | Transactional fleet deployment with rollback | `lib/openagents/forge/deployment.ex` and siblings; runbook `docs/operations/forge-transactional-deployment.md` | Stronger than Sarah's Loop v0: prepare/apply/verify/commit with expiring tokens, exact prior-object capture per node (fixes Sarah's revert-divergence flaw), membership rechecks between phases |
-| Relup lane with appup + proof harness | `mix.exs` appup wiring, `rel/openagents.appup.exs`, `ops/relup-proof/`, runbook `docs/operations/release-deployment-fallbacks.md` | Ported; forward/reverse/interrupted-install proofs are gate stages |
+| Relup lane with appup + proof harness | `mix.exs` appup wiring, `rel/openagents.appup.exs`, `ops/relup-proof/`, runbook `docs/operations/release-deployment-fallbacks.md` | Proof harness only: the classifier never emits a relup class and `RelupDeployment` admits only the fixed `0.1.0 → 0.2.0` proof transition, so the general lane is ported but not connected |
 | Boot convergence | `lib/openagents/forge/boot_converge.ex`; flag `OPENAGENTS_FEATURE_BOOT_CONVERGENCE` | Ported; readiness-gated so divergent nodes do not serve |
 | Three-node fleet infrastructure with state disks and builder wiring | `infra/staging/main.tf`, `infra/staging/templates/fleet-startup.sh.tftpl` | Terraform-complete, safety-tested; cloud apply never ran |
 | Promotion targets, receipts, WAL-backed git service | `lib/openagents/forge/targets.ex`, `pushes.ex`, `git_http.ex` | Ported and partially live: GitHub imports and the public clone URL already run in production |

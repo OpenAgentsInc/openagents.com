@@ -2,8 +2,15 @@
 
 Date: 2026-08-19
 
-Status: Design and partial local implementation; staging proof incomplete;
-production use prohibited
+Status: Historical design record. Superseded in part by operations: direct
+BEAM loading of allowlisted web-layer changes has since run on production
+through the transactional lane (`fa4b792`, 2026-08-21). Relups remain
+unimplemented as a general path and not production-approved. The current
+operator authority is
+[`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md) with the
+[fallbacks runbook](operations/release-deployment-fallbacks.md); the
+[hot deploy gap audit](2026-08-21-hot-deploy-gap-audit.md) records what
+changed after this plan was written.
 
 ## Outcome
 

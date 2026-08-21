@@ -46,3 +46,6 @@ npm-debug.log
 
 # Local environment variables
 /.env
+
+# Local development forge storage (config/dev.exs points at it).
+/.local/

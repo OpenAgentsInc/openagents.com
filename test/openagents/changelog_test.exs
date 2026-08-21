@@ -258,7 +258,7 @@ defmodule OpenAgents.ChangelogTest do
       # They are anchored to the history that preceded this repository's
       # clean-room rewrite. Kept so they can be restored if that history is
       # ever grafted in; not seeded, because today they would be dead links.
-      refute Backfill.pre_public_entries() == []
+      refute Enum.empty?(Backfill.pre_public_entries())
 
       seeded = MapSet.new(Backfill.seeded_entries(), & &1.sha)
 

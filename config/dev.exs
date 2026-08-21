@@ -6,6 +6,14 @@ config :openagents, :runtime_environment, :development
 # path, and a write that escapes the sandbox is a flaky suite.
 config :openagents, :changelog_backfill_on_boot, true
 
+# The forge, pointed at a writable directory inside the checkout. It is off in
+# the base config because `forge_data_dir` defaults to `/var/lib`, which no
+# development machine can write -- and with it off, every `/{owner}/{repo}`
+# page is a 404 locally, so the repository surfaces cannot be reviewed at all.
+config :openagents,
+  forge_enabled: true,
+  forge_data_dir: Path.expand("../.local/forge", __DIR__)
+
 # Configure your database
 config :openagents, OpenAgents.Repo,
   username: System.get_env("USER") || "christopherdavid",

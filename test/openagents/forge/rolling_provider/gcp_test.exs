@@ -51,6 +51,7 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
     assert :ok = Gcp.remove_readiness(hd(@nodes), context)
     assert {:ok, 0} = Gcp.drain(hd(@nodes), context)
     assert {:ok, %{ready: 2, quorum: true}} = Gcp.capacity(tl(@nodes), context)
+    assert_receive {:rpc, _, RollingNodeProbe, :status, [3, @sha, @digest]}
 
     assert {:ok,
             %{
@@ -97,7 +98,7 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
   end
 
   test "fails capacity closed when Ra quorum is absent" do
-    rpc = fn _node, RollingNodeProbe, :status, [_expected], _timeout ->
+    rpc = fn _node, RollingNodeProbe, :status, [_expected, @sha, @digest], _timeout ->
       Map.put(probe(hd(@nodes)), :ra_quorum, false)
     end
 
@@ -106,7 +107,7 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
   end
 
   test "reports a rebooting node as unavailable when Erlang distribution disconnects" do
-    rpc = fn _node, RollingNodeProbe, :status, [_expected], _timeout ->
+    rpc = fn _node, RollingNodeProbe, :status, [_expected, @sha, @digest], _timeout ->
       :erlang.error({:erpc, :noconnection})
     end
 
@@ -124,13 +125,32 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
   end
 
   test "reports other reboot transport exits as unavailable" do
-    rpc = fn _node, RollingNodeProbe, :status, [_expected], _timeout ->
+    rpc = fn _node, RollingNodeProbe, :status, [_expected, @sha, @digest], _timeout ->
       exit(:nodedown)
     end
 
     put_config(rpc)
 
     assert {:ok, %{ready: 0, quorum: false}} = Gcp.capacity([hd(@nodes)], context())
+  end
+
+  test "uses the bounded legacy probe while replacing an older fleet image" do
+    owner = self()
+
+    rpc = fn node, RollingNodeProbe, :status, arguments, _timeout ->
+      send(owner, {:probe_arguments, arguments})
+
+      case arguments do
+        [3, @sha, @digest] -> {:error, :undef}
+        [3] -> probe(node)
+      end
+    end
+
+    put_config(rpc)
+
+    assert {:ok, %{ready: 2, quorum: true}} = Gcp.capacity(tl(@nodes), context())
+    assert_receive {:probe_arguments, [3, @sha, @digest]}
+    assert_receive {:probe_arguments, [3]}
   end
 
   test "reports only connected nodes in the configured fleet inventory" do

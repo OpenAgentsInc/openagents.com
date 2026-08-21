@@ -57,7 +57,7 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
   @impl true
   def capacity(nodes, context) do
     with {:ok, config} <- config(),
-         {:ok, probes} <- probes(config, nodes, length(context.expected_nodes)) do
+         {:ok, probes} <- probes(config, nodes, context) do
       ready = Enum.count(probes, & &1.ready)
       majority = div(length(context.expected_nodes), 2) + 1
       ra_quorum? = Enum.any?(probes, & &1.ra_quorum)
@@ -76,7 +76,7 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
   @impl true
   def status(node, context) do
     with {:ok, config} <- config(),
-         {:ok, probe} <- probe(config, node, length(context.expected_nodes)) do
+         {:ok, probe} <- probe(config, node, context) do
       {:ok,
        Map.take(probe, [:member, :ready, :boot_converged, :database_ready, :sha, :image_digest])}
     end
@@ -113,11 +113,11 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
 
   def validate_config(_config), do: {:error, :invalid_provider_config}
 
-  defp probes(config, nodes, expected_fleet_size) do
+  defp probes(config, nodes, context) do
     results =
       Task.async_stream(
         nodes,
-        &probe(config, &1, expected_fleet_size),
+        &probe(config, &1, context),
         ordered: false,
         timeout: timeout(config)
       )
@@ -133,7 +133,17 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
     end
   end
 
-  defp probe(config, node, expected_fleet_size) do
+  defp probe(config, node, context) do
+    arguments = [length(context.expected_nodes), context.sha, context.image_digest]
+
+    case rpc(config, node, RollingNodeProbe, :status, arguments) do
+      %{member: true} = result -> {:ok, result}
+      {:error, _reason} -> legacy_probe(config, node, length(context.expected_nodes))
+      other -> {:error, {:invalid_node_probe, other}}
+    end
+  end
+
+  defp legacy_probe(config, node, expected_fleet_size) do
     case rpc(config, node, RollingNodeProbe, :status, [expected_fleet_size]) do
       %{member: true} = result -> {:ok, result}
       {:error, _transport_reason} -> {:ok, unavailable_probe()}

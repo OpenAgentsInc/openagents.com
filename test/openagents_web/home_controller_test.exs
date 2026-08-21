@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.HomeControllerTest do
   use OpenAgentsWeb.ConnCase, async: true
 
+  alias OpenAgents.{Repo, Repositories}
+
   test "the public homepage is the OpenAgents hero", %{conn: conn} do
     response = get(conn, ~p"/")
     html = html_response(response, 200)
@@ -32,6 +34,16 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     assert html =~ "Open issues"
     assert html =~ "Latest from the changelog"
     assert html =~ ~s(class="dashboard")
+  end
+
+  test "an authenticated account sees the dashboard before the first import", %{conn: conn} do
+    conn = log_in_github_user(conn, "authenticated-empty-home-user")
+    Repositories.initial_repository!() |> Repo.delete!()
+
+    html = html_response(get(conn, ~p"/"), 200)
+
+    assert html =~ ~s(class="dashboard")
+    assert html =~ "No repositories yet."
   end
 
   test "the browser policy permits only the narrow GitHub avatar origin", %{conn: conn} do

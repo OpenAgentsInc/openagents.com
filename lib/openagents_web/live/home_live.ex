@@ -39,15 +39,16 @@ defmodule OpenAgentsWeb.HomeLive do
   # Loaded once at mount rather than per render: none of it changes within a
   # visit, and the dashboard should not re-query on every diff.
   defp assign_dashboard(socket) do
-    repository = Repositories.initial_repository!()
-    {owner, name} = Repositories.initial_path()
     repositories = Repositories.list_visible_repositories(socket.assigns.current_user)
+    repository = dashboard_repository(repositories)
+    {owner, name} = repository_path(repository)
 
-    open_issues = Issues.list_issues(repository, state: "open")
-    closed_issues = Issues.list_issues(repository, state: "closed")
-    projects = Projects.list_projects(repository)
+    open_issues = list_issues(repository, "open")
+    closed_issues = list_issues(repository, "closed")
+    projects = list_projects(repository)
 
     socket
+    |> assign(:repository, repository)
     |> assign(:owner, owner)
     |> assign(:name, name)
     |> assign(:open_count, length(open_issues))
@@ -58,6 +59,24 @@ defmodule OpenAgentsWeb.HomeLive do
     |> assign(:changelog, changelog_entries())
     |> stream(:repositories, repositories)
   end
+
+  defp dashboard_repository(repositories) do
+    {initial_owner, initial_name} = Repositories.initial_path()
+
+    Enum.find(repositories, fn repository ->
+      String.downcase(repository.namespace.slug) == String.downcase(initial_owner) and
+        String.downcase(repository.name) == String.downcase(initial_name)
+    end) || Enum.find(repositories, &(&1.lifecycle_state == "ready"))
+  end
+
+  defp repository_path(nil), do: Repositories.initial_path()
+  defp repository_path(repository), do: {repository.namespace.slug, repository.name}
+
+  defp list_issues(nil, _state), do: []
+  defp list_issues(repository, state), do: Issues.list_issues(repository, state: state)
+
+  defp list_projects(nil), do: []
+  defp list_projects(repository), do: Projects.list_projects(repository)
 
   # The ledger is a bounded public projection and can legitimately refuse. An
   # empty rail is the honest answer; the home page should not crash over it.
@@ -83,7 +102,11 @@ defmodule OpenAgentsWeb.HomeLive do
           <section class="panel" aria-labelledby="dashboard-issues">
             <header class="panel__header">
               <h2 id="dashboard-issues" class="panel__title">Open issues</h2>
-              <.link navigate={~p"/#{@owner}/#{@name}/issues"} class="panel__more">
+              <.link
+                :if={@repository}
+                navigate={~p"/#{@owner}/#{@name}/issues"}
+                class="panel__more"
+              >
                 View all <.icon name="arrow-right" />
               </.link>
             </header>
@@ -108,15 +131,22 @@ defmodule OpenAgentsWeb.HomeLive do
               </li>
             </ul>
 
-            <p :if={@issues == []} class="panel__empty">
+            <p :if={@issues == [] and @repository} class="panel__empty">
               No open issues. <.link navigate={~p"/#{@owner}/#{@name}/issues/new"}>Open one</.link>.
+            </p>
+            <p :if={is_nil(@repository)} class="panel__empty">
+              Import your first repository to start tracking issues.
             </p>
           </section>
 
           <section class="panel" aria-labelledby="dashboard-projects">
             <header class="panel__header">
               <h2 id="dashboard-projects" class="panel__title">Projects</h2>
-              <.link navigate={~p"/#{@owner}/#{@name}/projects"} class="panel__more">
+              <.link
+                :if={@repository}
+                navigate={~p"/#{@owner}/#{@name}/projects"}
+                class="panel__more"
+              >
                 View all <.icon name="arrow-right" />
               </.link>
             </header>
@@ -136,7 +166,10 @@ defmodule OpenAgentsWeb.HomeLive do
               </li>
             </ul>
 
-            <p :if={@projects == []} class="panel__empty">No projects yet.</p>
+            <p :if={@projects == [] and @repository} class="panel__empty">No projects yet.</p>
+            <p :if={is_nil(@repository)} class="panel__empty">
+              Projects appear after you import a repository.
+            </p>
           </section>
         </div>
 

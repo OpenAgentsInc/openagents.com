@@ -7,6 +7,9 @@ defmodule OpenAgents.Tools.MemoryForget do
   alias OpenAgents.ProfileMemory
   alias OpenAgents.Tools.{ExecutionResult, MemoryContext, MemoryContract}
 
+  @categories ~w(name role project preference constraint other)
+  @record_categories ["" | @categories]
+
   @impl true
   def specification do
     MemoryContract.tool(
@@ -16,7 +19,9 @@ defmodule OpenAgents.Tools.MemoryForget do
         "authorizes it. Mode all (with empty record_id, category, claim, and " <>
         "expected_generation 0) forgets everything without listing first; mode " <>
         "category clears one category; mode record needs the exact record_id, " <>
-        "stored claim wording, and expected_generation",
+        "stored claim wording, and expected_generation. Record mode may repeat " <>
+        "the selected record category; the record ID and generation remain the " <>
+        "authority fence",
       input_schema(),
       output_schema(),
       :reversible_write,
@@ -60,12 +65,12 @@ defmodule OpenAgents.Tools.MemoryForget do
   defp selector(%{
          "mode" => "record",
          "record_id" => record_id,
-         "category" => "",
+         "category" => category,
          "claim" => claim,
          "expected_generation" => expected_generation
        })
-       when is_binary(record_id) and is_binary(claim) and is_integer(expected_generation) and
-              expected_generation > 0 do
+       when is_binary(record_id) and category in @record_categories and is_binary(claim) and
+              is_integer(expected_generation) and expected_generation > 0 do
     with {:ok, parsed_id} <- Ecto.UUID.cast(record_id),
          true <- byte_size(claim) in 1..500 do
       {:ok,
@@ -86,7 +91,7 @@ defmodule OpenAgents.Tools.MemoryForget do
          "claim" => "",
          "expected_generation" => 0
        })
-       when category in ~w(name role project preference constraint other),
+       when category in @categories,
        do: {:ok, %{"mode" => "category", "category" => category}, category}
 
   defp selector(%{

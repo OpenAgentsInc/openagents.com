@@ -107,7 +107,7 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
                call("memory_forget", %{
                  "mode" => "record",
                  "record_id" => record.id,
-                 "category" => "",
+                 "category" => "preference",
                  "claim" => record.claim,
                  "expected_generation" => record.generation
                }),

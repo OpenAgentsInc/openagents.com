@@ -4,7 +4,8 @@ defmodule OpenAgents.Repositories do
   import Ecto.Query, warn: false
 
   alias OpenAgents.Accounts.User
-  alias OpenAgents.{Audit, Repo}
+  alias OpenAgents.Forge.{Repos, WAL}
+  alias OpenAgents.{Analytics, Audit, Repo}
   alias OpenAgents.Machines.Machine
 
   alias OpenAgents.Repositories.{
@@ -259,6 +260,134 @@ defmodule OpenAgents.Repositories do
         order_by: [asc: namespace.slug_key, asc: repository.name_key, asc: repository.id],
         preload: [namespace: namespace]
     )
+  end
+
+  @doc "Returns the first repository path in the user's workspace, or `nil`."
+  def sidebar_repository_path(%User{id: user_id}) do
+    case Repo.one(
+           from repository in Repository,
+             join: namespace in assoc(repository, :namespace),
+             join: membership in Membership,
+             on:
+               membership.repository_id == repository.id and membership.user_id == ^user_id and
+                 membership.role in ^~w(owner maintainer contributor viewer),
+             order_by: [asc: namespace.slug_key, asc: repository.name_key, asc: repository.id],
+             limit: 1,
+             select: {namespace.slug, repository.name}
+         ) do
+      {owner, name} -> "/#{owner}/#{name}"
+      nil -> nil
+    end
+  end
+
+  @doc "Delete a repository owned by `user`, including its durable and node-local Git data."
+  def delete_owned_repository(owner, name, %User{} = user, options \\ [])
+      when is_binary(owner) and is_binary(name) do
+    with %Repository{} = repository <- owned_repository(owner, name, user) do
+      result =
+        :global.trans({{:forge_push, repository.storage_key}, self()}, fn ->
+          delete_owned_repository_locked(repository, user)
+        end)
+
+      case result do
+        {:ok, deleted} = success ->
+          Analytics.capture("repository_deleted", Analytics.distinct_id(user), %{
+            "repository_id" => deleted.id,
+            "provisioning_kind" => deleted.provisioning_kind,
+            "surface" => Keyword.get(options, :surface, "api")
+          })
+
+          success
+
+        error ->
+          error
+      end
+    else
+      nil -> {:error, :not_found}
+    end
+  end
+
+  defp owned_repository(owner, name, %User{id: user_id}) do
+    owner_key = String.downcase(owner)
+    name_key = String.downcase(name)
+
+    Repo.one(
+      from repository in repository_path_query(owner_key, name_key),
+        join: membership in Membership,
+        on:
+          membership.repository_id == repository.id and membership.user_id == ^user_id and
+            membership.role == "owner"
+    )
+  end
+
+  defp delete_owned_repository_locked(repository, user) do
+    Repo.transaction(fn ->
+      locked_repository =
+        Repo.one(
+          from candidate in Repository,
+            join: membership in Membership,
+            on:
+              membership.repository_id == candidate.id and membership.user_id == ^user.id and
+                membership.role == "owner",
+            where: candidate.id == ^repository.id,
+            lock: "FOR UPDATE",
+            select: candidate
+        )
+
+      if is_nil(locked_repository), do: Repo.rollback(:not_found)
+
+      provisioning =
+        Repo.one(
+          from outbox in ProvisioningOutbox,
+            where: outbox.repository_id == ^locked_repository.id,
+            lock: "FOR UPDATE"
+        )
+
+      if provisioning && provisioning.state == "running", do: Repo.rollback(:repository_busy)
+
+      with :ok <- WAL.delete_repo(locked_repository.storage_key),
+           :ok <- delete_local_caches(locked_repository.storage_key) do
+        Audit.record!(
+          "repository.deleted",
+          {:user, user.id},
+          "repository",
+          locked_repository.id,
+          repository_id: locked_repository.id,
+          metadata: %{
+            "owner" => locked_repository.owner,
+            "name" => locked_repository.name,
+            "provisioning_kind" => locked_repository.provisioning_kind
+          }
+        )
+
+        Repo.delete!(locked_repository)
+      else
+        {:error, reason} -> Repo.rollback({:storage_cleanup_failed, reason})
+      end
+    end)
+  end
+
+  defp delete_local_caches(storage_key) do
+    [node() | Node.list()]
+    |> Enum.uniq()
+    |> Task.async_stream(
+      fn target ->
+        if target == node() do
+          Repos.delete_repo(storage_key)
+        else
+          :erpc.call(target, Repos, :delete_repo, [storage_key], 30_000)
+        end
+      end,
+      ordered: false,
+      timeout: 31_000,
+      on_timeout: :kill_task,
+      max_concurrency: max(1, 1 + length(Node.list()))
+    )
+    |> Enum.reduce_while(:ok, fn
+      {:ok, :ok}, :ok -> {:cont, :ok}
+      {:ok, {:error, reason}}, :ok -> {:halt, {:error, reason}}
+      {:exit, reason}, :ok -> {:halt, {:error, reason}}
+    end)
   end
 
   def list_visible_repositories_page(

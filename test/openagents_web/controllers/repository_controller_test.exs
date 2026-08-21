@@ -2,6 +2,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
   alias OpenAgents.ApiTokens
+  alias OpenAgents.Forge.{Repos, WAL}
   alias OpenAgents.Repositories
 
   test "POST /api/v3/user/repos creates in the authenticated GitHub namespace", %{conn: conn} do
@@ -201,6 +202,63 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
              |> json_response(422)
   end
 
+  test "DELETE /api/v3/repos/:owner/:repo removes an owned repository and its storage", %{
+    conn: conn
+  } do
+    configure_repository_storage("repository-api-delete")
+    owner = github_user("repository-api-delete-owner", "delete-owner")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(
+               owner,
+               %{name: "delete-me", visibility: "private"},
+               "delete-repository"
+             )
+
+    mark_ready(repository)
+    assert {:ok, _generation} = WAL.cas_index(repository.storage_key, :none, WAL.new_index())
+    bare_path = Repos.ensure_repo!(repository.storage_key)
+
+    response =
+      conn
+      |> authorize(owner)
+      |> delete("/api/v3/repos/delete-owner/delete-me")
+
+    assert response.status == 204
+    assert response.resp_body == ""
+
+    assert_raise Ecto.NoResultsError, fn ->
+      Repositories.get_by_path!("delete-owner", "delete-me")
+    end
+
+    assert {:error, :not_found} = WAL.read_index(repository.storage_key)
+    refute File.exists?(bare_path)
+  end
+
+  test "DELETE /api/v3/repos/:owner/:repo permits only repository owners", %{conn: conn} do
+    owner = github_user("repository-api-delete-authorization-owner", "protected-owner")
+    maintainer = github_user("repository-api-delete-authorization-maintainer")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(
+               owner,
+               %{name: "protected-repository", visibility: "private"},
+               "protected-repository"
+             )
+
+    mark_ready(repository)
+    assert {:ok, _membership} = Repositories.add_member(repository, maintainer, "maintainer")
+
+    assert %{"code" => "not_found"} =
+             conn
+             |> authorize(maintainer)
+             |> delete("/api/v3/repos/protected-owner/protected-repository")
+             |> json_response(404)
+
+    assert Repositories.get_by_path!("protected-owner", "protected-repository").id ==
+             repository.id
+  end
+
   defp authorize(conn, user) do
     {:ok, _credential, plaintext} =
       ApiTokens.create(user, %{name: "repository API test", scopes: ["forge:write"]})
@@ -216,4 +274,27 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     )
     |> OpenAgents.Repo.update!()
   end
+
+  defp configure_repository_storage(key) do
+    root = Path.join(System.tmp_dir!(), "#{key}-#{System.unique_integer([:positive])}")
+    previous_data = Application.get_env(:openagents, :forge_data_dir)
+    previous_wal = Application.get_env(:openagents, :forge_wal_dir)
+    previous_adapter = Application.get_env(:openagents, :forge_wal_adapter)
+
+    Application.put_env(:openagents, :forge_data_dir, Path.join(root, "data"))
+    Application.put_env(:openagents, :forge_wal_dir, Path.join(root, "wal"))
+    Application.put_env(:openagents, :forge_wal_adapter, OpenAgents.Forge.WAL.Local)
+
+    on_exit(fn ->
+      restore_env(:forge_data_dir, previous_data)
+      restore_env(:forge_wal_dir, previous_wal)
+      restore_env(:forge_wal_adapter, previous_adapter)
+      File.rm_rf!(root)
+    end)
+
+    root
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
+  defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
 end

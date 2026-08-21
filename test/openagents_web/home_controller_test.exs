@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.HomeControllerTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   alias OpenAgents.{Repo, Repositories}
 

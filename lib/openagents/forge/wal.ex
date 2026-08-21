@@ -51,6 +51,7 @@ defmodule OpenAgents.Forge.WAL do
               :ok | {:error, term}
   @callback put_object(repo, object_key :: String.t(), payload :: binary()) ::
               {:ok, String.t()} | {:error, term}
+  @callback delete_repo(repo) :: :ok | {:error, term}
 
   @repo_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9]))*$/
   @entry_key_pattern ~r/^entries\/[0-9]{8}-[0-9a-f]{12}$/
@@ -133,6 +134,12 @@ defmodule OpenAgents.Forge.WAL do
          :ok <- validate_entry_key(object_key) do
       adapter().get_entry_file(repo, object_key, path)
     end
+  end
+
+  @doc "Delete every WAL object for one repository. This operation is idempotent."
+  @spec delete_repo(repo) :: :ok | {:error, term}
+  def delete_repo(repo) do
+    with :ok <- validate_repo(repo), do: adapter().delete_repo(repo)
   end
 
   @doc """

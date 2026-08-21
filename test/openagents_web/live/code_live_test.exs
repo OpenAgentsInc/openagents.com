@@ -318,6 +318,67 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
       refute has_element?(view, "#repo-import-provenance")
     end
+
+    test "an owner can delete a repository after typing its full name", %{conn: conn} do
+      owner = github_user("delete-repository-owner", "delete-repository-owner")
+
+      assert {:ok, repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "delete-repository", visibility: "private"},
+                 "delete-repository-ui"
+               )
+
+      member_conn = Plug.Test.init_test_session(conn, %{"user_id" => owner.id})
+      {:ok, view, _html} = live(member_conn, "/delete-repository-owner/delete-repository")
+
+      assert has_element?(view, "#repository-danger-zone")
+      assert has_element?(view, "#repository-delete-form")
+
+      view
+      |> form("#repository-delete-form", %{
+        "repository_delete" => %{"confirmation" => "wrong-name"}
+      })
+      |> render_submit()
+
+      assert has_element?(view, "#repository-delete-error")
+
+      result =
+        view
+        |> form("#repository-delete-form", %{
+          "repository_delete" => %{
+            "confirmation" => "delete-repository-owner/delete-repository"
+          }
+        })
+        |> render_submit()
+
+      assert {:error, {:live_redirect, %{to: "/repositories"}}} = result
+
+      assert_raise Ecto.NoResultsError, fn ->
+        OpenAgents.Repositories.get_by_path!("delete-repository-owner", "delete-repository")
+      end
+
+      refute File.exists?(Repos.bare_path(repository.storage_key))
+    end
+
+    test "a non-owner never sees repository deletion controls", %{conn: conn} do
+      owner = github_user("delete-repository-control-owner", "delete-control-owner")
+      viewer = github_user("delete-repository-control-viewer", "delete-control-viewer")
+
+      assert {:ok, repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "protected-repository", visibility: "private"},
+                 "delete-repository-controls"
+               )
+
+      assert {:ok, _membership} = OpenAgents.Repositories.add_member(repository, viewer, "viewer")
+      viewer_conn = Plug.Test.init_test_session(conn, %{"user_id" => viewer.id})
+      {:ok, view, _html} = live(viewer_conn, "/delete-control-owner/protected-repository")
+
+      refute has_element?(view, "#repository-danger-zone")
+      refute has_element?(view, "#repository-delete-form")
+    end
   end
 
   describe "/code/:repo/blob/:ref/*path" do

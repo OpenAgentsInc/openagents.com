@@ -118,6 +118,18 @@ openagents repo clone --repo OWNER/REPOSITORY [DIRECTORY]
 
 The CLI retrieves the clone URL from the API and starts standard Git.
 
+### `repo delete`
+
+```text
+openagents repo delete [OWNER/REPOSITORY] --yes
+openagents repo delete --repo OWNER/REPOSITORY --yes
+```
+
+The command permanently deletes a repository you own, including its Git
+history, issues, projects, and import records. You must pass `--yes`. When you
+omit the repository, the CLI infers it from an exact OpenAgents `origin`
+remote on the selected API origin.
+
 ## JSON and noninteractive use
 
 With `--json`, stdout contains machine-readable output. Human progress and

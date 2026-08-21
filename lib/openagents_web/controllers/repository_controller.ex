@@ -67,6 +67,15 @@ defmodule OpenAgentsWeb.RepositoryController do
     Ecto.NoResultsError -> render_error(conn, :not_found)
   end
 
+  def delete(conn, %{"owner" => owner, "repo" => name}) do
+    case Repositories.delete_owned_repository(owner, name, conn.assigns.current_user,
+           surface: "api"
+         ) do
+      {:ok, _repository} -> send_resp(conn, :no_content, "")
+      {:error, reason} -> render_error(conn, reason)
+    end
+  end
+
   defp render_repository(conn, repository, user, replay_state) do
     status = if repository.lifecycle_state == "ready", do: :created, else: :accepted
 
@@ -176,6 +185,24 @@ defmodule OpenAgentsWeb.RepositoryController do
   defp render_error(conn, :repository_name_conflict),
     do:
       error(conn, :conflict, "repository_name_conflict", "Repository name is unavailable", "name")
+
+  defp render_error(conn, :repository_busy),
+    do:
+      error(
+        conn,
+        :conflict,
+        "repository_busy",
+        "Repository provisioning is still running. Try again after it finishes"
+      )
+
+  defp render_error(conn, {:storage_cleanup_failed, _reason}),
+    do:
+      error(
+        conn,
+        :service_unavailable,
+        "repository_delete_failed",
+        "Repository storage could not be deleted"
+      )
 
   defp render_error(conn, :repository_quota_exceeded),
     do:

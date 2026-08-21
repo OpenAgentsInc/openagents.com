@@ -13,11 +13,12 @@ The current release lets you:
 - Import a GitHub repository as a one-time copy.
 - List and inspect repositories that you can access.
 - Clone repositories and configure Git authentication.
+- Delete a repository you own with explicit confirmation.
 - Push, pull, and fetch with standard Git.
 - Use JSON output and stable exit codes in scripts and agents.
 
-The current release does not provide pull requests, repository deletion,
-continuous GitHub mirroring, SSH transport, rulesets, or a self-update command.
+The current release does not provide pull requests, continuous GitHub
+mirroring, SSH transport, rulesets, or a self-update command.
 
 ## Choose how to run the CLI
 
@@ -82,6 +83,8 @@ After you sign in, open [Repositories](/repositories).
 - Select **Import from GitHub** to copy one GitHub repository.
 - Open a repository to see its clone URL, lifecycle state, code, Issues,
   Projects, and import receipt when applicable.
+- Open a repository's **Delete repository** section to permanently delete a
+  repository you own.
 
 ## Follow a common terminal workflow
 
@@ -117,4 +120,5 @@ After you sign in, open [Repositories](/repositories).
 - [Create a repository](/docs/create-repository)
 - [Import from GitHub](/docs/import-github)
 - [Clone, push, and pull](/docs/clone-push-pull)
+- [Delete a repository](/docs/delete-repository)
 - [CLI command reference](/docs/cli-command-reference)

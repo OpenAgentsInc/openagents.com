@@ -96,6 +96,14 @@ defmodule OpenAgents.Forge.WAL.Local do
     end
   end
 
+  @impl WAL
+  def delete_repo(repo) do
+    case File.rm_rf(repo_dir(repo)) do
+      {:ok, _removed} -> :ok
+      {:error, reason, _path} -> {:error, reason}
+    end
+  end
+
   ## Internal
 
   defp do_cas(repo, :none, index) do

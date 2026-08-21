@@ -126,6 +126,29 @@ defmodule OpenAgents.Forge.WALTest do
     end
   end
 
+  describe "delete_repo/1" do
+    test "removes the index and every immutable object for one repository" do
+      payload = "repository payload"
+      assert {:ok, key} = WAL.put_entry(@repo, 0, payload)
+
+      index =
+        WAL.new_index()
+        |> WAL.append_entry(%{
+          "seq" => 0,
+          "object" => key,
+          "refs" => %{"refs/heads/main" => String.duplicate("a", 40)},
+          "principal" => "test",
+          "pushed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+        })
+
+      assert {:ok, _generation} = WAL.cas_index(@repo, :none, index)
+      assert :ok = WAL.delete_repo(@repo)
+      assert {:error, :not_found} = WAL.read_index(@repo)
+      assert {:error, :not_found} = WAL.get_entry(@repo, key)
+      assert :ok = WAL.delete_repo(@repo)
+    end
+  end
+
   describe "digest-addressed artifacts" do
     test "round trips only under the payload's full SHA-256" do
       payload = :crypto.strong_rand_bytes(512)
@@ -155,6 +178,7 @@ defmodule OpenAgents.Forge.WALTest do
         assert {:error, :invalid_repo} = WAL.put_entry(bad, 0, "x")
         assert {:error, :invalid_repo} = WAL.put_entry_file(bad, 0, "/tmp/entry")
         assert {:error, :invalid_repo} = WAL.get_entry(bad, "entries/00000000-0123456789ab")
+        assert {:error, :invalid_repo} = WAL.delete_repo(bad)
 
         assert {:error, :invalid_repo} =
                  WAL.get_entry_file(bad, "entries/00000000-0123456789ab", "/tmp/entry")
@@ -260,6 +284,7 @@ defmodule OpenAgents.Forge.WALTest do
                OpenAgents.Forge.WAL.Gcs.cas_index(@repo, :none, WAL.new_index())
 
       assert {:error, :not_configured} = OpenAgents.Forge.WAL.Gcs.put_entry(@repo, 0, "x")
+      assert {:error, :not_configured} = OpenAgents.Forge.WAL.Gcs.delete_repo(@repo)
 
       assert {:error, :not_configured} =
                OpenAgents.Forge.WAL.Gcs.put_entry_file(@repo, 0, "/tmp/entry")

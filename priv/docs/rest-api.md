@@ -28,6 +28,7 @@ PATCH  /api/v3/repos/:owner/:repo/issues/:issue_number
 GET    /api/v3/user
 GET    /api/v3/user/repos
 GET    /api/v3/repos/:owner/:repo
+DELETE /api/v3/repos/:owner/:repo
 POST   /api/v3/user/repos
 POST   /api/v3/orgs/:org/repos
 POST   /api/v3/user/repos/imports
@@ -39,6 +40,8 @@ Repository writes require an `Idempotency-Key` header. The published
 [`openagents.repositories.v1` contract](/api/contracts/repositories-v1.json)
 defines request authority, lifecycle states, pagination, and stable error
 codes. The [OpenAgents CLI](/docs/openagents-cli) implements this contract.
+Only a repository owner can delete it. A successful deletion returns
+`204 No Content`.
 
 ## Comments
 

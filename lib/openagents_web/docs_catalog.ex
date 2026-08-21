@@ -57,6 +57,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
           route: "/repositories"
         },
         %{
+          slug: "delete-repository",
+          title: "Delete a repository",
+          icon: "trash",
+          route: "/repositories"
+        },
+        %{
           slug: "cli-command-reference",
           title: "CLI command reference",
           icon: "square-code",
@@ -154,7 +160,13 @@ defmodule OpenAgentsWeb.DocsCatalog do
   end
 
   @doc "Directory holding the Markdown sources."
-  def source_dir, do: Application.app_dir(:openagents, "priv/docs")
+  def source_dir do
+    Application.get_env(
+      :openagents,
+      :docs_source_dir,
+      Application.app_dir(:openagents, "priv/docs")
+    )
+  end
 
   @doc """
   Read and render one page.

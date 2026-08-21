@@ -50,6 +50,9 @@ defmodule OpenAgentsWeb.CodeRepoLive do
 
     refs = if head, do: Browse.refs(repository), else: []
 
+    delete_allowed? =
+      Repositories.membership_role(repository, socket.assigns.current_user) == "owner"
+
     # A repository that is still provisioning is the one state this page cannot
     # render usefully, and it is also the one state that ends on its own. The
     # provisioner and the importer announce each transition, so the page hears
@@ -75,7 +78,13 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:branch_count, Enum.count(refs, &(&1.kind == :branch)))
      |> assign(:tag_count, Enum.count(refs, &(&1.kind == :tag)))
      |> assign(:open_issue_count, open_issue_count(repository))
-     |> assign(:clone_url, RepositoryAccess.clone_url(repository))}
+     |> assign(:clone_url, RepositoryAccess.clone_url(repository))
+     |> assign(:delete_allowed?, delete_allowed?)
+     |> assign(:delete_error, nil)
+     |> assign(
+       :delete_form,
+       to_form(%{"confirmation" => ""}, as: :repository_delete)
+     )}
   rescue
     Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
   end
@@ -96,6 +105,47 @@ defmodule OpenAgentsWeb.CodeRepoLive do
          socket
          |> assign(:repository, repository)
          |> assign(:repository_import, repository.repository_import)}
+    end
+  end
+
+  @impl true
+  def handle_event(
+        "delete_repository",
+        %{"repository_delete" => %{"confirmation" => confirmation} = params},
+        socket
+      ) do
+    expected = "#{socket.assigns.owner}/#{socket.assigns.repo}"
+
+    if confirmation == expected do
+      case Repositories.delete_owned_repository(
+             socket.assigns.owner,
+             socket.assigns.repo,
+             socket.assigns.current_user,
+             surface: "web"
+           ) do
+        {:ok, _repository} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Repository deleted.")
+           |> push_navigate(to: ~p"/repositories")}
+
+        {:error, :repository_busy} ->
+          {:noreply,
+           assign(
+             socket,
+             :delete_error,
+             "Repository provisioning is still running. Try again after it finishes."
+           )}
+
+        {:error, _reason} ->
+          {:noreply,
+           assign(socket, :delete_error, "OpenAgents could not delete this repository.")}
+      end
+    else
+      {:noreply,
+       socket
+       |> assign(:delete_form, to_form(params, as: :repository_delete))
+       |> assign(:delete_error, "Type #{expected} exactly to confirm deletion.")}
     end
   end
 
@@ -298,6 +348,51 @@ defmodule OpenAgentsWeb.CodeRepoLive do
                 <span class="code-commit-author">{commit.author}</span>
               </li>
             </ol>
+          </.card>
+
+          <.card
+            :if={@delete_allowed?}
+            id="repository-danger-zone"
+            variant={:danger}
+            class="space-y-4"
+          >
+            <header>
+              <h2>Delete repository</h2>
+            </header>
+            <p class="text-sm text-muted-foreground">
+              This permanently deletes the repository, its Git history, issues, projects, and
+              import records. You cannot undo this action.
+            </p>
+            <.alert
+              :if={@delete_error}
+              id="repository-delete-error"
+              variant={:danger}
+              title="Repository was not deleted"
+            >
+              {@delete_error}
+            </.alert>
+            <.form
+              for={@delete_form}
+              id="repository-delete-form"
+              phx-submit="delete_repository"
+              class="space-y-3"
+            >
+              <.input
+                field={@delete_form[:confirmation]}
+                type="text"
+                label={"Type #{@owner}/#{@repo} to confirm"}
+                autocomplete="off"
+                required
+              />
+              <.button
+                id="repository-delete-submit"
+                type="submit"
+                variant={:destructive}
+                phx-disable-with="Deleting repository…"
+              >
+                Delete repository
+              </.button>
+            </.form>
           </.card>
 
           <:about>

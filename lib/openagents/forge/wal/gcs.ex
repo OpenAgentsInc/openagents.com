@@ -145,6 +145,14 @@ defmodule OpenAgents.Forge.WAL.Gcs do
     end
   end
 
+  @impl WAL
+  def delete_repo(repo) do
+    with {:ok, bucket} <- bucket(),
+         {:ok, token} <- token() do
+      delete_prefix(bucket, prefix(repo), token)
+    end
+  end
+
   ## Object naming (public so it is testable without a live bucket)
 
   @doc """
@@ -166,6 +174,59 @@ defmodule OpenAgents.Forge.WAL.Gcs do
   def prefix(repo), do: "forge/wal/" <> repo <> "/"
 
   ## Internal
+
+  defp delete_prefix(bucket, object_prefix, token) do
+    with {:ok, names} <- list_objects(bucket, object_prefix, token),
+         :ok <- delete_objects(bucket, names, token) do
+      if names == [], do: :ok, else: delete_prefix(bucket, object_prefix, token)
+    end
+  end
+
+  defp list_objects(bucket, object_prefix, token) do
+    url =
+      @storage_base <>
+        "/storage/v1/b/#{URI.encode_www_form(bucket)}/o?" <>
+        URI.encode_query(prefix: object_prefix, maxResults: 1_000, fields: "items(name)")
+
+    case Req.get(url, headers: auth_headers(token)) do
+      {:ok, %Req.Response{status: 200, body: %{"items" => items}}} when is_list(items) ->
+        {:ok, Enum.map(items, &Map.fetch!(&1, "name"))}
+
+      {:ok, %Req.Response{status: 200}} ->
+        {:ok, []}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:gcs_error, status, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp delete_objects(_bucket, [], _token), do: :ok
+
+  defp delete_objects(bucket, names, token) do
+    names
+    |> Task.async_stream(
+      fn name -> delete_object(bucket, name, token) end,
+      max_concurrency: 8,
+      ordered: false,
+      timeout: 60_000
+    )
+    |> Enum.reduce_while(:ok, fn
+      {:ok, :ok}, :ok -> {:cont, :ok}
+      {:ok, {:error, reason}}, :ok -> {:halt, {:error, reason}}
+      {:exit, reason}, :ok -> {:halt, {:error, reason}}
+    end)
+  end
+
+  defp delete_object(bucket, name, token) do
+    case Req.delete(object_url(bucket, name), headers: auth_headers(token), retry: false) do
+      {:ok, %Req.Response{status: status}} when status in [204, 404] -> :ok
+      {:ok, %Req.Response{status: status, body: body}} -> {:error, {:gcs_error, status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp fetch_generation(bucket, name) do
     with {:ok, token} <- token() do

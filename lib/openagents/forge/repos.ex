@@ -37,6 +37,18 @@ defmodule OpenAgents.Forge.Repos do
   @doc "Absolute path of the bare repository for `repo`."
   def bare_path(repo), do: Path.join([data_dir(), "repos", repo <> ".git"])
 
+  @doc "Delete one repository's disposable local bare-repository cache."
+  def delete_repo(storage_key) do
+    if valid_storage_key?(storage_key) do
+      case File.rm_rf(bare_path(storage_key)) do
+        {:ok, _removed} -> :ok
+        {:error, reason, _path} -> {:error, reason}
+      end
+    else
+      {:error, :invalid_storage_key}
+    end
+  end
+
   @doc "Initialize the bare repository if absent. Returns the path."
   def ensure_repo!(repo, default_branch \\ "main") do
     path = bare_path(repo)

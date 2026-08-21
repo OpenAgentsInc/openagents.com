@@ -828,6 +828,7 @@ openagents repo import <github-owner>/<github-repo>
 openagents repo list
 openagents repo view [<owner>/<name>]
 openagents repo clone <owner>/<name> [<directory>]
+openagents repo delete [<owner>/<name>] --yes
 ```
 
 `repo create <name>` targets the authenticated user's GitHub user namespace.
@@ -888,6 +889,10 @@ Import rules:
 `origin` remote when no argument is present. `-R, --repo <owner>/<name>`
 overrides inference.
 
+`repo delete` requires repository-owner authority and an explicit `--yes`.
+Success permanently removes the repository row, its dependent issue and
+project records, the durable WAL prefix, and connected-node bare caches.
+
 Remote inference accepts only clone URLs returned by an admitted OpenAgents
 endpoint. It must not treat an arbitrary path that resembles `owner/name` as an
 authenticated OpenAgents repository.
@@ -897,7 +902,6 @@ authenticated OpenAgents repository.
 Reserve these names without shipping placeholder commands:
 
 ```text
-openagents repo delete
 openagents repo mirror
 openagents pr ...
 openagents ruleset ...

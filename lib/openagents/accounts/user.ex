@@ -30,6 +30,7 @@ defmodule OpenAgents.Accounts.User do
     # be a query each time. Defaults to false, so a user loaded by any other
     # path is treated as new rather than accidentally grandfathered.
     field :agent_surfaces?, :boolean, virtual: true, default: false
+    field :sidebar_repository_path, :string, virtual: true
 
     has_one :storage_owner, OpenAgents.Conversations.Visitor
 
@@ -54,6 +55,7 @@ defmodule OpenAgents.Accounts.User do
           public_leaderboard_opted_out: boolean(),
           browser_key_hash: binary() | nil,
           agent_surfaces?: boolean(),
+          sidebar_repository_path: String.t() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }

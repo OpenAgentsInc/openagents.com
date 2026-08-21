@@ -31,11 +31,12 @@ The first release lets you:
 - Import a GitHub repository as a one-time copy.
 - List and inspect repositories that you can access.
 - Clone repositories and configure Git authentication.
+- Delete a repository you own with explicit confirmation.
 - Push, pull, and fetch through Git smart HTTP.
 - Use JSON output and stable exit codes in scripts and agents.
 
-Pull requests, repository deletion, continuous GitHub mirroring, SSH transport,
-rulesets, and self-update are not part of this release.
+Pull requests, continuous GitHub mirroring, SSH transport, rulesets, and
+self-update are not part of this release.
 
 ## Namespaces and access
 
@@ -77,6 +78,8 @@ access.
 - Select **Import from GitHub** to copy one GitHub repository.
 - Open a repository to see its clone URL, lifecycle state, Issues, Projects,
   code, and import receipt when applicable.
+- Open a repository's **Delete repository** section to permanently delete a
+  repository you own.
 
 ## Next steps
 
@@ -84,4 +87,5 @@ access.
 - [Create a repository](create-repository.md)
 - [Import a GitHub repository](import-github.md)
 - [Clone, push, and pull](git.md)
+- [Delete a repository](delete-repository.md)
 - [CLI command reference](command-reference.md)

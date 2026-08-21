@@ -372,7 +372,7 @@ defmodule OpenAgentsWeb.HomeLive do
         >
           <:column title="Product">
             <.link navigate={~p"/docs"}>Documentation</.link>
-            <.link navigate={~p"/OpenAgentsInc/openagents.com/issues"}>Issues</.link>
+            <.link navigate={~p"/docs/issues"}>Issues</.link>
           </:column>
           <:column title="Transparency">
             <.link navigate={~p"/changelog"}>Changelog</.link>

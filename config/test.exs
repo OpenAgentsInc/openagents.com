@@ -1,5 +1,7 @@
 import Config
 
+config :openagents, :docs_source_dir, Path.expand("../priv/docs", __DIR__)
+
 config :openagents, :repository_provisioner_enabled, false
 
 config :openagents, :runtime_environment, :test

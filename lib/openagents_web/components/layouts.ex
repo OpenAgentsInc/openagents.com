@@ -594,6 +594,7 @@ defmodule OpenAgentsWeb.Layouts do
     assigns =
       assigns
       |> assign(:agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
+      |> assign(:repository_path, assigns.current_scope.sidebar_repository_path)
 
     ~H"""
     <aside id="sidebar" class="sidebar hidden lg:flex">
@@ -608,13 +609,15 @@ defmodule OpenAgentsWeb.Layouts do
           patchable={false}
         />
         <Layouts.sidebar_link
-          path={~p"/OpenAgentsInc/openagents.com/issues"}
+          :if={@repository_path}
+          path={@repository_path <> "/issues"}
           label="Issues"
           icon="bug"
           patchable={false}
         />
         <Layouts.sidebar_link
-          path={~p"/OpenAgentsInc/openagents.com/projects"}
+          :if={@repository_path}
+          path={@repository_path <> "/projects"}
           label="Projects"
           icon="folder"
           patchable={false}

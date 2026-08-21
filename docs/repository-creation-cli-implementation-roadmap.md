@@ -397,12 +397,14 @@ headless behavior, token stdin, JSON output, signals, and secret tripwires.
    visibility, timeout, source head receipt, and no-sync notice.
 3. Implement cursor-based `repo list` and `repo view`.
 4. Implement `repo clone` using the server-provided clone URL.
-5. Implement safe repository inference from an admitted remote and explicit
+5. Implement owner-only `repo delete` with explicit confirmation and storage
+   cleanup.
+6. Implement safe repository inference from an admitted remote and explicit
    `-R` override.
-6. Refuse to overwrite an existing unrelated remote.
-7. Execute Git with argv arrays, bounded captured output, cancellation, and no
+7. Refuse to overwrite an existing unrelated remote.
+8. Execute Git with argv arrays, bounded captured output, cancellation, and no
    credential in the remote URL.
-8. Keep human progress on stderr when JSON owns stdout.
+9. Keep human progress on stderr when JSON owns stdout.
 
 **Tests:** all command options, mutual exclusions, error and exit-code mapping,
 idempotent retry, timeout without server cancellation, remote inference, remote

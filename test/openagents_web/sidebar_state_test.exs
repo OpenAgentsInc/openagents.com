@@ -18,8 +18,10 @@ defmodule OpenAgentsWeb.SidebarStateTest do
 
   use OpenAgentsWeb.ConnCase, async: true
 
+  import Ecto.Query
   import Phoenix.LiveViewTest
 
+  alias OpenAgents.Repositories.Membership
   alias OpenAgentsWeb.Plugs.SidebarSections
 
   describe "the admin row" do
@@ -87,6 +89,51 @@ defmodule OpenAgentsWeb.SidebarStateTest do
       {:ok, _view, html} = live(conn, ~p"/leaderboard")
 
       assert html =~ ~r/id="sidebar-section-sarah"[^>]*\sopen/
+    end
+  end
+
+  describe "repository navigation" do
+    test "repository pages keep Issues and Projects in the current repository", %{conn: conn} do
+      user = github_user("sidebar-current-repository")
+      conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+
+      {:ok, repository} =
+        OpenAgents.Repositories.create_repository(%{
+          owner: "navigation-owner",
+          name: "navigation-repository",
+          visibility: "private"
+        })
+
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "owner")
+      {:ok, view, _html} = live(conn, ~p"/navigation-owner/navigation-repository/issues")
+
+      assert has_element?(
+               view,
+               ~s(#sidebar a[href="/navigation-owner/navigation-repository/issues"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#sidebar a[href="/navigation-owner/navigation-repository/projects"])
+             )
+    end
+
+    test "an account with no visible repository gets no dead Issues or Projects link", %{
+      conn: conn
+    } do
+      user = github_user("sidebar-no-repository")
+
+      OpenAgents.Repo.delete_all(
+        from membership in Membership, where: membership.user_id == ^user.id
+      )
+
+      conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+
+      {:ok, view, _html} = live(conn, ~p"/leaderboard")
+
+      assert has_element?(view, ~s(#sidebar a[href="/repositories"]))
+      refute has_element?(view, ~s(#sidebar a), "Issues")
+      refute has_element?(view, ~s(#sidebar a), "Projects")
     end
   end
 

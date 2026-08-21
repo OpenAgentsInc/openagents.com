@@ -239,6 +239,7 @@ defmodule OpenAgentsWeb.Router do
     get "/user/repos", RepositoryController, :index
     post "/user/repos", RepositoryController, :create_user
     post "/orgs/:org/repos", RepositoryController, :create_organization
+    delete "/repos/:owner/:repo", RepositoryController, :delete
     post "/user/repos/imports", RepositoryImportController, :create_user
     post "/orgs/:org/repos/imports", RepositoryImportController, :create_organization
     get "/repository-imports/:id", RepositoryImportController, :show

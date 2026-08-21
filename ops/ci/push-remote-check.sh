@@ -3,13 +3,17 @@ set -eu
 
 # Refuses a push to anything but the OpenAgents forge.
 #
-# The forge is the authority for this repository. It records every push in the
-# durable WAL, and it mirrors `main` to GitHub itself
-# (`OpenAgents.Forge.Pushes.mirror_now/1`, watched by
-# `OpenAgents.Forge.MirrorWatch`). A push sent straight to GitHub arrives
-# behind the forge's back: the WAL never sees those objects, the mirror watch
-# compares the forge against a mirror that is now ahead of it, and the
-# divergence stays invisible until a clone disagrees with the site.
+# The forge is the authority for this repository: it records every push in the
+# durable WAL, and the site serves what the WAL holds. A push sent straight to
+# GitHub arrives behind the forge's back -- the WAL never sees those objects,
+# and the divergence stays invisible until a clone disagrees with the site.
+#
+# The forge can mirror `main` to GitHub (`OpenAgents.Forge.Pushes.mirror_now/1`,
+# watched by `OpenAgents.Forge.MirrorWatch`), but `:forge_mirror_urls` is empty
+# in `config/config.exs` and no environment sets it, so no mirror runs today.
+# Until one is configured, GitHub receives only what someone pushes to it, and
+# `mirror_now/1` is a `git push --mirror` -- a force push -- so a configured
+# mirror would overwrite whatever a direct push left there.
 #
 # Git hands a pre-push hook the remote's name and URL on argv. Called directly,
 # take the same two arguments; a name alone is resolved through `git remote`.
@@ -40,9 +44,9 @@ fi
 cat >&2 <<MESSAGE
 Refusing to push to ${remote_name:-this remote} ($remote_url).
 
-Pushes go to the OpenAgents forge, which records them in the WAL and mirrors
-main to GitHub itself. Pushing to GitHub directly leaves the forge behind its
-own mirror.
+Pushes go to the OpenAgents forge, which records them in the durable WAL and
+serves them. Pushing to GitHub directly leaves the forge behind a mirror it
+does not know about.
 
   git push openagents HEAD:main
 

@@ -1796,11 +1796,20 @@ Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
 Status: Current
 
 This repository's own commits reach the forge first. The forge records each
-push in the durable WAL and mirrors `main` to GitHub itself, so GitHub is a
+push in the durable WAL and serves what the WAL holds, so GitHub is a
 projection of the forge in the same sense that a slug is a projection of a
 GitHub ID. A push sent straight to GitHub inverts that: the WAL never sees the
-objects, the mirror watch compares the forge against a mirror that is ahead of
-it, and nothing reports the divergence until a clone disagrees with the site.
+objects, and nothing reports the divergence until a clone disagrees with the
+site.
+
+The mirror that would keep GitHub current is not running. `mirror_url/1` reads
+`:forge_mirror_urls`, which is empty in `config/config.exs` and set by no
+environment, so `MirrorWatch` reports `off` and GitHub receives only what
+someone pushes to it. `mirror_now/1` is a `git push --mirror`, a force push of
+every ref, so configuring a mirror overwrites whatever direct pushes left on
+GitHub rather than merging with it. Configuring that mirror is what makes this
+contract complete; until then it keeps the forge authoritative and lets GitHub
+go stale, which is the honest trade and not an accident.
 
 `ops/ci/push-remote-check.sh` admits only forge hosts and refuses every other
 remote, whatever URL form it takes. `.githooks/pre-push` runs it before the

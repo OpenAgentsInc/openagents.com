@@ -192,6 +192,30 @@ defmodule OpenAgents.Forge.BuildArtifactTest do
     assert {:error, :invalid_artifact_entry} = BuildArtifact.verify(tar_bytes(traversal))
   end
 
+  test "application-owned release module namespaces are admitted" do
+    build_id = Ecto.UUID.generate()
+
+    beams = [
+      loaded_beam(OpenAgents),
+      loaded_beam(OpenAgentsWeb),
+      loaded_beam(Inspect.OpenAgents.Accounts.User),
+      loaded_beam(Mix.Tasks.Openagents.Config.Readiness)
+    ]
+
+    assert {:ok, artifact} =
+             BuildArtifact.pack(@repo, @sha, build_id, beams,
+               toolchain: BuildArtifact.current_toolchain()
+             )
+
+    assert artifact.manifest["changes"]["added"] ==
+             Enum.sort([
+               "Elixir.Inspect.OpenAgents.Accounts.User",
+               "Elixir.Mix.Tasks.Openagents.Config.Readiness",
+               "Elixir.OpenAgents",
+               "Elixir.OpenAgentsWeb"
+             ])
+  end
+
   defp compile_beam(suffix, value) do
     module = "OpenAgents.Scratch.#{suffix}"
 
@@ -201,6 +225,12 @@ defmodule OpenAgents.Forge.BuildArtifactTest do
     :code.purge(atom)
     :code.delete(atom)
     %{module: "Elixir." <> module, binary: binary}
+  end
+
+  defp loaded_beam(module) do
+    assert {:module, ^module} = Code.ensure_loaded(module)
+    {^module, binary, _path} = :code.get_object_code(module)
+    %{module: Atom.to_string(module), binary: binary}
   end
 
   defp tar_bytes(entries) do

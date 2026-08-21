@@ -16,13 +16,16 @@ defmodule OpenAgents.Forge.BuildArtifact do
   @max_artifact_bytes 32 * 1_048_576
   @max_manifest_bytes 1_048_576
   @max_beam_bytes 4 * 1_048_576
-  @max_modules 512
+  @max_modules 2_048
   @manifest_keys ~w(schema build_id repo source_sha baseline toolchain classification structural_reasons changes modules)
   @toolchain_keys ~w(elixir otp erts application_version application_spec_sha256 mix_lock_sha256)
   @change_keys ~w(added changed deleted)
   @module_keys ~w(name sha256 size)
   @classification ~w(direct_candidate needs_rolling_replace)
-  @module_pattern ~r/^Elixir\.OpenAgents(?:\.[A-Za-z][A-Za-z0-9_]*)+$/
+  # Keep atom creation bounded to module namespaces owned by this OTP
+  # application. The release contains the two application roots, generated
+  # Inspect implementations, and Mix tasks in addition to OpenAgents.*.
+  @module_pattern ~r/^Elixir\.(?:(?:OpenAgents|OpenAgentsWeb)(?:\.[A-Za-z][A-Za-z0-9_]*)*|Inspect\.(?:OpenAgents|OpenAgentsWeb)(?:\.[A-Za-z][A-Za-z0-9_]*)+|Mix\.Tasks\.(?:OpenAgents|Openagents)(?:\.[A-Za-z][A-Za-z0-9_]*)+)$/
 
   @type beam :: %{module: String.t(), binary: binary()}
   @type verified :: %{

@@ -136,9 +136,10 @@ fleet_member="serviceAccount:openagents-staging-fleet@$staging_project.iam.gserv
 
 for slot in openagents-staging-scv-codex-operator-1 openagents-staging-scv-codex-operator-2; do
   jq -e --arg web "$web_member" --arg fleet "$fleet_member" '
+    . as $policy |
     all([$web, $fleet][]; . as $member |
-      any(.bindings[]?; .role == "roles/secretmanager.secretVersionAdder" and (.members | index($member))) and
-      any(.bindings[]?; .role == "roles/secretmanager.secretAccessor" and (.members | index($member)))
+      any($policy.bindings[]?; .role == "roles/secretmanager.secretVersionAdder" and (.members | index($member))) and
+      any($policy.bindings[]?; .role == "roles/secretmanager.secretAccessor" and (.members | index($member)))
     )
   ' "$run_root/$slot-iam.json" >/dev/null
 done

@@ -96,6 +96,13 @@ if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
 end
 
+# The changelog seed. Idempotent and off the boot path. It was gated behind a
+# flag that nothing ever set, so the seed sat unused and the public page said
+# "Nothing yet" from the day it shipped.
+if config_env() == :prod do
+  config :openagents, :changelog_backfill_on_boot, true
+end
+
 if config_env() == :prod and runtime_role == :web do
   runtime_environment =
     case required_text.("OPENAGENTS_ENVIRONMENT") do

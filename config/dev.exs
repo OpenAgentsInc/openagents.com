@@ -2,6 +2,10 @@ import Config
 
 config :openagents, :runtime_environment, :development
 
+# The changelog seed. Deliberately not enabled in `test`: it runs off the boot
+# path, and a write that escapes the sandbox is a flaky suite.
+config :openagents, :changelog_backfill_on_boot, true
+
 # Configure your database
 config :openagents, OpenAgents.Repo,
   username: System.get_env("USER") || "christopherdavid",

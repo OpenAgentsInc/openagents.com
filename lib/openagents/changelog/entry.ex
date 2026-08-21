@@ -62,7 +62,11 @@ defmodule OpenAgents.Changelog.Entry do
     ])
     |> validate_required([:repo, :sha, :summary, :category, :source, :entry_at])
     |> validate_format(:sha, ~r/^[0-9a-f]{7,40}$/)
-    |> validate_length(:summary, max: 500)
+    # 255, because that is what the column is. This said 500, so a summary
+    # between the two passed validation and then raised
+    # `string_data_right_truncation` from Postgres -- a changeset error turned
+    # into a crash, on the one path that writes this table.
+    |> validate_length(:summary, max: 255)
     |> validate_inclusion(:category, @categories)
     |> validate_inclusion(:source, @sources)
     |> validate_inclusion(:visibility, @visibilities)

@@ -109,6 +109,29 @@ defmodule OpenAgents.MarkdownTest do
       assert html("[cdn](//example.com/x)") =~ ~s(href="https://example.com/x")
     end
 
+    test "a link that stays on the site opens in the same tab" do
+      # A second tab per internal link leaves the reader with a trail of them
+      # for what is one visit.
+      for markdown <- ["[path](/docs)", "[root](/)", "[section](#part)"] do
+        rendered = html(markdown)
+
+        refute rendered =~ ~s(target="_blank"), "opened a new tab: #{markdown}"
+
+        refute rendered =~ ~s(rel="noopener noreferrer nofollow"),
+               "isolated a same-origin link: #{markdown}"
+      end
+    end
+
+    test "a link that only looks internal still leaves" do
+      # `//host` is a protocol-relative URL: it reads as a path and is not one.
+      # It is rewritten to https earlier, and must still be treated as leaving.
+      rendered = html("[cdn](//example.com/x)")
+
+      assert rendered =~ ~s(href="https://example.com/x")
+      assert rendered =~ ~s(target="_blank")
+      assert rendered =~ ~s(rel="noopener noreferrer nofollow")
+    end
+
     test "a bare domain is resolved as https rather than relative to Sarah" do
       assert html("[site](example.com)") =~ ~s(href="https://example.com")
     end

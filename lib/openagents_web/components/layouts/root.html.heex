@@ -12,6 +12,37 @@
     which applies it to `default` as well: a page with no title of its own
     rendered the brand twice. --%>
     <.live_title default="OpenAgents" phx-no-format>{page_title(assigns)}</.live_title>
+    <%!-- The faces the first paint actually uses, fetched in parallel with the
+    stylesheet instead of after it. Every face is `font-display: swap`, so one
+    arriving late re-lays-out text that is already on screen -- and the hero
+    animates while that happens, which reads as the animation stuttering and
+    restarting rather than as text reflowing.
+
+    Plain paths, not `~p`: these must be byte-identical to the `src` in
+    `@font-face`, or the browser fetches the file twice and preloads nothing.
+    `crossorigin` is required even same-origin -- fonts are fetched in CORS
+    mode, and a preload without it is discarded and re-fetched. --%>
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/fonts/geist-sans-latin-400-normal.woff2"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/fonts/geist-sans-latin-500-normal.woff2"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="/fonts/geist-sans-latin-600-normal.woff2"
+      crossorigin="anonymous"
+    />
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <%!-- Runs before first paint, and deliberately not deferred: resolving the
     theme after the stylesheet has painted produces a flash of the wrong theme.

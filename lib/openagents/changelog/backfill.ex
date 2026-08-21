@@ -33,7 +33,7 @@ defmodule OpenAgents.Changelog.Backfill do
 
   @doc "Insert every seed entry idempotently. Returns the inserted count."
   def run do
-    Enum.count(entries(), fn attrs ->
+    Enum.count(seeded_entries(), fn attrs ->
       case Changelog.record(Map.merge(attrs, %{repo: @repo, source: "backfill"})) do
         {:ok, %{id: id}} when not is_nil(id) -> true
         _ -> false
@@ -41,8 +41,44 @@ defmodule OpenAgents.Changelog.Backfill do
     end)
   end
 
-  @doc "The curated seed, lead-commit-anchored, from CHANGELOG.md."
-  def entries do
+  @doc """
+  What actually gets seeded.
+
+  Every entry links to its commit, and the page says so, so an entry may only
+  be published if its commit is in this repository's history. The curated
+  entries in `pre_public_entries/0` are anchored to the history that preceded
+  this repository's clean-room rewrite: those commits are not here, and
+  publishing them would give the page thirty links that resolve to nothing.
+
+  So the launch is stated once, as a release, from a commit that exists. If
+  the earlier history is ever grafted in, move those entries back.
+  """
+  def seeded_entries, do: [launch_entry()]
+
+  @doc """
+  The first public release.
+
+  Anchored to this repository's initial commit, which is where its history --
+  and everything the changelog can show a diff for -- begins.
+  """
+  def launch_entry do
+    e(
+      ~U[2026-08-19 19:47:28Z],
+      "a352f78",
+      "feature",
+      "v0.0.1 — the first public release: issues, projects and milestones over a GitHub-shaped API; repositories to create, import from GitHub, clone and push; code and diffs beside the issues that changed them; an agent to talk to; receipts under all of it."
+    )
+  end
+
+  @doc """
+  The curated seed, lead-commit-anchored, from CHANGELOG.md.
+
+  Retained, not seeded: see `seeded_entries/0`.
+  """
+  def entries, do: pre_public_entries()
+
+  @doc "Curated entries from before this repository's history begins."
+  def pre_public_entries do
     [
       # ── 2026-08-19 (later) — the transparency surfaces themselves
       e(

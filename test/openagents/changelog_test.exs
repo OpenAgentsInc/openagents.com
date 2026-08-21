@@ -225,11 +225,11 @@ defmodule OpenAgents.ChangelogTest do
   end
 
   describe "Backfill.run/0" do
-    test "seeds every curated entry and is idempotent on re-run" do
+    test "seeds what it can prove and is idempotent on re-run" do
       Backfill.run()
 
       seeded = Repo.aggregate(Entry, :count)
-      assert seeded == length(Backfill.entries())
+      assert seeded == length(Backfill.seeded_entries())
 
       # Re-running inserts nothing: the {repo, sha, source} conflict target
       # makes every duplicate a DB-level no-op.
@@ -238,6 +238,49 @@ defmodule OpenAgents.ChangelogTest do
 
       assert {:ok, rows} = Changelog.timeline("openagents.com", refresh: true)
       assert Enum.any?(rows, &(&1.source == "backfill"))
+    end
+
+    test "the launch entry is the release, and its commit is in this history" do
+      # The page tells a reader that every entry links to its commit and that
+      # the diff is readable from there. An entry anchored to a commit this
+      # repository does not contain is a link to nothing, so the seed may only
+      # publish entries whose sha is really here.
+      assert [launch] = Backfill.seeded_entries()
+      assert launch.summary =~ "v0.0.1"
+
+      for %{sha: sha} <- Backfill.seeded_entries() do
+        assert {_output, 0} = System.cmd("git", ["cat-file", "-e", sha <> "^{commit}"]),
+               "seeded entry #{sha} is not a commit in this repository"
+      end
+    end
+
+    test "the curated pre-public entries are retained but not published" do
+      # They are anchored to the history that preceded this repository's
+      # clean-room rewrite. Kept so they can be restored if that history is
+      # ever grafted in; not seeded, because today they would be dead links.
+      refute Backfill.pre_public_entries() == []
+
+      seeded = MapSet.new(Backfill.seeded_entries(), & &1.sha)
+
+      for %{sha: sha} <- Backfill.pre_public_entries() do
+        refute MapSet.member?(seeded, sha)
+      end
+    end
+
+    test "a summary the column cannot hold is a changeset error, not a crash" do
+      # `changelog_entries.summary` is varchar(255) and the validation allowed
+      # 500, so anything between the two raised from Postgres instead.
+      attrs = %{
+        repo: "openagents.com",
+        sha: "abcdef1",
+        summary: String.duplicate("x", 256),
+        category: "feature",
+        source: "backfill",
+        entry_at: DateTime.utc_now()
+      }
+
+      assert {:error, changeset} = Changelog.record(attrs)
+      assert %{summary: [_message]} = errors_on(changeset)
     end
   end
 end

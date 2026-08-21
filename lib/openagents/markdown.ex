@@ -58,6 +58,18 @@ defmodule OpenAgents.Markdown do
 
   @empty_link ~s(<a href="" target="_blank" rel="noopener noreferrer nofollow">)
 
+  # The sanitizer gives every link the same isolation attributes, which is
+  # right for a link that leaves the site and wrong for one that does not: a
+  # link to our own page opened a second tab, and the reader ends up with a
+  # trail of tabs for what is one visit.
+  #
+  # `safe_url/1` has already rewritten `//host` to `https://host`, so at this
+  # point a leading single `/` means same-origin, and `#` means this very page.
+  # Everything else -- any scheme, any bare host -- is still treated as leaving.
+  @internal_link ~r{<a href="(/(?!/)[^"]*|#[^"]*)" target="_blank" rel="noopener noreferrer nofollow">}
+
+  @same_tab ~S(<a href="\1">)
+
   @emphasis_markers ~w(*** ___ ** __ ~~ * _)
 
   @doc """
@@ -86,6 +98,7 @@ defmodule OpenAgents.Markdown do
          document <- normalize_links(document),
          {:ok, rendered} <- MDEx.to_html(document, mdex_options),
          rendered <- String.replace(rendered, @empty_link, "<a>"),
+         rendered <- String.replace(rendered, @internal_link, @same_tab),
          :ok <- validate_output(rendered) do
       {:safe, rendered}
     else

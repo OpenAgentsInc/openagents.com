@@ -410,7 +410,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   @impl true
   def render(%{live_action: :index} = assigns) do
     ~H"""
-    <div id="components-index" class="max-w-3xl">
+    <div id="components-index">
       <h1 class="text-3xl font-semibold mb-4">Component library</h1>
       <p class="text-muted-foreground mb-8 text-pretty max-w-[68ch]">
         Live examples of every supported function component in <code>OpenAgentsWeb.UI</code>, <code>OpenAgentsWeb.Layouts</code>, and the
@@ -423,7 +423,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
         <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
           {section.title}
         </h2>
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <.link
             :for={item <- section.items}
             patch={~p"/components/#{item.slug}"}
@@ -440,7 +440,11 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   def render(assigns) do
     ~H"""
-    <div id={"component-#{@item.slug}"} class="max-w-3xl space-y-6">
+    <%!-- The page fills its column and the prose caps itself. Capping the page
+    capped the demo too, which is the one thing on it that wants the room: a
+    composed surface squeezed into a reading measure stops demonstrating the
+    proportions it exists to show. --%>
+    <div id={"component-#{@item.slug}"} class="space-y-6">
       <header class="space-y-1">
         <h1 class="text-3xl font-semibold">{@item.title}</h1>
         <p class="text-sm text-muted-foreground"><code>{@item.source}</code></p>

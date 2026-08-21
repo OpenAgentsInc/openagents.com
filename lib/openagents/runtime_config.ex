@@ -359,6 +359,7 @@ defmodule OpenAgents.RuntimeConfig do
          {:ok, conversation_reset?} <-
            required_boolean(settings, :conversation_reset_enabled),
          {:ok, incident_fixer?} <- required_boolean(settings, :incident_fixer_enabled),
+         {:ok, scv_deploy?} <- nested_boolean(settings, :scv_deploy, :enabled),
          {:ok, ra?} <- required_boolean(settings, :ra_enabled) do
       features = %{
         tools: tools?,
@@ -381,6 +382,7 @@ defmodule OpenAgents.RuntimeConfig do
         work_workers: work_workers?,
         conversation_reset: conversation_reset?,
         incident_fixer: incident_fixer?,
+        scv_deploy: scv_deploy?,
         ra: ra?
       }
 
@@ -406,7 +408,8 @@ defmodule OpenAgents.RuntimeConfig do
           :shadow_programs,
           :tool_embeddings,
           :conversation_reset,
-          :incident_fixer
+          :incident_fixer,
+          :scv_deploy
         ],
         &features[&1]
       )
@@ -443,6 +446,18 @@ defmodule OpenAgents.RuntimeConfig do
 
       features.incident_fixer and not features.computers ->
         error(:incident_fixer_enabled, "requires computers")
+
+      # An SCV deployment IS a work job (SCV-001): without the work lane there
+      # is no durable row, no recovery sweep, and no report back into the
+      # conversation, so the run would spend our capacity unaccountably.
+      features.scv_deploy and not features.work ->
+        error(:scv_deploy, "requires the work lane")
+
+      features.scv_deploy and not features.tools ->
+        error(:scv_deploy, "requires tools")
+
+      features.scv_deploy and not valid_scv_deploy?(Map.get(settings, :scv_deploy)) ->
+        error(:scv_deploy, "requires an admitted model, bounds, and output root")
 
       features.forge_deploy and not features.forge ->
         error(:forge_deploy_lane_enabled, "requires the forge")
@@ -994,6 +1009,22 @@ defmodule OpenAgents.RuntimeConfig do
   end
 
   defp encryption_key?(_value), do: false
+
+  # The SCV deploy lane spends our own capacity, so its ceiling is configuration
+  # rather than a runtime argument: a bounded model slug, a bounded concurrency
+  # limit, a wall clock, an output cap, and a durable place to keep artifacts.
+  defp valid_scv_deploy?(settings) when is_list(settings) do
+    model = keyword_value(settings, :model)
+
+    is_binary(model) and byte_size(model) in 3..128 and
+      Regex.match?(~r{\A[a-zA-Z0-9_.:-]+/[a-zA-Z0-9_.:-]+\z}, model) and
+      keyword_integer_in?(settings, :concurrency_limit, 1..8) and
+      keyword_integer_in?(settings, :wall_clock_ms, 60_000..3_600_000) and
+      keyword_integer_in?(settings, :maximum_output_bytes, 65_536..67_108_864) and
+      durable_path?(keyword_value(settings, :output_root))
+  end
+
+  defp valid_scv_deploy?(_settings), do: false
 
   defp durable_path?(path) when is_binary(path) do
     Path.type(path) == :absolute and path != "/" and

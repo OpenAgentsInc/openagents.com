@@ -68,6 +68,17 @@ config :openagents,
     temporary_root: System.tmp_dir!(),
     client_options: []
   ],
+  scv_deploy: [
+    enabled: false,
+    model: "opencode/x-preview-f-free",
+    reasoning_effort: "low",
+    opencode_api_key: nil,
+    executable: nil,
+    concurrency_limit: 2,
+    wall_clock_ms: 900_000,
+    maximum_output_bytes: 16_777_216,
+    output_root: "/var/lib/openagents/scv/opencode-runs"
+  ],
   tools_enabled: true,
   voice: [
     enabled: false,
@@ -153,7 +164,8 @@ config :openagents,
     OpenAgents.Tools.CodeCheck,
     OpenAgents.Tools.RepoEdit,
     OpenAgents.Tools.RepoWrite,
-    OpenAgents.Tools.RepoCommitPush
+    OpenAgents.Tools.RepoCommitPush,
+    OpenAgents.Tools.ScvDeploy
   ],
   conversation_reset_enabled: false,
   github_api: [

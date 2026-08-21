@@ -199,6 +199,24 @@ if config_env() == :prod and runtime_role == :web do
     raise "environment variable OPENAGENTS_SCV_CODEX_CREDENTIAL_REFS is required when Codex SCV accounts are enabled"
   end
 
+  scv_deploy_enabled = parse_optional_boolean.("OPENAGENTS_FEATURE_SCV_DEPLOY")
+
+  scv_deploy_defaults = Application.fetch_env!(:openagents, :scv_deploy)
+
+  scv_deploy = [
+    enabled: scv_deploy_enabled,
+    model: optional_text.("OPENAGENTS_SCV_DEPLOY_MODEL") || scv_deploy_defaults[:model],
+    reasoning_effort: scv_deploy_defaults[:reasoning_effort],
+    opencode_api_key: optional_text.("OPENAGENTS_SCV_DEPLOY_OPENCODE_API_KEY"),
+    executable:
+      optional_text.("OPENAGENTS_SCV_DEPLOY_OPENCODE_BIN") || scv_deploy_defaults[:executable],
+    concurrency_limit: scv_deploy_defaults[:concurrency_limit],
+    wall_clock_ms: scv_deploy_defaults[:wall_clock_ms],
+    maximum_output_bytes: scv_deploy_defaults[:maximum_output_bytes],
+    output_root:
+      optional_text.("OPENAGENTS_SCV_DEPLOY_OUTPUT_ROOT") || scv_deploy_defaults[:output_root]
+  ]
+
   scv_codex = [
     enabled: scv_codex_enabled,
     execution_reaper_enabled: scv_codex_enabled,
@@ -342,6 +360,7 @@ if config_env() == :prod and runtime_role == :web do
     work: work,
     work_workers_enabled: work_enabled,
     scv_codex: scv_codex,
+    scv_deploy: scv_deploy,
     semantic_index: semantic_index,
     experience_memory: experience_memory,
     graph_memory: graph_memory,

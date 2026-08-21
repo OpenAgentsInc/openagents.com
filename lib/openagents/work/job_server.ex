@@ -579,7 +579,8 @@ defmodule OpenAgents.Work.JobServer do
 
   # The same read-oriented text authorities as a turn, minus `memory.write`
   # (a job has no current user message to satisfy MEMORY-005 consent) and
-  # minus `work.delegate` (no recursion).
+  # minus `work.delegate` and `scv.deploy` (no recursion, and no job may spend
+  # our own capacity on a second runtime).
   defp execution_authorities(job) do
     base =
       MapSet.new([

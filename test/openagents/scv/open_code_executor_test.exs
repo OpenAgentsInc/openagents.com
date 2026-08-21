@@ -161,6 +161,26 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
                Keyword.put(shared_options(context), :api_key, nil)
              )
 
+    # SCV-001: an OpenAI key is a per-provider credential, so a model served by
+    # another provider is not blocked on one it never reads. This gets past the
+    # credential check and fails on the missing binary instead.
+    assert {:error, :enoent} =
+             OpenCode.run(
+               context.repository,
+               "prompt",
+               shared_options(context)
+               |> Keyword.put(:api_key, nil)
+               |> Keyword.put(:model, "opencode/x-preview-f-free")
+               |> Keyword.put(:executable, Path.join(context.output, "absent-binary"))
+             )
+
+    assert {:error, :opencode_api_key_invalid} =
+             OpenCode.run(
+               context.repository,
+               "prompt",
+               Keyword.put(shared_options(context), :opencode_api_key, "short")
+             )
+
     assert {:error, :reasoning_effort_invalid} =
              OpenCode.run(
                context.repository,

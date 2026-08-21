@@ -1045,6 +1045,69 @@ typed refusals), `OpenAgents.Work.Coding`, `OpenAgents.Forge.Pushes` /
 `OpenAgents.CodingJobTest`, and the repository tool tests in
 `test/openagents/tools/repository_mutation_tools_test.exs`.
 
+### SCV-001 — An SCV spends our capacity only under operator authority and fixed bounds
+
+Status: Current
+
+An SCV deployment is the one lane where OpenAgents runs a coding agent on
+hardware we own and pay for, rather than on a machine the person paired and
+powers. Every other execution path is bounded by something outside our
+control; this one is not, so its ceiling is written down and enforced rather
+than assumed.
+
+- **One entry point, and it is operator-only.** Every surface that starts an
+  SCV enters `OpenAgents.SCV.Deployments.start/2`, which refuses any account
+  that is not an OpenAgents operator with `:operator_required` before a row is
+  written or a process is spawned. The refusal lives in the code that starts
+  the run, not in whatever advertised it, so a model that calls the tool on
+  behalf of a signed-in non-operator is refused exactly as an unauthenticated
+  caller is. `sarah.tool.scv_deploy.v1` declares `external_effect` under the
+  `explicit_operator_approval` class, and the matching receipt is minted only
+  for operators, so `OpenAgents.Modules.SurfacePolicy` refuses the same call a
+  second time and independently.
+- **It is a work job, not a second job system.** The durable unit is a
+  `work_jobs` row of kind `scv`, so an SCV inherits the seven statuses, the
+  PostgreSQL transition triggers, the Horde cluster singleton, the
+  `owner_node`/`generation` fence, the startup recovery sweep, cancellation,
+  and the bounded report that lands in the conversation as a durable assistant
+  message. An interrupted SCV is finished honestly rather than resumed: a
+  killed coding-agent process has no session to re-attach, so a worker that
+  adopts a row at a bumped generation ends it `interrupted` instead of paying
+  for the same objective twice.
+- **Four bounds, fixed at admission.** The objective is capped at 2,000 bytes;
+  the wall clock and the captured-output ceiling are snapshotted onto the row
+  when the run is admitted, so a configuration change mid-run cannot widen a
+  run already in flight; the executor enforces the wall clock and this
+  application independently backstops it; and the number of SCVs queued or
+  running across the whole application is capped by configuration. A tripped
+  concurrency ceiling refuses the call with `:scv_capacity_reached` rather
+  than queueing unbounded work.
+- **It reads; it does not write.** The run is admitted only under the
+  `read_only` permission profile in the `opencode-core` environment, against a
+  disposable clone of a forge repository at an exact 40-character revision
+  resolved by the application. The caller names a repository the operator may
+  read as `owner/name`; a filesystem path from a caller never reaches an SCV.
+  The workspace is removed on every terminal path, including the one that runs
+  when the worker died.
+- **No job may deploy one.** `scv.deploy` is a turn authority only. Job
+  authorities never include it, so neither a deep-work job, a delegation, a
+  coding job, nor an SCV can start another SCV.
+- **It is metered and visible.** Token usage is recorded into the shared
+  `inference_grants` ledger, the same one the coding kind uses, so "how much
+  did an SCV spend" is a query. Each run's lifecycle events reach the
+  content-free public projection on the status page through the existing
+  `[:openagents, :scv, :event]` telemetry, and every non-completed terminal is
+  recorded as a typed incident.
+- **It is off by default.** The lane is admitted only when the `scv_deploy`
+  feature is enabled, which `OpenAgents.RuntimeConfig` accepts only alongside
+  the work lane and tools, only with an admitted model slug and bounds, and
+  only above the staging gate that admits advanced product features.
+
+Evidence: `OpenAgents.SCV.Deployments`, `OpenAgents.Work.Scv`,
+`OpenAgents.Work.ScvServer`, `OpenAgents.Tools.ScvDeploy`, `OpenAgents.Work.Job`
+(the `scv` kind), `OpenAgents.RuntimeConfig`, and
+`test/openagents/scv/deployments_test.exs`.
+
 ## Interface and release
 
 ### VOICE-001 — Spoken identity is admitted before media
@@ -1889,6 +1952,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DEGRADE-002 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
+| SCV-001 | `test/openagents/scv/deployments_test.exs` |
 | VOICE-001 | `test/openagents/voice/config_test.exs` |
 | VOICE-002 | `test/openagents_web/controllers/voice_call_controller_test.exs` |
 | VOICE-003 | `test/openagents/voice_test.exs`, `test/openagents/voice_sessions_test.exs` |

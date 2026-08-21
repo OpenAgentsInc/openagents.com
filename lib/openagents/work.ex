@@ -110,6 +110,28 @@ defmodule OpenAgents.Work do
     start_job(Map.put(attributes, :kind, "coding"))
   end
 
+  @doc """
+  Start a durable SCV deployment (SCV-001): one bounded OpenCode run on our own
+  capacity, driven by `OpenAgents.Work.ScvServer` rather than by the model
+  loop, sharing the same row, statuses, fence, recovery sweep, and
+  report-into-conversation ending as every other kind.
+
+  Admission belongs to `OpenAgents.SCV.Deployments.start/2`; this only creates
+  the row and starts the worker.
+  """
+  def start_scv(attributes) when is_map(attributes) do
+    with {:ok, job} <- create_job(Map.put(attributes, :kind, "scv")) do
+      case start_worker(OpenAgents.Work.ScvServer, job.id) do
+        {:ok, _pid} ->
+          {:ok, job}
+
+        {:error, reason} ->
+          _failure = finish_job(job.id, "failed", error_code: "worker_start_failed")
+          {:error, reason}
+      end
+    end
+  end
+
   # Start a job's worker as a cluster-wide singleton under Horde. Horde routes
   # the child to whichever member `choose_node` picks and relocates it to a
   # survivor if that node dies. `{:already_started, pid}` is success: the
@@ -510,6 +532,9 @@ defmodule OpenAgents.Work do
       |> Multi.run(:coding_grant, fn _repo, %{job: job} ->
         OpenAgents.Work.Coding.settle_grant(job)
       end)
+      |> Multi.run(:scv_grant, fn _repo, %{job: job} ->
+        OpenAgents.Work.Scv.settle_grant(job)
+      end)
       |> Repo.transaction()
 
     case result do
@@ -518,8 +543,10 @@ defmodule OpenAgents.Work do
         broadcast_job(job)
         _injection = deliver_live_voice_report(job, message)
         # Kind-specific terminal cleanup (this path runs even when the worker
-        # died): a coding job removes its clone and settles its grant.
+        # died): a coding job removes its clone and settles its grant, and an
+        # SCV deployment removes its disposable workspace.
         :ok = OpenAgents.Work.Coding.on_terminal(job)
+        :ok = OpenAgents.Work.Scv.on_terminal(job)
         {:ok, job}
 
       {:error, :admission, {:already_terminal, job}, _changes} ->
@@ -634,6 +661,7 @@ defmodule OpenAgents.Work do
   defp recovery_error_code(_reason), do: "worker_start_failed"
 
   defp worker_module("delegation"), do: OpenAgents.Work.DelegationServer
+  defp worker_module("scv"), do: OpenAgents.Work.ScvServer
   defp worker_module(_kind), do: OpenAgents.Work.JobServer
 
   @doc """
@@ -776,6 +804,28 @@ defmodule OpenAgents.Work do
       _other ->
         "Delegation to #{agent} on #{machine} ended #{status} before reporting a result. " <>
           "Goal: #{locked_job.goal}"
+    end
+  end
+
+  # An SCV deployment has no LLM steps of its own either — its work happened in
+  # an OpenCode process on our capacity — so it gets a report that names the
+  # repository and the outcome rather than a step summary that would be empty.
+  defp fallback_report(_repo, %Job{kind: "scv"} = locked_job, status) do
+    authority = locked_job.authority_snapshot || %{}
+    path = authority["repository_path"] || "the repository"
+
+    case status do
+      "interrupted" ->
+        "SCV deployment on #{path} was interrupted by a server restart before it " <>
+          "finished. An SCV has no session to resume; deploy it again to continue. " <>
+          "Objective: #{locked_job.goal}"
+
+      "cancelled" ->
+        "SCV deployment on #{path} was cancelled. Objective: #{locked_job.goal}"
+
+      _other ->
+        "SCV deployment on #{path} ended #{status} before reporting a result. " <>
+          "Objective: #{locked_job.goal}"
     end
   end
 

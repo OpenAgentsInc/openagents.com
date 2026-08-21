@@ -101,6 +101,25 @@ identity access to unrelated SCV, Forge, or deployment credentials.
 Implement ChatGPT service accounts after this individual operator flow passes
 qualification. Service accounts are available only for pay-as-you-go plans.
 
+## SCV deployment settings
+
+The `scv_deploy` feature admits one bounded OpenCode run per SCV on OpenAgents
+capacity, started only by an operator through `OpenAgents.SCV.Deployments`. See
+INVARIANTS.md SCV-001. Bounds live in configuration rather than in a caller's
+arguments, and the compiled defaults are the safe values.
+
+| Environment setting | Requirement |
+| --- | --- |
+| `OPENAGENTS_FEATURE_SCV_DEPLOY` | `true` to admit the lane; otherwise `false` or empty |
+| `OPENAGENTS_SCV_DEPLOY_MODEL` | Model slug as `provider/model`; defaults to the free OpenCode Zen model `opencode/x-preview-f-free` |
+| `OPENAGENTS_SCV_DEPLOY_OPENCODE_BIN` | Absolute path to the pinned OpenCode executable; the release image uses `/usr/local/bin/opencode` |
+| `OPENAGENTS_SCV_DEPLOY_OPENCODE_API_KEY` | Optional OpenCode gateway key; the default model runs without one |
+| `OPENAGENTS_SCV_DEPLOY_OUTPUT_ROOT` | Durable directory for run artifacts; must not be under `/tmp` |
+
+The compiled defaults cap concurrency at two simultaneous SCVs, the wall clock
+at 15 minutes, and captured output at 16 MB. The lane runs read-only against a
+disposable clone of a forge repository at an exact revision.
+
 ## Required release settings
 
 All settings in this section are mandatory in a production release unless
@@ -166,6 +185,7 @@ it does not enable it automatically.
 | Tool embeddings | `OPENAGENTS_FEATURE_TOOL_EMBEDDINGS` | Off | Off | 14 |
 | Conversation reset | `OPENAGENTS_FEATURE_CONVERSATION_RESET` | Off | Off | 14 |
 | Incident fixer | `OPENAGENTS_FEATURE_INCIDENT_FIXER` | Off | Off | 14 |
+| SCV deployment | `OPENAGENTS_FEATURE_SCV_DEPLOY` | Off | Off | 14 |
 | Turn recovery | `OPENAGENTS_FEATURE_TURN_RECOVERY` | Off | Off | 8 |
 | Forge Git service | `OPENAGENTS_FEATURE_FORGE` | Off | Off | 12 |
 | Forge deployment | `OPENAGENTS_FEATURE_FORGE_DEPLOY` | Off | Off | 13 |
@@ -175,7 +195,8 @@ it does not enable it automatically.
 
 Invalid combinations fail closed. Recording requires voice and its encryption
 key; retention requires recording; work and its recovery worker move together;
-the incident fixer requires computers; deployment requires the forge; boot
+the incident fixer requires computers; SCV deployment requires the work lane,
+the tool catalog, and admitted bounds; deployment requires the forge; boot
 convergence requires deployment; and distributed features require Horde,
 discovery, node identity, cookie, and bounded distribution ports.
 

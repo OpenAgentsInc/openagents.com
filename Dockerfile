@@ -18,6 +18,7 @@ ARG ESBUILD_VERSION=0.25.4
 ARG ESBUILD_SHA256=93433b456cac3a454ee27403d3de9adce88d83e5439ba37e1471af54730c9ca7
 ARG NODE_VERSION=24.15.0
 ARG CODEX_VERSION=0.147.0
+ARG OPENCODE_VERSION=1.18.5
 
 ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}@sha256:ae38be7cb19bffa78adedb04732d9e6ba83a507b4cfb06983cbe711edb49da54"
 ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258"
@@ -140,6 +141,7 @@ FROM ${RUNNER_IMAGE} AS final
 # resolve and the checksum still guards the result.
 ARG TARGETARCH
 ARG CODEX_VERSION
+ARG OPENCODE_VERSION
 ARG DEBIAN_SNAPSHOT
 ARG SOURCE_DATE_EPOCH=0
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
@@ -174,6 +176,25 @@ RUN set -eu; \
   test -x /usr/local/lib/codex-package/codex-path/rg; \
   codex --version; \
   codex-code-mode-host --help >/dev/null
+
+# OpenCode, for the SCV deployment lane (SCV-001). The Codex SCV lane already
+# runs its binary as a child of this node; the OpenCode lane needs the same,
+# pinned by version and checksum from the same release the SCV worker image
+# uses, so both images run identical bytes.
+RUN set -eu; \
+  case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+    amd64) opencode_arch=x64; checksum=cd4a2557a3d6550f27cb5c0257ebe8d73388bb34beda8b6121e6428a74c1eae2 ;; \
+    arm64) opencode_arch=arm64; checksum=18b643362fdf0b8d5b8711b3e160dafb4e68d0bfc00288f56fd1298fd72da69d ;; \
+    *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+  esac; \
+  archive="opencode-linux-${opencode_arch}.tar.gz"; \
+  curl -fsSL --retry 3 -o "/tmp/${archive}" \
+    "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/${archive}"; \
+  echo "${checksum}  /tmp/${archive}" | sha256sum --check --strict; \
+  tar -xzf "/tmp/${archive}" -C /tmp; \
+  install -D -m 0755 /tmp/opencode /usr/local/bin/opencode; \
+  rm "/tmp/${archive}" /tmp/opencode; \
+  opencode --version
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \

@@ -802,12 +802,22 @@ defmodule OpenAgents.Turns.TurnServer do
     }
   end
 
+  # Approval receipts admitted for this turn's owner: one per paired machine
+  # (the pairing IS the operator approval), plus the SCV deployment receipt
+  # when — and only when — this account is an OpenAgents operator. A
+  # non-operator turn simply carries no SCV receipt, so `SurfacePolicy` refuses
+  # the call independently of the check inside `SCV.Deployments.start/2`.
   defp machine_approval_receipts(state) do
-    Machines.approval_receipts(
-      state.owner.user_id,
-      "conversation:#{state.turn.conversation_id}"
-    )
+    scope_ref = "conversation:#{state.turn.conversation_id}"
+
+    Machines.approval_receipts(state.owner.user_id, scope_ref) ++
+      OpenAgents.SCV.Deployments.approval_receipts(owner_account(state), scope_ref)
   end
+
+  defp owner_account(%{owner: %{user_id: user_id}}) when is_binary(user_id),
+    do: OpenAgents.Repo.get(OpenAgents.Accounts.User, user_id)
+
+  defp owner_account(_state), do: nil
 
   defp execution_authorities,
     do:
@@ -818,6 +828,7 @@ defmodule OpenAgents.Turns.TurnServer do
         "memory.read",
         "memory.write",
         "module.discover",
+        "scv.deploy",
         "work.delegate"
       ])
 

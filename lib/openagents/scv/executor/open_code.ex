@@ -57,6 +57,8 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
     run_id = Keyword.get(options, :run_id, Ecto.UUID.generate())
     output_root = Keyword.get(options, :output_root, default_output_root())
     api_key = Keyword.get(options, :api_key, System.get_env("OPENAI_API_KEY"))
+    opencode_api_key = Keyword.get(options, :opencode_api_key)
+    models_fetch = Keyword.get(options, :models_fetch, false)
     executable = Keyword.get(options, :executable, default_executable())
     config_seed = Keyword.get(options, :config_seed)
     diagnostic_logs = Keyword.get(options, :diagnostic_logs, false)
@@ -85,7 +87,9 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
          :ok <- validate_permissions(permissions),
          :ok <- validate_run_id(run_id),
          {:ok, output_root} <- validate_output_root(output_root),
-         :ok <- validate_api_key(api_key),
+         :ok <- validate_api_key(model, api_key),
+         :ok <- validate_optional_api_key(opencode_api_key),
+         :ok <- validate_boolean(models_fetch, :models_fetch_invalid),
          :ok <- validate_boolean(diagnostic_logs, :diagnostic_logs_invalid),
          :ok <-
            validate_integer(
@@ -114,6 +118,8 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
          run_id: run_id,
          output_root: output_root,
          api_key: api_key,
+         opencode_api_key: opencode_api_key,
+         models_fetch: models_fetch,
          executable: executable,
          config_seed: config_seed,
          diagnostic_logs: diagnostic_logs,
@@ -271,7 +277,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
       input.sample_interval_ms,
       input.maximum_output_bytes,
       sample_fun,
-      [input.api_key]
+      [input.api_key, input.opencode_api_key]
     )
   rescue
     error ->
@@ -593,6 +599,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
         executable: input.executable,
         model: input.model,
         reasoning_effort: input.reasoning_effort,
+        models_fetch: input.models_fetch,
         diagnostic_logs: input.diagnostic_logs,
         config_seeded: not is_nil(input.config_seed),
         permission_profile: Atom.to_string(input.permissions),
@@ -679,7 +686,6 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
       "LC_ALL" => "C.UTF-8",
       "LOGNAME" => "scv",
       "NO_COLOR" => "1",
-      "OPENAI_API_KEY" => input.api_key,
       "OPENCODE_CLIENT" => "scv",
       "OPENCODE_CONFIG_CONTENT" => Jason.encode!(config),
       "OPENCODE_CONFIG_DIR" => paths.config,
@@ -690,7 +696,7 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
       "OPENCODE_DISABLE_EMBEDDED_WEB_UI" => "1",
       "OPENCODE_DISABLE_EXTERNAL_SKILLS" => "1",
       "OPENCODE_DISABLE_LSP_DOWNLOAD" => "1",
-      "OPENCODE_DISABLE_MODELS_FETCH" => "1",
+      "OPENCODE_DISABLE_MODELS_FETCH" => if(input.models_fetch, do: "0", else: "1"),
       "OPENCODE_DISABLE_PROJECT_CONFIG" => "1",
       "OPENCODE_DISABLE_SHARE" => "1",
       "OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER" => "1",
@@ -712,7 +718,16 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
     System.get_env()
     |> Map.new(fn {key, _value} -> {key, false} end)
     |> Map.merge(safe)
+    |> put_credential("OPENAI_API_KEY", input.api_key)
+    |> put_credential("OPENCODE_API_KEY", input.opencode_api_key)
   end
+
+  # A credential this run does not hold stays scrubbed to `false` rather than
+  # exported empty, so the child process cannot mistake "" for a usable key.
+  defp put_credential(environment, key, value) when is_binary(value) and value != "",
+    do: Map.put(environment, key, value)
+
+  defp put_credential(environment, _key, _value), do: environment
 
   defp port_environment(environment) do
     Enum.map(environment, fn
@@ -874,10 +889,27 @@ defmodule OpenAgents.SCV.Executor.OpenCode do
 
   defp validate_output_root(_output_root), do: {:error, :output_root_invalid}
 
-  defp validate_api_key(api_key) when is_binary(api_key) and byte_size(api_key) in 8..16_384,
-    do: :ok
+  # The OpenAI key is a per-provider credential, not a precondition of running
+  # OpenCode. An `openai/...` model cannot answer without it; a model served by
+  # any other provider (the OpenCode Zen gateway, for instance) must not be
+  # blocked on a credential it never reads.
+  defp validate_api_key("openai/" <> _model, api_key), do: validate_provider_key(api_key)
+  defp validate_api_key(_model, nil), do: :ok
+  defp validate_api_key(_model, api_key), do: validate_provider_key(api_key)
 
-  defp validate_api_key(_api_key), do: {:error, :openai_api_key_missing}
+  defp validate_provider_key(api_key)
+       when is_binary(api_key) and byte_size(api_key) in 8..16_384,
+       do: :ok
+
+  defp validate_provider_key(_api_key), do: {:error, :openai_api_key_missing}
+
+  defp validate_optional_api_key(nil), do: :ok
+
+  defp validate_optional_api_key(api_key)
+       when is_binary(api_key) and byte_size(api_key) in 8..16_384,
+       do: :ok
+
+  defp validate_optional_api_key(_api_key), do: {:error, :opencode_api_key_invalid}
 
   defp validate_config_seed(nil), do: {:ok, nil}
 

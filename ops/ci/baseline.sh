@@ -66,9 +66,21 @@ if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
 fi
 
 javascript_tests=$(awk '/^ℹ tests [0-9]+$/ {value=$3} END {print value}' "$run_root/precommit.log")
-default_tests=$(awk '/^[0-9]+ tests, 0 failures/ {value=$1} END {print value}' "$run_root/precommit.log")
-excluded_tests=$(awk '/^[0-9]+ tests, 0 failures \([0-9]+ excluded\)$/ {value=$5} END {gsub(/[()]/, "", value); print value}' "$run_root/precommit.log")
-cluster_tests=$(awk '/^[0-9]+ tests, 0 failures \([0-9]+ excluded\)$/ {value=$1} END {print value}' "$run_root/coverage.log")
+default_tests=$(awk '
+  /^Result: [0-9]+ passed/ {value=$2}
+  /^[0-9]+ tests, 0 failures/ {value=$1}
+  END {print value}
+' "$run_root/precommit.log")
+excluded_tests=$(awk '
+  /^Result: [0-9]+ passed, [0-9]+ excluded$/ {value=$4; gsub(/,/, "", value)}
+  /^[0-9]+ tests, 0 failures \([0-9]+ excluded\)$/ {value=$5; gsub(/[()]/, "", value)}
+  END {print value}
+' "$run_root/precommit.log")
+cluster_tests=$(awk '
+  /^Result: [0-9]+ passed, [0-9]+ excluded$/ {value=$2}
+  /^[0-9]+ tests, 0 failures \([0-9]+ excluded\)$/ {value=$1}
+  END {print value}
+' "$run_root/coverage.log")
 coverage_percent=$(awk -F '|' '/Total/ {value=$2} END {gsub(/[% ]/, "", value); print value}' "$run_root/coverage.log")
 
 for parsed_value in "$javascript_tests" "$default_tests" "$excluded_tests" "$cluster_tests" "$coverage_percent"; do

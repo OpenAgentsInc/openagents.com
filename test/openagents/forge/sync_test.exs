@@ -40,11 +40,10 @@ defmodule OpenAgents.Forge.SyncTest do
     sha = source |> git!(["rev-parse", "HEAD"]) |> String.trim()
     bundle = Path.join(root, "source.bundle")
     git!(source, ["bundle", "create", bundle, "--all"])
-    payload = File.read!(bundle)
     refs = %{"refs/heads/trunk" => sha, "refs/tags/v1" => sha}
 
     index = WAL.new_index()
-    {:ok, object} = WAL.put_entry("storage-key", 0, payload)
+    {:ok, object} = WAL.put_entry_file("storage-key", 0, bundle)
 
     entry = %{
       "seq" => 0,

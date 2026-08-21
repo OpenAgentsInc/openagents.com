@@ -149,10 +149,12 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
 
     assert has_element?(view, "#repository-cli")
     assert has_element?(view, "#repository-cli-copy-0")
+    assert has_element?(view, ~s(a[href="/docs/openagents-cli"]))
+    assert html =~ "npx --yes @openagentsinc/cli@latest --version"
     assert html =~ "npm i -g @openagentsinc/cli"
     assert html =~ "openagents auth login"
     assert html =~ "openagents auth setup-git --local"
-    assert html =~ "/git/&lt;owner&gt;/&lt;name&gt;.git"
+    assert html =~ "/&lt;owner&gt;/&lt;name&gt;.git"
   end
 
   test "new repository defaults private and normalizes its name", %{conn: conn} do

@@ -3,7 +3,7 @@ defmodule OpenAgents.Forge.GitHTTP do
   Git smart-HTTP v0, wrapping the stock git binary ("Spokes got that exactly
   right" — standard packfiles, upstream clients, no custom object format).
 
-  Serves, under the mount point (`/git` in the router):
+  Serves under the canonical `/:owner/:repo.git` mount point:
 
       GET  /:repo.git/info/refs?service=git-upload-pack|git-receive-pack
       POST /:repo.git/git-upload-pack
@@ -35,7 +35,7 @@ defmodule OpenAgents.Forge.GitHTTP do
 
   @impl true
   def call(conn, _opts) do
-    case {conn.method, split_repo(conn.path_info)} do
+    case {conn.method, split_repo(conn)} do
       {"GET", {:ok, owner, name, ["info", "refs"]}} ->
         advertise(conn, owner, name, first_query(conn, "service"))
 
@@ -137,7 +137,19 @@ defmodule OpenAgents.Forge.GitHTTP do
 
   # ── helpers ─────────────────────────────────────────────────────────────
 
-  defp split_repo([segment | rest]) do
+  defp split_repo(%Plug.Conn{
+         path_params: %{"owner" => owner, "repo" => segment},
+         path_info: [_owner, _repo | rest]
+       }) do
+    case strip_git_suffix(segment) do
+      {:ok, name} -> {:ok, owner, name, rest}
+      :error -> :error
+    end
+  end
+
+  defp split_repo(%Plug.Conn{path_info: path_info}), do: split_legacy_repo(path_info)
+
+  defp split_legacy_repo([segment | rest]) do
     case strip_git_suffix(segment) do
       {:ok, "openagents.com"} -> {:ok, "OpenAgentsInc", "openagents.com", rest}
       {:ok, name} -> {:ok, nil, name, rest}
@@ -145,7 +157,7 @@ defmodule OpenAgents.Forge.GitHTTP do
     end
   end
 
-  defp split_repo(_), do: :error
+  defp split_legacy_repo(_), do: :error
 
   defp split_namespaced_repo(owner, [segment | rest]) do
     case strip_git_suffix(segment) do

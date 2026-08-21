@@ -6,14 +6,11 @@ The `openagents` command manages authentication and hosted repositories.
 openagents <subcommand> [flags]
 ```
 
-Run `openagents <command> --help` for the reference installed with your CLI
-version.
+Run `openagents <command> --help` for the reference that matches your installed
+version. When you use `npx`, replace the `openagents` prefix with
+`npx --yes @openagentsinc/cli@latest`.
 
-For one command without a global installation, replace the `openagents` prefix
-with `npx --yes @openagentsinc/cli@latest`. Do not run `auth setup-git` through
-`npx`; install the CLI globally before saving a persistent Git helper.
-
-## Global flags
+## Use global flags
 
 | Flag | Description |
 | --- | --- |
@@ -25,15 +22,16 @@ with `npx --yes @openagentsinc/cli@latest`. Do not run `auth setup-git` through
 | `--version`, `-v` | Show the CLI version. |
 | `--completions bash\|zsh\|fish\|sh` | Print a shell completion script. |
 
-Place shared flags before the subcommand, for example:
+Place shared flags before the subcommand:
 
 ```sh
 openagents --profile staging --json repo list
+npx --yes @openagentsinc/cli@latest --profile staging --json repo list
 ```
 
 Setting `NO_COLOR` also disables ANSI output.
 
-## Authentication commands
+## Run authentication commands
 
 | Command | Description |
 | --- | --- |
@@ -45,12 +43,13 @@ Setting `NO_COLOR` also disables ANSI output.
 | `openagents auth setup-git --local` | Configure the current Git repository. |
 | `openagents auth setup-git --global --yes` | Configure global Git settings with explicit confirmation. |
 
-`auth git-credential` is an internal Git helper endpoint. Do not invoke it
+`auth git-credential` is an internal Git-helper endpoint. Do not invoke it
 directly.
 
-## Repository commands
+Do not run either `auth setup-git` form through `npx`. Install the CLI globally
+before you save a persistent helper configuration.
 
-### `repo create`
+## Create a repository
 
 ```text
 openagents repo create [flags] <name-or-namespace/name>
@@ -69,7 +68,7 @@ openagents repo create [flags] <name-or-namespace/name>
 The command creates the server repository before it configures a local remote.
 It never pushes automatically.
 
-### `repo import`
+## Import a repository
 
 ```text
 openagents repo import [flags] <github-owner/repository>
@@ -83,9 +82,10 @@ openagents repo import [flags] <github-owner/repository>
 | `--private` | Create a private destination, which is the default. |
 | `--wait-timeout SECONDS` | Wait for import. The default is `300`; `0` does not wait. |
 
-This command performs one import. It does not start synchronization.
+This command performs one import. It does not start synchronization. A client
+timeout does not cancel the accepted server-side import.
 
-### `repo list`
+## List repositories
 
 ```text
 openagents repo list [--namespace OWNER] [--limit 1..100] [--after CURSOR]
@@ -94,7 +94,7 @@ openagents repo list [--namespace OWNER] [--limit 1..100] [--after CURSOR]
 The default limit is `30`. When more results exist, human output prints the
 next opaque cursor and JSON output returns it as `next_cursor`.
 
-### `repo view`
+## View a repository
 
 ```text
 openagents repo view [OWNER/REPOSITORY]
@@ -104,7 +104,7 @@ openagents repo view --repo OWNER/REPOSITORY
 When you omit the repository, the CLI infers it from an exact OpenAgents
 `origin` remote on the selected API origin.
 
-### `repo clone`
+## Clone a repository
 
 ```text
 openagents repo clone [OWNER/REPOSITORY] [DIRECTORY]
@@ -113,7 +113,7 @@ openagents repo clone --repo OWNER/REPOSITORY [DIRECTORY]
 
 The CLI retrieves the clone URL from the API and starts standard Git.
 
-## JSON and noninteractive use
+## Use JSON in noninteractive processes
 
 With `--json`, stdout contains machine-readable output. Human progress and
 errors do not contaminate a successful JSON response. Responses never include
@@ -127,7 +127,7 @@ In a noninteractive process:
 - Handle `SIGINT` and `SIGTERM` as exit code `130`. The CLI cancels in-flight
   HTTP work and terminates its child Git process.
 
-## Exit codes
+## Handle exit codes
 
 | Code | Meaning |
 | --- | --- |
@@ -141,8 +141,15 @@ In a noninteractive process:
 | `7` | Provisioning or import failure or timeout. |
 | `130` | Interrupted by `SIGINT` or `SIGTERM`. |
 
-## Commands not included
+## Know which commands are unavailable
 
 This release does not provide `repo delete`, `repo mirror`, pull-request,
 ruleset, SSH-key, generic API, or self-update commands. Use only commands shown
 by the installed version's `--help` output.
+
+## Next steps
+
+- [Install the CLI](/docs/install-cli)
+- [Create a repository](/docs/create-repository)
+- [Import from GitHub](/docs/import-github)
+- [Clone, push, and pull](/docs/clone-push-pull)

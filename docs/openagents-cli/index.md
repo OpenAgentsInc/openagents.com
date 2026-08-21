@@ -7,6 +7,20 @@ interface and leaves Git data transfer to standard Git.
 The CLI is available from npm. OpenAgents qualified repository imports on
 staging before deploying the same server revision to the production fleet.
 
+The same guides are published on the [OpenAgents documentation
+site](https://openagents.com/docs/openagents-cli).
+
+Install the CLI globally for regular use, or run a one-time command through
+`npx`:
+
+```sh
+npm install --global @openagentsinc/cli
+npx --yes @openagentsinc/cli@latest --version
+```
+
+Do not configure a persistent Git credential helper through `npx`. Install the
+CLI globally before you run `openagents auth setup-git`.
+
 ## What you can do
 
 The first release lets you:

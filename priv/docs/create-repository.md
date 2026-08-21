@@ -1,15 +1,15 @@
-# Create an OpenAgents repository
+# Create a repository
 
-Create an empty repository from the web interface or with the OpenAgents CLI.
-If the code already exists on GitHub, use a [one-time GitHub
-import](import-github.md) instead.
+Create an empty OpenAgents repository in the browser or with the CLI. If the
+code already exists on GitHub, use a [one-time GitHub
+import](/docs/import-github) instead.
 
 ## Create a repository in the browser
 
 1. Sign in to OpenAgents with GitHub.
-2. Open `/repositories`.
+2. Open [Repositories](/repositories).
 3. Select **New repository**.
-4. Choose your GitHub user or an eligible GitHub organization namespace.
+4. Choose your GitHub user namespace or an eligible GitHub organization.
 5. Enter a name and optional description.
 6. Choose **Private** or **Public**. Private is the default.
 7. Enter the default branch. The default value is `main`.
@@ -44,7 +44,8 @@ The CLI waits up to 300 seconds for provisioning by default. Pass
 `--wait-timeout 0` to return after the server accepts the durable request. The
 repository continues provisioning on the server.
 
-Run one create command without a global installation:
+For one command without a global install, prefix the same arguments with the
+package name:
 
 ```sh
 npx --yes @openagentsinc/cli@latest repo create my-project
@@ -62,22 +63,23 @@ The CLI verifies the Git worktree, adds the server-provided clone URL as the
 `origin` remote, and prints the next push command. It does not push
 automatically.
 
-Choose a different remote name when `origin` already belongs to another host:
+Choose another remote name when `origin` already belongs to another host:
 
 ```sh
 openagents repo create my-project --source . --remote openagents
 git push -u openagents HEAD
 ```
 
-The CLI refuses to overwrite an existing remote that points to a different
-URL. If remote attachment fails, the remote repository still exists.
+The CLI refuses to overwrite an existing remote that points to another URL. If
+remote attachment fails, the remote repository still exists.
 
 ## Push the first commit
 
-Install the CLI globally before configuring persistent Git authentication. For
-an existing local project:
+Install the CLI globally before configuring persistent Git authentication:
 
 ```sh
+npm install --global @openagentsinc/cli
+cd existing-worktree
 openagents auth setup-git --local
 git push -u origin HEAD
 ```
@@ -97,7 +99,7 @@ git push -u origin main
 Prefer the clone URL returned by the browser or CLI instead of constructing it
 yourself.
 
-## Names and visibility
+## Follow repository naming rules
 
 Repository names are case-insensitive and normalize to lowercase. A name:
 
@@ -109,20 +111,19 @@ Repository names are case-insensitive and normalize to lowercase. A name:
 
 A private repository requires an authorized OpenAgents membership. A public
 repository permits anonymous Git reads. The creator becomes the repository
-owner. OpenAgents does not automatically copy every GitHub organization member
-into the repository.
+owner.
 
-## Organization repositories
+## Create an organization repository
 
-OpenAgents uses GitHub to verify organization identity and membership. You need
-an active GitHub organization administrator membership to create a repository
-in that organization during the first release.
+OpenAgents uses GitHub to verify organization identity and membership. You
+need an active GitHub organization administrator membership to create a
+repository in that organization during this release.
 
 Custom OpenAgents namespaces, repository transfer, rename, archive, and delete
 are not available yet.
 
 ## Next steps
 
-- [Clone, push, and pull](git.md)
-- [Import a GitHub repository](import-github.md)
-- [CLI command reference](command-reference.md)
+- [Clone, push, and pull](/docs/clone-push-pull)
+- [Import from GitHub](/docs/import-github)
+- [CLI command reference](/docs/cli-command-reference)

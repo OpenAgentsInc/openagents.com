@@ -26,6 +26,8 @@ defmodule OpenAgents.Forge.WAL.Gcs do
   @metadata_token_url "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
   @token_cache_key {__MODULE__, :token}
   @token_expiry_margin_seconds 60
+  @stream_chunk_bytes 1_048_576
+  @default_stream_timeout_ms 6 * 60 * 60 * 1_000
 
   @impl WAL
   def read_index(repo) do
@@ -98,6 +100,17 @@ defmodule OpenAgents.Forge.WAL.Gcs do
   end
 
   @impl WAL
+  def put_entry_file(repo, seq, path) when is_integer(seq) and seq >= 0 do
+    with {:ok, bucket} <- bucket(),
+         {:ok, key} <- WAL.entry_key_file(seq, path),
+         {:ok, size} <- regular_file_size(path),
+         {:ok, token} <- token(),
+         :ok <- upload_file(bucket, object_name(repo, key), path, size, token) do
+      {:ok, key}
+    end
+  end
+
+  @impl WAL
   def put_object(repo, object_key, payload) when is_binary(payload) do
     with {:ok, bucket} <- bucket(),
          {:ok, token} <- token() do
@@ -121,6 +134,14 @@ defmodule OpenAgents.Forge.WAL.Gcs do
   def get_entry(repo, object_key) when is_binary(object_key) do
     with {:ok, bucket} <- bucket() do
       download(bucket, object_name(repo, object_key))
+    end
+  end
+
+  @impl WAL
+  def get_entry_file(repo, object_key, path) when is_binary(object_key) and is_binary(path) do
+    with {:ok, bucket} <- bucket(),
+         {:ok, token} <- token() do
+      download_file(bucket, object_name(repo, object_key), path, token)
     end
   end
 
@@ -177,6 +198,75 @@ defmodule OpenAgents.Forge.WAL.Gcs do
         {:error, reason} -> {:error, reason}
       end
     end
+  end
+
+  defp upload_file(bucket, name, path, size, token) do
+    url =
+      @storage_base <>
+        "/upload/storage/v1/b/#{URI.encode_www_form(bucket)}/o?" <>
+        URI.encode_query(uploadType: "media", name: name)
+
+    case Req.post(url,
+           body: File.stream!(path, @stream_chunk_bytes, []),
+           headers:
+             auth_headers(token) ++
+               [
+                 {"content-type", "application/octet-stream"},
+                 {"content-length", Integer.to_string(size)}
+               ],
+           receive_timeout: stream_timeout_ms(),
+           retry: false
+         ) do
+      {:ok, %Req.Response{status: 200}} -> :ok
+      {:ok, %Req.Response{status: status, body: body}} -> {:error, {:gcs_error, status, body}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp download_file(bucket, name, path, token) do
+    temporary = path <> ".tmp." <> Integer.to_string(System.unique_integer([:positive]))
+
+    result =
+      with :ok <- File.mkdir_p(Path.dirname(path)) do
+        case Req.get(object_url(bucket, name) <> "?alt=media",
+               headers: auth_headers(token),
+               into: File.stream!(temporary, @stream_chunk_bytes, [:write, :binary]),
+               decode_body: false,
+               receive_timeout: stream_timeout_ms(),
+               retry: false
+             ) do
+          {:ok, %Req.Response{status: 200}} ->
+            File.rename(temporary, path)
+
+          {:ok, %Req.Response{status: 404}} ->
+            {:error, :not_found}
+
+          {:ok, %Req.Response{status: status, body: body}} ->
+            {:error, {:gcs_error, status, body}}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end
+
+    if result != :ok, do: File.rm(temporary)
+    result
+  end
+
+  defp regular_file_size(path) do
+    case File.stat(path) do
+      {:ok, %File.Stat{type: :regular, size: size}} -> {:ok, size}
+      {:ok, _not_regular} -> {:error, :invalid_entry_file}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp stream_timeout_ms do
+    Application.get_env(
+      :openagents,
+      :forge_wal_stream_timeout_ms,
+      @default_stream_timeout_ms
+    )
   end
 
   defp object_url(bucket, name) do

@@ -29,6 +29,7 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
   # they are interpolated rather than written into the template, where the HEEx
   # parser would read them as tags.
   @cli_steps [
+    %{command: "npx --yes @openagentsinc/cli@latest --version", note: "try without installing"},
     %{command: "npm i -g @openagentsinc/cli", note: "install"},
     %{command: "openagents auth login", note: "sign in"},
     %{command: "openagents repo create <name>", note: "create"},
@@ -53,7 +54,7 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
      |> assign(:repositories_more?, more?)
      |> assign(:watching, MapSet.new())
      |> assign(:cli_steps, @cli_steps)
-     |> assign(:clone_url_shape, OpenAgentsWeb.Endpoint.url() <> "/git/<owner>/<name>.git")
+     |> assign(:clone_url_shape, OpenAgentsWeb.Endpoint.url() <> "/<owner>/<name>.git")
      |> stream(:repositories, repositories)
      |> watch(repositories)}
   end
@@ -256,6 +257,9 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
           The <code class="text-foreground">openagents</code>
           command creates, clones, and imports these repositories from a terminal.
           Clone URLs are <code class="text-foreground">{@clone_url_shape}</code>.
+          <.link navigate={~p"/docs/openagents-cli"} class="text-foreground underline">
+            Read the CLI guide.
+          </.link>
         </p>
 
         <ul class="space-y-2">

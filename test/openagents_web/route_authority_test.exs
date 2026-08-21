@@ -101,16 +101,17 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            end)
   end
 
-  test "the Forge smart HTTP mount always runs through credential authentication" do
+  test "the canonical Forge smart HTTP routes run through credential authentication" do
     route =
       Phoenix.Router.route_info(
         OpenAgentsWeb.Router,
         "GET",
-        "/git/openagents.com.git/info/refs",
+        "/OpenAgentsInc/openagents.com.git/info/refs",
         "stage.openagents.com"
       )
 
     assert route.pipe_through == [:forge_git]
+    assert route.route == "/:owner/:repo/info/refs"
   end
 
   test "the OAuth callback suppresses router parameter logging at the application boundary" do

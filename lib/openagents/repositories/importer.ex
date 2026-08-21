@@ -8,7 +8,8 @@ defmodule OpenAgents.Repositories.Importer do
   alias OpenAgents.Repositories.{Repository, RepositoryImport}
 
   @maximum_append_attempts 3
-  @default_import_timeout_ms 10 * 60 * 1_000
+  @default_import_timeout_ms 6 * 60 * 60 * 1_000
+  @default_maximum_bundle_bytes 20 * 1_024 * 1_024 * 1_024
 
   def import(%Repository{} = repository, options \\ []) do
     repository = Repo.preload(repository, [:created_by_user, :repository_import])
@@ -145,10 +146,11 @@ defmodule OpenAgents.Repositories.Importer do
            import_stage(repository, repository_import, "verify_snapshot", fn ->
              verify_snapshot(source_repository, repository_import)
            end),
-         {:ok, payload, format} <-
+         {:ok, payload, format, payload_bytes} <-
            import_stage(repository, repository_import, "create_payload", fn ->
              create_payload(source_repository, refs, temporary_directory)
            end),
+         :ok <- log_payload_ready(repository, repository_import, payload_bytes),
          :ok <-
            import_stage(repository, repository_import, "append_wal", fn ->
              append_import(repository, repository_import, payload, format, refs, 0)
@@ -284,16 +286,26 @@ defmodule OpenAgents.Repositories.Importer do
   end
 
   defp create_payload(_source_repository, refs, _temporary_directory) when map_size(refs) == 0,
-    do: {:ok, "", "empty_import"}
+    do: {:ok, "", "empty_import", 0}
 
   defp create_payload(source_repository, _refs, temporary_directory) do
     bundle_path = Path.join(temporary_directory, "snapshot.bundle")
 
     case Repos.git(source_repository, ["bundle", "create", bundle_path, "--all"]) do
       {_output, 0} ->
-        case File.read(bundle_path) do
-          {:ok, payload} -> {:ok, payload, "git_bundle"}
-          {:error, _reason} -> {:error, :bundle_unavailable}
+        case File.stat(bundle_path) do
+          {:ok, %File.Stat{type: :regular, size: size}} ->
+            if size <= maximum_bundle_bytes() do
+              {:ok, {:file, bundle_path}, "git_bundle", size}
+            else
+              {:error, :import_too_large}
+            end
+
+          {:ok, _not_regular} ->
+            {:error, :bundle_unavailable}
+
+          {:error, _reason} ->
+            {:error, :bundle_unavailable}
         end
 
       {_output, _status} ->
@@ -332,7 +344,7 @@ defmodule OpenAgents.Repositories.Importer do
          :missing <- import_entry(index, repository_import.id),
          true <- WAL.refs(index) == %{} or {:error, :destination_not_empty},
          seq = WAL.next_seq(index),
-         {:ok, object} <- WAL.put_entry(repository.storage_key, seq, payload),
+         {:ok, object} <- put_payload(repository.storage_key, seq, payload),
          entry = %{
            "seq" => seq,
            "object" => object,
@@ -476,6 +488,7 @@ defmodule OpenAgents.Repositories.Importer do
   defp error_code(:github_scope_required), do: "github_scope_required"
   defp error_code(:github_token_missing), do: "github_connection_required"
   defp error_code(:import_timeout), do: "import_timeout"
+  defp error_code(:import_too_large), do: "import_too_large"
   defp error_code(_reason), do: "import_failed"
 
   defp import_stage(repository, repository_import, stage, operation) do
@@ -491,6 +504,10 @@ defmodule OpenAgents.Repositories.Importer do
         result
 
       {:ok, _value, _metadata} = result ->
+        log_stage(repository, repository_import, stage, "completed")
+        result
+
+      {:ok, _value, _metadata, _measurement} = result ->
         log_stage(repository, repository_import, stage, "completed")
         result
 
@@ -518,6 +535,35 @@ defmodule OpenAgents.Repositories.Importer do
     do: " error_code=#{reason |> Atom.to_string() |> String.slice(0, 80)}"
 
   defp diagnostic_error(_reason), do: " error_code=unexpected_error"
+
+  defp put_payload(storage_key, seq, {:file, path}),
+    do: WAL.put_entry_file(storage_key, seq, path)
+
+  defp put_payload(storage_key, seq, payload) when is_binary(payload),
+    do: WAL.put_entry(storage_key, seq, payload)
+
+  defp log_payload_ready(repository, repository_import, bytes) do
+    Logger.info(
+      "repository_import_payload" <>
+        " repository_id=#{repository.id}" <>
+        " repository_import_id=#{repository_import.id}" <>
+        " bytes=#{bytes}" <>
+        " storage=streamed"
+    )
+
+    :ok
+  end
+
+  defp maximum_bundle_bytes do
+    case Application.get_env(
+           :openagents,
+           :repository_import_max_bundle_bytes,
+           @default_maximum_bundle_bytes
+         ) do
+      value when is_integer(value) and value > 0 -> value
+      _invalid -> @default_maximum_bundle_bytes
+    end
+  end
 
   defp temporary_directory(import_id) do
     root = Application.get_env(:openagents, :repository_import_temp_dir, System.tmp_dir!())

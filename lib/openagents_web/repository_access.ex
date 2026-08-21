@@ -37,7 +37,7 @@ defmodule OpenAgentsWeb.RepositoryAccess do
 
   def clone_url(%Repository{} = repository) do
     OpenAgentsWeb.Endpoint.url() <>
-      "/git/#{repository.namespace.slug}/#{repository.name}.git"
+      "/#{repository.namespace.slug}/#{repository.name}.git"
   end
 
   defp ordinary_public?(%Repository{visibility: "public", storage_key: storage_key}),

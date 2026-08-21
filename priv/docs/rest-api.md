@@ -1,7 +1,8 @@
 # REST API
 
-The API is shaped after GitHub's REST API and served under `/api/v3`. An
-existing client usually needs only a base URL change.
+The API is shaped after GitHub's REST API and served under `/api/v3`. Check the
+implemented paths and known differences before you point an existing client at
+OpenAgents.
 
 ## Authentication
 
@@ -20,6 +21,24 @@ POST   /api/v3/repos/:owner/:repo/issues
 GET    /api/v3/repos/:owner/:repo/issues/:issue_number
 PATCH  /api/v3/repos/:owner/:repo/issues/:issue_number
 ```
+
+## Repositories
+
+```text
+GET    /api/v3/user
+GET    /api/v3/user/repos
+GET    /api/v3/repos/:owner/:repo
+POST   /api/v3/user/repos
+POST   /api/v3/orgs/:org/repos
+POST   /api/v3/user/repos/imports
+POST   /api/v3/orgs/:org/repos/imports
+GET    /api/v3/repository-imports/:id
+```
+
+Repository writes require an `Idempotency-Key` header. The published
+[`openagents.repositories.v1` contract](/api/contracts/repositories-v1.json)
+defines request authority, lifecycle states, pagination, and stable error
+codes. The [OpenAgents CLI](/docs/openagents-cli) implements this contract.
 
 ## Comments
 
@@ -62,4 +81,5 @@ finds them here rather than in production:
 
 ## What is not implemented
 
-Pull requests, reviews, webhooks, releases, and Git LFS.
+Pull requests, reviews, webhooks, releases, SSH Git transport, and Git LFS
+object storage.

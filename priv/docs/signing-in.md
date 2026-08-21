@@ -22,3 +22,10 @@ browser.
 **Log out** from the account menu ends the session. It does not revoke the
 GitHub authorization; do that from GitHub's application settings if you want
 the grant removed entirely.
+
+## Sign in from the CLI
+
+Run `openagents auth login` to start a browser-assisted device flow. You review
+and approve that request while signed in to the site. The CLI receives an
+OpenAgents API token, not your GitHub token. See [Install the
+CLI](/docs/install-cli) for npm and `npx` instructions.

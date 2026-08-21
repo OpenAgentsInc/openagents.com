@@ -44,7 +44,11 @@ defmodule OpenAgents.Forge.WAL do
               {:ok, generation} | {:error, :cas_conflict} | {:error, term}
   @callback put_entry(repo, seq :: non_neg_integer(), payload :: binary()) ::
               {:ok, object_key :: String.t()} | {:error, term}
+  @callback put_entry_file(repo, seq :: non_neg_integer(), path :: String.t()) ::
+              {:ok, object_key :: String.t()} | {:error, term}
   @callback get_entry(repo, object_key :: String.t()) :: {:ok, binary()} | {:error, term}
+  @callback get_entry_file(repo, object_key :: String.t(), path :: String.t()) ::
+              :ok | {:error, term}
   @callback put_object(repo, object_key :: String.t(), payload :: binary()) ::
               {:ok, String.t()} | {:error, term}
 
@@ -92,6 +96,25 @@ defmodule OpenAgents.Forge.WAL do
   end
 
   @doc """
+  Stream one immutable WAL entry from `path` through the configured adapter.
+
+  The adapter derives the same content-addressed key as `put_entry/3` without
+  loading the complete file into the BEAM heap.
+  """
+  @spec put_entry_file(repo, non_neg_integer(), String.t()) ::
+          {:ok, String.t()} | {:error, term}
+  def put_entry_file(repo, seq, path)
+      when is_integer(seq) and seq >= 0 and is_binary(path) do
+    with :ok <- validate_repo(repo),
+         {:ok, %File.Stat{type: :regular}} <- File.stat(path) do
+      adapter().put_entry_file(repo, seq, path)
+    else
+      {:ok, _not_regular} -> {:error, :invalid_entry_file}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Fetch a previously stored WAL entry payload for `repo` by its object key.
   """
   @spec get_entry(repo, String.t()) :: {:ok, binary()} | {:error, term}
@@ -99,6 +122,16 @@ defmodule OpenAgents.Forge.WAL do
     with :ok <- validate_repo(repo),
          :ok <- validate_entry_key(object_key) do
       adapter().get_entry(repo, object_key)
+    end
+  end
+
+  @doc "Stream a WAL entry into `path` without retaining its complete body in memory."
+  @spec get_entry_file(repo, String.t(), String.t()) :: :ok | {:error, term}
+  def get_entry_file(repo, object_key, path)
+      when is_binary(object_key) and is_binary(path) do
+    with :ok <- validate_repo(repo),
+         :ok <- validate_entry_key(object_key) do
+      adapter().get_entry_file(repo, object_key, path)
     end
   end
 
@@ -201,6 +234,37 @@ defmodule OpenAgents.Forge.WAL do
       |> binary_part(0, 12)
 
     "entries/" <> String.pad_leading(Integer.to_string(seq), 8, "0") <> "-" <> digest
+  end
+
+  @doc "Derive the immutable entry key for a file without loading the file into memory."
+  @spec entry_key_file(non_neg_integer(), String.t()) :: {:ok, String.t()} | {:error, term}
+  def entry_key_file(seq, path) when is_integer(seq) and seq >= 0 and is_binary(path) do
+    with {:ok, digest} <- file_digest(path) do
+      {:ok, entry_key_from_digest(seq, digest)}
+    end
+  end
+
+  defp file_digest(path) do
+    try do
+      digest =
+        path
+        |> File.stream!(1_048_576, [])
+        |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
+        |> :crypto.hash_final()
+
+      {:ok, digest}
+    rescue
+      File.Error -> {:error, :entry_file_unavailable}
+    end
+  end
+
+  defp entry_key_from_digest(seq, digest) do
+    prefix =
+      digest
+      |> Base.encode16(case: :lower)
+      |> binary_part(0, 12)
+
+    "entries/" <> String.pad_leading(Integer.to_string(seq), 8, "0") <> "-" <> prefix
   end
 
   @doc """

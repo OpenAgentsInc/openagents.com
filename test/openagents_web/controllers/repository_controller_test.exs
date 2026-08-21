@@ -31,7 +31,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
              "permissions" => %{"admin" => true, "pull" => true, "push" => true}
            } = json_response(response, 202)
 
-    assert String.ends_with?(clone_url, "/git/octavia/my-project.git")
+    assert String.ends_with?(clone_url, "/octavia/my-project.git")
     assert String.ends_with?(html_url, "/octavia/my-project")
     assert Repositories.get_by_path!("octavia", "my-project").id == id
   end

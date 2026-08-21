@@ -48,6 +48,14 @@ defmodule OpenAgents.Forge.WAL.Local do
   end
 
   @impl WAL
+  def put_entry_file(repo, seq, source_path) when is_integer(seq) and seq >= 0 do
+    with {:ok, key} <- WAL.entry_key_file(seq, source_path) do
+      destination = Path.join(repo_dir(repo), key)
+      copy_file_atomically(source_path, destination, key)
+    end
+  end
+
+  @impl WAL
   def put_object(repo, object_key, payload) when is_binary(payload) do
     path = Path.join(repo_dir(repo), object_key)
 
@@ -63,6 +71,28 @@ defmodule OpenAgents.Forge.WAL.Local do
       {:ok, payload} -> {:ok, payload}
       {:error, :enoent} -> {:error, :not_found}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl WAL
+  def get_entry_file(repo, object_key, destination_path) do
+    source_path = Path.join(repo_dir(repo), object_key)
+
+    case File.stat(source_path) do
+      {:ok, %File.Stat{type: :regular}} ->
+        case copy_file_atomically(source_path, destination_path, destination_path) do
+          {:ok, _destination} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, :enoent} ->
+        {:error, :not_found}
+
+      {:ok, _not_regular} ->
+        {:error, :not_found}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -96,6 +126,20 @@ defmodule OpenAgents.Forge.WAL.Local do
          :ok <- File.write(temp, encoded),
          :ok <- File.rename(temp, path) do
       {:ok, generation}
+    end
+  end
+
+  defp copy_file_atomically(source, destination, result) do
+    temporary = destination <> ".tmp." <> Integer.to_string(System.unique_integer([:positive]))
+
+    with :ok <- File.mkdir_p(Path.dirname(destination)),
+         {:ok, _bytes} <- File.copy(source, temporary),
+         :ok <- File.rename(temporary, destination) do
+      {:ok, result}
+    else
+      {:error, reason} ->
+        File.rm(temporary)
+        {:error, reason}
     end
   end
 

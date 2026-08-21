@@ -390,7 +390,7 @@ The new surface extends the bounded GitHub-shaped API under `/api/v3`.
 | `GET /api/v3/user/repos` | Authenticated API | List repositories visible to the caller, including private repositories |
 | `GET /api/v3/repos/{owner}/{repo}` | Optional API principal | Return a public repository or a repository visible to the principal |
 | `GET /api/v3/repository-imports/{id}` | Authenticated API | Return bounded status for an import owned by the caller |
-| Git smart HTTP under `/git/{owner}/{repo}.git` | Public read or authenticated Git principal | Clone, fetch, push, and pull |
+| Git smart HTTP under `/{owner}/{repo}.git` | Public read or authenticated Git principal | Clone, fetch, push, and pull |
 
 Do not add an endpoint that accepts an arbitrary owner string. The user route
 derives the GitHub user namespace from the authenticated principal. The
@@ -499,7 +499,7 @@ repository is already `ready`.
   "description": "An optional description",
   "default_branch": "main",
   "lifecycle_state": "ready",
-  "clone_url": "https://openagents.com/git/octavia/my-project.git",
+  "clone_url": "https://openagents.com/octavia/my-project.git",
   "html_url": "https://openagents.com/octavia/my-project",
   "permissions": {
     "admin": true,
@@ -662,8 +662,7 @@ Resolve Git paths through the repository database:
 - A private, missing, suspended, failed, or unauthorized repository returns an
   indistinguishable refusal where the transport permits it.
 
-Change the canonical Git path from a name-only route to
-`/git/{owner}/{repo}.git`. Keep a tested compatibility alias for the existing
+Use `/{owner}/{repo}.git` as the canonical Git path. Keep a tested compatibility alias for the existing
 `/git/openagents.com.git` remote until the canonical repository cutover plan
 retires it.
 

@@ -275,7 +275,7 @@ and assertions that neither side receives a synchronization call.
 
 **Owner:** `openagents.com`.
 
-1. Change the Git route to `/git/{owner}/{repo}.git` while keeping the temporary
+1. Use the canonical `/{owner}/{repo}.git` route while keeping the temporary
    `/git/openagents.com.git` compatibility route required by the forge cutover
    contract.
 2. Allow anonymous upload-pack only for a ready public repository.

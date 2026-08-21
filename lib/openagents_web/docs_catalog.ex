@@ -24,6 +24,47 @@ defmodule OpenAgentsWeb.DocsCatalog do
       ]
     },
     %{
+      title: "Repositories and CLI",
+      items: [
+        %{
+          slug: "openagents-cli",
+          title: "Repositories and CLI",
+          icon: "terminal",
+          route: "/repositories"
+        },
+        %{
+          slug: "install-cli",
+          title: "Install the CLI",
+          icon: "download",
+          route: "/repositories"
+        },
+        %{
+          slug: "create-repository",
+          title: "Create a repository",
+          icon: "square-plus",
+          route: "/repositories/new"
+        },
+        %{
+          slug: "import-github",
+          title: "Import from GitHub",
+          icon: "download",
+          route: "/repositories/import/github"
+        },
+        %{
+          slug: "clone-push-pull",
+          title: "Clone, push, and pull",
+          icon: "code",
+          route: "/repositories"
+        },
+        %{
+          slug: "cli-command-reference",
+          title: "CLI command reference",
+          icon: "square-code",
+          route: "/repositories"
+        }
+      ]
+    },
+    %{
       title: "Issues",
       items: [
         %{slug: "issues", title: "Issues", icon: "file-document", route: "/:owner/:repo/issues"},

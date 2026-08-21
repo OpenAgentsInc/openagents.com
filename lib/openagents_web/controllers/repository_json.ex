@@ -21,7 +21,7 @@ defmodule OpenAgentsWeb.RepositoryJSON do
       "default_branch" => repository.default_branch,
       "lifecycle_state" => repository.lifecycle_state,
       "provision_error_code" => repository.provision_error_code,
-      "clone_url" => base_url <> "/git/#{owner}/#{repository.name}.git",
+      "clone_url" => base_url <> "/#{owner}/#{repository.name}.git",
       "html_url" => base_url <> "/#{owner}/#{repository.name}",
       "permissions" => permissions,
       "created_at" => DateTime.to_iso8601(repository.inserted_at),

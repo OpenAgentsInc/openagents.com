@@ -49,15 +49,15 @@ defmodule OpenAgents.Forge.Sync do
   end
 
   defp apply_entry!(repo, %{"seq" => seq, "object" => object} = entry) do
-    {:ok, payload} = WAL.get_entry(repo, object)
     path = Repos.bare_path(repo)
 
     case entry["format"] || "receive_pack" do
       "receive_pack" ->
+        {:ok, payload} = WAL.get_entry(repo, object)
         {_output, 0} = run_receive_pack(path, payload)
 
       "git_bundle" ->
-        :ok = unbundle(path, payload)
+        :ok = unbundle_entry(repo, path, object)
 
       "empty_import" ->
         :ok
@@ -77,20 +77,20 @@ defmodule OpenAgents.Forge.Sync do
     end
   end
 
-  defp unbundle(path, payload) do
+  defp unbundle_entry(repo, path, object) do
     temporary_path =
       Path.join(
-        System.tmp_dir!(),
+        Application.get_env(:openagents, :repository_import_temp_dir, System.tmp_dir!()),
         "openagents-import-#{System.unique_integer([:positive, :monotonic])}.bundle"
       )
 
     try do
-      File.write!(temporary_path, payload, [:binary, :exclusive])
-      File.chmod!(temporary_path, 0o600)
-
-      case Repos.git(path, ["bundle", "unbundle", temporary_path]) do
-        {_output, 0} -> :ok
-        {_output, _status} -> raise "repository bundle could not be materialized"
+      with :ok <- WAL.get_entry_file(repo, object, temporary_path),
+           :ok <- File.chmod(temporary_path, 0o600) do
+        case Repos.git(path, ["bundle", "unbundle", temporary_path]) do
+          {_output, 0} -> :ok
+          {_output, _status} -> raise "repository bundle could not be materialized"
+        end
       end
     after
       File.rm(temporary_path)

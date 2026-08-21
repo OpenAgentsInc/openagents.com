@@ -70,6 +70,18 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     end
   end
 
+  test "published CLI docs cover npm, npx, imports, and persistent Git authentication" do
+    assert {:ok, install} = DocsCatalog.render("install-cli")
+    assert install.markdown =~ "npm install --global @openagentsinc/cli"
+    assert install.markdown =~ "npx --yes @openagentsinc/cli@latest"
+    assert install.markdown =~ "Do not run `auth setup-git` through `npx`"
+
+    assert {:ok, import} = DocsCatalog.render("import-github")
+    assert import.markdown =~ "one-time copy"
+    assert import.markdown =~ "--wait-timeout 0"
+    assert import.markdown =~ "A client timeout does not cancel"
+  end
+
   describe "the docs surface" do
     test "the index lists every page", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/docs")

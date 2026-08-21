@@ -2,7 +2,7 @@ defmodule OpenAgents.Forge do
   @moduledoc """
   Sarah's own git forge — the public API of the bounded context (audit A6).
 
-  This app serves the forge at `openagents.com/git/<repo>.git` via stock git
+  This app serves the forge at `openagents.com/<owner>/<repo>.git` via stock Git
   smart-HTTP (`OpenAgents.Forge.GitHTTP`), with the WAL in object storage as ref
   truth (`OpenAgents.Forge.WAL`, Continuity-shaped per audit A7), bare repos on
   the stateful partition as per-node cache (`OpenAgents.Forge.Repos` /
@@ -86,6 +86,6 @@ defmodule OpenAgents.Forge do
 
   @doc "The clone URL for a repo on this deployment."
   def clone_url(repo) do
-    OpenAgentsWeb.Endpoint.url() <> "/git/#{repo}.git"
+    OpenAgentsWeb.Endpoint.url() <> "/OpenAgentsInc/#{repo}.git"
   end
 end

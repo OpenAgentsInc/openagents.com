@@ -1,12 +1,16 @@
 # Browsing code
 
-Any repository the forge hosts can be read in the browser at `/:repo`.
+Open a repository that you can access at `/:owner/:repo`. Start from
+[Repositories](/repositories) when you do not know the exact path.
 
 ## Files
 
-`/:repo/blob/:ref/*path` renders one file at one ref. The ref is part of the
-URL, so a link to a file is a link to that file *at that revision* and does not
-drift as the branch moves.
+`/:owner/:repo/blob/:ref/*path` renders one file at one ref. The ref is part of
+the URL, so a file link stays at that revision when the branch moves.
+
+The repository page also lists branches, tags, recent commits, and the clone
+URL. Use the [CLI and Git guide](/docs/clone-push-pull) to clone or change the
+repository.
 
 ## What is public
 

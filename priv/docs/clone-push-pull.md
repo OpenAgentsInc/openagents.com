@@ -1,7 +1,8 @@
 # Clone, push, and pull
 
-OpenAgents serves Git smart HTTP at an HTTPS URL returned by the repository API
-and web interface. Standard Git performs clone, fetch, push, and pull.
+OpenAgents serves Git smart HTTP at the HTTPS clone URL returned by the
+repository API and web interface. Standard Git performs clone, fetch, push,
+and pull operations.
 
 ## Clone with the CLI
 
@@ -15,15 +16,15 @@ Choose a destination directory:
 openagents repo clone OWNER/REPOSITORY ./local-directory
 ```
 
-Run one clone without a global installation:
+For a one-time clone without a global installation:
 
 ```sh
 npx --yes @openagentsinc/cli@latest repo clone OWNER/REPOSITORY
 ```
 
-The command uses the server-provided clone URL and invokes Git without putting
-the token in the URL or process arguments. For the clone operation, it scopes
-the OpenAgents credential helper to the selected API origin.
+The command retrieves the server-provided clone URL and invokes Git without
+putting the token in the URL or process arguments. It scopes the OpenAgents
+credential helper to the selected API origin for that clone process.
 
 ## Clone with Git
 
@@ -37,15 +38,17 @@ Public repositories support anonymous clone and fetch. Private repositories
 require an authorized credential.
 
 Before you use standard Git with a private repository, install the CLI globally
-and configure the helper:
+and configure the helper in the worktree:
 
 ```sh
+npm install --global @openagentsinc/cli
 cd existing-worktree
 openagents auth setup-git --local
 ```
 
 Do not run `auth setup-git` through `npx`. The saved helper calls
-`openagents`, and the temporary executable is unavailable after `npx` exits.
+`openagents`, and the temporary `npx` executable is unavailable after that
+command exits.
 
 Use global setup only when you want every local repository to use the helper
 for the selected OpenAgents origin:
@@ -65,11 +68,11 @@ git pull --ff-only
 ```
 
 Repository owners, maintainers, and contributors can push. Viewers can clone
-and fetch but cannot push. Token authorization is checked again for each Git
+and fetch but cannot push. OpenAgents checks token authorization for each Git
 request, so revoking or expiring a token takes effect without changing the
 remote URL.
 
-## Infer a repository from `origin`
+## Infer a repository from origin
 
 From a worktree whose `origin` is an exact OpenAgents clone URL:
 
@@ -78,15 +81,15 @@ openagents repo view
 ```
 
 The CLI accepts only `/OWNER/REPOSITORY.git` on the selected API origin. It
-does not infer authority from an arbitrary URL that resembles a repository
-path. Override inference explicitly when needed:
+does not infer authority from another URL that resembles a repository path.
+Override inference explicitly when needed:
 
 ```sh
 openagents repo view --repo OWNER/REPOSITORY
 openagents repo clone -R OWNER/REPOSITORY
 ```
 
-## Authentication safety
+## Review authentication safety
 
 The credential helper:
 
@@ -101,5 +104,6 @@ not available yet.
 
 ## Next steps
 
-- [Install and authenticate the CLI](install.md)
-- [CLI command reference](command-reference.md)
+- [Install the CLI](/docs/install-cli)
+- [Create a repository](/docs/create-repository)
+- [CLI command reference](/docs/cli-command-reference)

@@ -304,6 +304,54 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     assert "fetch" in arguments
   end
 
+  test "an import over the configured bundle limit fails without entering the WAL" do
+    root = Application.fetch_env!(:openagents, :forge_data_dir) |> Path.dirname()
+    source = Path.join(root, "oversized-source")
+    File.mkdir_p!(source)
+    git!(source, ["init", "--initial-branch=main"])
+    git!(source, ["config", "user.email", "test@example.com"])
+    git!(source, ["config", "user.name", "Import test"])
+    File.write!(Path.join(source, "README.md"), "larger than one byte\n")
+    git!(source, ["add", "README.md"])
+    git!(source, ["commit", "-m", "Oversized fixture"])
+
+    sha = source |> git!(["rev-parse", "HEAD"]) |> String.trim()
+    refs = %{"refs/heads/main" => sha}
+    user = repository_user_fixture("oversized-import-owner")
+
+    source_record = %{
+      source_repository_id: 503,
+      source_owner_id: user.github_id,
+      source_full_name: "oversized-import-owner/source",
+      source_default_branch: "main",
+      source_ref_digest: ref_digest(source, refs),
+      source_head_sha: sha,
+      source_refs: refs,
+      source_uses_lfs: false
+    }
+
+    assert {:ok, repository, repository_import, :created} =
+             Repositories.create_user_import(
+               user,
+               source_record,
+               %{name: "oversized-import", default_branch: "main"},
+               "oversized-import-key"
+             )
+
+    previous_limit = Application.get_env(:openagents, :repository_import_max_bundle_bytes)
+    Application.put_env(:openagents, :repository_import_max_bundle_bytes, 1)
+
+    on_exit(fn ->
+      restore_env(:repository_import_max_bundle_bytes, previous_limit)
+    end)
+
+    assert {:error, :import_too_large} = Importer.import(repository, source_url: source)
+    failed = OpenAgents.Repo.get!(OpenAgents.Repositories.RepositoryImport, repository_import.id)
+    assert failed.state == "failed"
+    assert failed.error_code == "import_too_large"
+    assert {:error, :not_found} = WAL.read_index(repository.storage_key)
+  end
+
   defp bare_git!(storage_key, args) do
     {output, 0} = Repos.git(Repos.bare_path(storage_key), args)
     output

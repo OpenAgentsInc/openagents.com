@@ -180,7 +180,7 @@ defmodule OpenAgents.Repositories.CliLocalE2ETest do
         "-c",
         "credential.helper=",
         "clone",
-        "#{context.api_origin}/git/#{context.user.github_login}/created-project.git",
+        "#{context.api_origin}/#{context.user.github_login}/created-project.git",
         anonymous
       ],
       [{"GIT_TERMINAL_PROMPT", "0"}]
@@ -203,7 +203,7 @@ defmodule OpenAgents.Repositories.CliLocalE2ETest do
     private_repository = Repositories.get_by_path!(context.user.github_login, "private-project")
 
     private_url =
-      "#{context.api_origin}/git/#{context.user.github_login}/private-project.git"
+      "#{context.api_origin}/#{context.user.github_login}/private-project.git"
 
     {anonymous_private_output, anonymous_private_status} =
       git_raw(

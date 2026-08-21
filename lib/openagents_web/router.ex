@@ -171,6 +171,16 @@ defmodule OpenAgentsWeb.Router do
     get "/recordings/:id/audio", AdminRecordingController, :show
   end
 
+  scope "/" do
+    pipe_through :forge_git
+
+    get "/:owner/:repo/info/refs", OpenAgents.Forge.GitHTTP, []
+    post "/:owner/:repo/git-upload-pack", OpenAgents.Forge.GitHTTP, []
+    post "/:owner/:repo/git-receive-pack", OpenAgents.Forge.GitHTTP, []
+  end
+
+  # Keep existing remotes operational while every newly issued clone URL uses
+  # the canonical GitHub-shaped /:owner/:repo.git path.
   scope "/git" do
     pipe_through :forge_git
     forward "/", OpenAgents.Forge.GitHTTP

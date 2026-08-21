@@ -111,6 +111,19 @@ defmodule OpenAgents.Forge.WALTest do
     test "a malformed object key is rejected" do
       assert {:error, :invalid_object_key} = WAL.get_entry(@repo, "../escape")
     end
+
+    test "streams a file into and out of the WAL under the same content key", %{tmp_dir: tmp_dir} do
+      source = Path.join(tmp_dir, "source.bundle")
+      destination = Path.join(tmp_dir, "downloaded.bundle")
+      payload = :crypto.strong_rand_bytes(4 * 1_024 * 1_024)
+      File.write!(source, payload)
+
+      assert {:ok, key} = WAL.put_entry_file(@repo, 0, source)
+      assert key == WAL.entry_key(0, payload)
+      assert :ok = WAL.get_entry_file(@repo, key, destination)
+      assert File.stat!(destination).size == byte_size(payload)
+      assert :crypto.hash(:sha256, File.read!(destination)) == :crypto.hash(:sha256, payload)
+    end
   end
 
   describe "digest-addressed artifacts" do
@@ -140,7 +153,11 @@ defmodule OpenAgents.Forge.WALTest do
         assert {:error, :invalid_repo} = WAL.read_index(bad)
         assert {:error, :invalid_repo} = WAL.cas_index(bad, :none, WAL.new_index())
         assert {:error, :invalid_repo} = WAL.put_entry(bad, 0, "x")
+        assert {:error, :invalid_repo} = WAL.put_entry_file(bad, 0, "/tmp/entry")
         assert {:error, :invalid_repo} = WAL.get_entry(bad, "entries/00000000-0123456789ab")
+
+        assert {:error, :invalid_repo} =
+                 WAL.get_entry_file(bad, "entries/00000000-0123456789ab", "/tmp/entry")
       end
     end
   end
@@ -245,7 +262,17 @@ defmodule OpenAgents.Forge.WALTest do
       assert {:error, :not_configured} = OpenAgents.Forge.WAL.Gcs.put_entry(@repo, 0, "x")
 
       assert {:error, :not_configured} =
+               OpenAgents.Forge.WAL.Gcs.put_entry_file(@repo, 0, "/tmp/entry")
+
+      assert {:error, :not_configured} =
                OpenAgents.Forge.WAL.Gcs.get_entry(@repo, "entries/00000000-0123456789ab")
+
+      assert {:error, :not_configured} =
+               OpenAgents.Forge.WAL.Gcs.get_entry_file(
+                 @repo,
+                 "entries/00000000-0123456789ab",
+                 "/tmp/entry"
+               )
     end
 
     test "object naming helpers" do

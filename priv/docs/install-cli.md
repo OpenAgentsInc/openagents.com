@@ -1,21 +1,18 @@
 # Install the OpenAgents CLI
 
-The npm package is `@openagentsinc/cli`, and it installs the `openagents`
-command. The package requires Node.js 20 or later.
+The npm package is `@openagentsinc/cli`. It provides the `openagents` command
+and requires Node.js 20 or later.
 
-## Install with npm
+## Install globally with npm
+
+Install the CLI globally when you use it regularly:
 
 ```sh
 npm install --global @openagentsinc/cli
-```
-
-Verify the installed version:
-
-```sh
 openagents --version
 ```
 
-To update after a release, install the latest npm package again:
+Install the latest release again when you want to update:
 
 ```sh
 npm install --global @openagentsinc/cli@latest
@@ -25,39 +22,36 @@ The CLI does not include an `openagents update` command.
 
 ## Run one command with npx
 
-Use `npx` when you want to run one command without a global installation:
+Use `npx` when you want to run one CLI command without installing the package
+globally:
 
 ```sh
 npx --yes @openagentsinc/cli@latest --version
 npx --yes @openagentsinc/cli@latest repo list
 ```
 
-Pin a version for a reproducible run:
+Pin the package version when a script or qualification run must be
+reproducible:
 
 ```sh
 npx --yes @openagentsinc/cli@0.1.3 --version
 ```
 
-Place all CLI arguments after the package name:
+Place every `openagents` argument after the package name:
 
 ```sh
 npx --yes @openagentsinc/cli@latest --profile staging auth status
 npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
 ```
 
-Do not run `auth setup-git` through `npx`. The command writes a persistent Git
-helper configuration that calls `openagents`, but the temporary executable is
-unavailable after `npx` exits. Install the CLI globally before you configure a
-local or global Git helper.
+`npx` works for authentication, repository creation, imports, listing,
+inspection, and cloning. The CLI stores an approved login in the same
+operating-system credential store that a global installation uses.
 
-## Run the CLI from source
-
-From the root of the `openagents` monorepo:
-
-```sh
-pnpm --filter @openagentsinc/cli run build
-node packages/openagents-cli/dist/main.js --version
-```
+Do not run `auth setup-git` through `npx`. That command writes a persistent Git
+helper configuration that calls `openagents`, but the temporary `npx`
+executable disappears after the command. Install the CLI globally before you
+configure a local or global Git helper.
 
 ## Sign in
 
@@ -81,10 +75,10 @@ The CLI stores the resulting `oa_pat_` token for the selected API origin:
 
 - On macOS, it uses Keychain through the `security` command.
 - On Linux, it uses Secret Service through `secret-tool`.
-- On an unsupported platform or a host without an admitted credential store,
-  it fails closed. Use `OPENAGENTS_TOKEN` without storing the token.
+- On a system without an admitted credential store, it fails closed. Use
+  `OPENAGENTS_TOKEN` for the current process instead.
 
-Check the selected account, namespaces, token source, expiry, and Git helper
+Check the selected account, namespaces, token source, expiry, and Git-helper
 state:
 
 ```sh
@@ -99,8 +93,8 @@ openagents auth logout
 
 ## Use a token without a browser
 
-For an interactive token import, pass the token through standard input. The
-CLI never accepts a token as a command-line argument.
+Read and store a token from standard input. The CLI never accepts a token as a
+command-line argument.
 
 ```sh
 openagents auth token-stdin
@@ -108,7 +102,7 @@ openagents auth token-stdin
 
 `openagents auth login --token-stdin` provides the same behavior.
 
-For an agent or CI process, set the token in the environment for the process:
+For an agent or CI process, set the token for the process:
 
 ```sh
 OPENAGENTS_TOKEN="oa_pat_..." openagents --json repo list
@@ -127,7 +121,7 @@ The CLI uses the production profile by default.
 | `staging` | `https://staging.openagents.com` |
 | `local` | `http://localhost:4000` |
 
-Select a named profile or a custom origin before the command:
+Place a shared profile or API flag before the subcommand:
 
 ```sh
 openagents --profile staging auth status
@@ -149,8 +143,8 @@ The CLI resolves endpoint settings in this order:
 6. `profile` in `~/.config/openagents/config.json`
 7. The production profile
 
-You can set `OPENAGENTS_CONFIG_PATH` to read a different configuration file.
-The file accepts `profile` or `api_url` and never stores credentials.
+Set `OPENAGENTS_CONFIG_PATH` to read another configuration file. The file
+accepts `profile` or `api_url` and never stores credentials.
 
 ```json
 {
@@ -166,7 +160,8 @@ After you install the CLI globally, configure only the current Git repository:
 openagents auth setup-git --local
 ```
 
-Global setup requires an interactive terminal and explicit confirmation:
+Configure every local repository only when you intend to use the same helper
+for the selected OpenAgents origin:
 
 ```sh
 openagents auth setup-git --global --yes
@@ -177,6 +172,7 @@ hosts and never places a token in a Git URL or process argument.
 
 ## Next steps
 
-- [Create a repository](create-repository.md)
-- [Clone, push, and pull](git.md)
-- [CLI command reference](command-reference.md)
+- [Create a repository](/docs/create-repository)
+- [Import from GitHub](/docs/import-github)
+- [Clone, push, and pull](/docs/clone-push-pull)
+- [CLI command reference](/docs/cli-command-reference)

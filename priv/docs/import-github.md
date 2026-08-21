@@ -1,9 +1,10 @@
 # Import a GitHub repository
 
-Import copies one accepted GitHub snapshot into a new OpenAgents repository.
-It does not create a mirror or continue synchronizing with GitHub.
+An import copies one accepted GitHub snapshot into a new OpenAgents
+repository. It is a one-time copy, not a mirror. Later changes do not
+synchronize in either direction.
 
-## Prerequisites
+## Check the prerequisites
 
 You need:
 
@@ -14,26 +15,26 @@ You need:
 - An active GitHub organization administrator membership for an organization
   destination.
 
-If your existing GitHub connection lacks the required grants, reconnect it
-before importing.
+Reconnect your GitHub account before importing if its current grant lacks the
+required permissions.
 
 ## Import in the browser
 
 1. Sign in to OpenAgents with GitHub.
-2. Open `/repositories`.
+2. Open [Repositories](/repositories).
 3. Select **Import from GitHub**.
 4. Choose a repository from the bounded GitHub repository list.
 5. Confirm the matching destination namespace.
-6. Keep the source name or enter a different destination repository name.
+6. Keep the source name or enter another destination name.
 7. Choose **Private** or **Public**. Private is the default, even when the
    GitHub source is public.
-8. Review any Git LFS warning.
+8. Review the Git LFS warning.
 9. Select **Import repository**.
 
 The import page shows the accepted snapshot and bounded lifecycle state. It
 does not expose raw Git output or a GitHub token.
 
-## Import with the CLI
+## Import with an installed CLI
 
 Import a repository into its matching namespace:
 
@@ -41,7 +42,7 @@ Import a repository into its matching namespace:
 openagents repo import OpenAgentsInc/example
 ```
 
-Choose a different destination name:
+Choose another destination name:
 
 ```sh
 openagents repo import OpenAgentsInc/example --name example-copy
@@ -53,7 +54,7 @@ Create a public destination explicitly:
 openagents repo import OpenAgentsInc/example --public
 ```
 
-You can state the matching organization explicitly:
+State the matching organization explicitly:
 
 ```sh
 openagents repo import OpenAgentsInc/example --namespace OpenAgentsInc
@@ -66,7 +67,9 @@ The CLI waits up to 300 seconds by default. Pass `--wait-timeout 0` to return
 after the server accepts the durable import. A client timeout does not cancel
 the server-side import.
 
-Run one import without a global installation:
+## Import once with npx
+
+Run the same import without a global installation:
 
 ```sh
 npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
@@ -82,11 +85,9 @@ npx --yes @openagentsinc/cli@0.1.3 \
   --wait-timeout 300
 ```
 
-In a headless agent process, `auth login` prints the complete approval URL and
-user code, then waits. The agent can surface both values while you approve the
-request in any browser. Install the CLI globally before you run
-`auth setup-git`; a saved Git helper cannot call the temporary executable after
-`npx` exits.
+You can use `npx` for the import and the CLI-managed clone. Install the CLI
+globally before you run `auth setup-git`, because a persistent Git helper
+cannot call the temporary executable after `npx` exits.
 
 ## Import a large repository
 
@@ -115,79 +116,74 @@ first import with a small repository so you can qualify authentication,
 lifecycle reporting, storage, and clone behavior before spending the time and
 bandwidth of a large transfer.
 
-## Verify the first production import
+## Verify an import
 
-Use a small private GitHub repository for the first production import. Include
-a second branch and an annotated tag so you can verify the accepted ref
-snapshot. If the repository uses Git LFS, expect OpenAgents to preserve the
-pointer files without copying the LFS objects.
+Use a small private repository for an initial environment check. Include a
+second branch and an annotated tag so you can verify the accepted ref
+snapshot. If the source uses Git LFS, expect OpenAgents to preserve pointer
+files without copying LFS objects.
 
-1. Install the qualified CLI version:
-
-   ```sh
-   npm install --global @openagentsinc/cli@0.1.0
-   ```
-
-2. Sign in to production and confirm the selected account:
+1. Sign in and confirm the selected account:
 
    ```sh
-   openagents --profile production auth login
-   openagents --profile production auth status
+   openagents auth login
+   openagents auth status
    ```
 
-3. Start one private import and wait for the durable result:
+2. Start one private import and wait for its durable result:
 
    ```sh
-   openagents --profile production repo import OWNER/REPOSITORY --private --wait-timeout 300
+   openagents repo import OWNER/REPOSITORY --private --wait-timeout 300
    ```
 
-4. Confirm that the repository is ready, then clone it:
+3. Confirm that the destination is ready, then clone it:
 
    ```sh
-   openagents --profile production repo view OWNER/REPOSITORY
-   openagents --profile production repo clone OWNER/REPOSITORY
+   openagents repo view OWNER/REPOSITORY
+   openagents repo clone OWNER/REPOSITORY
    ```
 
-5. Compare the cloned branches and tags with the accepted GitHub snapshot.
-   Confirm that a later GitHub commit does not appear in the OpenAgents copy.
+4. Compare the cloned branches and tags with the accepted GitHub snapshot.
+5. Add a later commit on GitHub and confirm that it does not appear in the
+   OpenAgents copy.
 
-The release process does not create a production repository automatically.
-An authenticated operator starts the first production import explicitly.
+OpenAgents does not start an import during a deployment. An authenticated user
+must start each import explicitly.
 
-## What the import copies
+## Understand what the import copies
 
 | Copied | Not copied |
 | --- | --- |
-| Git commit and object history reachable from accepted refs | GitHub Issues |
+| Git history reachable from accepted refs | GitHub Issues |
 | `refs/heads/*` branches | Pull requests and reviews |
-| `refs/tags/*` tags | Actions workflows, runs, and secrets |
+| `refs/tags/*` tags | Actions runs and secrets |
 | The source default branch | Releases and repository settings |
 | Submodule pointer commits | Wikis and Git LFS objects |
 
 OpenAgents freezes the accepted branch and tag map before copying data. It
-verifies that same ref snapshot before marking the repository ready. A GitHub
+verifies the same ref snapshot before marking the repository ready. A GitHub
 commit created after acceptance is not part of the import.
 
 Git LFS pointer files remain in Git history, but OpenAgents does not copy the
 referenced LFS objects. Download or migrate those objects separately before
 you rely on the imported repository.
 
-## After the import
+## Work after the import
 
-OpenAgents becomes the source of truth for the new repository. Later GitHub
-changes do not flow to OpenAgents, and OpenAgents pushes do not flow back to
-GitHub. The repository page labels the result as imported once and records the
-source and accepted snapshot.
-
-Clone and work with the destination as a normal OpenAgents repository:
+OpenAgents becomes the source of truth for the destination. Clone and work
+with it as a normal OpenAgents repository:
 
 ```sh
 openagents repo clone OpenAgentsInc/example
 cd example
+openagents auth setup-git --local
 git push
 ```
 
+The repository page records the GitHub source and labels the result as imported
+once.
+
 ## Next steps
 
-- [Clone, push, and pull](git.md)
-- [CLI command reference](command-reference.md)
+- [Clone, push, and pull](/docs/clone-push-pull)
+- [CLI command reference](/docs/cli-command-reference)

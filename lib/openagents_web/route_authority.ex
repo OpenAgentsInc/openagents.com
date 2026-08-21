@@ -127,14 +127,20 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/admin"}),
     do: declaration(:operator, "configured operator GitHub ID", "voice:metadata:read", false)
 
-  defp policy(%{path: "/git"}),
-    do:
-      declaration(
-        :git_transport,
-        "operator or active paired-machine HTTP credential",
-        "git:repository",
-        true
-      )
+  defp policy(%{path: path})
+       when path in [
+              "/:owner/:repo/info/refs",
+              "/:owner/:repo/git-upload-pack",
+              "/:owner/:repo/git-receive-pack",
+              "/git"
+            ],
+       do:
+         declaration(
+           :git_transport,
+           "anonymous read or authorized user, operator, or paired-machine HTTP credential",
+           "git:repository",
+           true
+         )
 
   defp policy(%{path: "/api/status", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:status", false)

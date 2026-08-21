@@ -98,12 +98,13 @@ defmodule OpenAgents.Application do
     end
   end
 
-  defp posthog_config do
+  @doc false
+  def posthog_config do
     case Application.get_env(:posthog, :api_key) do
       key when is_binary(key) and key != "" ->
         :posthog
-        |> Application.get_env([])
-        |> Keyword.put(:enable, false)
+        |> Application.get_all_env()
+        |> Keyword.drop([:enable, :enable_error_tracking])
         |> PostHog.Config.validate!()
 
       _missing ->

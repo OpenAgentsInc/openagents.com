@@ -164,7 +164,7 @@ defmodule OpenAgents.Forge.BootConverge do
         true
 
       {%{sha: sha, details: details}, %{"sha" => sha, "artifact_digest" => nil}} ->
-        (details || %{})["artifact_digest"] == nil and OpenAgents.BuildInfo.revision() == sha
+        image_state_matches?(sha, details || %{})
 
       {%{sha: sha, details: details},
        %{
@@ -193,29 +193,46 @@ defmodule OpenAgents.Forge.BootConverge do
   end
 
   defp converge_target(repo, target, sha, details, attempts) do
-    with {:ok, identity} <- target_identity(target, details),
-         {:ok, bytes, cache_state} <- artifact_bytes(repo, identity),
-         {:ok, response} <- DeploymentNode.install_artifact(install_request(identity, bytes)),
-         :ok <- retain_artifacts(repo, target.id, identity.artifact_digest) do
-      %{
-        "schema" => "openagents.forge.boot-convergence.v2",
-        "state" => "converged",
-        "ready" => true,
-        "reason" => cache_state,
-        "sha" => sha,
-        "artifact_digest" => identity.artifact_digest,
-        "manifest_digest" => identity.manifest_digest,
-        "modules" => response["modules"] || identity.modules,
-        "attempts" => attempts,
-        "retry_in_ms" => nil
-      }
+    if image_target_matches?(sha, details) do
+      image_ready("image_matches_live", attempts, sha)
     else
-      {:image_matches, ^sha} ->
-        image_ready("image_matches_live", attempts, sha)
+      with {:ok, identity} <- target_identity(target, details),
+           {:ok, bytes, cache_state} <- artifact_bytes(repo, identity),
+           {:ok, response} <- DeploymentNode.install_artifact(install_request(identity, bytes)),
+           :ok <- retain_artifacts(repo, target.id, identity.artifact_digest) do
+        %{
+          "schema" => "openagents.forge.boot-convergence.v2",
+          "state" => "converged",
+          "ready" => true,
+          "reason" => cache_state,
+          "sha" => sha,
+          "artifact_digest" => identity.artifact_digest,
+          "manifest_digest" => identity.manifest_digest,
+          "modules" => response["modules"] || identity.modules,
+          "attempts" => attempts,
+          "retry_in_ms" => nil
+        }
+      else
+        {:image_matches, ^sha} ->
+          image_ready("image_matches_live", attempts, sha)
 
-      {:error, reason} ->
-        degraded(OpenAgents.OperationalLog.code(reason), attempts, reason, sha)
+        {:error, reason} ->
+          degraded(OpenAgents.OperationalLog.code(reason), attempts, reason, sha)
+      end
     end
+  end
+
+  defp image_state_matches?(sha, details) do
+    (details["artifact_digest"] == nil and OpenAgents.BuildInfo.revision() == sha) or
+      image_target_matches?(sha, details)
+  end
+
+  defp image_target_matches?(sha, details) do
+    runtime_digest = OpenAgents.BuildInfo.image_digest()
+
+    is_binary(runtime_digest) and
+      OpenAgents.BuildInfo.revision() == sha and
+      details["image_digest"] == runtime_digest
   end
 
   defp target_identity(target, details) do

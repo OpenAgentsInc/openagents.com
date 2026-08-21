@@ -348,6 +348,67 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     assert BootConverge.ready?(@repo)
   end
 
+  test "image-matching rolling target remains ready despite a non-direct artifact" do
+    runtime_sha = OpenAgents.BuildInfo.revision()
+    runtime_digest = "sha256:" <> String.duplicate("f", 64)
+    previous_digest = Application.get_env(:openagents, :image_digest)
+    Application.put_env(:openagents, :image_digest, runtime_digest)
+
+    on_exit(fn -> restore_env(:image_digest, previous_digest) end)
+
+    {module, binary} = scratch_beam(OpenAgents.NotAllowed.BootConvergeRollingImage)
+    artifact = artifact(module, binary)
+
+    target =
+      insert_target!(
+        "live",
+        Map.put(artifact.details, "image_digest", runtime_digest)
+      )
+
+    target
+    |> Ecto.Changeset.change(%{sha: runtime_sha})
+    |> Repo.update!()
+
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+
+    on_exit(fn -> restore_env(:forge_boot_converge_enabled, previous_enabled) end)
+
+    assert %{
+             "state" => "image",
+             "ready" => true,
+             "reason" => "image_matches_live",
+             "sha" => ^runtime_sha
+           } = BootConverge.converge(@repo)
+
+    assert BootConverge.ready?(@repo)
+    refute Code.ensure_loaded?(module)
+  end
+
+  test "rolling target stays degraded when its image digest does not match the runtime" do
+    runtime_sha = OpenAgents.BuildInfo.revision()
+    previous_digest = Application.get_env(:openagents, :image_digest)
+    Application.put_env(:openagents, :image_digest, "sha256:" <> String.duplicate("f", 64))
+
+    on_exit(fn -> restore_env(:image_digest, previous_digest) end)
+
+    {module, binary} = scratch_beam(OpenAgents.NotAllowed.BootConvergeWrongImage)
+    artifact = artifact(module, binary)
+    File.write!(Path.join(Repos.data_dir(), artifact.details["artifact"]), artifact.built.bytes)
+
+    target =
+      insert_target!(
+        "live",
+        Map.put(artifact.details, "image_digest", "sha256:" <> String.duplicate("e", 64))
+      )
+
+    target
+    |> Ecto.Changeset.change(%{sha: runtime_sha})
+    |> Repo.update!()
+
+    assert %{"state" => "degraded", "ready" => false} = BootConverge.converge(@repo)
+  end
+
   test "an unreadable cache entry degrades with a bounded reason" do
     {module, binary} = scratch_beam(OpenAgents.Scratch.BootConvergeUnreadable)
     artifact = artifact(module, binary)

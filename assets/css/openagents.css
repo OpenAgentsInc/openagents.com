@@ -2368,8 +2368,21 @@
 
 /* ── Rendered Markdown ────────────────────────────────────────────────────── */
 
+/* One ruleset for every surface that renders Markdown to HTML: the docs pages,
+ * a repository's README, and a Markdown file in the source browser. The class
+ * used to be `.docs-prose`, which is why the README rendered as unstyled text
+ * for as long as it did -- the markup asked for `.code-markdown`, a class that
+ * was never written. Naming the ruleset after what it renders rather than
+ * where it renders keeps the next surface from repeating that. Chat keeps its
+ * own `.message-markdown`, tuned for a bubble rather than a document. */
+
 @layer components {
-  .docs-prose h1 {
+  .markdown {
+    min-width: 0;
+    color: var(--text-body);
+  }
+
+  .markdown h1 {
     margin: 0 0 8px;
     color: var(--text-primary);
     font-size: 2rem;
@@ -2378,7 +2391,7 @@
     line-height: 1.2;
   }
 
-  .docs-prose h2 {
+  .markdown h2 {
     margin: 40px 0 12px;
     color: var(--text-primary);
     font-size: 1.375rem;
@@ -2387,7 +2400,7 @@
     scroll-margin-top: 24px;
   }
 
-  .docs-prose h3 {
+  .markdown h3 {
     margin: 28px 0 8px;
     color: var(--text-primary);
     font-size: 1.0625rem;
@@ -2395,43 +2408,54 @@
     scroll-margin-top: 24px;
   }
 
-  .docs-prose p {
+  .markdown p {
     margin: 0 0 16px;
     line-height: 1.7;
   }
 
-  .docs-prose ul,
-  .docs-prose ol {
+  /* A README goes deeper than a docs page does. Below h3 the difference is
+     carried by weight rather than size, because a fourth size in a document
+     this shallow reads as noise. */
+  .markdown :is(h4, h5, h6) {
+    margin: 20px 0 8px;
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    scroll-margin-top: 24px;
+  }
+
+  .markdown ul,
+  .markdown ol {
     margin: 0 0 16px;
     padding-left: 22px;
     line-height: 1.7;
   }
 
-  .docs-prose ul {
+  .markdown ul {
     list-style: disc;
   }
 
-  .docs-prose ol {
+  .markdown ol {
     list-style: decimal;
   }
 
-  .docs-prose li {
+  .markdown li {
     margin-bottom: 6px;
   }
 
-  .docs-prose a {
+  .markdown a {
     color: var(--accent-bright);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
 
   @media (hover: hover) {
-    .docs-prose a:hover {
+    .markdown a:hover {
       text-decoration: none;
     }
   }
 
-  .docs-prose code {
+  .markdown code {
     padding: 1px 5px;
     border: 1px solid var(--line);
     border-radius: 4px;
@@ -2442,7 +2466,7 @@
   }
 
   /* A fenced block is already a panel; the inline chrome would double it. */
-  .docs-prose pre {
+  .markdown pre {
     margin: 0 0 16px;
     padding: 14px 16px;
     overflow-x: auto;
@@ -2451,7 +2475,7 @@
     background: var(--ink-raised);
   }
 
-  .docs-prose pre code {
+  .markdown pre code {
     padding: 0;
     border: 0;
     background: transparent;
@@ -2459,39 +2483,39 @@
     line-height: 1.6;
   }
 
-  .docs-prose blockquote {
+  .markdown blockquote {
     margin: 0 0 16px;
     padding-left: 16px;
     border-left: 2px solid var(--line-strong);
     color: var(--text-muted);
   }
 
-  .docs-prose hr {
+  .markdown hr {
     margin: 32px 0;
     border: 0;
     border-top: 1px solid var(--line);
   }
 
-  .docs-prose strong {
+  .markdown strong {
     color: var(--text-primary);
     font-weight: 600;
   }
 
-  .docs-prose table {
+  .markdown table {
     width: 100%;
     margin: 0 0 16px;
     border-collapse: collapse;
     font-size: 0.875rem;
   }
 
-  .docs-prose th,
-  .docs-prose td {
+  .markdown th,
+  .markdown td {
     padding: 8px 10px;
     border-bottom: 1px solid var(--line);
     text-align: left;
   }
 
-  .docs-prose th {
+  .markdown th {
     color: var(--text-primary);
     font-weight: 600;
   }

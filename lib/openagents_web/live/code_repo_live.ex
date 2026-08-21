@@ -257,10 +257,14 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             </:commit>
           </.file_table>
 
+          <%!-- A README is an authored document, not a message: its source is
+          wrapped at an editing width, so hard breaks would end every one of
+          those wraps in a line break and render the file at the width of its
+          source rather than the width of this column. --%>
           <.card :if={@readme} id="repo-readme">
             <h2>{@readme.name}</h2>
-            <div class="code-markdown">
-              {OpenAgents.Markdown.to_html(@readme.blob.content)}
+            <div class="markdown">
+              {OpenAgents.Markdown.to_html(@readme.blob.content, hardbreaks: false)}
             </div>
           </.card>
 

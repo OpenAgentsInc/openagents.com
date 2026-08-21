@@ -73,7 +73,15 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   defp seed_repo(repo) do
     path = Repos.ensure_repo!(repo)
 
-    readme = write_blob(path, "# OpenAgents test repo\n\nFixture readme.\n")
+    # The trailing paragraph is wrapped the way a file is wrapped, so a test can
+    # tell a rendered document from one line break per source line.
+    readme =
+      write_blob(
+        path,
+        "# OpenAgents test repo\n\nFixture readme.\n\n" <>
+          "This paragraph is wrapped like a file\nrather than like a message.\n"
+      )
+
     file = write_blob(path, "hello\n")
 
     tree_one =
@@ -177,6 +185,20 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert html =~ short
       assert html =~ ~s(id="repo-readme")
       assert html =~ "Fixture readme."
+    end
+
+    test "renders the README as a formatted document", %{conn: conn} do
+      browsable()
+      {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com")
+
+      # Structure, not source: the heading is a heading, and it carries the
+      # ruleset every rendered-Markdown surface shares.
+      assert html =~ ~s(class="markdown")
+      assert html =~ "<h1>OpenAgents test repo</h1>"
+
+      # A file's own wrapping is not a line break. Hard breaks belong to typed
+      # messages; here they would render the README at the width of its source.
+      refute html =~ "wrapped like a file<br"
     end
 
     test "publishes no node internals and no account controls anonymously", %{conn: conn} do
@@ -387,7 +409,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
 
       assert html =~ @audit_heading
       refute html =~ "# #{@audit_heading}"
-      assert html =~ ~s(class="code-markdown")
+      assert html =~ ~s(class="markdown")
     end
 
     test "?plain=1 renders the raw markdown source", %{conn: conn} do

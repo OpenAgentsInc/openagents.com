@@ -133,8 +133,11 @@ defmodule OpenAgentsWeb.CodeBlobLive do
           </.alert>
 
           <.card id="code-blob">
-            <div :if={@markdown?} class="code-markdown">
-              {OpenAgents.Markdown.to_html(@blob.content)}
+            <%!-- Authored document, not a message: hard breaks belong to
+            typed text, and here they would only reproduce the source file's
+            own wrapping. --%>
+            <div :if={@markdown?} class="markdown">
+              {OpenAgents.Markdown.to_html(@blob.content, hardbreaks: false)}
             </div>
             <pre :if={not @markdown? and not @blob.binary} class="code-source"><code>{@blob.content}</code></pre>
             <.empty :if={@blob.binary} id="code-binary" title="Binary file">

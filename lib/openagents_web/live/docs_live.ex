@@ -51,7 +51,7 @@ defmodule OpenAgentsWeb.DocsLive do
   @impl true
   def render(%{live_action: :index} = assigns) do
     ~H"""
-    <div id="docs-index" class="docs-prose">
+    <div id="docs-index" class="docs-prose markdown">
       <h1>Documentation</h1>
       <p>
         Everything documented here is something you can reach today. Where a page
@@ -73,7 +73,7 @@ defmodule OpenAgentsWeb.DocsLive do
   def render(assigns) do
     ~H"""
     <div class="docs-page">
-      <article class="docs-prose" id={"docs-#{@page.item.slug}"}>
+      <article class="docs-prose markdown" id={"docs-#{@page.item.slug}"}>
         {Phoenix.HTML.raw(@page.html)}
       </article>
 

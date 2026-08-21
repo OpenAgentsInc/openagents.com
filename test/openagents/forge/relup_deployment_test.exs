@@ -108,6 +108,80 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
     }
   end
 
+  describe "version admission" do
+    test "admits an arbitrary forward semver transition, not only the proof pair" do
+      parent = self()
+
+      rpc = fn node, _module, function, _arguments, _timeout ->
+        send(parent, {:phase, node, function})
+        {:ok, %{}}
+      end
+
+      request =
+        request()
+        |> Map.merge(%{from_version: "0.2.0", to_version: "0.3.0", from_state_version: 2})
+
+      assert {:ok, %{status: "live", from_version: "0.2.0", to_version: "0.3.0"}} =
+               RelupDeployment.run(request,
+                 members: fn -> @nodes end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: rpc
+               )
+
+      assert length(drain_messages([])) == 24
+    end
+
+    test "refuses a degenerate transition" do
+      request = request() |> Map.put(:to_version, request().from_version)
+
+      assert {:error, :degenerate_version_transition} =
+               RelupDeployment.run(request,
+                 members: fn -> @nodes end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: fn _, _, _, _, _ -> {:ok, %{}} end
+               )
+    end
+
+    test "refuses malformed versions" do
+      assert {:error, :invalid_from_version} =
+               RelupDeployment.run(request() |> Map.put(:from_version, "zero-point-twelve"),
+                 members: fn -> @nodes end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: fn _, _, _, _, _ -> {:ok, %{}} end
+               )
+
+      assert {:error, :invalid_to_version} =
+               RelupDeployment.run(request() |> Map.put(:to_version, "0.2"),
+                 members: fn -> @nodes end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: fn _, _, _, _, _ -> {:ok, %{}} end
+               )
+    end
+
+    test "refuses state version regression and unsupported state versions" do
+      regression =
+        request()
+        |> Map.merge(%{from_version: "0.2.0", to_version: "0.3.0", from_state_version: 2})
+        |> Map.put(:to_state_version, 1)
+
+      assert {:error, :state_version_regression} =
+               RelupDeployment.run(regression,
+                 members: fn -> @nodes end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: fn _, _, _, _, _ -> {:ok, %{}} end
+               )
+
+      unsupported = request() |> Map.put(:to_state_version, 3)
+
+      assert {:error, :unsupported_to_state_version} =
+               RelupDeployment.run(unsupported,
+                 members: fn -> @nodes end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: fn _, _, _, _, _ -> {:ok, %{}} end
+               )
+    end
+  end
+
   defp drain_messages(acc) do
     receive do
       event -> drain_messages([event | acc])

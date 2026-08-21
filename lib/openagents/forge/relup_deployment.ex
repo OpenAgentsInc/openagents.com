@@ -12,6 +12,12 @@ defmodule OpenAgents.Forge.RelupDeployment do
 
   @sha_pattern ~r/\A[0-9a-f]{40}\z/
   @digest_pattern ~r/\A[0-9a-f]{64}\z/
+  # Same admission the per-node release-handler transaction enforces
+  # (RelupNode): any concrete X.Y.Z[-+suffix] pair. The real gate for a
+  # transition is the packaged appup on the node itself; check_install refuses
+  # honestly when no relup exists between the two versions.
+  @version_pattern ~r/\A[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?\z/
+  @supported_state_versions [1, 2]
   @default_timeout_ms 120_000
 
   @doc "Deploy one two-way relup across the exact expected fleet."
@@ -169,6 +175,9 @@ defmodule OpenAgents.Forge.RelupDeployment do
   end
 
   defp validate_request(request) when is_map(request) do
+    from_version = Map.get(request, :from_version)
+    to_version = Map.get(request, :to_version)
+
     cond do
       not Regex.match?(@sha_pattern, Map.get(request, :sha, "")) ->
         {:error, :invalid_git_sha}
@@ -182,17 +191,23 @@ defmodule OpenAgents.Forge.RelupDeployment do
       Map.get(request, :release_name) != "openagents" ->
         {:error, :invalid_release_name}
 
-      Map.get(request, :from_version) != "0.1.0" ->
-        {:error, :unsupported_from_version}
+      not version?(from_version) ->
+        {:error, :invalid_from_version}
 
-      Map.get(request, :to_version) != "0.2.0" ->
-        {:error, :unsupported_to_version}
+      not version?(to_version) ->
+        {:error, :invalid_to_version}
 
-      Map.get(request, :from_state_version) != 1 ->
+      from_version == to_version ->
+        {:error, :degenerate_version_transition}
+
+      Map.get(request, :from_state_version) not in @supported_state_versions ->
         {:error, :unsupported_from_state_version}
 
-      Map.get(request, :to_state_version) != 2 ->
+      Map.get(request, :to_state_version) not in @supported_state_versions ->
         {:error, :unsupported_to_state_version}
+
+      Map.get(request, :to_state_version) < Map.get(request, :from_state_version) ->
+        {:error, :state_version_regression}
 
       not is_list(Map.get(request, :expected_nodes)) ->
         {:error, :invalid_expected_nodes}
@@ -209,6 +224,8 @@ defmodule OpenAgents.Forge.RelupDeployment do
   end
 
   defp validate_request(_request), do: {:error, :invalid_request}
+
+  defp version?(version), do: is_binary(version) and Regex.match?(@version_pattern, version)
 
   defp public_result(request, status, node_results, error_code) do
     %{

@@ -210,6 +210,17 @@ defmodule OpenAgentsWeb.RouteAuthority do
       tracker_browser_path?(path) ->
         declaration(:authenticated_browser, "active encrypted browser session", "forge:web", true)
 
+      issue_browser_path?(path) and verb in [:get, :head] ->
+        # Reading issues is public on a public repository. The GET mutates
+        # nothing: every write rides the LiveView channel and is re-checked
+        # against writability in the view's event handlers.
+        declaration(
+          :public_read,
+          "anonymous visitor or signed-in person",
+          "forge:issues:web",
+          false
+        )
+
       repository_browser_path?(path) and verb in [:get, :head] ->
         declaration(
           :public_read,
@@ -243,7 +254,17 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_mutation?(_path, _verb), do: true
 
   defp tracker_browser_path?(path) do
-    String.match?(path, ~r{\A/:owner/:repo/(issues|labels|milestones|assignees|projects)})
+    String.match?(
+      path,
+      ~r{\A/:owner/:repo/(issues/new|labels|milestones|assignees|projects|members)}
+    )
+  end
+
+  # The issue index and detail pages live in their own public-read session;
+  # `issues/new` above stays behind sign-in because filing needs an author.
+  defp issue_browser_path?(path) do
+    path == "/:owner/:repo/issues" or
+      String.match?(path, ~r{\A/:owner/:repo/issues/:number\z})
   end
 
   defp repository_browser_path?(path) do

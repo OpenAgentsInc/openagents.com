@@ -70,11 +70,15 @@ These are current measured behaviors:
 
 These are compatibility limits, not authorization fallbacks:
 
-- Label rename does not implement GitHub's `new_name` behavior.
-- Adding a nonexistent label, removing an absent label, and some label URL
-  encoding cases differ from GitHub behavior.
+- Issue creation with a nonexistent label returns 422; only the
+  add-labels-to-issue endpoint creates labels on the fly, matching GitHub.
 - Error envelopes and pagination/link headers are a bounded local contract,
   not complete Octokit or `gh` parity.
+
+Closed on 2026-08-21, each pinned by tests: label rename through `new_name`,
+create-on-add for missing labels at the issue-labels endpoint, 404 for
+removing a label an issue does not wear, and path-correct percent-encoding of
+label URLs so an advertised label URL resolves through the show endpoint.
 
 Gate 6 supplied the explicit API principal and mutation policy. Gate 7 supplied
 repository entities, foreign keys, scoped uniqueness, ownership checks, and

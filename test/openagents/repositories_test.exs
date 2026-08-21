@@ -75,12 +75,24 @@ defmodule OpenAgents.RepositoriesTest do
     second: second
   } do
     assert {:ok, issue} = Issues.create_issue(initial, %{title: "Scoped"})
-    assert {:ok, _label} = Labels.create_label(second, %{name: "private", color: "ffffff"})
+    assert {:ok, second_label} = Labels.create_label(second, %{name: "private", color: "ffffff"})
     assert {:ok, milestone} = Milestones.create_milestone(second, %{title: "Second"})
 
-    assert_raise Ecto.NoResultsError, fn -> Issues.add_labels(issue, ["private"]) end
-    assert_raise Ecto.NoResultsError, fn -> Issues.set_milestone(issue, milestone.number) end
-    assert Labels.list_labels(initial) == []
+    # Adding a name that exists only in the other repository creates a fresh,
+    # locally-scoped label; it never links across the repository boundary.
+    assert {:ok, labelled} = Issues.add_labels(issue, ["private"])
+    assert [%{"name" => "private"}] = labelled.labels
+
+    local_label = Labels.get_label_by_name!(initial, "private")
+    refute local_label.id == second_label.id
+
+    # The milestone lookup stays strict: a number from another repository
+    # cannot be attached at all.
+    assert_raise Ecto.NoResultsError, fn ->
+      Issues.set_milestone(issue, milestone.number)
+    end
+
+    assert Enum.map(Labels.list_labels(second), & &1.name) == ["private"]
   end
 
   test "only active repository members are assignable", %{initial: initial, second: second} do

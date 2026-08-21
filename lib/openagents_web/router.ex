@@ -109,9 +109,8 @@ defmodule OpenAgentsWeb.Router do
       live "/repositories/new", RepositoryNewLive, :new
       live "/repositories/import/github", RepositoryImportLive, :new
       live "/:owner/:repo/issues/new", IssueNewLive, :new
-      live "/:owner/:repo/issues/:number", IssueShowLive, :show
-      live "/:owner/:repo/issues", IssueIndexLive, :index
 
+      live "/:owner/:repo/members", MemberIndexLive, :index
       live "/:owner/:repo/labels", LabelIndexLive, :index
       live "/:owner/:repo/milestones", MilestoneIndexLive, :index
       live "/:owner/:repo/assignees", AssigneeIndexLive, :index
@@ -139,6 +138,22 @@ defmodule OpenAgentsWeb.Router do
 
     get "/memory/export", MemoryExportController, :show
     delete "/github/connection", AuthController, :disconnect
+  end
+
+  # Reading issues is a public activity on a public repository, the way code
+  # browsing already is, so this session runs behind plain :browser and mounts
+  # whoever is signed in. Each view decides what an anonymous visitor may do,
+  # and every write re-checks authority at the server. The scope comes after
+  # the authenticated one so the literal `new` segment keeps winning over
+  # `:number`.
+  scope "/", OpenAgentsWeb do
+    pipe_through :browser
+
+    live_session :forge_issues,
+      on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/:owner/:repo/issues/:number", IssueShowLive, :show
+      live "/:owner/:repo/issues", IssueIndexLive, :index
+    end
   end
 
   scope "/api", OpenAgentsWeb do

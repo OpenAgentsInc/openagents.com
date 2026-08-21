@@ -26,7 +26,7 @@ defmodule OpenAgentsWeb.LabelJSON do
       description: label.description,
       default: false,
       url:
-        "https://openagents.com/api/v3/repos/#{owner}/#{repo}/labels/#{URI.encode_www_form(label.name)}"
+        "https://openagents.com/api/v3/repos/#{owner}/#{repo}/labels/#{URI.encode(label.name, &URI.char_unreserved?/1)}"
     }
   end
 

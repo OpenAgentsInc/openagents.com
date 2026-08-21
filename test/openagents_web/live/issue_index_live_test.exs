@@ -207,10 +207,25 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     refute inspect(title_link) =~ "row-assignee-#{issue.id}"
   end
 
-  test "an anonymous visitor is redirected away from the issue list" do
-    assert {:error, {:redirect, %{to: to}}} =
-             live(build_conn(), ~p"/OpenAgentsInc/openagents.com/issues")
+  # Reading a public repository's issues is a public activity now, the same
+  # way reading its code is: no redirect, no controls, and an invitation to
+  # sign in rather than a wall.
+  test "an anonymous visitor reads a public repository's issue list" do
+    {:ok, _issue} = Issues.create_issue(%{"title" => "Public spectable"})
 
-    refute to == "/OpenAgentsInc/openagents.com/issues"
+    {:ok, view, html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/issues")
+
+    assert html =~ "Public spectable"
+    refute has_element?(view, "#issues-empty")
+    # No triage controls, no filing link: the toolbar actions need authority.
+    refute has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/issues/new"]})
+    refute has_element?(view, ~s{[id^="row-state-"]})
+    refute has_element?(view, ~s{[id^="row-assignee-"]})
+  end
+
+  test "an anonymous visitor cannot open a private repository's issues" do
+    assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+      live(build_conn(), ~p"/SecondOrg/hidden-repo/issues")
+    end
   end
 end

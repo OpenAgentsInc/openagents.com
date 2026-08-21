@@ -58,6 +58,26 @@ defmodule OpenAgents.Labels do
     Repo.get_by!(Label, repository_id: repository_id, name: URI.decode(name))
   end
 
+  @doc """
+  Returns the named label, creating it with a generated colour when it is
+  missing, the way GitHub does when a script adds a label an issue has never
+  worn.
+  """
+  def get_or_create_label_by_name(%Repository{} = repository, name, actor \\ nil)
+      when is_binary(name) do
+    decoded = URI.decode(name)
+
+    case Repo.get_by(Label, repository_id: repository.id, name: decoded) do
+      %Label{} = label ->
+        {:ok, label}
+
+      nil ->
+        create_label(repository, %{"name" => decoded, "color" => generated_color()}, actor)
+    end
+  end
+
+  defp generated_color, do: Base.encode16(:crypto.strong_rand_bytes(3), case: :lower)
+
   def get_label_by_path!(owner, repository_name, name) do
     Repo.one!(
       from label in Label,

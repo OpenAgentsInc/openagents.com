@@ -22,7 +22,23 @@ defmodule OpenAgents.Repositories do
   @initial_owner "OpenAgentsInc"
   @initial_name "openagents.com"
   @writable_roles ~w(owner maintainer contributor)
+  @all_roles ~w(owner maintainer contributor viewer)
   @repository_namespace_limit 100
+
+  # GitHub's default label set. Every created or imported repository starts
+  # with this vocabulary so triage has something to attach on day one; a
+  # repository that does not want a name can delete it.
+  @default_labels [
+    {"bug", "d73a4a", "Something isn't working"},
+    {"documentation", "0075ca", "Improvements or additions to docs"},
+    {"duplicate", "cfd3d7", "This issue or pull request already exists"},
+    {"enhancement", "a2eeef", "New feature or request"},
+    {"good first issue", "7057ff", "Good for newcomers"},
+    {"help wanted", "008672", "Extra attention is needed"},
+    {"invalid", "e4e669", "This doesn't seem right"},
+    {"question", "d876e3", "Further information is requested"},
+    {"wontfix", "ffffff", "This will not be worked on"}
+  ]
 
   # The two durable receipts that say where a repository is in provisioning:
   # the outbox row is the work, the import row is the GitHub snapshot. Both are
@@ -553,6 +569,148 @@ defmodule OpenAgents.Repositories do
     end)
   end
 
+  @doc """
+  Lists one repository's members with their users, owners first.
+
+  The order is role rank and then login, so the page reads the same way every
+  time it renders.
+  """
+  def list_members(%Repository{id: repository_id}) do
+    from(membership in Membership,
+      join: user in assoc(membership, :user),
+      where: membership.repository_id == ^repository_id,
+      order_by: [
+        asc:
+          fragment(
+            "array_position(array['owner','maintainer','contributor','viewer'], ?)",
+            membership.role
+          ),
+        asc: fragment("lower(?)", user.github_login)
+      ],
+      preload: [user: user]
+    )
+    |> Repo.all()
+  end
+
+  @doc "The acting owner's view of one member row: add by GitHub login."
+  def add_member_by_login(%Repository{} = repository, %User{} = actor, login, role)
+      when is_binary(login) and role in @all_roles do
+    case active_user_by_login(login) do
+      %User{} = user ->
+        case Repo.transaction(fn ->
+               membership = upsert_membership!(repository, user, role)
+               audit_membership(repository, actor, user, "added", role)
+               membership
+             end) do
+          {:ok, membership} -> {:ok, membership}
+          {:error, reason} -> {:error, reason}
+        end
+
+      nil ->
+        {:error, :unknown_user}
+    end
+  end
+
+  def change_member_role(%Repository{} = repository, %User{} = actor, user_id, role)
+      when role in @all_roles do
+    with %User{} = user <- Repo.get(User, user_id) || {:error, :unknown_member},
+         %Membership{} <-
+           Repo.get_by(Membership, repository_id: repository.id, user_id: user.id) ||
+             {:error, :unknown_member},
+         :ok <- guard_last_owner(repository, user, role) do
+      Repo.transaction(fn ->
+        updated = upsert_membership!(repository, user, role)
+        audit_membership(repository, actor, user, "role changed", role)
+        updated
+      end)
+      |> case do
+        {:ok, membership} -> {:ok, membership}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def remove_member(%Repository{} = repository, %User{} = actor, user_id) do
+    with %User{} = user <- Repo.get(User, user_id) || {:error, :unknown_member},
+         %Membership{} = membership <-
+           Repo.get_by(Membership, repository_id: repository.id, user_id: user.id) ||
+             {:error, :unknown_member},
+         :ok <- guard_last_owner(repository, user, nil) do
+      Repo.transaction(fn ->
+        Repo.delete!(membership)
+
+        Audit.record!(
+          "repository.membership.removed",
+          {:user, actor.id},
+          "membership",
+          membership_subject_id(membership),
+          repository_id: repository.id,
+          metadata: %{"login" => user.github_login}
+        )
+      end)
+
+      :ok
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # A repository with no owner cannot be administered any more, so the last
+  # owner cannot be demoted or removed, including by themselves.
+  defp guard_last_owner(%Repository{id: repository_id}, %User{id: user_id}, new_role) do
+    owner_count =
+      Repo.one!(
+        from membership in Membership,
+          where: membership.repository_id == ^repository_id and membership.role == "owner",
+          select: count()
+      )
+
+    leaving_owner? =
+      membership_role(%Repository{id: repository_id}, %User{id: user_id}) == "owner"
+
+    still_owner? = new_role == "owner"
+
+    if leaving_owner? and not still_owner? and owner_count <= 1,
+      do: {:error, :last_owner},
+      else: :ok
+  end
+
+  defp upsert_membership!(repository, user, role) do
+    %Membership{}
+    |> Membership.changeset(%{
+      repository_id: repository.id,
+      user_id: user.id,
+      role: role
+    })
+    |> Repo.insert!(
+      on_conflict: {:replace, [:role, :updated_at]},
+      conflict_target: [:repository_id, :user_id],
+      returning: true
+    )
+  end
+
+  defp audit_membership(repository, actor, subject, action, role) do
+    Audit.record!(
+      "repository.membership.updated",
+      {:user, actor.id},
+      "membership",
+      "#{repository.id}:#{subject.id}",
+      repository_id: repository.id,
+      metadata: %{"action" => action, "role" => role, "login" => subject.github_login}
+    )
+  end
+
+  defp active_user_by_login(login) do
+    Repo.one(
+      from user in User,
+        where:
+          user.status == "active" and
+            fragment("lower(?)", user.github_login) == ^String.downcase(String.trim(login))
+    )
+  end
+
   def grant_machine(%Repository{} = repository, %User{} = actor, %Machine{} = machine, operations)
       when is_list(operations) do
     with true <- machine.user_id == actor.id or {:error, :machine_not_owned},
@@ -626,6 +784,8 @@ defmodule OpenAgents.Repositories do
     )
   end
 
+  def writable?(%Repository{}, nil), do: false
+
   def membership_role(%Repository{id: repository_id}, %User{id: user_id}) do
     Repo.one(
       from membership in Membership,
@@ -635,6 +795,89 @@ defmodule OpenAgents.Repositories do
   end
 
   def membership_role(%Repository{}, nil), do: nil
+
+  @doc "Whether the repository is publicly readable."
+  def public?(%Repository{visibility: "public"}), do: true
+  def public?(%Repository{}), do: false
+
+  @doc """
+  Whether the user holds any membership role, including read-only `viewer`.
+  """
+  def member?(%Repository{id: repository_id}, %User{id: user_id}) do
+    Repo.exists?(
+      from membership in Membership,
+        join: user in User,
+        on: user.id == membership.user_id and user.status == "active",
+        where: membership.repository_id == ^repository_id and membership.user_id == ^user_id
+    )
+  end
+
+  def member?(%Repository{}, nil), do: false
+
+  @doc """
+  Whether the user may take part in issue conversations: open issues and
+  comment.
+
+  GitHub's model, which is ours: an active signed-in person can join the
+  conversation on any public repository without membership; a private
+  repository admits its own members. Triage writes (label, assign, close,
+  edit) stay behind writability and are not governed by this predicate.
+  """
+  def issue_participant?(%Repository{}, nil), do: false
+  def issue_participant?(%Repository{visibility: "public"}, %User{}), do: true
+
+  def issue_participant?(%Repository{} = repository, %User{} = user),
+    do: member?(repository, user)
+
+  @doc "Whether the user holds the repository's `owner` role."
+  def owner?(%Repository{} = repository, %User{} = user) do
+    membership_role(repository, user) == "owner"
+  end
+
+  def owner?(%Repository{}, nil), do: false
+
+  @doc "Subscribes the caller to one repository's issue activity."
+  def subscribe_issues(repository_id),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, issues_topic(repository_id))
+
+  def unsubscribe_issues(repository_id),
+    do: Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, issues_topic(repository_id))
+
+  @doc """
+  Announces that one repository's issues moved.
+
+  Called after the owning transaction commits. The message carries the
+  repository id and nothing else, so every subscriber re-reads through its own
+  visibility and authorization predicates.
+  """
+  def broadcast_issues(repository_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      issues_topic(repository_id),
+      {:issues_changed, repository_id}
+    )
+  end
+
+  defp issues_topic(repository_id), do: "issues:" <> repository_id
+
+  @doc "Seeds GitHub's default label vocabulary onto a new or imported repository."
+  def seed_default_labels!(%Repository{} = repository) do
+    Enum.each(@default_labels, fn {name, color, description} ->
+      Repo.insert!(
+        %OpenAgents.Labels.Label{}
+        |> OpenAgents.Labels.Label.changeset(%{
+          name: name,
+          color: color,
+          description: description,
+          repository_id: repository.id
+        }),
+        on_conflict: :nothing,
+        conflict_target: [:repository_id, :name]
+      )
+    end)
+
+    :ok
+  end
 
   def list_assignable_users(%Repository{id: repository_id}) do
     Repo.all(
@@ -759,6 +1002,8 @@ defmodule OpenAgents.Repositories do
       repository_id: repository.id,
       metadata: %{"role" => "owner"}
     )
+
+    seed_default_labels!(repository)
 
     repository_import =
       if source do

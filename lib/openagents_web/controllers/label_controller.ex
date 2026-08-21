@@ -45,7 +45,15 @@ defmodule OpenAgentsWeb.LabelController do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
     label = Labels.get_label_by_name!(repository, name)
 
-    case Labels.update_label(label, params) do
+    # GitHub renames through `new_name`; without this the path's name always
+    # won and the rename was silently dropped.
+    attrs =
+      case params["new_name"] do
+        nil -> params
+        new_name -> Map.put(params, "name", new_name)
+      end
+
+    case Labels.update_label(label, attrs) do
       {:ok, %Label{} = label} ->
         render(conn, :show, label: label, owner: owner, repo: repo)
 

@@ -362,9 +362,21 @@ defmodule OpenAgents.IssuesTest do
       assert Enum.map(updated.labels, & &1["name"]) == ["bug", "docs"]
     end
 
-    test "add_labels/2 raises for an unknown label" do
+    # GitHub creates a label on the fly when one is added that does not
+    # exist, and so do we: the name is scoped to this repository either way.
+    test "add_labels/2 creates an unknown label instead of raising" do
       issue = issue_fixture()
-      assert_raise Ecto.NoResultsError, fn -> Issues.add_labels(issue, ["nope"]) end
+
+      assert {:ok, %Issue{labels: [label]}} = Issues.add_labels(issue, ["nope"])
+      assert label["name"] == "nope"
+
+      assert %{color: color} =
+               OpenAgents.Labels.get_label_by_name!(
+                 OpenAgents.Repositories.initial_repository!(),
+                 "nope"
+               )
+
+      refute color in ["", nil]
     end
 
     test "add_labels/2 with an empty list is a no-op" do

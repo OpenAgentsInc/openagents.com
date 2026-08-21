@@ -6,6 +6,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
   import OpenAgents.LabelsFixtures
 
   alias OpenAgents.Issues
+  alias OpenAgents.Labels
 
   setup do
     {:ok, issue} = Issues.create_issue(%{title: "Labelled issue"})
@@ -119,7 +120,10 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       assert json_response(conn, 200) == %{"labels" => []}
     end
 
-    test "POST .../issues/:issue_number/labels returns 404 for a label that does not exist", %{
+    # GitHub creates a missing label on the fly when one is added to an
+    # issue, so a script that references `perf` before anyone defined it
+    # still works and the label outlives the call.
+    test "POST .../issues/:issue_number/labels creates a label that does not exist yet", %{
       conn: conn,
       issue: issue
     } do
@@ -132,8 +136,13 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
           }
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
-      assert Issues.get_issue_by_number!(issue.number).labels == []
+      assert %{"labels" => [%{"name" => "never-created"}]} = json_response(conn, 200)
+      assert [%{"name" => "never-created"}] = Issues.get_issue_by_number!(issue.number).labels
+
+      refute Labels.get_label_by_name!(
+               OpenAgents.Repositories.initial_repository!(),
+               "never-created"
+             ).color == ""
     end
 
     test "POST .../issues/:issue_number/labels returns 404 for a missing issue", %{conn: conn} do
@@ -183,7 +192,10 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       assert json_response(conn, 200) == %{"labels" => []}
     end
 
-    test "DELETE .../issues/:issue_number/labels/:name is a no-op for an unattached label", %{
+    # GitHub refuses the removal rather than pretending it happened, so a
+    # script whose bookkeeping drifted learns about it instead of silently
+    # succeeding.
+    test "DELETE .../issues/:issue_number/labels/:name returns 404 for an unattached label", %{
       conn: conn,
       issue: issue
     } do
@@ -196,7 +208,8 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
           ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/labels/docs"
         )
 
-      assert %{"labels" => [%{"name" => "bug"}]} = json_response(conn, 200)
+      assert json_response(conn, 404)
+      assert [%{"name" => "bug"}] = Issues.get_issue_by_number!(issue.number).labels
     end
 
     test "DELETE .../issues/:issue_number/labels/:name returns 404 for a missing issue", %{

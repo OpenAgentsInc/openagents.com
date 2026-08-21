@@ -50,15 +50,24 @@ defmodule OpenAgentsWeb.IssueLabelController do
       }) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
     issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
+    decoded = URI.decode(name)
 
-    case Issues.remove_label(issue, name) do
-      {:ok, %Issues.Issue{} = issue} ->
-        json(conn, %{labels: issue.labels})
+    if Enum.any?(issue.labels || [], &(&1["name"] == decoded)) do
+      case Issues.remove_label(issue, name) do
+        {:ok, %Issues.Issue{} = issue} ->
+          json(conn, %{labels: issue.labels})
 
-      {:error, _} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{message: "Could not remove label"})
+        {:error, _} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{message: "Could not remove label"})
+      end
+    else
+      # GitHub refuses to remove a label the issue does not wear; a silent
+      # no-op hides the mismatch from the script that sent it.
+      conn
+      |> put_status(:not_found)
+      |> json(%{message: "Label does not exist on this issue"})
     end
   rescue
     Ecto.NoResultsError ->

@@ -14,17 +14,68 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
 
+  @issues_per_page 25
+
+  @doc "How many issues one index page shows."
+  def per_page, do: @issues_per_page
+
   def list_issues(opts \\ []) when is_list(opts),
     do: list_issues(Repositories.initial_repository!(), opts)
 
   def list_issues(%Repository{id: repository_id}, opts) when is_list(opts) do
-    state = Keyword.get(opts, :state, "open")
-
-    Issue
-    |> where(repository_id: ^repository_id)
-    |> maybe_filter_state(state)
+    repository_id
+    |> issue_query(opts)
     |> order_by(desc: :inserted_at)
     |> Repo.all()
+  end
+
+  @doc """
+  One page of the filtered issue list, with the unpaginated total.
+
+  Supported options: `:state`, `:label`, `:assignee`, `:milestone`, `:q`,
+  and `:page`. Filters compose; counts and pages always agree because they
+  read the same query.
+  """
+  def list_issues_page(%Repository{} = repository, opts) when is_list(opts) do
+    page = max(parse_page(opts[:page]), 1)
+    query = issue_query(repository.id, opts)
+
+    total = Repo.aggregate(query, :count)
+
+    issues =
+      query
+      |> order_by(desc: :inserted_at)
+      |> limit(@issues_per_page)
+      |> offset(^((page - 1) * @issues_per_page))
+      |> Repo.all()
+
+    {issues, total}
+  end
+
+  def count_issues(%Repository{} = repository, opts) when is_list(opts),
+    do: repository.id |> issue_query(opts) |> Repo.aggregate(:count)
+
+  def parse_page(page) when is_integer(page), do: page
+
+  def parse_page(page) when is_binary(page) do
+    case Integer.parse(page) do
+      {number, _rest} -> number
+      :error -> 1
+    end
+  end
+
+  def parse_page(_page), do: 1
+
+  # Every list surface shares one filter chain so a page, a count, and an
+  # unpaginated read can never disagree about what matches.
+  defp issue_query(repository_id, opts) do
+    from(issue in Issue, as: :issue)
+    |> where([issue], issue.repository_id == ^repository_id)
+    |> maybe_filter_state(Keyword.get(opts, :state, "open"))
+    |> maybe_filter_label(Keyword.get(opts, :label))
+    |> maybe_filter_assignee(Keyword.get(opts, :assignee))
+    |> maybe_filter_milestone(Keyword.get(opts, :milestone))
+    |> maybe_filter_search(Keyword.get(opts, :q))
   end
 
   def get_issue!(id), do: get_issue!(Repositories.initial_repository!(), id)
@@ -98,6 +149,8 @@ defmodule OpenAgents.Issues do
           "has_assignees" => has_assignees?(normalized)
         })
 
+        Repositories.broadcast_issues(repository.id)
+
         {:ok, issue}
 
       result ->
@@ -137,6 +190,8 @@ defmodule OpenAgents.Issues do
           "state" => updated.state
         })
 
+        Repositories.broadcast_issues(issue.repository_id)
+
         {:ok, updated}
 
       result ->
@@ -158,12 +213,12 @@ defmodule OpenAgents.Issues do
   end
 
   def add_labels(%Issue{} = issue, names) when is_list(names) do
+    repository = repository_stub(issue.repository_id)
+
     new_labels =
       Enum.map(names, fn name ->
-        issue.repository_id
-        |> repository_stub()
-        |> Labels.get_label_by_name!(name)
-        |> label_json()
+        {:ok, label} = Labels.get_or_create_label_by_name(repository, name)
+        label_json(label)
       end)
 
     labels = ((issue.labels || []) ++ new_labels) |> Enum.uniq_by(& &1["name"])
@@ -294,6 +349,8 @@ defmodule OpenAgents.Issues do
           "issue_number" => issue.number
         })
 
+        Repositories.broadcast_issues(issue.repository_id)
+
         {:ok, comment}
 
       result ->
@@ -314,20 +371,28 @@ defmodule OpenAgents.Issues do
   end
 
   def delete_comment(%Comment{} = comment) do
-    Repo.transaction(fn ->
-      with {:ok, %Comment{}} <- Repo.delete(comment),
-           {1, nil} <-
-             from(i in Issue,
-               where: i.id == ^comment.issue_id and i.repository_id == ^comment.repository_id,
-               update: [inc: [comments: -1]]
-             )
-             |> Repo.update_all([]) do
-        :ok
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-        {_, _} -> Repo.rollback(:ok)
-      end
-    end)
+    result =
+      Repo.transaction(fn ->
+        with {:ok, %Comment{}} <- Repo.delete(comment),
+             {1, nil} <-
+               from(i in Issue,
+                 where: i.id == ^comment.issue_id and i.repository_id == ^comment.repository_id,
+                 update: [inc: [comments: -1]]
+               )
+               |> Repo.update_all([]) do
+          :ok
+        else
+          {:error, changeset} -> Repo.rollback(changeset)
+          {_, _} -> Repo.rollback(:ok)
+        end
+      end)
+
+    case result do
+      {:ok, :ok} -> Repositories.broadcast_issues(comment.repository_id)
+      _other -> :ok
+    end
+
+    result
   end
 
   defp prepare_collections(attrs, repository) do
@@ -509,6 +574,88 @@ defmodule OpenAgents.Issues do
 
   defp maybe_filter_state(query, "all"), do: query
   defp maybe_filter_state(query, state), do: where(query, state: ^state)
+
+  # The label, assignee, and milestone filters read the JSONB snapshots that
+  # already live on the issue row rather than joining the link tables. The
+  # snapshots are maintained in the same transaction as the links, so a filter
+  # over them cannot drift from what the API returns.
+  defp maybe_filter_label(query, nil), do: query
+  defp maybe_filter_label(query, ""), do: query
+
+  defp maybe_filter_label(query, name) when is_binary(name) do
+    decoded = URI.decode(name)
+
+    where(
+      query,
+      [issue],
+      fragment(
+        "EXISTS (SELECT 1 FROM unnest(?) AS l WHERE l ->> 'name' = ?)",
+        issue.labels,
+        ^decoded
+      )
+    )
+  end
+
+  defp maybe_filter_assignee(query, nil), do: query
+  defp maybe_filter_assignee(query, ""), do: query
+
+  defp maybe_filter_assignee(query, login) when is_binary(login) do
+    login_key = String.downcase(URI.decode(login))
+
+    where(
+      query,
+      [issue],
+      fragment(
+        "EXISTS (SELECT 1 FROM unnest(?) AS a WHERE lower(a ->> 'login') = ?)",
+        issue.assignees,
+        ^login_key
+      )
+    )
+  end
+
+  defp maybe_filter_milestone(query, nil), do: query
+  defp maybe_filter_milestone(query, ""), do: query
+
+  # The milestone snapshot on the row carries its own number, so the filter
+  # reads the JSON instead of resolving a milestone row first. A number that
+  # matches no milestone then simply matches no issues.
+  defp maybe_filter_milestone(query, number) when is_integer(number),
+    do: filter_milestone_number(query, number)
+
+  defp maybe_filter_milestone(query, number) when is_binary(number) do
+    case Integer.parse(number) do
+      {parsed, _rest} -> filter_milestone_number(query, parsed)
+      :error -> query
+    end
+  end
+
+  defp filter_milestone_number(query, number) do
+    where(
+      query,
+      [issue],
+      fragment("coalesce((? ->> 'number')::int, -1)", issue.milestone) == ^number
+    )
+  end
+
+  defp maybe_filter_search(query, nil), do: query
+  defp maybe_filter_search(query, ""), do: query
+
+  defp maybe_filter_search(query, q) when is_binary(q) do
+    # A percent sign typed into the box is a literal character, so the LIKE
+    # wildcards are escaped before the needle is wrapped.
+    escaped =
+      q
+      |> String.trim()
+      |> String.replace("\\", "\\\\")
+      |> String.replace("%", "\\%")
+      |> String.replace("_", "\\_")
+
+    where(
+      query,
+      [issue],
+      ilike(issue.title, ^"%#{escaped}%") or ilike(issue.body, ^"%#{escaped}%")
+    )
+  end
 
   defp to_string_map(attrs) do
     for {key, value} <- attrs, into: %{}, do: {to_string(key), value}

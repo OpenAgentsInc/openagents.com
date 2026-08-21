@@ -313,10 +313,17 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "ada"
   end
 
-  test "an anonymous visitor is redirected away from an issue page" do
-    issue = issue!(%{"title" => "Private"})
+  # Reading is public on a public repository; the page shows the conversation
+  # and an invitation to sign in, and no control that writes.
+  test "an anonymous visitor reads an issue page without write controls" do
+    issue = issue!(%{"title" => "Public reading"})
 
-    assert {:error, {:redirect, %{to: to}}} = live(build_conn(), path(issue))
-    refute to == "/OpenAgentsInc/openagents.com/issues/#{issue.number}"
+    {:ok, view, html} = live(build_conn(), path(issue))
+
+    assert html =~ "Public reading"
+    assert has_element?(view, "#sign-in-to-comment")
+    refute has_element?(view, "#comment-form")
+    refute has_element?(view, ~s{button[phx-click="close"]})
+    refute has_element?(view, ~s{button[phx-click="toggle_edit"]})
   end
 end

@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Comment
+  alias OpenAgents.Issues.Issue
   alias OpenAgents.Labels
   alias OpenAgents.Markdown
   alias OpenAgents.Milestones
@@ -35,8 +36,20 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgentsWeb.UI.Circle
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
-    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    repository =
+      try do
+        Repositories.get_visible_by_path!(owner, repo, socket.assigns.current_user)
+      rescue
+        Ecto.NoResultsError ->
+          raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
+      end
+
     issue = Issues.get_issue_by_number!(repository, String.to_integer(number))
+
+    user = socket.assigns.current_user
+    can_write = Repositories.writable?(repository, user)
+
+    if connected?(socket), do: Repositories.subscribe_issues(repository.id)
 
     {:ok,
      socket
@@ -44,15 +57,28 @@ defmodule OpenAgentsWeb.IssueShowLive do
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
+     |> assign(:current_user, user)
+     |> assign(:can_write, can_write)
+     |> assign(
+       :can_participate,
+       Repositories.issue_participant?(repository, user)
+     )
+     |> assign(:can_edit, can_write || author?(issue, user))
      |> assign(:editing, false)
      |> assign(:comment_form, to_form(Comment.changeset(%Comment{}, %{})))
-     |> assign(:repo_labels, Labels.list_labels(repository))
-     |> assign(:repo_milestones, Milestones.list_milestones(repository))
-     |> assign(:assignable, Repositories.list_assignable_users(repository))
+     |> assign(:repo_labels, if(can_write, do: Labels.list_labels(repository), else: []))
+     |> assign(
+       :repo_milestones,
+       if(can_write, do: Milestones.list_milestones(repository), else: [])
+     )
+     |> assign(
+       :assignable,
+       if(can_write, do: Repositories.list_assignable_users(repository), else: [])
+     )
      |> load(issue)}
   end
 
-  def handle_event("toggle_edit", _params, socket) do
+  def handle_event("toggle_edit", _params, socket) when socket.assigns.can_edit do
     issue = socket.assigns.issue
 
     {:noreply,
@@ -61,7 +87,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
      |> assign(:form, to_form(Issues.change_issue(issue)))}
   end
 
-  def handle_event("save", %{"issue" => issue_params}, socket) do
+  def handle_event("save", %{"issue" => issue_params}, socket) when socket.assigns.can_edit do
     issue = socket.assigns.issue
     attrs = %{"title" => issue_params["title"], "body" => issue_params["body"]}
 
@@ -78,18 +104,25 @@ defmodule OpenAgentsWeb.IssueShowLive do
     end
   end
 
-  def handle_event("close", _params, socket), do: set_state(socket, "closed", "completed")
-  def handle_event("reopen", _params, socket), do: set_state(socket, "open", nil)
+  # A viewer without authority who hand-crafts an event gets a refusal rather
+  # than a silent success; the UI never shows them the control in the first
+  # place.
+  def handle_event("close", _params, socket) when socket.assigns.can_edit,
+    do: set_state(socket, "closed", "completed")
+
+  def handle_event("reopen", _params, socket) when socket.assigns.can_edit,
+    do: set_state(socket, "open", nil)
 
   # The rail's state menu picks a close reason as well as a state, which the
   # header's two buttons cannot. Both end in the same write.
-  def handle_event("set_state", %{"state" => "open"}, socket),
+  def handle_event("set_state", %{"state" => "open"}, socket) when socket.assigns.can_edit,
     do: set_state(socket, "open", nil)
 
-  def handle_event("set_state", %{"state" => "closed"} = params, socket),
-    do: set_state(socket, "closed", params["reason"] || "completed")
+  def handle_event("set_state", %{"state" => "closed"} = params, socket)
+      when socket.assigns.can_edit,
+      do: set_state(socket, "closed", params["reason"] || "completed")
 
-  def handle_event("toggle_label", %{"name" => name}, socket) do
+  def handle_event("toggle_label", %{"name" => name}, socket) when socket.assigns.can_write do
     issue = socket.assigns.issue
 
     {:ok, updated} =
@@ -102,7 +135,8 @@ defmodule OpenAgentsWeb.IssueShowLive do
     {:noreply, load(socket, updated)}
   end
 
-  def handle_event("toggle_assignee", %{"login" => login}, socket) do
+  def handle_event("toggle_assignee", %{"login" => login}, socket)
+      when socket.assigns.can_write do
     issue = socket.assigns.issue
 
     {:ok, updated} =
@@ -115,12 +149,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
     {:noreply, load(socket, updated)}
   end
 
-  def handle_event("set_milestone", %{"number" => number}, socket) do
+  def handle_event("set_milestone", %{"number" => number}, socket)
+      when socket.assigns.can_write do
     {:ok, updated} = Issues.set_milestone(socket.assigns.issue, number_or_nil(number))
     {:noreply, load(socket, updated)}
   end
 
-  def handle_event("add_comment", %{"comment" => %{"body" => body}}, socket) do
+  def handle_event("add_comment", %{"comment" => %{"body" => body}}, socket)
+      when socket.assigns.can_participate do
     issue = socket.assigns.issue
 
     case Issues.create_comment(issue, %{body: body}, socket.assigns.current_user) do
@@ -135,6 +171,26 @@ defmodule OpenAgentsWeb.IssueShowLive do
         {:noreply, assign(socket, :comment_form, to_form(changeset))}
     end
   end
+
+  # Live updates: someone else's write re-reads this issue through the same
+  # visibility check the mount used.
+  def handle_info({:issues_changed, repository_id}, socket)
+      when repository_id == socket.assigns.repository.id do
+    issue = Issues.get_issue_by_number!(socket.assigns.repository, socket.assigns.issue.number)
+
+    {:noreply,
+     socket
+     |> assign(:can_edit, socket.assigns.can_write || author?(issue, socket.assigns.current_user))
+     |> load(issue)}
+  end
+
+  def handle_info({:issues_changed, _other_repository}, socket), do: {:noreply, socket}
+
+  defp author?(%Issue{author_user_id: author_id}, %OpenAgents.Accounts.User{id: user_id})
+       when is_binary(author_id),
+       do: author_id == user_id
+
+  defp author?(_issue, _user), do: false
 
   defp set_state(socket, state, reason) do
     attrs = %{"state" => state, "state_reason" => reason}
@@ -207,7 +263,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
             </p>
             <div class="issue-heading__actions">
               <button
-                :if={@issue.state == "open"}
+                :if={@can_edit and @issue.state == "open"}
                 class="btn"
                 data-variant="primary"
                 data-size="sm"
@@ -216,7 +272,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
                 Close issue
               </button>
               <button
-                :if={@issue.state == "closed"}
+                :if={@can_edit and @issue.state == "closed"}
                 class="btn"
                 data-variant="ghost"
                 data-size="sm"
@@ -224,7 +280,13 @@ defmodule OpenAgentsWeb.IssueShowLive do
               >
                 Reopen issue
               </button>
-              <button class="btn" data-variant="ghost" data-size="sm" phx-click="toggle_edit">
+              <button
+                :if={@can_edit}
+                class="btn"
+                data-variant="ghost"
+                data-size="sm"
+                phx-click="toggle_edit"
+              >
                 <.icon name="edit" /> Edit
               </button>
             </div>
@@ -232,7 +294,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
         </:heading>
 
         <:rail>
-          <Circle.properties_panel>
+          <Circle.properties_panel :if={@can_write}>
             <:group heading="State">
               <Circle.field_menu id="issue-state-menu" label="Change the state of this issue">
                 <:trigger>
@@ -373,7 +435,24 @@ defmodule OpenAgentsWeb.IssueShowLive do
           This conversation is locked{if @issue.locked_reason, do: " as #{@issue.locked_reason}"}.
         </.alert>
 
-        <.form :if={!@issue.locked} for={@comment_form} id="comment-form" phx-submit="add_comment">
+        <.alert
+          :if={!@can_participate and !@issue.locked}
+          variant={:info}
+          appearance={:notice}
+          id="sign-in-to-comment"
+        >
+          <.link navigate={~p"/"} class="font-medium underline">
+            Sign in with GitHub
+          </.link>
+          to comment on this issue.
+        </.alert>
+
+        <.form
+          :if={@can_participate and !@issue.locked}
+          for={@comment_form}
+          id="comment-form"
+          phx-submit="add_comment"
+        >
           <Circle.comment_composer id="issue-composer" author={viewer(@current_user)}>
             <.input
               field={@comment_form[:body]}

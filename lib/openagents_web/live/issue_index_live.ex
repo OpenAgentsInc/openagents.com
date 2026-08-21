@@ -1,59 +1,173 @@
 defmodule OpenAgentsWeb.IssueIndexLive do
   @moduledoc """
   Lists issues for a repository.
+
+  Reading is public on a public repository, the way code browsing already is.
+  Interacting — opening an issue, commenting on the detail page — needs a
+  signed-in person, and triage (state, assignees) needs a writable membership,
+  so every control that writes checks its authority at the server and not only
+  in what the template renders.
   """
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Issues
-  alias OpenAgentsWeb.UI.Circle
+  alias OpenAgents.Labels
+  alias OpenAgents.Milestones
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.UI.Circle
+
+  @filter_keys ~w(label assignee milestone q)
 
   def mount(_params, _session, socket) do
     {:ok, assign(socket, :current_scope, socket.assigns[:current_scope])}
   end
 
   def handle_params(%{"owner" => owner, "repo" => repo} = params, _url, socket) do
-    state = params["state"] || "open"
-    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    with {:ok, repository} <- visible_repository(owner, repo, socket.assigns.current_user) do
+      if connected?(socket), do: Repositories.subscribe_issues(repository.id)
 
-    socket =
-      socket
-      |> assign(:owner, owner)
-      |> assign(:repo, repo)
-      |> assign(:repository, repository)
-      |> assign(:state, state)
-      |> assign(:assignable, Repositories.list_assignable_users(repository))
-      |> load()
+      user = socket.assigns.current_user
+      can_write = Repositories.writable?(repository, user)
 
-    {:noreply, socket}
+      socket =
+        socket
+        |> assign(:owner, owner)
+        |> assign(:repo, repo)
+        |> assign(:repository, repository)
+        |> assign(:current_user, user)
+        |> assign(:can_write, can_write)
+        |> assign(:can_participate, Repositories.issue_participant?(repository, user))
+        |> assign(:state, normalize_state(params["state"]))
+        |> assign(:page, Issues.parse_page(params["page"]))
+        |> assign(:filters, read_filters(params))
+        |> assign(:label_options, if(can_write, do: Labels.list_labels(repository), else: []))
+        |> assign(
+          :assignable,
+          if(can_write, do: Repositories.list_assignable_users(repository), else: [])
+        )
+        |> assign(
+          :milestone_options,
+          if(can_write, do: Milestones.list_milestones(repository), else: [])
+        )
+        |> load()
+
+      {:noreply, socket}
+    else
+      :error -> raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
+    end
   end
 
-  # The row's own controls, which is what Circle has that a static list does
-  # not. Only state and assignee: they are the two facts worth changing without
-  # opening the issue, and labels and milestone need option lists longer than a
-  # row has room to explain. Both live in the rail on the issue page instead.
-  def handle_event("set_state", %{"id" => id, "state" => "open"}, socket),
-    do: write(socket, id, %{"state" => "open", "state_reason" => nil})
+  # Filters arrive as query params; anything unrecognized is dropped so a
+  # hand-edited URL cannot smuggle an option into the context call.
+  defp read_filters(params) do
+    Map.new(@filter_keys, fn key -> {key, blank_to_nil(params[key])} end)
+  end
 
-  def handle_event("set_state", %{"id" => id, "state" => "closed"} = params, socket),
-    do: write(socket, id, %{"state" => "closed", "state_reason" => params["reason"]})
+  # One form drives every filter, so one change event carries the complete
+  # desired set and patching replaces it wholesale.
+  def handle_event("filter", params, socket) do
+    filters = Map.new(@filter_keys, fn key -> {key, blank_to_nil(params[key])} end)
+    apply_filters(socket, filters)
+  end
+
+  def handle_event("set_state", %{"id" => id, "state" => state} = params, socket) do
+    if socket.assigns.can_write do
+      attrs =
+        case state do
+          "open" -> %{"state" => "open", "state_reason" => nil}
+          "closed" -> %{"state" => "closed", "state_reason" => params["reason"]}
+        end
+
+      Issues.update_issue(issue!(socket, id), attrs, socket.assigns.current_user)
+      {:noreply, load(socket)}
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can change issue state.")}
+    end
+  end
 
   def handle_event("toggle_assignee", %{"id" => id, "login" => login}, socket) do
-    issue = issue!(socket, id)
+    if socket.assigns.can_write do
+      issue = issue!(socket, id)
 
-    {:ok, _updated} =
       if Enum.any?(issue.assignees || [], &(&1["login"] == login)) do
         Issues.remove_assignees(issue, [login])
       else
         Issues.add_assignees(issue, [login])
       end
 
-    {:noreply, load(socket)}
+      {:noreply, load(socket)}
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can change assignees.")}
+    end
   end
 
-  defp write(socket, id, attrs) do
-    {:ok, _updated} = Issues.update_issue(issue!(socket, id), attrs, socket.assigns.current_user)
-    {:noreply, load(socket)}
+  # Live updates: any committed issue write in this repository re-reads the
+  # current page through this viewer's own authorization, so two people
+  # triaging together converge instead of drifting.
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, load(socket)},
+      else: {:noreply, socket}
+  end
+
+  defp apply_filters(socket, filters) do
+    {:noreply,
+     push_patch(socket, to: issues_path(socket.assigns.owner, socket.assigns.repo, filters))}
+  end
+
+  defp issues_path(owner, repo, filters, extra \\ %{}) do
+    query =
+      filters
+      |> Map.merge(extra)
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Map.new()
+
+    ~p"/#{owner}/#{repo}/issues?#{query}"
+  end
+
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
+
+  defp normalize_state("closed"), do: "closed"
+  defp normalize_state(_state), do: "open"
+
+  defp visible_repository(owner, repo, user) do
+    try do
+      {:ok, Repositories.get_visible_by_path!(owner, repo, user)}
+    rescue
+      Ecto.NoResultsError -> :error
+    end
+  end
+
+  # Reloading rather than patching one row: closing an issue while the Open tab
+  # is showing has to remove it from the list and change both tab counts, and a
+  # row that stays visible after being closed is worse than a reload.
+  defp load(socket) do
+    repository = socket.assigns.repository
+    %{filters: filters, state: state, page: page} = socket.assigns
+
+    opts =
+      filters
+      |> Keyword.new(fn {key, value} -> {String.to_existing_atom(key), value} end)
+      |> Keyword.put(:state, state)
+      |> Keyword.put(:page, page)
+
+    count_opts = Keyword.drop(opts, [:page])
+
+    {issues, total} = Issues.list_issues_page(repository, opts)
+
+    socket
+    |> assign(
+      :open_count,
+      Issues.count_issues(repository, Keyword.put(count_opts, :state, "open"))
+    )
+    |> assign(
+      :closed_count,
+      Issues.count_issues(repository, Keyword.put(count_opts, :state, "closed"))
+    )
+    |> assign(:total_count, total)
+    |> assign(:issues_count, length(issues))
+    |> stream(:issues, issues, reset: true)
   end
 
   # `JS.push` sends the id as a number; a `phx-value-` attribute would send a
@@ -63,20 +177,6 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
   defp issue!(socket, id) when is_binary(id),
     do: Issues.get_issue!(socket.assigns.repository, String.to_integer(id))
-
-  # Reloading rather than patching one row: closing an issue while the Open tab
-  # is showing has to remove it from the list and change both tab counts, and a
-  # row that stays visible after being closed is worse than a reload.
-  defp load(socket) do
-    repository = socket.assigns.repository
-    issues = Issues.list_issues(repository, state: socket.assigns.state)
-
-    socket
-    |> assign(:open_count, length(Issues.list_issues(repository, state: "open")))
-    |> assign(:closed_count, length(Issues.list_issues(repository, state: "closed")))
-    |> assign(:issues_count, length(issues))
-    |> stream(:issues, issues, reset: true)
-  end
 
   def render(assigns) do
     ~H"""
@@ -92,12 +192,12 @@ defmodule OpenAgentsWeb.IssueIndexLive do
           <Circle.view_tabs>
             <:tab
               label={"#{@open_count} Open"}
-              patch={~p"/#{@owner}/#{@repo}/issues?state=open"}
+              patch={issues_path(@owner, @repo, @filters, %{"state" => "open"})}
               selected={@state == "open"}
             />
             <:tab
               label={"#{@closed_count} Closed"}
-              patch={~p"/#{@owner}/#{@repo}/issues?state=closed"}
+              patch={issues_path(@owner, @repo, @filters, %{"state" => "closed"})}
               selected={@state == "closed"}
             />
           </Circle.view_tabs>
@@ -105,6 +205,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
         <:actions>
           <.link
+            :if={@can_write}
             navigate={~p"/#{@owner}/#{@repo}/labels"}
             class="btn"
             data-variant="ghost"
@@ -113,6 +214,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
             <.icon name="tag" /> Labels
           </.link>
           <.link
+            :if={@can_write}
             navigate={~p"/#{@owner}/#{@repo}/milestones"}
             class="btn"
             data-variant="ghost"
@@ -121,6 +223,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
             <.icon name="flag" /> Milestones
           </.link>
           <.link
+            :if={@can_participate}
             navigate={~p"/#{@owner}/#{@repo}/issues/new"}
             class="btn"
             data-variant="primary"
@@ -131,12 +234,56 @@ defmodule OpenAgentsWeb.IssueIndexLive do
         </:actions>
       </Circle.issue_toolbar>
 
+      <div class="issue-filters">
+        <.form for={%{}} as={:filter} phx-change="filter" id="issue-filter-form">
+          <.input
+            type="search"
+            name="q"
+            value={@filters["q"]}
+            placeholder="Search issues"
+            aria-label="Search issues"
+            class="!w-56"
+          />
+          <.input
+            :if={@milestone_options != []}
+            type="select"
+            name="milestone"
+            value={@filters["milestone"]}
+            options={Enum.map(@milestone_options, &{&1.title, Integer.to_string(&1.number)})}
+            prompt="All milestones"
+            aria-label="Filter by milestone"
+          />
+          <.input
+            :if={@label_options != []}
+            type="select"
+            name="label"
+            value={@filters["label"]}
+            options={Enum.map(@label_options, &{&1.name, &1.name})}
+            prompt="All labels"
+            aria-label="Filter by label"
+          />
+          <.input
+            :if={@assignable != []}
+            type="select"
+            name="assignee"
+            value={@filters["assignee"]}
+            options={Enum.map(@assignable, &{&1.github_login, &1.github_login})}
+            prompt="Everyone"
+            aria-label="Filter by assignee"
+          />
+        </.form>
+      </div>
+
       <.empty
         :if={@issues_count == 0}
         id="issues-empty"
         title={"No #{@state} issues"}
       >
-        Issues will show up here once they are created.
+        <%= if @can_participate do %>
+          Issues will show up here once they are created.
+        <% else %>
+          Nothing matches here yet.
+        <% end %>
       </.empty>
 
       <div :if={@issues_count > 0} id="issues" phx-update="stream" class="issue-list">
@@ -154,7 +301,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
           author={author(issue)}
           comments={issue.comments}
         >
-          <:state>
+          <:state :if={@can_write}>
             <Circle.field_menu
               id={"row-state-#{issue.id}"}
               label={"Change the state of issue ##{issue.number}"}
@@ -174,7 +321,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
               </Circle.field_menu_item>
             </Circle.field_menu>
           </:state>
-          <:people>
+          <:people :if={@can_write}>
             <Circle.field_menu
               id={"row-assignee-#{issue.id}"}
               label={"Assign issue ##{issue.number}"}
@@ -200,13 +347,39 @@ defmodule OpenAgentsWeb.IssueIndexLive do
           </:people>
         </Circle.issue_row>
       </div>
+
+      <nav :if={@total_count > Issues.per_page()} class="issue-pagination" aria-label="Pages">
+        <span class="issue-pagination__status">
+          Showing {@issues_count} of {@total_count}
+        </span>
+        <span class="issue-pagination__controls">
+          <.link
+            :if={@page > 1}
+            patch={issues_path(@owner, @repo, @filters, %{"state" => @state, "page" => @page - 1})}
+            class="btn"
+            data-variant="ghost"
+            data-size="sm"
+          >
+            Previous
+          </.link>
+          <.link
+            :if={@page * Issues.per_page() < @total_count}
+            patch={issues_path(@owner, @repo, @filters, %{"state" => @state, "page" => @page + 1})}
+            class="btn"
+            data-variant="ghost"
+            data-size="sm"
+          >
+            Next
+          </.link>
+        </span>
+      </nav>
     </Layouts.app>
     """
   end
 
-  # The row's own state cell is a control now, so the static category and label
-  # it would otherwise draw come from `Circle.issue_state/1` instead. They stay
-  # as the row's defaults for a caller with nowhere to send a change.
+  # GitHub's two states, and nothing invented on top of them. `not_planned` is
+  # the one close reason with a distinct reading, so it takes the cancelled
+  # glyph; every other close is a completion.
   defp category(%{state: "closed", state_reason: "not_planned"}), do: :canceled
   defp category(%{state: "closed"}), do: :completed
   defp category(_issue), do: :unstarted

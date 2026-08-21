@@ -2,31 +2,38 @@
 
 Date: 2026-08-20
 
-Status: Core surfaces and repository boundary implemented; staging UX validation pending
+Updated: 2026-08-21
+
+Status: Core surfaces, repository boundary, public issue reading, and triage
+ergonomics implemented; staging UX validation pending
 
 ## Current surface
 
-The Phoenix LiveView application currently ships authenticated pages for:
+The Phoenix LiveView application currently ships these pages:
 
-| Surface | Route | LiveView |
+| Surface | Route | Access |
 | --- | --- | --- |
-| Issue list | `/:owner/:repo/issues` | `OpenAgentsWeb.IssueIndexLive` |
-| New issue | `/:owner/:repo/issues/new` | `OpenAgentsWeb.IssueNewLive` |
-| Issue detail and comments | `/:owner/:repo/issues/:number` | `OpenAgentsWeb.IssueShowLive` |
-| Labels | `/:owner/:repo/labels` | `OpenAgentsWeb.LabelIndexLive` |
-| Milestones | `/:owner/:repo/milestones` | `OpenAgentsWeb.MilestoneIndexLive` |
-| Assignees | `/:owner/:repo/assignees` | `OpenAgentsWeb.AssigneeIndexLive` |
-| Project list | `/:owner/:repo/projects` | `OpenAgentsWeb.ProjectIndexLive` |
-| Project board | `/:owner/:repo/projects/:number` | `OpenAgentsWeb.ProjectShowLive` |
+| Issue list | `/:owner/:repo/issues` | Public on public repositories; filters, search, pagination, live updates |
+| New issue | `/:owner/:repo/issues/new` | Any signed-in person on a public repository |
+| Issue detail and comments | `/:owner/:repo/issues/:number` | Public read; participation per the model below |
+| Members | `/:owner/:repo/members` | Repository owners only |
+| Labels | `/:owner/:repo/labels` | Writable members |
+| Milestones | `/:owner/:repo/milestones` | Writable members |
+| Assignees | `/:owner/:repo/assignees` | Writable members |
+| Project list | `/:owner/:repo/projects` | Writable members |
+| Project board | `/:owner/:repo/projects/:number` | Writable members |
 
 The matching `/api/v3` issue, comment, label, assignee, milestone, and Projects
 V2 subset is implemented and covered. The dated
 [coverage audit](2026-08-20-test-coverage-audit.md) records the original gaps
-and the coverage added to close them.
+and the coverage added to close them. The
+[triage runbook](2026-08-21-issue-project-triage-runbook.md) records the
+participation model and its authority rules.
 
 ## Interface rules
 
-- Every page uses `Layouts.app` and the authenticated LiveView session.
+- Every page uses `Layouts.app`. The issue list and detail pages mount in a
+  public-read session; everything else requires an authenticated session.
 - New reusable primitives come from `OpenAgentsWeb.UI`; domain compositions can
   live in a focused issue, project, or forge component module.
 - Basecoat supplies pinned structural CSS and `assets/css/openagents.css`
@@ -38,6 +45,8 @@ and the coverage added to close them.
   sanitized Markdown path selected by Gate 4.
 - Icons come from the vendored set through `OpenAgentsWeb.UI.icon/1`; icon-only
   controls have accessible names.
+- Hiding a control for an unauthorized viewer is courtesy, not security:
+  every event handler re-checks authority at the server.
 
 The current governed component inventory is documented in
 [docs/component-library.md](component-library.md).
@@ -52,9 +61,12 @@ Gate 7 completed the durable repository boundary:
 - Issues, labels, milestones, comments, projects, project items, issue-label
   links, and issue-assignee links carry repository ownership. Issue,
   milestone, and project numbers are unique within a repository.
-- Public API reads resolve only public repositories. Authenticated LiveViews
-  and PAT writes resolve a writable repository membership before loading or
-  changing a resource.
+- Public API reads resolve only public repositories. PAT writes resolve a
+  writable repository membership before changing a resource. Browser issue
+  pages follow the participation model recorded in the
+  [triage runbook](2026-08-21-issue-project-triage-runbook.md): public read on
+  public repositories, filing and commenting for any signed-in person, and
+  triage writes for writable members only.
 - Assignees are active repository members with a writable role. Arbitrary
   login snapshots are no longer accepted.
 - Projects V2 compatibility paths enforce the requested username in show,
@@ -79,13 +91,14 @@ With the domain boundary established:
 1. Extract repeated issue rows, comment threads, label selectors, milestone
    progress, and project columns only where doing so improves behavior and test
    ownership.
-2. Add bounded search, filtering, pagination, and useful empty/loading/error
-   states.
-3. Add PubSub invalidation and database rereads where concurrent users need
-   live updates.
-4. Run accessibility, keyboard, responsive, compiled-CSS, and browser staging
+2. Run accessibility, keyboard, responsive, compiled-CSS, and browser staging
    checks against the same candidate SHA.
 
-Drag-and-drop boards, advanced project views, pull requests, review workflows,
+Done on 2026-08-21: bounded search, filtering (label, assignee, milestone),
+and pagination on the issue index; PubSub invalidation with database rereads
+for issue surfaces; the members management page.
+
+Drag-and-drop boards, advanced project views, notifications, pull requests
+with a per-repository enable/disable switch, review workflows,
 and pixel-level compatibility with another forge remain planned rather than
 current promises.

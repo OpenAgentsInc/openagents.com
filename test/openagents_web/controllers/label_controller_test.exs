@@ -103,6 +103,20 @@ defmodule OpenAgentsWeb.LabelControllerTest do
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
+
+    # The advertised URL is percent-encoded the way a path is, so a label
+    # with a space in its name advertises a link that resolves.
+    test "the rendered url round-trips through the show endpoint", %{conn: conn} do
+      label_fixture(%{name: "good first issue", color: "7057ff"})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels")
+
+      assert %{"labels" => [label]} = json_response(conn, 200)
+      assert label["url"] =~ "good%20first%20issue"
+
+      %URI{path: path} = URI.parse(label["url"])
+      assert get(conn, path).resp_body =~ "good first issue"
+    end
   end
 
   describe "update" do
@@ -125,6 +139,22 @@ defmodule OpenAgentsWeb.LabelControllerTest do
         })
 
       assert json_response(conn, 200)["description"] == "new"
+    end
+
+    # GitHub renames through `new_name`; the name in the path identifies the
+    # label and `new_name` is what it becomes.
+    test "PATCH /api/v3/repos/:owner/:repo/labels/:name renames with new_name", %{conn: conn} do
+      label_fixture(%{name: "bug", color: "d73a4a"})
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug", %{
+          new_name: "defect"
+        })
+
+      assert json_response(conn, 200)["name"] == "defect"
+      assert Labels.get_label_by_name!("defect").color == "d73a4a"
+
+      assert_raise Ecto.NoResultsError, fn -> Labels.get_label_by_name!("bug") end
     end
 
     test "PATCH /api/v3/repos/:owner/:repo/labels/:name returns 422 for a blank color", %{

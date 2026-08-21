@@ -2,22 +2,23 @@
 
 Date: 2026-08-21
 
-Status: Assessed against production at commit `a40a799`. The runbook describes
-the interim process you can run today; the gap list describes what must change
-before community issue submission works without manual steps.
+Status: Current. The gap list from the morning assessment is implemented and
+covered by tests; this document records what ships, the pull-request product
+stance, and how to operate triage day to day.
 
 ## Purpose
 
-OpenAgents just cut over to production, the first repository
-(`OpenAgentsInc/openagents.com`) is being imported, and the goal is to start
-building a public backlog: people read issues and submit them, maintainers
-triage them, pull requests stay closed to the public for now.
+OpenAgents cut over to production, imported the first repository
+(`OpenAgentsInc/openagents.com`), and opened the tracker for a public backlog:
+anyone can read issues and, once signed in, file them. Maintainers triage.
+Pull requests stay closed on this repository while the backlog forms, and the
+product direction for them is written down below.
 
 This document has three parts:
 
-1. What the issues-and-projects system implements today.
-2. The gaps that stand between that implementation and public triage, ranked.
-3. A triage process and runbook you can operate with what ships now.
+1. What the issues-and-projects system implements now.
+2. The pull-request product stance and what deliberately remains unbuilt.
+3. A triage process and runbook you can operate today.
 
 ## Part 1: What is implemented
 
@@ -26,177 +27,138 @@ This document has three parts:
 - Sign-in is GitHub OAuth. Namespaces are keyed to immutable GitHub numeric
   IDs; logins are mutable projections.
 - Browser mutations use the signed session. API writes use a personal access
-  token (`oa_pat_…`) with the exact `forge:write` scope, created and revoked at
-  `/settings/api-tokens`; plaintext is shown once.
+  token (`oa_pat_…`) with the exact `forge:write` scope, created and revoked
+  at `/settings/api-tokens`; plaintext is shown once.
 - Repository roles are `owner`, `maintainer`, `contributor` (writable), and
-  `viewer` (read-only). Every GitHub sign-in used to grant `contributor` on the
-  initial repository; commit `348dcc8` removed that auto-grant, so membership
-  is now explicit.
+  `viewer` (read-only). Membership is explicit and managed through product
+  surfaces, not consoles.
 
-### Repositories and Git transport
+### The participation model
 
-- Create, one-time GitHub import, list, and view work through both the browser
-  (`/repositories`, `/repositories/new`, `/repositories/import/github`) and
-  the API (`POST /api/v3/user/repos`, `POST /api/v3/user/repos/imports`, and
-  organization equivalents). Provisioning runs through a durable outbox.
-- Git smart HTTP serves `https://openagents.com/{owner}/{repo}.git` plus a
-  legacy `/git` compatibility route. Public repositories allow anonymous clone
-  and fetch. Push requires repository membership with a writable role,
-  authenticated by PAT over HTTP Basic or the CLI credential helper. Machine
-  (`smct_…`) and operator lanes are separate.
-- The CLI (`@openagentsinc/cli`, published on npm) handles auth login,
-  `repo create|import|list|view|clone`, and Git credential setup.
-- Public code browsing (repository home, commit, blob) reads from the WAL and
-  requires no sign-in.
+Reading and writing split cleanly, GitHub-style:
 
-### Issues
+| Who | Read issues | File issues | Comment | Triage (label, assign, milestone, close others') |
+| --- | --- | --- | --- | --- |
+| Anonymous visitor | Public repositories | No | No | No |
+| Signed in, not a member | Public repositories | Yes | Yes | No |
+| An issue's author | Their issue | Already filed | Yes | Edit title/body, close, reopen their own |
+| Repository member with write role | All visible repositories | Yes | Yes | Yes |
+| `viewer` member | Including private repositories | On public only | On public only | No |
 
-The GitHub-shaped subset is implemented end to end:
+Rules the server enforces, regardless of what any client renders:
 
-- List, get, create, update, close, reopen with `state_reason`
-  (`completed`, `not_planned`, `duplicate`, `reopened`).
-- Comments (list, create, edit, delete).
-- Issue numbers are repository-local; composite foreign keys make cross-
-  repository references impossible at the database level.
-- JSON API: anonymous public reads on `/api/v3/repos/{owner}/{repo}/issues`;
-  token-authenticated writes.
-- Web UI (`/:owner/:repo/issues`) has open/closed tabs, inline state changes
-  with close reasons, inline assignee toggles, label and milestone pickers in
-  the issue rail, and a comment timeline.
+- Issue reading runs behind plain `:browser`; the route ledger classifies it
+  `public_read` with scope `forge:issues:web`. A hand-crafted event from a
+  viewer without authority is refused with a flash message, never applied.
+- Filing requires an identity: `/issues/new` stays behind sign-in, because an
+  issue without an author cannot be triaged honestly. The author is recorded
+  on the issue.
+- Every mutation re-checks authority in the view's event handlers. The
+  templates hide controls for viewers who lack them, but hiding is courtesy,
+  not security.
 
-### Labels, milestones, and assignees
+### Membership management
 
-- Full CRUD through UI and API for labels and milestones.
-- Assignees resolve to active repository members with writable roles;
-  assignment of arbitrary logins is rejected.
+`/:owner/:repo/members`, owner-only, lists members with roles and supports:
 
-### Projects V2
+- Adding a member by GitHub login (the person must have signed in once).
+- Changing roles across the four levels.
+- Removing members.
+- Last-owner protection: the final `owner` cannot be demoted or removed.
 
-- Bounded subset: list, get, create projects; add items; update item field
-  values; list fields.
-- The board (`/:owner/:repo/projects/:number`) renders columns from the values
-  of a "Status" project field ("To Do", "In Progress", "Done") and links items
-  to issues.
+Every change flows through `OpenAgents.Repositories` functions that write
+audit records naming the actor, subject, action, and role. Non-owners are
+redirected; non-members get the same quiet bounce as a nonexistent
+repository, so the page never confirms who has access to what.
+
+### Repositories, Git transport, and code browsing
+
+- Create, one-time GitHub import, list, and view work through the browser,
+  the API, and the published CLI (`@openagentsinc/cli` on npm). Provisioning
+  runs through a durable outbox.
+- Git smart HTTP serves `https://openagents.com/{owner}/{repo}.git`. Public
+  repositories allow anonymous clone and fetch. Push requires repository
+  membership with a write role, authenticated by PAT over HTTP Basic or the
+  CLI credential helper.
+- Default labels seed automatically on every repository creation and import:
+  `bug`, `documentation`, `duplicate`, `enhancement`, `good first issue`,
+  `help wanted`, `invalid`, `question`, `wontfix`.
+
+### Issue list ergonomics
+
+The issue index has grown past open/closed tabs:
+
+- Filters by label, assignee, and milestone, plus text search across titles
+  and bodies (wildcards escaped; what you type is matched literally).
+- Pagination at 25 issues per page with Previous and Next, and a row count.
+- The Open and Closed tab counts respect the active filters, so the counts
+  and the list always agree — they read the same query.
+
+### Live updates
+
+Every committed issue write broadcasts on a per-repository topic. The index
+and detail views subscribe and re-read through the viewer's own authorization,
+so two people triaging together converge instead of drifting. The message
+carries the repository id and nothing else; subscribers re-read rather than
+trust payloads.
+
+### JSON API compatibility
+
+Four pinned deviations from GitHub behavior were closed:
+
+- Label URLs percent-encode as paths (`good%20first%20issue`), and the
+  advertised URL resolves through the show endpoint.
+- `PATCH .../labels/:name` renames through `new_name`.
+- Adding a nonexistent label to an issue creates it with a generated color,
+  instead of returning 404.
+- Removing a label an issue does not wear returns 404, instead of silently
+  succeeding.
+
+Issue creation with unknown labels remains strict (422); the add-to-issue
+endpoint creates on the fly, matching GitHub. Cross-repository isolation is
+unchanged: composite foreign keys still make cross-repo references
+impossible, and a name collision between repositories produces two
+independent labels rather than a link.
 
 ### Analytics
 
 PostHog captures `issue_created`, `issue_updated`, `issue_commented`,
 `label_created`, `milestone_created`, `project_created`, and
-`project_item_added` at the domain-context choke points, so triage activity is
-measurable from day one.
+`project_item_added` at the domain-context choke points.
 
 ### Tests
 
-The issues-and-projects layer went from 33% to 98% line coverage in the
-August coverage push; 23 previously untested modules including all eight
-LiveViews are covered. Two real defects were found and fixed this way
-(including a `ProjectShowLive` that had never rendered).
+The suite covers all of the above: the participation matrix for anonymous
+visitors, non-member filers, authors, and members; the members page including
+last-owner protection; filter, search, and pagination semantics; broadcast
+delivery; and each compatibility fix against the endpoint contract it
+restores.
 
-## Part 2: Gaps between here and public triage
+## Part 2: The pull-request product stance
 
-Ranked by how much they block the stated goal. Items 1–3 block it outright.
+Recorded direction, stated plainly so nobody has to rediscover it:
 
-### 1. No membership management surface — the blocker
+- Pull requests will exist as a general repository capability.
+- They will be disable-able per repository.
+- New repositories default to **enabled**.
+- `OpenAgentsInc/openagents.com` defaults to **disabled**: contribution to
+  this repository starts with issues, not patches.
+- Priority is explicitly lower than smooth issue interaction, which is why it
+  is not part of this pass.
 
-`OpenAgents.Repositories.add_member/3` exists, writes audit records, and has
-no caller anywhere in product code. OAuth no longer auto-grants membership.
-Consequence: nobody who signs up from now on can see or touch issues, and
-there is no UI, API, or admin page that fixes that. Today the only way to add
-a maintainer or reporter is a production console command (see the runbook).
+Nothing about that stance needs guarding in the meantime, because the Git
+plane already behaves as if pull requests were switched off everywhere: push
+requires a writable repository membership, so external participation is
+issue-shaped by construction. When the feature lands, the per-repository
+switch turns the existing membership gate into a policy knob instead of a
+hard rule, and this repository's switch starts at `off`.
 
-**Recommendation:** ship the smallest possible surface first — an owner-only
-"Members" section on the repository settings page that lists members and adds
-one by GitHub login with a role. It needs one context function that already
-exists, audit records that already exist, and one LiveView.
+Deliberately not built yet, in priority order:
 
-### 2. Issue pages require writable membership
-
-Every issue LiveView resolves the repository with
-`Repositories.get_writable_by_path!/3`, which raises when the viewer lacks a
-writable-role membership. A signed-in non-member gets an exception page instead
-of a 404 or a read-only view, and an anonymous visitor cannot view issues at
-all even on a public repository — while anonymous code browsing works.
-
-The read path already exists: `get_visible_by_path!/3` returns public
-repositories to anyone and private ones to any member, including `viewer`.
-
-**Recommendation:** split reads from writes in the issue LiveViews. Read with
-`get_visible_by_path!` (plus an anonymous path for public repositories), gate
-every mutation behind writability, and render a clean "sign in to interact"
-state otherwise. This is also what makes the public backlog readable, which is
-the point of having one.
-
-### 3. Submission policy is undecided
-
-Today, opening an issue requires a writable membership, because `contributor`
-was the only door in. That conflates two different grants: "can report bugs"
-and "can push code". GitHub's model separates them: anyone signed in can open
-an issue on a public repository; only collaborators can label, assign,
-close, or edit.
-
-**Recommendation:** adopt the GitHub model. Allow any active signed-in user to
-create issues and comments on public repositories, recorded with their author
-attribution, and keep every other mutation behind membership. This matches the
-existing data model (issues already carry an author), keeps the API contract
-unchanged, and turns "submit an issue" into a link instead of a manual grant.
-
-Until that lands, the interim policy in Part 3 uses manual grants.
-
-### 4. New repositories have no default labels
-
-A freshly created repository has an empty label set, so the first triage pass
-has nothing to attach. **Recommendation:** seed GitHub's default set on
-repository creation (`bug`, `documentation`, `duplicate`, `enhancement`,
-`good first issue`, `help wanted`, `invalid`, `question`, `wontfix`). Until
-then, seed once per repository through the API (scripted in the runbook).
-
-### 5. List ergonomics stop at open/closed tabs
-
-The issue list has state tabs only: no filter by label, assignee, or milestone;
-no search; no sorting; no pagination (the list loads every row). The design
-ruling in `2026-08-20-linear-design-github-shape.md` notes grouping, sorting,
-and filtering are free — arithmetic over existing responses — so these are low
-risk. **Recommendation:** filter-by-label and filter-by-assignee first, then
-pagination, then text search.
-
-### 6. Concurrent triage has no live updates
-
-Issue pages load once; there is no PubSub subscription, so two maintainers
-triaging simultaneously see stale rows until reload. Repository provisioning
-already demonstrates the broadcast pattern. **Recommendation:** subscribe the
-issue index and show views to a per-repository topic and re-stream on change.
-
-### 7. Known compatibility sharp edges
-
-Pinned by tests, still present at `a40a799`. None block triage, but each will
-bite a scripted client eventually:
-
-- `LabelJSON` renders label URLs with `URI.encode_www_form/1`, so a label
-  named `good first issue` advertises a URL its own endpoint cannot resolve.
-- `PATCH .../labels/:name` ignores `new_name`; renaming is impossible through
-  the API.
-- Adding a nonexistent label to an issue returns 404 where GitHub creates the
-  label.
-- Removing a label an issue does not have is a silent no-op where GitHub
-  returns 404.
-
-**Recommendation:** fix the URL encoding first (it is a correctness bug in
-advertised data), batch the rest into one compatibility pass.
-
-### 8. Notifications do not exist yet
-
-There is no email and no mention machinery; the mailer is development-only.
-A backlog stays healthy when reporters hear back. Acceptable to defer while
-the community is small and responses happen in chat, but it should not be
-deferred past the first hundred external issues.
-
-### 9. Pull requests stay out — deliberately
-
-Pull requests, reviews, and fork workflows are unimplemented, and per the
-current direction they should stay that way while the backlog forms. The Git
-plane already enforces the useful half of this: only members with writable
-roles can push, so external contribution is limited to issues until you decide
-otherwise.
+1. Pull requests with a per-repository enable/disable switch.
+2. Notifications (email or mentions). Acceptable while the community is small
+   and responses happen in chat; revisit before the first hundred external
+   issues.
 
 ## Part 3: Triage runbook
 
@@ -204,76 +166,56 @@ otherwise.
 
 | Role | Can do |
 | --- | --- |
-| `owner` | Everything, plus member management (console until gap 1 closes) |
-| `maintainer` | Triage: label, assign, milestone, close, edit any issue |
-| `contributor` | Open and comment on issues; push if granted Git access |
-| `viewer` | Read private-repository content; no writes |
+| `owner` | Everything, including managing members |
+| `maintainer` | Triage: label, assign, set milestones, close, edit any issue |
+| `contributor` | File and comment on issues; push if granted Git access |
+| `viewer` | Read private-repository content; join public conversations |
 
-While gap 2 stands, all of these roles also gate *viewing* the web UI, which
-is why setup begins with grants.
+### One-time setup for this repository
 
-### One-time production setup
+The initial repository was imported before automatic label seeding shipped,
+so give it the default vocabulary once. Either use the Labels page
+(`/:owner/:repo/labels`) or run the equivalent calls:
 
-Run these once, after the import finishes and the repository reports `ready`.
+```sh
+TOKEN=oa_pat_your_token   # created at /settings/api-tokens, forge:write scope
+BASE=https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/labels
 
-1. Verify the repository exists and is public:
+for spec in bug:d73a4a documentation:0075ca duplicate:cfd3d7 \
+  enhancement:a2eeef "good first issue:7057ff" help wanted:008672 \
+  invalid:e4e669 question:d876e3 wontfix:ffffff; do
+  name=${spec%%:*}; color=${spec#*:}
+  curl -s -X POST "$BASE" -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"$name\", \"color\": \"$color\"}" >/dev/null
+done
+```
 
-   ```sh
-   curl -s https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com | grep visibility
-   ```
+Repositories created from now on get these labels automatically.
 
-2. Seed the default labels. Run once per missing label:
+Then grant maintainer roles to everyone who will run triage:
 
-   ```sh
-   TOKEN=oa_pat_your_token   # created at /settings/api-tokens, forge:write scope
-   BASE=https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/labels
+1. Each person signs in at `openagents.com` once with GitHub.
+2. An owner opens `/:owner/:repo/members`, adds their login with the
+   `maintainer` role, and saves.
+3. Keep `owner` to two or three people; the last owner is protected, but a
+   single-owner repository still has a bus factor of one.
 
-   for spec in bug:d73a4a documentation:0075ca duplicate:cfd3d7 \
-     enhancement:a2eeef "good first issue:7057ff" help wanted:008672 \
-     invalid:e4e669 question:d876e3 wontfix:ffffff; do
-     name=${spec%%:*}; color=${spec#*:}
-     curl -s -X POST "$BASE" -H "Authorization: Bearer $TOKEN" \
-       -H "Content-Type: application/json" \
-       -d "{\"name\": \"$name\", \"color\": \"$color\"}" >/dev/null
-   done
-   ```
+Finally, create a starting milestone and project so triaged work has a
+destination:
 
-3. Grant memberships to the initial maintainers. Until gap 1 closes this needs
-   a console session on a production node:
+```sh
+curl -s -X POST "$BASE/../milestones" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Backlog hygiene", "description": "First triage sweep"}'
 
-   ```elixir
-   alias OpenAgents.{Accounts, Repo, Repositories}
+curl -s -X POST "https://openagents.com/api/v3/OpenAgentsInc/projectsV2" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title": "openagents.com roadmap"}'
+```
 
-   repo = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
-   user = Repo.get_by!(Accounts.User, github_login: "their-github-login")
-   Repositories.add_member(repo, user, "maintainer")
-   ```
-
-   Grant `maintainer` to everyone who will run triage; keep `owner` to two or
-   three people. Each call writes an `Audit` record.
-
-4. Create the first milestone so work has a destination:
-
-   ```sh
-   curl -s -X POST "$BASE/../milestones" -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"title": "Backlog hygiene", "description": "First triage sweep", "state": "open"}'
-   ```
-
-5. Create a project for the public board:
-
-   ```sh
-   curl -s -X POST "https://openagents.com/api/v3/OpenAgentsInc/projectsV2" \
-     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-     -d '{"title": "openagents.com roadmap"}'
-   ```
-
-   Then add its Status field values ("To Do", "In Progress", "Done") through
-   the project fields API, and pin high-signal issues to the board with
-   `project_item_added`.
-
-6. Record who holds which role in your own notes; there is no UI to look it up
-   until gap 1 closes.
+Add the Status field values ("To Do", "In Progress", "Done") through the
+project fields API, then pin high-signal issues to the board.
 
 ### Label vocabulary
 
@@ -311,37 +253,38 @@ Ten minutes, ideally same time each day:
    - Answered questions: close with reason `completed`.
 5. Move anything scheduled onto the project board and into a milestone. The
    board is the promise; the milestone is the deadline.
-6. Sweep the closed tab briefly: a wrong close is cheaper to catch the same
+6. Sweep the Closed tab briefly: a wrong close is cheaper to catch the same
    day than next week.
 
-Everything above mutates through either the issue rail in the UI or the
-equivalent PATCH calls below.
+Use the filters to work in slices — `label:bug` for the bug sweep,
+`assignee:you` for your queue, the search box to check whether a new report
+duplicates an old one before you label it. The page updates live while other
+maintainers triage alongside you.
 
 ### The weekly review
 
 1. Walk the project board column by column. "In Progress" older than a week
    gets an owner, a milestone, or moves back to "To Do".
 2. Check the milestone: scope fixed, due date honest, nothing stuck.
-3. Skim PostHog for `issue_created` volume versus `issue_commented` — a rising
-   creation rate with flat response rate means triage is falling behind.
-4. Confirm every new triage participant has a membership row (console check
-   until the members UI exists).
+3. Skim PostHog for `issue_created` volume versus `issue_commented` — a
+   rising creation rate with flat response rate means triage is falling
+   behind.
+4. Review the members list on the members page: departed maintainers lose
+   their role the week they leave, not someday.
 5. File the meta-issue: anything about the triage process itself that hurt
    this week becomes an issue labeled `enhancement` on this same tracker.
 
-### Interim community submission policy
+### Community submissions
 
-Until gaps 1–3 close, the honest flow for an outside reporter is:
+The standing policy, publishable anywhere the tracker is announced:
 
-1. They sign in with GitHub at `openagents.com`.
-2. You grant their account `contributor` from the console (step 3 of setup).
-3. They open issues and comment; they cannot push unless you separately intend
-   them to, since Git push checks the same membership table but is a distinct
-   decision you control by role.
+1. Sign in with GitHub at `openagents.com`.
+2. Open issues on any public repository — no invitation, no membership.
+3. Expect triage: a maintainer labels and responds. Comments stay open, so
+   the conversation continues on your issue.
 
-Publish this expectation wherever you announce the tracker, or hold public
-submissions until the GitHub-model change lands — a crash page for eager
-first-time reporters is worse than "issue tracker opens next week".
+Reporters who later become contributors get roles through the members page;
+that is a deliberate human decision, not an automatic upgrade.
 
 ### API recipes
 
@@ -359,6 +302,10 @@ curl -s -X POST "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.co
   -d '{"title": "Search returns duplicates", "body": "Steps to reproduce...", "labels": ["bug"]}'
 ```
 
+Note the difference in kind: the JSON API's write path stays
+membership-gated. The participation model is a browser-session contract; PAT
+holders remain collaborators.
+
 Close as not planned:
 
 ```sh
@@ -367,30 +314,34 @@ curl -s -X PATCH "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.c
   -d '{"state": "closed", "state_reason": "not_planned"}'
 ```
 
-Label and assign in one update: `labels` takes names, `assignees` takes
-logins, and both replace the full set, so send the complete desired lists.
+Label and assign in one update: `labels` takes names (creating missing ones),
+`assignees` takes logins, and both replace the full set, so send the complete
+desired lists.
 
 ### Measuring triage health
 
 PostHog events land at the domain boundary, so the funnel is queryable:
 
-- Median time from `issue_created` to first `issue_commented` by a maintainer:
-  your response-time promise.
+- Median time from `issue_created` to first `issue_commented` by a
+  maintainer: your response-time promise.
 - `issue_created` count per week versus issues closed per week: backlog
   direction.
-- Share of issues carrying zero labels after 24 hours: triage loop discipline.
+- Share of issues carrying zero labels after 24 hours: triage loop
+  discipline.
 
-Track them as three insights on one dashboard before the first announcement;
+Track them as three insights on one dashboard before the next announcement;
 retrofitting measurement onto a neglected backlog is miserable.
 
 ## Guardrails
 
-- Do not widen Git push beyond repository members; that is the mechanism that
-  keeps public participation issue-shaped while pull requests remain closed.
+- Do not widen Git push beyond repository members; that is the mechanism
+  that keeps public participation issue-shaped while pull requests remain a
+  planned feature.
 - Do not grant `maintainer` casually: triage roles can close and rewrite
   anyone's issues.
-- Keep every membership change flowing through `add_member/3` so audit
-  records accumulate; when the members UI lands it inherits the trail.
-- When you fix gaps 1–3, update this document the same day; a runbook that
-  says "use the console" one commit longer than necessary is how stale
-  instructions become incident reports.
+- Keep every membership change flowing through the members page so audit
+  records accumulate; direct console edits skip the trail.
+- When the pull-request switch ships, update this document the day it does:
+  record where the setting lives, which repositories default which way, and
+  flip `OpenAgentsInc/openagents.com` to `off` explicitly rather than relying
+  on the default.

@@ -178,6 +178,83 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
              "accepted snapshot"
   end
 
+  test "a credential-backed import keeps the askpass helper available during fetch" do
+    root = Application.fetch_env!(:openagents, :forge_data_dir) |> Path.dirname()
+    source = Path.join(root, "credential-source")
+    File.mkdir_p!(source)
+    git!(source, ["init", "--initial-branch=main"])
+    git!(source, ["config", "user.email", "test@example.com"])
+    git!(source, ["config", "user.name", "Import test"])
+    File.write!(Path.join(source, "README.md"), "credential boundary\n")
+    git!(source, ["add", "README.md"])
+    git!(source, ["commit", "-m", "Credential boundary"])
+
+    sha = source |> git!(["rev-parse", "HEAD"]) |> String.trim()
+    refs = %{"refs/heads/main" => sha}
+    user = repository_user_fixture("credential-import-owner")
+
+    source_record = %{
+      source_repository_id: 502,
+      source_owner_id: user.github_id,
+      source_full_name: "credential-import-owner/source",
+      source_default_branch: "main",
+      source_ref_digest: ref_digest(source, refs),
+      source_head_sha: sha,
+      source_refs: refs,
+      source_uses_lfs: false
+    }
+
+    assert {:ok, repository, _repository_import, :created} =
+             Repositories.create_user_import(
+               user,
+               source_record,
+               %{name: "credential-import", default_branch: "main"},
+               "credential-import-key"
+             )
+
+    test_process = self()
+
+    git_runner = fn git_directory, arguments, options ->
+      environment = Keyword.fetch!(options, :env)
+      askpass = List.keyfind!(environment, "GIT_ASKPASS", 0) |> elem(1)
+      token_file = List.keyfind!(environment, "OPENAGENTS_GITHUB_TOKEN_FILE", 0) |> elem(1)
+
+      {username, 0} =
+        System.cmd(askpass, ["Username for 'https://github.com':"],
+          env: environment,
+          stderr_to_stdout: true
+        )
+
+      {password, 0} =
+        System.cmd(askpass, ["Password for 'https://github.com':"],
+          env: environment,
+          stderr_to_stdout: true
+        )
+
+      send(test_process, {
+        :credential_fetch,
+        arguments,
+        String.trim(username) == "x-access-token",
+        password == "fixture-credential",
+        File.stat!(token_file).mode |> Bitwise.band(0o777)
+      })
+
+      Repos.git(git_directory, arguments, options)
+    end
+
+    assert :ok =
+             Importer.import(repository,
+               source_url: source,
+               source_credential: "fixture-credential",
+               git_runner: git_runner
+             )
+
+    assert_receive {:credential_fetch, arguments, true, true, 0o600}
+    refute "credential.interactive=never" in arguments
+    assert "credential.helper=" in arguments
+    assert "fetch" in arguments
+  end
+
   defp bare_git!(storage_key, args) do
     {output, 0} = Repos.git(Repos.bare_path(storage_key), args)
     output

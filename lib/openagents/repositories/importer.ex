@@ -1,6 +1,8 @@
 defmodule OpenAgents.Repositories.Importer do
   @moduledoc "Copies one accepted GitHub ref snapshot into the durable forge WAL."
 
+  require Logger
+
   alias OpenAgents.{Accounts, Audit, GitHubOAuth, Repo}
   alias OpenAgents.Forge.{Repos, Sync, WAL}
   alias OpenAgents.Repositories.{Repository, RepositoryImport}
@@ -39,18 +41,24 @@ defmodule OpenAgents.Repositories.Importer do
           :ok
         end
       rescue
-        _error -> {:error, :import_failed}
+        _error ->
+          log_stage(repository, running_import, "import", "failed", :import_exception)
+          {:error, :import_failed}
       catch
-        _kind, _reason -> {:error, :import_failed}
+        _kind, _reason ->
+          log_stage(repository, running_import, "import", "failed", :import_exception)
+          {:error, :import_failed}
       after
         File.rm_rf(temporary_directory)
       end
 
     case result do
       :ok ->
+        log_stage(repository, running_import, "import", "completed")
         :ok
 
       {:error, reason} ->
+        log_stage(repository, running_import, "import", "failed", reason)
         mark_failed!(running_import, error_code(reason))
         {:error, reason}
     end
@@ -83,7 +91,8 @@ defmodule OpenAgents.Repositories.Importer do
             repository_import,
             source_url,
             credential,
-            temporary_directory
+            temporary_directory,
+            options
           )
         end)
 
@@ -108,16 +117,46 @@ defmodule OpenAgents.Repositories.Importer do
          repository_import,
          source_url,
          credential,
-         temporary_directory
+         temporary_directory,
+         options
        ) do
-    with :ok <- File.mkdir_p(temporary_directory),
-         :ok <- File.chmod(temporary_directory, 0o700),
-         {:ok, source_repository} <- initialize_source(temporary_directory),
-         :ok <- fetch_source(source_repository, source_url, credential, temporary_directory),
-         {:ok, refs} <- verify_snapshot(source_repository, repository_import),
-         {:ok, payload, format} <- create_payload(source_repository, refs, temporary_directory),
-         :ok <- append_import(repository, repository_import, payload, format, refs, 0),
-         :ok <- Sync.ensure_fresh(repository.storage_key, repository.default_branch) do
+    with :ok <-
+           import_stage(repository, repository_import, "prepare_workspace", fn ->
+             with :ok <- File.mkdir_p(temporary_directory),
+                  :ok <- File.chmod(temporary_directory, 0o700) do
+               :ok
+             end
+           end),
+         {:ok, source_repository} <-
+           import_stage(repository, repository_import, "initialize_source", fn ->
+             initialize_source(temporary_directory)
+           end),
+         :ok <-
+           import_stage(repository, repository_import, "fetch_source", fn ->
+             fetch_source(
+               source_repository,
+               source_url,
+               credential,
+               temporary_directory,
+               options
+             )
+           end),
+         {:ok, refs} <-
+           import_stage(repository, repository_import, "verify_snapshot", fn ->
+             verify_snapshot(source_repository, repository_import)
+           end),
+         {:ok, payload, format} <-
+           import_stage(repository, repository_import, "create_payload", fn ->
+             create_payload(source_repository, refs, temporary_directory)
+           end),
+         :ok <-
+           import_stage(repository, repository_import, "append_wal", fn ->
+             append_import(repository, repository_import, payload, format, refs, 0)
+           end),
+         :ok <-
+           import_stage(repository, repository_import, "materialize_cache", fn ->
+             Sync.ensure_fresh(repository.storage_key, repository.default_branch)
+           end) do
       :ok
     end
   end
@@ -125,9 +164,13 @@ defmodule OpenAgents.Repositories.Importer do
   defp source_access(repository, repository_import, options) do
     case Keyword.get(options, :source_url) do
       source_url when is_binary(source_url) ->
-        if Path.type(source_url) == :absolute,
-          do: {:ok, source_url, nil},
-          else: {:error, :invalid_source_url}
+        credential = Keyword.get(options, :source_credential)
+
+        cond do
+          Path.type(source_url) != :absolute -> {:error, :invalid_source_url}
+          is_nil(credential) or is_binary(credential) -> {:ok, source_url, credential}
+          true -> {:error, :invalid_source_credential}
+        end
 
       nil ->
         with true <-
@@ -148,13 +191,13 @@ defmodule OpenAgents.Repositories.Importer do
     end
   end
 
-  defp fetch_source(source_repository, source_url, credential, temporary_directory) do
+  defp fetch_source(source_repository, source_url, credential, temporary_directory, options) do
     with {:ok, environment} <- credential_environment(credential, temporary_directory) do
+      git_runner = Keyword.get(options, :git_runner, &Repos.git/3)
+
       args = [
         "-c",
         "credential.helper=",
-        "-c",
-        "credential.interactive=never",
         "fetch",
         "--force",
         "--prune",
@@ -164,7 +207,7 @@ defmodule OpenAgents.Repositories.Importer do
         "+refs/tags/*:refs/tags/*"
       ]
 
-      case Repos.git(source_repository, args, env: environment) do
+      case git_runner.(source_repository, args, env: environment) do
         {_output, 0} -> :ok
         {_output, _status} -> {:error, :source_fetch_failed}
       end
@@ -422,6 +465,47 @@ defmodule OpenAgents.Repositories.Importer do
   defp error_code(:github_token_missing), do: "github_connection_required"
   defp error_code(:import_timeout), do: "import_timeout"
   defp error_code(_reason), do: "import_failed"
+
+  defp import_stage(repository, repository_import, stage, operation) do
+    log_stage(repository, repository_import, stage, "started")
+
+    case operation.() do
+      :ok = result ->
+        log_stage(repository, repository_import, stage, "completed")
+        result
+
+      {:ok, _value} = result ->
+        log_stage(repository, repository_import, stage, "completed")
+        result
+
+      {:ok, _value, _metadata} = result ->
+        log_stage(repository, repository_import, stage, "completed")
+        result
+
+      {:error, reason} = result ->
+        log_stage(repository, repository_import, stage, "failed", reason)
+        result
+    end
+  end
+
+  defp log_stage(repository, repository_import, stage, state, reason \\ nil) do
+    message =
+      "repository_import_stage" <>
+        " repository_id=#{repository.id}" <>
+        " repository_import_id=#{repository_import.id}" <>
+        " stage=#{stage}" <>
+        " state=#{state}" <>
+        diagnostic_error(reason)
+
+    if state == "failed", do: Logger.warning(message), else: Logger.info(message)
+  end
+
+  defp diagnostic_error(nil), do: ""
+
+  defp diagnostic_error(reason) when is_atom(reason),
+    do: " error_code=#{reason |> Atom.to_string() |> String.slice(0, 80)}"
+
+  defp diagnostic_error(_reason), do: " error_code=unexpected_error"
 
   defp temporary_directory(import_id) do
     root = Application.get_env(:openagents, :repository_import_temp_dir, System.tmp_dir!())

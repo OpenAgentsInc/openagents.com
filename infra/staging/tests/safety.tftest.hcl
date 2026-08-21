@@ -23,6 +23,17 @@ run "isolated_topology" {
   }
 
   assert {
+    condition = alltrue([
+      for instance in values(google_compute_instance.fleet) :
+      strcontains(
+        instance.metadata["startup-script"],
+        "--volume \"$state_root/artifacts:$state_root/artifacts\""
+      )
+    ])
+    error_message = "The isolated Forge builder must share the artifact directory with the application."
+  }
+
+  assert {
     condition     = length(google_compute_instance.deployer.network_interface[0].access_config) == 0
     error_message = "The staging deployer must not have a public access configuration."
   }

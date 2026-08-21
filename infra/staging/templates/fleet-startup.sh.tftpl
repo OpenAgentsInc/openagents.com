@@ -230,5 +230,6 @@ if [ -n "$builder_image" ] || [ -n "$builder_digest" ]; then
     --restart always \
     --env-file /run/openagents/builder.env \
     --volume "$state_root/workspace:$state_root/workspace" \
+    --volume "$state_root/artifacts:$state_root/artifacts" \
     "$builder_image"
 fi

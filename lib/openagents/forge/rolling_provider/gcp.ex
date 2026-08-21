@@ -20,9 +20,13 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
     with {:ok, config} <- config() do
       configured = config |> Keyword.fetch!(:instances) |> Map.keys() |> MapSet.new()
 
+      local_node = Keyword.get(config, :local_node, Node.self())
+
       config
       |> Keyword.get(:node_list, &connected_nodes/0)
       |> then(& &1.())
+      |> then(&[local_node | &1])
+      |> Enum.uniq()
       |> Enum.filter(&MapSet.member?(configured, to_string(&1)))
       |> Enum.sort()
     else

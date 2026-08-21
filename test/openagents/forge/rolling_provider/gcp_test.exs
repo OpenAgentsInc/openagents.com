@@ -163,6 +163,17 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
     assert Gcp.members() == [hd(@nodes), Enum.at(@nodes, 2)]
   end
 
+  test "includes the coordinator in the configured fleet inventory" do
+    rpc = fn _node, _module, _function, _arguments, _timeout -> :ok end
+
+    put_config(rpc,
+      local_node: hd(@nodes),
+      node_list: fn -> tl(@nodes) end
+    )
+
+    assert Gcp.members() == @nodes
+  end
+
   defp context do
     %{
       sha: @sha,

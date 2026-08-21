@@ -22,10 +22,20 @@ defmodule OpenAgents.DataRights do
   @maximum_export_voice_sessions 2_000
   @maximum_export_tool_steps 10_000
 
-  @doc "Whether the one-click full reset control is enabled (development and staging only)."
+  @doc """
+  Whether the one-click full reset control is enabled.
+
+  Development and staging only. The control deletes every message, memory, and
+  voice session an account has, with one confirmation and no undo — reasonable
+  to hand someone exercising a build, never something to leave on a page a
+  customer is using. The flag alone was the gate, so a production deployment
+  that set it got the control; the environment now decides last, and enabling
+  the flag against production is inert rather than destructive.
+  """
   @spec reset_enabled?() :: boolean()
   def reset_enabled? do
-    Application.get_env(:openagents, :conversation_reset_enabled, false) == true
+    Application.get_env(:openagents, :conversation_reset_enabled, false) == true and
+      Application.get_env(:openagents, :runtime_environment) != :production
   end
 
   @spec export(User.t(), Visitor.t(), Conversation.t()) :: {:ok, map()} | {:error, term()}

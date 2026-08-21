@@ -9,7 +9,20 @@ defmodule OpenAgents.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      test_coverage: [summary: [threshold: 83.0], local_only: false],
+      test_coverage: [
+        summary: [threshold: 83.0],
+        local_only: false,
+        # Release gates cover operational entry points. Keep this threshold
+        # focused on application runtime code, not generated and test-only modules.
+        ignore_modules: [
+          ~r/^Inspect\./,
+          ~r/^Mix\.Tasks\./,
+          ~r/^OpenAgents\.Test\./,
+          OpenAgents.Release,
+          OpenAgents.ReleaseAssembler,
+          OpenAgentsWeb.ChannelCase
+        ]
+      ],
       deps: deps(),
       compilers: [:appup, :phoenix_live_view] ++ Mix.compilers(),
       appup: "rel/openagents.appup.exs",

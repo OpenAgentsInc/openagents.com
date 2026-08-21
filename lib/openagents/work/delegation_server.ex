@@ -23,7 +23,11 @@ defmodule OpenAgents.Work.DelegationServer do
   alias OpenAgents.Cluster.Sessions
   alias OpenAgents.Computer.AcpTranscript
 
-  @maximum_report_output 6_000
+  # A report is a chat message, not a terminal window. It carries what the
+  # agent said and any tool call that failed; the tool-by-tool log stays in the
+  # live delegation rail. The bound is characters of that composed body.
+  @maximum_report_output 2_000
+  @maximum_detail 500
 
   def start_link(job_id) do
     GenServer.start_link(__MODULE__, job_id, name: via(job_id))
@@ -261,26 +265,37 @@ defmodule OpenAgents.Work.DelegationServer do
   defp human_status("refused"), do: "refused"
   defp human_status(other), do: "ended (#{other})"
 
-  defp detail_line(detail) when is_binary(detail) and detail != "", do: detail
+  # The detail is controller-reported text: bound it before it reaches a message.
+  defp detail_line(detail) when is_binary(detail) and detail != "",
+    do: String.slice(detail, 0, @maximum_detail)
+
   defp detail_line(_detail), do: nil
 
+  # The conversation gets the agent's answer, not its keystrokes. Posting the
+  # whole decoded transcript dumped hundreds of `Terminal: …` lines into the
+  # chat the moment a long delegation ended. What survives here is the prose,
+  # the tool calls that failed, and a line counting the rest, so the work is
+  # named without being replayed.
   defp output_block(output) when is_binary(output) and output != "" do
-    transcript = AcpTranscript.decode(output)
+    {summary, tool_count} = AcpTranscript.summarize(output)
 
-    if transcript == "" do
-      nil
-    else
-      bound_transcript(transcript)
+    case Enum.reject([bound_report(summary), tool_count_line(tool_count)], &(&1 in [nil, ""])) do
+      [] -> nil
+      parts -> Enum.join(parts, "\n\n")
     end
   end
 
   defp output_block(_output), do: nil
 
-  defp bound_transcript(transcript) do
-    if String.length(transcript) <= @maximum_report_output do
-      transcript
+  defp tool_count_line(0), do: nil
+  defp tool_count_line(1), do: "The agent ran 1 tool call on the machine."
+  defp tool_count_line(count), do: "The agent ran #{count} tool calls on the machine."
+
+  defp bound_report(summary) do
+    if String.length(summary) <= @maximum_report_output do
+      summary
     else
-      String.slice(transcript, 0, @maximum_report_output) <> "\n\n[transcript truncated]"
+      String.slice(summary, 0, @maximum_report_output) <> "\n\n[report truncated]"
     end
   end
 

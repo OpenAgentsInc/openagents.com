@@ -87,6 +87,35 @@ defmodule OpenAgents.Computer.AcpTranscriptTest do
     assert report =~ "3 hits"
   end
 
+  test "summarize keeps the prose and failures, and counts the rest" do
+    stream =
+      "I read the failing test and fixed the selector.\n" <>
+        frame("T", ["toolu_01run", "1", "execute", b64("git status"), b64("On branch main")]) <>
+        frame("T", ["toolu_02read", "1", "read", b64("chat_live.ex"), b64("defmodule")]) <>
+        frame("T", ["toolu_03edit", "2", "edit", b64("chat_live.ex"), b64("User refused")]) <>
+        frame("N", [b64("Permission denied: Edit"), "warn"])
+
+    assert {text, 3} = AcpTranscript.summarize(stream)
+
+    # What explains the outcome stays: the agent's words, its notes, the failure.
+    assert text =~ "I read the failing test and fixed the selector."
+    assert text =~ "Edit: chat_live.ex (failed)"
+    assert text =~ "Warning: Permission denied: Edit"
+
+    # The tool-by-tool log does not.
+    refute text =~ "git status"
+    refute text =~ "On branch main"
+    refute text =~ "Read: chat_live.ex"
+  end
+
+  test "summarize counts a tool that never finished, and empties safely" do
+    stream = frame("T", ["toolu_01open", "0", "read", b64("chat_live.ex"), ""])
+
+    assert {"", 1} = AcpTranscript.summarize(stream)
+    assert AcpTranscript.summarize("") == {"", 0}
+    assert AcpTranscript.summarize(nil) == {"", 0}
+  end
+
   defp frame(kind, fields) do
     @rs <> Enum.join([kind | fields], @us) <> "\n"
   end

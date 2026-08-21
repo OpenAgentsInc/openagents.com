@@ -7,6 +7,10 @@ defmodule OpenAgents.Computer.AcpTranscript do
   separator `0x1F`. Durable job reports used to post the raw bytes. This
   module is the server-side decoder so a timeout or completion never writes
   `Ttoolu_…0executeVGVybWluYWw=` into the conversation.
+
+  `decode/1` renders the whole stream, prose and tool lines alike. A chat
+  message wants less than that, so `summarize/1` splits the two: the agent's
+  own words stay, and the tool-by-tool log becomes a count.
   """
 
   @record_separator <<30>>
@@ -33,11 +37,34 @@ defmodule OpenAgents.Computer.AcpTranscript do
   @spec decode(term()) :: String.t()
   def decode(binary) when is_binary(binary) do
     binary
-    |> walk([], %{})
-    |> finalize()
+    |> entries()
+    |> render()
   end
 
   def decode(_other), do: ""
+
+  @doc """
+  Splits the stream into what a conversation can carry and what it cannot.
+
+  Returns the agent's own prose, its notes, and the tool calls that failed —
+  the parts that explain an outcome — plus the total number of tool calls.
+  The tool-by-tool log belongs to the live delegation rail: pasted into a
+  message it buries the report under hundreds of `Terminal: …` lines, so the
+  caller names the count instead.
+  """
+  @spec summarize(term()) :: {String.t(), non_neg_integer()}
+  def summarize(binary) when is_binary(binary) do
+    entries = entries(binary)
+
+    text =
+      entries
+      |> Enum.reject(&(&1.kind == :tool and &1.status != :failed))
+      |> render()
+
+    {text, Enum.count(entries, &(&1.kind == :tool))}
+  end
+
+  def summarize(_other), do: {"", 0}
 
   defp walk(<<@record_separator, rest::binary>>, acc, tools) do
     case take_line(rest) do
@@ -80,7 +107,7 @@ defmodule OpenAgents.Computer.AcpTranscript do
 
       ["N", encoded | rest] ->
         tone = Enum.at(rest, 0) || "info"
-        {append_block(acc, note_line(decode64(encoded), tone)), tools}
+        {append_block(:note, acc, note_line(decode64(encoded), tone), nil), tools}
 
       _other ->
         {acc, tools}
@@ -110,34 +137,43 @@ defmodule OpenAgents.Computer.AcpTranscript do
     if tool.emitted? do
       {acc, tools}
     else
-      {append_block(acc, tool_line(tool, if(phase == "2", do: :failed, else: :done))),
+      status = if phase == "2", do: :failed, else: :done
+
+      {append_block(:tool, acc, tool_line(tool, status), status),
        Map.update!(tools, id, &Map.put(&1, :emitted?, true))}
     end
   end
 
   defp maybe_emit_tool(acc, _id, _phase, tools), do: {acc, tools}
 
-  defp finalize({acc, tools}) do
+  # The stream in reading order, each block tagged with what it is, so a caller
+  # can keep the prose without the tool log.
+  defp entries(binary) do
+    {acc, tools} = walk(binary, [], %{})
+
     unfinished =
       tools
       |> Enum.reject(fn {_id, tool} -> tool.emitted? or tool.phase in ["1", "2"] end)
-      |> Enum.map(fn {_id, tool} -> tool_line(tool, :running) end)
+      |> Enum.map(fn {_id, tool} -> entry(:tool, tool_line(tool, :running), :running) end)
 
-    [Enum.reverse(acc), unfinished]
-    |> List.flatten()
-    |> Enum.reject(&(&1 in [nil, ""]))
-    |> Enum.join("\n\n")
+    Enum.reverse(acc) ++ unfinished
+  end
+
+  defp render(entries) do
+    entries
+    |> Enum.map_join("\n\n", & &1.text)
     |> String.trim()
   end
 
+  defp entry(kind, text, status), do: %{kind: kind, text: text, status: status}
+
   defp append_prose(acc, text) do
     trimmed = String.trim(text)
-    if trimmed == "", do: acc, else: [trimmed | acc]
+    if trimmed == "", do: acc, else: [entry(:prose, trimmed, nil) | acc]
   end
 
-  defp append_block(acc, block) do
-    if block in [nil, ""], do: acc, else: [block | acc]
-  end
+  defp append_block(_kind, acc, block, _status) when block in [nil, ""], do: acc
+  defp append_block(kind, acc, block, status), do: [entry(kind, block, status) | acc]
 
   defp tool_line(tool, status) do
     label = Map.get(@kind_labels, tool.kind, "")

@@ -28,6 +28,9 @@ Install the repository hook once on each owned development or release machine:
 git config core.hooksPath .githooks
 ```
 
+The hook refuses any push aimed somewhere other than the forge before it
+considers the gate, so an installed hook enforces REPOSITORY-002 as well.
+
 Provision a disposable PostgreSQL database with pgvector already installed,
 then run the complete exact-SHA gate:
 

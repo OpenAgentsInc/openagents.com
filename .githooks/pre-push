@@ -2,4 +2,8 @@
 set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
+
+# Where the push is going, before what it costs to check the push itself.
+"$repo_root/ops/ci/push-remote-check.sh" "$@"
+
 exec "$repo_root/ops/ci/gate.sh"

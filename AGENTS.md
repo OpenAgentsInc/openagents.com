@@ -12,6 +12,21 @@ All text in this repo — docs, README, `AGENTS.md`, commit messages, and agent 
 - Avoid jargon, buzzwords, metaphors, exclamation marks, and phrases like `simply` or `just`.
 - Avoid `please` in instructions.
 
+## Git remotes
+
+Push to the forge, never to GitHub:
+
+```sh
+git push openagents HEAD:main
+```
+
+The `openagents` remote is the forge at `openagents.com`, which records every
+push in the durable WAL and mirrors `main` to GitHub itself. The `origin`
+remote is that GitHub mirror; pushing to it directly leaves the forge behind
+its own mirror, and nothing reports the divergence until a clone disagrees
+with the site. `ops/ci/push-remote-check.sh` refuses a non-forge push, and
+`.githooks/pre-push` runs it. See `INVARIANTS.md`, REPOSITORY-002.
+
 ## Project guidelines
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues

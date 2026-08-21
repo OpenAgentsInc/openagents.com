@@ -312,7 +312,7 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
     String.trim(sha)
   end
 
-  defp git_in(path, args, stdin \\ "", opts \\ []) do
+  defp git_in(path, args, stdin, opts \\ []) do
     input = Path.join(System.tmp_dir!(), "og-stdin-#{System.unique_integer([:positive])}")
     File.write!(input, stdin)
 

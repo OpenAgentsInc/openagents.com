@@ -47,6 +47,23 @@ run "isolated_topology" {
   }
 
   assert {
+    condition = alltrue([
+      strcontains(google_compute_instance.deployer.metadata["startup-script"], "OPENAGENTS_GCP_ROLLING_PROJECT_ID"),
+      strcontains(google_compute_instance.deployer.metadata["startup-script"], "OPENAGENTS_GCP_ROLLING_INSTANCES_JSON"),
+      strcontains(google_compute_instance.deployer.metadata["startup-script"], "OPENAGENTS_PRODUCTION_PROJECT_ID")
+    ])
+    error_message = "The staging deployer must receive its bounded, non-secret rolling-provider inventory."
+  }
+
+  assert {
+    condition = strcontains(
+      google_compute_instance.fleet["openagents-fleet-1"].metadata["startup-script"],
+      "docker image prune --all --force"
+    )
+    error_message = "Fleet startup must reclaim only unused registry-backed images before pulling a candidate."
+  }
+
+  assert {
     condition     = google_sql_database_instance.staging.deletion_protection
     error_message = "The staging database must keep Terraform deletion protection enabled."
   }

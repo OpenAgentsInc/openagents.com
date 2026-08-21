@@ -123,6 +123,16 @@ defmodule OpenAgents.Forge.RollingProvider.GcpTest do
             }} = Gcp.status(hd(@nodes), context())
   end
 
+  test "reports other reboot transport exits as unavailable" do
+    rpc = fn _node, RollingNodeProbe, :status, [_expected], _timeout ->
+      exit(:nodedown)
+    end
+
+    put_config(rpc)
+
+    assert {:ok, %{ready: 0, quorum: false}} = Gcp.capacity([hd(@nodes)], context())
+  end
+
   test "reports only connected nodes in the configured fleet inventory" do
     rpc = fn _node, _module, _function, _arguments, _timeout -> :ok end
 

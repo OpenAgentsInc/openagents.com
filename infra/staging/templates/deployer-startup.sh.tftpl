@@ -71,6 +71,11 @@ docker run --detach \
   --restart always \
   --env-file /run/openagents/deployer.env \
   --env "OPENAGENTS_CONTROLLER_SHA=$source_sha" \
+  --env "OPENAGENTS_GCP_IMAGE_REPOSITORY=${image_repository}" \
+  --env 'OPENAGENTS_GCP_ROLLING_INSTANCES_JSON=${rolling_instances_json}' \
+  --env "OPENAGENTS_GCP_ROLLING_PROJECT_ID=${project_id}" \
+  --env "OPENAGENTS_GCP_ROLLING_ZONE=${zone}" \
+  --env "OPENAGENTS_PRODUCTION_PROJECT_ID=${production_project_id}" \
   --entrypoint /bin/sh \
   "$image" -c '
     set -eu

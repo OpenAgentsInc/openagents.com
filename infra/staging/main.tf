@@ -750,8 +750,12 @@ resource "google_compute_instance" "deployer" {
     openagents-controller-sha   = ""
     openagents-cookie-secret    = google_secret_manager_secret.runtime["openagents-staging-release-cookie"].secret_id
     startup-script = templatefile("${path.module}/templates/deployer-startup.sh.tftpl", {
-      project_id = var.staging_project_id
-      region     = var.region
+      image_repository       = "${var.region}-docker.pkg.dev/${var.staging_project_id}/openagents-staging/openagents"
+      production_project_id  = var.production_project_id
+      project_id             = var.staging_project_id
+      region                 = var.region
+      rolling_instances_json = jsonencode({ for instance, ip in local.nodes : "openagents@${ip}" => instance })
+      zone                    = var.zone
     })
   }
 

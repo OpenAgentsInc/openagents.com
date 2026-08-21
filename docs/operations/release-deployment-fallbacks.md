@@ -155,10 +155,11 @@ For each node, the coordinator performs this sequence:
    access, source SHA, and image digest.
 7. Recheck exact fleet membership before selecting another node.
 
-An Erlang distribution disconnect is an expected transient state while a VM
-reboots. The GCP provider reports that node as unavailable so the coordinator
-continues its bounded readiness polling. Other RPC errors fail the rollout
-closed.
+An Erlang distribution transport failure is an expected transient state while
+a VM reboots. The GCP provider reports that node as unavailable so the
+coordinator continues its bounded readiness polling. An invalid probe response
+fails immediately, and a node that remains unavailable fails at the bounded
+timeout.
 
 If a node does not rejoin, the coordinator asks the provider to restore the
 last-known-good SHA and digest, waits for that node's full health, records the

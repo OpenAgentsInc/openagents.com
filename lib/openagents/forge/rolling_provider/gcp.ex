@@ -136,8 +136,7 @@ defmodule OpenAgents.Forge.RollingProvider.Gcp do
   defp probe(config, node, expected_fleet_size) do
     case rpc(config, node, RollingNodeProbe, :status, [expected_fleet_size]) do
       %{member: true} = result -> {:ok, result}
-      {:error, :noconnection} -> {:ok, unavailable_probe()}
-      {:error, reason} -> {:error, reason}
+      {:error, _transport_reason} -> {:ok, unavailable_probe()}
       other -> {:error, {:invalid_node_probe, other}}
     end
   end

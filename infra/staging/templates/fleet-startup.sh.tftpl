@@ -154,6 +154,10 @@ mkdir -p "$DOCKER_CONFIG"
 chmod 0700 "$DOCKER_CONFIG"
 docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
 
+# Fleet images are immutable and recoverable from Artifact Registry. Reclaim
+# only images that no running container uses before pulling the next candidate.
+docker image prune --all --force
+
 cloud_sql_proxy_image=gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:825d5e4ce70d38bd0006c9eea15a6a2e2983e87b31ac6924d33e2dba56eafc9f
 docker pull "$cloud_sql_proxy_image"
 docker rm --force openagents-cloud-sql-proxy 2>/dev/null || true

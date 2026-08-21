@@ -8,13 +8,16 @@ defmodule OpenAgents.Forge.Targets do
   another promotion, receipted like any other. Status advances through the
   deploy lane (`promoted → building → built → deploying →
   live | failed | reverted | needs_rolling_replace`) with bounded details
-  at every step; the `forge:target` broadcast is what wakes the builder.
+  at every step. An operator-approved rolling replacement can settle a
+  `needs_rolling_replace` target as `live` or `failed` with a second immutable
+  receipt. The `forge:target` broadcast is what wakes the builder.
   """
 
   import Ecto.Query
 
-  alias OpenAgents.Forge.Target
+  alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.DeployReceipt
+  alias OpenAgents.Forge.Target
   alias OpenAgents.Repo
 
   @statuses ~w(promoted building built deploying live failed reverted needs_rolling_replace)
@@ -244,6 +247,203 @@ defmodule OpenAgents.Forge.Targets do
       broadcast_status(target)
       {:ok, committed}
     end
+  end
+
+  @doc """
+  Settle an operator-approved rolling replacement against its verified build.
+
+  The rolling coordinator returns the bounded result passed to this function.
+  Settlement succeeds only for the newest target, only after Forge classified
+  it as `needs_rolling_replace`, and only when a complete build receipt exists.
+  The target update and the second immutable deployment receipt commit in one
+  database transaction. The original classification receipt remains intact.
+  """
+  def finish_rolling_replacement(target_id, rolling_result) when is_map(rolling_result) do
+    result =
+      :global.trans({{:forge_target_deploy, target_id}, self()}, fn ->
+        Repo.transaction(fn ->
+          target = Repo.get(Target, target_id, lock: "FOR UPDATE") || Repo.rollback(:not_found)
+
+          current_id =
+            Target
+            |> where([t], t.repo == ^target.repo)
+            |> order_by([t], desc: t.inserted_at)
+            |> limit(1)
+            |> select([t], t.id)
+            |> Repo.one()
+
+          if current_id != target.id, do: Repo.rollback(:superseded_target)
+
+          unless target.status == "needs_rolling_replace" do
+            requested_status = result_value(rolling_result, :status) || "invalid"
+            Repo.rollback({:invalid_transition, target.status, requested_status})
+          end
+
+          rolling =
+            case validate_rolling_result(rolling_result, target.sha) do
+              {:ok, rolling} -> rolling
+              {:error, reason} -> Repo.rollback(reason)
+            end
+
+          build =
+            BuildReceipt
+            |> where([b], b.target_id == ^target.id and b.status == "complete")
+            |> order_by([b], desc: b.inserted_at)
+            |> limit(1)
+            |> Repo.one()
+
+          if is_nil(build), do: Repo.rollback(:complete_build_receipt_not_found)
+
+          deployment_id = Ecto.UUID.generate()
+          manifest_digest = manifest_digest(build.manifest)
+          now = DateTime.utc_now()
+
+          details = %{
+            "artifact_digest" => build.artifact_digest,
+            "deployment_id" => deployment_id,
+            "image_digest" => rolling.image_digest,
+            "manifest_digest" => manifest_digest,
+            "previous_image_digest" => rolling.previous_image_digest,
+            "previous_sha" => rolling.previous_sha,
+            "rolling_error_code" => rolling.error_code,
+            "rolling_node_results" => rolling.node_results,
+            "rolling_recovery" => rolling.recovery
+          }
+
+          target =
+            target
+            |> Target.status_changeset(rolling.status, details)
+            |> Repo.update!()
+
+          receipt_attrs = %{
+            artifact_digest: build.artifact_digest,
+            completed_at: now,
+            deployment_id: deployment_id,
+            error_code: rolling.error_code,
+            expected_nodes: rolling.expected_nodes,
+            manifest_digest: manifest_digest,
+            modules: build.modules,
+            node_results: rolling.node_results,
+            nodes: Enum.map(rolling.expected_nodes, &"#{&1}=#{rolling.node_results[&1]}"),
+            repo: target.repo,
+            result: rolling.status,
+            rollback_verified:
+              rolling.status == "failed" and rolling.recovery == "last_known_good_restored",
+            sha: target.sha,
+            started_at: now,
+            target_id: target.id
+          }
+
+          receipt =
+            %DeployReceipt{}
+            |> DeployReceipt.changeset(receipt_attrs)
+            |> Repo.insert()
+            |> case do
+              {:ok, receipt} -> receipt
+              {:error, changeset} -> Repo.rollback({:invalid_receipt, changeset})
+            end
+
+          %{target: target, receipt: receipt}
+        end)
+      end)
+
+    with {:ok, %{target: target} = committed} <- result do
+      broadcast_status(target)
+      {:ok, committed}
+    end
+  end
+
+  def finish_rolling_replacement(_target_id, _rolling_result),
+    do: {:error, :invalid_rolling_result}
+
+  defp validate_rolling_result(result, target_sha) do
+    schema = result_value(result, :schema)
+    sha = result_value(result, :sha)
+    previous_sha = result_value(result, :previous_sha)
+    image_digest = result_value(result, :image_digest)
+    previous_image_digest = result_value(result, :previous_image_digest)
+    status = result_value(result, :status)
+    node_results = result_value(result, :node_results)
+    error_code = result_value(result, :error_code)
+    recovery = result_value(result, :recovery)
+
+    cond do
+      schema != "openagents.rolling-replacement.v1" ->
+        {:error, :invalid_rolling_result}
+
+      sha != target_sha ->
+        {:error, :rolling_sha_mismatch}
+
+      not valid_sha?(previous_sha) ->
+        {:error, :invalid_rolling_result}
+
+      not valid_image_digest?(image_digest) or not valid_image_digest?(previous_image_digest) ->
+        {:error, :invalid_rolling_result}
+
+      status not in ~w(live failed) ->
+        {:error, :invalid_rolling_result}
+
+      not valid_node_results?(node_results) ->
+        {:error, :invalid_rolling_result}
+
+      status == "live" and
+          (Enum.any?(node_results, fn {_node, node_status} -> node_status != "ready" end) or
+             not is_nil(error_code) or not is_nil(recovery)) ->
+        {:error, :invalid_rolling_result}
+
+      status == "failed" and not bounded_error?(error_code) ->
+        {:error, :invalid_rolling_result}
+
+      status == "failed" and not bounded_recovery?(recovery) ->
+        {:error, :invalid_rolling_result}
+
+      true ->
+        {:ok,
+         %{
+           error_code: error_code,
+           expected_nodes: node_results |> Map.keys() |> Enum.sort(),
+           image_digest: image_digest,
+           node_results: node_results,
+           previous_image_digest: previous_image_digest,
+           previous_sha: previous_sha,
+           recovery: recovery,
+           status: status
+         }}
+    end
+  end
+
+  defp result_value(result, key), do: Map.get(result, key, Map.get(result, to_string(key)))
+
+  defp valid_sha?(value) when is_binary(value), do: Regex.match?(~r/\A[0-9a-f]{40}\z/, value)
+  defp valid_sha?(_value), do: false
+
+  defp valid_image_digest?(value) when is_binary(value),
+    do: Regex.match?(~r/\Asha256:[0-9a-f]{64}\z/, value)
+
+  defp valid_image_digest?(_value), do: false
+
+  defp valid_node_results?(results) when is_map(results) and map_size(results) in 1..100 do
+    Enum.all?(results, fn {node, status} ->
+      is_binary(node) and byte_size(node) in 1..255 and is_binary(status) and
+        byte_size(status) in 1..255
+    end)
+  end
+
+  defp valid_node_results?(_results), do: false
+
+  defp bounded_error?(value) when is_binary(value),
+    do: byte_size(value) in 1..128 and Regex.match?(~r/\A[a-z0-9_]+\z/, value)
+
+  defp bounded_error?(_value), do: false
+
+  defp bounded_recovery?(value) when is_binary(value), do: byte_size(value) in 1..255
+  defp bounded_recovery?(_value), do: false
+
+  defp manifest_digest(manifest) do
+    manifest
+    |> Jason.encode!()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
   end
 
   defp bounded_details(details) do

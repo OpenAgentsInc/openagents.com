@@ -154,6 +154,20 @@ last-known-good SHA and digest, waits for that node's full health, records the
 recovery result, and aborts. It never replaces a second node while the first is
 missing or unhealthy.
 
+After the coordinator returns, settle its bounded result against the Forge
+target:
+
+```elixir
+OpenAgents.Forge.Targets.finish_rolling_replacement(target_id, rolling_result)
+```
+
+Settlement accepts only the newest target in `needs_rolling_replace`, requires
+the target's complete verified build receipt, and verifies that the result SHA
+matches the target. It changes the target to `live` or `failed` and inserts a
+second immutable deployment receipt in one transaction. Forge preserves the
+earlier `needs_rolling_replace` classification receipt. A successful settlement
+makes that build manifest the baseline for later direct-load classification.
+
 ## Database compatibility
 
 Keep schema changes additive while old and new releases overlap. During a

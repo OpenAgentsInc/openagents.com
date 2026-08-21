@@ -1,6 +1,6 @@
 defmodule OpenAgents.Forge.TargetLifecycleTest do
   use OpenAgents.DataCase, async: false
-  alias OpenAgents.Forge.{DeployReceipt, Repos, Targets}
+  alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, Repos, Targets}
 
   setup do
     base = Path.join(System.tmp_dir!(), "forge-targets-#{System.unique_integer([:positive])}")
@@ -168,6 +168,104 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     assert receipt.manifest_digest == manifest_digest
   end
 
+  test "rolling replacement settlement makes the verified build the live baseline", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
+
+    artifact_digest = String.duplicate("a", 64)
+    manifest = %{"classification" => "needs_rolling_replace", "source_sha" => sha}
+
+    insert_build_receipt!(target, manifest, artifact_digest)
+
+    assert {:ok, %{target: live, receipt: receipt}} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+
+    assert live.status == "live"
+    assert live.details["image_digest"] == "sha256:" <> String.duplicate("c", 64)
+    assert receipt.result == "live"
+    assert receipt.artifact_digest == artifact_digest
+    assert receipt.modules == ["Elixir.OpenAgents.BuildInfo"]
+    assert receipt.expected_nodes == ["openagents@10.42.0.11", "openagents@10.42.0.12"]
+
+    assert receipt.node_results == %{
+             "openagents@10.42.0.11" => "ready",
+             "openagents@10.42.0.12" => "ready"
+           }
+
+    assert Targets.live("demo").id == target.id
+
+    assert {:error, {:invalid_transition, "live", "live"}} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+  end
+
+  test "rolling replacement settlement refuses a superseded target", %{sha: sha} do
+    {:ok, first} = Targets.promote("demo", sha, "operator:first")
+    {:ok, _building} = Targets.advance(first.id, "building")
+    {:ok, _built} = Targets.advance(first.id, "built")
+    {:ok, _rolling} = Targets.advance(first.id, "needs_rolling_replace")
+    insert_build_receipt!(first, %{"source_sha" => sha}, String.duplicate("a", 64))
+
+    {:ok, second} = Targets.promote("demo", sha, "operator:second")
+
+    assert {:error, :superseded_target} =
+             Targets.finish_rolling_replacement(first.id, rolling_result(sha, "live"))
+
+    assert Targets.current("demo").id == second.id
+  end
+
+  test "rolling replacement settlement records a verified rollback failure", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+
+    result =
+      rolling_result(sha, "failed")
+      |> Map.put(:node_results, %{
+        "openagents@10.42.0.11" => "ready",
+        "openagents@10.42.0.12" => "rejoin_check_failed"
+      })
+      |> Map.put(:error_code, "rejoin_check_failed")
+      |> Map.put(:recovery, "last_known_good_restored")
+
+    assert {:ok, %{target: failed, receipt: receipt}} =
+             Targets.finish_rolling_replacement(target.id, result)
+
+    assert failed.status == "failed"
+    assert receipt.result == "failed"
+    assert receipt.rollback_verified
+    assert receipt.error_code == "rejoin_check_failed"
+  end
+
+  test "rolling replacement settlement requires a complete build receipt", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
+
+    assert {:error, :complete_build_receipt_not_found} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+  end
+
+  test "rolling replacement settlement refuses a result for another SHA", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+
+    assert {:error, :rolling_sha_mismatch} =
+             Targets.finish_rolling_replacement(
+               target.id,
+               rolling_result(String.duplicate("e", 40), "live")
+             )
+
+    assert Repo.get!(OpenAgents.Forge.Target, target.id).status == "needs_rolling_replace"
+  end
+
   test "PostgreSQL rejects deployment receipt mutation", %{sha: sha} do
     target =
       %OpenAgents.Forge.Target{}
@@ -199,5 +297,39 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
         mode: :savepoint
       )
     end
+  end
+
+  defp insert_build_receipt!(target, manifest, artifact_digest) do
+    %BuildReceipt{}
+    |> BuildReceipt.changeset(%{
+      repo: target.repo,
+      sha: target.sha,
+      target_id: target.id,
+      status: "complete",
+      manifest: manifest,
+      modules: ["Elixir.OpenAgents.BuildInfo"],
+      artifact: "#{artifact_digest}.tar.gz",
+      artifact_digest: artifact_digest,
+      duration_ms: 1,
+      completed_at: DateTime.utc_now()
+    })
+    |> Repo.insert!()
+  end
+
+  defp rolling_result(sha, status) do
+    %{
+      schema: "openagents.rolling-replacement.v1",
+      sha: sha,
+      previous_sha: String.duplicate("b", 40),
+      image_digest: "sha256:" <> String.duplicate("c", 64),
+      previous_image_digest: "sha256:" <> String.duplicate("d", 64),
+      status: status,
+      node_results: %{
+        "openagents@10.42.0.11" => "ready",
+        "openagents@10.42.0.12" => "ready"
+      },
+      error_code: nil,
+      recovery: nil
+    }
   end
 end

@@ -114,7 +114,7 @@ defmodule OpenAgents.NetworkStatus do
       },
       "nodes" => nodes,
       "counts" => counts(),
-      "scvs" => safely(fn -> OpenAgents.SCV.Activity.public_projection() end) || [],
+      "scvs" => scv_projection(),
       "forge" => forge_section(),
       "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
@@ -275,6 +275,21 @@ defmodule OpenAgents.NetworkStatus do
           )
         end)
     }
+  end
+
+  # Live events make the local UI responsive. Durable rows make the same SCV
+  # visible from every serving node. Prefer the live entry when both exist.
+  defp scv_projection do
+    durable = safely(fn -> OpenAgents.SCV.Executions.public_projection() end) || []
+    live = safely(fn -> OpenAgents.SCV.Activity.public_projection() end) || []
+
+    entries = Map.new(durable ++ live, fn entry -> {entry["id"], entry} end)
+
+    (live ++ durable)
+    |> Enum.map(& &1["id"])
+    |> Enum.uniq()
+    |> Enum.take(32)
+    |> Enum.map(&Map.fetch!(entries, &1))
   end
 
   defp safely(fun) do

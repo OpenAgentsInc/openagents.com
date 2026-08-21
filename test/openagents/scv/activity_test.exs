@@ -84,6 +84,39 @@ defmodule OpenAgents.SCV.ActivityTest do
     assert Activity.public_projection() == []
   end
 
+  test "projects Codex app-server activity without protocol content" do
+    activity = start_supervised!({Activity, name: nil, pubsub: nil, telemetry: false})
+    run_id = Ecto.UUID.generate()
+
+    Activity.observe(
+      %{
+        schema: "openagents.scv.event.v1",
+        run_id: run_id,
+        type: "driver_started",
+        model: "gpt-5.6-luna"
+      },
+      activity
+    )
+
+    assert [%{"text" => "Codex runtime started"}] = Activity.public_projection(activity)
+
+    Activity.observe(
+      %{
+        schema: "openagents.scv.event.v1",
+        run_id: run_id,
+        type: "tool_started",
+        activity_kind: "command",
+        command: "private command"
+      },
+      activity
+    )
+
+    assert [entry] = Activity.public_projection(activity)
+    assert entry["text"] == "Running a read-only repository command"
+    refute inspect(entry) =~ "private command"
+    refute inspect(entry) =~ "gpt-5.6-luna"
+  end
+
   test "ignores malformed and unrelated events" do
     activity = start_supervised!({Activity, name: nil, pubsub: nil, telemetry: false})
 

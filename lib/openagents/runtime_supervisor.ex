@@ -32,12 +32,14 @@ defmodule OpenAgents.RuntimeSupervisor do
         {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.TurnSupervisor},
         {Registry, keys: :unique, name: OpenAgents.VoiceSessionRegistry},
         {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.VoiceSessionSupervisor},
+        {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.SCV.CodexRunSupervisor},
         OpenAgents.SCV.Activity,
         OpenAgents.Leaderboard.Server,
         {Task.Supervisor, name: OpenAgents.ProviderTaskSupervisor},
         {Task.Supervisor, name: OpenAgents.ToolTaskSupervisor},
         {Task.Supervisor, name: OpenAgents.ShadowProgramTaskSupervisor}
       ] ++
+        maybe_scv_execution_reaper() ++
         maybe_forge() ++
         maybe_semantic_worker() ++
         maybe_turn_recovery() ++
@@ -47,6 +49,14 @@ defmodule OpenAgents.RuntimeSupervisor do
         maybe_ra_bootstrap()
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp maybe_scv_execution_reaper do
+    if Application.fetch_env!(:openagents, :scv_codex)[:execution_reaper_enabled] do
+      [OpenAgents.SCV.ExecutionReaper]
+    else
+      []
+    end
   end
 
   defp maybe_forge do

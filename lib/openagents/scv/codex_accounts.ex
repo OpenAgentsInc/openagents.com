@@ -9,6 +9,7 @@ defmodule OpenAgents.SCV.CodexAccounts do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Repo
   alias OpenAgents.SCV.CodexLoginSupervisor
+  alias OpenAgents.SCV.CodexCredentialStore
   alias OpenAgents.SCV.DriverAccount
   alias OpenAgents.SCV.DriverLoginAttempt
 
@@ -63,6 +64,44 @@ defmodule OpenAgents.SCV.CodexAccounts do
 
   def start_device_login(%User{}, _attributes), do: {:error, :attributes_invalid}
   def start_device_login(_operator, _attributes), do: {:error, :not_authorized}
+
+  @doc "Persists a credential refresh for the currently leased account generation."
+  @spec refresh_credential(DriverAccount.t(), binary()) ::
+          {:ok, DriverAccount.t()} | {:error, atom()}
+  def refresh_credential(%DriverAccount{} = account, auth_json) when is_binary(auth_json) do
+    Repo.transaction(fn ->
+      current =
+        Repo.one!(
+          from stored in DriverAccount,
+            where: stored.id == ^account.id,
+            lock: "FOR UPDATE"
+        )
+
+      cond do
+        current.status != "ready" ->
+          Repo.rollback(:account_not_ready)
+
+        current.credential_version != account.credential_version ->
+          Repo.rollback(:credential_generation_stale)
+
+        true ->
+          with {:ok, version} <- CodexCredentialStore.put(current, auth_json),
+               {:ok, updated} <-
+                 current
+                 |> Ecto.Changeset.change(
+                   credential_version: version,
+                   last_verified_at: DateTime.utc_now()
+                 )
+                 |> Repo.update() do
+            updated
+          else
+            {:error, reason} -> Repo.rollback(reason)
+          end
+      end
+    end)
+  end
+
+  def refresh_credential(%DriverAccount{}, _auth_json), do: {:error, :credential_invalid}
 
   @spec cancel_device_login(User.t(), Ecto.UUID.t()) :: :ok | {:error, atom()}
   def cancel_device_login(%User{} = operator, attempt_id) when is_binary(attempt_id) do

@@ -54,6 +54,59 @@ defmodule OpenAgents.NetworkStatusTest do
     assert refreshed["schema"] == first["schema"]
   end
 
+  test "the projection includes durable SCVs running on another node" do
+    alias OpenAgents.SCV.{Activity, DriverAccount, Executions}
+
+    {:ok, operator} =
+      OpenAgents.Accounts.upsert_github_user(%{
+        github_id: System.unique_integer([:positive]),
+        github_login: "network-status-scv-#{System.unique_integer([:positive])}",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/1?v=4"
+      })
+
+    account =
+      %DriverAccount{}
+      |> DriverAccount.create_changeset(%{
+        operator_id: operator.id,
+        label: "Status projection account",
+        secret_ref: "file:status-projection-#{System.unique_integer([:positive])}"
+      })
+      |> Repo.insert!()
+      |> DriverAccount.ready_changeset(%{
+        credential_version: 1,
+        plan_type: "pro",
+        available_models: ["gpt-5.6-luna"],
+        reasoning_efforts: ["low"],
+        last_verified_at: DateTime.utc_now()
+      })
+      |> Repo.update!()
+
+    {:ok, execution} =
+      Executions.claim(
+        account,
+        String.duplicate("d", 40),
+        "Private objective that must not reach public status."
+      )
+
+    event = %{
+      schema: "openagents.scv.event.v1",
+      run_id: execution.id,
+      type: "tool_started",
+      activity_kind: "searching",
+      tool: "grep",
+      output: "private output"
+    }
+
+    assert :ok = Executions.record_event(execution, event)
+    expected = Activity.project_event(event)
+    projection = NetworkStatus.projection(refresh: true)
+
+    assert Enum.find(projection["scvs"], &(&1["id"] == expected["id"])) == expected
+    refute inspect(projection["scvs"]) =~ execution.id
+    refute inspect(projection["scvs"]) =~ "Private objective"
+    refute inspect(projection["scvs"]) =~ "private output"
+  end
+
   test "a single forge node cannot report configured fleet quorum" do
     previous_lane = Application.get_env(:openagents, :forge_deploy_lane_enabled)
     previous_size = Application.get_env(:openagents, :forge_expected_fleet_size)

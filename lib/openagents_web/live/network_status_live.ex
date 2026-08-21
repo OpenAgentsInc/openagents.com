@@ -47,7 +47,11 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   end
 
   def handle_info({:scv_activity, entries}, socket) do
-    {:noreply, assign(socket, :scvs, public_scvs(entries))}
+    projection =
+      NetworkStatus.projection(refresh: true)
+      |> Map.update("scvs", entries, &merge_scvs(&1, entries))
+
+    {:noreply, assign_projection(socket, projection)}
   end
 
   def handle_info(:tick, socket) do
@@ -97,16 +101,22 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
     # A briefly-cached projection built by a pre-#126 module (mid hot-load)
     # may lack the forge section — normalize rather than crash the page.
     projection =
-      Map.put_new(projection, "forge", %{
+      projection
+      |> Map.put_new("forge", %{
         "target" => nil,
         "recent_targets" => [],
         "recent_deploys" => [],
         "loop" => %{"last_ms" => nil, "median_ms" => nil}
       })
+      |> Map.update(
+        "scvs",
+        Activity.public_projection(),
+        &merge_scvs(&1, Activity.public_projection())
+      )
 
     socket
     |> assign(:projection, projection)
-    |> assign(:scvs, public_scvs(Activity.public_projection()))
+    |> assign(:scvs, public_scvs(projection["scvs"]))
     |> assign(:overall, overall(projection))
   end
 
@@ -124,6 +134,16 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   end
 
   defp public_scvs(_entries), do: []
+
+  defp merge_scvs(durable_entries, live_entries) do
+    entries = Map.new(durable_entries ++ live_entries, fn entry -> {entry["id"], entry} end)
+
+    (live_entries ++ durable_entries)
+    |> Enum.map(& &1["id"])
+    |> Enum.uniq()
+    |> Enum.take(32)
+    |> Enum.map(&Map.fetch!(entries, &1))
+  end
 
   defp public_scv_status("running"), do: :running
   defp public_scv_status(_status), do: :idle

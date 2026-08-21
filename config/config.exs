@@ -53,6 +53,7 @@ config :openagents,
   work: [enabled: false],
   scv_codex: [
     enabled: false,
+    execution_reaper_enabled: false,
     executable: "/usr/local/bin/codex",
     credential_store: OpenAgents.SCV.CodexCredentialStore.File,
     credential_refs: ["file:operator-1"],

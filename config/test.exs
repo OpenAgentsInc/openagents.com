@@ -81,6 +81,7 @@ config :openagents, :computer_controller_enabled, true
 
 config :openagents, :scv_codex,
   enabled: true,
+  execution_reaper_enabled: false,
   executable: Path.expand("../test/support/fake_codex_app_server.sh", __DIR__),
   credential_store: OpenAgents.SCV.CodexCredentialStore.File,
   credential_refs: ["file:test-operator-1", "file:test-operator-2"],

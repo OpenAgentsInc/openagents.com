@@ -33,6 +33,21 @@ defmodule OpenAgents.SCV.Environment do
      }}
   end
 
+  def fetch(environment) when environment in [:codex_app_server, "codex-app-server"] do
+    {:ok,
+     %__MODULE__{
+       id: "codex-app-server",
+       image_name: "openagents",
+       capabilities: [
+         :model_inference,
+         :network_egress,
+         :process_execute,
+         :workspace_read
+       ],
+       runtimes: ["codex", "git"]
+     }}
+  end
+
   def fetch(_environment), do: {:error, :environment_not_admitted}
 
   @spec supports?(t(), [atom()]) :: boolean()

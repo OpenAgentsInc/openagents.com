@@ -16,5 +16,8 @@ defmodule OpenAgents.SCV.Driver do
   def fetch(driver) when driver in [:opencode, "opencode"],
     do: {:ok, OpenAgents.SCV.Driver.OpenCode}
 
+  def fetch(driver) when driver in [:codex_app_server, "codex_app_server"],
+    do: {:ok, OpenAgents.SCV.Driver.CodexAppServer}
+
   def fetch(_driver), do: {:error, :driver_not_admitted}
 end

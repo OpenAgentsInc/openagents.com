@@ -2,7 +2,8 @@
 
 Date: 2026-08-20
 
-Status: operator account connection first; staging implementation in progress
+Status: individual operator connection and propose-only execution implemented;
+staging qualification pending; service accounts remain second
 
 ## Outcome
 
@@ -42,6 +43,48 @@ the durable effect barrier required for autonomous repository writes. Before a
 Codex-backed SCV receives write or deployment authority, separate the
 credential-bearing app-server from candidate command execution and prove that
 candidate code cannot read its credential.
+
+## Implementation checkpoint
+
+The first individual-operator path now implements the following boundaries:
+
+- `OpenAgents.SCV.CodexAppServer` owns one isolated app-server process and
+  rejects every server-initiated request that the host does not implement.
+- `OpenAgents.SCV.Driver.CodexAppServer` exposes Codex as the
+  `codex_app_server` driver behind the common SCV contract.
+- `OpenAgents.SCV.CodexRuns` claims one ready account for one active run and
+  starts it under a local dynamic supervisor.
+- `OpenAgents.SCV.Execution` stores the SCV principal, exact repository SHA,
+  account generation, node owner, lease deadline, Codex thread and turn IDs,
+  usage, resources, terminal report, and report digest.
+- `OpenAgents.SCV.ExecutionEvent` stores only bounded, normalized,
+  credential-free events. It excludes objectives, repository paths, commands,
+  output, raw protocol payloads, and credentials.
+- `OpenAgents.SCV.Workspace` clones the node-local Forge cache into a
+  disposable workspace, checks out the admitted SHA, verifies a clean index
+  and worktree, and deletes the workspace after the run.
+- The driver fixes the model to `gpt-5.6-luna`, admits only `none` or `low`
+  reasoning, sets `approvalPolicy` to `never`, and requires the
+  repository-scoped `scv-read-only` permission profile.
+- The driver streams normalized lifecycle, tool, usage, heartbeat, and
+  terminal events through the common SCV telemetry event. `/status` projects
+  those events without exposing protocol content.
+- `/status` merges node-local live events with the durable active-run
+  projection. You can observe an SCV from a different serving node without
+  exposing its objective, repository path, output, account, or protocol IDs.
+- A run cannot report success until PostgreSQL retains its terminal report and
+  SHA-256 digest. An expired account lease becomes `uncertain` before another
+  run can claim the account.
+- A periodic reaper marks abandoned leases `uncertain` and releases their
+  account capacity without waiting for a new claim.
+
+The implementation does not yet admit repository writes, pushes, Forge
+promotion, deployment, automatic issue closure, process recovery, or a
+service-account credential. A node loss can leave a run active until its lease
+expires; the reaper then fences the stale generation as `uncertain`. Complete
+the staging procedure in
+[Qualify an SCV in staging](operations/scv-staging-qualification.md) before you
+call the driver qualified.
 
 ## Research basis
 
@@ -456,9 +499,14 @@ Use `openagents_scv` as the proposed `clientInfo.name`. OpenAI asks enterprise
 integrations to register a known client name for compliance logs. Contact
 OpenAI before production enterprise use and record the accepted identifier.
 
-Keep `initialize.capabilities.experimentalApi` disabled in the first version.
-Enable individual experimental features only in a separately admitted driver
-revision with protocol fixtures and downgrade behavior.
+Enable `initialize.capabilities.experimentalApi` for the pinned driver because
+the repository-scoped permission-profile selector remains behind that protocol
+gate. Admit only the `permissions` field and the returned
+`activePermissionProfile` proof. Keep every other experimental request field
+disabled unless a later driver revision adds protocol fixtures and downgrade
+behavior for it. Refuse the run instead of falling back to the legacy
+full-filesystem read-only sandbox when the pinned runtime cannot activate the
+profile.
 
 ### SCV run sequence
 
@@ -627,9 +675,12 @@ worker startup. For every admitted version:
 7. Promote the version only after the worker image and rollback image both
    pass.
 
-Use stable protocol fields with `experimentalApi` disabled first. App-server
-schemas are version-specific. Treat a method or field added on the development
-branch as unavailable until it appears in the pinned released schema.
+Prefer stable protocol fields. The first driver makes one narrow exception for
+the released `permissions` and `activePermissionProfile` fields because the
+legacy read-only sandbox can read unrelated filesystem paths, including the
+credential home. App-server schemas are version-specific. Treat any other
+method or field added on the development branch as unavailable until it appears
+in the pinned released schema.
 
 ## Data retention and privacy
 

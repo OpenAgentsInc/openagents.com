@@ -194,6 +194,7 @@ if config_env() == :prod and runtime_role == :web do
 
   scv_codex = [
     enabled: scv_codex_enabled,
+    execution_reaper_enabled: scv_codex_enabled,
     executable:
       optional_text.("OPENAGENTS_SCV_CODEX_BIN") ||
         Application.fetch_env!(:openagents, :scv_codex)[:executable],

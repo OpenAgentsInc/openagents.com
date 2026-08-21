@@ -20,6 +20,12 @@ defmodule OpenAgents.SCV.CodexAppServer do
     GenServer.start_link(__MODULE__, options)
   end
 
+  @doc false
+  @spec start(keyword()) :: GenServer.on_start()
+  def start(options) do
+    GenServer.start(__MODULE__, options)
+  end
+
   @spec request(pid(), String.t(), map(), timeout()) :: request_result()
   def request(server, method, params \\ %{}, timeout \\ @default_timeout)
       when is_binary(method) and is_map(params) do
@@ -132,13 +138,14 @@ defmodule OpenAgents.SCV.CodexAppServer do
       {:ok, %{"id" => id, "error" => error}} when is_integer(id) ->
         reply_pending(state, id, {:error, error})
 
-      {:ok, %{"id" => id, "method" => _method}} when is_integer(id) ->
+      {:ok, %{"id" => id, "method" => method}} when is_integer(id) ->
         _ =
           send_message(state.port, %{
             "id" => id,
             "error" => %{"code" => -32601, "message" => "Method not supported"}
           })
 
+        notify_owner(state.owner, {:server_request_rejected, method})
         state
 
       {:ok, %{"method" => _method} = notification} ->

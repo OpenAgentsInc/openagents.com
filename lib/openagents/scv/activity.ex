@@ -41,6 +41,16 @@ defmodule OpenAgents.SCV.Activity do
     :exit, _reason -> []
   end
 
+  @doc false
+  @spec project_event(map()) :: public_entry() | nil
+  def project_event(event) do
+    case public_command(event) do
+      {:upsert, _id, public} -> public
+      {:touch, _id, public} -> public
+      _ignored_or_terminal -> nil
+    end
+  end
+
   @doc "Subscribes the caller to `{:scv_activity, entries}` updates."
   @spec subscribe(module()) :: :ok | {:error, term()}
   def subscribe(pubsub \\ OpenAgents.PubSub),
@@ -161,6 +171,30 @@ defmodule OpenAgents.SCV.Activity do
         "process_started" ->
           {:upsert, id, base_entry(id, "Coding runtime started")}
 
+        "driver_started" ->
+          {:upsert, id, base_entry(id, "Codex runtime started")}
+
+        "driver_session_started" ->
+          {:upsert, id, base_entry(id, "Started its isolated Codex session")}
+
+        "turn_started" ->
+          {:upsert, id, base_entry(id, "Investigating its admitted objective")}
+
+        "message_delta" ->
+          {:upsert, id, base_entry(id, "Preparing its bounded report")}
+
+        "usage_updated" ->
+          {:touch, id, base_entry(id, "Working within its token budget")}
+
+        "tool_started" ->
+          {:upsert, id, codex_tool_entry(id, event)}
+
+        "tool_completed" ->
+          {:upsert, id, codex_tool_entry(id, event)}
+
+        "turn_finished" ->
+          {:upsert, id, base_entry(id, "Persisting its terminal report")}
+
         "opencode_event" ->
           {:upsert, id, open_code_entry(id, event)}
 
@@ -202,6 +236,16 @@ defmodule OpenAgents.SCV.Activity do
 
   defp admitted_tool(tool) when tool in @admitted_tools, do: tool
   defp admitted_tool(_tool), do: nil
+
+  defp codex_tool_entry(id, event) do
+    case value(event, :activity_kind) do
+      "command" -> base_entry(id, "Running a read-only repository command")
+      "searching" -> base_entry(id, "Searching repository context")
+      "viewing" -> base_entry(id, "Viewing repository context")
+      "file_change" -> base_entry(id, "Reviewing a proposed file change")
+      _activity -> base_entry(id, "Using an admitted Codex tool")
+    end
+  end
 
   defp base_entry(id, text) do
     %{

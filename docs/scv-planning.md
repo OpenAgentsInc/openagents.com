@@ -2,10 +2,10 @@
 
 Date: 2026-08-20
 
-Status: OpenCode SCV environment and bounded report path implemented and proven
-locally; three shared-project read-only audit SCVs deployed; durable
-coordination, durable tool effects, isolated staging, and autonomous deployment
-remain disabled
+Status: OpenCode worker and Codex propose-only driver implemented; Codex runs
+now retain durable leases, normalized events, and terminal reports; isolated
+staging qualification, durable write effects, and autonomous deployment remain
+disabled
 
 ## Outcome
 
@@ -118,10 +118,34 @@ authority in staging, worker registration, Forge promotion, or deployment:
   diagnostic lines.
 - `OpenAgents.SCV.ResourceSampler` observes the direct OpenCode process from the
   host and records RSS and CPU samples.
+- Codex-backed SCVs persist generation-fenced leases, normalized events, and a
+  bounded terminal report. The runtime reaps expired leases and projects active
+  durable runs through the public `/status` SCV stream, including when the SCV
+  and web request land on different nodes.
 - `mix openagents.scv.opencode` exposes the adapter for local qualification.
 - `ops/scv/images/opencode-core/Dockerfile` defines the first complete
   multi-architecture environment with a pinned Debian runtime, Elixir release,
   Node.js, Bun, Python, Git, native build tools, and OpenCode.
+
+The individual-operator Codex path adds a durable propose-only coordinator:
+
+- `OpenAgents.SCV.CodexRuns` claims one connected account generation and
+  dispatches one SCV under an OTP supervisor.
+- `OpenAgents.SCV.Execution` and `OpenAgents.SCV.ExecutionEvent` retain the
+  exact-SHA lease, normalized event ledger, Codex session references, usage,
+  resource summary, terminal report, and digest in PostgreSQL.
+- `OpenAgents.SCV.Workspace` creates a clean disposable checkout from the
+  node-local Forge cache and destroys it after the run.
+- `OpenAgents.SCV.Driver.CodexAppServer` fixes the execution to
+  `gpt-5.6-luna`, `low` or `none` reasoning, `approvalPolicy=never`, and the
+  repository-scoped `scv-read-only` permission profile.
+- `OpenAgents.SCV.Activity` projects Codex lifecycle and tool phases into the
+  public `/status` SCV stream without publishing objectives, paths, commands,
+  output, or account identity.
+
+This durability applies to the Codex propose-only driver. The existing
+Cloud Run OpenCode job still emits its bounded report through Cloud Logging;
+it does not ingest that result into the new PostgreSQL execution ledger.
 
 The executor emits `openagents.scv.event.v1` records while the run is active.
 Callers can supply an `event_sink` function, and the executor also emits the

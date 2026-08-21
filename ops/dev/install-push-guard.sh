@@ -13,6 +13,12 @@ set -eu
 # this clone. Run it once per clone, on every machine.
 #
 #   sh ops/dev/install-push-guard.sh [--force]
+#
+# The guard is copied next to the hook rather than run from the worktree. A
+# worktree can sit on a branch older than the guard, or on one that never had
+# it, and a hook that execs a missing file refuses every push -- including the
+# ones to the forge -- with a confusing error. Re-run the installer to pick up
+# a newer guard.
 
 force=${1:-}
 
@@ -36,13 +42,17 @@ fi
 
 mkdir -p "$common_dir/hooks"
 
+guard_path="$common_dir/hooks/openagents-push-remote-check.sh"
+cp "$repo_root/ops/ci/push-remote-check.sh" "$guard_path"
+chmod +x "$guard_path"
+
 cat >"$hook_path" <<'HOOK'
 #!/bin/sh
 # openagents-push-guard — installed by ops/dev/install-push-guard.sh
 set -eu
 
-repo_root=$(git rev-parse --show-toplevel)
-exec "$repo_root/ops/ci/push-remote-check.sh" "$@"
+common_dir=$(cd "$(git rev-parse --git-common-dir)" && pwd)
+exec "$common_dir/hooks/openagents-push-remote-check.sh" "$@"
 HOOK
 
 chmod +x "$hook_path"

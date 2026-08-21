@@ -60,6 +60,11 @@ defmodule OpenAgents.PushRemoteContractTest do
     hook = Path.join(root, ".git/hooks/pre-push")
     assert File.exists?(hook)
 
+    # The guard travels with the hook, so a worktree on a branch that predates
+    # it still refuses the wrong remote instead of failing to find a file.
+    assert File.exists?(Path.join(root, ".git/hooks/openagents-push-remote-check.sh"))
+    File.rm!(Path.join(root, @script))
+
     assert {output, 1} =
              System.cmd("sh", [hook, "origin", "git@github.com:OpenAgentsInc/x.git"],
                cd: root,

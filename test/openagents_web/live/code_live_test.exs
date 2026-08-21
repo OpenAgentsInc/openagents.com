@@ -165,7 +165,11 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       browsable()
       {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com")
 
-      assert html =~ "<h1>OpenAgentsInc/openagents.com</h1>"
+      # The identity is the owner trail of the composed repository view now,
+      # not a bare heading.
+      assert html =~ ~s(aria-label="OpenAgentsInc / openagents.com")
+      assert html =~ ~s(class="repo-view)
+      assert html =~ ~s(class="repo-tabs)
       assert html =~ "Add the transparency audit fixture"
       assert html =~ "First commit"
       assert html =~ ~s(id="repo-refs")

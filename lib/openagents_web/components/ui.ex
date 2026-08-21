@@ -1114,7 +1114,12 @@ defmodule OpenAgentsWeb.UI do
 
   attr :owner_path, :string,
     default: nil,
-    doc: "where the owner's name leads; `/OWNER` by default"
+    doc: """
+    Where the owner's name leads. Absent means it leads nowhere and is drawn as
+    plain text, because there is not necessarily anything at `/OWNER` -- this
+    defaulted to that path, and on a deployment with no namespace page every
+    repository header carried a link to a 404.
+    """
 
   attr :visibility, :atom, values: [:public, :private], default: :public
   attr :class, :any, default: nil
@@ -1125,8 +1130,6 @@ defmodule OpenAgentsWeb.UI do
   slot :about, doc: "the trailing rail, normally one `repo_about/1`"
 
   def repo_view(assigns) do
-    assigns = assign(assigns, :owner_path, assigns.owner_path || "/#{assigns.owner}")
-
     ~H"""
     <div class={["repo-page", @class]} {@rest}>
       <header class="repo-page__identity">
@@ -1138,7 +1141,8 @@ defmodule OpenAgentsWeb.UI do
           aria-hidden="true"
         />
         <.breadcrumb class="repo-page__trail" label={"#{@owner} / #{@repo}"}>
-          <:item navigate={@owner_path}>{@owner}</:item>
+          <:item :if={@owner_path} navigate={@owner_path}>{@owner}</:item>
+          <:item :if={is_nil(@owner_path)}>{@owner}</:item>
           <:item>{@repo}</:item>
         </.breadcrumb>
         <.badge variant={:dim}>{visibility_label(@visibility)}</.badge>

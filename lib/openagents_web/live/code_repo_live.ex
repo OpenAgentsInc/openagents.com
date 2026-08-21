@@ -42,6 +42,14 @@ defmodule OpenAgentsWeb.CodeRepoLive do
         _ -> []
       end
 
+    entries =
+      case head && Browse.tree(repository, head) do
+        {:ok, entries} -> entries
+        _ -> []
+      end
+
+    refs = if head, do: Browse.refs(repository), else: []
+
     # A repository that is still provisioning is the one state this page cannot
     # render usefully, and it is also the one state that ends on its own. The
     # provisioner and the importer announce each transition, so the page hears
@@ -61,7 +69,12 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:head, head)
      |> assign(:readme, readme)
      |> assign(:commits, commits)
-     |> assign(:refs, if(head, do: Browse.refs(repository), else: []))
+     |> assign(:latest, List.first(commits))
+     |> assign(:refs, refs)
+     |> assign(:entries, entries)
+     |> assign(:branch_count, Enum.count(refs, &(&1.kind == :branch)))
+     |> assign(:tag_count, Enum.count(refs, &(&1.kind == :tag)))
+     |> assign(:open_issue_count, open_issue_count(repository))
      |> assign(:clone_url, RepositoryAccess.clone_url(repository))}
   rescue
     Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
@@ -88,6 +101,35 @@ defmodule OpenAgentsWeb.CodeRepoLive do
 
   defp short(sha), do: String.slice(sha, 0, 12)
 
+  # The tab carries a count only when there is something to count, the way the
+  # component's own `count` attribute is defined: nil renders no badge.
+  defp open_issue_count(repository) do
+    case OpenAgents.Issues.list_issues(repository, state: "open") do
+      [] -> nil
+      issues -> length(issues)
+    end
+  rescue
+    # The tab is decoration over another context's data. A repository whose
+    # issues cannot be read is still a repository whose code should render.
+    _error -> nil
+  end
+
+  # `%cI` from `Browse.log/3`, which is strict ISO 8601.
+  defp committed_at(%{committed_at: stamp}) when is_binary(stamp) do
+    case DateTime.from_iso8601(stamp) do
+      {:ok, at, _offset} -> at
+      _unparseable -> nil
+    end
+  end
+
+  defp committed_at(_commit), do: nil
+
+  defp initial(name) when is_binary(name) do
+    name |> String.trim() |> String.first() |> Kernel.||("?") |> String.upcase()
+  end
+
+  defp initial(_name), do: "?"
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -98,25 +140,20 @@ defmodule OpenAgentsWeb.CodeRepoLive do
       title="Code"
     >
       <main id="code-repo-page" class="app-shell code-shell">
-        <section class="code" aria-label="Repository">
-          <header class="code-heading">
-            <div>
-              <h1>{@owner}/{@repo}</h1>
-              <p class="code-meta">
-                <.badge variant={if(@repository.visibility == "public", do: :success, else: :dim)}>
-                  {@repository.visibility}
-                </.badge>
-                <span :if={@head}>head <code>{short(@head)}</code></span>
-                <span :if={@repository.description}>{@repository.description}</span>
-              </p>
-            </div>
-            <div class="code-actions">
-              <.button navigate={"#{@base}/issues"} variant={:secondary} size={:sm}>Issues</.button>
-              <.button navigate={"#{@base}/projects"} variant={:secondary} size={:sm}>
-                Projects
-              </.button>
-            </div>
-          </header>
+        <.repo_view
+          owner={@owner}
+          repo={@repo}
+          visibility={if @repository.visibility == "public", do: :public, else: :private}
+        >
+          <:tabs>
+            <.repo_tabs>
+              <:tab icon="code" navigate={@base} current>Code</:tab>
+              <:tab icon="empty-circle" navigate={"#{@base}/issues"} count={@open_issue_count}>
+                Issues
+              </:tab>
+              <:tab icon="cube" navigate={"#{@base}/projects"}>Projects</:tab>
+            </.repo_tabs>
+          </:tabs>
 
           <.alert
             :if={@repository.lifecycle_state == "provisioning"}
@@ -174,19 +211,81 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             </p>
           </.card>
 
-          <.card :if={@repository.lifecycle_state == "ready"} id="repo-clone">
-            <h2>Clone</h2>
-            <code class="block break-all">git clone {@clone_url}</code>
-          </.card>
-
           <.empty
             :if={@repository.lifecycle_state == "ready" and is_nil(@head)}
             id="repo-empty"
             title="This repository is empty"
           >
             Push the first commit to <code>{@repository.default_branch}</code>
-            with the clone URL above.
+            with the clone URL below.
           </.empty>
+
+          <%!-- Only while the repository has nothing in it. Once there is a
+          tree, the ref bar carries a Clone control and a second copy of the
+          same command underneath it is noise -- but an empty repository has no
+          ref bar, and telling someone how to push the first commit is the only
+          thing this page can usefully do for them. --%>
+          <.card :if={@repository.lifecycle_state == "ready" and is_nil(@head)} id="repo-clone">
+            <h2>Clone</h2>
+            <code class="block break-all">git clone {@clone_url}</code>
+          </.card>
+
+          <%!-- Counts rather than a list: the ref bar states how many branches
+          and tags there are, and each name is reachable from there. `commits`
+          is left unset because the total is not a bounded query -- an invented
+          number beside two real ones is worse than one missing number. --%>
+          <.file_table
+            :if={@head}
+            owner={@owner}
+            repo={@repo}
+            ref={@repository.default_branch}
+            entries={@entries}
+            branches={@branch_count}
+            tags={@tag_count}
+          >
+            <:actions>
+              <.copy_button
+                id="repo-clone-copy"
+                text={"git clone #{@clone_url}"}
+                label="Clone"
+                copied_label="Copied"
+              />
+            </:actions>
+            <:commit :if={@latest}>
+              <.avatar size={:sm} fallback={initial(@latest.author)} label={@latest.author} />
+              <strong>{@latest.author}</strong>
+              <span>{@latest.subject}</span>
+              <.text_button navigate={"#{@base}/commit/#{short(@latest.sha)}"}>
+                <code>{short(@latest.sha)}</code>
+              </.text_button>
+              <time :if={committed_at(@latest)} datetime={@latest.committed_at}>
+                {Calendar.strftime(committed_at(@latest), "%Y-%m-%d")}
+              </time>
+            </:commit>
+          </.file_table>
+
+          <.card :if={@readme} id="repo-readme">
+            <h2>{@readme.name}</h2>
+            <div class="code-markdown">
+              {OpenAgents.Markdown.to_html(@readme.blob.content)}
+            </div>
+          </.card>
+
+          <%!-- The ref bar counts branches and tags; this is where their names
+          and heads actually are. Without it the counts are the only trace of a
+          branch that is not the default one. --%>
+          <.card :if={@head} id="repo-refs">
+            <h2>Refs</h2>
+            <ul class="code-refs">
+              <li :for={ref <- @refs}>
+                <.badge variant={:dim}>{ref.kind}</.badge>
+                {ref.name}
+                <.text_button navigate={"#{@base}/commit/#{short(ref.sha)}"}>
+                  <code>{short(ref.sha)}</code>
+                </.text_button>
+              </li>
+            </ul>
+          </.card>
 
           <.card :if={@head} id="repo-commits">
             <h2>Recent commits</h2>
@@ -201,26 +300,29 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             </ol>
           </.card>
 
-          <.card :if={@head} id="repo-refs">
-            <h2>Refs</h2>
-            <ul class="code-refs">
-              <li :for={ref <- @refs}>
-                <.badge variant={:dim}>{ref.kind}</.badge>
-                {ref.name}
-                <.text_button navigate={"#{@base}/commit/#{short(ref.sha)}"}>
-                  <code>{short(ref.sha)}</code>
-                </.text_button>
-              </li>
-            </ul>
-          </.card>
-
-          <.card :if={@readme} id="repo-readme">
-            <h2>{@readme.name}</h2>
-            <div class="code-markdown">
-              {OpenAgents.Markdown.to_html(@readme.blob.content)}
-            </div>
-          </.card>
-        </section>
+          <:about>
+            <.repo_about description={@repository.description}>
+              <%!-- The file that is actually there, under the name it actually
+              has. A fixed `README.md` is a guess, and a repository whose readme
+              is named anything else gets a rail link to a 404. --%>
+              <:link
+                :if={@readme}
+                icon="book"
+                navigate={"#{@base}/blob/#{@repository.default_branch}/#{@readme.name}"}
+              >
+                {@readme.name}
+              </:link>
+              <:link icon="empty-circle" navigate={"#{@base}/issues"}>Issues</:link>
+              <:link icon="cube" navigate={"#{@base}/projects"}>Projects</:link>
+              <:stat icon="branch">
+                {@branch_count} {if @branch_count == 1, do: "branch", else: "branches"}
+              </:stat>
+              <:stat :if={@tag_count > 0} icon="tag">
+                {@tag_count} {if @tag_count == 1, do: "tag", else: "tags"}
+              </:stat>
+            </.repo_about>
+          </:about>
+        </.repo_view>
       </main>
     </Layouts.app>
     """

@@ -3393,11 +3393,16 @@
     scale: 2;
   }
 
-  /* Light mode carries far less of it: the same intensity that reads as a lit
-     backdrop on a dark surface reads as a stain on a white one. */
+  /* Light mode carries none of it. A glow is light spilling from behind
+     something, which a dark surface can show and a white one cannot: there is
+     nothing brighter than the page for it to be. Dimmed to a third it did not
+     read as light, it read as a grey smudge behind the words.
+
+     Removed rather than made transparent, so it is not painted or composited
+     at all in the theme that never shows it. */
   :root[data-theme="light"] .glow,
   :root:not([data-theme="dark"]) .glow {
-    --glow-base: 0.35;
+    display: none;
   }
 
   @media (min-width: 640px) {
@@ -4895,9 +4900,10 @@
   .hero__glow {
     top: 38%;
     z-index: 0;
-    /* Half strength. At full it lit the headline from behind hard enough to
-       read as a light source in the page rather than depth behind it. */
-    --glow-scale: 0.5;
+    /* A quarter. At full it lit the headline from behind hard enough to read as
+       a light source in the page rather than depth behind it; at half it was
+       still brighter than the words in front of it. */
+    --glow-scale: 0.25;
   }
 
   /* Two edges of one line. The copyright says who owns this and the note says

@@ -76,9 +76,15 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     # sidebar the layout owns, so there is exactly one of each.
     assert has_element?(view, "#sidebar")
     assert view |> render() |> String.split("<aside") |> length() == 2
-    refute has_element?(view, "#sidebar-scrim")
+    assert has_element?(view, "#app-shell")
+    assert has_element?(view, ~s(#sidebar[aria-hidden="true"]))
+    assert has_element?(view, ~s(#sidebar-scrim[aria-hidden="true"]))
     refute has_element?(view, "#mobile-menu")
-    refute has_element?(view, "#sidebar-toggle")
+
+    assert has_element?(
+             view,
+             ~s(#sidebar-toggle[aria-controls="sidebar"][aria-expanded="false"])
+           )
 
     # Every destination chat used to carry in its own rail is still reachable,
     # with an accessible name on each stretched hit target.

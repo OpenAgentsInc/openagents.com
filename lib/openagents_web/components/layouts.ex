@@ -75,7 +75,11 @@ defmodule OpenAgentsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <div class="h-screen flex overflow-hidden bg-background">
+    <div
+      id="app-shell"
+      class="h-screen flex overflow-hidden bg-background"
+      phx-hook=".AppSidebar"
+    >
       <.sidebar
         :if={@current_scope}
         current_scope={@current_scope}
@@ -83,6 +87,16 @@ defmodule OpenAgentsWeb.Layouts do
       >
         <:extra>{render_slot(@sidebar_extra)}</:extra>
       </.sidebar>
+
+      <button
+        :if={@current_scope}
+        id="sidebar-scrim"
+        type="button"
+        class="sidebar-scrim"
+        aria-label="Close navigation sidebar"
+        aria-hidden="true"
+        tabindex="-1"
+      ></button>
 
       <div class="flex-1 min-w-0 flex flex-col h-screen">
         <.openagents_command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle}>
@@ -110,6 +124,106 @@ defmodule OpenAgentsWeb.Layouts do
       </div>
 
       <.flash_group flash={@flash} class="fixed bottom-4 right-4 z-50" />
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".AppSidebar">
+        export default {
+          mounted() {
+            this.desktop = window.matchMedia("(min-width: 1024px)")
+            this.onClick = event => this.handleClick(event)
+            this.onKeydown = event => this.handleKeydown(event)
+            this.onBreakpointChange = () => this.restoreForViewport()
+
+            this.el.addEventListener("click", this.onClick)
+            window.addEventListener("keydown", this.onKeydown)
+            this.desktop.addEventListener("change", this.onBreakpointChange)
+            this.restoreForViewport()
+          },
+
+          updated() {
+            this.applyState(this.open, {persist: false})
+          },
+
+          destroyed() {
+            this.el.removeEventListener("click", this.onClick)
+            window.removeEventListener("keydown", this.onKeydown)
+            this.desktop.removeEventListener("change", this.onBreakpointChange)
+            document.body.classList.remove("sidebar-open")
+          },
+
+          handleClick(event) {
+            if (event.target.closest("#sidebar-toggle")) {
+              this.applyState(!this.open, {persist: true, focusSidebar: !this.open})
+              return
+            }
+
+            if (event.target.closest("#sidebar-scrim")) {
+              this.applyState(false, {persist: false, restoreFocus: true})
+              return
+            }
+
+            if (!this.desktop.matches && event.target.closest("#sidebar a")) {
+              this.applyState(false, {persist: false})
+            }
+          },
+
+          handleKeydown(event) {
+            if (event.key === "Escape" && this.open && !this.desktop.matches) {
+              this.applyState(false, {persist: false, restoreFocus: true})
+            }
+          },
+
+          restoreForViewport() {
+            const open = this.desktop.matches ? this.desktopPreference() : false
+            this.applyState(open, {persist: false})
+          },
+
+          desktopPreference() {
+            try {
+              return window.localStorage.getItem("openagents:sidebar-desktop") !== "closed"
+            } catch (_error) {
+              return true
+            }
+          },
+
+          applyState(open, options = {}) {
+            const sidebar = this.el.querySelector("#sidebar")
+            const toggle = this.el.querySelector("#sidebar-toggle")
+            const scrim = this.el.querySelector("#sidebar-scrim")
+            if (!sidebar || !toggle || !scrim) return
+
+            this.open = open
+            this.el.dataset.sidebarInitialized = "true"
+            this.el.dataset.sidebarOpen = open ? "true" : "false"
+            sidebar.setAttribute("aria-hidden", open ? "false" : "true")
+            sidebar.inert = !open
+            toggle.setAttribute("aria-expanded", open ? "true" : "false")
+            toggle.setAttribute(
+              "aria-label",
+              open ? "Collapse navigation sidebar" : "Open navigation sidebar"
+            )
+            toggle.title = open ? "Collapse navigation sidebar" : "Open navigation sidebar"
+            scrim.setAttribute("aria-hidden", open ? "false" : "true")
+            document.body.classList.toggle("sidebar-open", open && !this.desktop.matches)
+
+            if (options.persist && this.desktop.matches) {
+              try {
+                window.localStorage.setItem(
+                  "openagents:sidebar-desktop",
+                  open ? "open" : "closed"
+                )
+              } catch (_error) {}
+            }
+
+            if (options.focusSidebar && !this.desktop.matches) {
+              window.requestAnimationFrame(() => {
+                sidebar.querySelector("a, button, summary")?.focus()
+              })
+            } else if (options.restoreFocus) {
+              toggle.focus()
+            }
+          }
+        }
+      </script>
     </div>
     """
   end
@@ -123,6 +237,20 @@ defmodule OpenAgentsWeb.Layouts do
     ~H"""
     <header class="flex items-center gap-2 bg-background border-b border-border px-4 h-[52px] shrink-0">
       <div class="flex flex-1 min-w-0 items-center gap-2">
+        <UI.button
+          :if={@current_scope}
+          id="sidebar-toggle"
+          class="sidebar-toggle"
+          variant={:ghost}
+          size={:sm}
+          aria-label="Open navigation sidebar"
+          aria-controls="sidebar"
+          aria-expanded="false"
+          title="Open navigation sidebar"
+        >
+          <UI.icon name="menu" class="sidebar-toggle__open" />
+          <UI.icon name="sidebar-collapse-left" class="sidebar-toggle__collapse" />
+        </UI.button>
         <%= if !@current_scope do %>
           <.link navigate={~p"/"} class="btn text-xl text-foreground" data-variant="ghost">
             OpenAgents
@@ -597,7 +725,7 @@ defmodule OpenAgentsWeb.Layouts do
       |> assign(:repository_path, assigns.current_scope.sidebar_repository_path)
 
     ~H"""
-    <aside id="sidebar" class="sidebar hidden lg:flex">
+    <aside id="sidebar" class="sidebar" aria-hidden="true">
       <Layouts.sidebar_brand />
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">

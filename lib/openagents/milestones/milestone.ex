@@ -10,6 +10,8 @@ defmodule OpenAgents.Milestones.Milestone do
     field :description, :string
     field :due_on, :string
     field :number, :integer
+    field :open_issues, :integer, virtual: true, default: 0
+    field :closed_issues, :integer, virtual: true, default: 0
     belongs_to :repository, Repository, type: :binary_id
 
     timestamps(type: :utc_datetime)

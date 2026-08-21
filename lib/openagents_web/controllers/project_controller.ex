@@ -157,6 +157,38 @@ defmodule OpenAgentsWeb.ProjectController do
       |> json(%{message: "Not Found"})
   end
 
+  def create_field(
+        conn,
+        %{
+          "username" => username,
+          "project_number" => project_number
+        } = params
+      ) do
+    authorize_owner!(conn.assigns.current_user, username)
+
+    project =
+      Projects.get_project_by_owner_and_number!(username, String.to_integer(project_number))
+
+    attrs =
+      params
+      |> Map.take(["name", "data_type", "options"])
+      |> Map.put("project_id", project.id)
+
+    case Projects.create_project_field(attrs) do
+      {:ok, field} ->
+        conn
+        |> put_status(:created)
+        |> render(:fields, fields: [field])
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> render(:error, changeset: changeset)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
   defp cast_issue_number(number) when is_integer(number), do: {:ok, number}
 
   defp cast_issue_number(number) when is_binary(number) do

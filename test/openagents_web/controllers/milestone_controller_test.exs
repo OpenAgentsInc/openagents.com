@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
 
   import OpenAgents.MilestonesFixtures
 
+  alias OpenAgents.Issues
   alias OpenAgents.Milestones
 
   describe "index" do
@@ -20,12 +21,16 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
 
     test "GET /api/v3/repos/:owner/:repo/milestones renders issue counts and url", %{conn: conn} do
       milestone = milestone_fixture(%{title: "v1.0"})
+      {:ok, _open_issue} = Issues.create_issue(%{title: "Open", milestone: milestone.number})
+
+      {:ok, _closed_issue} =
+        Issues.create_issue(%{title: "Closed", milestone: milestone.number, state: "closed"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones")
 
       assert %{"milestones" => [rendered]} = json_response(conn, 200)
-      assert rendered["open_issues"] == 0
-      assert rendered["closed_issues"] == 0
+      assert rendered["open_issues"] == 1
+      assert rendered["closed_issues"] == 1
 
       assert rendered["url"] ==
                "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"

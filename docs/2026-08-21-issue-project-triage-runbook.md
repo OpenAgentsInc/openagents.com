@@ -212,17 +212,30 @@ Finally, create a starting milestone and project so triaged work has a
 destination:
 
 ```sh
-curl -s -X POST "$BASE/../milestones" -H "Authorization: Bearer $TOKEN" \
+REPOSITORY_API=https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com
+USER_LOGIN=$(curl -fsS "https://openagents.com/api/v3/user" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.login')
+
+curl -fsS -X POST "$REPOSITORY_API/milestones" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title": "Backlog hygiene", "description": "First triage sweep"}'
 
-curl -s -X POST "https://openagents.com/api/v3/OpenAgentsInc/projectsV2" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"title": "openagents.com roadmap"}'
+PROJECT_NUMBER=$(curl -fsS -X POST \
+  "https://openagents.com/api/v3/$USER_LOGIN/projectsV2" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "openagents.com roadmap"}' | jq -r '.number')
+
+curl -fsS -X POST \
+  "https://openagents.com/api/v3/users/$USER_LOGIN/projectsV2/$PROJECT_NUMBER/fields" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Status", "data_type": "single_select", "options": {"values": ["To Do", "In Progress", "Done"]}}'
 ```
 
-Add the Status field values ("To Do", "In Progress", "Done") through the
-project fields API, then pin high-signal issues to the board.
+The project belongs to the GitHub login tied to your token. Add high-signal
+issues to the board and set their `Status` value through the project items API.
 
 ### Label vocabulary
 

@@ -280,6 +280,7 @@ defmodule OpenAgentsWeb.Router do
     delete "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :delete
     post "/:owner/projectsV2", ProjectController, :create
     post "/users/:username/projectsV2/:project_number/items", ProjectController, :create_item
+    post "/users/:username/projectsV2/:project_number/fields", ProjectController, :create_field
 
     patch "/users/:username/projectsV2/:project_number/items/:item_id",
           ProjectController,

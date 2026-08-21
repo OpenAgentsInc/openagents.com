@@ -6,6 +6,7 @@ defmodule OpenAgents.Milestones do
   import Ecto.Query, warn: false
   alias OpenAgents.Accounts.User
   alias OpenAgents.Analytics
+  alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
@@ -27,6 +28,7 @@ defmodule OpenAgents.Milestones do
     Milestone
     |> where(repository_id: ^repository_id)
     |> order_by(asc: :number)
+    |> with_issue_counts()
     |> Repo.all()
   end
 
@@ -47,25 +49,35 @@ defmodule OpenAgents.Milestones do
   def get_milestone!(id), do: get_milestone!(Repositories.initial_repository!(), id)
 
   def get_milestone!(%Repository{id: repository_id}, id) do
-    Repo.get_by!(Milestone, id: id, repository_id: repository_id)
+    Milestone
+    |> where(id: ^id, repository_id: ^repository_id)
+    |> with_issue_counts()
+    |> Repo.one!()
   end
 
   def get_milestone_by_number!(number) when is_integer(number),
     do: get_milestone_by_number!(Repositories.initial_repository!(), number)
 
-  def get_milestone_by_number!(%Repository{id: repository_id}, number) when is_integer(number),
-    do: Repo.get_by!(Milestone, repository_id: repository_id, number: number)
+  def get_milestone_by_number!(%Repository{id: repository_id}, number) when is_integer(number) do
+    Milestone
+    |> where(repository_id: ^repository_id, number: ^number)
+    |> with_issue_counts()
+    |> Repo.one!()
+  end
 
   def get_milestone_by_path!(owner, repository_name, number) when is_integer(number) do
-    Repo.one!(
-      from milestone in Milestone,
-        join: repository in Repository,
-        on: repository.id == milestone.repository_id,
-        where:
-          repository.owner_key == ^String.downcase(owner) and
-            repository.name_key == ^String.downcase(repository_name) and
-            repository.visibility == "public" and milestone.number == ^number
+    Milestone
+    |> join(:inner, [milestone], repository in Repository,
+      on: repository.id == milestone.repository_id
     )
+    |> where(
+      [milestone, repository],
+      repository.owner_key == ^String.downcase(owner) and
+        repository.name_key == ^String.downcase(repository_name) and
+        repository.visibility == "public" and milestone.number == ^number
+    )
+    |> with_issue_counts()
+    |> Repo.one!()
   end
 
   @doc """
@@ -169,9 +181,17 @@ defmodule OpenAgents.Milestones do
   def update_milestone(%Milestone{} = milestone, attrs) do
     attrs = Map.drop(attrs, [:repository_id, "repository_id", :number, "number"])
 
-    milestone
-    |> Milestone.changeset(attrs)
-    |> Repo.update()
+    case milestone |> Milestone.changeset(attrs) |> Repo.update() do
+      {:ok, updated} ->
+        {:ok,
+         get_milestone!(
+           %Repository{id: updated.repository_id},
+           updated.id
+         )}
+
+      result ->
+        result
+    end
   end
 
   @doc """
@@ -201,5 +221,18 @@ defmodule OpenAgents.Milestones do
   """
   def change_milestone(%Milestone{} = milestone, attrs \\ %{}) do
     Milestone.changeset(milestone, attrs)
+  end
+
+  defp with_issue_counts(query) do
+    from milestone in query,
+      left_join: issue in Issue,
+      on:
+        issue.milestone_id == milestone.id and
+          issue.repository_id == milestone.repository_id,
+      group_by: milestone.id,
+      select_merge: %{
+        open_issues: filter(count(issue.id), issue.state == "open"),
+        closed_issues: filter(count(issue.id), issue.state == "closed")
+      }
   end
 end

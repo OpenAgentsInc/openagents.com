@@ -315,6 +315,62 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
+
+    test "POST .../projectsV2/:project_number/fields creates a field", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields", %{
+          name: "Status",
+          data_type: "single_select",
+          options: %{values: ["To Do", "In Progress", "Done"]}
+        })
+
+      assert %{
+               "fields" => [
+                 %{
+                   "name" => "Status",
+                   "data_type" => "single_select",
+                   "options" => %{"values" => ["To Do", "In Progress", "Done"]}
+                 }
+               ]
+             } = json_response(conn, 201)
+
+      assert [%{name: "Status", project_id: project_id}] = Projects.list_project_fields(project)
+      assert project_id == project.id
+    end
+
+    test "POST .../projectsV2/:project_number/fields returns 422 without required values", %{
+      conn: conn
+    } do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn = post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields", %{})
+
+      assert %{"errors" => errors} = json_response(conn, 422)
+      assert Map.has_key?(errors, "name")
+      assert Map.has_key?(errors, "data_type")
+      assert Projects.list_project_fields(project) == []
+    end
+
+    test "POST .../projectsV2/:project_number/fields takes the project from the path", %{
+      conn: conn
+    } do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      other_project = project_fixture(%{title: "Other", owner: "alice"})
+
+      conn =
+        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields", %{
+          name: "Status",
+          data_type: "single_select",
+          project_id: other_project.id
+        })
+
+      assert json_response(conn, 201)
+      assert [%{project_id: project_id}] = Projects.list_project_fields(project)
+      assert project_id == project.id
+      assert Projects.list_project_fields(other_project) == []
+    end
   end
 
   describe "owner-path authorization" do
@@ -354,6 +410,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                recycle(conn),
                ~p"/api/v3/users/bob/projectsV2/#{project.number}/items/#{item.id}",
                %{values: %{"Status" => "Done"}}
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert post(
+               recycle(conn),
+               ~p"/api/v3/users/bob/projectsV2/#{project.number}/fields",
+               %{name: "Priority", data_type: "single_select"}
              )
              |> json_response(404) == %{"message" => "Not Found"}
 

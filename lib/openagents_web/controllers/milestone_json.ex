@@ -26,8 +26,8 @@ defmodule OpenAgentsWeb.MilestoneJSON do
       state: milestone.state,
       description: milestone.description,
       due_on: milestone.due_on,
-      open_issues: 0,
-      closed_issues: 0,
+      open_issues: milestone.open_issues,
+      closed_issues: milestone.closed_issues,
       url: "https://openagents.com/api/v3/repos/#{owner}/#{repo}/milestones/#{milestone.number}"
     }
   end

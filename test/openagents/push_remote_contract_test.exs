@@ -101,6 +101,30 @@ defmodule OpenAgents.PushRemoteContractTest do
     assert File.read!(hook) =~ "openagents-push-guard"
   end
 
+  test "--ensure installs quietly and never fails the build" do
+    root = Path.join(System.tmp_dir!(), "push-guard-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    File.mkdir_p!(Path.join(root, "ops/ci"))
+    File.mkdir_p!(Path.join(root, "ops/dev"))
+    File.cp!(@script, Path.join(root, @script))
+    File.cp!(@installer, Path.join(root, @installer))
+    {_output, 0} = System.cmd("git", ["init", "-q", root])
+
+    assert {"", 0} = System.cmd("sh", [@installer, "--ensure"], cd: root, stderr_to_stdout: true)
+    assert File.read!(Path.join(root, ".git/hooks/pre-push")) =~ "openagents-push-guard"
+
+    # A hook someone else installed is a decision, not an obstacle: say so and
+    # let precommit continue.
+    File.write!(Path.join(root, ".git/hooks/pre-push"), "#!/bin/sh\nexit 0\n")
+
+    assert {output, 0} =
+             System.cmd("sh", [@installer, "--ensure"], cd: root, stderr_to_stdout: true)
+
+    assert output =~ "not the push guard"
+    assert File.read!(Path.join(root, ".git/hooks/pre-push")) == "#!/bin/sh\nexit 0\n"
+  end
+
   test "the pre-push hook runs the check before the release gate" do
     hook = File.read!(".githooks/pre-push")
 

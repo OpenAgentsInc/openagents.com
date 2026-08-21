@@ -1821,9 +1821,12 @@ The check is a guard, not a deployment: it refuses a wrong destination and
 makes no claim about the candidate. `ops/dev/install-push-guard.sh` installs
 it at Git's default hook path, so a clone refuses the wrong destination
 without also owing a release-gate receipt for every push; a machine that sets
-`core.hooksPath` runs the guard and the gate together instead. Neither is
-automatic: an uninstalled clone is unguarded, which is why the command belongs
-in `AGENTS.md` rather than in someone's memory.
+`core.hooksPath` runs the guard and the gate together instead. `mix precommit` runs the installer in `--ensure`
+mode, so a clone becomes guarded on the way to its first push without anyone
+having read this entry; `--ensure` never fails the build, because a machine
+that has chosen `core.hooksPath` or that keeps its own pre-push hook has made
+a decision the installer will not overrule. A clone that never runs precommit
+is still unguarded, which is why `AGENTS.md` states the rule as well.
 
 Evidence: `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`,
 `.githooks/pre-push`,

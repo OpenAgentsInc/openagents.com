@@ -143,6 +143,7 @@ defmodule OpenAgents.MixProject do
         "phx.digest"
       ],
       precommit: [
+        "cmd sh ops/dev/install-push-guard.sh --ensure",
         "hex.audit",
         "deps.audit",
         "compile --warnings-as-errors",

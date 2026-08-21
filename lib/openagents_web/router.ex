@@ -180,6 +180,7 @@ defmodule OpenAgentsWeb.Router do
         {OpenAgentsWeb.UserAuth, :ensure_admin}
       ] do
       live "/", AdminLive, :index
+      live "/analytics", AdminAnalyticsLive, :index
       live "/forge", AdminForgeLive, :index
       live "/recordings", AdminRecordingsLive, :index
       live "/scv/accounts", AdminScvAccountsLive, :index

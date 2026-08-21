@@ -51,6 +51,11 @@ config :openagents,
   coding_jobs_dir: "/var/lib/openagents/coding-jobs",
   posthog_project_token: nil,
   posthog_api_host: "https://us.i.posthog.com",
+  posthog_analytics: [
+    personal_api_key: nil,
+    project_id: nil,
+    app_host: "https://us.posthog.com"
+  ],
   work_workers_enabled: false,
   work: [enabled: false],
   scv_codex: [

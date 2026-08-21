@@ -442,6 +442,16 @@ if runtime_role == :web do
     config :posthog, api_host: posthog_api_host
   end
 
+  # The operator analytics surface reads computed results back from the
+  # PostHog REST API. Absent credentials disable the read path only; capture
+  # above is independent of it.
+  config :openagents, :posthog_analytics,
+    personal_api_key: optional_text.("OPENAGENTS_POSTHOG_PERSONAL_API_KEY"),
+    project_id: optional_text.("OPENAGENTS_POSTHOG_PROJECT_ID"),
+    app_host:
+      optional_text.("OPENAGENTS_POSTHOG_APP_HOST") ||
+        Application.get_env(:openagents, :posthog_analytics)[:app_host]
+
   github_oauth = Application.get_env(:openagents, :github_oauth, [])
 
   github_oauth =

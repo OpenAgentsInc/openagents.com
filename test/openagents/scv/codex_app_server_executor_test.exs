@@ -105,6 +105,7 @@ defmodule OpenAgents.SCV.CodexAppServerExecutorTest do
     assert result.report.text =~ "SCV completed the inspection"
     assert result.report.text =~ "[REDACTED]"
     assert result.events.tool_calls == %{"commandExecution" => 1}
+    assert result.events.completed_tool_calls == %{"commandExecution" => 1}
     assert result.usage.total_tokens == 21
 
     assert_receive {:scv_session, %{driver_thread_id: "thr_fixture"}}
@@ -132,6 +133,42 @@ defmodule OpenAgents.SCV.CodexAppServerExecutorTest do
                "openagents-scv-codex-run-#{run_id}"
              ])
            )
+  end
+
+  test "fails a report-only run that never accesses the repository", context do
+    config = Application.fetch_env!(:openagents, :scv_codex)
+
+    Application.put_env(
+      :openagents,
+      :scv_codex,
+      Keyword.put(config, :client_options, args: ["no_tools"])
+    )
+
+    test_process = self()
+
+    assert {:ok, result} =
+             CodexAppServer.run(
+               context.repository,
+               "Inspect the fixture without changing it.",
+               account: context.account,
+               run_id: Ecto.UUID.generate(),
+               repository_revision: context.revision,
+               reasoning_effort: "low",
+               event_sink: fn event ->
+                 send(test_process, {:scv_event, event})
+                 :ok
+               end
+             )
+
+    assert result.status == "failed"
+    assert result.error_code == "tool_activity_missing"
+    assert result.report.valid
+    assert result.events.tool_calls == %{}
+    assert result.events.completed_tool_calls == %{}
+    assert_receive {:scv_event, %{type: "turn_finished", status: "succeeded"}}
+
+    assert_receive {:scv_event,
+                    %{type: "run_finished", status: "failed", error_code: "tool_activity_missing"}}
   end
 
   defp fixture do

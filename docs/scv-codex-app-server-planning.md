@@ -480,7 +480,10 @@ binaries in the credential compartment.
 
 For one admitted account runtime:
 
-1. Resolve a digest-pinned worker image and Codex binary or stable SDK release.
+1. Resolve a digest-pinned worker image and complete Codex package. The package
+   must include the app-server entry point, `codex-code-mode-host`, and its
+   packaged `bwrap`, `rg`, and `zsh` resources. Installing only the `codex`
+   binary disables code-mode tools and does not qualify an SCV runtime.
 2. Materialize the account secret or credential home into its isolated
    compartment.
 3. Generate host-owned Codex configuration. Ignore repository-controlled user

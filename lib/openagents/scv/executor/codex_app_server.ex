@@ -170,6 +170,7 @@ defmodule OpenAgents.SCV.Executor.CodexAppServer do
         redactions: redactions,
         notification_count: 0,
         tool_calls: %{},
+        completed_tool_calls: %{},
         usage: %{},
         client_monitor: monitor,
         next_heartbeat_ms: monotonic_ms() + @heartbeat_interval_ms
@@ -397,10 +398,18 @@ defmodule OpenAgents.SCV.Executor.CodexAppServer do
             status: status
           })
 
-        if event_type == "tool_started" do
-          %{state | tool_calls: Map.update(state.tool_calls, tool, 1, &(&1 + 1))}
-        else
-          state
+        case {event_type, status} do
+          {"tool_started", _status} ->
+            %{state | tool_calls: Map.update(state.tool_calls, tool, 1, &(&1 + 1))}
+
+          {"tool_completed", "completed"} ->
+            %{
+              state
+              | completed_tool_calls: Map.update(state.completed_tool_calls, tool, 1, &(&1 + 1))
+            }
+
+          {_event_type, _status} ->
+            state
         end
     end
   end
@@ -426,14 +435,23 @@ defmodule OpenAgents.SCV.Executor.CodexAppServer do
     finished_at = DateTime.utc_now()
     duration_ms = max(monotonic_ms() - started_ms, 0)
     {report, report_valid?} = valid_report(state.report, state.report_truncated?)
+    tool_activity_valid? = map_size(state.completed_tool_calls) > 0
 
     status =
-      if state.status == "succeeded" and not report_valid?, do: "failed", else: state.status
+      cond do
+        state.status != "succeeded" -> state.status
+        not report_valid? -> "failed"
+        not tool_activity_valid? -> "failed"
+        true -> "succeeded"
+      end
 
     error_code =
-      if state.status == "succeeded" and not report_valid?,
-        do: "report_invalid",
-        else: state.error_code
+      cond do
+        state.status != "succeeded" -> state.error_code
+        not report_valid? -> "report_invalid"
+        not tool_activity_valid? -> "tool_activity_missing"
+        true -> nil
+      end
 
     %{
       schema: @schema,
@@ -455,6 +473,7 @@ defmodule OpenAgents.SCV.Executor.CodexAppServer do
       events: %{
         event_count: state.notification_count,
         tool_calls: state.tool_calls,
+        completed_tool_calls: state.completed_tool_calls,
         usage: state.usage
       },
       report: report,

@@ -248,6 +248,16 @@ if [ "$embedded_application_revision" != "$git_sha" ] ||
   exit 1
 fi
 
+docker run --rm \
+  --entrypoint /bin/sh \
+  "$application_image" \
+  -c 'set -eu
+      test -x /opt/codex/bin/codex
+      test -x /opt/codex/bin/codex-code-mode-host
+      test -x /opt/codex/codex-resources/bwrap
+      test -x /opt/codex/codex-path/rg
+      /opt/codex/bin/codex-code-mode-host --help >/dev/null'
+
 application_config_digest=$(docker image inspect "$application_image" --format '{{.Id}}')
 builder_config_digest=$(docker image inspect "$builder_image" --format '{{.Id}}')
 

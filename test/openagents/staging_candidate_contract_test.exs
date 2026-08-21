@@ -34,6 +34,18 @@ defmodule OpenAgents.StagingCandidateContractTest do
              ~s(RELEASE_COOKIE:?RELEASE_COOKIE is required for a distributed node)
   end
 
+  test "the runtime installs the complete pinned Codex package" do
+    dockerfile = File.read!("Dockerfile")
+
+    assert dockerfile =~ ~s(archive="codex-package-${codex_arch}-unknown-linux-musl.tar.gz")
+    assert dockerfile =~ ~r/amd64\).*checksum=[0-9a-f]{64}/
+    assert dockerfile =~ ~r/arm64\).*checksum=[0-9a-f]{64}/
+    assert dockerfile =~ "/opt/codex/bin/codex-code-mode-host"
+    assert dockerfile =~ "test -x /opt/codex/codex-resources/bwrap"
+    assert dockerfile =~ "test -x /opt/codex/codex-path/rg"
+    assert dockerfile =~ "codex-code-mode-host --help"
+  end
+
   test "the isolated builder loads runtime configuration without the web role" do
     dockerfile = File.read!("Dockerfile")
     runtime_config = File.read!("config/runtime.exs")

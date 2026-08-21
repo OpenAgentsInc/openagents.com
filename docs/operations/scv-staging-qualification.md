@@ -101,8 +101,10 @@ service account until this path passes.
    SHA-256 digest, exact repository SHA, Codex thread and turn IDs, event count,
    usage, and resources.
 7. Query `scv_run_events` for that run. Require `driver_started`,
-   `driver_session_started`, `turn_started`, at least one activity or message
-   event, `turn_finished`, and `run_finished`.
+   `driver_session_started`, `turn_started`, at least one successful
+   `tool_started` and `tool_completed` pair, `turn_finished`, and
+   `run_finished`. A message-only report does not prove repository access and
+   does not qualify the SCV runtime.
 8. Confirm that no disposable workspace or temporary `CODEX_HOME` remains and
    that the connected account remains **Ready**.
 9. Scan the bounded event payloads, application logs, and public status

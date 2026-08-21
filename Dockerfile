@@ -134,18 +134,23 @@ RUN sed -i \
 
 RUN set -eu; \
   case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
-    amd64) codex_arch=x86_64; checksum=0246e2e773834e07f0fb5249ed6ebad12e4591e608f8c7bb97dd6a9690544c36 ;; \
-    arm64) codex_arch=aarch64; checksum=eb677c80f666b1ab8b4b1d083b66e8d614b1281d960bb6f9fd8ca98f58b38b90 ;; \
+    amd64) codex_arch=x86_64; checksum=bd758d53d56e41dc65e045f4589df79a038ed197a011adcb52a258e6ad64cfda ;; \
+    arm64) codex_arch=aarch64; checksum=89cbf79bd5ae6f9c58da47e8079f311c84219350c9c43c070d42f3e9b2a81401 ;; \
     *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
   esac; \
-  archive="codex-${codex_arch}-unknown-linux-musl.tar.gz"; \
+  archive="codex-package-${codex_arch}-unknown-linux-musl.tar.gz"; \
   curl -fsSL --retry 3 -o "/tmp/${archive}" \
     "https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/${archive}"; \
   echo "${checksum}  /tmp/${archive}" | sha256sum --check --strict; \
-  tar -xzf "/tmp/${archive}" -C /tmp; \
-  install -D -m 0755 "/tmp/codex-${codex_arch}-unknown-linux-musl" /usr/local/bin/codex; \
-  rm "/tmp/${archive}" "/tmp/codex-${codex_arch}-unknown-linux-musl"; \
-  codex --version
+  install -d -m 0755 /opt/codex; \
+  tar -xzf "/tmp/${archive}" -C /opt/codex; \
+  ln -s /opt/codex/bin/codex /usr/local/bin/codex; \
+  ln -s /opt/codex/bin/codex-code-mode-host /usr/local/bin/codex-code-mode-host; \
+  rm "/tmp/${archive}"; \
+  test -x /opt/codex/codex-resources/bwrap; \
+  test -x /opt/codex/codex-path/rg; \
+  codex --version; \
+  codex-code-mode-host --help >/dev/null
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \

@@ -49,3 +49,7 @@ npm-debug.log
 
 # Local development forge storage (config/dev.exs points at it).
 /.local/
+
+# Agent scratch space: Claude Code keeps per-agent Git worktrees here, so the
+# directory is a set of checkouts of this repository rather than part of it.
+/.claude/

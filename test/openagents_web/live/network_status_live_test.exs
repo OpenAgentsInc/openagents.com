@@ -188,11 +188,12 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
       })
       |> Repo.insert!()
 
-      {:ok, _view, html} = live(conn, ~p"/status")
+      {:ok, view, html} = live(conn, ~p"/status")
 
       assert html =~ "promoted by operator"
       assert html =~ "13.2s"
       assert html =~ "deploy policy: direct hot load → relup → rolling replacement"
+      assert has_element?(view, "#status-forge-policy[data-path-order='direct,relup,rolling']")
       refute html =~ "55554444"
       refute html =~ "HiddenModuleName"
       # Full sha never appears — only the short form.

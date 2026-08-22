@@ -485,7 +485,11 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
               mirror: {mirror_text(@projection["forge"]["mirror"])}
             </p>
 
-            <p class="status-forge__intro" id="status-forge-policy">
+            <p
+              class="status-forge__intro"
+              id="status-forge-policy"
+              data-path-order="direct,relup,rolling"
+            >
               deploy policy: direct hot load → relup → rolling replacement
             </p>
 

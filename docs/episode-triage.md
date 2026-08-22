@@ -930,3 +930,197 @@ both lines claim the same promise vocabulary. When reintegrating, attach
 promise language to whichever surface actually ships it.
 
 ---
+
+## Batch 5: Episodes 256-267 — Desktop RC, verifiable software, Sarah, and Bitcoin defense
+
+Airtime window: mid-July through early August 2026. Desktop reaches release
+candidate; the IDE promises harden into baseline-competence doctrine; a crash
+postmortem yields sixteen controls; verifiable software reconnects the IDE to
+the energy thesis; Sarah spawns for paternity leave; Project Omega forks Zed;
+Loupe gets run against Coldcard; the vulnerability workbench ships in Omega;
+Boltz's shutdown triggers the Immortal pivot.
+
+### Episode summaries
+
+#### 256 — OpenAgents Desktop Release Candidate
+
+Short announcement: installable RC builds for macOS (Apple Silicon/Intel) and
+Linux (ARM64/x64); Windows deferred. The host uses it daily, including live
+model switching when Fable failed mid-conversation. Community bug reporters
+thanked by name; feedback deliberately informal (tweet or forum).
+
+#### 257 — Cursor Fails to Open a File
+
+Baseline competence as product thesis: if an IDE cannot reliably open a file,
+nothing else matters. Cursor loses the opened file; OpenAgents' Command-E
+editor toggle works instantly and the RC registers as a macOS open-with
+handler. Declares the IDE commitment ("We have to") and the positioning:
+"your last agent IDE."
+
+#### 258 — Why ChatGPT Desktop Kept Crashing
+
+Postmortem of ChatGPT Desktop crashes (unbounded internal Git review worker on
+an oversized umbrella repo) converted into an after-action report written in
+ASD-STE100 simplified technical English. Yields sixteen mandatory controls for
+the IDE: exact attachment, root preflight, file/byte/output limits, queue,
+concurrency, time limits, cancel fence, aggregate fallback, circuit breaker,
+memory-pressure gate, process isolation, typed degradation, scoped teardown,
+durable session state. Doctrine: every discovered error becomes a permanent
+regression gate; open source compounds faster.
+
+#### 259 — Verifiable Software and the Energy Layer
+
+Reconnects IDE to economics: electrons in, accepted outcomes out. Cites the
+Catalini paper's asymmetry — generation collapsing toward free while
+verification cost stays linear — so verification dominates the price of an
+accepted outcome. Defines verifiable software: scope work in advance as
+falsifiable intent, observe evidence instead of narrating it, separate producer
+from verifier, emit receipts strangers can check and pay against. Bitcoin
+mining analogy: hashes verify themselves; extend that from money to outcomes.
+Forum agents vetting published manifests; certifications and NIP-32 reputation
+events teased; Nostr/Bitcoin layer returns to the editor within weeks.
+
+#### 260 — Spawning Sarah
+
+Paternity leave forces the ultimate dogfood: turn the business over to an
+autopilot. Sarah debuts through the site's ask-anything surface ("To continue,
+we require more minerals"). One-agent funnel: sales, payment, service, execution
+without handoffs. StarCraft naming (Kerrigan): human but not quite, spawned.
+
+#### 261 — Hello World
+
+Prepared script: Sarah speaks for herself, first person. Availability promise
+(anyone can reach, hire, hand real work), accountability promise ("answers for
+every result"), mission statement (serve humanity), and explicit rejection of
+frontier-lab endgames ("We reject their vision. We reject their leadership.").
+"I am the first of many OpenAgents to come online."
+
+#### 262 — Project Omega
+
+The anchor-product decision after three years of R&D without a stable product:
+fork Zed as Cursor forked VS Code. Omega positioned as "the last IDE you'll
+ever need," with verification, markets, revenue share, and multiplayer as
+explicit future layers — the script carefully disclaims present-tense
+capability. First builds promised within days; Desktop supported until Omega
+"earns the cutover."
+
+Note: `263.md` carries the header title Bitcoin Wallets Under Attack and its
+content is the Coldcard incident response below; the README's description of
+263 as the Omega Alpha announcement does not match the current file. Treat the
+transcript as authoritative for content and flag the index for repair.
+
+#### 263 — Bitcoin Wallets Under Attack (as recorded)
+
+Live reaction to the Coldcard RNG exploit (~594 BTC, roughly $70M stolen via
+chopped entropy). Argues Bitcoin is blind to AI-augmented attacks: about 1,000
+quantum-hardening posts versus approximately zero AI-hardening posts in a year.
+Opt-in scanning fails structurally — the projects most needing scans are least
+likely to opt in — so bad-cop white-hat agentic fuzzing with responsible
+disclosure is needed. Commits to a Nostr NIP-29 coordination channel and a
+fuzzing operation; attacker/defender symmetry named explicitly.
+
+#### 264 — Running Loupe
+
+A pre-registered two-arm experiment: would Loupe have caught the Coldcard bug
+pre-fix? Default config misses it; fetching submodules finds it three times.
+The real defect relocates from scanner architecture to silent incomplete
+checkouts (`git clone --bare` cannot fetch submodules — "a green result that
+structurally could not have been red"). Ends in an upstream Loupe PR (warn when
+checkouts leave submodule paths empty) after 121 passing tests. Build order
+settled: materialize dependencies, refuse confident reports on incomplete
+programs, then symbol provenance, reachability, ranking. L0/L1 hardening
+framework: rank attack surface before scanning; follow data across symbol
+boundaries.
+
+#### 265 — Vulnerability Workbench
+
+v1 forensics/vulnerability workbench inside Omega, extending Project Loupe.
+Critique of naive scanning (Kimi dumps on X) and of Loupe itself: silently
+omits submodules, no coverage manifest, can mark success after scanner
+failures, verifier receives no proof-of-concept copy, findings unbound to
+receipts. Multi-model delegation (Codex/Claude/Grok/Sol; Luna free default);
+scans run on monitored OpenAgents Cloud Linux workers under an opsec stance
+that assumes adversaries watch public development. Issue 9300 holds the
+roadmap. Host has moved 60-80 percent of his dev workflow into Omega.
+
+#### 266 — Single Points of Failure
+
+The Boltz shutdown (swaps disabled August 1-3, indefinite) reads as coordinator
+monoculture. OpenAgents stands down the vulnerability effort (a Bitcoin dev team
+handles basic identification) and pivots to decentralizing SPOFs, fusing
+tbDEX's market grammar (offerings, RFQ, quote, order, status, close — discovery
+and negotiation without moving money) with Boltz's atomic-settlement physics
+into NIP-MKT on a self-built Rust relay. tbDEX autopsy: identity too heavy
+(DIDs/VCs rejected — Nostr keypairs suffice), cold-start effects, stablecoin
+incumbency. Governing boundary: relay acceptance proves transport only; owning
+profiles prove settlement. Notes NIP-90-era markets now deprecated.
+
+#### 267 — Immortal Infrastructure
+
+Immortal ships as CC0 Rust infrastructure in exactly seven crates: the relay
+(live at relay.openagents.com speaking NIP-MKT), a provider daemon run by a
+different party, and a wallet-embedded skeptical client engine with
+verify-before-fund. Answers Boltz's four failure modes: funds never live on the
+relay (script-path refunds survive relay death), implementation diversity over
+monoculture, tiny attack surfaces over honeypots, runnable operator software
+over specs (what killed tbDEX). Boltz-compatible facade plus cutover runbook
+planned for stranded wallets. Generalization claim: the same coordination loop
+prices and verifies a merged pull request. Honest caveat: one relay today is
+still a point of trust.
+
+### Batch synthesis and integration notes
+
+This batch pivots the company from agent products toward two anchors: Omega as
+the IDE, and infrastructure-grade trustworthiness (postmortems, controls,
+receipts, CC0 relay code) as the brand. Both transfer directly onto the forge:
+the forge is where receipts land, and the discipline episodes here demand —
+errors become gates, green must be falsifiable — is the forge's test suite.
+
+Dispositions:
+
+1. **Live.** Sarah deployed on openagents.com (episodes 270-272 make her real);
+   Omega fork active; the forge itself answers 266's SPOF argument for code
+   hosting; issue-shaped participation mirrors the verify-before-fund stance.
+2. **Dust off.**
+   - **The sixteen controls**: written for a desktop Git review worker, but
+     bounded-work and typed-degradation controls map onto server-side review
+     surfaces too. Worth an invariant pass: which forge endpoints do unbounded
+     work on untrusted repository state?
+   - **Verifiable-software definition** (259): scope-as-falsifiable-intent,
+     evidence over narration, producer-verifier separation, stranger-checkable
+     receipts. This is a sharper articulation than anything currently in the
+     docs; adopt the language in the work-system assessment and issue template.
+   - **NIP-32 reputation events / certifications**: gold-star attestation for
+     accepted outcomes. Dormant since; pairs naturally with forum moderation
+     and bounty payouts on the new stack.
+   - **L0/L1 scan-ranking framework** (264): rank attack surface before
+     scanning applies to the forge itself (route ledger already does this for
+     authority).
+3. **Reimagine.**
+   - **Vulnerability workbench**: stood down deliberately at Bitcoin OSS
+     targets (266), but the harness lessons (coverage manifests, evidence-bound
+     findings, refusal to grade incomplete programs) apply to any repository
+     the forge hosts. A lightweight coverage-manifest requirement for
+     agent-generated PRs is the durable residue.
+   - **NIP-MKT / Immortal**: the swap market is Bitcoin-domain, but the
+     architecture — neutral relay, provider daemons, skeptical clients,
+     transport-versus-settlement separation — is exactly how agent markets
+     should be rebuilt after the NIP-90 deprecation. If labor/compute markets
+     return, rebuild them on this shape rather than resurrecting DVMs.
+   - **One-agent funnel** (260): sales-to-service collapse. The chat console
+     (#55) should assume funnel duty (conversation to paid outcome) rather
+     than being a bare model playground.
+4. **Retired.**
+   - **NIP-90 data-vending-machine markets**: deprecated by the host's own
+     later ruling (266). Do not build new NIP-90-dependent features.
+   - **DID/verifiable-credential identity**: rejected for Nostr keypairs; keep
+     rejected unless a concrete counterexample appears.
+   - **Copilot as a delegation target**: removed ("Copilot is dumb"); exclude
+     from harness lists.
+
+Pivot watch: Desktop RC (256) and the IDE promises (257-258) belong to the
+Electron line; Omega inherits the vocabulary two episodes later. The 263 index
+mismatch also shows the transcript index itself needs a maintenance pass —
+fold that into any future transcripts cleanup.
+
+---

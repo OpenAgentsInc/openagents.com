@@ -11,7 +11,8 @@ defmodule OpenAgents.Forge.Supervisor do
   def init(_init_arg) do
     children =
       [
-        {Task.Supervisor, name: OpenAgents.Forge.TaskSupervisor}
+        {Task.Supervisor, name: OpenAgents.Forge.TaskSupervisor},
+        {OpenAgents.Forge.MirrorWatch, []}
       ] ++ repository_children() ++ deploy_lane_children()
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -35,8 +36,7 @@ defmodule OpenAgents.Forge.Supervisor do
       [
         {OpenAgents.Forge.Builder, []},
         {OpenAgents.Forge.HotLoader, []},
-        {OpenAgents.Forge.Janitor, []},
-        {OpenAgents.Forge.MirrorWatch, []}
+        {OpenAgents.Forge.Janitor, []}
       ]
     else
       []

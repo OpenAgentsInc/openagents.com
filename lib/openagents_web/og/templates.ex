@@ -271,14 +271,23 @@ defmodule OpenAgentsWeb.OG.Templates do
   end
 
   defp footer do
+    # The mark is drawn a shade smaller than the wordmark's cap height, which
+    # is what keeps a glyph from outweighing the words beside it.
     scale = 0.62
     translate_y = @footer_y - trunc(BrandMark.height() * scale)
 
+    # Strokes, not fills: the glyph is a ring with a gap and a bar, and both
+    # keep their round caps only as strokes. `vector-effect` is deliberately
+    # absent — the card is rasterized once at a fixed size, so the stroke
+    # scales with the group exactly as the geometry does.
     mark =
       tag("g",
         transform: "translate(#{@margin}, #{translate_y}) scale(#{scale})",
-        fill: @muted,
-        content: [tag("path", d: BrandMark.path())]
+        fill: "none",
+        stroke: @muted,
+        "stroke-width": BrandMark.stroke_width(),
+        "stroke-linecap": "round",
+        content: Enum.map(BrandMark.paths(), &tag("path", d: &1))
       )
 
     wordmark =

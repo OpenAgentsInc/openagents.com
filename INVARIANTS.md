@@ -1088,7 +1088,12 @@ than assumed.
   resolved by the application. The caller names a repository the operator may
   read as `owner/name`; a filesystem path from a caller never reaches an SCV.
   The workspace is removed on every terminal path, including the one that runs
-  when the worker died.
+  when the worker died. In staging and production that workspace must sit on a
+  durable path: a container's `System.tmp_dir!()` is the writable image layer
+  on the boot disk, which the node already shares with Docker and the import
+  workspace, so a repository cloned there is how a node runs out of room while
+  its durable volume idles. Configuration names the root, and a node refuses
+  to boot with an SCV lane enabled and a clone root under `/tmp`.
 - **No job may deploy one.** `scv.deploy` is a turn authority only. Job
   authorities never include it, so neither a deep-work job, a delegation, a
   coding job, nor an SCV can start another SCV.

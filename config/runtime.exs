@@ -228,7 +228,9 @@ if config_env() == :prod and runtime_role == :web do
     file_root:
       optional_text.("OPENAGENTS_SCV_CODEX_FILE_ROOT") ||
         Application.fetch_env!(:openagents, :scv_codex)[:file_root],
-    temporary_root: System.tmp_dir!(),
+    temporary_root:
+      optional_text.("OPENAGENTS_SCV_TEMPORARY_ROOT") ||
+        Application.fetch_env!(:openagents, :scv_codex)[:temporary_root],
     client_options: []
   ]
 

@@ -459,6 +459,16 @@ defmodule OpenAgents.RuntimeConfig do
       features.scv_deploy and not valid_scv_deploy?(Map.get(settings, :scv_deploy)) ->
         error(:scv_deploy, "requires an admitted model, bounds, and output root")
 
+      # An SCV clones the repository before it runs, and that clone is the
+      # largest thing the lane writes. `System.tmp_dir!()` inside a container
+      # is the writable image layer on the boot disk, which the node already
+      # shares with Docker and the import workspace; a repository landing
+      # there is how a node runs out of room while its durable volume idles.
+      environment in [:staging, :production] and
+        (features.scv_deploy or Map.get(settings, :scv_codex, [])[:enabled] == true) and
+          not durable_path?(keyword_value(Map.get(settings, :scv_codex), :temporary_root)) ->
+        error(:scv_temporary_root, "must be durable when an SCV lane is enabled")
+
       features.forge_deploy and not features.forge ->
         error(:forge_deploy_lane_enabled, "requires the forge")
 

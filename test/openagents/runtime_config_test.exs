@@ -247,6 +247,36 @@ defmodule OpenAgents.RuntimeConfigTest do
     end
   end
 
+  test "an SCV lane refuses a clone root on the container layer" do
+    # Gate 14 admits the lane; the clone root is what decides whether the
+    # repository lands on the durable volume or on the boot disk.
+    settings =
+      staging_settings()
+      |> Map.put(:staging_gate, 14)
+      |> Map.put(:build_revision, String.duplicate("a", 40))
+      |> Map.put(:image_digest, "sha256:" <> String.duplicate("b", 64))
+      |> put_nested(:work, :enabled, true)
+      |> Map.put(:work_workers_enabled, true)
+      |> put_nested(:scv_deploy, :enabled, true)
+
+    assert {:error, %{setting: :scv_temporary_root}} =
+             settings
+             |> put_nested(:scv_codex, :temporary_root, "/tmp")
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :scv_temporary_root}} =
+             settings
+             |> put_nested(:scv_codex, :temporary_root, "/tmp/openagents-scv")
+             |> RuntimeConfig.validate()
+
+    assert {:ok, config} =
+             settings
+             |> put_nested(:scv_codex, :temporary_root, "/var/lib/openagents/workspace/scv")
+             |> RuntimeConfig.validate()
+
+    assert RuntimeConfig.feature_enabled?(config, :scv_deploy)
+  end
+
   defp staging_settings do
     current = Map.new(Application.get_all_env(:openagents))
 

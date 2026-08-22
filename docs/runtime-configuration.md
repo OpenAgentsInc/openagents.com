@@ -115,6 +115,7 @@ arguments, and the compiled defaults are the safe values.
 | `OPENAGENTS_SCV_DEPLOY_OPENCODE_BIN` | Absolute path to the pinned OpenCode executable; the release image uses `/usr/local/bin/opencode` |
 | `OPENAGENTS_SCV_DEPLOY_OPENCODE_API_KEY` | Optional OpenCode gateway key; the default model runs without one |
 | `OPENAGENTS_SCV_DEPLOY_OUTPUT_ROOT` | Durable directory for run artifacts; must not be under `/tmp` |
+| `OPENAGENTS_SCV_TEMPORARY_ROOT` | Durable directory for SCV repository clones; must not be under `/tmp` when an SCV lane is enabled in staging or production |
 
 The compiled defaults cap concurrency at two simultaneous SCVs, the wall clock
 at 15 minutes, and captured output at 16 MB. The lane runs read-only against a

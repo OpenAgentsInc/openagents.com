@@ -25,6 +25,7 @@
 # Current architecture and decisions discuss the Sarah persona boundary.
 ^README\.md:[0-9]+:.*[Ss][Aa][Rr][Aa][Hh]
 ^docs/architecture\.md:
+^docs/taxonomy\.md:
 ^docs/decisions/0001-integrate-the-complete-public-application\.md:
 ^docs/decisions/0002-model-sarah-as-an-openagents-persona\.md:
 ^docs/decisions/0005-use-basecoat-and-one-component-system\.md:

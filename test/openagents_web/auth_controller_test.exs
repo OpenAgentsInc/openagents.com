@@ -76,7 +76,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     conn = start_login(conn)
     {_attempt, state} = attempt_and_state(conn)
     expect_github(502, "empty-repository-person")
-    Repositories.initial_repository!() |> Repo.delete!()
+    Repositories.get_by_path!("OpenAgentsInc", "openagents.com") |> Repo.delete!()
 
     authenticated =
       conn

@@ -39,7 +39,7 @@ defmodule OpenAgents.StagingCleanupTest do
   test "one run removes only its registered accounts, repositories, recordings, and machines" do
     user = repository_user_fixture("cleanup-target")
     unrelated_user = repository_user_fixture("cleanup-unrelated")
-    repository = repository_fixture(user)
+    repository = cleanup_repository_fixture(user)
     project = project_fixture(repository, user)
     field = project_field_fixture(project)
     machine = machine_fixture(user)
@@ -78,7 +78,7 @@ defmodule OpenAgents.StagingCleanupTest do
     assert Repo.get(Recording, recording.id) == nil
     assert Repo.get(ProjectField, field.id) == nil
     assert Repo.get(OpenAgents.Accounts.User, unrelated_user.id)
-    assert Repositories.initial_repository!()
+    assert Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
     assert Repo.aggregate(DisposableResource, :count) == 0
 
     assert {:ok, %{registered: empty}} = StagingCleanup.preview(@run_id)
@@ -87,7 +87,11 @@ defmodule OpenAgents.StagingCleanupTest do
 
   test "registration refuses the canonical repository and administrator accounts" do
     assert {:error, :canonical_repository_forbidden} =
-             StagingCleanup.register(@run_id, :repository, Repositories.initial_repository!().id)
+             StagingCleanup.register(
+               @run_id,
+               :repository,
+               Repositories.get_by_path!("OpenAgentsInc", "openagents.com").id
+             )
 
     user = repository_user_fixture("cleanup-admin")
     original_ids = Application.get_env(:openagents, :admin_github_ids)
@@ -100,7 +104,9 @@ defmodule OpenAgents.StagingCleanupTest do
 
   test "cleanup refuses an account that owns a project outside the registered repositories" do
     user = repository_user_fixture("cleanup-project-owner")
-    project = project_fixture(Repositories.initial_repository!(), user)
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+    {:ok, _membership} = Repositories.add_member(repository, user, "owner")
+    project = project_fixture(repository, user)
     assert {:ok, _registration} = StagingCleanup.register(@run_id, :account, user.id)
 
     assert {:error, :account_owns_unregistered_project} = StagingCleanup.cleanup(@run_id)
@@ -188,7 +194,7 @@ defmodule OpenAgents.StagingCleanupTest do
     assert {:error, :staging_cleanup_not_admitted} = StagingCleanup.preview(@run_id)
   end
 
-  defp repository_fixture(user) do
+  defp cleanup_repository_fixture(user) do
     {:ok, repository} =
       Repositories.create_repository(%{
         owner: "OpenAgentsStaging",

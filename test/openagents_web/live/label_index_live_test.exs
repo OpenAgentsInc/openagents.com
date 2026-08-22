@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
   alias OpenAgents.Labels
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "label-index")}
+    {:ok, conn: log_in_repository_user(conn, "label-index", repository())}
   end
 
   test "mounts with the create form and an empty state", %{conn: conn} do
@@ -20,8 +20,13 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
   end
 
   test "lists seeded labels with their descriptions", %{conn: conn} do
-    label_fixture(%{name: "bug", color: "d73a4a", description: "Something is broken"})
-    label_fixture(%{name: "docs", color: "0075ca", description: nil})
+    label_fixture(repository(), %{
+      name: "bug",
+      color: "d73a4a",
+      description: "Something is broken"
+    })
+
+    label_fixture(repository(), %{name: "docs", color: "0075ca", description: nil})
 
     {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
 
@@ -44,7 +49,7 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
 
     assert html =~ "Label created"
     assert has_element?(view, "#labels td", "enhancement")
-    assert [%Labels.Label{name: "enhancement"}] = Labels.list_labels()
+    assert [%Labels.Label{name: "enhancement"}] = Labels.list_labels(repository())
   end
 
   test "a label missing its required color re-renders the form with an error", %{conn: conn} do
@@ -57,11 +62,11 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
 
     assert html =~ "can&#39;t be blank"
     assert has_element?(view, "#new-label-form")
-    assert Labels.list_labels() == []
+    assert Labels.list_labels(repository()) == []
   end
 
   test "deleting a label removes it and returns the empty state", %{conn: conn} do
-    label = label_fixture(%{name: "wontfix", color: "ffffff"})
+    label = label_fixture(repository(), %{name: "wontfix", color: "ffffff"})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/labels")
     assert has_element?(view, "#labels td", "wontfix")
@@ -73,6 +78,10 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
 
     assert html =~ "Label deleted"
     assert has_element?(view, ~s{[role="status"]}, "No labels yet")
-    assert Labels.list_labels() == []
+    assert Labels.list_labels(repository()) == []
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

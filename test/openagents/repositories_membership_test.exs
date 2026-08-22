@@ -23,7 +23,7 @@ defmodule OpenAgents.RepositoriesMembershipTest do
   end
 
   setup do
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
     owner = plain_user("members-owner")
     {:ok, _membership} = Repositories.add_member(repository, owner, "owner")
 

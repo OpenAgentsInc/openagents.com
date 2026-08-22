@@ -20,10 +20,7 @@ defmodule OpenAgents.Issues do
   @doc "How many issues one index page shows."
   def per_page, do: @issues_per_page
 
-  def list_issues(opts \\ []) when is_list(opts),
-    do: list_issues(Repositories.initial_repository!(), opts)
-
-  def list_issues(%Repository{id: repository_id}, opts) when is_list(opts) do
+  def list_issues(%Repository{id: repository_id}, opts \\ []) when is_list(opts) do
     repository_id
     |> issue_query(opts)
     |> order_by([issue], desc: issue.inserted_at, desc: issue.id)
@@ -136,14 +133,9 @@ defmodule OpenAgents.Issues do
     |> maybe_filter_search(Keyword.get(opts, :q))
   end
 
-  def get_issue!(id), do: get_issue!(Repositories.initial_repository!(), id)
-
   def get_issue!(%Repository{id: repository_id}, id) do
     Repo.get_by!(Issue, id: id, repository_id: repository_id)
   end
-
-  def get_issue_by_number!(number) when is_integer(number),
-    do: get_issue_by_number!(Repositories.initial_repository!(), number)
 
   def get_issue_by_number!(%Repository{id: repository_id}, number) when is_integer(number),
     do: Repo.get_by!(Issue, repository_id: repository_id, number: number)
@@ -159,9 +151,6 @@ defmodule OpenAgents.Issues do
             repository.visibility == "public" and issue.number == ^number
     )
   end
-
-  def create_issue(attrs \\ %{}),
-    do: create_issue(Repositories.initial_repository!(), attrs, nil)
 
   def create_issue(%Repository{} = repository, attrs),
     do: create_issue(repository, attrs, nil)
@@ -257,16 +246,13 @@ defmodule OpenAgents.Issues do
     end
   end
 
-  def change_issue(%Issue{} = issue, attrs \\ %{}) do
-    attrs =
-      if is_nil(issue.repository_id) do
-        attrs
-        |> to_string_map()
-        |> Map.put("repository_id", Repositories.initial_repository!().id)
-      else
-        attrs
-      end
+  def change_issue(%Repository{id: repository_id}, %Issue{} = issue, attrs) do
+    attrs = attrs |> to_string_map() |> Map.put("repository_id", repository_id)
+    Issue.changeset(issue, attrs)
+  end
 
+  def change_issue(%Issue{repository_id: repository_id} = issue, attrs \\ %{})
+      when not is_nil(repository_id) do
     Issue.changeset(issue, attrs)
   end
 
@@ -339,13 +325,6 @@ defmodule OpenAgents.Issues do
     |> Repo.all()
   end
 
-  def list_comments(issue_id) do
-    issue = get_issue!(issue_id)
-    list_comments(issue)
-  end
-
-  def get_comment!(id), do: get_comment!(Repositories.initial_repository!(), id)
-
   def get_comment!(%Repository{id: repository_id}, id) do
     Repo.get_by!(Comment, id: id, repository_id: repository_id)
   end
@@ -362,26 +341,31 @@ defmodule OpenAgents.Issues do
     )
   end
 
-  def create_comment(attrs \\ %{}) do
+  def create_comment(attrs) when is_map(attrs) do
     normalized = to_string_map(attrs)
 
     case Map.fetch(normalized, "issue_id") do
       {:ok, issue_id} ->
-        issue = get_issue!(issue_id)
-        create_comment(issue, normalized, nil)
+        case Repo.get(Issue, issue_id) do
+          %Issue{} = issue -> create_comment(issue, normalized, nil)
+          nil -> invalid_comment(normalized)
+        end
 
       :error ->
-        now = DateTime.utc_now() |> DateTime.truncate(:second)
-
-        %Comment{}
-        |> Comment.changeset(
-          normalized
-          |> Map.put("repository_id", Repositories.initial_repository!().id)
-          |> Map.put_new("created_at", now)
-          |> Map.put_new("updated_at", now)
-        )
-        |> Ecto.Changeset.apply_action(:insert)
+        invalid_comment(normalized)
     end
+  end
+
+  defp invalid_comment(attrs) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    %Comment{}
+    |> Comment.changeset(
+      attrs
+      |> Map.put_new("created_at", now)
+      |> Map.put_new("updated_at", now)
+    )
+    |> Ecto.Changeset.apply_action(:insert)
   end
 
   def create_comment(%Issue{} = issue, attrs, author \\ nil)

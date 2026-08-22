@@ -21,13 +21,27 @@ defmodule OpenAgentsWeb.MemberIndexLiveTest do
 
   defp sign_in_owner(conn, key) do
     user = repository_user_fixture(key)
-    {:ok, _} = Repositories.add_member(Repositories.initial_repository!(), user, "owner")
+
+    {:ok, _} =
+      Repositories.add_member(
+        Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
+        user,
+        "owner"
+      )
+
     {Plug.Test.init_test_session(conn, %{"user_id" => user.id}), user}
   end
 
   test "an owner sees the members and their roles", %{conn: conn} do
     {conn, _owner} = sign_in_owner(conn, "members-view-owner")
-    repository_user_fixture("members-view-member")
+    member = repository_user_fixture("members-view-member")
+
+    {:ok, _membership} =
+      Repositories.add_member(
+        Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
+        member,
+        "contributor"
+      )
 
     {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/members")
 
@@ -50,7 +64,10 @@ defmodule OpenAgentsWeb.MemberIndexLiveTest do
     assert has_element?(view, "#members")
     assert html =~ "recruit"
 
-    assert Repositories.membership_role(Repositories.initial_repository!(), recruit) ==
+    assert Repositories.membership_role(
+             Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
+             recruit
+           ) ==
              "maintainer"
   end
 
@@ -70,6 +87,8 @@ defmodule OpenAgentsWeb.MemberIndexLiveTest do
   test "an owner changes a member's role", %{conn: conn} do
     {conn, _owner} = sign_in_owner(conn, "members-role-owner")
     member = repository_user_fixture("role-target")
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+    {:ok, _membership} = Repositories.add_member(repository, member, "contributor")
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/members")
 
@@ -80,14 +99,18 @@ defmodule OpenAgentsWeb.MemberIndexLiveTest do
     })
     |> render_change()
 
-    assert Repositories.membership_role(Repositories.initial_repository!(), member) ==
+    assert Repositories.membership_role(
+             Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
+             member
+           ) ==
              "maintainer"
   end
 
   test "an owner removes a member", %{conn: conn} do
     {conn, _owner} = sign_in_owner(conn, "members-remove-owner")
     member = repository_user_fixture("remove-target")
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+    {:ok, _membership} = Repositories.add_member(repository, member, "contributor")
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/members")
 
@@ -101,7 +124,7 @@ defmodule OpenAgentsWeb.MemberIndexLiveTest do
   test "a demoted owner cannot keep administering through an open page", %{conn: conn} do
     {conn, owner} = sign_in_owner(conn, "members-stale-owner")
     recruit = plain_user("members-stale-recruit")
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/members")
     {:ok, _} = Repositories.add_member(repository, owner, "contributor")
@@ -126,11 +149,18 @@ defmodule OpenAgentsWeb.MemberIndexLiveTest do
       |> render_click()
 
     assert html =~ "at least one owner"
-    assert Repositories.member?(Repositories.initial_repository!(), owner)
+
+    assert Repositories.member?(
+             Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
+             owner
+           )
   end
 
   test "a non-owner is sent away", %{conn: conn} do
-    conn = log_in_github_user(conn, "plain-contributor")
+    user = repository_user_fixture("plain-contributor")
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+    {:ok, _membership} = Repositories.add_member(repository, user, "contributor")
+    conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
     {:error, {:redirect, %{to: to}}} = live(conn, ~p"/OpenAgentsInc/openagents.com/members")
 

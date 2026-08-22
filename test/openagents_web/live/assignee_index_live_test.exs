@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
   import OpenAgents.AccountsFixtures
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "assignee-index")}
+    {:ok, conn: log_in_repository_user(conn, "assignee-index", repository())}
   end
 
   test "mounts with an honest empty state when no issue has an assignee", %{conn: conn} do
@@ -19,20 +19,22 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
   end
 
   test "tallies assignees across open and closed issues, most-assigned first", %{conn: conn} do
-    repository_user_fixture("ada-assignee")
-    repository_user_fixture("grace-assignee")
+    for login <- ["ada-assignee", "grace-assignee"] do
+      user = repository_user_fixture(login)
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository(), user, "contributor")
+    end
 
     {:ok, _first} =
-      Issues.create_issue(%{
+      Issues.create_issue(repository(), %{
         "title" => "First",
         "assignees" => ["ada-assignee", "grace-assignee"]
       })
 
     {:ok, _second} =
-      Issues.create_issue(%{"title" => "Second", "assignees" => ["ada-assignee"]})
+      Issues.create_issue(repository(), %{"title" => "Second", "assignees" => ["ada-assignee"]})
 
     {:ok, third} =
-      Issues.create_issue(%{"title" => "Third", "assignees" => ["ada-assignee"]})
+      Issues.create_issue(repository(), %{"title" => "Third", "assignees" => ["ada-assignee"]})
 
     # A closed issue still counts: the view lists `state: "all"`.
     {:ok, _} = Issues.update_issue(third, %{"state" => "closed"})
@@ -55,5 +57,9 @@ defmodule OpenAgentsWeb.AssigneeIndexLiveTest do
              live(build_conn(), ~p"/OpenAgentsInc/openagents.com/assignees")
 
     refute to == "/OpenAgentsInc/openagents.com/assignees"
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

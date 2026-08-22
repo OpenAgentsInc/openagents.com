@@ -213,8 +213,6 @@ destination:
 
 ```sh
 REPOSITORY_API=https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com
-USER_LOGIN=$(curl -fsS "https://openagents.com/api/v3/user" \
-  -H "Authorization: Bearer $TOKEN" | jq -r '.login')
 
 curl -fsS -X POST "$REPOSITORY_API/milestones" \
   -H "Authorization: Bearer $TOKEN" \
@@ -222,19 +220,19 @@ curl -fsS -X POST "$REPOSITORY_API/milestones" \
   -d '{"title": "Backlog hygiene", "description": "First triage sweep"}'
 
 PROJECT_NUMBER=$(curl -fsS -X POST \
-  "https://openagents.com/api/v3/$USER_LOGIN/projectsV2" \
+  "$REPOSITORY_API/projectsV2" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title": "openagents.com roadmap"}' | jq -r '.number')
 
 curl -fsS -X POST \
-  "https://openagents.com/api/v3/users/$USER_LOGIN/projectsV2/$PROJECT_NUMBER/fields" \
+  "$REPOSITORY_API/projectsV2/$PROJECT_NUMBER/fields" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "Status", "data_type": "single_select", "options": {"values": ["To Do", "In Progress", "Done"]}}'
 ```
 
-The project belongs to the GitHub login tied to your token. Add high-signal
+The project belongs to the repository in `REPOSITORY_API`. Add high-signal
 issues to the board and set their `Status` value through the project items API.
 
 ### Label vocabulary

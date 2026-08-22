@@ -1,15 +1,18 @@
 defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-assignees")}
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-assignees", repository())}
 
   alias OpenAgents.Issues
   import OpenAgents.AccountsFixtures
 
   setup do
-    repository_user_fixture("octocat")
-    repository_user_fixture("hubot")
-    {:ok, issue} = Issues.create_issue(%{title: "Assignable issue"})
+    for login <- ["octocat", "hubot"] do
+      user = repository_user_fixture(login)
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository(), user, "contributor")
+    end
+
+    {:ok, issue} = Issues.create_issue(repository(), %{title: "Assignable issue"})
     %{issue: issue}
   end
 
@@ -57,7 +60,8 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
 
       assert %{"assignees" => [%{"login" => "octocat"}]} = json_response(conn, 200)
 
-      assert [%{"login" => "octocat"}] = Issues.get_issue_by_number!(issue.number).assignees
+      assert [%{"login" => "octocat"}] =
+               Issues.get_issue_by_number!(repository(), issue.number).assignees
     end
 
     test "POST .../issues/:issue_number/assignees adds several at once", %{
@@ -135,7 +139,8 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
 
       assert %{"assignees" => [%{"login" => "hubot"}]} = json_response(conn, 200)
 
-      assert [%{"login" => "hubot"}] = Issues.get_issue_by_number!(issue.number).assignees
+      assert [%{"login" => "hubot"}] =
+               Issues.get_issue_by_number!(repository(), issue.number).assignees
     end
 
     test "DELETE .../issues/:issue_number/assignees ignores an assignee that is not set", %{
@@ -166,5 +171,9 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

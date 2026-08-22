@@ -2,13 +2,19 @@
 
 **Date:** 2026-08-21
 **Commits measured:** `81e4c25eb5b5` (`openagents/main`, the forge) for the API; `5bd0061e4f6e` in the `openagents` monorepo for `packages/openagents-cli` (package version `0.1.7`)
-**Status:** Stage 1 shipped on 2026-08-21 as `@openagentsinc/cli@0.2.1`; see section 5. Everything else below describes the surface as measured, unchanged.
+**Status:** Stages 1, 2, and 7 shipped. Stage 1 added `openagents api` in `@openagentsinc/cli@0.2.1`. Stages 2 and 7 added optional-bearer issue reads and repository-scoped Projects V2 routes on 2026-08-22. Historical measurements below retain the original findings.
 **Question:** Does the CLI only cover repository upload? What of the Issues and Projects API does it reach? Should that coverage be generated from an OpenAPI document instead of hand-written? What is the fastest honest path to managing issues and projects from a terminal?
 **Method:** direct reading of `lib/openagents_web/router.ex`, every controller it routes to under `/api/v3`, the contexts behind them (`lib/openagents/issues.ex`, `labels.ex`, `milestones.ex`, `projects.ex`, `repositories.ex`), the auth plugs, `lib/openagents_web/route_authority.ex`, `priv/api-contracts/repositories-v1.json` and its controller and test, and `docs/openagents-cli/`; plus direct reading of all 21 source files in the `openagents` monorepo at `packages/openagents-cli/src/` and its tests. The CLI lives in a different repository, so every CLI citation names it. Claims that neither repository can settle are in section 7 with the command that would settle them.
 
 ---
 
 ## 0. Summary
+
+> **Update, 2026-08-22:** The server now resolves Projects V2 through
+> `/repos/:owner/:repo/projectsV2`, applies the named repository's read and
+> write policy to every project operation, and supports authenticated reads of
+> private issues. The `initial_repository!/0` and `initial_path/0` shortcuts no
+> longer exist. The findings below describe the pre-remediation surface.
 
 The owner is right. The CLI is repository-shaped and reaches **none** of the Issues and Projects API.
 
@@ -381,6 +387,11 @@ Extend the `RouteAuthority` walk to emit the full `/api/v3` surface — path, me
 Ranks 6 through 9. Straightforward once Stage 3 has established the client and command shapes.
 
 ### Stage 7 — Make projects addressable, then build project commands (this repository, then CLI; large)
+
+**Shipped on 2026-08-22.** Projects now use repository-shaped routes and no
+production context selects a default repository. The generic `openagents api`
+command can address the resulting project surface; dedicated project commands
+remain future CLI work.
 
 Unpin the project surface from `Repositories.initial_repository!()` (`projects.ex:26`, `:131`), make `ProjectController.create` honor its own `:owner` segment instead of resolving `Repositories.initial_path()` (`project_controller.ex:21`), reconcile `POST /api/v3/:owner/projectsV2` with the `/users/:username/projectsV2` shape every other project route uses (`router.ex:290`), and give the project reads a visibility predicate. Only then are there project commands worth writing. **Size:** large, and it is genuinely a redesign rather than a port.
 

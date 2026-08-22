@@ -5,7 +5,8 @@ defmodule OpenAgentsWeb.AssigneeControllerTest do
 
   describe "index" do
     test "GET /api/v3/repos/:owner/:repo/assignees returns the assignable list", %{conn: conn} do
-      repository_user_fixture("octocat")
+      user = repository_user_fixture("octocat")
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository(), user, "contributor")
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/assignees")
 
       assert %{"assignees" => [%{"login" => "octocat"}]} = json_response(conn, 200)
@@ -15,7 +16,8 @@ defmodule OpenAgentsWeb.AssigneeControllerTest do
   describe "show" do
     test "GET /api/v3/repos/:owner/:repo/assignees/:assignee returns an assignable user",
          %{conn: conn} do
-      repository_user_fixture("octocat")
+      user = repository_user_fixture("octocat")
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository(), user, "contributor")
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/assignees/octocat")
 
       assert %{"login" => "octocat"} = json_response(conn, 200)
@@ -26,5 +28,9 @@ defmodule OpenAgentsWeb.AssigneeControllerTest do
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

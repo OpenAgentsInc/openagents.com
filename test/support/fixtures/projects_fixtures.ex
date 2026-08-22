@@ -7,15 +7,16 @@ defmodule OpenAgents.ProjectsFixtures do
   @doc """
   Generate a project.
   """
-  def project_fixture(attrs \\ %{}) do
+  def project_fixture(repository, attrs \\ %{}) do
     {:ok, project} =
-      attrs
-      |> Enum.into(%{
-        owner: "some owner",
-        state: "some state",
-        title: "some title"
-      })
-      |> OpenAgents.Projects.create_project()
+      OpenAgents.Projects.create_project(
+        repository,
+        Enum.into(attrs, %{
+          owner: "some owner",
+          state: "some state",
+          title: "some title"
+        })
+      )
 
     project
   end

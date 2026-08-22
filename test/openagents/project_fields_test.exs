@@ -3,6 +3,12 @@ defmodule OpenAgents.ProjectFieldsTest do
 
   alias OpenAgents.ProjectFields
 
+  setup do
+    Process.put({__MODULE__, :repository}, repository_fixture())
+    on_exit(fn -> Process.delete({__MODULE__, :repository}) end)
+    :ok
+  end
+
   describe "project_fields" do
     alias OpenAgents.ProjectFields.ProjectField
 
@@ -12,7 +18,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     @invalid_attrs %{name: nil, data_type: nil, options: nil, project_id: nil}
 
     test "list_project_fields/0 returns all project_fields" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
       assert ProjectFields.list_project_fields() == [project_field]
     end
 
@@ -21,20 +27,20 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "list_project_fields/0 spans projects" do
-      a = project_field_fixture(name: "Status")
-      b = project_field_fixture(name: "Priority")
+      a = project_field_fixture(repository(), name: "Status")
+      b = project_field_fixture(repository(), name: "Priority")
 
       ids = ProjectFields.list_project_fields() |> Enum.map(& &1.id) |> Enum.sort()
       assert ids == Enum.sort([a.id, b.id])
     end
 
     test "get_project_field!/1 returns the project_field with given id" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
       assert ProjectFields.get_project_field!(project_field.id) == project_field
     end
 
     test "get_project_field!/1 raises for an unknown id" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
 
       assert_raise Ecto.NoResultsError, fn ->
         ProjectFields.get_project_field!(project_field.id + 1)
@@ -42,7 +48,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "create_project_field/1 with valid data creates a project_field" do
-      project = project_fixture()
+      project = project_fixture(repository())
 
       valid_attrs = %{
         name: "Status",
@@ -61,7 +67,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "create_project_field/1 leaves options nil when omitted" do
-      project = project_fixture()
+      project = project_fixture(repository())
 
       assert {:ok, %ProjectField{} = project_field} =
                ProjectFields.create_project_field(%{
@@ -106,7 +112,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "update_project_field/2 with valid data updates the project_field" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
 
       update_attrs = %{
         name: "some updated name",
@@ -123,8 +129,8 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "update_project_field/2 can move a field to another project" do
-      project_field = project_field_fixture()
-      other = project_fixture(number: 99)
+      project_field = project_field_fixture(repository())
+      other = project_fixture(repository(), number: 99)
 
       assert {:ok, %ProjectField{} = moved} =
                ProjectFields.update_project_field(project_field, %{project_id: other.id})
@@ -133,7 +139,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "update_project_field/2 with invalid data returns error changeset" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
 
       assert {:error, %Ecto.Changeset{}} =
                ProjectFields.update_project_field(project_field, @invalid_attrs)
@@ -142,7 +148,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "delete_project_field/1 deletes the project_field" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
       assert {:ok, %ProjectField{}} = ProjectFields.delete_project_field(project_field)
 
       assert_raise Ecto.NoResultsError, fn ->
@@ -151,12 +157,12 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "change_project_field/1 returns a project_field changeset" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
       assert %Ecto.Changeset{} = ProjectFields.change_project_field(project_field)
     end
 
     test "change_project_field/2 applies the given attrs" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
 
       changeset = ProjectFields.change_project_field(project_field, %{name: "Renamed"})
 
@@ -165,7 +171,7 @@ defmodule OpenAgents.ProjectFieldsTest do
     end
 
     test "change_project_field/2 surfaces validation errors without touching the database" do
-      project_field = project_field_fixture()
+      project_field = project_field_fixture(repository())
 
       changeset = ProjectFields.change_project_field(project_field, %{name: nil})
 
@@ -174,4 +180,6 @@ defmodule OpenAgents.ProjectFieldsTest do
       assert project_field == ProjectFields.get_project_field!(project_field.id)
     end
   end
+
+  defp repository, do: Process.get({__MODULE__, :repository})
 end

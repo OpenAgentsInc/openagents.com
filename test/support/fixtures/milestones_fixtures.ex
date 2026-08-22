@@ -7,17 +7,18 @@ defmodule OpenAgents.MilestonesFixtures do
   @doc """
   Generate a milestone.
   """
-  def milestone_fixture(attrs \\ %{}) do
+  def milestone_fixture(repository, attrs \\ %{}) do
     {:ok, milestone} =
-      attrs
-      |> Enum.into(%{
-        description: "some description",
-        due_on: "some due_on",
-        number: 42,
-        state: "some state",
-        title: "some title"
-      })
-      |> OpenAgents.Milestones.create_milestone()
+      OpenAgents.Milestones.create_milestone(
+        repository,
+        Enum.into(attrs, %{
+          description: "some description",
+          due_on: "some due_on",
+          number: 42,
+          state: "some state",
+          title: "some title"
+        })
+      )
 
     milestone
   end

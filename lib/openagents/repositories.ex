@@ -19,8 +19,6 @@ defmodule OpenAgents.Repositories do
     RepositoryImport
   }
 
-  @initial_owner "OpenAgentsInc"
-  @initial_name "openagents.com"
   @writable_roles ~w(owner maintainer contributor)
   @all_roles ~w(owner maintainer contributor viewer)
   @repository_namespace_limit 100
@@ -45,12 +43,6 @@ defmodule OpenAgents.Repositories do
   # `has_one`, so they are preloaded together wherever a surface renders
   # progress or provenance.
   @provisioning_assocs [:repository_import, :provisioning_outbox]
-
-  def initial_path, do: {@initial_owner, @initial_name}
-
-  def initial_repository! do
-    get_by_path!(@initial_owner, @initial_name)
-  end
 
   def get_by_path!(owner, name) when is_binary(owner) and is_binary(name) do
     owner_key = String.downcase(owner)
@@ -762,10 +754,6 @@ defmodule OpenAgents.Repositories do
   end
 
   def machine_access?(%Repository{}, _machine_id, _operation), do: false
-
-  def ensure_initial_membership(%User{} = user) do
-    add_member(initial_repository!(), user)
-  end
 
   def writable?(%Repository{id: repository_id}, %User{id: user_id}) do
     Repo.exists?(

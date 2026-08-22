@@ -10,11 +10,9 @@ defmodule OpenAgents.IssuesFixtures do
   The issue number is assigned by the context, so callers get a fresh,
   monotonically increasing number without having to coordinate.
   """
-  def issue_fixture(attrs \\ %{}) do
+  def issue_fixture(repository, attrs \\ %{}) do
     {:ok, issue} =
-      attrs
-      |> Enum.into(%{title: "some title"})
-      |> OpenAgents.Issues.create_issue()
+      OpenAgents.Issues.create_issue(repository, Enum.into(attrs, %{title: "some title"}))
 
     issue
   end

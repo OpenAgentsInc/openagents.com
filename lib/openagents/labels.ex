@@ -7,7 +7,6 @@ defmodule OpenAgents.Labels do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Analytics
   alias OpenAgents.Repo
-  alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
 
   alias OpenAgents.Labels.Label
@@ -21,8 +20,6 @@ defmodule OpenAgents.Labels do
       [%Label{}, ...]
 
   """
-  def list_labels, do: list_labels(Repositories.initial_repository!())
-
   def list_labels(%Repository{id: repository_id}) do
     Label
     |> where(repository_id: ^repository_id)
@@ -44,14 +41,8 @@ defmodule OpenAgents.Labels do
       ** (Ecto.NoResultsError)
 
   """
-  def get_label!(id), do: get_label!(Repositories.initial_repository!(), id)
-
   def get_label!(%Repository{id: repository_id}, id) do
     Repo.get_by!(Label, id: id, repository_id: repository_id)
-  end
-
-  def get_label_by_name!(name) when is_binary(name) do
-    get_label_by_name!(Repositories.initial_repository!(), name)
   end
 
   def get_label_by_name!(%Repository{id: repository_id}, name) when is_binary(name) do
@@ -114,8 +105,6 @@ defmodule OpenAgents.Labels do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_label(attrs), do: create_label(Repositories.initial_repository!(), attrs, nil)
-
   def create_label(%Repository{} = repository, attrs, actor \\ nil)
       when is_nil(actor) or is_struct(actor, User) do
     attrs =

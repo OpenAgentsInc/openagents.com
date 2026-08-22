@@ -3,6 +3,12 @@ defmodule OpenAgents.LabelsTest do
 
   alias OpenAgents.Labels
 
+  setup do
+    Process.put({__MODULE__, :repository}, repository_fixture())
+    on_exit(fn -> Process.delete({__MODULE__, :repository}) end)
+    :ok
+  end
+
   describe "labels" do
     alias OpenAgents.Labels.Label
 
@@ -11,30 +17,30 @@ defmodule OpenAgents.LabelsTest do
     @invalid_attrs %{name: nil, description: nil, color: nil}
 
     test "list_labels/0 returns all labels" do
-      label = label_fixture()
-      assert Labels.list_labels() == [label]
+      label = label_fixture(repository())
+      assert Labels.list_labels(repository()) == [label]
     end
 
     test "get_label!/1 returns the label with given id" do
-      label = label_fixture()
-      assert Labels.get_label!(label.id) == label
+      label = label_fixture(repository())
+      assert Labels.get_label!(repository(), label.id) == label
     end
 
     test "create_label/1 with valid data creates a label" do
       valid_attrs = %{name: "some name", description: "some description", color: "some color"}
 
-      assert {:ok, %Label{} = label} = Labels.create_label(valid_attrs)
+      assert {:ok, %Label{} = label} = Labels.create_label(repository(), valid_attrs)
       assert label.name == "some name"
       assert label.description == "some description"
       assert label.color == "some color"
     end
 
     test "create_label/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Labels.create_label(@invalid_attrs)
+      assert {:error, %Ecto.Changeset{}} = Labels.create_label(repository(), @invalid_attrs)
     end
 
     test "update_label/2 with valid data updates the label" do
-      label = label_fixture()
+      label = label_fixture(repository())
 
       update_attrs = %{
         name: "some updated name",
@@ -49,24 +55,24 @@ defmodule OpenAgents.LabelsTest do
     end
 
     test "update_label/2 with invalid data returns error changeset" do
-      label = label_fixture()
+      label = label_fixture(repository())
       assert {:error, %Ecto.Changeset{}} = Labels.update_label(label, @invalid_attrs)
-      assert label == Labels.get_label!(label.id)
+      assert label == Labels.get_label!(repository(), label.id)
     end
 
     test "delete_label/1 deletes the label" do
-      label = label_fixture()
+      label = label_fixture(repository())
       assert {:ok, %Label{}} = Labels.delete_label(label)
-      assert_raise Ecto.NoResultsError, fn -> Labels.get_label!(label.id) end
+      assert_raise Ecto.NoResultsError, fn -> Labels.get_label!(repository(), label.id) end
     end
 
     test "change_label/1 returns a label changeset" do
-      label = label_fixture()
+      label = label_fixture(repository())
       assert %Ecto.Changeset{} = Labels.change_label(label)
     end
 
     test "change_label/2 applies attrs and surfaces validation errors" do
-      label = label_fixture()
+      label = label_fixture(repository())
 
       assert Labels.change_label(label, %{name: "renamed"}).valid?
 
@@ -76,18 +82,23 @@ defmodule OpenAgents.LabelsTest do
     end
 
     test "get_label_by_name!/1 returns the label with the given name" do
-      label = label_fixture(name: "bug")
-      assert Labels.get_label_by_name!("bug") == label
+      label = label_fixture(repository(), name: "bug")
+      assert Labels.get_label_by_name!(repository(), "bug") == label
     end
 
     test "get_label_by_name!/1 decodes a percent-encoded name" do
-      label = label_fixture(name: "help wanted")
-      assert Labels.get_label_by_name!("help%20wanted") == label
+      label = label_fixture(repository(), name: "help wanted")
+      assert Labels.get_label_by_name!(repository(), "help%20wanted") == label
     end
 
     test "get_label_by_name!/1 raises for an unknown name" do
-      label_fixture(name: "bug")
-      assert_raise Ecto.NoResultsError, fn -> Labels.get_label_by_name!("nope") end
+      label_fixture(repository(), name: "bug")
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Labels.get_label_by_name!(repository(), "nope")
+      end
     end
   end
+
+  defp repository, do: Process.get({__MODULE__, :repository})
 end

@@ -8,6 +8,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
 
   setup %{conn: conn} do
     user = github_user("project-index")
+    {:ok, _membership} = OpenAgents.Repositories.add_member(repository(), user, "owner")
     conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
     {:ok, conn: conn, user: user}
   end
@@ -21,7 +22,8 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   end
 
   test "lists projects owned by the URL owner and links to each board", %{conn: conn} do
-    project = project_fixture(%{title: "Roadmap", owner: "OpenAgentsInc", state: "open"})
+    project =
+      project_fixture(repository(), %{title: "Roadmap", owner: "OpenAgentsInc", state: "open"})
 
     {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
@@ -45,7 +47,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
   end
 
   test "the repository board lists projects regardless of their user owner", %{conn: conn} do
-    project_fixture(%{title: "Someone elses", owner: "other-org"})
+    project_fixture(repository(), %{title: "Someone elses", owner: "other-org"})
 
     {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
@@ -67,7 +69,7 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
     assert html =~ "Project created"
     assert html =~ "Q3 delivery"
 
-    assert [project] = Projects.list_projects()
+    assert [project] = Projects.list_projects(repository())
     assert project.title == "Q3 delivery"
     assert project.owner == user.github_login
     assert project.state == "open"
@@ -83,11 +85,11 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
 
     assert html =~ "can&#39;t be blank"
     assert has_element?(view, "#new-project-form")
-    assert Projects.list_projects() == []
+    assert Projects.list_projects(repository()) == []
   end
 
   test "deleting a project returns the empty state", %{conn: conn} do
-    project = project_fixture(%{title: "Doomed", owner: "OpenAgentsInc"})
+    project = project_fixture(repository(), %{title: "Doomed", owner: "OpenAgentsInc"})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
@@ -98,25 +100,31 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
 
     assert html =~ "Project deleted"
     assert has_element?(view, ~s{[role="status"]}, "No projects yet")
-    assert Projects.list_projects() == []
+    assert Projects.list_projects(repository()) == []
   end
 
   test "closing a project from its row uses the state GitHub already has", %{conn: conn} do
     # Projects V2 carries `state`, so this changes a real field rather than an
     # invented one. Delete stays a separate control beside the row.
-    project = project_fixture(%{title: "Closeable", owner: "OpenAgentsInc", state: "open"})
+    project =
+      project_fixture(repository(), %{title: "Closeable", owner: "OpenAgentsInc", state: "open"})
+
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/projects")
 
     view
     |> element(~s{#project-state-#{project.id} button}, "Closed")
     |> render_click()
 
-    assert Projects.get_project!(project.id).state == "closed"
+    assert Projects.get_project!(repository(), project.id).state == "closed"
 
     assert has_element?(
              view,
              ~s{#project-state-#{project.id} button[aria-current="true"]},
              "Closed"
            )
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

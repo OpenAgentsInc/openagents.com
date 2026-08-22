@@ -7,9 +7,22 @@ defmodule OpenAgents.ProjectFieldsFixtures do
   @doc """
   Generate a project_field.
   """
-  def project_field_fixture(attrs \\ %{}) do
-    {:ok, project} =
-      OpenAgents.Projects.create_project(%{title: "Fixture project", owner: "OpenAgents"})
+  def project_field_fixture(repository, attrs \\ %{}) do
+    normalized = Map.new(attrs)
+    project_id = Map.get(normalized, :project_id) || Map.get(normalized, "project_id")
+
+    project =
+      if project_id do
+        OpenAgents.Projects.get_project!(repository, project_id)
+      else
+        {:ok, project} =
+          OpenAgents.Projects.create_project(repository, %{
+            title: "Fixture project",
+            owner: "OpenAgents"
+          })
+
+        project
+      end
 
     {:ok, project_field} =
       attrs

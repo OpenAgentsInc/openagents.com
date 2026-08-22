@@ -11,11 +11,11 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
   alias OpenAgents.Repositories
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "issue-show")}
+    {:ok, conn: log_in_repository_user(conn, "issue-show", repository())}
   end
 
   defp issue!(attrs) do
-    {:ok, issue} = Issues.create_issue(attrs)
+    {:ok, issue} = Issues.create_issue(repository(), attrs)
     issue
   end
 
@@ -54,7 +54,8 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
   # an issue can never get its first label. So the group is always present and
   # states its own emptiness instead.
   test "an empty property group says so rather than disappearing", %{conn: conn} do
-    repository_user_fixture("grace-show")
+    grace = repository_user_fixture("grace-show")
+    {:ok, _membership} = Repositories.add_member(repository(), grace, "contributor")
     bare = issue!(%{"title" => "Bare"})
     {:ok, view, html} = live(conn, path(bare))
 
@@ -71,8 +72,8 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
              "the #{id} property is stated but cannot be changed"
     end
 
-    label_fixture(%{name: "bug", color: "d73a4a"})
-    milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
+    label_fixture(repository(), %{name: "bug", color: "d73a4a"})
+    milestone = milestone_fixture(repository(), %{title: "v1.0", due_on: nil})
 
     rich = issue!(%{"title" => "Rich", "labels" => ["bug"], "assignees" => ["grace-show"]})
     {:ok, rich} = Issues.set_milestone(rich, milestone.number)
@@ -86,9 +87,10 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
   end
 
   test "the rail changes state, labels, assignees, and the milestone", %{conn: conn} do
-    repository_user_fixture("hopper-show")
-    label_fixture(%{name: "bug", color: "d73a4a"})
-    milestone = milestone_fixture(%{title: "v2.0", due_on: nil})
+    hopper = repository_user_fixture("hopper-show")
+    {:ok, _membership} = Repositories.add_member(repository(), hopper, "contributor")
+    label_fixture(repository(), %{name: "bug", color: "d73a4a"})
+    milestone = milestone_fixture(repository(), %{title: "v2.0", due_on: nil})
     issue = issue!(%{"title" => "Editable"})
 
     {:ok, view, _html} = live(conn, path(issue))
@@ -97,26 +99,28 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     |> element(~s{#issue-label-menu button}, "bug")
     |> render_click()
 
-    assert Issues.get_issue!(issue.id).labels |> Enum.map(& &1["name"]) == ["bug"]
+    assert Issues.get_issue!(repository(), issue.id).labels |> Enum.map(& &1["name"]) == ["bug"]
 
     view
     |> element(~s{#issue-assignee-menu button}, "hopper-show")
     |> render_click()
 
-    assert Issues.get_issue!(issue.id).assignees |> Enum.map(& &1["login"]) == ["hopper-show"]
+    assert Issues.get_issue!(repository(), issue.id).assignees |> Enum.map(& &1["login"]) == [
+             "hopper-show"
+           ]
 
     view
     |> element(~s{#issue-milestone-menu button}, "v2.0")
     |> render_click()
 
-    assert Issues.get_issue!(issue.id).milestone["number"] == milestone.number
+    assert Issues.get_issue!(repository(), issue.id).milestone["number"] == milestone.number
 
     # The rail can pick a close reason the header's two buttons cannot.
     view
     |> element(~s{#issue-state-menu button}, "Closed as not planned")
     |> render_click()
 
-    closed = Issues.get_issue!(issue.id)
+    closed = Issues.get_issue!(repository(), issue.id)
     assert closed.state == "closed"
     assert closed.state_reason == "not_planned"
 
@@ -125,13 +129,13 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     |> element(~s{#issue-label-menu button}, "bug")
     |> render_click()
 
-    assert Issues.get_issue!(issue.id).labels == []
+    assert Issues.get_issue!(repository(), issue.id).labels == []
   end
 
   test "a member who loses write access cannot triage through an open page", %{conn: conn} do
     user = Accounts.get_user(Plug.Conn.get_session(conn, "user_id"))
     issue = issue!(%{"title" => "Authority changed"})
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
 
     {:ok, view, _html} = live(conn, path(issue))
     {:ok, _} = Repositories.add_member(repository, user, "viewer")
@@ -139,7 +143,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     html = render_click(view, "toggle_label", %{"name" => "bug"})
 
     assert html =~ "Only repository members can change issue labels"
-    assert Issues.get_issue!(issue.id).labels == []
+    assert Issues.get_issue!(repository(), issue.id).labels == []
   end
 
   test "the history is one feed of comments and state changes", %{conn: conn} do
@@ -211,7 +215,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert has_element?(view, ~s{button[phx-click="reopen"]}, "Reopen issue")
     refute has_element?(view, ~s{button[phx-click="close"]})
 
-    closed = Issues.get_issue!(issue.id)
+    closed = Issues.get_issue!(repository(), issue.id)
     assert closed.state == "closed"
     assert closed.state_reason == "completed"
     assert closed.closed_at
@@ -221,7 +225,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "Issue reopened"
     assert has_element?(view, ~s{button[phx-click="close"]}, "Close issue")
 
-    reopened = Issues.get_issue!(issue.id)
+    reopened = Issues.get_issue!(repository(), issue.id)
     assert reopened.state == "open"
     assert reopened.closed_at == nil
   end
@@ -257,7 +261,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "After"
     refute has_element?(view, "#issue-edit-form")
 
-    updated = Issues.get_issue!(issue.id)
+    updated = Issues.get_issue!(repository(), issue.id)
     assert updated.title == "Edited"
     assert updated.body == "After"
   end
@@ -275,7 +279,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
 
     assert html =~ "can&#39;t be blank"
     assert has_element?(view, "#issue-edit-form")
-    assert Issues.get_issue!(issue.id).title == "Editable"
+    assert Issues.get_issue!(repository(), issue.id).title == "Editable"
   end
 
   test "adding a comment appends it to the thread and bumps the count", %{conn: conn} do
@@ -294,9 +298,9 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "Looks good to me"
     assert html =~ "anonymous"
 
-    assert [comment] = Issues.list_comments(issue.id)
+    assert [comment] = Issues.list_comments(issue)
     assert comment.body == "Looks good to me"
-    assert Issues.get_issue!(issue.id).comments == 1
+    assert Issues.get_issue!(repository(), issue.id).comments == 1
   end
 
   test "an empty comment body is rejected and nothing is stored", %{conn: conn} do
@@ -309,8 +313,8 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
       |> render_submit()
 
     assert html =~ "can&#39;t be blank"
-    assert Issues.list_comments(issue.id) == []
-    assert Issues.get_issue!(issue.id).comments == 0
+    assert Issues.list_comments(issue) == []
+    assert Issues.get_issue!(repository(), issue.id).comments == 0
   end
 
   test "existing comments render with their author on mount", %{conn: conn} do
@@ -341,5 +345,9 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     refute has_element?(view, "#comment-form")
     refute has_element?(view, ~s{button[phx-click="close"]})
     refute has_element?(view, ~s{button[phx-click="toggle_edit"]})
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

@@ -24,6 +24,7 @@ defmodule OpenAgents.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import OpenAgents.DataCase
+      import OpenAgents.AccountsFixtures
     end
   end
 

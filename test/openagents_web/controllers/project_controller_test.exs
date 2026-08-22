@@ -1,20 +1,36 @@
 defmodule OpenAgentsWeb.ProjectControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "projects", "alice")}
-
-  import OpenAgents.ProjectFieldsFixtures
-  import OpenAgents.ProjectItemsFixtures
-  import OpenAgents.ProjectsFixtures
-
   alias OpenAgents.Issues
   alias OpenAgents.Projects
 
+  @owner "ProjectTestOrg"
+  @repo "project-api"
+
+  setup %{conn: conn} do
+    user = github_user("api-token-projects", "alice")
+
+    repository =
+      repository_with_member_fixture(user, %{
+        owner: @owner,
+        name: @repo,
+        visibility: "private"
+      })
+
+    Process.put({__MODULE__, :repository}, repository)
+    on_exit(fn -> Process.delete({__MODULE__, :repository}) end)
+
+    {:ok,
+     conn: put_forge_api_token(conn, "projects", "alice"), repository: repository, user: user}
+  end
+
   describe "index" do
-    test "GET /api/v3/users/:username/projectsV2 lists that user's projects", %{conn: conn} do
+    test "GET /api/v3/repos/:owner/:repo/projectsV2 lists the repository's projects", %{
+      conn: conn
+    } do
       project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2")
+      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
 
       assert %{"projects" => [project]} = json_response(conn, 200)
       assert project["title"] == "Roadmap"
@@ -22,64 +38,76 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert project["state"] == "open"
     end
 
-    test "GET /api/v3/users/:username/projectsV2 excludes other owners' projects", %{conn: conn} do
+    test "GET /api/v3/repos/:owner/:repo/projectsV2 excludes another repository", %{conn: conn} do
       project_fixture(%{title: "Mine", owner: "alice"})
-      project_fixture(%{title: "Theirs", owner: "bob"})
+      other_repository = repository_fixture(%{owner: "Elsewhere", name: "other-projects"})
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2")
+      {:ok, _project} =
+        Projects.create_project(other_repository, %{title: "Theirs", owner: "bob"})
+
+      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
 
       assert %{"projects" => [%{"title" => "Mine"}]} = json_response(conn, 200)
     end
 
-    test "GET /api/v3/users/:username/projectsV2 returns an empty list for an unknown user", %{
-      conn: conn
-    } do
-      conn = get(conn, ~p"/api/v3/users/nobody/projectsV2")
-
-      assert json_response(conn, 200) == %{"projects" => []}
+    test "GET /api/v3/repos/:owner/:repo/projectsV2 hides a private repository from a non-member" do
+      conn = get(build_conn(), ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
   end
 
   describe "create" do
-    test "POST /api/v3/:owner/projectsV2 creates a project", %{conn: conn} do
-      conn = post(conn, ~p"/api/v3/alice/projectsV2", %{title: "New board"})
+    test "POST /api/v3/repos/:owner/:repo/projectsV2 creates a project", %{conn: conn} do
+      conn =
+        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{
+          title: "New board"
+        })
 
       assert %{"title" => "New board", "owner" => "alice", "number" => number} =
                json_response(conn, 201)
 
-      assert Projects.get_project_by_number!(number).title == "New board"
+      assert Projects.get_project_by_number!(repository(), number).title == "New board"
     end
 
-    test "POST /api/v3/:owner/projectsV2 takes the owner from the path", %{conn: conn} do
-      conn = post(conn, ~p"/api/v3/alice/projectsV2", %{title: "Board", owner: "mallory"})
+    test "POST /api/v3/repos/:owner/:repo/projectsV2 ignores repository override params", %{
+      conn: conn
+    } do
+      conn =
+        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{
+          title: "Board",
+          owner: "mallory",
+          repo: "elsewhere"
+        })
 
       assert json_response(conn, 201)["owner"] == "alice"
     end
 
-    test "POST /api/v3/:owner/projectsV2 returns 422 without a title", %{conn: conn} do
-      conn = post(conn, ~p"/api/v3/alice/projectsV2", %{})
+    test "POST /api/v3/repos/:owner/:repo/projectsV2 returns 422 without a title", %{
+      conn: conn
+    } do
+      conn = post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{})
 
       assert %{"errors" => %{"title" => _}} = json_response(conn, 422)
-      assert Projects.list_projects() == []
+      assert Projects.list_projects(repository()) == []
     end
   end
 
   describe "show" do
-    test "GET /api/v3/users/:username/projectsV2/:project_number returns the project", %{
+    test "GET /api/v3/repos/:owner/:repo/projectsV2/:project_number returns the project", %{
       conn: conn
     } do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}")
+      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}")
 
       assert %{"title" => "Roadmap", "id" => id} = json_response(conn, 200)
       assert id == project.id
     end
 
-    test "GET /api/v3/users/:username/projectsV2/:project_number returns 404 when missing", %{
+    test "GET /api/v3/repos/:owner/:repo/projectsV2/:project_number returns 404 when missing", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/999999")
+      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -91,7 +119,8 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     } do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items")
+      conn =
+        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       assert json_response(conn, 200) == %{"items" => []}
     end
@@ -100,7 +129,8 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
       item = project_item_fixture(%{project_id: project.id, values: %{"Status" => "Todo"}})
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items")
+      conn =
+        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       assert %{"items" => [rendered]} = json_response(conn, 200)
       assert rendered["id"] == item.id
@@ -111,7 +141,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     test "GET .../projectsV2/:project_number/items returns 404 for a missing project", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/999999/items")
+      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/items")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -120,7 +150,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
   describe "create_item" do
     setup do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
-      {:ok, issue} = Issues.create_issue(%{title: "Trackable issue"})
+      {:ok, issue} = create_issue(%{title: "Trackable issue"})
       %{project: project, issue: issue}
     end
 
@@ -130,14 +160,18 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items", %{
-          issue_number: issue.number
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{
+            issue_number: issue.number
+          }
+        )
 
       assert %{"items" => [item]} = json_response(conn, 201)
       assert item["issue_id"] == issue.id
 
-      assert [%{issue_id: issue_id}] = Projects.list_project_items(project.id)
+      assert [%{issue_id: issue_id}] = Projects.list_project_items(project)
       assert issue_id == issue.id
     end
 
@@ -147,10 +181,14 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items", %{
-          issue_number: issue.number,
-          values: %{"Status" => "In Progress"}
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{
+            issue_number: issue.number,
+            values: %{"Status" => "In Progress"}
+          }
+        )
 
       assert %{"items" => [%{"values" => %{"Status" => "In Progress"}}]} =
                json_response(conn, 201)
@@ -162,34 +200,47 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items", %{
-          issue_number: issue.number,
-          values: "not-a-map"
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{
+            issue_number: issue.number,
+            values: "not-a-map"
+          }
+        )
 
       assert %{"errors" => %{"values" => _}} = json_response(conn, 422)
-      assert Projects.list_project_items(project.id) == []
+      assert Projects.list_project_items(project) == []
     end
 
     test "POST .../projectsV2/:project_number/items returns 422 without an issue_number", %{
       conn: conn,
       project: project
     } do
-      conn = post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items", %{})
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{}
+        )
 
       assert %{"errors" => %{"issue_number" => _}} = json_response(conn, 422)
-      assert Projects.list_project_items(project.id) == []
+      assert Projects.list_project_items(project) == []
     end
 
     test "POST .../projectsV2/:project_number/items returns 422 for a non-numeric issue_number",
          %{conn: conn, project: project} do
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items", %{
-          issue_number: "not-a-number"
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{
+            issue_number: "not-a-number"
+          }
+        )
 
       assert %{"errors" => %{"issue_number" => _}} = json_response(conn, 422)
-      assert Projects.list_project_items(project.id) == []
+      assert Projects.list_project_items(project) == []
     end
 
     test "POST .../projectsV2/:project_number/items returns 404 for an unknown issue", %{
@@ -197,9 +248,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project: project
     } do
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items", %{
-          issue_number: 999_999
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{
+            issue_number: 999_999
+          }
+        )
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -209,7 +264,9 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/999999/items", %{issue_number: issue.number})
+        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/items", %{
+          issue_number: issue.number
+        })
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -228,12 +285,16 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       item: item
     } do
       conn =
-        patch(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items/#{item.id}", %{
-          values: %{"Status" => "Done"}
-        })
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          %{
+            values: %{"Status" => "Done"}
+          }
+        )
 
       assert %{"items" => [%{"values" => %{"Status" => "Done"}}]} = json_response(conn, 200)
-      assert Projects.get_project_item!(item.id).values == %{"Status" => "Done"}
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Done"}
     end
 
     test "PATCH .../items/:item_id keeps values it was not asked to change", %{
@@ -242,9 +303,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       item: item
     } do
       conn =
-        patch(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items/#{item.id}", %{
-          values: %{"Priority" => "P1"}
-        })
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          %{
+            values: %{"Priority" => "P1"}
+          }
+        )
 
       assert %{"items" => [%{"values" => values}]} = json_response(conn, 200)
       assert values == %{"Status" => "Todo", "Priority" => "P1"}
@@ -256,12 +321,16 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       item: item
     } do
       conn =
-        patch(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items/#{item.id}", %{
-          values: "not-a-map"
-        })
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          %{
+            values: "not-a-map"
+          }
+        )
 
       assert %{"errors" => %{"values" => _}} = json_response(conn, 422)
-      assert Projects.get_project_item!(item.id).values == %{"Status" => "Todo"}
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Todo"}
     end
 
     test "PATCH .../items/:item_id returns 404 for a missing item", %{
@@ -269,9 +338,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project: project
     } do
       conn =
-        patch(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/items/999999", %{
-          values: %{"Status" => "Done"}
-        })
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/999999",
+          %{
+            values: %{"Status" => "Done"}
+          }
+        )
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -283,7 +356,11 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     } do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields")
+      conn =
+        get(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+        )
 
       assert json_response(conn, 200) == %{"fields" => []}
     end
@@ -299,7 +376,11 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           options: %{"values" => ["Todo", "Done"]}
         })
 
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields")
+      conn =
+        get(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+        )
 
       assert %{"fields" => [rendered]} = json_response(conn, 200)
       assert rendered["id"] == field.id
@@ -311,7 +392,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     test "GET .../projectsV2/:project_number/fields returns 404 for a missing project", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/users/alice/projectsV2/999999/fields")
+      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/fields")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
@@ -320,11 +401,15 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields", %{
-          name: "Status",
-          data_type: "single_select",
-          options: %{values: ["To Do", "In Progress", "Done"]}
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{
+            name: "Status",
+            data_type: "single_select",
+            options: %{values: ["To Do", "In Progress", "Done"]}
+          }
+        )
 
       assert %{
                "fields" => [
@@ -345,7 +430,12 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     } do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
-      conn = post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields", %{})
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{}
+        )
 
       assert %{"errors" => errors} = json_response(conn, 422)
       assert Map.has_key?(errors, "name")
@@ -360,11 +450,15 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       other_project = project_fixture(%{title: "Other", owner: "alice"})
 
       conn =
-        post(conn, ~p"/api/v3/users/alice/projectsV2/#{project.number}/fields", %{
-          name: "Status",
-          data_type: "single_select",
-          project_id: other_project.id
-        })
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{
+            name: "Status",
+            data_type: "single_select",
+            project_id: other_project.id
+          }
+        )
 
       assert json_response(conn, 201)
       assert [%{project_id: project_id}] = Projects.list_project_fields(project)
@@ -373,12 +467,11 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     end
   end
 
-  describe "owner-path authorization" do
-    test "another username cannot read or mutate a project through any project action", %{
-      conn: conn
-    } do
+  describe "repository authorization" do
+    test "a non-member cannot read or mutate a private repository's project" do
       project = project_fixture(%{title: "Alice only", owner: "alice"})
-      {:ok, issue} = Issues.create_issue(%{title: "Tracked"})
+      {:ok, issue} = create_issue(%{title: "Tracked"})
+      mallory_conn = put_forge_api_token(build_conn(), "project-mallory", "mallory")
 
       {:ok, item} =
         Projects.create_project_item(%{"issue_number" => issue.number}, project)
@@ -390,44 +483,74 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           data_type: "single_select"
         })
 
-      assert get(conn, ~p"/api/v3/users/bob/projectsV2/#{project.number}")
+      assert get(
+               mallory_conn,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+             )
              |> json_response(404) == %{"message" => "Not Found"}
 
-      assert get(recycle(conn), ~p"/api/v3/users/bob/projectsV2/#{project.number}/items")
+      assert get(
+               recycle(mallory_conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
+             )
              |> json_response(404) == %{"message" => "Not Found"}
 
-      assert get(recycle(conn), ~p"/api/v3/users/bob/projectsV2/#{project.number}/fields")
+      assert get(
+               recycle(mallory_conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+             )
              |> json_response(404) == %{"message" => "Not Found"}
 
       assert post(
-               recycle(conn),
-               ~p"/api/v3/users/bob/projectsV2/#{project.number}/items",
+               recycle(mallory_conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
                %{issue_number: issue.number}
              )
              |> json_response(404) == %{"message" => "Not Found"}
 
       assert patch(
-               recycle(conn),
-               ~p"/api/v3/users/bob/projectsV2/#{project.number}/items/#{item.id}",
+               recycle(mallory_conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
                %{values: %{"Status" => "Done"}}
              )
              |> json_response(404) == %{"message" => "Not Found"}
 
       assert post(
-               recycle(conn),
-               ~p"/api/v3/users/bob/projectsV2/#{project.number}/fields",
+               recycle(mallory_conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
                %{name: "Priority", data_type: "single_select"}
              )
              |> json_response(404) == %{"message" => "Not Found"}
 
-      assert Projects.get_project_item!(item.id).values == %{}
+      assert Projects.get_project_item!(project, item.id).values == %{}
     end
 
-    test "a token owner cannot create a project for another username", %{conn: conn} do
-      assert post(conn, ~p"/api/v3/bob/projectsV2", %{title: "Not Bob's"})
+    test "a token owner cannot create a project in another repository", %{conn: conn} do
+      other_repository =
+        repository_fixture(%{owner: "OtherOrg", name: "other-private", visibility: "private"})
+
+      assert post(conn, ~p"/api/v3/repos/OtherOrg/other-private/projectsV2", %{
+               title: "Not Alice's"
+             })
              |> json_response(404) == %{"message" => "Not Found"}
 
-      assert Projects.list_projects() == []
+      assert Projects.list_projects(other_repository) == []
     end
   end
+
+  defp repository, do: Process.get({__MODULE__, :repository})
+
+  defp project_fixture(attrs) do
+    OpenAgents.ProjectsFixtures.project_fixture(repository(), attrs)
+  end
+
+  defp project_item_fixture(attrs) do
+    OpenAgents.ProjectItemsFixtures.project_item_fixture(repository(), attrs)
+  end
+
+  defp project_field_fixture(attrs) do
+    OpenAgents.ProjectFieldsFixtures.project_field_fixture(repository(), attrs)
+  end
+
+  defp create_issue(attrs), do: Issues.create_issue(repository(), attrs)
 end

@@ -5,13 +5,16 @@ defmodule OpenAgents.IssuesTest do
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
 
-  import OpenAgents.IssuesFixtures
-  import OpenAgents.LabelsFixtures
-  import OpenAgents.MilestonesFixtures
-  import OpenAgents.AccountsFixtures
-
   setup do
-    Enum.each(~w(alice bob carol), &repository_user_fixture/1)
+    repository = repository_fixture()
+
+    Enum.each(~w(alice bob carol), fn login ->
+      user = repository_user_fixture(login)
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "contributor")
+    end)
+
+    Process.put({__MODULE__, :repository}, repository)
+    on_exit(fn -> Process.delete({__MODULE__, :repository}) end)
     :ok
   end
 
@@ -21,7 +24,7 @@ defmodule OpenAgents.IssuesTest do
     {1, nil} =
       Repo.update_all(from(i in Issue, where: i.id == ^issue.id), set: [inserted_at: at])
 
-    Issues.get_issue!(issue.id)
+    Issues.get_issue!(repository(), issue.id)
   end
 
   describe "list_issues/1" do
@@ -30,7 +33,7 @@ defmodule OpenAgents.IssuesTest do
       closed = issue_fixture(title: "closed one")
       {:ok, closed} = Issues.update_issue(closed, %{"state" => "closed"})
 
-      numbers = Issues.list_issues() |> Enum.map(& &1.number)
+      numbers = Issues.list_issues(repository()) |> Enum.map(& &1.number)
 
       assert open.number in numbers
       refute closed.number in numbers
@@ -41,7 +44,9 @@ defmodule OpenAgents.IssuesTest do
       closed = issue_fixture(title: "closed one")
       {:ok, closed} = Issues.update_issue(closed, %{"state" => "closed"})
 
-      assert Issues.list_issues(state: "closed") |> Enum.map(& &1.number) == [closed.number]
+      assert Issues.list_issues(repository(), state: "closed") |> Enum.map(& &1.number) == [
+               closed.number
+             ]
     end
 
     test "state: \"all\" skips the filter" do
@@ -49,13 +54,15 @@ defmodule OpenAgents.IssuesTest do
       closed = issue_fixture(title: "closed one")
       {:ok, _} = Issues.update_issue(closed, %{"state" => "closed"})
 
-      numbers = Issues.list_issues(state: "all") |> Enum.map(& &1.number) |> Enum.sort()
+      numbers =
+        Issues.list_issues(repository(), state: "all") |> Enum.map(& &1.number) |> Enum.sort()
+
       assert numbers == Enum.sort([open.number, closed.number])
     end
 
     test "returns an empty list when nothing matches" do
-      assert Issues.list_issues() == []
-      assert Issues.list_issues(state: "all") == []
+      assert Issues.list_issues(repository()) == []
+      assert Issues.list_issues(repository(), state: "all") == []
     end
 
     test "orders newest first" do
@@ -63,45 +70,53 @@ defmodule OpenAgents.IssuesTest do
       middle = issue_fixture(title: "middle") |> backdate!(200)
       newest = issue_fixture(title: "newest") |> backdate!(100)
 
-      assert Issues.list_issues() |> Enum.map(& &1.id) == [newest.id, middle.id, oldest.id]
+      assert Issues.list_issues(repository()) |> Enum.map(& &1.id) == [
+               newest.id,
+               middle.id,
+               oldest.id
+             ]
     end
   end
 
   describe "get_issue!/1 and get_issue_by_number!/1" do
     test "get_issue!/1 returns the issue with the given id" do
       issue = issue_fixture()
-      assert Issues.get_issue!(issue.id) == issue
+      assert Issues.get_issue!(repository(), issue.id) == issue
     end
 
     test "get_issue!/1 raises for an unknown id" do
       issue = issue_fixture()
-      assert_raise Ecto.NoResultsError, fn -> Issues.get_issue!(issue.id + 1) end
+      assert_raise Ecto.NoResultsError, fn -> Issues.get_issue!(repository(), issue.id + 1) end
     end
 
     test "get_issue_by_number!/1 returns the issue with the given number" do
       issue = issue_fixture()
-      assert Issues.get_issue_by_number!(issue.number) == issue
+      assert Issues.get_issue_by_number!(repository(), issue.number) == issue
     end
 
     test "get_issue_by_number!/1 raises for an unknown number" do
       issue = issue_fixture()
-      assert_raise Ecto.NoResultsError, fn -> Issues.get_issue_by_number!(issue.number + 1) end
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Issues.get_issue_by_number!(repository(), issue.number + 1)
+      end
     end
   end
 
   describe "create_issue/1" do
     test "assigns numbers from one upwards" do
-      assert {:ok, %Issue{number: 1}} = Issues.create_issue(%{title: "one"})
-      assert {:ok, %Issue{number: 2}} = Issues.create_issue(%{title: "two"})
-      assert {:ok, %Issue{number: 3}} = Issues.create_issue(%{title: "three"})
+      assert {:ok, %Issue{number: 1}} = Issues.create_issue(repository(), %{title: "one"})
+      assert {:ok, %Issue{number: 2}} = Issues.create_issue(repository(), %{title: "two"})
+      assert {:ok, %Issue{number: 3}} = Issues.create_issue(repository(), %{title: "three"})
     end
 
     test "ignores a caller-supplied number" do
-      assert {:ok, %Issue{number: 1}} = Issues.create_issue(%{title: "one", number: 99})
+      assert {:ok, %Issue{number: 1}} =
+               Issues.create_issue(repository(), %{title: "one", number: 99})
     end
 
     test "sets the documented defaults" do
-      assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "defaults"})
+      assert {:ok, %Issue{} = issue} = Issues.create_issue(repository(), %{title: "defaults"})
 
       assert issue.state == "open"
       assert issue.locked == false
@@ -114,19 +129,21 @@ defmodule OpenAgents.IssuesTest do
 
     test "accepts string keys" do
       assert {:ok, %Issue{} = issue} =
-               Issues.create_issue(%{"title" => "strings", "body" => "hello"})
+               Issues.create_issue(repository(), %{"title" => "strings", "body" => "hello"})
 
       assert issue.title == "strings"
       assert issue.body == "hello"
     end
 
     test "requires a title" do
-      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_issue(%{body: "no title"})
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Issues.create_issue(repository(), %{body: "no title"})
+
       assert %{title: ["can't be blank"]} = errors_on(changeset)
     end
 
     test "called with no attrs at all it still refuses" do
-      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_issue()
+      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_issue(repository(), %{})
       assert %{title: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -134,7 +151,7 @@ defmodule OpenAgents.IssuesTest do
       label = label_fixture(name: "bug", color: "d73a4a", description: "Something broken")
 
       assert {:ok, %Issue{} = issue} =
-               Issues.create_issue(%{title: "labelled", labels: ["bug"]})
+               Issues.create_issue(repository(), %{title: "labelled", labels: ["bug"]})
 
       assert issue.labels == [
                %{
@@ -148,7 +165,7 @@ defmodule OpenAgents.IssuesTest do
 
     test "rejects a label outside the repository label set" do
       assert_raise Ecto.NoResultsError, fn ->
-        Issues.create_issue(%{title: "labelled", labels: ["nope"]})
+        Issues.create_issue(repository(), %{title: "labelled", labels: ["nope"]})
       end
     end
 
@@ -156,7 +173,8 @@ defmodule OpenAgents.IssuesTest do
       label = label_fixture(name: "bug", color: "abcdef")
       given = [%{"name" => "bug", "color" => "abcdef"}]
 
-      assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "labelled", labels: given})
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(repository(), %{title: "labelled", labels: given})
 
       assert issue.labels == [
                %{
@@ -169,12 +187,13 @@ defmodule OpenAgents.IssuesTest do
     end
 
     test "accepts an empty label list" do
-      assert {:ok, %Issue{labels: []}} = Issues.create_issue(%{title: "none", labels: []})
+      assert {:ok, %Issue{labels: []}} =
+               Issues.create_issue(repository(), %{title: "none", labels: []})
     end
 
     test "expands assignee logins into assignee maps" do
       assert {:ok, %Issue{} = issue} =
-               Issues.create_issue(%{title: "assigned", assignees: ["alice", "bob"]})
+               Issues.create_issue(repository(), %{title: "assigned", assignees: ["alice", "bob"]})
 
       assert issue.assignees == [%{"login" => "alice"}, %{"login" => "bob"}]
     end
@@ -182,7 +201,9 @@ defmodule OpenAgents.IssuesTest do
     test "canonicalizes assignee maps from repository membership" do
       given = [%{"login" => "alice", "id" => 7}]
 
-      assert {:ok, %Issue{} = issue} = Issues.create_issue(%{title: "assigned", assignees: given})
+      assert {:ok, %Issue{} = issue} =
+               Issues.create_issue(repository(), %{title: "assigned", assignees: given})
+
       assert issue.assignees == [%{"login" => "alice"}]
     end
 
@@ -190,7 +211,7 @@ defmodule OpenAgents.IssuesTest do
       milestone = milestone_fixture(title: "v1", state: "open", due_on: "2026-01-01")
 
       assert {:ok, %Issue{} = issue} =
-               Issues.create_issue(%{title: "planned", milestone: milestone.number})
+               Issues.create_issue(repository(), %{title: "planned", milestone: milestone.number})
 
       assert issue.milestone == %{
                "number" => milestone.number,
@@ -203,13 +224,13 @@ defmodule OpenAgents.IssuesTest do
 
     test "raises for an unknown milestone number" do
       assert_raise Ecto.NoResultsError, fn ->
-        Issues.create_issue(%{title: "planned", milestone: 404})
+        Issues.create_issue(repository(), %{title: "planned", milestone: 404})
       end
     end
 
     test "accepts an explicit nil milestone" do
       assert {:ok, %Issue{milestone: nil}} =
-               Issues.create_issue(%{title: "unplanned", milestone: nil})
+               Issues.create_issue(repository(), %{title: "unplanned", milestone: nil})
     end
   end
 
@@ -228,7 +249,7 @@ defmodule OpenAgents.IssuesTest do
       issue = issue_fixture()
 
       assert {:error, %Ecto.Changeset{}} = Issues.update_issue(issue, %{"title" => nil})
-      assert issue == Issues.get_issue!(issue.id)
+      assert issue == Issues.get_issue!(repository(), issue.id)
     end
 
     test "closing stamps closed_at and defaults the state reason" do
@@ -372,7 +393,7 @@ defmodule OpenAgents.IssuesTest do
 
       assert %{color: color} =
                OpenAgents.Labels.get_label_by_name!(
-                 OpenAgents.Repositories.initial_repository!(),
+                 repository(),
                  "nope"
                )
 
@@ -491,7 +512,7 @@ defmodule OpenAgents.IssuesTest do
       refute is_nil(comment.created_at)
       refute is_nil(comment.updated_at)
 
-      assert Issues.get_issue!(issue.id).comments == 1
+      assert Issues.get_issue!(repository(), issue.id).comments == 1
     end
 
     test "create_comment/1 keeps explicit timestamps" do
@@ -530,7 +551,7 @@ defmodule OpenAgents.IssuesTest do
                Issues.create_comment(%{body: nil, issue_id: issue.id})
 
       assert %{body: ["can't be blank"]} = errors_on(changeset)
-      assert Issues.get_issue!(issue.id).comments == 0
+      assert Issues.get_issue!(repository(), issue.id).comments == 0
     end
 
     test "create_comment/1 requires an issue_id" do
@@ -539,7 +560,7 @@ defmodule OpenAgents.IssuesTest do
     end
 
     test "create_comment/0 refuses an empty comment" do
-      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_comment()
+      assert {:error, %Ecto.Changeset{} = changeset} = Issues.create_comment(%{})
       assert %{body: ["can't be blank"], issue_id: ["can't be blank"]} = errors_on(changeset)
     end
 
@@ -547,14 +568,16 @@ defmodule OpenAgents.IssuesTest do
       issue = issue_fixture()
       {:ok, comment} = Issues.create_comment(%{body: "hello", issue_id: issue.id})
 
-      assert Issues.get_comment!(comment.id) == comment
+      assert Issues.get_comment!(repository(), comment.id) == comment
     end
 
     test "get_comment!/1 raises for an unknown id" do
       issue = issue_fixture()
       {:ok, comment} = Issues.create_comment(%{body: "hello", issue_id: issue.id})
 
-      assert_raise Ecto.NoResultsError, fn -> Issues.get_comment!(comment.id + 1) end
+      assert_raise Ecto.NoResultsError, fn ->
+        Issues.get_comment!(repository(), comment.id + 1)
+      end
     end
 
     test "list_comments/1 is scoped to one issue and ordered by creation time" do
@@ -579,12 +602,12 @@ defmodule OpenAgents.IssuesTest do
 
       {:ok, _elsewhere} = Issues.create_comment(%{body: "elsewhere", issue_id: other.id})
 
-      assert Issues.list_comments(issue.id) |> Enum.map(& &1.id) == [first.id, second.id]
+      assert Issues.list_comments(issue) |> Enum.map(& &1.id) == [first.id, second.id]
     end
 
     test "list_comments/1 returns an empty list for an issue with no comments" do
       issue = issue_fixture()
-      assert Issues.list_comments(issue.id) == []
+      assert Issues.list_comments(issue) == []
     end
 
     test "update_comment/2 edits the body and bumps updated_at" do
@@ -610,28 +633,42 @@ defmodule OpenAgents.IssuesTest do
       {:ok, comment} = Issues.create_comment(%{body: "before", issue_id: issue.id})
 
       assert {:error, %Ecto.Changeset{}} = Issues.update_comment(comment, %{body: nil})
-      assert Issues.get_comment!(comment.id).body == "before"
+      assert Issues.get_comment!(repository(), comment.id).body == "before"
     end
 
     test "delete_comment/1 removes it and decrements the issue counter" do
       issue = issue_fixture()
       {:ok, comment} = Issues.create_comment(%{body: "hello", issue_id: issue.id})
-      assert Issues.get_issue!(issue.id).comments == 1
+      assert Issues.get_issue!(repository(), issue.id).comments == 1
 
       assert {:ok, :ok} = Issues.delete_comment(comment)
 
-      assert_raise Ecto.NoResultsError, fn -> Issues.get_comment!(comment.id) end
-      assert Issues.get_issue!(issue.id).comments == 0
+      assert_raise Ecto.NoResultsError, fn -> Issues.get_comment!(repository(), comment.id) end
+      assert Issues.get_issue!(repository(), issue.id).comments == 0
     end
 
     test "the counter tracks several comments" do
       issue = issue_fixture()
       {:ok, a} = Issues.create_comment(%{body: "a", issue_id: issue.id})
       {:ok, _b} = Issues.create_comment(%{body: "b", issue_id: issue.id})
-      assert Issues.get_issue!(issue.id).comments == 2
+      assert Issues.get_issue!(repository(), issue.id).comments == 2
 
       {:ok, :ok} = Issues.delete_comment(a)
-      assert Issues.get_issue!(issue.id).comments == 1
+      assert Issues.get_issue!(repository(), issue.id).comments == 1
     end
+  end
+
+  defp repository, do: Process.get({__MODULE__, :repository})
+
+  defp issue_fixture(attrs \\ %{}) do
+    OpenAgents.IssuesFixtures.issue_fixture(repository(), attrs)
+  end
+
+  defp label_fixture(attrs) do
+    OpenAgents.LabelsFixtures.label_fixture(repository(), attrs)
+  end
+
+  defp milestone_fixture(attrs) do
+    OpenAgents.MilestonesFixtures.milestone_fixture(repository(), attrs)
   end
 end

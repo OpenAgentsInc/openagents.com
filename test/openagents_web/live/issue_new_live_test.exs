@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   alias OpenAgents.Issues
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "issue-new")}
+    {:ok, conn: log_in_repository_user(conn, "issue-new", repository())}
   end
 
   test "mounts with an empty form and a cancel link back to the list", %{conn: conn} do
@@ -22,8 +22,8 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   end
 
   test "the milestone and label selects offer the seeded records", %{conn: conn} do
-    milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
-    label_fixture(%{name: "bug", color: "d73a4a"})
+    milestone = milestone_fixture(repository(), %{title: "v1.0", due_on: nil})
+    label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
@@ -47,7 +47,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
       |> form("#new-issue-form", issue: %{title: "Add a runbook", body: "Please"})
       |> render_submit()
 
-    assert [issue] = Issues.list_issues()
+    assert [issue] = Issues.list_issues(repository())
     assert issue.title == "Add a runbook"
     assert issue.body == "Please"
 
@@ -59,8 +59,8 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
   end
 
   test "a submitted label and milestone are applied to the new issue", %{conn: conn} do
-    milestone = milestone_fixture(%{title: "v1.0", due_on: nil})
-    label_fixture(%{name: "bug", color: "d73a4a"})
+    milestone = milestone_fixture(repository(), %{title: "v1.0", due_on: nil})
+    label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
@@ -76,14 +76,14 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
              )
              |> render_submit()
 
-    assert [issue] = Issues.list_issues()
+    assert [issue] = Issues.list_issues(repository())
     assert [%{"name" => "bug", "color" => "d73a4a"}] = issue.labels
     assert issue.milestone["title"] == "v1.0"
     assert issue.milestone["number"] == milestone.number
   end
 
   test "an empty label and milestone selection leaves the issue bare", %{conn: conn} do
-    label_fixture(%{name: "bug", color: "d73a4a"})
+    label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/new")
 
@@ -94,7 +94,7 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
              )
              |> render_submit()
 
-    assert [issue] = Issues.list_issues()
+    assert [issue] = Issues.list_issues(repository())
     assert issue.labels == []
     assert issue.milestone == nil
   end
@@ -109,6 +109,10 @@ defmodule OpenAgentsWeb.IssueNewLiveTest do
 
     assert html =~ "can&#39;t be blank"
     assert has_element?(view, "#new-issue-form")
-    assert Issues.list_issues(state: "all") == []
+    assert Issues.list_issues(repository(), state: "all") == []
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

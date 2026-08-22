@@ -33,12 +33,15 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
     {path, _flash} = assert_redirect(view)
     number = path |> String.split("/") |> List.last() |> String.to_integer()
 
-    Issues.get_issue_by_number!(Repositories.initial_repository!(), number)
+    Issues.get_issue_by_number!(
+      Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
+      number
+    )
   end
 
   describe "anonymous visitors" do
     test "read a public issue and its timeline without any write controls" do
-      {:ok, issue} = Issues.create_issue(%{"title" => "Readable by anyone"})
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Readable by anyone"})
       {:ok, _} = Issues.create_comment(issue, %{body: "First comment"}, nil)
 
       {:ok, view, html} =
@@ -90,7 +93,7 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
     end
 
     test "can comment on an open conversation", %{conn: conn} do
-      {:ok, issue} = Issues.create_issue(%{"title" => "Needs a reply"})
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Needs a reply"})
       {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       view
@@ -104,7 +107,7 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
     end
 
     test "cannot post to a conversation locked after the page opened", %{conn: conn} do
-      {:ok, issue} = Issues.create_issue(%{"title" => "Lock this thread"})
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Lock this thread"})
       {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")
       {:ok, _locked} = Issues.update_issue(issue, %{"locked" => true})
 
@@ -115,18 +118,18 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
     end
 
     test "get no triage controls anywhere on the issue page", %{conn: conn} do
-      {:ok, issue} = Issues.create_issue(%{"title" => "Not yours to close"})
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Not yours to close"})
       {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       refute has_element?(view, ~s{button[phx-click="close"]})
       refute has_element?(view, ~s{button[phx-click="toggle_edit"]})
       refute has_element?(view, ~s{[id^="row-state-"]})
 
-      assert Issues.get_issue!(issue.id).state == "open"
+      assert Issues.get_issue!(repository(), issue.id).state == "open"
     end
 
     test "see the issue list with a filing link but no row menus", %{conn: conn} do
-      {:ok, _issue} = Issues.create_issue(%{"title" => "Visible to all"})
+      {:ok, _issue} = Issues.create_issue(repository(), %{"title" => "Visible to all"})
 
       {:ok, view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
 
@@ -170,7 +173,7 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
       |> form("#issue-edit-form", issue: %{title: "Fixed title", body: "Now with steps"})
       |> render_submit()
 
-      updated = Issues.get_issue!(issue.id)
+      updated = Issues.get_issue!(repository(), issue.id)
       assert updated.title == "Fixed title"
       assert updated.body == "Now with steps"
     end
@@ -185,9 +188,13 @@ defmodule OpenAgentsWeb.IssueAccessLiveTest do
       |> element(~s{button[phx-click="close"]})
       |> render_click()
 
-      closed = Issues.get_issue!(issue.id)
+      closed = Issues.get_issue!(repository(), issue.id)
       assert closed.state == "closed"
       assert closed.state_reason == "completed"
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

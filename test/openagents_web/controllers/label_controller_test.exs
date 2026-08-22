@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.LabelControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "labels")}
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "labels", repository())}
 
   import OpenAgents.LabelsFixtures
 
@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
 
   describe "index" do
     test "GET /api/v3/repos/:owner/:repo/labels lists labels", %{conn: conn} do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels")
 
@@ -19,7 +19,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
     end
 
     test "GET /api/v3/repos/:owner/:repo/labels renders a repo-scoped url", %{conn: conn} do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels")
 
@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
                "default" => false
              } = json_response(conn, 201)
 
-      assert Labels.get_label_by_name!("enhancement").color == "a2eeef"
+      assert Labels.get_label_by_name!(repository(), "enhancement").color == "a2eeef"
     end
 
     test "POST /api/v3/repos/:owner/:repo/labels returns 422 without a color", %{conn: conn} do
@@ -74,7 +74,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
         color: "ffffff"
       })
 
-      label = Labels.get_label_by_name!("scoped")
+      label = Labels.get_label_by_name!(repository(), "scoped")
       refute Map.has_key?(label, :owner)
       refute Map.has_key?(label, :repo)
     end
@@ -82,7 +82,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
 
   describe "show" do
     test "GET /api/v3/repos/:owner/:repo/labels/:name returns the label", %{conn: conn} do
-      label = label_fixture(%{name: "bug", color: "d73a4a"})
+      label = label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug")
 
@@ -91,7 +91,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
     end
 
     test "GET /api/v3/repos/:owner/:repo/labels/:name decodes an escaped name", %{conn: conn} do
-      label_fixture(%{name: "good first issue", color: "7057ff"})
+      label_fixture(repository(), %{name: "good first issue", color: "7057ff"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/good first issue")
 
@@ -107,7 +107,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
     # The advertised URL is percent-encoded the way a path is, so a label
     # with a space in its name advertises a link that resolves.
     test "the rendered url round-trips through the show endpoint", %{conn: conn} do
-      label_fixture(%{name: "good first issue", color: "7057ff"})
+      label_fixture(repository(), %{name: "good first issue", color: "7057ff"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels")
 
@@ -121,17 +121,17 @@ defmodule OpenAgentsWeb.LabelControllerTest do
 
   describe "update" do
     test "PATCH /api/v3/repos/:owner/:repo/labels/:name updates the color", %{conn: conn} do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn =
         patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug", %{color: "000000"})
 
       assert %{"name" => "bug", "color" => "000000"} = json_response(conn, 200)
-      assert Labels.get_label_by_name!("bug").color == "000000"
+      assert Labels.get_label_by_name!(repository(), "bug").color == "000000"
     end
 
     test "PATCH /api/v3/repos/:owner/:repo/labels/:name updates the description", %{conn: conn} do
-      label_fixture(%{name: "bug", color: "d73a4a", description: "old"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a", description: "old"})
 
       conn =
         patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug", %{
@@ -144,7 +144,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
     # GitHub renames through `new_name`; the name in the path identifies the
     # label and `new_name` is what it becomes.
     test "PATCH /api/v3/repos/:owner/:repo/labels/:name renames with new_name", %{conn: conn} do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn =
         patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug", %{
@@ -152,15 +152,15 @@ defmodule OpenAgentsWeb.LabelControllerTest do
         })
 
       assert json_response(conn, 200)["name"] == "defect"
-      assert Labels.get_label_by_name!("defect").color == "d73a4a"
+      assert Labels.get_label_by_name!(repository(), "defect").color == "d73a4a"
 
-      assert_raise Ecto.NoResultsError, fn -> Labels.get_label_by_name!("bug") end
+      assert_raise Ecto.NoResultsError, fn -> Labels.get_label_by_name!(repository(), "bug") end
     end
 
     test "PATCH /api/v3/repos/:owner/:repo/labels/:name returns 422 for a blank color", %{
       conn: conn
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn =
         conn
@@ -168,7 +168,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
         |> patch(~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug", ~s({"color": null}))
 
       assert %{"errors" => %{"color" => _}} = json_response(conn, 422)
-      assert Labels.get_label_by_name!("bug").color == "d73a4a"
+      assert Labels.get_label_by_name!(repository(), "bug").color == "d73a4a"
     end
 
     test "PATCH /api/v3/repos/:owner/:repo/labels/:name returns 404 when missing", %{conn: conn} do
@@ -181,12 +181,12 @@ defmodule OpenAgentsWeb.LabelControllerTest do
 
   describe "delete" do
     test "DELETE /api/v3/repos/:owner/:repo/labels/:name returns 204", %{conn: conn} do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn = delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug")
 
       assert response(conn, 204) == ""
-      assert Labels.list_labels() == []
+      assert Labels.list_labels(repository()) == []
     end
 
     test "DELETE /api/v3/repos/:owner/:repo/labels/:name returns 404 when missing", %{conn: conn} do
@@ -194,5 +194,9 @@ defmodule OpenAgentsWeb.LabelControllerTest do
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

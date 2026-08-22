@@ -7,11 +7,31 @@ defmodule OpenAgents.ProjectItemsFixtures do
   @doc """
   Generate a project_item.
   """
-  def project_item_fixture(attrs \\ %{}) do
-    {:ok, project} =
-      OpenAgents.Projects.create_project(%{title: "Fixture project", owner: "OpenAgents"})
+  def project_item_fixture(repository, attrs \\ %{}) do
+    normalized = Map.new(attrs)
+    project_id = Map.get(normalized, :project_id) || Map.get(normalized, "project_id")
+    issue_id = Map.get(normalized, :issue_id) || Map.get(normalized, "issue_id")
 
-    {:ok, issue} = OpenAgents.Issues.create_issue(%{title: "Fixture issue"})
+    project =
+      if project_id do
+        OpenAgents.Projects.get_project!(repository, project_id)
+      else
+        {:ok, project} =
+          OpenAgents.Projects.create_project(repository, %{
+            title: "Fixture project",
+            owner: "OpenAgents"
+          })
+
+        project
+      end
+
+    issue =
+      if issue_id do
+        OpenAgents.Issues.get_issue!(repository, issue_id)
+      else
+        {:ok, issue} = OpenAgents.Issues.create_issue(repository, %{title: "Fixture issue"})
+        issue
+      end
 
     {:ok, project_item} =
       attrs
@@ -20,7 +40,7 @@ defmodule OpenAgents.ProjectItemsFixtures do
         project_id: project.id,
         issue_id: issue.id
       })
-      |> OpenAgents.ProjectItems.create_project_item()
+      |> then(&OpenAgents.ProjectItems.create_project_item(repository, &1))
 
     project_item
   end

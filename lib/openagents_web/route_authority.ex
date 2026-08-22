@@ -54,6 +54,15 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/api/computer-agent-jobs/"
   ]
 
+  @optional_forge_read_paths [
+    "/api/v3/repos/:owner/:repo/issues",
+    "/api/v3/repos/:owner/:repo/issues/:issue_number",
+    "/api/v3/repos/:owner/:repo/projectsV2",
+    "/api/v3/repos/:owner/:repo/projectsV2/:project_number",
+    "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items",
+    "/api/v3/repos/:owner/:repo/projectsV2/:project_number/fields"
+  ]
+
   @spec classes() :: [atom()]
   def classes, do: @classes
 
@@ -191,6 +200,16 @@ defmodule OpenAgentsWeb.RouteAuthority do
         "forge:repository:read",
         false
       )
+
+  defp policy(%{path: path, verb: verb})
+       when path in @optional_forge_read_paths and verb in [:get, :head],
+       do:
+         declaration(
+           :public_read,
+           "anonymous or first-party bearer token",
+           "forge:repository:read",
+           false
+         )
 
   defp policy(%{path: "/api/v3/" <> _path, verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:forge", false)

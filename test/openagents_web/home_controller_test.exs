@@ -38,7 +38,7 @@ defmodule OpenAgentsWeb.HomeControllerTest do
 
   test "an authenticated account sees the dashboard before the first import", %{conn: conn} do
     conn = log_in_github_user(conn, "authenticated-empty-home-user")
-    Repositories.initial_repository!() |> Repo.delete!()
+    Repositories.get_by_path!("OpenAgentsInc", "openagents.com") |> Repo.delete!()
 
     html = html_response(get(conn, ~p"/"), 200)
 

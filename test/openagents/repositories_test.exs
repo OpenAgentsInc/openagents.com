@@ -12,7 +12,7 @@ defmodule OpenAgents.RepositoriesTest do
   alias OpenAgents.Repositories
 
   setup do
-    initial = Repositories.initial_repository!()
+    initial = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
 
     {:ok, second} =
       Repositories.create_repository(%{
@@ -96,11 +96,11 @@ defmodule OpenAgents.RepositoriesTest do
   end
 
   test "only active repository members are assignable", %{initial: initial, second: second} do
-    _initial_only = repository_user_fixture("initial-only")
+    initial_only = repository_user_fixture("initial-only")
+    {:ok, _membership} = Repositories.add_member(initial, initial_only, "contributor")
 
     assert Enum.map(Repositories.list_assignable_users(initial), & &1.github_login) == [
-             "initial-only",
-             "tenant-member"
+             "initial-only"
            ]
 
     assert Enum.map(Repositories.list_assignable_users(second), & &1.github_login) == [
@@ -127,6 +127,7 @@ defmodule OpenAgents.RepositoriesTest do
     second: second,
     user: user
   } do
+    {:ok, _membership} = Repositories.add_member(initial, user, "maintainer")
     assert {:ok, project} = Projects.create_project(initial, %{title: "Initial"}, user)
     assert {:ok, second_issue} = Issues.create_issue(second, %{title: "Second"})
 
@@ -162,6 +163,7 @@ defmodule OpenAgents.RepositoriesTest do
     second: second,
     user: user
   } do
+    {:ok, _membership} = Repositories.add_member(initial, user, "maintainer")
     assert {:ok, initial_project} = Projects.create_project(initial, %{title: "Initial"}, user)
     assert {:ok, second_project} = Projects.create_project(second, %{title: "Second"}, user)
 

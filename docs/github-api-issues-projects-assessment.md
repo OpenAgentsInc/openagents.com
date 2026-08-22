@@ -32,12 +32,11 @@ locks, dependencies, sub-issues, and suggestion APIs are not implemented.
 
 | Method | Path |
 | --- | --- |
-| `GET` | `/users/{username}/projectsV2` |
-| `POST` | `/{owner}/projectsV2` |
-| `GET` | `/users/{username}/projectsV2/{project_number}` |
-| `GET, POST` | `/users/{username}/projectsV2/{project_number}/items` |
-| `PATCH` | `/users/{username}/projectsV2/{project_number}/items/{item_id}` |
-| `GET` | `/users/{username}/projectsV2/{project_number}/fields` |
+| `GET, POST` | `/repos/{owner}/{repo}/projectsV2` |
+| `GET` | `/repos/{owner}/{repo}/projectsV2/{project_number}` |
+| `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items` |
+| `PATCH` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}` |
+| `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/fields` |
 
 The project-creation endpoint is an OpenAgents extension because the comparable
 GitHub Projects V2 creation workflow is not supplied by the assessed REST
@@ -48,7 +47,8 @@ ordering, draft items, and organization projects remain unimplemented.
 
 These are current measured behaviors:
 
-- `/api/v3` public reads and authenticated writes use separate pipelines.
+- `/api/v3` anonymous and optional-bearer reads and authenticated writes use
+  separate pipelines.
   Writes require an expiring digest-only `oa_pat_…` bearer with exact
   `forge:write` scope. An authenticated person creates and revokes credentials
   at `/settings/api-tokens`; plaintext is shown once.
@@ -60,9 +60,9 @@ These are current measured behaviors:
   assignee links, milestones, and project items.
 - Issue and milestone numbers are repository-local. Project numbers are also
   repository-local for the repository-shaped LiveView surface.
-- Project show, item, update-item, and field actions enforce the username in the
-  route. The user-shaped Projects V2 subset is limited to the explicit initial
-  repository because those compatibility URLs contain no repository segment.
+- Project list, show, item, update-item, and field actions resolve the repository
+  from the route. Public repositories allow anonymous reads. Private reads and
+  every write require membership in that repository.
 - Assignee reads return active repository members with writable roles, and
   issue assignment accepts only those members.
 

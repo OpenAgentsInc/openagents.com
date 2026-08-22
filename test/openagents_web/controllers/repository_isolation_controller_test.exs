@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
 
   setup %{conn: conn} do
     conn = put_forge_api_token(conn, "repository-isolation")
-    initial = Repositories.initial_repository!()
+    initial = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
 
     {:ok, second} =
       Repositories.create_repository(%{

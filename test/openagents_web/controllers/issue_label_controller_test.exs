@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.IssueLabelControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-labels")}
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issue-labels", repository())}
 
   import OpenAgents.LabelsFixtures
 
@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
   alias OpenAgents.Labels
 
   setup do
-    {:ok, issue} = Issues.create_issue(%{title: "Labelled issue"})
+    {:ok, issue} = Issues.create_issue(repository(), %{title: "Labelled issue"})
     %{issue: issue}
   end
 
@@ -28,7 +28,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
       {:ok, _issue} = Issues.add_labels(issue, ["bug"])
 
       conn =
@@ -50,7 +50,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
 
       conn =
         post(
@@ -64,15 +64,15 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       assert %{"labels" => [label]} = json_response(conn, 200)
       assert label["name"] == "bug"
 
-      assert [%{"name" => "bug"}] = Issues.get_issue_by_number!(issue.number).labels
+      assert [%{"name" => "bug"}] = Issues.get_issue_by_number!(repository(), issue.number).labels
     end
 
     test "POST .../issues/:issue_number/labels adds several labels at once", %{
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
-      label_fixture(%{name: "docs", color: "0075ca"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "docs", color: "0075ca"})
 
       conn =
         post(
@@ -91,7 +91,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
       {:ok, _issue} = Issues.add_labels(issue, ["bug"])
 
       conn =
@@ -137,10 +137,12 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
         )
 
       assert %{"labels" => [%{"name" => "never-created"}]} = json_response(conn, 200)
-      assert [%{"name" => "never-created"}] = Issues.get_issue_by_number!(issue.number).labels
+
+      assert [%{"name" => "never-created"}] =
+               Issues.get_issue_by_number!(repository(), issue.number).labels
 
       refute Labels.get_label_by_name!(
-               OpenAgents.Repositories.initial_repository!(),
+               OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com"),
                "never-created"
              ).color == ""
     end
@@ -157,7 +159,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
         )
 
       assert %{"errors" => %{"name" => [_message]}} = json_response(conn, 422)
-      assert Issues.get_issue_by_number!(issue.number).labels == []
+      assert Issues.get_issue_by_number!(repository(), issue.number).labels == []
     end
 
     test "POST .../issues/:issue_number/labels returns 404 for a missing issue", %{conn: conn} do
@@ -175,8 +177,8 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
-      label_fixture(%{name: "docs", color: "0075ca"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "docs", color: "0075ca"})
       {:ok, _issue} = Issues.add_labels(issue, ["bug", "docs"])
 
       conn =
@@ -188,14 +190,15 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       assert %{"labels" => [label]} = json_response(conn, 200)
       assert label["name"] == "docs"
 
-      assert [%{"name" => "docs"}] = Issues.get_issue_by_number!(issue.number).labels
+      assert [%{"name" => "docs"}] =
+               Issues.get_issue_by_number!(repository(), issue.number).labels
     end
 
     test "DELETE .../issues/:issue_number/labels/:name decodes an escaped name", %{
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "good first issue", color: "7057ff"})
+      label_fixture(repository(), %{name: "good first issue", color: "7057ff"})
       {:ok, _issue} = Issues.add_labels(issue, ["good first issue"])
 
       conn =
@@ -214,7 +217,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
       conn: conn,
       issue: issue
     } do
-      label_fixture(%{name: "bug", color: "d73a4a"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
       {:ok, _issue} = Issues.add_labels(issue, ["bug"])
 
       conn =
@@ -224,7 +227,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
         )
 
       assert json_response(conn, 404)
-      assert [%{"name" => "bug"}] = Issues.get_issue_by_number!(issue.number).labels
+      assert [%{"name" => "bug"}] = Issues.get_issue_by_number!(repository(), issue.number).labels
     end
 
     test "DELETE .../issues/:issue_number/labels/:name returns 404 for a missing issue", %{
@@ -234,5 +237,9 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

@@ -1,15 +1,16 @@
 defmodule OpenAgentsWeb.IssueControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issues")}
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issues", repository())}
 
   alias OpenAgents.Issues
+  alias OpenAgents.Repositories
 
   describe "index" do
     test "GET /api/v3/repos/:owner/:repo/issues lists open issues by default", %{
       conn: conn
     } do
-      {:ok, _issue} = Issues.create_issue(%{title: "First issue"})
+      {:ok, _issue} = Issues.create_issue(repository(), %{title: "First issue"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
 
@@ -19,8 +20,10 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
 
     test "GET /api/v3/repos/:owner/:repo/issues filters by state", %{conn: conn} do
-      {:ok, _open_issue} = Issues.create_issue(%{title: "Open issue"})
-      {:ok, _closed_issue} = Issues.create_issue(%{title: "Closed issue", state: "closed"})
+      {:ok, _open_issue} = Issues.create_issue(repository(), %{title: "Open issue"})
+
+      {:ok, _closed_issue} =
+        Issues.create_issue(repository(), %{title: "Closed issue", state: "closed"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=closed")
 
@@ -60,7 +63,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "GET /api/v3/repos/:owner/:repo/issues/:issue_number returns the issue", %{
       conn: conn
     } do
-      {:ok, issue} = Issues.create_issue(%{title: "Show me"})
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Show me"})
 
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
@@ -81,11 +84,49 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
   end
 
+  describe "private repository reads" do
+    test "a repository member can list and read issues, but an anonymous visitor cannot" do
+      private_repository = repository_fixture(%{visibility: "private"})
+      {:ok, issue} = Issues.create_issue(private_repository, %{title: "Private issue"})
+
+      path =
+        "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues"
+
+      assert get(build_conn(), path) |> json_response(404)
+
+      member_conn = put_forge_api_token(build_conn(), "private-issue-reader", private_repository)
+
+      assert %{"issues" => [%{"title" => "Private issue"}]} =
+               get(member_conn, path) |> json_response(200)
+
+      issue_path = path <> "/#{issue.number}"
+
+      member_conn = put_forge_api_token(build_conn(), "private-issue-show", private_repository)
+      assert %{"title" => "Private issue"} = get(member_conn, issue_path) |> json_response(200)
+      assert get(build_conn(), issue_path) |> json_response(404)
+    end
+
+    test "a bearer without repository membership cannot read private issues" do
+      private_repository = repository_fixture(%{visibility: "private"})
+      {:ok, _issue} = Issues.create_issue(private_repository, %{title: "Private issue"})
+
+      conn = put_forge_api_token(build_conn(), "private-issue-nonmember")
+
+      conn =
+        get(
+          conn,
+          "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues"
+        )
+
+      assert json_response(conn, 404)
+    end
+  end
+
   describe "update" do
     test "PATCH /api/v3/repos/:owner/:repo/issues/:issue_number closes an issue", %{
       conn: conn
     } do
-      {:ok, issue} = Issues.create_issue(%{title: "Close me"})
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Close me"})
 
       conn =
         patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
@@ -95,5 +136,9 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert %{"state" => "closed", "number" => n} = json_response(conn, 200)
       assert n == issue.number
     end
+  end
+
+  defp repository do
+    Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

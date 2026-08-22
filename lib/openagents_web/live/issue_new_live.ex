@@ -32,7 +32,9 @@ defmodule OpenAgentsWeb.IssueNewLive do
        |> put_flash(:error, "You cannot open an issue on that repository.")
        |> redirect(to: ~p"/")}
     else
-      changeset = Issues.change_issue(%Issue{}, %{"title" => "", "body" => ""})
+      changeset =
+        Issues.change_issue(repository, %Issue{}, %{"title" => "", "body" => ""})
+
       can_write = Repositories.writable?(repository, user)
 
       {:ok,

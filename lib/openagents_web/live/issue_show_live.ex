@@ -260,7 +260,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
     visible? = not is_nil(visible_repository)
     can_write = visible? and Repositories.writable?(repository, user)
     can_participate = visible? and Repositories.issue_participant?(repository, user)
-    issue = Issues.get_issue!(socket.assigns.issue.id)
+    issue = Issues.get_issue!(socket.assigns.repository, socket.assigns.issue.id)
     can_edit = can_write || (can_participate and author?(issue, user))
 
     socket

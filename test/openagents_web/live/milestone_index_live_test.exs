@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   alias OpenAgents.Milestones
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "milestone-index")}
+    {:ok, conn: log_in_repository_user(conn, "milestone-index", repository())}
   end
 
   test "mounts with the create form and an empty state", %{conn: conn} do
@@ -20,7 +20,12 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   end
 
   test "lists seeded milestones with their state and due date", %{conn: conn} do
-    milestone_fixture(%{title: "v1.0", state: "open", due_on: "2026-12-31", description: "Ship"})
+    milestone_fixture(repository(), %{
+      title: "v1.0",
+      state: "open",
+      due_on: "2026-12-31",
+      description: "Ship"
+    })
 
     {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
@@ -31,12 +36,12 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   end
 
   test "the progress meter reports the closed-to-total ratio", %{conn: conn} do
-    milestone = milestone_fixture(%{title: "Beta", state: "open", due_on: nil})
+    milestone = milestone_fixture(repository(), %{title: "Beta", state: "open", due_on: nil})
 
-    {:ok, open_issue} = Issues.create_issue(%{"title" => "Still open"})
+    {:ok, open_issue} = Issues.create_issue(repository(), %{"title" => "Still open"})
     {:ok, _} = Issues.set_milestone(open_issue, milestone.number)
 
-    {:ok, done_issue} = Issues.create_issue(%{"title" => "Finished"})
+    {:ok, done_issue} = Issues.create_issue(repository(), %{"title" => "Finished"})
     {:ok, done_issue} = Issues.set_milestone(done_issue, milestone.number)
     {:ok, _} = Issues.update_issue(done_issue, %{"state" => "closed"})
 
@@ -54,7 +59,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
   end
 
   test "a milestone with no issues reports zero progress", %{conn: conn} do
-    milestone_fixture(%{title: "Empty", due_on: nil})
+    milestone_fixture(repository(), %{title: "Empty", due_on: nil})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
@@ -76,7 +81,9 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
 
     assert html =~ "Milestone created"
     assert html =~ "v2.0"
-    assert [%Milestones.Milestone{title: "v2.0", number: 1}] = Milestones.list_milestones()
+
+    assert [%Milestones.Milestone{title: "v2.0", number: 1}] =
+             Milestones.list_milestones(repository())
   end
 
   test "a milestone with no title re-renders the form with an error", %{conn: conn} do
@@ -88,11 +95,11 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
       |> render_submit()
 
     assert html =~ "can&#39;t be blank"
-    assert Milestones.list_milestones() == []
+    assert Milestones.list_milestones(repository()) == []
   end
 
   test "closing a milestone flips its state and hides the close button", %{conn: conn} do
-    milestone = milestone_fixture(%{title: "Closeable", state: "open", due_on: nil})
+    milestone = milestone_fixture(repository(), %{title: "Closeable", state: "open", due_on: nil})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
     assert has_element?(view, ~s{button[phx-click="close"][phx-value-id="#{milestone.id}"]})
@@ -104,11 +111,11 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
 
     assert html =~ "Milestone closed"
     refute has_element?(view, ~s{button[phx-click="close"][phx-value-id="#{milestone.id}"]})
-    assert Milestones.get_milestone!(milestone.id).state == "closed"
+    assert Milestones.get_milestone!(repository(), milestone.id).state == "closed"
   end
 
   test "deleting a milestone returns the empty state", %{conn: conn} do
-    milestone = milestone_fixture(%{title: "Deletable", due_on: nil})
+    milestone = milestone_fixture(repository(), %{title: "Deletable", due_on: nil})
 
     {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/milestones")
 
@@ -119,6 +126,10 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
 
     assert html =~ "Milestone deleted"
     assert has_element?(view, ~s{[role="status"]}, "No milestones yet")
-    assert Milestones.list_milestones() == []
+    assert Milestones.list_milestones(repository()) == []
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

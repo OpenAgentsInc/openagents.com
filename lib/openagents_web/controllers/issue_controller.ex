@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.IssueController do
 
   def index(conn, %{"owner" => owner, "repo" => repo} = params) do
     state = Map.get(params, "state", "open")
-    repository = Repositories.get_public_by_path!(owner, repo)
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
     issues = Issues.list_issues(repository, state: state)
     render(conn, :index, issues: issues, owner: owner, repo: repo)
   rescue
@@ -37,7 +37,8 @@ defmodule OpenAgentsWeb.IssueController do
         "repo" => repo,
         "issue_number" => issue_number
       }) do
-    issue = Issues.get_issue_by_path!(owner, repo, String.to_integer(issue_number))
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
     render(conn, :show, issue: issue, owner: owner, repo: repo)
   rescue
     Ecto.NoResultsError ->

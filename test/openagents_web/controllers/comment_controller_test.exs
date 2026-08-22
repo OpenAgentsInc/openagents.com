@@ -1,12 +1,12 @@
 defmodule OpenAgentsWeb.CommentControllerTest do
   use OpenAgentsWeb.ConnCase
 
-  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "comments")}
+  setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "comments", repository())}
 
   alias OpenAgents.Issues
 
   setup do
-    {:ok, issue} = Issues.create_issue(%{title: "Comment target"})
+    {:ok, issue} = Issues.create_issue(repository(), %{title: "Comment target"})
     %{issue: issue}
   end
 
@@ -75,5 +75,9 @@ defmodule OpenAgentsWeb.CommentControllerTest do
       delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
 
     assert response(conn, 204)
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

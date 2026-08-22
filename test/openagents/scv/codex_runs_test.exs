@@ -32,7 +32,7 @@ defmodule OpenAgents.SCV.CodexRunsTest do
       )
     )
 
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
     bare = ForgeRepos.ensure_repo!(repository.storage_key, repository.default_branch)
     source = Path.join(root, "source")
     File.mkdir_p!(source)

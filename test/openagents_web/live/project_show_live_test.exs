@@ -10,10 +10,10 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
   alias OpenAgents.Projects
 
   setup %{conn: conn} do
-    {:ok, conn: log_in_github_user(conn, "project-show")}
+    {:ok, conn: log_in_repository_user(conn, "project-show", repository())}
   end
 
-  defp project!, do: project_fixture(%{title: "Roadmap", owner: "OpenAgentsInc"})
+  defp project!, do: project_fixture(repository(), %{title: "Roadmap", owner: "OpenAgentsInc"})
 
   defp path(project), do: ~p"/OpenAgentsInc/openagents.com/projects/#{project.number}"
 
@@ -47,8 +47,8 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
   test "the issue select offers every issue, open or closed", %{conn: conn} do
     project = project!()
-    {:ok, open} = Issues.create_issue(%{"title" => "Still open"})
-    {:ok, closed} = Issues.create_issue(%{"title" => "All done"})
+    {:ok, open} = Issues.create_issue(repository(), %{"title" => "Still open"})
+    {:ok, closed} = Issues.create_issue(repository(), %{"title" => "All done"})
     {:ok, _} = Issues.update_issue(closed, %{"state" => "closed"})
 
     {:ok, view, _html} = live(conn, path(project))
@@ -72,13 +72,15 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
   test "an existing item renders as a card in its status column", %{conn: conn} do
     project = project!()
-    label_fixture(%{name: "bug", color: "d73a4a"})
-    {:ok, issue} = Issues.create_issue(%{"title" => "Fix the parser", "labels" => ["bug"]})
+    label_fixture(repository(), %{name: "bug", color: "d73a4a"})
+
+    {:ok, issue} =
+      Issues.create_issue(repository(), %{"title" => "Fix the parser", "labels" => ["bug"]})
 
     {:ok, _item} =
       Projects.create_project_item(
         %{"issue_number" => issue.number, "values" => %{"Status" => "In Progress"}},
-        project.id
+        project
       )
 
     {:ok, view, html} = live(conn, path(project))
@@ -95,12 +97,12 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
   test "an item with no recorded status falls back to To Do", %{conn: conn} do
     project = project!()
-    {:ok, issue} = Issues.create_issue(%{"title" => "Unsorted"})
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Unsorted"})
 
     {:ok, _item} =
       Projects.create_project_item(
         %{"issue_number" => issue.number, "values" => %{}},
-        project.id
+        project
       )
 
     {:ok, _view, html} = live(conn, path(project))
@@ -110,7 +112,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
   test "submitting the form adds the issue to the board", %{conn: conn} do
     project = project!()
-    {:ok, issue} = Issues.create_issue(%{"title" => "Ship the runbook"})
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Ship the runbook"})
 
     {:ok, view, html} = live(conn, path(project))
     refute html =~ "Ship the runbook</a>"
@@ -130,17 +132,17 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
              "Ship the runbook"
            )
 
-    assert [item] = Projects.list_project_items(project.id)
+    assert [item] = Projects.list_project_items(project)
     assert item.issue_id == issue.id
     assert item.values == %{"Status" => "Done"}
   end
 
   test "a fixture-built item lands in the column named by its Status value", %{conn: conn} do
     project = project!()
-    {:ok, issue} = Issues.create_issue(%{"title" => "Fixture-placed"})
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Fixture-placed"})
 
     item =
-      project_item_fixture(%{
+      project_item_fixture(repository(), %{
         project_id: project.id,
         issue_id: issue.id,
         values: %{"Status" => "Done"}
@@ -167,5 +169,9 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
     assert_raise Ecto.NoResultsError, fn ->
       live(conn, ~p"/OpenAgentsInc/openagents.com/projects/9999")
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

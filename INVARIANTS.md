@@ -1884,11 +1884,23 @@ row from a repository the reader could not open directly. The duplicate that
 `list_visible_repositories/1` held had already lost the `ready` half and
 disagreed with the paged read about the same repository; there is one copy now.
 
+Amended 2026-08-22 (explicit issue and project repository scope): production
+contexts accept a repository or a resource that already carries its repository
+identity. No context function selects a default repository or grants membership
+as a side effect. The Projects V2 API uses
+`/api/v3/repos/:owner/:repo/projectsV2`; every project, item, and field query
+includes that repository. Optional bearer authentication lets a member read a
+private repository's issues and projects, while anonymous readers and
+nonmembers receive `404 Not Found`. Every write still requires `forge:write`
+and a writable membership in the same repository.
+
 Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
 `OpenAgents.Repositories.Importer`, `OpenAgents.Forge.GitHTTP`,
 `test/openagents/repository_lifecycle_test.exs`,
 `test/openagents/repositories/provisioner_test.exs`,
 `test/openagents_web/controllers/repository_controller_test.exs`,
+`test/openagents_web/controllers/issue_controller_test.exs`,
+`test/openagents_web/controllers/project_controller_test.exs`,
 `test/openagents/issues_workspace_test.exs`,
 `test/openagents_web/live/issue_workspace_live_test.exs`,
 `test/openagents_web/live/project_workspace_live_test.exs`, and

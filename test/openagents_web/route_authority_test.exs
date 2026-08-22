@@ -28,6 +28,8 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     write = route!(:post, "/api/v3/repos/:owner/:repo/issues")
 
     assert read.class == :public_read
+    assert read.principal == "anonymous or first-party bearer token"
+    assert read.scope == "forge:repository:read"
     assert read.mutation == false
     assert write.class == :authenticated_api
     assert write.principal == "first-party bearer token"
@@ -39,7 +41,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
              "GET",
              "/api/v3/repos/OpenAgentsInc/openagents.com/issues",
              "stage.openagents.com"
-           ).pipe_through == [:api]
+           ).pipe_through == [:optional_forge_api]
 
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,

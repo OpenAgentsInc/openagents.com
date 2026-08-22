@@ -19,7 +19,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
      |> assign(:repo, repo)
      |> assign(:repository, repository)
      |> assign(:projects, Projects.list_projects(repository))
-     |> assign(:form, to_form(Projects.change_project(%Project{})))}
+     |> assign(:form, to_form(Projects.change_project(repository, %Project{}, %{})))}
   end
 
   def handle_event("save", %{"project" => project_params}, socket) do
@@ -32,7 +32,10 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
         {:noreply,
          socket
          |> assign(:projects, Projects.list_projects(socket.assigns.repository))
-         |> assign(:form, to_form(Projects.change_project(%Project{})))
+         |> assign(
+           :form,
+           to_form(Projects.change_project(socket.assigns.repository, %Project{}, %{}))
+         )
          |> put_flash(:info, "Project created")}
 
       {:error, changeset} ->

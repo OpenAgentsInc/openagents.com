@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import OpenAgentsWeb.ConnCase
+      import OpenAgents.AccountsFixtures
     end
   end
 
@@ -54,13 +55,17 @@ defmodule OpenAgentsWeb.ConnCase do
         github_avatar_url: "https://avatars.githubusercontent.com/u/#{github_id}?v=4"
       })
 
-    {:ok, _membership} = OpenAgents.Repositories.ensure_initial_membership(user)
-
     user
   end
 
   def log_in_github_user(conn, key) when is_binary(key) do
     user = github_user(key)
+    Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+  end
+
+  def log_in_repository_user(conn, key, repository) when is_binary(key) do
+    user = github_user(key)
+    {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "owner")
     Plug.Test.init_test_session(conn, %{"user_id" => user.id})
   end
 
@@ -85,10 +90,24 @@ defmodule OpenAgentsWeb.ConnCase do
     put_forge_api_token_for_user(conn, user)
   end
 
+  def put_forge_api_token(conn, key, %OpenAgents.Repositories.Repository{} = repository)
+      when is_binary(key) do
+    user = github_user("api-token-" <> key)
+    {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "owner")
+    put_forge_api_token_for_user(conn, user)
+  end
+
   def put_forge_api_token(conn, key, login)
       when is_binary(key) and is_binary(login) do
     user = github_user("api-token-" <> key, login)
 
+    put_forge_api_token_for_user(conn, user)
+  end
+
+  def put_forge_api_token(conn, key, login, %OpenAgents.Repositories.Repository{} = repository)
+      when is_binary(key) and is_binary(login) do
+    user = github_user("api-token-" <> key, login)
+    {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "owner")
     put_forge_api_token_for_user(conn, user)
   end
 

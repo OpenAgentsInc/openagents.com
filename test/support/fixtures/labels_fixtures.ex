@@ -7,15 +7,16 @@ defmodule OpenAgents.LabelsFixtures do
   @doc """
   Generate a label.
   """
-  def label_fixture(attrs \\ %{}) do
+  def label_fixture(repository, attrs \\ %{}) do
     {:ok, label} =
-      attrs
-      |> Enum.into(%{
-        color: "some color",
-        description: "some description",
-        name: "some name"
-      })
-      |> OpenAgents.Labels.create_label()
+      OpenAgents.Labels.create_label(
+        repository,
+        Enum.into(attrs, %{
+          color: "some color",
+          description: "some description",
+          name: "some name"
+        })
+      )
 
     label
   end

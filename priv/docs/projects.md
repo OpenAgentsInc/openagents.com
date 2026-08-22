@@ -15,11 +15,6 @@ issue, so two boards can hold different views of the same work.
 
 ## Through the API
 
-Projects are exposed under `/users/:username/projectsV2`, shaped after GitHub's
-ProjectsV2. See [REST API](/docs/rest-api).
-
-## A current limitation
-
-The project endpoints do not scope by the `:username` in the path, so a project
-is reachable under any username. Treat project URLs as unguessable rather than
-access-controlled until that is closed.
+Projects are exposed under `/repos/:owner/:repo/projectsV2`. The repository in
+the path controls visibility and write authority for every project, item, and
+field operation. See [REST API](/docs/rest-api).

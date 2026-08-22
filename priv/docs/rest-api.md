@@ -64,10 +64,14 @@ POST   /api/v3/repos/:owner/:repo/issues/:issue_number/assignees
 ## Projects
 
 ```
-GET    /api/v3/users/:username/projectsV2
-GET    /api/v3/users/:username/projectsV2/:project_number
-GET    /api/v3/users/:username/projectsV2/:project_number/items
-GET    /api/v3/users/:username/projectsV2/:project_number/fields
+GET    /api/v3/repos/:owner/:repo/projectsV2
+POST   /api/v3/repos/:owner/:repo/projectsV2
+GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number
+GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/items
+POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/items
+PATCH  /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id
+GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields
+POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields
 ```
 
 ## Known differences from GitHub
@@ -78,8 +82,6 @@ finds them here rather than in production:
 - Renaming a label via `new_name` is accepted and ignored; the path name wins.
 - Applying a label that does not exist returns 404. GitHub creates it.
 - Removing a label an issue does not carry succeeds silently. GitHub returns 404.
-- The assignable-users endpoint always returns an empty list.
-- Project endpoints ignore the `:username` in the path.
 - A non-numeric issue, milestone, or project number is a 500 rather than a 404.
 
 ## What is not implemented

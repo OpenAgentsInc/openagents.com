@@ -232,8 +232,6 @@ defmodule OpenAgentsWeb.Router do
     post "/device/authorizations", DeviceAuthorizationController, :create
     post "/device/authorizations/token", DeviceAuthorizationController, :token
 
-    get "/repos/:owner/:repo/issues", IssueController, :index
-    get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
     get "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :index
     get "/repos/:owner/:repo/issues/comments/:id", CommentController, :show
     get "/repos/:owner/:repo/issues/:issue_number/labels", IssueLabelController, :index
@@ -244,16 +242,18 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :show
     get "/repos/:owner/:repo/assignees", AssigneeController, :index
     get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
-    get "/users/:username/projectsV2", ProjectController, :index
-    get "/users/:username/projectsV2/:project_number", ProjectController, :show
-    get "/users/:username/projectsV2/:project_number/items", ProjectController, :items
-    get "/users/:username/projectsV2/:project_number/fields", ProjectController, :fields
   end
 
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :optional_forge_api
 
     get "/repos/:owner/:repo", RepositoryController, :show
+    get "/repos/:owner/:repo/issues", IssueController, :index
+    get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
+    get "/repos/:owner/:repo/projectsV2", ProjectController, :index
+    get "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :show
+    get "/repos/:owner/:repo/projectsV2/:project_number/items", ProjectController, :items
+    get "/repos/:owner/:repo/projectsV2/:project_number/fields", ProjectController, :fields
   end
 
   scope "/api/v3", OpenAgentsWeb do
@@ -287,11 +287,17 @@ defmodule OpenAgentsWeb.Router do
     put "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :update
     patch "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :update
     delete "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :delete
-    post "/:owner/projectsV2", ProjectController, :create
-    post "/users/:username/projectsV2/:project_number/items", ProjectController, :create_item
-    post "/users/:username/projectsV2/:project_number/fields", ProjectController, :create_field
+    post "/repos/:owner/:repo/projectsV2", ProjectController, :create
 
-    patch "/users/:username/projectsV2/:project_number/items/:item_id",
+    post "/repos/:owner/:repo/projectsV2/:project_number/items",
+         ProjectController,
+         :create_item
+
+    post "/repos/:owner/:repo/projectsV2/:project_number/fields",
+         ProjectController,
+         :create_field
+
+    patch "/repos/:owner/:repo/projectsV2/:project_number/items/:item_id",
           ProjectController,
           :update_item
   end

@@ -58,7 +58,7 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
     end)
 
     shas = seed_repo("openagents.com")
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
 
     {:ok, repository: repository, shas: shas}
   end
@@ -91,7 +91,7 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
   end
 
   test "issue cards render from the public issue path", %{conn: conn} do
-    {:ok, issue} = Issues.create_issue(%{"title" => "Carded issue"})
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Carded issue"})
     card = OpenAgentsWeb.OG.issue("OpenAgentsInc", "openagents.com", issue)
 
     assert response(get(conn, signed_url(card)), 200) == @marker_png
@@ -155,7 +155,9 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
 
     real_path =
       OpenAgentsWeb.OG.request_path(
-        OpenAgentsWeb.OG.repo_card_for(Repositories.initial_repository!())
+        OpenAgentsWeb.OG.repo_card_for(
+          Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+        )
       )
 
     bad_signature = real_path <> "?sig=bogus"
@@ -228,7 +230,7 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
   end
 
   test "an issue page emits an issue-specific card URL", %{conn: conn} do
-    {:ok, issue} = Issues.create_issue(%{"title" => "Shared on social"})
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Shared on social"})
 
     {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
@@ -327,5 +329,9 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
     after
       File.rm(input)
     end
+  end
+
+  defp repository do
+    OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
 end

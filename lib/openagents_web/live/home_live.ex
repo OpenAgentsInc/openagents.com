@@ -60,16 +60,10 @@ defmodule OpenAgentsWeb.HomeLive do
     |> stream(:repositories, repositories)
   end
 
-  defp dashboard_repository(repositories) do
-    {initial_owner, initial_name} = Repositories.initial_path()
+  defp dashboard_repository(repositories),
+    do: Enum.find(repositories, &(&1.lifecycle_state == "ready"))
 
-    Enum.find(repositories, fn repository ->
-      String.downcase(repository.namespace.slug) == String.downcase(initial_owner) and
-        String.downcase(repository.name) == String.downcase(initial_name)
-    end) || Enum.find(repositories, &(&1.lifecycle_state == "ready"))
-  end
-
-  defp repository_path(nil), do: Repositories.initial_path()
+  defp repository_path(nil), do: {nil, nil}
   defp repository_path(repository), do: {repository.namespace.slug, repository.name}
 
   defp list_issues(nil, _state), do: []
@@ -256,33 +250,14 @@ defmodule OpenAgentsWeb.HomeLive do
           description="Purpose-built for planning and shipping issues. Designed for the agent era."
         >
           <:actions>
-            <%= if @current_user do %>
-              <.button
-                id="home-cta-create"
-                navigate={~p"/OpenAgentsInc/openagents.com/issues/new"}
-                variant={:primary}
-                size={:lg}
-              >
-                Create new issue
-              </.button>
-              <.button
-                id="home-cta-browse"
-                navigate={~p"/OpenAgentsInc/openagents.com/issues"}
-                variant={:secondary}
-                size={:lg}
-              >
-                View issues
-              </.button>
-            <% else %>
-              <.github_login id="home-cta-signin" size={:lg} />
-              <%!-- Quieter than the action beside it. `variant` defaults to
-              `:primary`, so two filled buttons sat side by side stating that
-              both were the thing to do, which leaves a reader picking rather
-              than proceeding. --%>
-              <.button navigate={~p"/docs"} variant={:secondary} size={:lg}>
-                Read the docs
-              </.button>
-            <% end %>
+            <.github_login id="home-cta-signin" size={:lg} />
+            <%!-- Quieter than the action beside it. `variant` defaults to
+            `:primary`, so two filled buttons sat side by side stating that
+            both were the thing to do, which leaves a reader picking rather
+            than proceeding. --%>
+            <.button navigate={~p"/docs"} variant={:secondary} size={:lg}>
+              Read the docs
+            </.button>
           </:actions>
 
           <%!-- Commented out rather than deleted: the frame is right, what goes

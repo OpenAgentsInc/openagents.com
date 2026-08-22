@@ -9,7 +9,7 @@ defmodule OpenAgents.IssuesQueryTest do
   alias OpenAgents.Repositories
 
   setup do
-    repository = Repositories.initial_repository!()
+    repository = Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
 
     {:ok, open} =
       Issues.create_issue(repository, %{"title" => "First open", "body" => "alpha body"})

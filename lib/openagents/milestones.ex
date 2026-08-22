@@ -8,7 +8,6 @@ defmodule OpenAgents.Milestones do
   alias OpenAgents.Analytics
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
-  alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
 
   alias OpenAgents.Milestones.Milestone
@@ -22,8 +21,6 @@ defmodule OpenAgents.Milestones do
       [%Milestone{}, ...]
 
   """
-  def list_milestones, do: list_milestones(Repositories.initial_repository!())
-
   def list_milestones(%Repository{id: repository_id}) do
     Milestone
     |> where(repository_id: ^repository_id)
@@ -46,17 +43,12 @@ defmodule OpenAgents.Milestones do
       ** (Ecto.NoResultsError)
 
   """
-  def get_milestone!(id), do: get_milestone!(Repositories.initial_repository!(), id)
-
   def get_milestone!(%Repository{id: repository_id}, id) do
     Milestone
     |> where(id: ^id, repository_id: ^repository_id)
     |> with_issue_counts()
     |> Repo.one!()
   end
-
-  def get_milestone_by_number!(number) when is_integer(number),
-    do: get_milestone_by_number!(Repositories.initial_repository!(), number)
 
   def get_milestone_by_number!(%Repository{id: repository_id}, number) when is_integer(number) do
     Milestone
@@ -92,9 +84,6 @@ defmodule OpenAgents.Milestones do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_milestone(attrs \\ %{}),
-    do: create_milestone(Repositories.initial_repository!(), attrs, nil)
-
   def create_milestone(%Repository{} = repository, attrs, actor \\ nil)
       when is_nil(actor) or is_struct(actor, User) do
     normalized = for {k, v} <- attrs, into: %{}, do: {to_string(k), v}

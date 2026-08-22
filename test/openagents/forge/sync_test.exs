@@ -62,7 +62,14 @@ defmodule OpenAgents.Forge.SyncTest do
     assert String.trim(git_bare!(Repos.bare_path("storage-key"), ["symbolic-ref", "HEAD"])) ==
              "refs/heads/trunk"
 
-    File.rm_rf!(Repos.bare_path("storage-key"))
+    bare_path = Repos.bare_path("storage-key")
+    File.rm_rf!(Path.join(bare_path, "objects"))
+    File.mkdir_p!(Path.join(bare_path, "objects"))
+
+    assert :ok = Sync.ensure_fresh("storage-key", "trunk")
+    assert String.trim(git_bare!(bare_path, ["show", "trunk:README.md"])) == "durable import"
+
+    File.rm_rf!(bare_path)
     repository = %Repository{storage_key: "storage-key", default_branch: "trunk"}
 
     assert {:ok, ^sha} = Browse.head(repository)

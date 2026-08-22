@@ -77,9 +77,38 @@ defmodule OpenAgents.Forge.Sync do
     |> Enum.filter(fn entry -> entry["seq"] > applied end)
     |> Enum.each(fn entry -> apply_entry!(repo, entry) end)
 
+    rebuild_if_objects_missing!(repo, index, default_branch)
     converge_refs(repo, index)
     Repos.set_default_branch!(repo, default_branch)
     :ok
+  end
+
+  defp rebuild_if_objects_missing!(repo, index, default_branch) do
+    unless refs_materialized?(repo, index) do
+      Logger.warning("forge_sync_cache_rebuild repo=#{repo} code=missing_ref_object")
+      :ok = Repos.delete_repo(repo)
+      Repos.ensure_repo!(repo, default_branch)
+
+      index
+      |> WAL.entries()
+      |> Enum.each(fn entry -> apply_entry!(repo, entry) end)
+
+      unless refs_materialized?(repo, index) do
+        raise "forge cache rebuild did not materialize every authoritative ref"
+      end
+    end
+  end
+
+  defp refs_materialized?(repo, index) do
+    path = Repos.bare_path(repo)
+
+    index
+    |> WAL.refs()
+    |> Map.values()
+    |> Enum.uniq()
+    |> Enum.all?(fn sha ->
+      match?({_output, 0}, Repos.git(path, ["cat-file", "-e", sha]))
+    end)
   end
 
   defp apply_entry!(repo, %{"seq" => seq, "object" => object} = entry) do

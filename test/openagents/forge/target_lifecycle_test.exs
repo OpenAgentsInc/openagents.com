@@ -227,6 +227,27 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
              Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
   end
 
+  test "rolling replacement records a complete large module inventory", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
+
+    modules = Enum.map(1..600, &"Elixir.OpenAgents.Generated.Module#{&1}")
+
+    insert_build_receipt!(
+      target,
+      %{"classification" => "needs_rolling_replace", "source_sha" => sha},
+      String.duplicate("a", 64),
+      modules
+    )
+
+    assert {:ok, %{receipt: receipt}} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+
+    assert receipt.modules == modules
+  end
+
   test "rolling replacement settlement refuses a superseded target", %{sha: sha} do
     {:ok, first} = Targets.promote("demo", sha, "operator:first")
     {:ok, _building} = Targets.advance(first.id, "building")
@@ -326,7 +347,12 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     end
   end
 
-  defp insert_build_receipt!(target, manifest, artifact_digest) do
+  defp insert_build_receipt!(
+         target,
+         manifest,
+         artifact_digest,
+         modules \\ ["Elixir.OpenAgents.BuildInfo"]
+       ) do
     %BuildReceipt{}
     |> BuildReceipt.changeset(%{
       repo: target.repo,
@@ -334,7 +360,7 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
       target_id: target.id,
       status: "complete",
       manifest: manifest,
-      modules: ["Elixir.OpenAgents.BuildInfo"],
+      modules: modules,
       artifact: "#{artifact_digest}.tar.gz",
       artifact_digest: artifact_digest,
       duration_ms: 1,

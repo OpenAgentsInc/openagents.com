@@ -80,7 +80,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
     |> validate_format(:sha, ~r/^[0-9a-f]{40}$/)
     |> validate_format(:artifact_digest, ~r/^[0-9a-f]{64}$/)
     |> validate_format(:manifest_digest, ~r/^[0-9a-f]{64}$/)
-    |> validate_length(:modules, max: 512)
+    |> validate_length(:modules, max: 2_048)
     |> validate_length(:nodes, max: 100)
     |> validate_length(:expected_nodes, max: 100)
     |> validate_length(:canary, max: 255)

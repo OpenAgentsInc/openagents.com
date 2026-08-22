@@ -22,6 +22,7 @@ defmodule OpenAgents.Forge.BuildWorker do
     artifacts = required_env!("OPENAGENTS_FORGE_ARTIFACT_DIR")
     builds = required_env!("OPENAGENTS_FORGE_BUILD_DIR")
     ensure_builder_paths!(queue, artifacts, builds)
+    seed_cache!(builds, System.get_env("OPENAGENTS_FORGE_BUILD_CACHE_SEED_DIR") || File.cwd!())
     loop(queue, artifacts, builds)
   end
 
@@ -177,7 +178,14 @@ defmodule OpenAgents.Forge.BuildWorker do
   end
 
   defp prepare_production_candidate(request, workspace, builds, output, opts) do
+    cache = cache_paths(builds)
+
     with {:ok, env} <- command_env(opts),
+         env =
+           [
+             {"MIX_BUILD_PATH", cache.build},
+             {"MIX_DEPS_PATH", cache.deps}
+           ] ++ env,
          :ok <- run_ok("git", ["init", "--quiet", workspace], builds, env, output),
          :ok <-
            run_ok(
@@ -206,11 +214,11 @@ defmodule OpenAgents.Forge.BuildWorker do
              [{"MIX_ENV", "prod"} | env],
              output
            ),
-         {:ok, beams} <- read_candidate_beams(workspace) do
+         {:ok, beams} <- read_candidate_beams(cache.build) do
       toolchain =
         BuildArtifact.current_toolchain(
           lock_path: Path.join(workspace, "mix.lock"),
-          app_file: Path.join(workspace, "_build/prod/lib/openagents/ebin/openagents.app")
+          app_file: Path.join(cache.build, "lib/openagents/ebin/openagents.app")
         )
 
       {:ok, beams, toolchain, structural_reasons}
@@ -305,8 +313,8 @@ defmodule OpenAgents.Forge.BuildWorker do
     end
   end
 
-  defp read_candidate_beams(workspace) do
-    paths = Path.wildcard(Path.join(workspace, "_build/prod/lib/openagents/ebin/*.beam"))
+  defp read_candidate_beams(build_path) do
+    paths = Path.wildcard(Path.join(build_path, "lib/openagents/ebin/*.beam"))
 
     if paths == [] do
       {:error, :application_beams_missing}
@@ -595,9 +603,43 @@ defmodule OpenAgents.Forge.BuildWorker do
           Path.join(queue, "responses"),
           Path.join(artifacts, "artifacts"),
           Path.join(artifacts, "output"),
-          Path.join(builds, "jobs")
+          Path.join(builds, "jobs"),
+          cache_paths(builds).build,
+          cache_paths(builds).deps
         ],
         do: File.mkdir_p!(path)
+  end
+
+  @doc false
+  def cache_paths(builds) do
+    %{
+      build: Path.join([builds, "cache", "_build", "prod"]),
+      deps: Path.join([builds, "cache", "deps"])
+    }
+  end
+
+  @doc false
+  def seed_cache!(builds, source_root) do
+    cache = cache_paths(builds)
+    marker = Path.join([builds, "cache", ".seeded"])
+
+    unless File.exists?(marker) do
+      copy_cache_entries(Path.join([source_root, "_build", "prod"]), cache.build)
+      copy_cache_entries(Path.join(source_root, "deps"), cache.deps)
+      File.write!(marker, "seeded\n")
+    end
+
+    :ok
+  end
+
+  defp copy_cache_entries(source, destination) do
+    if File.dir?(source) do
+      source
+      |> File.ls!()
+      |> Enum.each(fn entry ->
+        File.cp_r!(Path.join(source, entry), Path.join(destination, entry))
+      end)
+    end
   end
 
   defp required_env!(name) do

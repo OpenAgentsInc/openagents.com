@@ -627,7 +627,13 @@ defmodule OpenAgents.RuntimeConfig do
              :forge_expected_fleet_size,
              "must include a canary and peer for deployment"
            ),
-         :ok <- validate_rolling_provider(rolling_provider, rolling_provider_config, features),
+         :ok <-
+           validate_rolling_provider(
+             rolling_provider,
+             rolling_provider_config,
+             features,
+             environment
+           ),
          :ok <- validate_forge_secrets(operator_token, durable_required? or features.forge_deploy),
          :ok <- validate_forge_paths(settings, durable_required? or features.forge_deploy),
          :ok <- validate_wal(settings, durable_required? or features.forge_deploy) do
@@ -635,16 +641,19 @@ defmodule OpenAgents.RuntimeConfig do
     end
   end
 
-  defp validate_rolling_provider(_provider, _config, %{forge_deploy: false}), do: :ok
+  defp validate_rolling_provider(_provider, _config, %{forge_deploy: false}, _environment),
+    do: :ok
 
-  defp validate_rolling_provider(Gcp, config, %{forge_deploy: true}) do
+  defp validate_rolling_provider(nil, _config, %{forge_deploy: true}, :production), do: :ok
+
+  defp validate_rolling_provider(Gcp, config, %{forge_deploy: true}, _environment) do
     case Gcp.validate_config(config) do
       :ok -> :ok
       {:error, _reason} -> error(:forge_rolling_provider, "must use an isolated staging project")
     end
   end
 
-  defp validate_rolling_provider(_provider, _config, %{forge_deploy: true}),
+  defp validate_rolling_provider(_provider, _config, %{forge_deploy: true}, _environment),
     do: error(:forge_rolling_provider, "must be the admitted infrastructure provider")
 
   defp validate_forge_secrets(operator_token, true) do

@@ -118,7 +118,13 @@ defmodule OpenAgents.Forge.BuildExecutor.Sidecar do
 
   @doc "Repository URL with no embedded credential, query, or fragment."
   def repo_url(repo) do
-    base = Application.get_env(:openagents, :forge_internal_git_url, "http://127.0.0.1:8080/git")
+    base =
+      Application.get_env(
+        :openagents,
+        :forge_internal_git_url,
+        "http://127.0.0.1:8080/OpenAgentsInc"
+      )
+
     URI.to_string(URI.parse(base)) <> "/" <> repo <> ".git"
   end
 

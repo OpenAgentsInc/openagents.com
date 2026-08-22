@@ -141,6 +141,7 @@ defmodule OpenAgents.NetworkStatusTest do
 
       forge = NetworkStatus.projection(refresh: true)["forge"]
 
+      assert forge["state"] in ["active", "off"]
       assert forge["target"] == nil
       assert forge["recent_deploys"] == []
       assert forge["loop"] == %{"last_ms" => nil, "median_ms" => nil}
@@ -185,6 +186,18 @@ defmodule OpenAgents.NetworkStatusTest do
 
       assert forge["loop"]["last_ms"] == 13_242
       assert forge["loop"]["median_ms"] == 13_242
+    end
+
+    test "reports whether the preferred deploy loop is active" do
+      previous = Application.get_env(:openagents, :forge_deploy_lane_enabled)
+
+      on_exit(fn -> restore_env(:forge_deploy_lane_enabled, previous) end)
+
+      Application.put_env(:openagents, :forge_deploy_lane_enabled, true)
+      assert NetworkStatus.projection(refresh: true)["forge"]["state"] == "active"
+
+      Application.put_env(:openagents, :forge_deploy_lane_enabled, false)
+      assert NetworkStatus.projection(refresh: true)["forge"]["state"] == "off"
     end
 
     test "loop metrics: last is newest, median over live deploys only" do

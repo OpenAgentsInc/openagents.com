@@ -1,5 +1,7 @@
 defmodule OpenAgents.Forge.TargetLifecycleTest do
   use OpenAgents.DataCase, async: false
+  import OpenAgents.AccountsFixtures
+
   alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, Repos, Targets}
 
   setup do
@@ -75,6 +77,31 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
              Targets.promote("demo", String.duplicate("a", 40), "operator:test")
 
     assert {:error, :invalid_sha} = Targets.promote("demo", "not-a-sha!", "operator:test")
+  end
+
+  test "promotion resolves a repository name to its UUID storage key" do
+    user = repository_user_fixture("target-storage-owner")
+
+    {:ok, repository, :created} =
+      OpenAgents.Repositories.create_user_repository(
+        user,
+        %{name: "mapped-target"},
+        "target-storage-key"
+      )
+
+    repository =
+      repository
+      |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+      |> OpenAgents.Repo.update!()
+
+    sha = seeded_commit(repository.storage_key)
+    previous_repos = Application.get_env(:openagents, :forge_repos)
+    Application.put_env(:openagents, :forge_repos, [repository.name])
+
+    on_exit(fn -> Application.put_env(:openagents, :forge_repos, previous_repos) end)
+
+    assert {:ok, target} = Targets.promote(repository.name, sha, "operator:test")
+    assert target.sha == sha
   end
 
   test "advance walks the lifecycle, bounds details, and refuses terminal rows", %{sha: sha} do

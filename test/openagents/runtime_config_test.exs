@@ -126,6 +126,42 @@ defmodule OpenAgents.RuntimeConfigTest do
              |> RuntimeConfig.validate()
   end
 
+  test "production admits direct deployment without an automatic rolling provider" do
+    settings =
+      staging_settings()
+      |> Map.merge(%{
+        runtime_environment: :production,
+        staging_gate: 16,
+        production_deploy_enabled: true,
+        build_revision: String.duplicate("a", 40),
+        image_digest: "sha256:" <> String.duplicate("b", 64),
+        forge_enabled: true,
+        forge_deploy_lane_enabled: true,
+        forge_boot_converge_enabled: false,
+        forge_expected_fleet_size: 3,
+        forge_operator_token: "production-operator-token",
+        forge_rolling_provider: nil,
+        forge_wal_dir: "/var/lib/openagents/forge-wal",
+        github_token_encryption_key_id: "production-2026-08",
+        ra_enabled: true,
+        dns_cluster_query: "openagents.fleet.internal",
+        distribution: [
+          enabled: true,
+          node_configured: true,
+          cookie_configured: true,
+          port_min: 9_100,
+          port_max: 9_115
+        ]
+      })
+      |> Map.put(OpenAgentsWeb.Endpoint,
+        url: [host: "openagents.com", port: 443, scheme: "https"],
+        check_origin: ["https://openagents.com"]
+      )
+      |> update_oauth(:redirect_uri, "https://openagents.com/auth/github/callback")
+
+    assert {:ok, _config} = RuntimeConfig.validate(settings)
+  end
+
   test "enabled OpenAI features require the centralized provider secret" do
     settings =
       staging_settings()

@@ -3,6 +3,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+git_common_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
 
 proof_key() {
   git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
@@ -30,7 +31,7 @@ proof_key() {
 
 proof_root() {
   key=$(proof_key) || return $?
-  printf '%s\n' "$repo_root/.git/openagents/relup-proof/$key"
+  printf '%s\n' "$git_common_dir/openagents/relup-proof/$key"
 }
 
 require_proof_artifacts() {

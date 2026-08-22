@@ -26,7 +26,8 @@
 set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-pkg="${RELUP_PROOF_PACKAGE_DIR:-$repo_root/.git/openagents/relup-package}"
+git_common_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
+pkg="${RELUP_PROOF_PACKAGE_DIR:-$git_common_dir/openagents/relup-package}"
 node_name="${RELUP_PROOF_NODE:-openagents-relup-proof@127.0.0.1}"
 
 if [ "${OPENAGENTS_RELUP_PROOF_DISPOSABLE:-}" != "1" ]; then

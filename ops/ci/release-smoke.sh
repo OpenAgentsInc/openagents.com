@@ -29,7 +29,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-if [ ! -d "$repo_root/.git" ]; then
+if [ "$(git -C "$repo_root" rev-parse --is-inside-work-tree 2>/dev/null || true)" != "true" ]; then
   echo "release smoke must run from a Git worktree" >&2
   exit 1
 fi

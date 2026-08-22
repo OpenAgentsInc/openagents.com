@@ -3,6 +3,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+git_common_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
 
 if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=all)" ]; then
   echo "image build requires a clean worktree" >&2
@@ -13,7 +14,7 @@ git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
 source_date_epoch=$(git -C "$repo_root" show -s --format=%ct "$git_sha")
 platform=${OPENAGENTS_IMAGE_PLATFORM:-linux/amd64}
 tag=${1:-"openagents:$git_sha"}
-image_root="$repo_root/.git/openagents/images"
+image_root="$git_common_dir/openagents/images"
 result_path="$image_root/$git_sha.json"
 iid_file=$(mktemp /tmp/openagents-image-iid.XXXXXX)
 

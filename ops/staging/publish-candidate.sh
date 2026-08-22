@@ -288,7 +288,7 @@ ops/staging/generate-sbom.sh \
 release_sha256=$(sha256sum "$candidate_temp/$archive_name" | cut -d ' ' -f 1)
 sbom_sha256=$(sha256sum "$candidate_temp/sbom.cdx.json" | cut -d ' ' -f 1)
 sbom_receipt_sha256=$(sha256sum "$candidate_temp/sbom.cdx.json.receipt" | cut -d ' ' -f 1)
-gate_receipt="$repo_root/.git/openagents/release-gate-receipts/$git_sha.json"
+gate_receipt="$git_common_dir/openagents/release-gate-receipts/$git_sha.json"
 gate_receipt_sha256=$(sha256sum "$gate_receipt" | cut -d ' ' -f 1)
 dockerfile_sha256=$(sha256sum "$repo_root/Dockerfile" | cut -d ' ' -f 1)
 mix_lock_sha256=$(sha256sum "$repo_root/mix.lock" | cut -d ' ' -f 1)

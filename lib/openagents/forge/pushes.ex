@@ -23,6 +23,7 @@ defmodule OpenAgents.Forge.Pushes do
   alias OpenAgents.Analytics
   alias OpenAgents.Forge.{GitHTTP, PushReceipt, Repos, Sync, WAL}
   alias OpenAgents.Repo
+  alias OpenAgents.Repositories.Repository
 
   @doc """
   Handle one `git-receive-pack` request body. Returns `{:ok, response_body}`
@@ -235,7 +236,7 @@ defmodule OpenAgents.Forge.Pushes do
         {:error, :mirror_unconfigured}
 
       url ->
-        path = Repos.bare_path(repo)
+        path = repo |> mirror_storage_key() |> Repos.bare_path()
 
         case Repos.git(path, ["push", "--mirror", url]) do
           {_, 0} ->
@@ -251,10 +252,47 @@ defmodule OpenAgents.Forge.Pushes do
   @doc "The configured mirror URL for a repo, or nil (config `:forge_mirror_urls`)."
   def mirror_url(repo) do
     case Application.get_env(:openagents, :forge_mirror_urls, %{}) do
-      %{} = urls -> clean_mirror_url(urls[repo])
+      %{} = urls -> clean_mirror_url(urls[repo] || urls[repository_name(repo)])
       _ -> nil
     end
   end
+
+  @doc "Resolve a configured repository name or storage key to its bare-cache storage key."
+  def mirror_storage_key(repo) when is_binary(repo) do
+    storage_key_for_storage_key(repo) || storage_key_for_name(repo) || repo
+  rescue
+    _database_unavailable -> repo
+  end
+
+  def mirror_storage_key(repo), do: repo
+
+  defp storage_key_for_storage_key(storage_key) do
+    Repo.one(
+      from repository in Repository,
+        where: repository.storage_key == ^storage_key,
+        select: repository.storage_key
+    )
+  end
+
+  defp storage_key_for_name(name) do
+    Repo.one(
+      from repository in Repository,
+        where: repository.name == ^name,
+        select: repository.storage_key
+    )
+  end
+
+  defp repository_name(storage_key) when is_binary(storage_key) do
+    Repo.one(
+      from repository in Repository,
+        where: repository.storage_key == ^storage_key,
+        select: repository.name
+    )
+  rescue
+    _database_unavailable -> nil
+  end
+
+  defp repository_name(_storage_key), do: nil
 
   defp clean_mirror_url(nil), do: nil
 

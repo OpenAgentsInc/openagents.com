@@ -141,7 +141,7 @@ defmodule OpenAgents.Forge.MirrorWatch do
   end
 
   defp forge_main(repo) do
-    case Repos.refs(repo) do
+    case repo |> Pushes.mirror_storage_key() |> Repos.refs() do
       %{"refs/heads/main" => sha} when is_binary(sha) -> {:ok, sha}
       _other -> {:error, :no_main}
     end

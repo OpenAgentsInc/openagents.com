@@ -10,6 +10,7 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
 
   alias OpenAgents.Forge.{MirrorWatch, Repos}
   alias OpenAgents.Repo
+  alias OpenAgents.Repositories.{Namespace, Repository}
 
   setup do
     base = Path.join(System.tmp_dir!(), "mirror-#{System.unique_integer([:positive])}")
@@ -100,6 +101,46 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
     seed_commit!(path, "two")
     _state = MirrorWatch.check_all(state)
     assert MirrorWatch.state()["state"] == "current"
+  end
+
+  test "a logical repository name mirrors its canonical storage key", %{mirror: mirror} do
+    namespace =
+      Repo.insert!(%Namespace{
+        provider: "github",
+        provider_account_id: System.unique_integer([:positive]),
+        slug: "MirrorTest",
+        slug_key: "mirrortest",
+        kind: "organization",
+        provider_refreshed_at: DateTime.utc_now(),
+        state: "active"
+      })
+
+    storage_key = Ecto.UUID.generate()
+
+    Repo.insert!(%Repository{
+      namespace_id: namespace.id,
+      owner: namespace.slug,
+      owner_key: namespace.slug_key,
+      name: "mapped-repo",
+      name_key: "mapped-repo",
+      visibility: "public",
+      default_branch: "main",
+      lifecycle_state: "ready",
+      provisioning_kind: "empty",
+      storage_key: storage_key,
+      ready_at: DateTime.utc_now()
+    })
+
+    Application.put_env(:openagents, :forge_mirror_urls, %{"mapped-repo" => mirror})
+    path = Repos.ensure_repo!(storage_key)
+    seed_commit!(path, "canonical")
+
+    assert OpenAgents.Forge.Pushes.mirror_storage_key("mapped-repo") == storage_key
+    assert :ok = OpenAgents.Forge.Pushes.mirror_now("mapped-repo")
+
+    {forge_main, 0} = Repos.git(path, ["rev-parse", "refs/heads/main"])
+    {mirror_main, 0} = System.cmd("git", ["--git-dir", mirror, "rev-parse", "refs/heads/main"])
+    assert String.trim(forge_main) == String.trim(mirror_main)
   end
 
   test "sustained lag records ONE degraded incident per episode" do

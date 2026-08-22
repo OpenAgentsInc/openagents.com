@@ -94,7 +94,13 @@ defmodule OpenAgentsWeb.IssueController do
         "issue_number" => issue_number
       }) do
     repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
-    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
+
+    issue =
+      Issues.get_issue_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
+
     render(conn, :show, issue: issue, owner: owner, repo: repo)
   rescue
     Ecto.NoResultsError ->
@@ -112,7 +118,12 @@ defmodule OpenAgentsWeb.IssueController do
         } = params
       ) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
-    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
+
+    issue =
+      Issues.get_issue_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
 
     case Issues.update_issue(issue, params, conn.assigns.current_user) do
       {:ok, %Issue{} = issue} ->

@@ -10,7 +10,13 @@ defmodule OpenAgentsWeb.CommentController do
         "repo" => repo,
         "issue_number" => issue_number
       }) do
-    issue = Issues.get_issue_by_path!(owner, repo, String.to_integer(issue_number))
+    issue =
+      Issues.get_issue_by_path!(
+        owner,
+        repo,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
+
     comments = Issues.list_comments(issue)
     render(conn, :index, comments: comments)
   rescue
@@ -29,7 +35,12 @@ defmodule OpenAgentsWeb.CommentController do
         } = params
       ) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
-    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
+
+    issue =
+      Issues.get_issue_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
 
     case Issues.create_comment(issue, params, conn.assigns.current_user) do
       {:ok, %Comment{} = comment} ->
@@ -50,7 +61,9 @@ defmodule OpenAgentsWeb.CommentController do
   end
 
   def show(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
-    comment = Issues.get_comment_by_path!(owner, repo, String.to_integer(id))
+    comment =
+      Issues.get_comment_by_path!(owner, repo, OpenAgentsWeb.ControllerHelpers.integer_param!(id))
+
     render(conn, :show, comment: comment)
   rescue
     Ecto.NoResultsError ->
@@ -61,7 +74,7 @@ defmodule OpenAgentsWeb.CommentController do
 
   def update(conn, %{"owner" => owner, "repo" => repo, "id" => id} = params) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
-    comment = Issues.get_comment!(repository, String.to_integer(id))
+    comment = Issues.get_comment!(repository, OpenAgentsWeb.ControllerHelpers.integer_param!(id))
 
     case Issues.update_comment(comment, params) do
       {:ok, %Comment{} = comment} ->
@@ -81,7 +94,7 @@ defmodule OpenAgentsWeb.CommentController do
 
   def delete(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
-    comment = Issues.get_comment!(repository, String.to_integer(id))
+    comment = Issues.get_comment!(repository, OpenAgentsWeb.ControllerHelpers.integer_param!(id))
 
     case Issues.delete_comment(comment) do
       {:ok, :ok} ->

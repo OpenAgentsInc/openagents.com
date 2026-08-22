@@ -37,7 +37,11 @@ defmodule OpenAgentsWeb.MilestoneController do
         "milestone_number" => milestone_number
       }) do
     milestone =
-      Milestones.get_milestone_by_path!(owner, repo, String.to_integer(milestone_number))
+      Milestones.get_milestone_by_path!(
+        owner,
+        repo,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(milestone_number)
+      )
 
     render(conn, :show, milestone: milestone, owner: owner, repo: repo)
   rescue
@@ -58,7 +62,10 @@ defmodule OpenAgentsWeb.MilestoneController do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
 
     milestone =
-      Milestones.get_milestone_by_number!(repository, String.to_integer(milestone_number))
+      Milestones.get_milestone_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(milestone_number)
+      )
 
     case Milestones.update_milestone(milestone, params) do
       {:ok, %Milestone{} = milestone} ->
@@ -84,7 +91,10 @@ defmodule OpenAgentsWeb.MilestoneController do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
 
     milestone =
-      Milestones.get_milestone_by_number!(repository, String.to_integer(milestone_number))
+      Milestones.get_milestone_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(milestone_number)
+      )
 
     case Milestones.delete_milestone(milestone) do
       {:ok, %Milestone{}} ->

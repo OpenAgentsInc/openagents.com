@@ -5,7 +5,13 @@ defmodule OpenAgentsWeb.IssueLabelController do
   alias OpenAgents.Repositories
 
   def index(conn, %{"owner" => owner, "repo" => repo, "issue_number" => issue_number}) do
-    issue = Issues.get_issue_by_path!(owner, repo, String.to_integer(issue_number))
+    issue =
+      Issues.get_issue_by_path!(
+        owner,
+        repo,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
+
     json(conn, %{labels: issue.labels || []})
   rescue
     Ecto.NoResultsError ->
@@ -23,7 +29,13 @@ defmodule OpenAgentsWeb.IssueLabelController do
         } = params
       ) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
-    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
+
+    issue =
+      Issues.get_issue_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
+
     names = params["labels"] || []
 
     case Issues.add_labels(issue, names) do
@@ -49,7 +61,13 @@ defmodule OpenAgentsWeb.IssueLabelController do
         "name" => name
       }) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
-    issue = Issues.get_issue_by_number!(repository, String.to_integer(issue_number))
+
+    issue =
+      Issues.get_issue_by_number!(
+        repository,
+        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+      )
+
     decoded = URI.decode(name)
 
     if Enum.any?(issue.labels || [], &(&1["name"] == decoded)) do

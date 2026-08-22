@@ -264,17 +264,14 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
             />
 
             <.prompt_input_toolbar class="chat-placeholder-composer__toolbar">
-              <div class="flex min-w-0 items-center gap-2">
-                <.input
-                  field={@form[:reasoning]}
-                  type="select"
-                  options={@reasoning_options}
-                  aria-label="Reasoning effort"
-                  class="chat-placeholder-composer__reasoning"
-                  disabled={@streaming?}
-                />
-                <span class="text-foreground/70 text-xs">Enter to send · Shift+Enter for a new line</span>
-              </div>
+              <.input
+                field={@form[:reasoning]}
+                type="select"
+                options={@reasoning_options}
+                aria-label="Reasoning effort"
+                class="chat-placeholder-composer__reasoning"
+                disabled={@streaming?}
+              />
               <.prompt_input_tools class="ml-auto">
                 <.prompt_input_submit
                   id="chat-placeholder-submit"

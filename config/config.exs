@@ -252,6 +252,7 @@ config :openagents,
   forge_hot_load_allowlist: [
     "OpenAgentsWeb.",
     "OpenAgents.Forge.Browse",
+    "OpenAgents.Forge.MirrorWatch",
     "OpenAgents.Changelog",
     "OpenAgents.Scratch.",
     "OpenAgents.BuildInfo"

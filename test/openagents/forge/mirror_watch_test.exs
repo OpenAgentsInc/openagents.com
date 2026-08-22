@@ -88,6 +88,11 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
 
   defp fresh_state, do: %{lagging_since: %{}, incident_reported: MapSet.new()}
 
+  test "the watcher checks mirror freshness immediately after it starts" do
+    assert {:ok, _state} = MirrorWatch.init([])
+    assert_receive :tick
+  end
+
   test "a behind mirror is retried immediately and becomes current", %{path: path, mirror: mirror} do
     # Forge has a commit the mirror lacks → behind → check retries → healed.
     state = MirrorWatch.check_all(fresh_state())

@@ -8,8 +8,8 @@ for allowlisted code changes. Relup and rolling replacement remain fallbacks.
 This is the operator procedure for the fast deployment lane: push to the owned
 forge, promote, and watch a code-only change go live across the fleet in
 seconds without an image build. It also describes the production relup path,
-the independent GitHub mirror repair worker, and the remaining direct-load
-enablement work.
+the independent GitHub mirror repair worker, and the production activation
+evidence.
 
 ## Verified state of the lanes
 
@@ -18,7 +18,7 @@ enablement work.
 | Direct BEAM transaction on production | Works | `fa4b792` loaded across three nodes via the transaction protocol; `live` target and deployment receipt recorded; uptimes unbroken |
 | Automated push → promote → build → hot-load loop | Active | The web role runs `Builder`, `HotLoader`, and `Janitor`; every fleet node runs the pinned builder sidecar; `/status` reports the lane as **Active** and exposes target, build, deploy, and timing receipts |
 | General relup lane | Active in production | `RelupPackage` binds source and target revisions, release versions, state schemas, target system, and artifact digests before `RelupDeployment` upgrades one node at a time. Production upgraded `0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds without restarting the BEAM. |
-| Forge-to-GitHub mirror | Active in production | The production mirror uses a write-enabled deploy key. `MirrorWatch` runs independently of the deploy lane, repairs drift every five minutes, and reports freshness. Forge and GitHub exposed 10 identical refs after the production drill. |
+| Forge-to-GitHub mirror | Active in production | The production mirror uses a write-enabled deploy key. `MirrorWatch` checks immediately at process startup, repairs drift every five minutes, and reports freshness. Forge and GitHub exposed 10 identical refs after the production drill. |
 | Rolling image replacement | Available for structural changes | Production requires an operator-directed rollout when the classifier returns `needs_rolling_replace`; staging can use the configured GCP provider |
 
 Two consequences worth stating plainly:
@@ -90,8 +90,9 @@ The production fleet uses this configuration:
    regardless of this flag. Boot convergence is already proven on this fleet.
 5. **Allowlist**: no change needed. Baked configuration already admits the
    whole `OpenAgentsWeb.` layer plus `OpenAgents.Changelog`,
-   `OpenAgents.Forge.Browse`, `OpenAgents.BuildInfo`, and the scratch prefix,
-   with boot-time classification self-tests.
+   `OpenAgents.Forge.Browse`, `OpenAgents.Forge.MirrorWatch`,
+   `OpenAgents.BuildInfo`, and the scratch prefix, with boot-time
+   classification self-tests.
 6. **Optional: Turn the mirror on** by configuring a mirror URL for
    `openagents.com`. This only affects the public status projection and GitHub
    mirroring, never deploys.
@@ -118,6 +119,11 @@ The first build after replacing the builder image can take minutes while it
 seeds the persistent cache. Subsequent web-layer diffs should land in seconds.
 Receipts measure pipeline time from push acknowledgment to live, not operator
 reaction time.
+
+Keep the application version unchanged for direct BEAM transactions. Use the
+next patch version only when a compatible full-release package needs a new
+version. Reserve a minor-version change for a deliberate compatibility or
+feature boundary.
 
 If classification returns `needs_rolling_replace`, keep that receipt and use
 this fallback order:
@@ -209,9 +215,37 @@ the URL or instance metadata.
 `Pushes.mirror_storage_key/1` resolves the logical repository name to its
 canonical storage UUID before reading refs. This distinction matters for
 migrated repositories whose display name and storage key differ.
-`MirrorWatch` runs even when `OPENAGENTS_FEATURE_FORGE_DEPLOY=false`, compares
-the canonical `main` ref every five minutes, retries a full mirror push on
-drift, and publishes `current` or `lagging` status.
+`MirrorWatch` runs even when `OPENAGENTS_FEATURE_FORGE_DEPLOY=false`. It checks
+the canonical `main` ref immediately when the process starts and every five
+minutes afterward, retries a full mirror push on drift, and publishes
+`current` or `lagging` status.
+
+## Production activation evidence
+
+The 2026-08-22 activation established this baseline:
+
+- The exact-SHA release gate passed all 13 stages in 163 seconds, including
+  2,040 tests, direct transaction, relup, rolling replacement, infrastructure
+  contracts, and disposable PostgreSQL release smoke tests.
+- All three production nodes run revision `4bf3f0c` from immutable application
+  digest `sha256:345220949cf29ae652879624df45db2b871926418bd3bb6f8d085fc9f9e3d8ab`
+  with builder digest
+  `sha256:a55ba9a80b781d953c24a254fc755541dbb954297ef92f81c982a58d13aafa9f`.
+- The one-time structural baseline built in about 127 seconds and settled as
+  `live` with a 542-module receipt. Later compatible changes use that manifest
+  for direct classification.
+- Restarting a node reported boot convergence `ready: true`, reason
+  `image_matches_live`, and the exact baseline SHA before admission.
+- `/api/status` reported the Forge lane as `active`. The configured GitHub
+  mirror accepted `git ls-remote` from the application identity and reported
+  `current` after its freshness check.
+- Production's small boot partitions required removing obsolete build
+  containers before pruning immutable images. The startup metadata and the
+  repository-owned fleet template now remove those retired containers and
+  replace the disposable builder sidecar before pulling a new builder image.
+
+The activation did not change the application version from `0.2.0`. Do not
+increment a release version merely to record a source commit.
 
 After a rollout or storage repair, force convergence before validating the
 mirror:

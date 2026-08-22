@@ -31,7 +31,7 @@ defmodule OpenAgents.Forge.MirrorWatch do
 
   @impl true
   def init(_opts) do
-    schedule()
+    send(self(), :tick)
     {:ok, %{lagging_since: %{}, incident_reported: MapSet.new()}}
   end
 

@@ -164,6 +164,7 @@ docker-credential-gcr configure-docker --registries=${region}-docker.pkg.dev
 
 # Fleet images are immutable and recoverable from Artifact Registry. Reclaim
 # only images that no running container uses before pulling the next candidate.
+docker rm --force sarah-builder sarah-breakglass 2>/dev/null || true
 docker image prune --all --force
 
 cloud_sql_proxy_image=gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:825d5e4ce70d38bd0006c9eea15a6a2e2983e87b31ac6924d33e2dba56eafc9f
@@ -239,8 +240,11 @@ if [ -n "$builder_image" ] || [ -n "$builder_digest" ]; then
     exit 1
   fi
   append_secret OPENAGENTS_FORGE_OPERATOR_TOKEN openagents-staging-forge-operator-token /run/openagents/builder.env
-  docker pull "$builder_image"
+  # The small COS boot disk cannot retain two builder images. The running
+  # application remains available while this disposable sidecar is replaced.
   docker rm --force openagents-builder 2>/dev/null || true
+  docker image prune --all --force
+  docker pull "$builder_image"
   docker run --detach \
     --name openagents-builder \
     --network host \

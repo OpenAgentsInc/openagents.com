@@ -251,10 +251,11 @@ whether those settings passed; it never prints their values.
 
 Setting `OPENAGENTS_FORGE_MIRROR_URLS_JSON` turns on one-way mirroring: every
 accepted forge push is followed by a best-effort `git push --mirror` to the
-configured URL, and `OpenAgents.Forge.MirrorWatch` compares refs every five
-minutes, retries drift, and raises one `forge_mirror_lagging` incident per lag
-episode past fifteen minutes. Mirror freshness appears on the public status
-page as `current` or `lagging`; with no URLs configured it reads `off`.
+configured URL. `OpenAgents.Forge.MirrorWatch` compares refs immediately after
+process startup and every five minutes afterward, retries drift, and raises
+one `forge_mirror_lagging` incident per lag episode past fifteen minutes.
+Mirror freshness appears on the public status page as `current` or `lagging`;
+with no URLs configured it reads `off`.
 
 Two rules are load-bearing:
 

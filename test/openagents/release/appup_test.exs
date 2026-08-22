@@ -13,6 +13,8 @@ defmodule OpenAgents.Release.AppupTest do
   alias OpenAgents.Release.Appup
 
   @appup_file Path.expand("../../../rel/openagents.appup.exs", __DIR__)
+  @dockerfile Path.expand("../../../Dockerfile", __DIR__)
+  @version_file Path.expand("../../../VERSION", __DIR__)
   @environment [
     "OPENAGENTS_RELEASE_VSN",
     "RELUP_FROM",
@@ -39,8 +41,13 @@ defmodule OpenAgents.Release.AppupTest do
   test "plain releases keep the appup and project versions aligned" do
     Enum.each(@environment, &System.delete_env/1)
 
+    assert String.trim(File.read!(@version_file)) == Mix.Project.config()[:version]
+
     assert {String.to_charlist(Mix.Project.config()[:version]), [], []} ==
              @appup_file |> Code.eval_file() |> elem(0)
+
+    assert File.read!(@dockerfile) =~ "ARG OPENAGENTS_RELEASE_VSN\n"
+    refute File.read!(@dockerfile) =~ "ARG OPENAGENTS_RELEASE_VSN="
   end
 
   test "covers a changed module the fixed proof set never named" do

@@ -47,6 +47,7 @@ fi
 git_sha=$(git rev-parse --verify HEAD)
 origin_main=$(git rev-parse --verify refs/remotes/origin/main)
 source_date_epoch=$(git show -s --format=%ct "$git_sha")
+release_version=$(tr -d '\n' <"$repo_root/VERSION")
 
 if [ "$git_sha" != "$origin_main" ]; then
   echo "candidate must equal the locally fetched origin/main commit" >&2
@@ -184,6 +185,7 @@ else
   docker build \
     --platform "$platform" \
     --build-arg "OPENAGENTS_BUILD_REVISION=$git_sha" \
+    --build-arg "OPENAGENTS_RELEASE_VSN=$release_version" \
     --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
     --iidfile "$builder_iid" \
     --label "org.opencontainers.image.revision=$git_sha" \
@@ -274,8 +276,13 @@ case "$archive_name" in
   *) echo "builder image does not contain one release archive" >&2; exit 1 ;;
 esac
 
-release_version=${archive_name#openagents-}
-release_version=${release_version%.tar.gz}
+archive_version=${archive_name#openagents-}
+archive_version=${archive_version%.tar.gz}
+
+if [ "$archive_version" != "$release_version" ]; then
+  echo "builder archive version does not match VERSION" >&2
+  exit 1
+fi
 builder_container=$(docker create "$builder_image")
 docker cp "$builder_container:/app/_build/prod/$archive_name" "$candidate_temp/$archive_name" >/dev/null
 docker rm "$builder_container" >/dev/null

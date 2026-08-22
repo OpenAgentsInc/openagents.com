@@ -12,6 +12,7 @@ fi
 
 git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
 source_date_epoch=$(git -C "$repo_root" show -s --format=%ct "$git_sha")
+release_version=$(tr -d '\n' <"$repo_root/VERSION")
 platform=${OPENAGENTS_IMAGE_PLATFORM:-linux/amd64}
 tag=${1:-"openagents:$git_sha"}
 image_root="$git_common_dir/openagents/images"
@@ -34,6 +35,7 @@ fi
 docker build \
   --platform "$platform" \
   --build-arg "OPENAGENTS_BUILD_REVISION=$git_sha" \
+  --build-arg "OPENAGENTS_RELEASE_VSN=$release_version" \
   --build-arg "SOURCE_DATE_EPOCH=$source_date_epoch" \
   --iidfile "$iid_file" \
   --label "org.opencontainers.image.revision=$git_sha" \

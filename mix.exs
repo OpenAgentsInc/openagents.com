@@ -51,7 +51,14 @@ defmodule OpenAgents.MixProject do
   end
 
   defp release_version do
-    System.get_env("OPENAGENTS_RELEASE_VSN", "0.2.3")
+    System.get_env("OPENAGENTS_RELEASE_VSN", default_release_version())
+  end
+
+  defp default_release_version do
+    __DIR__
+    |> Path.join("VERSION")
+    |> File.read!()
+    |> String.trim()
   end
 
   # Hot-upgrade-capable release: castle/forecastle add appup + relup generation

@@ -55,14 +55,15 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
   end
 
   @doc """
-  GitHub's two states, and nothing invented on top of them.
+  GitHub's state iconography, and nothing invented on top of it.
 
-  `not_planned` is the one close reason with a distinct reading, so it takes
-  the cancelled glyph; every other close is a completion.
+  An open issue takes the green circle-dot. `not_planned` is the one close
+  reason with a distinct reading, so it keeps the cancelled glyph; every other
+  close is the purple check-circle.
   """
   def category(%{state: "closed", state_reason: "not_planned"}), do: :canceled
   def category(%{state: "closed"}), do: :completed
-  def category(_issue), do: :unstarted
+  def category(_issue), do: :open
 
   @doc "The word beside the glyph, for assistive technology and for a label."
   def status_label(%{state: "closed", state_reason: "not_planned"}), do: "Closed as not planned"

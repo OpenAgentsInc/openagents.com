@@ -27,12 +27,15 @@ defmodule OpenAgentsWeb.IconsTest do
     test "is present and complete" do
       # 755 vendored glyphs plus the brand marks, which live apart because a
       # logo cannot come from a generic set and because the vendoring task
-      # clears priv/icons on every run.
-      {brand, vendored} = Enum.split_with(Icons.names(), &String.starts_with?(&1, "brand-"))
+      # clears priv/icons on every run, plus the octicon state glyphs in
+      # priv/octicons, which are governed by their own pinned upstream.
+      {brand, rest} = Enum.split_with(Icons.names(), &String.starts_with?(&1, "brand-"))
+      {octicons, vendored} = Enum.split_with(rest, &String.starts_with?(&1, "octicon-"))
 
       assert length(vendored) == 755
       assert brand != []
       assert "brand-github" in brand
+      assert octicons == ["octicon-issue-closed", "octicon-issue-opened"]
       assert length(Icons.names()) == Icons.count()
     end
 

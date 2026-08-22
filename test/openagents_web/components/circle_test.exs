@@ -93,7 +93,7 @@ defmodule OpenAgentsWeb.UI.CircleTest do
     end
 
     test "every category resolves to a shape" do
-      for category <- [:triage, :backlog, :unstarted, :started, :completed, :canceled] do
+      for category <- [:open, :triage, :backlog, :unstarted, :started, :completed, :canceled] do
         rendered = status(category: category, label: "Any", progress: 50)
 
         assert query(rendered, ~s{.issue-status[data-category="#{category}"]}) != []
@@ -214,7 +214,7 @@ defmodule OpenAgentsWeb.UI.CircleTest do
     # looks like.
     test "GitHub's two states, plus the one close reason that reads differently" do
       for {state, reason, category, label} <- [
-            {"open", nil, "unstarted", "Open"},
+            {"open", nil, "open", "Open"},
             {"closed", "completed", "completed", "Closed"},
             {"closed", nil, "completed", "Closed"},
             {"closed", "not_planned", "canceled", "Closed as not planned"},

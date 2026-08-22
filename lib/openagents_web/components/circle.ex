@@ -46,7 +46,7 @@ defmodule OpenAgentsWeb.UI.Circle do
   alias OpenAgentsWeb.UI
   alias Phoenix.LiveView.JS
 
-  @categories [:triage, :backlog, :unstarted, :started, :completed, :canceled]
+  @categories [:open, :triage, :backlog, :unstarted, :started, :completed, :canceled]
   @priorities [:none, :low, :medium, :high, :urgent]
   @tones [:neutral, :primary, :info, :success, :warning, :danger]
   @presences [:none, :online, :away, :offline]
@@ -1261,7 +1261,7 @@ defmodule OpenAgentsWeb.UI.Circle do
     do: :canceled
 
   defp state_category("closed", _reason), do: :completed
-  defp state_category(_state, _reason), do: :unstarted
+  defp state_category(_state, _reason), do: :open
 
   defp state_label("closed", "not_planned"), do: "Closed as not planned"
   defp state_label("closed", "duplicate"), do: "Closed as duplicate"
@@ -1272,10 +1272,15 @@ defmodule OpenAgentsWeb.UI.Circle do
   # opposing arrows in a disc, which `compare-arrows` says exactly; the dashed
   # gear it uses for backlog has no equivalent and `circle-dashed` carries the
   # same "not yet real" reading without vendoring a glyph for one state.
+  # GitHub's issue-state glyphs. Open is the green circle-dot and a completed
+  # close is the purple check-circle; the other categories keep the triage
+  # glyphs because GitHub itself has no opinion about them.
+  defp category_icon(:open), do: "octicon-issue-opened"
   defp category_icon(:triage), do: "compare-arrows"
   defp category_icon(:backlog), do: "circle-dashed"
   defp category_icon(:unstarted), do: "empty-circle"
-  defp category_icon(:completed), do: "check-circle-filled"
+  # :started draws the conic-gradient arc in CSS, never a glyph.
+  defp category_icon(:completed), do: "octicon-issue-closed"
   defp category_icon(:canceled), do: "x-circle-filled"
 
   defp priority_name(:none), do: "No priority"

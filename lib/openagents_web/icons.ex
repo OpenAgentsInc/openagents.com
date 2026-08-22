@@ -18,8 +18,12 @@ defmodule OpenAgentsWeb.Icons do
   # generic icon library. They are namespaced `brand-*`. See priv/brand/README.md.
   @brand_dir Path.join([__DIR__, "..", "..", "priv", "brand"]) |> Path.expand()
 
+  # Issue-state glyphs from Primer Octicons. See priv/octicons/README.md.
+  @octicons_dir Path.join([__DIR__, "..", "..", "priv", "octicons"]) |> Path.expand()
+
   @paths (@icons_dir |> Path.join("*.svg") |> Path.wildcard()) ++
-           (@brand_dir |> Path.join("*.svg") |> Path.wildcard())
+           (@brand_dir |> Path.join("*.svg") |> Path.wildcard()) ++
+           (@octicons_dir |> Path.join("*.svg") |> Path.wildcard())
 
   for path <- @paths do
     @external_resource path
@@ -27,7 +31,14 @@ defmodule OpenAgentsWeb.Icons do
 
   @icons Map.new(@paths, fn path ->
            base = Path.basename(path, ".svg")
-           name = if Path.dirname(path) == @brand_dir, do: "brand-" <> base, else: base
+
+           name =
+             cond do
+               Path.dirname(path) == @brand_dir -> "brand-" <> base
+               Path.dirname(path) == @octicons_dir -> "octicon-" <> base
+               true -> base
+             end
+
            contents = path |> File.read!() |> String.trim()
 
            view_box =

@@ -49,6 +49,24 @@ identify the service reached by an action. Render it through `icon/1` with a
 `brand-*` name, and follow the attribution and trademark rules in
 `priv/brand/README.md`.
 
+## Octicons
+
+Issue-state glyphs live in `priv/octicons`, vendored verbatim from
+[Primer Octicons](https://github.com/primer/octicons) (MIT) at the commit
+recorded in `priv/octicons/README.md`. They render through `icon/1` under
+`octicon-*` names.
+
+OpenAgents is a GitHub-compatible forge, so issue state is domain vocabulary:
+open takes `octicon-issue-opened` and a completed close takes
+`octicon-issue-closed`. Neither governed tier carries those concepts — the Apps
+SDK set has no issue glyph, and Heroicons has no circle-dot. State color comes
+from palette tokens at the call site (`--success` for open, `--done` for
+closed), never from the file.
+
+Adding or upgrading an octicon follows the same rule as every other tier:
+copy the upstream file at the pinned commit, update the README's commit, date,
+and count, and run `mix precommit`.
+
 ## Accessibility
 
 A glyph beside visible words is decorative and needs no label. Put

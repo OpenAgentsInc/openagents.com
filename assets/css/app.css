@@ -106,6 +106,7 @@
   --accent-bright: #828fff;
   --info: #4ea7fc;
   --success: #27a644;
+  --done: #ab7df8; /* GitHub's closed-as-completed purple */
   --warning: #d4b144;
   --danger: #eb5757;
 
@@ -176,6 +177,7 @@
      hover/visited state rather than the resting one. */
   --accent: #5e6ad2;
   --accent-bright: #4a55b8;
+  --done: #8250df; /* GitHub's light-theme closed-as-completed purple */
 
   --text-body: #3c4149;
   --text-muted: #62666d;

@@ -5679,9 +5679,14 @@
     --issue-tint: var(--info);
   }
 
+  .issue-status[data-category="open"],
+  .issue-group[data-category="open"] {
+    --issue-tint: var(--success);
+  }
+
   .issue-status[data-category="completed"],
   .issue-group[data-category="completed"] {
-    --issue-tint: var(--success);
+    --issue-tint: var(--done);
   }
 
   .issue-status {

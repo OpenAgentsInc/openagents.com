@@ -596,7 +596,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   defp close_icon(%{state_reason: reason}) when reason in ["not_planned", "duplicate"],
     do: "x-circle-filled"
 
-  defp close_icon(_issue), do: "check-circle-filled"
+  defp close_icon(_issue), do: "octicon-issue-closed"
 
   defp close_tone(%{state_reason: reason}) when reason in ["not_planned", "duplicate"],
     do: :danger

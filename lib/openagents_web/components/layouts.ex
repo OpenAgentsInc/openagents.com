@@ -702,10 +702,7 @@ defmodule OpenAgentsWeb.Layouts do
   slot :extra, doc: "rows contributed by the current page"
 
   defp sidebar(assigns) do
-    assigns =
-      assigns
-      |> assign(:agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
-      |> assign(:repository_path, assigns.current_scope.sidebar_repository_path)
+    assigns = assign(assigns, :agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
 
     ~H"""
     <aside id="sidebar" class="sidebar" aria-hidden="true">
@@ -719,16 +716,18 @@ defmodule OpenAgentsWeb.Layouts do
           icon="branch"
           patchable={false}
         />
+        <%!-- Global, and unconditional. These rows used to address whichever
+        repository the current page named, falling back to the first repository
+        in the reader's workspace alphabetically, so the same row led somewhere
+        different depending on where it was clicked from — and vanished
+        entirely for an account with no membership. A row in the app's own
+        navigation has to mean one thing everywhere, so it addresses everything
+        the reader can see. The repository-scoped lists keep their place in the
+        repository's own tabs, which is where a repository-scoped nav
+        belongs. --%>
+        <Layouts.sidebar_link path={~p"/issues"} label="Issues" icon="bug" patchable={false} />
         <Layouts.sidebar_link
-          :if={@repository_path}
-          path={@repository_path <> "/issues"}
-          label="Issues"
-          icon="bug"
-          patchable={false}
-        />
-        <Layouts.sidebar_link
-          :if={@repository_path}
-          path={@repository_path <> "/projects"}
+          path={~p"/projects"}
           label="Projects"
           icon="folder"
           patchable={false}

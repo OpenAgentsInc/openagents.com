@@ -34,6 +34,75 @@ defmodule OpenAgents.Projects do
     )
   end
 
+  @projects_per_page 25
+
+  @doc "How many projects one workspace-wide page shows."
+  def per_page, do: @projects_per_page
+
+  @doc """
+  One page of the projects `user` can read, across every repository, with the
+  unpaginated total.
+
+  Authorization is the same predicate the repository surfaces compose,
+  `Repositories.readable_by/2`, joined in as a subquery rather than restated
+  here, so a project in a repository the reader has no membership in cannot
+  appear.
+
+  Supported options: `:state`, `:owner`, and `:page`. Rows come back with their
+  repository preloaded, because a project's board lives at a repository path.
+  """
+  def list_visible_projects_page(%User{} = user, opts \\ []) when is_list(opts) do
+    page = max(parse_page(opts[:page]), 1)
+    query = visible_project_query(user, opts)
+
+    total = Repo.aggregate(query, :count)
+
+    projects =
+      query
+      |> order_by([project], desc: project.inserted_at, desc: project.id)
+      |> limit(@projects_per_page)
+      |> offset(^((page - 1) * @projects_per_page))
+      |> Repo.all()
+      |> Repo.preload(repository: :namespace)
+
+    {projects, total}
+  end
+
+  @doc "How many projects `user` can read across every repository, filtered."
+  def count_visible_projects(%User{} = user, opts \\ []) when is_list(opts),
+    do: user |> visible_project_query(opts) |> Repo.aggregate(:count)
+
+  @doc "Clamps a reader-supplied page number into the bounded range."
+  def parse_page(page), do: OpenAgents.Issues.parse_page(page)
+
+  defp visible_project_query(user, opts) do
+    readable = from(repository in Repositories.readable_by(Repository, user), select: repository)
+
+    from(project in Project,
+      join: repository in subquery(readable),
+      on: repository.id == project.repository_id
+    )
+    |> maybe_filter_project_state(Keyword.get(opts, :state, "open"))
+    |> maybe_filter_project_owner(Keyword.get(opts, :owner))
+  end
+
+  defp maybe_filter_project_state(query, "all"), do: query
+  defp maybe_filter_project_state(query, state), do: where(query, state: ^state)
+
+  # As with issues, a project created here carries a durable owner link while
+  # one that arrived with only a login carries the login.
+  defp maybe_filter_project_owner(query, nil), do: query
+
+  defp maybe_filter_project_owner(query, %User{id: user_id, github_login: login}) do
+    login_key = String.downcase(login)
+
+    where(
+      query,
+      [project],
+      project.owner_user_id == ^user_id or fragment("lower(?)", project.owner) == ^login_key
+    )
+  end
+
   def get_project!(id), do: get_project!(Repositories.initial_repository!(), id)
 
   def get_project!(%Repository{id: repository_id}, id) do

@@ -68,11 +68,67 @@ defmodule OpenAgents.Issues do
 
   def parse_page(_page), do: 1
 
+  @doc """
+  One page of the issues `user` can read, across every repository, with the
+  unpaginated total.
+
+  The workspace-wide counterpart to `list_issues_page/2`. Where that one is
+  handed a repository the caller has already authorized, this one authorizes
+  as it reads: the issue table is joined to `Repositories.readable_by/2`, the
+  single predicate every repository surface composes, so an issue in a private
+  repository the reader has no membership in cannot reach the query's result
+  no matter what the options say.
+
+  Supported options: `:state`, `:assignee`, `:author`, `:q`, and `:page`.
+  Rows come back with their repository preloaded, because a cross-repository
+  list has to say which repository each row belongs to.
+  """
+  def list_visible_issues_page(%User{} = user, opts \\ []) when is_list(opts) do
+    page = max(parse_page(opts[:page]), 1)
+    query = visible_issue_query(user, opts)
+
+    total = Repo.aggregate(query, :count)
+
+    issues =
+      query
+      |> order_by([issue], desc: issue.inserted_at, desc: issue.id)
+      |> limit(@issues_per_page)
+      |> offset(^((page - 1) * @issues_per_page))
+      |> Repo.all()
+      |> Repo.preload(repository: :namespace)
+
+    {issues, total}
+  end
+
+  @doc "How many issues `user` can read across every repository, filtered."
+  def count_visible_issues(%User{} = user, opts \\ []) when is_list(opts),
+    do: user |> visible_issue_query(opts) |> Repo.aggregate(:count)
+
+  # The readable-repository set arrives as a subquery rather than as extra
+  # joins on this query, so the membership left join keeps its own bindings and
+  # the filter chain below still sees the issue as binding zero.
+  defp visible_issue_query(user, opts) do
+    readable = from(repository in Repositories.readable_by(Repository, user), select: repository)
+
+    from(issue in Issue,
+      as: :issue,
+      join: repository in subquery(readable),
+      on: repository.id == issue.repository_id
+    )
+    |> apply_issue_filters(opts)
+    |> maybe_filter_author(Keyword.get(opts, :author))
+  end
+
   # Every list surface shares one filter chain so a page, a count, and an
   # unpaginated read can never disagree about what matches.
   defp issue_query(repository_id, opts) do
     from(issue in Issue, as: :issue)
     |> where([issue], issue.repository_id == ^repository_id)
+    |> apply_issue_filters(opts)
+  end
+
+  defp apply_issue_filters(query, opts) do
+    query
     |> maybe_filter_state(Keyword.get(opts, :state, "open"))
     |> maybe_filter_label(Keyword.get(opts, :label))
     |> maybe_filter_assignee(Keyword.get(opts, :assignee))
@@ -621,6 +677,23 @@ defmodule OpenAgents.Issues do
         issue.assignees,
         ^login_key
       )
+    )
+  end
+
+  # "Opened by me" has two honest answers. An issue filed here carries a
+  # durable author link; an issue imported from GitHub carries only the login
+  # in its user snapshot, because the account that opened it may not exist
+  # here. Either one is the reader having opened it, so the filter takes both.
+  defp maybe_filter_author(query, nil), do: query
+
+  defp maybe_filter_author(query, %User{id: user_id, github_login: login}) do
+    login_key = String.downcase(login)
+
+    where(
+      query,
+      [issue],
+      issue.author_user_id == ^user_id or
+        fragment("lower(? ->> 'login')", issue.user) == ^login_key
     )
   end
 

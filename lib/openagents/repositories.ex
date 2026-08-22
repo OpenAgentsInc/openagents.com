@@ -69,21 +69,43 @@ defmodule OpenAgents.Repositories do
     )
   end
 
-  def get_visible_by_path!(owner, name, nil), do: get_public_by_path!(owner, name)
-
-  def get_visible_by_path!(owner, name, %User{id: user_id}) do
+  def get_visible_by_path!(owner, name, user) do
     owner_key = String.downcase(owner)
     name_key = String.downcase(name)
 
-    Repo.one!(
-      from repository in repository_path_query(owner_key, name_key),
-        left_join: membership in Membership,
-        on: membership.repository_id == repository.id and membership.user_id == ^user_id,
-        where:
-          (repository.visibility == "public" and repository.lifecycle_state == "ready") or
-            (not is_nil(membership.user_id) and
-               membership.role in ^~w(owner maintainer contributor viewer))
-    )
+    owner_key
+    |> repository_path_query(name_key)
+    |> readable_by(user)
+    |> Repo.one!()
+  end
+
+  @doc """
+  Narrows a repository query to the repositories `user` may read.
+
+  One predicate, composed by every surface that lists or resolves a repository,
+  so a new surface cannot arrive at a looser rule by rewriting the join from
+  memory. Reading is public on a repository that is both public and
+  provisioned; anything else needs a membership in a reading role. `nil` is an
+  anonymous visitor, who sees only the public half.
+
+  It composes into a query that already carries joins and preloads: the
+  membership join is appended, so the caller's own bindings keep their
+  positions.
+  """
+  def readable_by(query, user)
+
+  def readable_by(query, nil) do
+    from repository in query,
+      where: repository.visibility == "public" and repository.lifecycle_state == "ready"
+  end
+
+  def readable_by(query, %User{id: user_id}) do
+    from repository in query,
+      left_join: reader in Membership,
+      on: reader.repository_id == repository.id and reader.user_id == ^user_id,
+      where:
+        (repository.visibility == "public" and repository.lifecycle_state == "ready") or
+          (not is_nil(reader.user_id) and reader.role in ^@all_roles)
   end
 
   def get_writable_by_path!(owner, name, %User{id: user_id}) do
@@ -263,38 +285,23 @@ defmodule OpenAgents.Repositories do
     end
   end
 
-  def list_visible_repositories(%User{id: user_id}) do
+  def list_visible_repositories(%User{} = user) do
     Repo.all(
-      from repository in Repository,
+      from repository in readable_by(Repository, user),
         join: namespace in assoc(repository, :namespace),
-        left_join: membership in Membership,
-        on: membership.repository_id == repository.id and membership.user_id == ^user_id,
-        where:
-          repository.visibility == "public" or
-            (not is_nil(membership.user_id) and
-               membership.role in ^~w(owner maintainer contributor viewer)),
         order_by: [asc: namespace.slug_key, asc: repository.name_key, asc: repository.id],
         preload: [namespace: namespace]
     )
   end
 
-  @doc "Returns the first repository path in the user's workspace, or `nil`."
-  def sidebar_repository_path(%User{id: user_id}) do
-    case Repo.one(
-           from repository in Repository,
-             join: namespace in assoc(repository, :namespace),
-             join: membership in Membership,
-             on:
-               membership.repository_id == repository.id and membership.user_id == ^user_id and
-                 membership.role in ^~w(owner maintainer contributor viewer),
-             order_by: [asc: namespace.slug_key, asc: repository.name_key, asc: repository.id],
-             limit: 1,
-             select: {namespace.slug, repository.name}
-         ) do
-      {owner, name} -> "/#{owner}/#{name}"
-      nil -> nil
-    end
-  end
+  @doc """
+  Whether `user` can read any repository at all.
+
+  What a workspace-wide list asks to tell an empty page from an empty
+  workspace: "no open issues" and "no repositories yet" want different words
+  and different next steps, and only this distinguishes them.
+  """
+  def any_visible_repository?(user), do: Repo.exists?(readable_by(Repository, user))
 
   @doc "Delete a repository owned by `user`, including its durable and node-local Git data."
   def delete_owned_repository(owner, name, %User{} = user, options \\ [])
@@ -409,21 +416,16 @@ defmodule OpenAgents.Repositories do
   end
 
   def list_visible_repositories_page(
-        %User{id: user_id},
+        %User{} = user,
         per_page,
         after_cursor,
         namespace_key \\ nil
       )
       when per_page in 1..100 do
     query =
-      from repository in Repository,
+      from repository in readable_by(Repository, user),
         join: namespace in assoc(repository, :namespace),
-        left_join: membership in Membership,
-        on: membership.repository_id == repository.id and membership.user_id == ^user_id,
-        where:
-          (repository.visibility == "public" and repository.lifecycle_state == "ready") or
-            (not is_nil(membership.user_id) and
-               membership.role in ^~w(owner maintainer contributor viewer)),
+        as: :namespace,
         order_by: [asc: namespace.slug_key, asc: repository.name_key, asc: repository.id],
         preload: [namespace: namespace]
 
@@ -448,29 +450,11 @@ defmodule OpenAgents.Repositories do
   than the whole page. Returns `nil` rather than raising, because a repository
   can stop being visible between the broadcast and the read.
   """
-  def get_visible_repository(id, user)
-
-  def get_visible_repository(id, nil) when is_binary(id) do
+  def get_visible_repository(id, user) when is_binary(id) do
     visible_repository(
-      from repository in Repository,
+      from repository in readable_by(Repository, user),
         join: namespace in assoc(repository, :namespace),
         where: repository.id == ^id,
-        where: repository.visibility == "public" and repository.lifecycle_state == "ready",
-        preload: [namespace: namespace]
-    )
-  end
-
-  def get_visible_repository(id, %User{id: user_id}) when is_binary(id) do
-    visible_repository(
-      from repository in Repository,
-        join: namespace in assoc(repository, :namespace),
-        left_join: membership in Membership,
-        on: membership.repository_id == repository.id and membership.user_id == ^user_id,
-        where: repository.id == ^id,
-        where:
-          (repository.visibility == "public" and repository.lifecycle_state == "ready") or
-            (not is_nil(membership.user_id) and
-               membership.role in ^~w(owner maintainer contributor viewer)),
         preload: [namespace: namespace]
     )
   end
@@ -530,8 +514,7 @@ defmodule OpenAgents.Repositories do
   defp apply_namespace_filter(query, nil), do: query
 
   defp apply_namespace_filter(query, namespace_key) when is_binary(namespace_key) do
-    from [repository, namespace, membership] in query,
-      where: namespace.slug_key == ^namespace_key
+    where(query, [namespace: namespace], namespace.slug_key == ^namespace_key)
   end
 
   def get_import_for_user!(id, %User{id: user_id}) do
@@ -1212,12 +1195,14 @@ defmodule OpenAgents.Repositories do
   defp apply_repository_cursor(query, nil), do: query
 
   defp apply_repository_cursor(query, {owner_key, name_key, id}) do
-    from [repository, namespace, _membership] in query,
-      where:
-        namespace.slug_key > ^owner_key or
-          (namespace.slug_key == ^owner_key and repository.name_key > ^name_key) or
-          (namespace.slug_key == ^owner_key and repository.name_key == ^name_key and
-             repository.id > ^id)
+    where(
+      query,
+      [repository, namespace: namespace],
+      namespace.slug_key > ^owner_key or
+        (namespace.slug_key == ^owner_key and repository.name_key > ^name_key) or
+        (namespace.slug_key == ^owner_key and repository.name_key == ^name_key and
+           repository.id > ^id)
+    )
   end
 
   defp normalize_repository_attrs(attrs) do

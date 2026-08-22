@@ -269,6 +269,12 @@ defmodule OpenAgentsWeb.UI.Circle do
   attr :status_label, :string, required: true
   attr :progress, :integer, default: nil
   attr :priority, :atom, values: @priorities, default: :none
+
+  # Which repository the issue is in. A list drawn from one repository already
+  # knows, and leaves this `nil`; a list drawn across several is unreadable
+  # without it, so it joins the scan column rather than the trailing edge,
+  # which drops by width.
+  attr :repository, :string, default: nil, doc: "`owner/name`, for a cross-repository list"
   attr :labels, :list, default: [], doc: "`[%{name: String.t(), tone: atom()}]`"
   attr :project, :string, default: nil
   attr :due, :string, default: nil, doc: "already formatted; overdue is the caller's judgement"
@@ -299,6 +305,9 @@ defmodule OpenAgentsWeb.UI.Circle do
     <div class={["issue-row", @class]} data-selected={@selected} {@rest}>
       <span class="issue-row__scan">
         <.issue_priority level={@priority} />
+        <span :if={@repository} class="issue-row__repository" title={@repository}>
+          {@repository}
+        </span>
         <span class="issue-row__identifier">{@identifier}</span>
         {render_slot(@state)}
         <.issue_status

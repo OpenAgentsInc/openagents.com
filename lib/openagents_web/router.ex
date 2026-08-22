@@ -108,6 +108,14 @@ defmodule OpenAgentsWeb.Router do
       live "/repositories", RepositoryIndexLive, :index
       live "/repositories/new", RepositoryNewLive, :new
       live "/repositories/import/github", RepositoryImportLive, :new
+
+      # The sidebar's global surfaces. They are workspace-wide by construction:
+      # each reads through the repository visibility predicate rather than
+      # through a repository the URL names, so what they show never depends on
+      # which page you arrived from.
+      live "/issues", IssueWorkspaceLive, :index
+      live "/projects", ProjectWorkspaceLive, :index
+
       live "/:owner/:repo/issues/new", IssueNewLive, :new
 
       live "/:owner/:repo/members", MemberIndexLive, :index

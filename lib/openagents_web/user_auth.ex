@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.UserAuth do
 
   import Plug.Conn
 
-  alias OpenAgents.{Accounts, Repositories}
+  alias OpenAgents.Accounts
 
   @session_key "user_id"
 
@@ -59,25 +59,17 @@ defmodule OpenAgentsWeb.UserAuth do
 
   # The scope is the user, plus the answers the layout needs on every render
   # and must not re-ask for. Resolved once here, at mount.
-  defp scope(user, params) do
-    repository_path =
-      case params do
-        %{"owner" => owner, "repo" => repository}
-        when is_binary(owner) and is_binary(repository) ->
-          "/#{owner}/#{repository}"
-
-        _other ->
-          Repositories.sidebar_repository_path(user)
-      end
-
-    %{
-      user
-      | agent_surfaces?: OpenAgents.Conversations.user_has_messages?(user),
-        sidebar_repository_path: repository_path
-    }
+  #
+  # It deliberately does not depend on the page's params. It used to carry the
+  # repository the sidebar's Issues and Projects rows pointed at, read from
+  # `:owner`/`:repo` when the route had them, so a global nav row silently
+  # retargeted as you browsed. Those rows now address `/issues` and
+  # `/projects`, which mean the same thing on every page.
+  defp scope(user) do
+    %{user | agent_surfaces?: OpenAgents.Conversations.user_has_messages?(user)}
   end
 
-  def on_mount(:mount_current_user, params, session, socket) do
+  def on_mount(:mount_current_user, _params, session, socket) do
     socket = assign_sidebar_sections(socket, session)
 
     with user_id when is_binary(user_id) <- session[@session_key],
@@ -85,7 +77,7 @@ defmodule OpenAgentsWeb.UserAuth do
       {:cont,
        socket
        |> Phoenix.Component.assign(:current_user, user)
-       |> Phoenix.Component.assign(:current_scope, scope(user, params))}
+       |> Phoenix.Component.assign(:current_scope, scope(user))}
     else
       _missing_or_inactive ->
         {:cont,
@@ -95,7 +87,7 @@ defmodule OpenAgentsWeb.UserAuth do
     end
   end
 
-  def on_mount(:ensure_authenticated, params, session, socket) do
+  def on_mount(:ensure_authenticated, _params, session, socket) do
     socket = assign_sidebar_sections(socket, session)
 
     with user_id when is_binary(user_id) <- session[@session_key],
@@ -103,7 +95,7 @@ defmodule OpenAgentsWeb.UserAuth do
       {:cont,
        socket
        |> Phoenix.Component.assign(:current_user, user)
-       |> Phoenix.Component.assign(:current_scope, scope(user, params))
+       |> Phoenix.Component.assign(:current_scope, scope(user))
        |> Phoenix.LiveView.attach_hook(
          :active_user_guard,
          :handle_event,

@@ -5966,6 +5966,20 @@
     text-overflow: ellipsis;
   }
 
+  /* Only a cross-repository list draws this. There, which repository a row is
+     in is as load-bearing as its number, so it takes a fixed width inside the
+     scan column and forms a column of its own rather than sitting at the
+     trailing edge, which drops. The full path is on the element's title, for
+     the long name that clips. */
+  .issue-row__repository {
+    width: 6.5rem;
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
   .issue-row__title {
     min-width: 0;
     flex: 1;
@@ -6021,6 +6035,10 @@
 
     .issue-row__chips {
       display: inline-flex;
+    }
+
+    .issue-row__repository {
+      width: 10rem;
     }
   }
 

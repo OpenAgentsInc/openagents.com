@@ -1873,11 +1873,25 @@ OpenAgents becomes the source of truth for the imported snapshot. Public ready
 repositories permit anonymous Git reads. Private reads and every write require
 an admitted repository principal, and read-only members cannot push.
 
+Amended 2026-08-21 (workspace-wide issue and project lists): who may read a
+repository is one composable predicate, `OpenAgents.Repositories.readable_by/2`
+— public and `ready`, or a membership in a reading role — and every surface
+that lists or resolves a repository composes it rather than restating the
+join. Reading across repositories obeys the same rule as reading one: the
+workspace-wide lists at `/issues` and `/projects` join their tables to that
+predicate, so no filter, search term, or page number they accept can surface a
+row from a repository the reader could not open directly. The duplicate that
+`list_visible_repositories/1` held had already lost the `ready` half and
+disagreed with the paged read about the same repository; there is one copy now.
+
 Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
 `OpenAgents.Repositories.Importer`, `OpenAgents.Forge.GitHTTP`,
 `test/openagents/repository_lifecycle_test.exs`,
 `test/openagents/repositories/provisioner_test.exs`,
-`test/openagents_web/controllers/repository_controller_test.exs`, and
+`test/openagents_web/controllers/repository_controller_test.exs`,
+`test/openagents/issues_workspace_test.exs`,
+`test/openagents_web/live/issue_workspace_live_test.exs`,
+`test/openagents_web/live/project_workspace_live_test.exs`, and
 `test/openagents/forge/git_http_test.exs`.
 
 ### REPOSITORY-002 — Development pushes go to the forge, never to the mirror
@@ -2005,5 +2019,5 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
-| REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/forge/git_http_test.exs` |
+| REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |

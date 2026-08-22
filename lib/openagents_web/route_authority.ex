@@ -42,6 +42,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/memory",
     "/device",
     "/repositories",
+    # The workspace-wide issue and project lists. Repository-scoped reading is
+    # public; reading across every repository is not, because the set being
+    # read is one person's.
+    "/issues",
+    "/projects",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",
@@ -253,6 +258,8 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/data" <> _path), do: "data:self"
   defp browser_scope("/memory/" <> _path), do: "memory:self"
   defp browser_scope("/github/connection"), do: "github-tools:self"
+  defp browser_scope("/issues"), do: "forge:issues:self"
+  defp browser_scope("/projects"), do: "forge:projects:self"
   defp browser_scope("/settings/api-tokens"), do: "api-token:self"
   defp browser_scope(_path), do: "product:self"
 

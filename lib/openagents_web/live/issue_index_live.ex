@@ -14,6 +14,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
   alias OpenAgents.Labels
   alias OpenAgents.Milestones
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.Components.IssuePresentation
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.UI.Circle
 
@@ -303,19 +304,11 @@ defmodule OpenAgentsWeb.IssueIndexLive do
       </.empty>
 
       <div :if={@issues_count > 0} id="issues" phx-update="stream" class="issue-list">
-        <Circle.issue_row
+        <IssuePresentation.issue_row
           :for={{id, issue} <- @streams.issues}
           id={id}
-          identifier={"##{issue.number}"}
-          title={issue.title}
+          issue={issue}
           navigate={~p"/#{@owner}/#{@repo}/issues/#{issue.number}"}
-          status_category={category(issue)}
-          status_label={status_label(issue)}
-          labels={labels(issue)}
-          assignee={assignee(issue)}
-          created={"opened #{relative(issue.inserted_at)} ago"}
-          author={author(issue)}
-          comments={issue.comments}
         >
           <:state :if={@can_write}>
             <Circle.field_menu
@@ -326,10 +319,10 @@ defmodule OpenAgentsWeb.IssueIndexLive do
                 <Circle.issue_state state={issue.state} reason={issue.state_reason} />
               </:trigger>
               <Circle.field_menu_item
-                :for={{label, state, reason} <- state_options()}
+                :for={{label, state, reason} <- IssuePresentation.state_options()}
                 label={label}
                 mode={:choice}
-                selected={issue.state == state and close_reason(issue) == reason}
+                selected={issue.state == state and IssuePresentation.close_reason(issue) == reason}
                 closes={"row-state-#{issue.id}"}
                 on_select={JS.push("set_state", value: %{id: issue.id, state: state, reason: reason})}
               >
@@ -345,14 +338,14 @@ defmodule OpenAgentsWeb.IssueIndexLive do
             >
               <:trigger>
                 <Circle.assignee
-                  name={assignee(issue) && assignee(issue)[:name]}
-                  src={assignee(issue) && assignee(issue)[:src]}
+                  name={IssuePresentation.assignee(issue)[:name]}
+                  src={IssuePresentation.assignee(issue)[:src]}
                 />
               </:trigger>
               <Circle.field_menu_item
                 :for={user <- @assignable}
                 label={user.github_login}
-                selected={assigned?(issue, user.github_login)}
+                selected={IssuePresentation.assigned?(issue, user.github_login)}
                 on_select={
                   JS.push("toggle_assignee", value: %{id: issue.id, login: user.github_login})
                 }
@@ -361,7 +354,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
               </Circle.field_menu_item>
             </Circle.field_menu>
           </:people>
-        </Circle.issue_row>
+        </IssuePresentation.issue_row>
       </div>
 
       <nav :if={@total_count > Issues.per_page()} class="issue-pagination" aria-label="Pages">
@@ -391,71 +384,5 @@ defmodule OpenAgentsWeb.IssueIndexLive do
       </nav>
     </Layouts.app>
     """
-  end
-
-  # GitHub's two states, and nothing invented on top of them. `not_planned` is
-  # the one close reason with a distinct reading, so it takes the cancelled
-  # glyph; every other close is a completion.
-  defp category(%{state: "closed", state_reason: "not_planned"}), do: :canceled
-  defp category(%{state: "closed"}), do: :completed
-  defp category(_issue), do: :unstarted
-
-  defp status_label(%{state: "closed", state_reason: "not_planned"}), do: "Closed as not planned"
-  defp status_label(%{state: "closed"}), do: "Closed"
-  defp status_label(_issue), do: "Open"
-
-  # `duplicate` is rendered when it arrives from the API but is not offered:
-  # the menu has nowhere to record which issue it duplicates, and a duplicate
-  # that does not say of what is worse than a plain close.
-  defp state_options do
-    [
-      {"Open", "open", nil},
-      {"Closed as completed", "closed", "completed"},
-      {"Closed as not planned", "closed", "not_planned"}
-    ]
-  end
-
-  defp close_reason(%{state: "closed", state_reason: reason}), do: reason || "completed"
-  defp close_reason(_issue), do: nil
-
-  defp assigned?(issue, login), do: Enum.any?(issue.assignees || [], &(&1["login"] == login))
-
-  # A label carries a colour on GitHub; the row takes a tone from our ladder
-  # rather than that hex, so the list stays in one palette.
-  defp labels(%{labels: labels}) when is_list(labels) do
-    Enum.map(labels, fn label ->
-      %{name: label["name"] || label[:name] || "label", tone: :neutral}
-    end)
-  end
-
-  defp labels(_issue), do: []
-
-  # GitHub issues carry many assignees; the row shows the first, which is the
-  # one GitHub itself treats as `assignee`.
-  defp assignee(%{assignees: [first | _rest]}) when is_map(first) do
-    %{
-      name: first["login"] || first[:login],
-      src: first["avatar_url"] || first[:avatar_url],
-      presence: :none
-    }
-  end
-
-  defp assignee(_issue), do: nil
-
-  # GitHub prints who opened an issue beside when. An issue whose author is
-  # gone still has a history, so it says so rather than showing a blank.
-  defp author(%{user: %{} = user}), do: user["login"] || user[:login] || "anonymous"
-  defp author(_issue), do: "anonymous"
-
-  defp relative(nil), do: nil
-
-  defp relative(at) do
-    at = if is_struct(at, NaiveDateTime), do: DateTime.from_naive!(at, "Etc/UTC"), else: at
-
-    case DateTime.diff(DateTime.utc_now(), at, :second) do
-      s when s < 3_600 -> "#{max(div(s, 60), 1)}m"
-      s when s < 86_400 -> "#{div(s, 3_600)}h"
-      s -> "#{div(s, 86_400)}d"
-    end
   end
 end

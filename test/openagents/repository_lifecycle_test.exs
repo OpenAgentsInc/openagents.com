@@ -153,10 +153,28 @@ defmodule OpenAgents.RepositoryLifecycleTest do
     viewer_repository_ids = Enum.map(Repositories.list_visible_repositories(viewer), & &1.id)
     outsider_repository_ids = Enum.map(Repositories.list_visible_repositories(outsider), & &1.id)
 
-    assert public_repository.id in viewer_repository_ids
+    # A repository is readable through membership at any point in its
+    # lifecycle, and readable to everyone else only once it is both public and
+    # provisioned. Both of these are still `provisioning`, so the viewer sees
+    # only the private one it belongs to, and the stranger sees neither.
+    #
+    # `list_visible_repositories/1` used to hold its own copy of the predicate,
+    # and that copy had lost the lifecycle half, so it disagreed with
+    # `list_visible_repositories_page/4` and with `get_visible_by_path!/3`
+    # about the same repository. All of them compose `readable_by/2` now.
+    refute public_repository.id in viewer_repository_ids
     assert private_repository.id in viewer_repository_ids
-    assert public_repository.id in outsider_repository_ids
+    refute public_repository.id in outsider_repository_ids
     refute private_repository.id in outsider_repository_ids
+
+    public_repository
+    |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+    |> Repo.update!()
+
+    ready_outsider_ids = Enum.map(Repositories.list_visible_repositories(outsider), & &1.id)
+
+    assert public_repository.id in ready_outsider_ids
+    refute private_repository.id in ready_outsider_ids
   end
 
   test "an organization namespace retains GitHub identity separately from its slug" do

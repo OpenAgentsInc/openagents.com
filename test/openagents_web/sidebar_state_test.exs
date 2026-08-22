@@ -92,8 +92,16 @@ defmodule OpenAgentsWeb.SidebarStateTest do
     end
   end
 
-  describe "repository navigation" do
-    test "repository pages keep Issues and Projects in the current repository", %{conn: conn} do
+  # The Issues and Projects rows used to be repository-scoped: they took the
+  # `:owner`/`:repo` of whatever page you were on, and fell back to the first
+  # repository in your workspace alphabetically. The same row therefore led
+  # somewhere different depending on where you clicked it from, and vanished
+  # for an account with no membership. They are global now, and these tests
+  # say so from both directions.
+  describe "global navigation" do
+    test "a repository page does not retarget Issues and Projects at that repository", %{
+      conn: conn
+    } do
       user = github_user("sidebar-current-repository")
       conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
@@ -107,20 +115,21 @@ defmodule OpenAgentsWeb.SidebarStateTest do
       {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "owner")
       {:ok, view, _html} = live(conn, ~p"/navigation-owner/navigation-repository/issues")
 
-      assert has_element?(
+      assert has_element?(view, ~s(#sidebar a[href="/issues"]))
+      assert has_element?(view, ~s(#sidebar a[href="/projects"]))
+
+      refute has_element?(
                view,
                ~s(#sidebar a[href="/navigation-owner/navigation-repository/issues"])
              )
 
-      assert has_element?(
+      refute has_element?(
                view,
                ~s(#sidebar a[href="/navigation-owner/navigation-repository/projects"])
              )
     end
 
-    test "an account with no visible repository gets no dead Issues or Projects link", %{
-      conn: conn
-    } do
+    test "an account with no repository still gets Issues and Projects", %{conn: conn} do
       user = github_user("sidebar-no-repository")
 
       OpenAgents.Repo.delete_all(
@@ -132,8 +141,37 @@ defmodule OpenAgentsWeb.SidebarStateTest do
       {:ok, view, _html} = live(conn, ~p"/leaderboard")
 
       assert has_element?(view, ~s(#sidebar a[href="/repositories"]))
-      refute has_element?(view, ~s(#sidebar a), "Issues")
-      refute has_element?(view, ~s(#sidebar a), "Projects")
+      assert has_element?(view, ~s(#sidebar a[href="/issues"][aria-label="Issues"]))
+      assert has_element?(view, ~s(#sidebar a[href="/projects"][aria-label="Projects"]))
+    end
+
+    test "the rows read the same from a page in a repository and a page outside one", %{
+      conn: conn
+    } do
+      user = github_user("sidebar-stable-rows")
+      conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+
+      for {owner, name} <- [
+            {"alpha-owner", "alpha-repository"},
+            {"zulu-owner", "zulu-repository"}
+          ] do
+        {:ok, repository} =
+          OpenAgents.Repositories.create_repository(%{
+            owner: owner,
+            name: name,
+            visibility: "private"
+          })
+
+        {:ok, _membership} = OpenAgents.Repositories.add_member(repository, user, "owner")
+      end
+
+      {:ok, from_repository, _html} = live(conn, ~p"/zulu-owner/zulu-repository/issues")
+      {:ok, from_elsewhere, _html} = live(conn, ~p"/leaderboard")
+
+      for view <- [from_repository, from_elsewhere] do
+        assert has_element?(view, ~s(#sidebar a[href="/issues"]))
+        assert has_element?(view, ~s(#sidebar a[href="/projects"]))
+      end
     end
   end
 

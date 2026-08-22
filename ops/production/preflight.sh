@@ -7,7 +7,8 @@ production_project=${OPENAGENTS_PRODUCTION_PROJECT_ID:-}
 staging_report=${OPENAGENTS_STAGING_REPORT:-}
 resilience_report=${OPENAGENTS_STAGING_RESILIENCE_REPORT:-}
 git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
-candidate="$repo_root/.git/openagents/staging-candidates/$git_sha/candidate-manifest.json"
+git_common_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
+candidate="$git_common_dir/openagents/staging-candidates/$git_sha/candidate-manifest.json"
 isolation="$repo_root/.git/openagents/staging-isolation/$git_sha.json"
 rehearsal="$repo_root/.git/openagents/production-rehearsal/$git_sha.json"
 run_root=$(mktemp -d /tmp/openagents-production-preflight.XXXXXX)

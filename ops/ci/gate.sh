@@ -3,15 +3,16 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
-receipt_root="$repo_root/.git/openagents/release-gate-receipts"
 required_stages='compile production_compile precommit cluster javascript direct_transaction relup version_chain interrupted_install rolling_replacement contracts staging_infra release_smoke'
 mode=${1:-run}
 
-if [ ! -d "$repo_root/.git" ]; then
+if [ "$(git -C "$repo_root" rev-parse --is-inside-work-tree 2>/dev/null || true)" != "true" ]; then
   echo "release gate must run from a Git worktree" >&2
   exit 1
 fi
 
+git_common_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
+receipt_root="$git_common_dir/openagents/release-gate-receipts"
 git_sha=$(git -C "$repo_root" rev-parse --verify HEAD)
 receipt_path="$receipt_root/$git_sha.json"
 

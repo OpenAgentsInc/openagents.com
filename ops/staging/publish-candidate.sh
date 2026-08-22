@@ -82,7 +82,8 @@ application_repository="${repository}/openagents"
 builder_repository="${repository}/openagents-builder"
 application_tag="${application_repository}:${git_sha}"
 builder_tag="${builder_repository}:${git_sha}"
-evidence_root="$repo_root/.git/openagents/staging-candidates"
+git_common_dir=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)
+evidence_root="$git_common_dir/openagents/staging-candidates"
 candidate_path="$evidence_root/$git_sha"
 run_root=$(mktemp -d /tmp/openagents-staging-candidate.XXXXXX)
 candidate_temp=

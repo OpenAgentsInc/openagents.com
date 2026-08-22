@@ -72,6 +72,8 @@ defmodule OpenAgents.Markdown do
 
   @emphasis_markers ~w(*** ___ ** __ ~~ * _)
 
+  @incomplete_block_marker ~r/^(?:\s{0,3}(?:\d{1,9}[.)]?|[#>*+\-]{1,6})\s*|\s*\|?[:|\-\s]+\|?)$/u
+
   @doc """
   Renders Markdown to safe HTML.
 
@@ -222,6 +224,8 @@ defmodule OpenAgents.Markdown do
       text
       |> drop_incomplete_image()
       |> flatten_incomplete_link()
+      |> drop_incomplete_html_tag()
+      |> drop_incomplete_block_marker()
       |> close_inline_code()
       |> close_emphasis()
     end
@@ -236,11 +240,45 @@ defmodule OpenAgents.Markdown do
 
   # A half-arrived image cannot be shown, so it is removed rather than rendered
   # as a broken one.
-  defp drop_incomplete_image(text), do: String.replace(text, ~r/!\[[^\]]*\]\([^)]*\z/, "")
+  defp drop_incomplete_image(text) do
+    text
+    |> String.replace(~r/!\[[^\]]*\]\([^)]*\z/u, "")
+    |> String.replace(~r/!\[[^\]\n]*\z/u, "")
+  end
 
   # A half-arrived URL must never reach an href. The text survives; the link
   # does not.
-  defp flatten_incomplete_link(text), do: String.replace(text, ~r/\[([^\]]*)\]\([^)]*\z/, "\\1")
+  defp flatten_incomplete_link(text) do
+    text
+    |> String.replace(~r/\[([^\]]*)\]\([^)]*\z/u, "\\1")
+    |> String.replace(~r/\[([^\]\n]*)\z/u, "\\1")
+  end
+
+  # Streamdown's `remend` removes a tag-shaped tail until its closing `>`
+  # arrives. Raw HTML is refused later regardless, but dropping the partial
+  # source here also prevents `<di` from flashing as ordinary text first.
+  defp drop_incomplete_html_tag(text) do
+    String.replace(text, ~r/<[!?\/]?[[:alpha:]][^>\n]*\z/u, "")
+  end
+
+  # A block marker cannot be classified until some content follows it. For
+  # example, `1` becomes `1. ` and then an ordered-list item; rendering each
+  # prefix changes the DOM from a paragraph into a list and exposes the raw
+  # marker for a frame. Keep every completed block visible, but withhold this
+  # ambiguous final line until its first content character arrives.
+  defp drop_incomplete_block_marker(text) do
+    lines = String.split(text, "\n")
+    tail = List.last(lines)
+
+    if Regex.match?(@incomplete_block_marker, tail) do
+      lines
+      |> Enum.drop(-1)
+      |> Enum.join("\n")
+      |> then(&if(length(lines) > 1, do: &1 <> "\n", else: &1))
+    else
+      text
+    end
+  end
 
   defp close_inline_code(text) do
     if text |> strip_escapes() |> count_solo_backticks() |> rem(2) == 1 do

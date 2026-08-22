@@ -2748,7 +2748,17 @@
   }
 
   .message-markdown :is(ul, ol) {
-    padding-inline-start: 1.25em;
+    list-style-position: outside;
+  }
+
+  .message-markdown ul {
+    padding-inline-start: 1.5em;
+    list-style-type: disc;
+  }
+
+  .message-markdown ol {
+    padding-inline-start: 2em;
+    list-style-type: decimal;
   }
 
   .message-markdown li + li {

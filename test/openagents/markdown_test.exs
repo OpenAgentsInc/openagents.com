@@ -43,6 +43,14 @@ defmodule OpenAgents.MarkdownTest do
       assert html("~~gone~~") =~ "<del>"
     end
 
+    test "renders ordered lists as ordered-list markup" do
+      rendered = html("1. First\n2. Second")
+
+      assert rendered =~ "<ol>"
+      assert rendered =~ "<li>First</li>"
+      assert rendered =~ "<li>Second</li>"
+    end
+
     test "renders tables and malformed Markdown without crashing" do
       table = html("| A | B |\n|---|---|\n| 1 | 2 |")
 
@@ -203,6 +211,17 @@ defmodule OpenAgents.MarkdownTest do
       assert Markdown.complete("text *") == "text "
     end
 
+    test "withholds an ambiguous trailing block marker until content arrives" do
+      for marker <- ["1", "1.", "1. ", "-", "- ", "##", "## ", ">", "> ", "|"] do
+        assert Markdown.complete(marker) == "",
+               "rendered incomplete block marker #{inspect(marker)}"
+      end
+
+      assert Markdown.complete("Done\n2.") == "Done\n"
+      assert Markdown.complete("1. First") == "1. First"
+      assert Markdown.complete("## Heading") == "## Heading"
+    end
+
     test "ignores escaped markers" do
       assert Markdown.complete("2 \\* 3") == "2 \\* 3"
     end
@@ -213,6 +232,11 @@ defmodule OpenAgents.MarkdownTest do
       refute completed =~ "href"
       refute completed =~ "]("
       assert completed =~ "the docs"
+    end
+
+    test "a half-arrived link label and HTML tag do not expose their delimiters" do
+      assert Markdown.complete("see [the doc") == "see the doc"
+      assert Markdown.complete("before <sect") == "before "
     end
 
     test "a half-arrived image is dropped rather than rendered broken" do

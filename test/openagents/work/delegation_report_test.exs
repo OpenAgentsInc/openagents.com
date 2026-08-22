@@ -57,15 +57,18 @@ defmodule OpenAgents.Work.DelegationReportTest do
 
   test "cancelling a delegation reports the cancellation, never a partial transcript" do
     %{conversation: conversation, machine: machine} = delegation_owner("deleg-report-cancel")
+    test_pid = self()
 
     # A delegation that streams and never returns: the owner stops it from the
     # live panel while the tool log is still growing.
     connect(machine.id, fn {:agent, request_id, _payload, caller} ->
       FakeController.chunk(caller, request_id, noisy_transcript())
+      send(test_pid, :delegation_streaming)
     end)
 
     {:ok, started} = Work.start_delegation(delegation_attributes(conversation, machine))
     assert eventually(fn -> Work.get_job!(started.id).status == "running" end)
+    assert_receive :delegation_streaming
 
     :ok = Work.cancel_active_delegations(conversation.id)
     assert eventually(fn -> Work.get_job!(started.id).status == "cancelled" end)

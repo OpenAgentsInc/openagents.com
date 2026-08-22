@@ -140,7 +140,7 @@ defmodule OpenAgentsWeb.Layouts do
           },
 
           updated() {
-            this.applyState(this.open, {persist: false})
+            this.applyState(this.open)
           },
 
           destroyed() {
@@ -152,37 +152,29 @@ defmodule OpenAgentsWeb.Layouts do
 
           handleClick(event) {
             if (event.target.closest("#sidebar-toggle")) {
-              this.applyState(!this.open, {persist: true, focusSidebar: !this.open})
+              this.applyState(!this.open, {focusSidebar: !this.open})
               return
             }
 
             if (event.target.closest("#sidebar-scrim")) {
-              this.applyState(false, {persist: false, restoreFocus: true})
+              this.applyState(false, {restoreFocus: true})
               return
             }
 
             if (!this.desktop.matches && event.target.closest("#sidebar a")) {
-              this.applyState(false, {persist: false})
+              this.applyState(false)
             }
           },
 
           handleKeydown(event) {
             if (event.key === "Escape" && this.open && !this.desktop.matches) {
-              this.applyState(false, {persist: false, restoreFocus: true})
+              this.applyState(false, {restoreFocus: true})
             }
           },
 
           restoreForViewport() {
-            const open = this.desktop.matches ? this.desktopPreference() : false
-            this.applyState(open, {persist: false})
-          },
-
-          desktopPreference() {
-            try {
-              return window.localStorage.getItem("openagents:sidebar-desktop") !== "closed"
-            } catch (_error) {
-              return true
-            }
+            const open = this.desktop.matches
+            this.applyState(open)
           },
 
           applyState(open, options = {}) {
@@ -204,15 +196,6 @@ defmodule OpenAgentsWeb.Layouts do
             toggle.title = open ? "Collapse navigation sidebar" : "Open navigation sidebar"
             scrim.setAttribute("aria-hidden", open ? "false" : "true")
             document.body.classList.toggle("sidebar-open", open && !this.desktop.matches)
-
-            if (options.persist && this.desktop.matches) {
-              try {
-                window.localStorage.setItem(
-                  "openagents:sidebar-desktop",
-                  open ? "open" : "closed"
-                )
-              } catch (_error) {}
-            }
 
             if (options.focusSidebar && !this.desktop.matches) {
               window.requestAnimationFrame(() => {

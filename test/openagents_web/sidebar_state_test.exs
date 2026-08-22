@@ -197,6 +197,16 @@ defmodule OpenAgentsWeb.SidebarStateTest do
     end
   end
 
+  describe "viewport defaults" do
+    test "desktop starts open and mobile starts closed without a saved browser preference" do
+      source = File.read!("lib/openagents_web/components/layouts.ex")
+
+      assert source =~ "const open = this.desktop.matches"
+      refute source =~ "openagents:sidebar-desktop"
+      refute source =~ "desktopPreference()"
+    end
+  end
+
   defp parse(value) do
     :get
     |> Plug.Test.conn("/")

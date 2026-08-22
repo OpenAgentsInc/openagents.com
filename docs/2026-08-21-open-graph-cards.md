@@ -5,9 +5,8 @@ Date: 2026-08-21
 Status: Implemented. Meta tags ship on every public page; the signed,
 content-versioned card endpoint serves repository, issue, blob, and commit
 cards; rasterization runs through librsvg with a committed fallback card when
-the binary is absent. One operations requirement remains: fleet images need
-`librsvg2-bin` (and, for exact brand type, the Geist TTFs) installed — until
-then nodes serve the fallback card by design.
+the binary is absent. The release image carries librsvg, fontconfig, and the
+pinned Geist TTFs; dynamic cards render wherever a rebuilt image runs.
 
 ## What links to our pages look like today
 
@@ -208,8 +207,10 @@ The implementation notes below record what landed and where.
 
 Remaining operations work, tracked here so it cannot be forgotten:
 
-* Add `librsvg2-bin` (and optionally the Geist TTF faces) to the release
-  image. Until that lands, production nodes serve the fallback card for all
-  dynamic URLs — correct, branded, but generic.
+* The release image now carries `librsvg2-bin`, `fontconfig`, and the pinned
+  Geist TTFs (v1.7.2, zip and per-file digests checked in the Dockerfile) with
+  a fontconfig alias from the CSS family name "Geist Sans" to the files'
+  internal name "Geist". Dynamic cards render on any node running a rebuilt
+  image; deploy the rebuilt image and the staging check below goes green.
 * The staging check should assert a dynamic card URL returns bytes other
   than the committed fallback, proving rasterization end to end.

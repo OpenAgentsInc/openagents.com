@@ -70,7 +70,7 @@ defmodule OpenAgents.StagingCandidateContractTest do
     startup = File.read!("infra/staging/templates/fleet-startup.sh.tftpl")
     outputs = File.read!("infra/staging/outputs.tf")
 
-    assert terraform =~ "network_cidr = var.network_cidr"
+    assert terraform =~ ~s(network_cidr           = var.network_cidr)
     assert startup =~ "instance_ip=$(metadata instance/network-interfaces/0/ip)"
     assert startup =~ ~s(iptables -C INPUT -s "${network_cidr}")
     assert startup =~ "--dports 4000,4369,9100:9115 -j ACCEPT"
@@ -79,6 +79,18 @@ defmodule OpenAgents.StagingCandidateContractTest do
     assert startup =~ "RELEASE_NODE=openagents@$instance_ip"
     refute startup =~ "RELEASE_NODE=openagents@$instance_name.staging.internal"
     assert outputs =~ ~s("openagents@${instance_ip}" => instance_name)
+  end
+
+  test "the optional forge mirror rides the fleet environment untouched" do
+    variables = File.read!("infra/staging/variables.tf")
+    terraform = File.read!("infra/staging/main.tf")
+    startup = File.read!("infra/staging/templates/fleet-startup.sh.tftpl")
+
+    # Deployment policy, not a secret: the JSON carries credential-free URLs
+    # only (RuntimeConfig refuses userinfo), so it flows as plain env.
+    assert variables =~ "forge_mirror_urls_json"
+    assert terraform =~ "forge_mirror_urls_json = var.forge_mirror_urls_json"
+    assert startup =~ "OPENAGENTS_FORGE_MIRROR_URLS_JSON=${forge_mirror_urls_json}"
   end
 
   test "IAP SSH reaches the fleet and deploy controller" do

@@ -310,6 +310,30 @@ if config_env() == :prod and runtime_role == :web do
       _invalid -> raise "environment variable OPENAGENTS_FORGE_ROLLING_PROVIDER is not admitted"
     end
 
+  # Optional one-way GitHub mirrors, keyed by bare repository name. URLs must
+  # stay credential-free (RuntimeConfig enforces it): authentication belongs
+  # to the nodes' git credential helper or SSH key, never to this value.
+  forge_mirror_urls =
+    case optional_text.("OPENAGENTS_FORGE_MIRROR_URLS_JSON") do
+      nil ->
+        %{}
+
+      encoded ->
+        case Jason.decode(encoded) do
+          {:ok, urls} when is_map(urls) and map_size(urls) >= 0 ->
+            valid? = Enum.all?(urls, fn {repo, url} -> is_binary(repo) and is_binary(url) end)
+
+            if valid? do
+              Map.new(urls, fn {repo, url} -> {repo, url} end)
+            else
+              raise "environment variable OPENAGENTS_FORGE_MIRROR_URLS_JSON must map repository names to credential-free git URL strings"
+            end
+
+          _invalid ->
+            raise "environment variable OPENAGENTS_FORGE_MIRROR_URLS_JSON must be a JSON object from repository name to credential-free git URL"
+        end
+    end
+
   rolling_instances =
     case optional_text.("OPENAGENTS_GCP_ROLLING_INSTANCES_JSON") do
       nil ->
@@ -390,6 +414,7 @@ if config_env() == :prod and runtime_role == :web do
     forge_public_paths: Map.new(forge_repos, &{&1, []}),
     forge_internal_git_url: required_text.("OPENAGENTS_FORGE_INTERNAL_GIT_URL"),
     forge_operator_token: optional_text.("OPENAGENTS_FORGE_OPERATOR_TOKEN"),
+    forge_mirror_urls: forge_mirror_urls,
     forge_data_dir: required_text.("OPENAGENTS_FORGE_DATA_DIR"),
     forge_build_dir: required_text.("OPENAGENTS_FORGE_BUILD_DIR"),
     forge_build_queue_dir: required_text.("OPENAGENTS_FORGE_BUILD_QUEUE_DIR"),

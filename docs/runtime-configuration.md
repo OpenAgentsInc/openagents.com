@@ -209,6 +209,7 @@ discovery, node identity, cookie, and bounded distribution ports.
 | `OPENAGENTS_FORGE_OWNER` | Exactly `OpenAgentsInc` |
 | `OPENAGENTS_FORGE_INTERNAL_GIT_URL` | HTTP(S) service URL with no embedded credentials |
 | `OPENAGENTS_FORGE_OPERATOR_TOKEN` | Secret required when the forge is enabled; empty while disabled |
+| `OPENAGENTS_FORGE_MIRROR_URLS_JSON` | Optional JSON object from repository name to credential-free git mirror URL; empty disables one-way GitHub mirroring |
 | `OPENAGENTS_FORGE_BUILD_EXECUTOR` | `sidecar` |
 | `OPENAGENTS_FORGE_ARTIFACT_STORE` | `local` until the durable store gate replaces it |
 | `OPENAGENTS_FORGE_WAL_ADAPTER` | `local` or `gcs` |
@@ -245,6 +246,31 @@ Ra and fleet deployment additionally require a stable `RELEASE_NODE`, a
 `RELEASE_NODE` because `DNSCluster` constructs peer identities from the A
 records returned by `DNS_CLUSTER_QUERY`. The readiness report records only
 whether those settings passed; it never prints their values.
+
+### Forge GitHub mirroring
+
+Setting `OPENAGENTS_FORGE_MIRROR_URLS_JSON` turns on one-way mirroring: every
+accepted forge push is followed by a best-effort `git push --mirror` to the
+configured URL, and `OpenAgents.Forge.MirrorWatch` compares refs every five
+minutes, retries drift, and raises one `forge_mirror_lagging` incident per lag
+episode past fifteen minutes. Mirror freshness appears on the public status
+page as `current` or `lagging`; with no URLs configured it reads `off`.
+
+Two rules are load-bearing:
+
+1. **The URL carries no credential.** RuntimeConfig refuses mirror URLs that
+   embed userinfo. Authentication belongs to the nodes: give each fleet node
+   a read-write GitHub credential through a git credential helper or an SSH
+   deploy key for the target repository. The mirror push runs as the same
+   user as the release.
+2. **The mirror is force-pushed.** `--mirror` makes the configured remote
+   exactly match the forge. Configure it only on a repository you accept
+   being overwritten by forge state — for this project, GitHub's
+   `OpenAgentsInc/openagents.com`.
+
+Staging receives the value through the optional
+`forge_mirror_urls_json` Terraform variable; production sets the environment
+variable directly in its fleet configuration.
 
 ## Local defaults
 

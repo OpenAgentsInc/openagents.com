@@ -9,11 +9,12 @@ set -eu
 # and the divergence stays invisible until a clone disagrees with the site.
 #
 # The forge can mirror `main` to GitHub (`OpenAgents.Forge.Pushes.mirror_now/1`,
-# watched by `OpenAgents.Forge.MirrorWatch`), but `:forge_mirror_urls` is empty
-# in `config/config.exs` and no environment sets it, so no mirror runs today.
-# Until one is configured, GitHub receives only what someone pushes to it, and
-# `mirror_now/1` is a `git push --mirror` -- a force push -- so a configured
-# mirror would overwrite whatever a direct push left there.
+# watched by `OpenAgents.Forge.MirrorWatch`): an operator sets
+# `OPENAGENTS_FORGE_MIRROR_URLS_JSON` for the environment and every forge push
+# is mirrored one-way, with lag detection on the status page. Until that
+# variable is set, GitHub receives only what someone pushes to it, and
+# `mirror_now/1` is a `git push --mirror` -- a force push -- so configuring it
+# makes the mirror authoritative over whatever a direct push left there.
 #
 # Git hands a pre-push hook the remote's name and URL on argv. Called directly,
 # take the same two arguments; a name alone is resolved through `git remote`.

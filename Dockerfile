@@ -144,6 +144,15 @@ ARG CODEX_VERSION
 ARG OPENCODE_VERSION
 ARG DEBIAN_SNAPSHOT
 ARG SOURCE_DATE_EPOCH=0
+
+# Geist TTFs for server-side image rendering (Open Graph cards). The web
+# ships the same faces as woff2; librsvg reads system fonts through
+# fontconfig, so the release image carries the pinned release's static weights.
+ARG GEIST_FONT_VERSION=1.7.2
+ARG GEIST_FONT_SHA256=7fc800d2ac6b92844895196e5041aca55d814c15db70c44f79b3b83ab82b04e2
+ARG GEIST_REGULAR_SHA256=5c8968eafb98a4c4f47033daf29e38e284a6f2a82eb017d171ab040fe7c4b615
+ARG GEIST_MEDIUM_SHA256=0090e004725f6f64b841715b4167920580f883fcf9b67fc6d744089103fec101
+ARG GEIST_SEMIBOLD_SHA256=612ec98df33935354f39e81e54101656961ab6e5549f64b63eb57868ba7bab8d
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 RUN sed -i \
@@ -154,9 +163,47 @@ RUN sed -i \
       /etc/apt/sources.list.d/debian.sources \
   && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
   && apt-get update \
-  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates curl git \
+  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates curl git unzip fontconfig librsvg2-bin \
   && rm -rf /var/lib/apt/lists/*
 
+# Server-side image rendering (Open Graph cards) reads system fonts through
+# fontconfig. The CSS declares the family as "Geist Sans" while the TTFs'
+# internal name is "Geist", so the alias below keeps librsvg on-brand without
+# touching the web font stack. Zip and extracted-file digests are both checked.
+RUN set -eu; \
+  archive="geist-font-v${GEIST_FONT_VERSION}.zip"; \
+  curl -fsSL --retry 3 -o "/tmp/${archive}" \
+    "https://github.com/vercel/geist-font/releases/download/v${GEIST_FONT_VERSION}/${archive}"; \
+  echo "${GEIST_FONT_SHA256}  /tmp/${archive}" | sha256sum --check --strict; \
+  install -d -m 0755 /usr/local/share/fonts/geist; \
+  unzip -q -j "/tmp/${archive}" \
+    "geist-font/Geist/ttf/Geist-Regular.ttf" \
+    "geist-font/Geist/ttf/Geist-Medium.ttf" \
+    "geist-font/Geist/ttf/Geist-SemiBold.ttf" \
+    -d /usr/local/share/fonts/geist; \
+  rm "/tmp/${archive}"; \
+  cd /usr/local/share/fonts/geist; \
+  printf '%s  %s\n' \
+    "${GEIST_REGULAR_SHA256}" "Geist-Regular.ttf" \
+    "${GEIST_MEDIUM_SHA256}" "Geist-Medium.ttf" \
+    "${GEIST_SEMIBOLD_SHA256}" "Geist-SemiBold.ttf" \
+    | sha256sum --check --strict; \
+  printf '%s\n' \
+    '<?xml version="1.0"?>' \
+    '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+    '<fontconfig>' \
+    '  <match target="pattern">' \
+    '    <test qual="any" name="family"><string>Geist Sans</string></test>' \
+    '    <edit name="family" mode="assign" binding="same"><string>Geist</string></edit>' \
+    '  </match>' \
+    '</fontconfig>' \
+    > /etc/fonts/local.conf; \
+  fc-cache -f >/dev/null; \
+  fc-match --format '%{family}\n' 'Geist Sans' | grep -qx 'Geist'; \
+  rsvg-convert --version
+
+# Codex, for the SCV deployment lane (SCV-001), pinned by version and
+# checksum like every other external artifact in this image.
 RUN set -eu; \
   case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
     amd64) codex_arch=x86_64; checksum=bd758d53d56e41dc65e045f4589df79a038ed197a011adcb52a258e6ad64cfda ;; \

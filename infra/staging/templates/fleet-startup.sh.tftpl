@@ -149,6 +149,14 @@ RELEASE_DISTRIBUTION=name
 RELEASE_NODE=openagents@$instance_ip
 EOF
 
+# Optional one-way GitHub mirrors, keyed by repository name. The value is
+# deployment policy (credential-free URLs by construction -- RuntimeConfig
+# refuses anything else), so it rides the plain environment when the
+# operator sets it.
+if [ -n "${forge_mirror_urls_json}" ]; then
+  echo "OPENAGENTS_FORGE_MIRROR_URLS_JSON=${forge_mirror_urls_json}" >>/run/openagents/runtime.env
+fi
+
 export DOCKER_CONFIG=/run/openagents/docker-config
 mkdir -p "$DOCKER_CONFIG"
 chmod 0700 "$DOCKER_CONFIG"

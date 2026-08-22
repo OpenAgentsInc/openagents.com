@@ -112,3 +112,9 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "forge_mirror_urls_json" {
+  description = "Optional JSON object from repository name to credential-free git mirror URL (e.g. {\"openagents.com\":\"https://github.com/OpenAgentsInc/openagents.com.git\"}). Empty disables mirroring."
+  type        = string
+  default     = ""
+}

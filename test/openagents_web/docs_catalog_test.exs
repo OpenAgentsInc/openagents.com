@@ -70,7 +70,7 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     end
   end
 
-  test "published CLI docs cover agent login, npm, npx, imports, and persistent Git authentication" do
+  test "published CLI docs cover authentication, installation, imports, and API access" do
     assert {:ok, install} = DocsCatalog.render("install-cli")
     assert install.markdown =~ "npm install --global @openagentsinc/cli"
     assert install.markdown =~ "npx --yes @openagentsinc/cli@latest"
@@ -83,6 +83,14 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     assert import.markdown =~ "one-time copy"
     assert import.markdown =~ "--wait-timeout 0"
     assert import.markdown =~ "A client timeout does not cancel"
+
+    assert {:ok, api} = DocsCatalog.render("cli-api")
+    assert api.markdown =~ "openagents api"
+    assert api.markdown =~ ".issues[]"
+    assert api.markdown =~ "projectsV2/PROJECT_NUMBER/items"
+    assert api.markdown =~ "numeric database ID"
+    assert api.markdown =~ "does not provide `openagents issue`"
+    assert api.markdown =~ "`openagents project` commands"
   end
 
   describe "the docs surface" do

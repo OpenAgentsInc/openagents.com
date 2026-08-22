@@ -1,6 +1,6 @@
 # GitHub-shaped Issues and Projects API assessment
 
-Date: 2026-08-20
+Date: 2026-08-22
 
 Status: Repository-scoped subset implemented; bounded compatibility gaps remain
 
@@ -18,12 +18,12 @@ infer authorization that the server does not enforce.
 
 | Concern | Methods and paths |
 | --- | --- |
-| Issues | `GET, POST /repos/{owner}/{repo}/issues`; `GET, PATCH /repos/{owner}/{repo}/issues/{number}` |
-| Comments | `GET, POST /repos/{owner}/{repo}/issues/{number}/comments`; `GET, PATCH, DELETE /repos/{owner}/{repo}/issues/comments/{id}` |
-| Labels | `GET, POST /repos/{owner}/{repo}/labels`; `GET, PATCH, DELETE /repos/{owner}/{repo}/labels/{name}` |
+| Issues | `GET, POST /repos/{owner}/{repo}/issues`; `GET, PUT, PATCH /repos/{owner}/{repo}/issues/{number}` |
+| Comments | `GET, POST /repos/{owner}/{repo}/issues/{number}/comments`; `GET, PUT, PATCH, DELETE /repos/{owner}/{repo}/issues/comments/{id}` |
+| Labels | `GET, POST /repos/{owner}/{repo}/labels`; `GET, PUT, PATCH, DELETE /repos/{owner}/{repo}/labels/{name}` |
 | Issue labels | `GET, POST /repos/{owner}/{repo}/issues/{number}/labels`; `DELETE /repos/{owner}/{repo}/issues/{number}/labels/{name}` |
-| Assignees | `GET /repos/{owner}/{repo}/assignees`; `GET /repos/{owner}/{repo}/assignees/{login}`; issue-assignee list/add/remove paths |
-| Milestones | `GET, POST /repos/{owner}/{repo}/milestones`; `GET, PATCH, DELETE /repos/{owner}/{repo}/milestones/{number}` |
+| Assignees | `GET /repos/{owner}/{repo}/assignees`; `GET /repos/{owner}/{repo}/assignees/{login}`; `GET, POST, DELETE /repos/{owner}/{repo}/issues/{number}/assignees` |
+| Milestones | `GET, POST /repos/{owner}/{repo}/milestones`; `GET, PUT, PATCH, DELETE /repos/{owner}/{repo}/milestones/{number}` |
 
 Cross-repository issue lists, organization issue lists, event/timeline APIs,
 locks, dependencies, sub-issues, and suggestion APIs are not implemented.

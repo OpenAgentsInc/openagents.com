@@ -2,6 +2,7 @@
 
 **Date:** 2026-08-21
 **Commits measured:** `81e4c25eb5b5` (`openagents/main`, the forge) for the API; `5bd0061e4f6e` in the `openagents` monorepo for `packages/openagents-cli` (package version `0.1.7`)
+**Status:** Stage 1 shipped on 2026-08-21 as `@openagentsinc/cli@0.2.1`; see section 5. Everything else below describes the surface as measured, unchanged.
 **Question:** Does the CLI only cover repository upload? What of the Issues and Projects API does it reach? Should that coverage be generated from an OpenAPI document instead of hand-written? What is the fastest honest path to managing issues and projects from a terminal?
 **Method:** direct reading of `lib/openagents_web/router.ex`, every controller it routes to under `/api/v3`, the contexts behind them (`lib/openagents/issues.ex`, `labels.ex`, `milestones.ex`, `projects.ex`, `repositories.ex`), the auth plugs, `lib/openagents_web/route_authority.ex`, `priv/api-contracts/repositories-v1.json` and its controller and test, and `docs/openagents-cli/`; plus direct reading of all 21 source files in the `openagents` monorepo at `packages/openagents-cli/src/` and its tests. The CLI lives in a different repository, so every CLI citation names it. Claims that neither repository can settle are in section 7 with the command that would settle them.
 
@@ -323,9 +324,41 @@ The order matters. The passthrough removes the urgency, the drift tests remove t
 
 Each stage is independently shippable and independently useful. Sizes are rough and relative.
 
-### Stage 1 — Ship `openagents api` (CLI repository only, small)
+### Stage 1 — Ship `openagents api` (CLI repository only, small) — SHIPPED 2026-08-21
 
 Add one leaf command taking a path, an optional `-X/--method`, repeated `-f key=value` body fields or `--input -` for raw JSON, and honoring the existing `--json` and profile flags. **Seam:** `packages/openagents-cli/src/cli.ts` plus a thin passthrough client in the `openagents` monorepo; no schema, no server change. **Size:** 150–250 lines with tests. **Effect:** every one of the 50 endpoints becomes reachable from a terminal, and every future endpoint arrives free. Also update `docs/openagents-cli/command-reference.md:171`, which currently lists a generic API command among the things the release does not provide, and fix the stale `repo delete` claim on the same line while you are in there.
+
+**What shipped.** `eaa2aa1006` in the `openagents` monorepo, released as
+`@openagentsinc/cli@0.2.1`. The command is `openagents api <path>`: a path
+without a leading slash resolves under `/api/v3/`, an absolute path must start
+with `/api/` and stay on the selected origin, `-X` covers GET, POST, PATCH,
+PUT, and DELETE, `-f key=value` repeats into a JSON object, `--input <file|->`
+takes a whole body from a file or standard input, `-H` repeats headers and
+refuses to overwrite `authorization`, and `--profile`/`--api-url`/`--json`
+behave as they do elsewhere. The body goes to stdout as JSON so it pipes into
+`jq`; a non-2xx writes status, body, and request id to stderr and exits
+non-zero, keeping stdout clean. 32 tests, and `ApiTransport` gained PATCH and
+PUT, which it had never carried (`api-transport.ts:8`) — the audit missed that
+the transport could not express the issue-update route at all.
+
+**What it cost to publish, which is worth recording.** `0.2.0` went to npm with
+`"effect": "catalog:"` in its dependencies and installed nowhere. The monorepo
+is a pnpm workspace: pnpm resolves catalog references while packing, `npm
+publish` does not, and the tarball reaches the registry looking healthy. npm
+refuses unpublishing outside its window, so `0.2.0` could only be deprecated
+and replaced. The rule now lives in that repository's `AGENTS.md` and
+`docs/DEPLOYMENT.md`, along with the check that catches it in seconds:
+install the published version from the registry rather than reading the
+publish output.
+
+**What Stage 1 does not fix**, both from section 3.2 and both server-side:
+reading an issue back from a private repository still answers 404, because the
+read pipeline discards the bearer token, so the passthrough can create an issue
+it cannot then show you. And the `projectsV2` routes still resolve through
+`Repositories.initial_repository!/0`, so `openagents api users/me/projectsV2`
+returns real-looking JSON describing one hardcoded repository rather than
+yours. A passthrough is faithful by design: it exposes those surfaces exactly
+as they are, including where they are wrong.
 
 ### Stage 2 — Let an authenticated caller read their own private issues (this repository only, medium)
 

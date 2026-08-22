@@ -265,3 +265,210 @@ the Zed fork, and the forge itself. Treat every UI reference (infinite canvas,
 panes) as pre-history of the current Desktop/Omega split rather than a spec.
 
 ---
+
+## Batch 2: Episodes 214-227 — Markets, Psionic, and the compute thesis
+
+Airtime window: March 2026. Five weekly market launches begin (compute ships,
+data ships thinly), the rollout pauses when Psionic redirects the buy side
+toward decentralized training, Probe joins the stack as a Rust coding agent,
+the propaganda podcast frames the network thesis, Pylon launches publicly,
+the Templar collapse supplies miners, payments flip from online-presence to
+verified ML work, bounties relaunch, worse-is-better becomes doctrine, and
+ocean power enters as a phase-3 horizon.
+
+### Episode summaries
+
+#### 214 — Compute Market
+
+Relaunches the 2023 product as an Airbnb-for-compute: sell spare Apple Silicon
+for Bitcoin over NIP-90 kind 5050 jobs. Autopilot v0.1 desktop app ships the
+same day with a Spark wallet unlocked by one BIP-39 seed that also derives the
+Nostr keypair. A buy-mode bootstrap sends 2-sat dummy jobs to seed sellers.
+Restates the five-market roadmap (compute, data, labor, liquidity, risk) plus
+draft NIPs for skills, sovereign agents (Frostr key splits), and agent credit.
+Foil math: 5.5 GW of idle desktop Macs against OpenAI's entire 2 GW.
+
+#### 215 — Data Market
+
+Second launch: monetize your data — especially Claude Code and Codex
+conversation logs — through NIP-DS, an open Nostr dataset-trading spec
+(kind 30404 listings, kind 30406 offers, delivery via DVM or NIP-90).
+Redaction-first flow: bundle, redact, canonical digest, list, offer, deliver.
+Host commits to paying more Bitcoin than anyone for coding-agent conversations
+to train OpenAgents' own agent. On-camera demo failed to complete; Autopilot
+Control super-CLI not ready.
+
+#### 216 — Psionic
+
+Pauses the market rollout: don't build supply without matched demand. Introduces
+Psionic, the all-Rust ML framework whose inference engine already edges out
+llama.cpp (172 vs 160 tokens/sec), produced by pointing Codex at libraries and
+looping until they outperform. New direction: decentralized training of
+OpenAgents' own Psion-class models, absorbing Prime Intellect and Bittensor
+research ported to Rust, with Bitcoin bounties for ML engineers. Reproduces the
+Percepta paper's executor-model direction.
+
+#### 217 — Psionic: Fast Qwen 3.5
+
+Single-metric obsession: tokens per second. Per-device, per-model custom CUDA
+kernels take Qwen 3.5 0.5B from parity to 523 vs 328 tokens/sec overnight, then
+repeat across the 2B, 4B, and 9B sizes. Community-driven targets; inference
+framed explicitly as a side quest on the way to the large decentralized
+training run.
+
+#### 218 — Probe
+
+Announces Probe, a lean fully-Rust embeddable coding agent in the OpenCode
+tradition, timed pointedly against the same-day Claude Code source leak. Codex
+is loved and borrowed from; MCP deliberately de-emphasized. Contribution rule:
+"Please don't send PRs. Please send detailed issues" — ideas accepted, code
+written by their own tooling.
+
+#### 219 — Probe: Inference Modes
+
+One day later, Probe demos three swappable backends: hosted Codex via ChatGPT
+Pro accounts, Qwen-fast served by Psionic on a remote RTX 4080 over Tailscale,
+and the local Apple Foundation Model. Thesis: route workloads across tiers —
+frontier models for hard reasoning, small models for volume, local models for
+trivial calls — estimating maybe half of Codex's roughly 1,000 tool calls per
+run could offload. Latency bragging: instant Ctrl-C exit.
+
+#### 220 — Propaganda Podcast
+
+Launches the openly declared propaganda arm: billions flowing to NVIDIA and
+clouds should train models on retail consumer compute paid in Bitcoin.
+Cites Bittensor Templar's 70-person peer-to-peer pretraining as proof and sets
+a 100x-participation goal. One-install personal super app folds the best open
+source in. Moat thesis: contributors go where they are paid most Bitcoin;
+networks cannot be copied. Revenue-share scorecard updated: OpenAI zero,
+OpenAgents thirty.
+
+#### 221 — Pylon Launch
+
+Pylon ships publicly: paste instructions to your coding agent, install a NIP-90
+provider with a built-in wallet, earn sats. StarCraft naming system codified
+(Probe, Pylon, Nexus, Psionic; Archon teased). Frames the global economic layer:
+closed players (Visa, Coinbase, Cloudflare, Stripe) are converging on stablecoin
+rails, so Bitcoiners must build the open version or face a new SWIFT.
+OpenAgents is buyer number one and invites outbids. Live counters show thousands
+of completed jobs without refresh.
+
+#### 222 — Templar Merge
+
+Covenant AI rugs Bittensor's flagship Templar subnet (~$10M cash-out); OpenAgents
+invites displaced miners into Pylon. Anti-token thesis vindicated: if someone
+can rugpull, it is not decentralized; companies with vesting hold administrators
+accountable. Agents ported Templar and Prime Intellect training code to Psionic
+overnight; fleet-wide hill-climbing loops benchmark inference on every
+participant machine. Network doubled twice in two days post-launch (52 nodes,
+108k sats paid).
+
+#### 223 — Pay the People
+
+Social mood on AI turns negative; labs risk a generational fumble. Fix: pay
+people directly for compute, data, and contributions instead of lobbying for
+UBI. Audit of broken promises: Altman's DevDay revenue-sharing pledge versus
+zero paid to developers (the $1.3B went to Microsoft); this series started the
+day after that promise. Demonstrates heterogeneous-device training across M3
+Max, old MacBook CPU fallback, and a remote RTX 4080 over Tailscale. Roadmap:
+rebuild the full OpenAI/Anthropic product suite on this substrate — fine-tuning
+API, continual learning as a service, image generation, embeddings.
+
+#### 224 — Distributed Training 101
+
+Training seminar on run day. Milestone: 1M+ sats paid across 1,300+ pylons.
+Policy change effective immediately: no more pay-for-online; payouts follow real
+ML work delivered. Weak devices get validator assignments; device-to-job
+matching will be learned empirically and exposed through public stats and APIs
+agents can crawl. Stanford's open language-models-from-scratch course becomes
+network homework (assignment 1: BPE tokenizer, transformer, Adam optimizer;
+assignment 2: Flash Attention in Triton, distributed data parallel, scaling
+laws). DiLoCo architecture explained: heavy local work, occasional sync.
+
+#### 225 — Developer Bounties
+
+Revives the paid-bounties program with a permanent list at openagents.com/
+bounties. Tours the whole suite: front door becoming a ChatGPT-style homepage,
+Autopilot targeting Microsoft Copilot replacement, Nexus carrying a Bitcoin
+treasury module, Probe replacing Claude Code/Cursor internally (still wrapping
+Cursor under the hood), Forge as the internal software factory inspired by
+Ramp's Inspect-agent writeup, mobile for voice control of Probes. Anti-spam
+rules: unknown PRs auto-closed, vetting happens in humans-only Discord.
+Pet-peeve bounties already shipped: visible account email, weekly-limit display,
+multi-account switching on rate limits, API-key fallback.
+
+#### 226 — Worse is Better
+
+Doctrine episode: the New Jersey school beats the MIT school — ship the simple
+viral thing, grow it to 90 percent of right. Nostr as modern proof; UNIX/C as
+the original viruses. Contrast operating models: no stealth year, optimize for
+virality from day one. Consumer compute is priced at zero today; put a price on
+it and build value above it. Twenty gigawatts of consumer compute versus
+OpenAI's two.
+
+#### 227 — Ocean Power
+
+Back from silence with Ben Silone hired for ocean tech. Long-term OTEC thesis:
+monetize stranded ocean energy at source with Bitcoin mining; free seawater
+cooling; floating cities as phase 3 (100 MW minimum ambitions; Panthalassa
+critiqued as too small). Immediate business: Pylon v0.2 within 48 hours, LDK
+replacing a bottlenecked payment provider, Qwen fine-tuning on Harvey's legal
+benchmark to position Autopilot as the neutral last agent — hyper-specialized
+per-business agents, export-your-data always, pricing barely above compute.
+Anthropic named most dangerous company in the world; "print eight billion rings"
+versus fighting for the one ring.
+
+### Batch synthesis and integration notes
+
+This arc contains the economic core that later episodes refine into the
+accepted-outcome economy: verified work, receipts, device-to-job matching, and
+paying validators. It also contains the clearest early statement of the
+issue-not-PR participation model that the forge now enforces literally.
+
+Dispositions:
+
+1. **Live.** Pylon node economics and Psionic (Tassadar runs on both);
+   Probe's backend-pluralism (now the SCV driver question: hosted versus
+   self-hosted executors); verified-work payouts replacing presence payouts
+   (the work-job receipt model); public stats pages; worse-is-better shipping
+   culture; anti-spam contribution rules (now membership-gated push).
+2. **Dust off.**
+   - **NIP-DS data market**: shipped thin, then abandoned when training became
+     the buyer. The buyer now exists (training traces, Ox Alpha logs). A
+     dataset-listing surface tied to trace visibility policy would revive it
+     without new protocol work.
+   - **Curriculum-as-bounty**: Stanford-homework assignments as paid network
+     work is directly portable to forge issues — a `bounty` label plus sats
+     pricing would restart the contributor flywheel on the new tracker.
+   - **Device-to-job matching APIs**: promised so agents could crawl earnings
+     estimates; still absent. Fits the cloud-computer capacity work (issues
+     #37/#38).
+   - **Continual-learning-as-a-service API**: named twice, never built; the
+     closest living relative is Tassadar's never-stopped run.
+3. **Reimagine.**
+   - **Five markets on weekly cadence**: compute proved, data half-proved,
+     labor became work jobs, liquidity and risk never launched. Keep the
+     shared-kernel idea; drop the cadence.
+   - **The neutral last agent / all-in-one dashboard**: the anti-lock-in
+     positioning survives in the front-door thesis, but the single dashboard
+     is now several surfaces (forge, chat, projects, status). Revisit as a
+     signed-in command-center surface rather than a new product.
+   - **Legal fine-tune wedge (Harvey benchmark)**: domain-fine-tuning as a
+     service remains a plausible Pylon revenue mode once training receipts are
+     public.
+4. **Retired.**
+   - **Spark wallet inside Autopilot**: superseded by MoneyDevKit/LDK
+     self-custody (episode 235).
+   - **Buy-mode dummy-job bootstrapping**: gamed instantly by design; replaced
+     by pay-for-verified-work.
+   - **Wrapping Cursor under the hood in Probe**: dependency inverted since;
+     own harnesses only.
+   - **Pay-for-online mining**: retired deliberately in 224; do not reintroduce
+     presence-based rewards anywhere.
+
+Pivot watch: this batch treats GitHub as contribution surface (auto-closing PRs)
+and predates the forge entirely. Any marketplace or bounty mechanics must be
+restated against forge authority (repository membership, PAT scopes) rather than
+GitHub primitives.
+
+---

@@ -46,6 +46,10 @@ defmodule OpenAgentsWeb.Layouts do
     default: false,
     doc: "use a wider content column for catalog and list surfaces"
 
+  attr :full_width, :boolean,
+    default: false,
+    doc: "let a signed-out application surface use the full content area"
+
   attr :title, :string, default: nil, doc: "the page title to display in the command bar"
 
   attr :subtitle, :string, default: nil, doc: "the page subtitle to display in the command bar"
@@ -116,7 +120,12 @@ defmodule OpenAgentsWeb.Layouts do
           <%= if @flush or @current_scope do %>
             {render_slot(@inner_block)}
           <% else %>
-            <div class={["mx-auto space-y-4", @wide && "max-w-6xl", !@wide && "max-w-2xl"]}>
+            <div class={[
+              "mx-auto w-full space-y-4",
+              @full_width && "max-w-none",
+              !@full_width && @wide && "max-w-6xl",
+              !@full_width && !@wide && "max-w-2xl"
+            ]}>
               {render_slot(@inner_block)}
             </div>
           <% end %>

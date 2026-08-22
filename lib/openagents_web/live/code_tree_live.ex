@@ -76,6 +76,7 @@ defmodule OpenAgentsWeb.CodeTreeLive do
       sidebar_sections={assigns[:sidebar_sections]}
       current_scope={@current_scope}
       title="Code"
+      full_width
     >
       <main id="code-tree-page" class="app-shell code-shell">
         <.repo_view

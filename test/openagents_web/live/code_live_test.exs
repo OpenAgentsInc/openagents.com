@@ -178,6 +178,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert html =~ ~s(aria-label="OpenAgentsInc / openagents.com")
       assert html =~ ~s(class="repo-view)
       assert html =~ ~s(class="repo-tabs)
+      assert html =~ ~s(class="mx-auto w-full space-y-4 max-w-none")
       assert html =~ "Add the transparency audit fixture"
       assert html =~ "First commit"
       assert html =~ ~s(id="repo-refs")

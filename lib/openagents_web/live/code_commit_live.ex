@@ -145,6 +145,7 @@ defmodule OpenAgentsWeb.CodeCommitLive do
       sidebar_sections={assigns[:sidebar_sections]}
       current_scope={@current_scope}
       title="Commit"
+      full_width
     >
       <main id="code-commit-page" class="app-shell code-shell">
         <section class="code" aria-label="Commit view">

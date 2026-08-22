@@ -103,6 +103,7 @@ defmodule OpenAgentsWeb.CodeBlobLive do
       sidebar_sections={assigns[:sidebar_sections]}
       current_scope={assigns[:current_scope]}
       title="Code"
+      full_width
     >
       <main id="code-blob-page" class="app-shell code-shell">
         <section class="code" aria-label="File view">

@@ -8,6 +8,8 @@ defmodule OpenAgentsWeb.DocsLiveTest do
 
     assert html =~ "Documentation"
     assert has_element?(view, ~s{nav[aria-label="Documentation"]})
+    assert has_element?(view, ~s(#docs-sidebar-collapse-toggle[aria-controls="docs-sidebar"]))
+    assert has_element?(view, ~s(#docs-sidebar-expand-toggle[aria-controls="docs-sidebar"]))
   end
 
   test "the docs sidebar has no search bar", %{conn: conn} do

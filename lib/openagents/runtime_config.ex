@@ -110,9 +110,10 @@ defmodule OpenAgents.RuntimeConfig do
   def internal_surfaces_visible?(%__MODULE__{environment: environment}),
     do: environment != :production
 
-  @spec fetch_secret(:openai_api_key) :: {:ok, String.t()} | {:error, :not_configured}
-  def fetch_secret(:openai_api_key) do
-    case Application.fetch_env(:openagents, :openai_api_key) do
+  @spec fetch_secret(:openai_api_key | :openrouter_api_key) ::
+          {:ok, String.t()} | {:error, :not_configured}
+  def fetch_secret(secret) when secret in [:openai_api_key, :openrouter_api_key] do
+    case Application.fetch_env(:openagents, secret) do
       {:ok, value} when is_binary(value) and byte_size(value) > 0 -> {:ok, value}
       _missing -> {:error, :not_configured}
     end

@@ -160,8 +160,9 @@ defmodule OpenAgentsWeb.Layouts do
           },
 
           handleClick(event) {
-            if (event.target.closest("#sidebar-toggle")) {
-              this.applyState(!this.open, {focusSidebar: !this.open})
+            if (event.target.closest("[data-sidebar-toggle]")) {
+              const opening = !this.open
+              this.applyState(opening, opening ? {focusSidebar: true} : {restoreFocus: true})
               return
             }
 
@@ -188,21 +189,17 @@ defmodule OpenAgentsWeb.Layouts do
 
           applyState(open, options = {}) {
             const sidebar = this.el.querySelector("#sidebar")
-            const toggle = this.el.querySelector("#sidebar-toggle")
+            const toggles = this.el.querySelectorAll("[data-sidebar-toggle]")
+            const expandToggle = this.el.querySelector("#sidebar-expand-toggle")
             const scrim = this.el.querySelector("#sidebar-scrim")
-            if (!sidebar || !toggle || !scrim) return
+            if (!sidebar || toggles.length === 0 || !expandToggle || !scrim) return
 
             this.open = open
             this.el.dataset.sidebarInitialized = "true"
             this.el.dataset.sidebarOpen = open ? "true" : "false"
             sidebar.setAttribute("aria-hidden", open ? "false" : "true")
             sidebar.inert = !open
-            toggle.setAttribute("aria-expanded", open ? "true" : "false")
-            toggle.setAttribute(
-              "aria-label",
-              open ? "Collapse navigation sidebar" : "Open navigation sidebar"
-            )
-            toggle.title = open ? "Collapse navigation sidebar" : "Open navigation sidebar"
+            toggles.forEach(toggle => toggle.setAttribute("aria-expanded", open ? "true" : "false"))
             scrim.setAttribute("aria-hidden", open ? "false" : "true")
             document.body.classList.toggle("sidebar-open", open && !this.desktop.matches)
 
@@ -211,7 +208,7 @@ defmodule OpenAgentsWeb.Layouts do
                 sidebar.querySelector("a, button, summary")?.focus()
               })
             } else if (options.restoreFocus) {
-              toggle.focus()
+              expandToggle.focus()
             }
           }
         }
@@ -231,17 +228,17 @@ defmodule OpenAgentsWeb.Layouts do
       <div class="flex flex-1 min-w-0 items-center gap-2">
         <UI.button
           :if={@current_scope}
-          id="sidebar-toggle"
-          class="sidebar-toggle"
+          id="sidebar-expand-toggle"
+          class="sidebar-toggle sidebar-toggle--expand"
           variant={:ghost}
           size={:sm}
+          data-sidebar-toggle
           aria-label="Open navigation sidebar"
           aria-controls="sidebar"
           aria-expanded="false"
           title="Open navigation sidebar"
         >
-          <UI.icon name="menu" class="sidebar-toggle__open" />
-          <UI.icon name="sidebar-collapse-left" class="sidebar-toggle__collapse" />
+          <UI.icon name="sidebar-open-left" />
         </UI.button>
         <%= if !@current_scope do %>
           <.link navigate={~p"/"} class="btn text-xl text-foreground" data-variant="ghost">
@@ -718,7 +715,22 @@ defmodule OpenAgentsWeb.Layouts do
 
     ~H"""
     <aside id="sidebar" class="sidebar" aria-hidden="true">
-      <Layouts.sidebar_brand />
+      <div class="sidebar-app-header">
+        <Layouts.sidebar_brand />
+        <UI.button
+          id="sidebar-collapse-toggle"
+          class="sidebar-toggle sidebar-toggle--collapse"
+          variant={:ghost}
+          size={:sm}
+          data-sidebar-toggle
+          aria-label="Collapse navigation sidebar"
+          aria-controls="sidebar"
+          aria-expanded="false"
+          title="Collapse navigation sidebar"
+        >
+          <UI.icon name="sidebar-left" />
+        </UI.button>
+      </div>
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
         <Layouts.sidebar_link path={~p"/"} label="Home" icon="home" patchable={false} />

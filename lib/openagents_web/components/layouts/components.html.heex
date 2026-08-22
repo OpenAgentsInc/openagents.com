@@ -1,7 +1,22 @@
 <% patchable? = @active_component != :icons %>
-<div class="docs-layout">
-  <aside class="docs-sidebar">
-    <Layouts.sidebar_brand title="Components" path={~p"/components"} />
+<div id="docs-shell" class="docs-layout" phx-hook="DocsSidebar">
+  <aside id="docs-sidebar" class="docs-sidebar" aria-hidden="false">
+    <div class="sidebar-app-header">
+      <Layouts.sidebar_brand title="Components" path={~p"/components"} />
+      <UI.button
+        id="docs-sidebar-collapse-toggle"
+        class="sidebar-toggle sidebar-toggle--collapse"
+        variant={:ghost}
+        size={:sm}
+        data-docs-sidebar-toggle
+        aria-label="Collapse component library sidebar"
+        aria-controls="docs-sidebar"
+        aria-expanded="true"
+        title="Collapse component library sidebar"
+      >
+        <UI.icon name="sidebar-left" />
+      </UI.button>
+    </div>
 
     <nav class="docs-sidebar__nav" aria-label="Component library">
       <Layouts.sidebar_section
@@ -38,11 +53,33 @@
     <Layouts.sidebar_footer current_user={@current_scope} />
   </aside>
 
+  <button
+    id="docs-sidebar-scrim"
+    type="button"
+    class="docs-sidebar-scrim"
+    aria-label="Close component library sidebar"
+    aria-hidden="true"
+    tabindex="-1"
+  ></button>
+
   <div class="docs-column">
     <%!-- The header spans the content column, not the sidebar: the trail names
     where you are within the library, and the controls act on the page you are
     reading. Same arrangement as the docs surface it is modelled on. --%>
     <header class="docs-header">
+      <UI.button
+        id="docs-sidebar-expand-toggle"
+        class="sidebar-toggle sidebar-toggle--expand"
+        variant={:ghost}
+        size={:sm}
+        data-docs-sidebar-toggle
+        aria-label="Open component library sidebar"
+        aria-controls="docs-sidebar"
+        aria-expanded="true"
+        title="Open component library sidebar"
+      >
+        <UI.icon name="sidebar-open-left" />
+      </UI.button>
       <UI.breadcrumb label="Component library">
         <:item navigate={~p"/components"}>Components</:item>
         <:item :if={assigns[:section_title]}>{@section_title}</:item>

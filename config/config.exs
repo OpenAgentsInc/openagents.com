@@ -100,6 +100,8 @@ config :openagents,
   provider: OpenAgents.Providers.OpenAI,
   openai_model: "gpt-5.6-luna",
   openai_api_key: nil,
+  openrouter_api_key: nil,
+  openrouter_model: "stealth/ox-alpha",
   shadow_programs: [
     enabled: false,
     provider: OpenAgents.ShadowPrograms.OpenAI,

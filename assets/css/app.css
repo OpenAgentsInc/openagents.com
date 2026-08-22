@@ -290,24 +290,57 @@ body.sidebar-open {
 }
 
 .sidebar-toggle {
-  flex: none;
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.sidebar-toggle__collapse {
-  display: none;
-}
-
-.sidebar-toggle[aria-expanded="true"] .sidebar-toggle__open {
-  display: none;
-}
-
-.sidebar-toggle[aria-expanded="true"] .sidebar-toggle__collapse {
   display: inline-flex;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  cursor: w-resize;
+  transition:
+    background-color 150ms var(--ease),
+    color 150ms var(--ease);
+}
+
+.sidebar-toggle .icon {
+  width: 18px;
+  height: 18px;
+}
+
+@media (hover: hover) {
+  .sidebar-toggle:hover {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    color: var(--text-primary);
+  }
+}
+
+.sidebar-app-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 52px;
+  padding-inline-end: 8px;
+}
+
+.sidebar-app-header .sidebar-brand {
+  flex: 1;
+  min-width: 0;
+}
+
+#app-shell[data-sidebar-initialized="true"][data-sidebar-open="true"] .sidebar-toggle--expand,
+#app-shell[data-sidebar-initialized="true"][data-sidebar-open="false"] .sidebar-toggle--collapse {
+  display: none;
 }
 
 @media (min-width: 1024px) {
+  #app-shell:not([data-sidebar-initialized="true"]) .sidebar-toggle--expand {
+    display: none;
+  }
+
   #app-shell > .sidebar {
     position: relative;
     inset: auto;
@@ -559,6 +592,73 @@ body.sidebar-open {
   overflow: hidden;
 }
 
+.docs-sidebar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  border: 0;
+  background: rgb(0 0 0 / 58%);
+}
+
+#docs-shell[data-sidebar-open="true"] > .docs-sidebar-scrim {
+  display: block;
+}
+
+body.docs-sidebar-open {
+  overflow: hidden;
+}
+
+#docs-shell[data-sidebar-initialized="true"][data-sidebar-open="true"] .sidebar-toggle--expand,
+#docs-shell[data-sidebar-initialized="true"][data-sidebar-open="false"] .sidebar-toggle--collapse {
+  display: none;
+}
+
+#docs-shell > .docs-sidebar {
+  transition:
+    width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms ease;
+}
+
+@media (min-width: 1024px) {
+  #docs-shell:not([data-sidebar-initialized="true"]) .sidebar-toggle--expand {
+    display: none;
+  }
+
+  #docs-shell[data-sidebar-initialized="true"][data-sidebar-open="false"] > .docs-sidebar {
+    width: 0;
+    border-color: transparent;
+    visibility: hidden;
+  }
+
+  #docs-shell > .docs-sidebar-scrim,
+  #docs-shell[data-sidebar-open="true"] > .docs-sidebar-scrim {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  #docs-shell > .docs-sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 50;
+    width: min(280px, calc(100vw - 48px));
+    padding-inline-start: env(safe-area-inset-left);
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 200ms;
+  }
+
+  #docs-shell[data-sidebar-open="true"] > .docs-sidebar {
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0s;
+  }
+}
+
 
 .docs-sidebar__header {
   display: flex;
@@ -621,6 +721,71 @@ body.sidebar-open {
      sidebar. Text starting immediately against a rule reads as an overflow of
      the sidebar rather than as its own column. */
   padding: 40px 64px 96px;
+}
+
+.chat-placeholder-composer {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 30;
+  border-block-start: 1px solid var(--line-faint);
+  background: var(--ink-void);
+  padding: 16px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+.chat-placeholder-composer__form {
+  width: 100%;
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+.chat-placeholder-composer__toolbar {
+  padding-bottom: 8px;
+}
+
+.chat-placeholder-composer__reasoning {
+  width: auto;
+  min-height: 28px;
+  margin: 0;
+  padding: 3px 28px 3px 8px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background-color: var(--ink-void);
+  color: var(--text-body);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.chat-placeholder-composer__reasoning:hover:not(:disabled),
+.chat-placeholder-composer__reasoning:focus-visible {
+  border-color: var(--line-strong);
+  color: var(--text-primary);
+}
+
+.chat-placeholder-composer__submit {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ink-raised);
+  color: var(--text-primary);
+}
+
+@media (hover: hover) {
+  .chat-placeholder-composer__submit:hover:not(:disabled) {
+    border-color: var(--text-muted);
+    background: var(--ink-hover);
+    color: var(--text-primary);
+  }
+}
+
+@media (min-width: 1024px) {
+  #app-shell:not([data-sidebar-initialized="true"]) .chat-placeholder-composer,
+  #app-shell[data-sidebar-open="true"] .chat-placeholder-composer {
+    inset-inline-start: 240px;
+  }
 }
 
 /* Chat UI (OpenAgents) */

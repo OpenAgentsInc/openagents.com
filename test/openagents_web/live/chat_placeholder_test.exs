@@ -28,8 +28,31 @@ defmodule OpenAgentsWeb.ChatPlaceholderTest do
     conn = log_in_admin_user(conn, "placeholder-operator")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
+    assert has_element?(view, "#chat-placeholder-transcript")
     assert has_element?(view, "#chat-placeholder-empty")
     assert has_element?(view, ~s(a[href="/sarah"]))
+    assert has_element?(view, ~s(#chat-placeholder-form[data-submit-on-enter="true"]))
+    assert has_element?(view, ~s(#chat-placeholder-form[data-clear-event="chat-preview:clear"]))
+    assert has_element?(view, ~s(#chat_message[phx-mounted]))
+    assert has_element?(view, ~s(#chat_reasoning[name="chat[reasoning]"]))
+    assert has_element?(view, "#chat-placeholder-submit")
+  end
+
+  test "the composer shows a safe inline error when OpenRouter is not configured", %{conn: conn} do
+    conn = log_in_admin_user(conn, "placeholder-composer-operator")
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    view
+    |> form("#chat-placeholder-form", %{"chat" => %{"message" => "Draft the release notes."}})
+    |> render_submit()
+
+    assert has_element?(
+             view,
+             ~s([data-message-role="user"]),
+             "Draft the release notes."
+           )
+
+    assert has_element?(view, ~s([role="status"]), "OpenRouter is not configured")
   end
 
   test "a non-operator on a live socket is still turned away by the mount hook", %{conn: conn} do

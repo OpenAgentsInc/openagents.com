@@ -1,6 +1,21 @@
-<div class="docs-layout">
-  <aside class="docs-sidebar">
-    <Layouts.sidebar_brand title="Docs" path={~p"/docs"} />
+<div id="docs-shell" class="docs-layout" phx-hook="DocsSidebar">
+  <aside id="docs-sidebar" class="docs-sidebar" aria-hidden="false">
+    <div class="sidebar-app-header">
+      <Layouts.sidebar_brand title="Docs" path={~p"/docs"} />
+      <UI.button
+        id="docs-sidebar-collapse-toggle"
+        class="sidebar-toggle sidebar-toggle--collapse"
+        variant={:ghost}
+        size={:sm}
+        data-docs-sidebar-toggle
+        aria-label="Collapse documentation sidebar"
+        aria-controls="docs-sidebar"
+        aria-expanded="true"
+        title="Collapse documentation sidebar"
+      >
+        <UI.icon name="sidebar-left" />
+      </UI.button>
+    </div>
 
     <nav class="docs-sidebar__nav" aria-label="Documentation">
       <Layouts.sidebar_section
@@ -23,8 +38,30 @@
     <Layouts.sidebar_footer current_user={@current_scope} />
   </aside>
 
+  <button
+    id="docs-sidebar-scrim"
+    type="button"
+    class="docs-sidebar-scrim"
+    aria-label="Close documentation sidebar"
+    aria-hidden="true"
+    tabindex="-1"
+  ></button>
+
   <div class="docs-column">
     <header class="docs-header">
+      <UI.button
+        id="docs-sidebar-expand-toggle"
+        class="sidebar-toggle sidebar-toggle--expand"
+        variant={:ghost}
+        size={:sm}
+        data-docs-sidebar-toggle
+        aria-label="Open documentation sidebar"
+        aria-controls="docs-sidebar"
+        aria-expanded="true"
+        title="Open documentation sidebar"
+      >
+        <UI.icon name="sidebar-open-left" />
+      </UI.button>
       <UI.breadcrumb label="Documentation">
         <:item navigate={~p"/docs"}>Docs</:item>
         <:item :if={assigns[:section_title]}>{@section_title}</:item>

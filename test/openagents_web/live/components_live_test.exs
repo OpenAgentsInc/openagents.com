@@ -46,6 +46,8 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
 
     assert has_element?(view, ~s{nav[aria-label="Component library"]})
     assert has_element?(view, ~s{a[href="/components/icons"]})
+    assert has_element?(view, ~s(#docs-sidebar-collapse-toggle[aria-controls="docs-sidebar"]))
+    assert has_element?(view, ~s(#docs-sidebar-expand-toggle[aria-controls="docs-sidebar"]))
   end
 
   test "an unknown slug redirects back to the index", %{conn: conn} do

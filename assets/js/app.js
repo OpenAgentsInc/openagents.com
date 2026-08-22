@@ -27,6 +27,7 @@ import topbar from "../vendor/topbar"
 import posthog from "posthog-js"
 import VoiceController from "./voice_controller"
 import PacedTranscript from "./paced_transcript"
+import DocsSidebar from "./docs_sidebar"
 
 // Browser analytics (docs/2026-08-21-posthog-integration-runbook.md). The
 // root layout carries the boot configuration and the session identity as data
@@ -73,7 +74,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, VoiceController, PacedTranscript},
+  hooks: {...colocatedHooks, VoiceController, PacedTranscript, DocsSidebar},
 })
 
 // Show progress bar on live navigation and form submits
@@ -124,4 +125,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-

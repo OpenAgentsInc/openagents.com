@@ -128,6 +128,14 @@ defmodule OpenAgentsWeb.AI.PromptInput do
     source removes the last attachment
     """
 
+  attr :clear_event, :string,
+    default: nil,
+    doc: "server event that clears and focuses the textarea after a completed submission"
+
+  attr :clear_on_submit, :boolean,
+    default: false,
+    doc: "clears the textarea on the next animation frame after a submitted form is serialized"
+
   attr :class, :any, default: nil
   attr :group_class, :any, default: nil
   attr :rest, :global, include: ~w(method action)
@@ -155,6 +163,8 @@ defmodule OpenAgentsWeb.AI.PromptInput do
         data-file-input={"#{@id}-files"}
         data-submit-on-enter={to_string(@submit_on_enter)}
         data-backspace-event={@backspace_event}
+        data-clear-event={@clear_event}
+        data-clear-on-submit={to_string(@clear_on_submit)}
         data-dragging="false"
         {@rest}
       >
@@ -197,8 +207,20 @@ defmodule OpenAgentsWeb.AI.PromptInput do
             el.style.height = `${el.scrollHeight}px`
           }
 
+          this.clear = () => {
+            if (!this.textarea) return
+            this.textarea.value = ""
+            this.resize()
+            this.textarea.focus()
+          }
+
           this.onCompositionStart = () => { this.composing = true }
           this.onCompositionEnd = () => { this.composing = false }
+          this.onSubmit = () => {
+            if (this.el.dataset.clearOnSubmit === "true") {
+              requestAnimationFrame(() => this.clear())
+            }
+          }
 
           this.onKeyDown = (event) => {
             if (event.key === "Enter" && this.el.dataset.submitOnEnter === "true") {
@@ -271,6 +293,8 @@ defmodule OpenAgentsWeb.AI.PromptInput do
             this.textarea.addEventListener("compositionend", this.onCompositionEnd)
             this.resize()
           }
+          if (this.el.dataset.clearEvent) this.handleEvent(this.el.dataset.clearEvent, this.clear)
+          this.el.addEventListener("submit", this.onSubmit)
           this.el.addEventListener("dragenter", this.onDragEnter)
           this.el.addEventListener("dragover", this.onDragOver)
           this.el.addEventListener("dragleave", this.onDragLeave)
@@ -288,6 +312,7 @@ defmodule OpenAgentsWeb.AI.PromptInput do
             this.textarea.removeEventListener("compositionend", this.onCompositionEnd)
           }
           this.el.removeEventListener("dragenter", this.onDragEnter)
+          this.el.removeEventListener("submit", this.onSubmit)
           this.el.removeEventListener("dragover", this.onDragOver)
           this.el.removeEventListener("dragleave", this.onDragLeave)
           this.el.removeEventListener("drop", this.onDrop)

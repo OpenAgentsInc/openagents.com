@@ -83,7 +83,12 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     assert has_element?(
              view,
-             ~s(#sidebar-toggle[aria-controls="sidebar"][aria-expanded="false"])
+             ~s(#sidebar-expand-toggle[aria-controls="sidebar"][aria-expanded="false"])
+           )
+
+    assert has_element?(
+             view,
+             ~s(#sidebar-collapse-toggle[aria-controls="sidebar"][aria-expanded="false"])
            )
 
     # Every destination chat used to carry in its own rail is still reachable,

@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
   use OpenAgentsWeb, :live_view
 
-  alias OpenAgents.Chat.OpenRouter
+  alias OpenAgents.Chat.{OpenRouter, Runner}
 
   @reasoning_options [
     {"Reasoning off", "none"},
@@ -357,22 +357,12 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     to_form(%{"message" => "", "reasoning" => reasoning}, as: :chat)
   end
 
-  defp local_chat_request(messages, message, reasoning) do
-    %{
-      "model" => OpenRouter.default_model(),
-      "models" => ["openrouter/free"],
-      "reasoning" => reasoning,
-      "messages" =>
-        Enum.map(messages, &provider_message/1) ++ [%{"role" => "user", "content" => message}]
-    }
-  end
-
   defp submit_message(socket, message, reasoning) do
     stream_id = System.unique_integer([:positive, :monotonic])
     owner = self()
 
     request =
-      local_chat_request(
+      Runner.request(
         Enum.filter(socket.assigns.messages, fn message -> message.history? end),
         message,
         reasoning
@@ -380,10 +370,11 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
     task =
       Task.Supervisor.async_nolink(OpenAgents.ProviderTaskSupervisor, fn ->
-        OpenRouter.stream(
+        Runner.stream(
           request,
+          socket.assigns.current_user,
           fn event -> send(owner, {:openrouter_stream_event, stream_id, event}) end,
-          tool_context: %{user: socket.assigns.current_user}
+          []
         )
       end)
 
@@ -443,31 +434,6 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
     update(socket, :messages, &(&1 ++ [assistant]))
   end
-
-  defp provider_message(%{role: :assistant} = message) do
-    %{"role" => "assistant", "content" => message.content}
-    |> maybe_put_provider_message_id(message.provider_message_id)
-    |> maybe_put_provider_status(message.provider_status)
-    |> maybe_put_provider_reasoning_items(message.provider_reasoning_items)
-  end
-
-  defp provider_message(%{role: role, content: content}),
-    do: %{"role" => Atom.to_string(role), "content" => content}
-
-  defp maybe_put_provider_message_id(message, id) when is_binary(id),
-    do: Map.put(message, "id", id)
-
-  defp maybe_put_provider_message_id(message, _id), do: message
-
-  defp maybe_put_provider_status(message, status) when is_binary(status),
-    do: Map.put(message, "status", status)
-
-  defp maybe_put_provider_status(message, _status), do: message
-
-  defp maybe_put_provider_reasoning_items(message, items) when is_list(items) and items != [],
-    do: Map.put(message, "reasoning_items", items)
-
-  defp maybe_put_provider_reasoning_items(message, _items), do: message
 
   defp error_message(:missing_api_key), do: "OpenRouter is not configured for this environment."
   defp error_message(:rate_limited), do: "OpenRouter is rate-limited. Try again later."

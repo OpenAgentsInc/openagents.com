@@ -13,7 +13,7 @@ defmodule OpenAgentsWeb.ForgeUserController do
         json(conn, %{
           "id" => user.github_id,
           "login" => user.github_login,
-          "token_expires_at" => DateTime.to_iso8601(conn.assigns.api_token.expires_at),
+          "token_expires_at" => serialized_expiration(conn.assigns.api_token.expires_at),
           "namespaces" =>
             Enum.map(namespaces, fn namespace ->
               %{
@@ -28,6 +28,9 @@ defmodule OpenAgentsWeb.ForgeUserController do
         render_error(conn, reason)
     end
   end
+
+  defp serialized_expiration(nil), do: nil
+  defp serialized_expiration(%DateTime{} = expires_at), do: DateTime.to_iso8601(expires_at)
 
   defp render_error(conn, :github_connection_required),
     do: error(conn, :forbidden, "github_connection_required", "Connect GitHub to continue")

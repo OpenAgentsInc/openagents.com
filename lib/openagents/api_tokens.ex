@@ -1,5 +1,5 @@
 defmodule OpenAgents.ApiTokens do
-  @moduledoc "Scoped, expiring first-party credentials for non-browser API clients."
+  @moduledoc "Scoped first-party credentials for non-browser API clients."
 
   import Ecto.Query
 
@@ -9,7 +9,7 @@ defmodule OpenAgents.ApiTokens do
   alias OpenAgents.Repo
 
   @prefix "oa_pat_"
-  @allowed_scopes ["forge:write"]
+  @allowed_scopes ["account:write", "forge:write"]
   @maximum_lifetime_days 90
 
   @spec create(User.t(), map()) ::
@@ -17,7 +17,7 @@ defmodule OpenAgents.ApiTokens do
   def create(%User{id: user_id}, attributes) when is_map(attributes) do
     with {:ok, name} <- name(attributes),
          {:ok, scopes} <- scopes(attributes),
-         {:ok, lifetime_days} <- lifetime_days(attributes) do
+         {:ok, expires_at} <- expires_at(attributes) do
       id = Ecto.UUID.generate()
       secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
       plaintext = @prefix <> id <> "." <> secret
@@ -28,7 +28,7 @@ defmodule OpenAgents.ApiTokens do
           |> ApiToken.create_changeset(%{
             name: name,
             scopes: scopes,
-            expires_at: DateTime.add(DateTime.utc_now(), lifetime_days, :day)
+            expires_at: expires_at
           })
           |> Repo.insert!()
 
@@ -118,7 +118,7 @@ defmodule OpenAgents.ApiTokens do
 
   defp usable?(token, required_scope) do
     is_nil(token.revoked_at) and required_scope in token.scopes and
-      DateTime.compare(DateTime.utc_now(), token.expires_at) == :lt
+      (is_nil(token.expires_at) or DateTime.compare(DateTime.utc_now(), token.expires_at) == :lt)
   end
 
   defp name(attributes) do
@@ -145,18 +145,35 @@ defmodule OpenAgents.ApiTokens do
     end
   end
 
-  defp lifetime_days(attributes) do
-    case Map.get(attributes, "lifetime_days") || Map.get(attributes, :lifetime_days) || 30 do
-      days when is_integer(days) and days in 1..@maximum_lifetime_days -> {:ok, days}
-      days when is_binary(days) -> parse_lifetime_days(days)
-      _invalid -> {:error, :invalid_api_token}
+  defp expires_at(attributes) do
+    case Map.get(attributes, "lifetime_days") || Map.get(attributes, :lifetime_days) do
+      nil ->
+        {:ok, nil}
+
+      "" ->
+        {:ok, nil}
+
+      "never" ->
+        {:ok, nil}
+
+      days when is_integer(days) and days in 1..@maximum_lifetime_days ->
+        {:ok, DateTime.add(DateTime.utc_now(), days, :day)}
+
+      days when is_binary(days) ->
+        parse_expiry(days)
+
+      _invalid ->
+        {:error, :invalid_api_token}
     end
   end
 
-  defp parse_lifetime_days(value) do
+  defp parse_expiry(value) do
     case Integer.parse(value) do
-      {days, ""} when days in 1..@maximum_lifetime_days -> {:ok, days}
-      _invalid -> {:error, :invalid_api_token}
+      {days, ""} when days in 1..@maximum_lifetime_days ->
+        {:ok, DateTime.add(DateTime.utc_now(), days, :day)}
+
+      _invalid ->
+        {:error, :invalid_api_token}
     end
   end
 

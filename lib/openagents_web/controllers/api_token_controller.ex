@@ -11,6 +11,13 @@ defmodule OpenAgentsWeb.ApiTokenController do
   end
 
   def create(conn, params) do
+    params =
+      if Map.has_key?(params, "scopes") or Map.has_key?(params, :scopes) do
+        params
+      else
+        Map.put(params, "scopes", ["account:write", "forge:write"])
+      end
+
     case ApiTokens.create(conn.assigns.current_user, params) do
       {:ok, token, plaintext} ->
         conn

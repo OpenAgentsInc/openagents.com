@@ -25,7 +25,7 @@ defmodule OpenAgents.ApiTokens.ApiToken do
   def create_changeset(token, attributes) do
     token
     |> cast(attributes, [:name, :scopes, :expires_at])
-    |> validate_required([:name, :scopes, :expires_at])
+    |> validate_required([:name, :scopes])
     |> validate_length(:name, min: 1, max: 80)
     |> validate_length(:scopes, min: 1, max: 8)
     |> check_constraint(:scopes, name: :api_tokens_scopes_present)

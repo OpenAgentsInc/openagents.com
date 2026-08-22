@@ -47,12 +47,11 @@ defmodule OpenAgentsWeb.ForgeUserControllerTest do
              "namespaces" => [
                %{"id" => namespace_id, "login" => "octavia", "type" => "user"}
              ],
-             "token_expires_at" => token_expires_at
+             "token_expires_at" => nil
            } = json_response(response, 200)
 
     assert github_id == user.github_id
     assert namespace_id == user.github_id
-    assert {:ok, _date_time, 0} = DateTime.from_iso8601(token_expires_at)
     assert get_resp_header(response, "cache-control") == ["no-store"]
   end
 

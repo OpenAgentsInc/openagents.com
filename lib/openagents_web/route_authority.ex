@@ -187,6 +187,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/inference/proxy"}),
     do: declaration(:internal_service, "scoped inference grant", "inference:invoke", true)
 
+  defp policy(%{path: "/api/v1/chat/responses", verb: :post}),
+    do: declaration(:authenticated_api, "first-party account bearer token", "account:write", true)
+
   defp policy(%{path: "/api/v3/device/authorizations" <> _path, verb: :post}),
     do:
       declaration(

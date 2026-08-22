@@ -42,6 +42,12 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
   end
 
+  pipeline :account_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "account:write"
+  end
+
   pipeline :optional_forge_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -201,6 +207,12 @@ defmodule OpenAgentsWeb.Router do
     post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
     get "/computer-agent-jobs/:id", ComputerAgentJobsController, :show
     delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
+  end
+
+  scope "/api/v1", OpenAgentsWeb do
+    pipe_through :account_api
+
+    post "/chat/responses", ChatResponseController, :create
   end
 
   scope "/admin", OpenAgentsWeb do

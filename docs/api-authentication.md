@@ -1,6 +1,28 @@
 # API authentication
 
-Date: 2026-08-20
+Date: 2026-08-22
+
+## Account API clients
+
+Create a token at `/settings/api-tokens`. Manual tokens carry `account:write`
+and `forge:write`, do not expire by default, and act with the issuing account's
+authority. You can select a 7-, 30-, or 90-day lifetime when a client requires
+rotation. The `oa_pat_…` plaintext appears once; OpenAgents stores only its
+SHA-256 digest.
+
+Use `account:write` to call the same chat runtime that serves `/chat`:
+
+```sh
+curl https://openagents.com/api/v1/chat/responses \
+  --header "Authorization: Bearer $OPENAGENTS_API_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"input":"Read my repository README.","reasoning":{"effort":"high"}}'
+```
+
+Set `"stream":true` to receive server-sent events for reasoning, tool calls,
+tool results, response text, and terminal completion. The server selects the
+model and tools. The token supplies the account identity, so a caller cannot
+claim another user's repository authority.
 
 ## Forge API clients
 
@@ -8,9 +30,7 @@ Date: 2026-08-20
 Every `POST`, `PUT`, `PATCH`, and `DELETE` route under `/api/v3` requires an
 OpenAgents personal API token with exact `forge:write` scope.
 
-Create a token in the authenticated browser at `/settings/api-tokens`. Choose a
-name and a lifetime from 1 through 90 days. The `oa_pat_…` plaintext appears
-once; OpenAgents stores only its SHA-256 digest. Send it as a bearer:
+Send a token with `forge:write` as a bearer:
 
 ```sh
 curl \

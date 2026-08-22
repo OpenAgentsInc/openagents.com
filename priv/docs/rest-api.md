@@ -36,6 +36,18 @@ POST   /api/v3/orgs/:org/repos/imports
 GET    /api/v3/repository-imports/:id
 ```
 
+## Chat responses
+
+```text
+POST /api/v1/chat/responses
+```
+
+This endpoint requires an `oa_pat_` token with `account:write`. Send `input` as
+a string, or send `messages` as a list of `system`, `user`, and `assistant`
+messages. Set `stream` to `true` for server-sent reasoning, tool-call,
+tool-result, text, and completion events. The endpoint uses the same server
+model and account-scoped repository tools as `/chat`.
+
 Repository writes require an `Idempotency-Key` header. The published
 [`openagents.repositories.v1` contract](/api/contracts/repositories-v1.json)
 defines request authority, lifecycle states, pagination, and stable error

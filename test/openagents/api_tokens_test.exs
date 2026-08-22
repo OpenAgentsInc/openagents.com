@@ -61,6 +61,21 @@ defmodule OpenAgents.ApiTokensTest do
              })
   end
 
+  test "account tokens do not expire by default and remain account-scoped" do
+    {:ok, user} = Accounts.upsert_github_user(profile(803, "api-account"))
+
+    assert {:ok, token, plaintext} =
+             ApiTokens.create(user, %{
+               name: "account automation",
+               scopes: ["account:write", "forge:write"]
+             })
+
+    assert is_nil(token.expires_at)
+    assert {:ok, ^user, _used} = ApiTokens.authenticate(plaintext, "account:write")
+    assert {:ok, ^user, _used} = ApiTokens.authenticate(plaintext, "forge:write")
+    assert {:error, :invalid_api_token} = ApiTokens.authenticate(plaintext, "admin")
+  end
+
   defp profile(id, login) do
     %{
       github_id: id,

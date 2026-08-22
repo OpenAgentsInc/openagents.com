@@ -122,6 +122,16 @@ defmodule OpenAgentsWeb.ConnCase do
     Plug.Conn.put_req_header(conn, "authorization", "Bearer " <> plaintext)
   end
 
+  def put_account_api_token_for_user(conn, user) do
+    {:ok, _credential, plaintext} =
+      OpenAgents.ApiTokens.create(user, %{
+        name: "test account client",
+        scopes: ["account:write", "forge:write"]
+      })
+
+    Plug.Conn.put_req_header(conn, "authorization", "Bearer " <> plaintext)
+  end
+
   @doc """
   Logs in an account and grants it operator access for the duration of the test.
   """

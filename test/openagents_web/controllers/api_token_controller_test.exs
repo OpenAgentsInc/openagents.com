@@ -29,6 +29,23 @@ defmodule OpenAgentsWeb.ApiTokenControllerTest do
     assert {:error, :invalid_api_token} = ApiTokens.authenticate(plaintext, "forge:write")
   end
 
+  test "browser issuance defaults to a non-expiring account credential", %{conn: conn} do
+    user = github_user("default-account-token-owner")
+    browser = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+
+    issued = post(browser, ~p"/api/tokens", %{name: "programmatic client"})
+
+    assert %{
+             "token" => plaintext,
+             "credential" => %{
+               "expires_at" => nil,
+               "scopes" => ["account:write", "forge:write"]
+             }
+           } = json_response(issued, 201)
+
+    assert {:ok, ^user, _token} = ApiTokens.authenticate(plaintext, "account:write")
+  end
+
   test "forge mutations refuse missing, malformed, expired, and revoked credentials", %{
     conn: conn
   } do

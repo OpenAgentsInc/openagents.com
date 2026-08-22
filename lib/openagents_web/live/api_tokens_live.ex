@@ -21,7 +21,7 @@ defmodule OpenAgentsWeb.ApiTokensLive do
   def handle_event("create", %{"api_token" => params}, socket) do
     case ApiTokens.create(socket.assigns.current_user, %{
            "name" => params["name"],
-           "scopes" => ["forge:write"],
+           "scopes" => ["account:write", "forge:write"],
            "lifetime_days" => params["lifetime_days"]
          }) do
       {:ok, token, plaintext} ->
@@ -32,7 +32,7 @@ defmodule OpenAgentsWeb.ApiTokensLive do
          |> stream_insert(:tokens, token, at: 0)}
 
       {:error, _invalid} ->
-        {:noreply, put_flash(socket, :error, "Choose a name and a lifetime from 1 to 90 days.")}
+        {:noreply, put_flash(socket, :error, "Choose a name and a valid lifetime.")}
     end
   end
 
@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.ApiTokensLive do
         <header class="space-y-2">
           <h1 class="text-3xl font-semibold tracking-tight">API tokens</h1>
           <p class="text-muted-foreground">
-            Create an expiring credential for CLI forge writes. Tokens carry only <code>forge:write</code>, are stored as digests, and are shown once.
+            Create a credential for API and CLI access to your account. Tokens are stored as digests and shown once. New tokens do not expire unless you choose a lifetime.
           </p>
         </header>
 
@@ -78,13 +78,16 @@ defmodule OpenAgentsWeb.ApiTokensLive do
               <.input field={@form[:name]} placeholder="Release CLI" required />
             </.field>
             <.field>
-              <.label for={@form[:lifetime_days].id}>Lifetime in days</.label>
+              <.label for={@form[:lifetime_days].id}>Lifetime</.label>
               <.input
                 field={@form[:lifetime_days]}
-                type="number"
-                min="1"
-                max="90"
-                required
+                type="select"
+                options={[
+                  {"Does not expire", "never"},
+                  {"7 days", "7"},
+                  {"30 days", "30"},
+                  {"90 days", "90"}
+                ]}
               />
             </.field>
             <.button id="create-api-token" type="submit" variant={:primary}>
@@ -97,14 +100,14 @@ defmodule OpenAgentsWeb.ApiTokensLive do
           <h2 id="api-token-list-heading" class="text-xl font-semibold">Credentials</h2>
           <div id="api-tokens" phx-update="stream" class="space-y-3">
             <.empty id="api-tokens-empty" title="No API tokens" class="hidden only:block">
-              Create one when a CLI needs forge write access.
+              Create one when an API client or CLI needs access to your account.
             </.empty>
             <.card :for={{id, token} <- @streams.tokens} id={id}>
               <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <strong>{token.name}</strong>
                   <p class="text-sm text-muted-foreground">
-                    {Enum.join(token.scopes, ", ")} · expires {format_time(token.expires_at)}
+                    {Enum.join(token.scopes, ", ")} · {expiration(token.expires_at)}
                   </p>
                   <.badge :if={token.revoked_at} variant={:danger}>REVOKED</.badge>
                 </div>
@@ -128,8 +131,11 @@ defmodule OpenAgentsWeb.ApiTokensLive do
   end
 
   defp token_form do
-    to_form(%{"name" => "", "lifetime_days" => "30"}, as: :api_token)
+    to_form(%{"name" => "", "lifetime_days" => "never"}, as: :api_token)
   end
+
+  defp expiration(nil), do: "does not expire"
+  defp expiration(%DateTime{} = value), do: "expires #{format_time(value)}"
 
   defp format_time(%DateTime{} = value),
     do: value |> DateTime.truncate(:second) |> DateTime.to_iso8601()

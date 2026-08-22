@@ -18,18 +18,18 @@ defmodule OpenAgentsWeb.RepositoryAccess do
   def full_source?(%Repository{} = repository, user) do
     ready?(repository) and
       (member?(repository, user) or ordinary_public?(repository) or
-         Visibility.allows?(repository.storage_key, :files))
+         Visibility.allows?(repository.name, :files))
   end
 
   def ledger?(%Repository{} = repository, user) do
     full_source?(repository, user) or
-      (ready?(repository) and Visibility.allows?(repository.storage_key, :ledger))
+      (ready?(repository) and Visibility.allows?(repository.name, :ledger))
   end
 
   def allows_file?(%Repository{} = repository, user, path, ref_sha, head_sha) do
     full_source?(repository, user) or
       (ready?(repository) and
-         Visibility.allows_file?(repository.storage_key, path, ref_sha, head_sha))
+         Visibility.allows_file?(repository.name, path, ref_sha, head_sha))
   end
 
   def member?(%Repository{} = repository, user),
@@ -40,8 +40,8 @@ defmodule OpenAgentsWeb.RepositoryAccess do
       "/#{repository.namespace.slug}/#{repository.name}.git"
   end
 
-  defp ordinary_public?(%Repository{visibility: "public", storage_key: storage_key}),
-    do: storage_key not in OpenAgents.Forge.Repos.allowed_repos()
+  defp ordinary_public?(%Repository{visibility: "public", name: name}),
+    do: name not in OpenAgents.Forge.Repos.allowed_repos()
 
   defp ordinary_public?(_repository), do: false
   defp ready?(%Repository{lifecycle_state: "ready"}), do: true

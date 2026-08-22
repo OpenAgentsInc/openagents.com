@@ -188,6 +188,26 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert html =~ "Fixture readme."
     end
 
+    test "keeps configured source public after the storage key joins the forge", %{conn: conn} do
+      repository =
+        OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+
+      previous_repos = Application.fetch_env!(:openagents, :forge_repos)
+
+      Application.put_env(
+        :openagents,
+        :forge_repos,
+        Enum.uniq(previous_repos ++ [repository.storage_key])
+      )
+
+      on_exit(fn -> Application.put_env(:openagents, :forge_repos, previous_repos) end)
+
+      browsable()
+      {:ok, view, _html} = live(conn, "/OpenAgentsInc/openagents.com")
+
+      assert has_element?(view, "#code-repo-page")
+    end
+
     test "renders the README as a formatted document", %{conn: conn} do
       browsable()
       {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com")

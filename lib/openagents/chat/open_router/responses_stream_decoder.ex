@@ -11,7 +11,9 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
             assistant_message_id: nil,
             assistant_content: "",
             reasoning_summary: nil,
-            reasoning_items: []
+            reasoning_items: [],
+            text_event_family: nil,
+            reasoning_event_family: nil
 
   @type completion :: map()
 
@@ -66,20 +68,36 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
 
   defp decode_event(state, {:ok, %{"type" => "response.content_part.delta", "delta" => delta}})
        when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
-       do:
-         {:ok, %{state | assistant_content: state.assistant_content <> delta},
-          [{:text_delta, delta}]}
+       do: append_text_delta(state, delta, :content_part)
+
+  defp decode_event(state, {:ok, %{"type" => "response.output_text.delta", "delta" => delta}})
+       when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
+       do: append_text_delta(state, delta, :output_text)
 
   defp decode_event(state, {:ok, %{"type" => "response.reasoning.delta", "delta" => delta}})
        when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
-       do: {:ok, state, [{:reasoning_delta, delta}]}
+       do: append_reasoning_delta(state, delta, :reasoning)
+
+  defp decode_event(
+         state,
+         {:ok, %{"type" => "response.reasoning_text.delta", "delta" => delta}}
+       )
+       when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
+       do: append_reasoning_delta(state, delta, :reasoning_text)
 
   defp decode_event(
          state,
          {:ok, %{"type" => "response.reasoning_summary_text.delta", "delta" => delta}}
        )
        when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
-       do: {:ok, state, [{:reasoning_delta, delta}]}
+       do: append_reasoning_delta(state, delta, :reasoning_summary_text)
+
+  defp decode_event(
+         state,
+         {:ok, %{"type" => "response.reasoning_summary.delta", "delta" => delta}}
+       )
+       when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
+       do: append_reasoning_delta(state, delta, :reasoning_summary)
 
   defp decode_event(
          state,
@@ -111,6 +129,37 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
 
   defp decode_event(state, {:ok, %{"type" => _type}}), do: {:ok, state, []}
   defp decode_event(_state, {:ok, _event}), do: {:error, :invalid_response}
+
+  defp append_text_delta(%{text_event_family: nil} = state, delta, family) do
+    {:ok,
+     %{
+       state
+       | assistant_content: state.assistant_content <> delta,
+         text_event_family: family
+     }, [{:text_delta, delta}]}
+  end
+
+  defp append_text_delta(%{text_event_family: family} = state, delta, family) do
+    {:ok, %{state | assistant_content: state.assistant_content <> delta}, [{:text_delta, delta}]}
+  end
+
+  defp append_text_delta(state, _delta, _other_family), do: {:ok, state, []}
+
+  defp append_reasoning_delta(%{reasoning_event_family: nil} = state, delta, family) do
+    {:ok,
+     %{
+       state
+       | reasoning_summary: (state.reasoning_summary || "") <> delta,
+         reasoning_event_family: family
+     }, [{:reasoning_delta, delta}]}
+  end
+
+  defp append_reasoning_delta(%{reasoning_event_family: family} = state, delta, family) do
+    {:ok, %{state | reasoning_summary: (state.reasoning_summary || "") <> delta},
+     [{:reasoning_delta, delta}]}
+  end
+
+  defp append_reasoning_delta(state, _delta, _other_family), do: {:ok, state, []}
 
   defp completion(%{"object" => "response", "model" => model, "output" => output})
        when is_binary(model) and is_list(output) do
@@ -182,7 +231,8 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
       output
       |> Enum.filter(&reasoning?/1)
       |> Enum.flat_map(&Map.get(&1, "summary", []))
-      |> Enum.filter(&(is_binary(&1) and byte_size(&1) > 0))
+      |> Enum.map(&reasoning_summary_text/1)
+      |> Enum.reject(&is_nil/1)
       |> Enum.join("\n\n")
 
     if summary == "", do: completion, else: Map.put(completion, "reasoning_summary", summary)
@@ -195,6 +245,14 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
 
   defp reasoning?(%{"type" => "reasoning", "summary" => summary}) when is_list(summary), do: true
   defp reasoning?(_item), do: false
+
+  defp reasoning_summary_text(text) when is_binary(text) and byte_size(text) > 0, do: text
+
+  defp reasoning_summary_text(%{"type" => "summary_text", "text" => text})
+       when is_binary(text) and byte_size(text) > 0,
+       do: text
+
+  defp reasoning_summary_text(_summary), do: nil
 
   defp reasoning_item?(%{"type" => "reasoning", "id" => id, "encrypted_content" => content})
        when is_binary(id) and is_binary(content),
@@ -243,7 +301,12 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
   defp capture_reasoning_item(state, _item), do: state
 
   defp capture_reasoning_summary(state, summary) when is_list(summary) do
-    summary = summary |> Enum.filter(&is_binary/1) |> Enum.join("\n\n")
+    summary =
+      summary
+      |> Enum.map(&reasoning_summary_text/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("\n\n")
+
     if summary == "", do: state, else: %{state | reasoning_summary: summary}
   end
 

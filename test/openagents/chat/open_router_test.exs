@@ -80,8 +80,13 @@ defmodule OpenAgents.Chat.OpenRouterTest do
 
       assert %{
                "model" => "stealth/ox-alpha",
-               "reasoning" => %{"effort" => "max", "exclude" => false},
+               "reasoning" => %{
+                 "effort" => "max",
+                 "exclude" => false,
+                 "summary" => "detailed"
+               },
                "include" => ["reasoning.encrypted_content"],
+               "max_output_tokens" => 9_000,
                "models" => ["openrouter/free"],
                "input" => [
                  %{
@@ -128,7 +133,9 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                   "type" => "reasoning",
                   "id" => "rs_test",
                   "encrypted_content" => "encrypted-reasoning",
-                  "summary" => ["Checked the prior context."]
+                  "summary" => [
+                    %{"type" => "summary_text", "text" => "Checked the prior context."}
+                  ]
                 },
                 %{
                   "type" => "message",
@@ -162,7 +169,9 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                   "type" => "reasoning",
                   "id" => "rs_test",
                   "encrypted_content" => "encrypted-reasoning",
-                  "summary" => ["Checked the prior context."]
+                  "summary" => [
+                    %{"type" => "summary_text", "text" => "Checked the prior context."}
+                  ]
                 }
               ]
             }} =
@@ -397,6 +406,73 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                api_key: "test-openrouter-key",
                request_options: [plug: {Req.Test, __MODULE__}]
              )
+  end
+
+  test "streams canonical output and detailed reasoning deltas" do
+    Req.Test.expect(__MODULE__, fn conn ->
+      body =
+        sse(%{
+          "type" => "response.output_item.added",
+          "item" => %{
+            "type" => "message",
+            "id" => "msg_canonical",
+            "role" => "assistant",
+            "status" => "in_progress",
+            "content" => []
+          }
+        }) <>
+          sse(%{
+            "type" => "response.reasoning_summary_text.delta",
+            "delta" => "Check the values."
+          }) <>
+          sse(%{"type" => "response.output_text.delta", "delta" => "Canonical"}) <>
+          sse(%{"type" => "response.output_text.delta", "delta" => " stream"}) <>
+          sse(%{
+            "type" => "response.output_item.done",
+            "item" => %{
+              "type" => "message",
+              "id" => "msg_canonical",
+              "role" => "assistant",
+              "status" => "completed",
+              "content" => [
+                %{"type" => "output_text", "text" => "Canonical stream", "annotations" => []}
+              ]
+            }
+          }) <>
+          sse(%{
+            "type" => "response.done",
+            "response" => %{
+              "id" => "resp_canonical",
+              "object" => "response",
+              "status" => "completed"
+            }
+          }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    parent = self()
+
+    assert {:ok,
+            %{
+              "assistant_content" => "Canonical stream",
+              "reasoning_summary" => "Check the values."
+            }} =
+             OpenRouter.stream(
+               %{
+                 "model" => "stealth/ox-alpha",
+                 "messages" => [%{"role" => "user", "content" => "Hello"}]
+               },
+               &send(parent, {:openrouter_event, &1}),
+               api_key: "test-openrouter-key",
+               request_options: [plug: {Req.Test, __MODULE__}]
+             )
+
+    assert_receive {:openrouter_event, {:reasoning_delta, "Check the values."}}
+    assert_receive {:openrouter_event, {:text_delta, "Canonical"}}
+    assert_receive {:openrouter_event, {:text_delta, " stream"}}
   end
 
   test "executes the demo tool and continues the Responses conversation" do

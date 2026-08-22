@@ -152,7 +152,8 @@ defmodule OpenAgents.Chat.OpenRouter do
          "tools" => Demo.definitions(),
          "tool_choice" => "auto",
          "reasoning" => reasoning,
-         "include" => ["reasoning.encrypted_content"]
+         "include" => ["reasoning.encrypted_content"],
+         "max_output_tokens" => 9_000
        })}
     end
   end
@@ -161,7 +162,8 @@ defmodule OpenAgents.Chat.OpenRouter do
 
   defp reasoning_request("none"), do: %{"effort" => "none", "exclude" => false}
 
-  defp reasoning_request(effort), do: %{"effort" => effort, "exclude" => false}
+  defp reasoning_request(effort),
+    do: %{"effort" => effort, "exclude" => false, "summary" => "detailed"}
 
   defp responses_input(messages) do
     Enum.reduce_while(messages, {:ok, []}, fn message, {:ok, input} ->

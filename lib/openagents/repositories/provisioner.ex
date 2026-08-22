@@ -30,7 +30,7 @@ defmodule OpenAgents.Repositories.Provisioner do
       %ProvisioningOutbox{} = work ->
         case safe_execute(executor, work) do
           :ok -> complete(work)
-          {:error, _reason} -> fail(work)
+          {:error, reason} -> fail(work, reason)
         end
 
         :processed
@@ -210,9 +210,10 @@ defmodule OpenAgents.Repositories.Provisioner do
     :ok
   end
 
-  defp fail(work) do
+  defp fail(work, reason) do
     now = DateTime.utc_now()
     retry_at = DateTime.add(now, retry_delay(work.attempt_count), :second)
+    error_code = provision_error_code(reason)
 
     Repo.transaction(fn ->
       repository = lock_repository!(work.repository_id)
@@ -222,7 +223,7 @@ defmodule OpenAgents.Repositories.Provisioner do
       |> Ecto.Changeset.change(
         lifecycle_state: "failed",
         ready_at: nil,
-        provision_error_code: "provisioning_failed"
+        provision_error_code: error_code
       )
       |> Repo.update!()
 
@@ -233,7 +234,7 @@ defmodule OpenAgents.Repositories.Provisioner do
         retry_at: retry_at,
         claimed_at: outbox.claimed_at,
         completed_at: nil,
-        error_code: "provisioning_failed"
+        error_code: error_code
       })
       |> Repo.update!()
 
@@ -241,16 +242,30 @@ defmodule OpenAgents.Repositories.Provisioner do
         repository_id: repository.id,
         metadata: %{
           "attempt_count" => outbox.attempt_count,
-          "error_code" => "provisioning_failed",
+          "error_code" => error_code,
           "operation" => outbox.operation
         }
       )
     end)
 
     OpenAgents.Repositories.broadcast_provisioning(work.repository_id)
-    Logger.warning("repository_provisioning_failed code=provisioning_failed")
+    Logger.warning("repository_provisioning_failed code=#{error_code}")
     :ok
   end
+
+  defp provision_error_code(reason)
+       when reason in [
+              :github_connection_required,
+              :github_scope_required,
+              :import_timeout,
+              :import_too_large,
+              :insufficient_storage,
+              :source_changed,
+              :temporary_storage_unavailable
+            ],
+       do: Atom.to_string(reason)
+
+  defp provision_error_code(_reason), do: "provisioning_failed"
 
   defp lock_repository!(id) do
     Repo.one!(from repository in Repository, where: repository.id == ^id, lock: "FOR UPDATE")

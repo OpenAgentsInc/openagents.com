@@ -59,9 +59,10 @@ defmodule OpenAgents.Repositories.Importer do
         :ok
 
       {:error, reason} ->
-        log_stage(repository, running_import, "import", "failed", reason)
-        mark_failed!(running_import, error_code(reason))
-        {:error, reason}
+        normalized_reason = normalize_error(reason)
+        log_stage(repository, running_import, "import", "failed", normalized_reason)
+        mark_failed!(running_import, error_code(normalized_reason))
+        {:error, normalized_reason}
     end
   end
 
@@ -183,12 +184,30 @@ defmodule OpenAgents.Repositories.Importer do
         end
 
       nil ->
-        with true <-
-               repository.created_by_user.github_token_scopes == GitHubOAuth.required_scopes() or
-                 {:error, :github_scope_required},
-             {:ok, credential} <- Accounts.github_token(repository.created_by_user) do
-          {:ok, "https://github.com/#{repository_import.source_full_name}.git", credential}
+        source_url = "https://github.com/#{repository_import.source_full_name}.git"
+
+        case repository.visibility do
+          "public" ->
+            {:ok, source_url, optional_github_credential(repository.created_by_user)}
+
+          "private" ->
+            with true <-
+                   repository.created_by_user.github_token_scopes ==
+                     GitHubOAuth.required_scopes() or
+                     {:error, :github_scope_required},
+                 {:ok, credential} <- Accounts.github_token(repository.created_by_user) do
+              {:ok, source_url, credential}
+            end
         end
+    end
+  end
+
+  defp optional_github_credential(user) do
+    if user.github_token_scopes == GitHubOAuth.required_scopes() do
+      case Accounts.github_token(user) do
+        {:ok, credential} -> credential
+        {:error, _reason} -> nil
+      end
     end
   end
 
@@ -542,6 +561,12 @@ defmodule OpenAgents.Repositories.Importer do
   defp error_code(:insufficient_storage), do: "insufficient_storage"
   defp error_code(:temporary_storage_unavailable), do: "temporary_storage_unavailable"
   defp error_code(_reason), do: "import_failed"
+
+  defp normalize_error(reason) when reason in [:eacces, :enoent, :enotdir, :erofs],
+    do: :temporary_storage_unavailable
+
+  defp normalize_error(:enospc), do: :insufficient_storage
+  defp normalize_error(reason), do: reason
 
   defp import_stage(repository, repository_import, stage, operation) do
     log_stage(repository, repository_import, stage, "started")

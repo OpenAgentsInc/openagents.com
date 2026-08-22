@@ -62,4 +62,89 @@ defmodule OpenAgentsWeb.ChatPlaceholderTest do
 
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/chat")
   end
+
+  test "reasoning stays interleaved with successive tool attempts" do
+    socket =
+      %Phoenix.LiveView.Socket{}
+      |> Phoenix.Component.assign(:stream_id, 42)
+      |> Phoenix.Component.assign(:streaming?, true)
+      |> Phoenix.Component.assign(:assistant_reasoning, nil)
+      |> Phoenix.Component.assign(:assistant_tool_calls, [])
+      |> Phoenix.Component.assign(:assistant_blocks, [])
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42, {:reasoning_delta, "First attempt."}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42,
+         {:tool_call_started,
+          %{
+            "call_id" => "call-1",
+            "name" => "read_repository_file",
+            "arguments" => ~s({"path":"null"})
+          }}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42,
+         {:tool_call_failed, %{"call_id" => "call-1", "error" => "Not found"}}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42, {:reasoning_delta, "Second attempt."}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42,
+         {:tool_call_started,
+          %{
+            "call_id" => "call-2",
+            "name" => "read_repository_file",
+            "arguments" => ~s({"path":"README.md"})
+          }}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42,
+         {:tool_call_failed, %{"call_id" => "call-2", "error" => "Still not found"}}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 42, {:reasoning_delta, "Report the failure."}},
+        socket
+      )
+
+    assert [first_reasoning, first_tool, second_reasoning, second_tool, final_reasoning] =
+             socket.assigns.assistant_blocks
+
+    assert first_reasoning.type == :reasoning
+    assert first_reasoning.text == "First attempt."
+    assert is_integer(first_reasoning.duration)
+    assert first_tool.type == :tool
+    assert first_tool.tool_call.state == "output-error"
+    assert first_tool.tool_call.error == "Not found"
+    assert second_reasoning.type == :reasoning
+    assert second_reasoning.text == "Second attempt."
+    assert is_integer(second_reasoning.duration)
+    assert second_tool.type == :tool
+    assert second_tool.tool_call.state == "output-error"
+    assert second_tool.tool_call.error == "Still not found"
+    assert final_reasoning.type == :reasoning
+    assert final_reasoning.text == "Report the failure."
+    assert is_nil(final_reasoning.duration)
+  end
 end

@@ -92,6 +92,7 @@ defmodule OpenAgentsWeb.AI.Conversation do
       />
       <script :type={Phoenix.LiveView.ColocatedHook} name=".StickToBottom">
         const THRESHOLD = 24
+        const USER_SCROLL_WINDOW = 400
 
         export default {
           mounted() {
@@ -100,12 +101,86 @@ defmodule OpenAgentsWeb.AI.Conversation do
 
             this.button = this.el.querySelector("[data-conversation-scroll-button]")
             this.pinned = true
+            this.userScrollUntil = 0
+            this.touchY = null
+            this.pointerDown = false
+            this.stickFrame = null
+
+            this.markUserScroll = () => {
+              this.userScrollUntil = performance.now() + USER_SCROLL_WINDOW
+            }
 
             this.onScroll = () => {
-              this.pinned = this.atBottom()
+              if (this.atBottom()) {
+                this.pinned = true
+              } else if (performance.now() <= this.userScrollUntil) {
+                this.pinned = false
+              }
               this.sync()
             }
+
+            this.onWheel = (event) => {
+              this.markUserScroll()
+
+              if (event.deltaY < 0) {
+                this.pinned = false
+                this.sync()
+              }
+            }
+
+            this.onTouchStart = (event) => {
+              this.touchY = event.touches[0]?.clientY ?? null
+              this.markUserScroll()
+            }
+
+            this.onTouchMove = (event) => {
+              const nextY = event.touches[0]?.clientY ?? null
+              this.markUserScroll()
+
+              if (nextY !== null && this.touchY !== null && nextY > this.touchY) {
+                this.pinned = false
+                this.sync()
+              }
+
+              this.touchY = nextY
+            }
+
+            this.onPointerDown = () => {
+              this.pointerDown = true
+              this.markUserScroll()
+            }
+
+            this.onPointerMove = () => {
+              if (this.pointerDown) this.markUserScroll()
+            }
+
+            this.onPointerUp = () => {
+              this.pointerDown = false
+              this.markUserScroll()
+            }
+
+            this.onKeyDown = (event) => {
+              const upwardKeys = ["ArrowUp", "PageUp", "Home"]
+              const scrollingKeys = [...upwardKeys, "ArrowDown", "PageDown", "End", " "]
+
+              if (!scrollingKeys.includes(event.key)) return
+
+              this.markUserScroll()
+
+              if (upwardKeys.includes(event.key)) {
+                this.pinned = false
+                this.sync()
+              }
+            }
+
             this.viewport.addEventListener("scroll", this.onScroll, { passive: true })
+            this.viewport.addEventListener("wheel", this.onWheel, { passive: true })
+            this.viewport.addEventListener("touchstart", this.onTouchStart, { passive: true })
+            this.viewport.addEventListener("touchmove", this.onTouchMove, { passive: true })
+            this.viewport.addEventListener("pointerdown", this.onPointerDown)
+            this.viewport.addEventListener("pointermove", this.onPointerMove)
+            window.addEventListener("pointerup", this.onPointerUp)
+            this.viewport.addEventListener("keydown", this.onKeyDown)
 
             if (this.button) {
               this.onClick = () => {
@@ -116,28 +191,49 @@ defmodule OpenAgentsWeb.AI.Conversation do
             }
 
             if (window.ResizeObserver) {
-              this.observer = new ResizeObserver(() => this.stick("smooth"))
-              for (const child of this.viewport.children) {
-                this.observer.observe(child)
-              }
+              this.observer = new ResizeObserver(() => this.scheduleStick())
+              this.observeChildren()
             }
+
+            this.mutationObserver = new MutationObserver(() => this.scheduleStick())
+            this.mutationObserver.observe(this.viewport, {
+              childList: true,
+              characterData: true,
+              subtree: true
+            })
 
             this.stick("auto")
           },
 
           updated() {
-            this.stick("smooth")
+            this.observeChildren()
+            this.scheduleStick()
           },
 
           destroyed() {
             if (this.viewport && this.onScroll) {
               this.viewport.removeEventListener("scroll", this.onScroll)
+              this.viewport.removeEventListener("wheel", this.onWheel)
+              this.viewport.removeEventListener("touchstart", this.onTouchStart)
+              this.viewport.removeEventListener("touchmove", this.onTouchMove)
+              this.viewport.removeEventListener("pointerdown", this.onPointerDown)
+              this.viewport.removeEventListener("pointermove", this.onPointerMove)
+              this.viewport.removeEventListener("keydown", this.onKeyDown)
+            }
+            if (this.onPointerUp) {
+              window.removeEventListener("pointerup", this.onPointerUp)
             }
             if (this.button && this.onClick) {
               this.button.removeEventListener("click", this.onClick)
             }
             if (this.observer) {
               this.observer.disconnect()
+            }
+            if (this.mutationObserver) {
+              this.mutationObserver.disconnect()
+            }
+            if (this.stickFrame) {
+              cancelAnimationFrame(this.stickFrame)
             }
           },
 
@@ -148,9 +244,30 @@ defmodule OpenAgentsWeb.AI.Conversation do
 
           stick(behavior) {
             if (this.pinned) {
-              this.viewport.scrollTo({ top: this.viewport.scrollHeight, behavior })
+              if (behavior === "smooth") {
+                this.viewport.scrollTo({ top: this.viewport.scrollHeight, behavior })
+              } else {
+                this.viewport.scrollTop = this.viewport.scrollHeight
+              }
             }
             this.sync()
+          },
+
+          scheduleStick() {
+            if (this.stickFrame) return
+
+            this.stickFrame = requestAnimationFrame(() => {
+              this.stickFrame = null
+              this.stick("auto")
+            })
+          },
+
+          observeChildren() {
+            if (!this.observer) return
+
+            for (const child of this.viewport.children) {
+              this.observer.observe(child)
+            }
           },
 
           sync() {

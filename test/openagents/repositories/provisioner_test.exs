@@ -145,6 +145,26 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     assert "repository.provisioning.failed" in audit_types(repository.id)
   end
 
+  test "an admitted provisioning error remains visible on the repository and outbox" do
+    user = repository_user_fixture("provisioner-specific-failure")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(
+               user,
+               %{name: "specific-failure"},
+               "specific-failure-key"
+             )
+
+    assert :processed =
+             Provisioner.run_once(fn _work -> {:error, :temporary_storage_unavailable} end)
+
+    failed_outbox = OpenAgents.Repo.get_by!(ProvisioningOutbox, repository_id: repository.id)
+    failed_repository = OpenAgents.Repo.get!(Repository, repository.id)
+
+    assert failed_outbox.error_code == "temporary_storage_unavailable"
+    assert failed_repository.provision_error_code == "temporary_storage_unavailable"
+  end
+
   test "a one-time import persists a bundle that reconstructs after cache loss", %{test: _test} do
     root = Application.fetch_env!(:openagents, :forge_data_dir) |> Path.dirname()
     source = Path.join(root, "github-source")
@@ -314,6 +334,59 @@ defmodule OpenAgents.Repositories.ProvisionerTest do
     refute "credential.interactive=never" in arguments
     assert "credential.helper=" in arguments
     assert "fetch" in arguments
+  end
+
+  test "a public GitHub import falls back to anonymous fetch without a usable token" do
+    root = Application.fetch_env!(:openagents, :forge_data_dir) |> Path.dirname()
+    source = Path.join(root, "public-source")
+    File.mkdir_p!(source)
+    git!(source, ["init", "--initial-branch=main"])
+    git!(source, ["config", "user.email", "test@example.com"])
+    git!(source, ["config", "user.name", "Import test"])
+    File.write!(Path.join(source, "README.md"), "public repository\n")
+    git!(source, ["add", "README.md"])
+    git!(source, ["commit", "-m", "Public fixture"])
+
+    sha = source |> git!(["rev-parse", "HEAD"]) |> String.trim()
+    refs = %{"refs/heads/main" => sha}
+    user = repository_user_fixture("public-import-owner")
+
+    source_record = %{
+      source_repository_id: 504,
+      source_owner_id: user.github_id,
+      source_full_name: "public-import-owner/source",
+      source_default_branch: "main",
+      source_ref_digest: ref_digest(source, refs),
+      source_head_sha: sha,
+      source_refs: refs,
+      source_uses_lfs: false
+    }
+
+    assert {:ok, repository, _repository_import, :created} =
+             Repositories.create_user_import(
+               user,
+               source_record,
+               %{name: "public-import", visibility: "public", default_branch: "main"},
+               "public-import-key"
+             )
+
+    test_process = self()
+
+    git_runner = fn git_directory, arguments, options ->
+      environment = Keyword.fetch!(options, :env)
+      send(test_process, {:public_fetch_environment, environment})
+
+      local_arguments =
+        Enum.map(arguments, fn
+          "https://github.com/public-import-owner/source.git" -> source
+          argument -> argument
+        end)
+
+      Repos.git(git_directory, local_arguments, options)
+    end
+
+    assert :ok = Importer.import(repository, git_runner: git_runner)
+    assert_receive {:public_fetch_environment, [{"GIT_TERMINAL_PROMPT", "0"}]}
   end
 
   test "an import over the configured bundle limit fails without entering the WAL" do

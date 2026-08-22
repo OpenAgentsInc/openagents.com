@@ -724,9 +724,8 @@ body.docs-sidebar-open {
 }
 
 .chat-placeholder-composer {
-  position: fixed;
-  inset-inline: 0;
-  inset-block-end: 0;
+  position: relative;
+  flex: none;
   z-index: 30;
   border-block-start: 1px solid var(--line-faint);
   background: var(--ink-void);
@@ -778,13 +777,6 @@ body.docs-sidebar-open {
     border-color: var(--text-muted);
     background: var(--ink-hover);
     color: var(--text-primary);
-  }
-}
-
-@media (min-width: 1024px) {
-  #app-shell:not([data-sidebar-initialized="true"]) .chat-placeholder-composer,
-  #app-shell[data-sidebar-open="true"] .chat-placeholder-composer {
-    inset-inline-start: 240px;
   }
 }
 

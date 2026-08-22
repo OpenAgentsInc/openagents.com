@@ -253,5 +253,18 @@ defmodule OpenAgents.MarkdownTest do
         refute rendered =~ "](", "raw link syntax leaked at prefix #{length}"
       end
     end
+
+    test "withholds partial closing emphasis markers" do
+      for {partial, expected} <- [
+            {"**bold*", "<p><strong>bold</strong></p>"},
+            {"*italic", "<p><em>italic</em></p>"},
+            {"***both*", "<p><em><strong>both</strong></em></p>"},
+            {"***both**", "<p><em><strong>both</strong></em></p>"},
+            {"~~gone~", "<p><del>gone</del></p>"}
+          ] do
+        assert html(partial, streaming: true) == expected,
+               "rendered a partial closing marker for #{inspect(partial)}"
+      end
+    end
   end
 end

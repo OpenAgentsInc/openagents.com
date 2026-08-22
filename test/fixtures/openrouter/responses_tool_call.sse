@@ -1,0 +1,21 @@
+data: {"type":"response.created","response":{"id":"resp_demo","object":"response","status":"in_progress","model":"stealth/ox-alpha","output":[]}}
+
+data: {"type":"response.in_progress","response":{"id":"resp_demo","object":"response","status":"in_progress","model":"stealth/ox-alpha","output":[]}}
+
+data: {"type":"response.output_item.added","response_id":"resp_demo","output_index":0,"item":{"type":"reasoning","id":"rs_demo","status":"in_progress","summary":[]}}
+
+data: {"type":"response.reasoning_summary_text.delta","response_id":"resp_demo","item_id":"rs_demo","output_index":0,"summary_index":0,"delta":"The user asked to read a repository file."}
+
+data: {"type":"response.output_item.done","response_id":"resp_demo","output_index":0,"item":{"type":"reasoning","id":"rs_demo","status":"completed","summary":[{"type":"summary_text","text":"The user asked to read a repository file."}],"encrypted_content":"encrypted-demo-reasoning"}}
+
+data: {"type":"response.output_item.added","response_id":"resp_demo","output_index":1,"item":{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"","status":"in_progress"}}
+
+data: {"type":"response.function_call_arguments.delta","response_id":"resp_demo","item_id":"fc_demo","output_index":1,"delta":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}"}
+
+data: {"type":"response.function_call_arguments.done","response_id":"resp_demo","item_id":"fc_demo","output_index":1,"arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}"}
+
+data: {"type":"response.output_item.done","response_id":"resp_demo","output_index":1,"item":{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}","status":"completed"}}
+
+data: {"type":"response.completed","response":{"id":"resp_demo","object":"response","status":"completed","model":"stealth/ox-alpha","output":[{"type":"reasoning","id":"rs_demo","status":"completed","summary":[{"type":"summary_text","text":"The user asked to read a repository file."}],"encrypted_content":"encrypted-demo-reasoning"},{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}","status":"completed"}],"usage":{"input_tokens":18,"output_tokens":11,"total_tokens":29}}}
+
+data: [DONE]

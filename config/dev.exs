@@ -12,7 +12,8 @@ config :openagents, :changelog_backfill_on_boot, true
 # page is a 404 locally, so the repository surfaces cannot be reviewed at all.
 config :openagents,
   forge_enabled: true,
-  forge_data_dir: Path.expand("../.local/forge", __DIR__)
+  forge_data_dir: Path.expand("../.local/forge", __DIR__),
+  forge_wal_dir: Path.expand("../.local/forge-wal", __DIR__)
 
 # Configure your database
 config :openagents, OpenAgents.Repo,

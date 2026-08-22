@@ -3,6 +3,8 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
 
   @maximum_buffer_bytes 262_144
   @maximum_delta_bytes 65_536
+  @maximum_arguments_bytes 65_536
+  @maximum_error_characters 240
 
   defstruct buffer: "",
             complete?: false,
@@ -12,6 +14,8 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
             assistant_content: "",
             reasoning_summary: nil,
             reasoning_items: [],
+            output_items: [],
+            function_call_arguments: %{},
             text_event_family: nil,
             reasoning_event_family: nil
 
@@ -64,7 +68,9 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
   end
 
   defp decode_event(_state, {:error, _reason}), do: {:error, :invalid_response}
-  defp decode_event(_state, {:ok, %{"type" => "error"}}), do: {:error, :provider_unavailable}
+
+  defp decode_event(_state, {:ok, %{"type" => "error"} = event}),
+    do: {:error, provider_event_error(event)}
 
   defp decode_event(state, {:ok, %{"type" => "response.content_part.delta", "delta" => delta}})
        when is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes,
@@ -101,34 +107,92 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
 
   defp decode_event(
          state,
-         {:ok, %{"type" => "response.output_item.added", "item" => item}}
+         {:ok, %{"type" => "response.output_item.added", "item" => item} = event}
        )
        when is_map(item),
-       do: {:ok, capture_output_item(state, item), []}
+       do: {:ok, capture_output_item(state, item, event["output_index"]), []}
 
   defp decode_event(
          state,
-         {:ok, %{"type" => "response.output_item.done", "item" => item}}
+         {:ok, %{"type" => "response.output_item.done", "item" => item} = event}
        )
        when is_map(item),
-       do: {:ok, capture_output_item(state, item), []}
+       do: {:ok, capture_output_item(state, item, event["output_index"]), []}
 
-  defp decode_event(state, {:ok, %{"type" => "response.done", "response" => response}})
-       when is_map(response) do
-    state = capture_model(state, response["model"])
-
-    case completion(response) do
-      {:ok, completion} -> {:ok, %{state | completion: completion}, []}
-      {:error, :invalid_response} -> {:ok, state, []}
-    end
+  defp decode_event(
+         state,
+         {:ok,
+          %{
+            "type" => "response.function_call_arguments.delta",
+            "item_id" => item_id,
+            "delta" => delta
+          }}
+       )
+       when is_binary(item_id) and is_binary(delta) do
+    append_function_call_arguments(state, item_id, delta)
   end
 
-  defp decode_event(_state, {:ok, %{"type" => type}})
+  defp decode_event(
+         state,
+         {:ok,
+          %{
+            "type" => "response.function_call_arguments.done",
+            "item_id" => item_id,
+            "arguments" => arguments
+          }}
+       )
+       when is_binary(item_id) and is_binary(arguments) and
+              byte_size(arguments) <= @maximum_arguments_bytes do
+    {:ok, put_function_call_arguments(state, item_id, arguments), []}
+  end
+
+  defp decode_event(state, {:ok, %{"type" => type, "response" => response}})
+       when type in ["response.completed", "response.done"] and is_map(response) do
+    complete_response(state, response)
+  end
+
+  defp decode_event(_state, {:ok, %{"type" => type} = event})
        when type in ["response.failed", "response.incomplete"],
-       do: {:error, :provider_unavailable}
+       do: {:error, provider_event_error(event)}
 
   defp decode_event(state, {:ok, %{"type" => _type}}), do: {:ok, state, []}
   defp decode_event(_state, {:ok, _event}), do: {:error, :invalid_response}
+
+  defp complete_response(state, response)
+       when is_map(response) do
+    state = capture_model(state, response["model"])
+    output = terminal_output(response["output"], state)
+
+    response =
+      response
+      |> Map.put_new("object", "response")
+      |> maybe_put_model(state.model)
+      |> maybe_put_output(output)
+
+    case completion(response) do
+      {:ok, completion} ->
+        completion = merge_streamed_reasoning(completion, state)
+        {:ok, %{state | complete?: true, completion: completion}, []}
+
+      {:error, :invalid_response} ->
+        {:ok, %{state | complete?: true}, []}
+    end
+  end
+
+  defp merge_streamed_reasoning(completion, state) do
+    completion =
+      if is_binary(state.reasoning_summary) do
+        Map.put_new(completion, "reasoning_summary", state.reasoning_summary)
+      else
+        completion
+      end
+
+    if state.reasoning_items == [] do
+      completion
+    else
+      Map.put_new(completion, "reasoning_items", state.reasoning_items)
+    end
+  end
 
   defp append_text_delta(%{text_event_family: nil} = state, delta, family) do
     {:ok,
@@ -164,8 +228,19 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
   defp completion(%{"object" => "response", "model" => model, "output" => output})
        when is_binary(model) and is_list(output) do
     case tool_calls(output) do
-      [] -> assistant_completion(model, output)
-      tool_calls -> {:ok, %{"object" => "response", "model" => model, "tool_calls" => tool_calls}}
+      [] ->
+        assistant_completion(model, output)
+
+      tool_calls ->
+        %{
+          "object" => "response",
+          "model" => model,
+          "output" => output,
+          "tool_calls" => tool_calls
+        }
+        |> maybe_put_reasoning_summary(output)
+        |> maybe_put_reasoning_items(output)
+        |> then(&{:ok, &1})
     end
   end
 
@@ -185,6 +260,7 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
       completion = %{
         "object" => "response",
         "model" => model,
+        "output" => output,
         "assistant_message_id" => id,
         "assistant_content" => text
       }
@@ -263,7 +339,18 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
   defp capture_model(state, model) when is_binary(model), do: %{state | model: model}
   defp capture_model(state, _model), do: state
 
-  defp capture_output_item(
+  defp capture_output_item(state, item, output_index) do
+    item = maybe_put_function_call_arguments(item, state.function_call_arguments)
+
+    state = %{
+      state
+      | output_items: upsert_output_item(state.output_items, item, output_index)
+    }
+
+    capture_output_item_details(state, item)
+  end
+
+  defp capture_output_item_details(
          state,
          %{
            "type" => "message",
@@ -281,14 +368,68 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
     }
   end
 
-  defp capture_output_item(state, %{"type" => "reasoning"} = item) do
+  defp capture_output_item_details(state, %{"type" => "reasoning"} = item) do
     state = capture_reasoning_item(state, item)
     summary = Map.get(item, "summary", [])
 
     capture_reasoning_summary(state, summary)
   end
 
-  defp capture_output_item(state, _item), do: state
+  defp capture_output_item_details(state, _item), do: state
+
+  defp upsert_output_item(output_items, item, output_index) do
+    key = output_item_key(item, output_index)
+
+    case Enum.find_index(output_items, fn {existing_key, _item} -> existing_key == key end) do
+      nil -> output_items ++ [{key, item}]
+      index -> List.replace_at(output_items, index, {key, item})
+    end
+  end
+
+  defp output_item_key(_item, output_index)
+       when is_integer(output_index) and output_index >= 0,
+       do: {:index, output_index}
+
+  defp output_item_key(%{"id" => id}, _output_index) when is_binary(id), do: {:id, id}
+  defp output_item_key(_item, _output_index), do: make_ref()
+
+  defp append_function_call_arguments(state, item_id, delta)
+       when byte_size(delta) <= @maximum_arguments_bytes do
+    arguments = Map.get(state.function_call_arguments, item_id, "") <> delta
+
+    if byte_size(arguments) <= @maximum_arguments_bytes do
+      {:ok, put_function_call_arguments(state, item_id, arguments), []}
+    else
+      {:error, :invalid_response}
+    end
+  end
+
+  defp append_function_call_arguments(_state, _item_id, _delta),
+    do: {:error, :invalid_response}
+
+  defp put_function_call_arguments(state, item_id, arguments) do
+    argument_map = Map.put(state.function_call_arguments, item_id, arguments)
+
+    output_items =
+      Enum.map(state.output_items, fn {key, item} ->
+        {key, maybe_put_function_call_arguments(item, argument_map)}
+      end)
+
+    %{state | function_call_arguments: argument_map, output_items: output_items}
+  end
+
+  defp maybe_put_function_call_arguments(
+         %{"type" => "function_call", "id" => item_id} = item,
+         argument_map
+       )
+       when is_binary(item_id) do
+    case Map.get(argument_map, item_id) do
+      arguments when is_binary(arguments) -> Map.put(item, "arguments", arguments)
+      _missing -> item
+    end
+  end
+
+  defp maybe_put_function_call_arguments(item, _argument_map), do: item
 
   defp capture_reasoning_item(
          state,
@@ -311,6 +452,67 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
   end
 
   defp capture_reasoning_summary(state, _summary), do: state
+
+  defp terminal_output(output, state) when is_list(output) and output != [] do
+    Enum.map(output, &maybe_put_function_call_arguments(&1, state.function_call_arguments))
+  end
+
+  defp terminal_output(_output, state) do
+    Enum.map(state.output_items, fn {_key, item} -> item end)
+  end
+
+  defp maybe_put_model(response, model) when is_binary(model),
+    do: Map.put_new(response, "model", model)
+
+  defp maybe_put_model(response, _model), do: response
+
+  defp maybe_put_output(response, output) when is_list(output) and output != [],
+    do: Map.put(response, "output", output)
+
+  defp maybe_put_output(response, _output), do: response
+
+  defp provider_event_error(event) do
+    response = map_or_empty(event["response"])
+    error = map_or_empty(event["error"] || response["error"])
+    incomplete_details = map_or_empty(response["incomplete_details"])
+
+    code =
+      event["error_type"] ||
+        error["code"] ||
+        incomplete_details["reason"] ||
+        "provider_error"
+
+    message = error["message"] || incomplete_details["message"]
+
+    {:provider_error, normalize_error_code(code), normalize_error_message(message)}
+  end
+
+  defp map_or_empty(value) when is_map(value), do: value
+  defp map_or_empty(_value), do: %{}
+
+  defp normalize_error_code(code) when is_binary(code) do
+    code
+    |> String.trim()
+    |> String.slice(0, 80)
+    |> case do
+      "" -> "provider_error"
+      normalized -> normalized
+    end
+  end
+
+  defp normalize_error_code(_code), do: "provider_error"
+
+  defp normalize_error_message(message) when is_binary(message) do
+    message
+    |> String.trim()
+    |> String.slice(0, @maximum_error_characters)
+    |> case do
+      "" -> nil
+      normalized -> normalized
+    end
+  end
+
+  defp normalize_error_message(_message), do: nil
 
   defp streamed_completion(
          %{

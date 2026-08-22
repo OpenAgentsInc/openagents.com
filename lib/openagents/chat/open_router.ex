@@ -1,20 +1,24 @@
 defmodule OpenAgents.Chat.OpenRouter do
   @moduledoc """
-  Server-side OpenRouter chat-completions adapter for the `/chat` preview.
+  Server-side OpenRouter Responses adapter for the `/chat` preview.
 
   The adapter keeps the OpenRouter credential and HTTP transport on the server.
   It requests Ox Alpha first, with the Free Models Router as its configured
-  fallback, and returns normalized failures without provider credentials or
+  model fallback. It uses chat completions only when a provider does not support
+  Responses, and returns normalized failures without provider credentials or
   response bodies.
   """
 
   alias OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder
-  alias OpenAgents.Chat.Tools.Demo
+  alias OpenAgents.Chat.Tools.RepositoryFile
 
   @chat_completions_endpoint "https://openrouter.ai/api/v1/chat/completions"
   @responses_endpoint "https://openrouter.ai/api/v1/responses"
   @default_model "stealth/ox-alpha"
-  @maximum_tool_rounds 3
+  @maximum_tool_rounds 6
+  @tool_instructions """
+  Ground every repository claim in repository tool output. Never claim that a file or directory exists unless a tool result confirms it. Use list_repository_directory before guessing a path, and use the returned paths exactly. Do not retry the same failed repository, path, and ref combination. If a read fails, list its parent directory once or tell the user that the requested content is unavailable.
+  """
   @reasoning_efforts ~w(none minimal low medium high max)
 
   @type completion :: map()
@@ -80,7 +84,7 @@ defmodule OpenAgents.Chat.OpenRouter do
   end
 
   defp stream_with_responses_fallback(api_key, request, on_event, options) do
-    with {:ok, payload} <- responses_payload(request) do
+    with {:ok, payload} <- responses_payload(request, options) do
       case responses_stream_request(api_key, payload, options) do
         {:ok, response} -> consume_responses_stream(response, on_event, payload["model"])
         {:fallback, _reason} -> stream_with_chat_completions(api_key, request, on_event, options)
@@ -130,7 +134,7 @@ defmodule OpenAgents.Chat.OpenRouter do
     end
   end
 
-  defp responses_payload(%{"model" => model, "messages" => messages} = request)
+  defp responses_payload(%{"model" => model, "messages" => messages} = request, options)
        when is_binary(model) and is_list(messages) do
     with {:ok, input} <- responses_input(messages) do
       payload = %{"model" => model, "input" => input}
@@ -149,7 +153,8 @@ defmodule OpenAgents.Chat.OpenRouter do
 
       {:ok,
        Map.merge(payload, %{
-         "tools" => Demo.definitions(),
+         "instructions" => @tool_instructions,
+         "tools" => tool_module(options).definitions(),
          "tool_choice" => "auto",
          "reasoning" => reasoning,
          "include" => ["reasoning.encrypted_content"],
@@ -158,7 +163,7 @@ defmodule OpenAgents.Chat.OpenRouter do
     end
   end
 
-  defp responses_payload(_request), do: {:error, :invalid_response}
+  defp responses_payload(_request, _options), do: {:error, :invalid_response}
 
   defp reasoning_request("none"), do: %{"effort" => "none", "exclude" => false}
 
@@ -234,16 +239,16 @@ defmodule OpenAgents.Chat.OpenRouter do
   defp chat_request(request), do: request
 
   defp continue_responses_tool_calls(
-         {:ok, %{"tool_calls" => tool_calls}},
+         {:ok, %{"tool_calls" => tool_calls, "output" => provider_output}},
          api_key,
          payload,
          on_event,
          options,
          rounds_remaining
        )
-       when is_list(tool_calls) and rounds_remaining > 0 do
-    with {:ok, tool_outputs} <- execute_tool_calls(tool_calls),
-         payload <- Map.update!(payload, "input", &(&1 ++ tool_calls ++ tool_outputs)),
+       when is_list(tool_calls) and is_list(provider_output) and rounds_remaining > 0 do
+    with {:ok, tool_outputs} <- execute_tool_calls(tool_calls, on_event, options),
+         payload <- Map.update!(payload, "input", &(&1 ++ provider_output ++ tool_outputs)),
          {:ok, response} <- responses_stream_request(api_key, payload, options),
          result <- consume_responses_stream(response, on_event, payload["model"]) do
       continue_responses_tool_calls(
@@ -277,22 +282,50 @@ defmodule OpenAgents.Chat.OpenRouter do
        ),
        do: result
 
-  defp execute_tool_calls(tool_calls) do
+  defp execute_tool_calls(tool_calls, on_event, options) do
+    tool_module = tool_module(options)
+    tool_context = Keyword.get(options, :tool_context, %{})
+
     tool_outputs =
       Enum.map(tool_calls, fn %{"call_id" => call_id, "name" => name, "arguments" => arguments} ->
-        {:ok, output} = Demo.execute(name, arguments)
+        on_event.(
+          {:tool_call_started, %{"call_id" => call_id, "name" => name, "arguments" => arguments}}
+        )
 
-        %{
-          "type" => "function_call_output",
-          "call_id" => call_id,
-          "output" => Jason.encode!(output)
-        }
+        case execute_tool(tool_module, name, arguments, tool_context) do
+          {:ok, output} ->
+            encoded_output = Jason.encode!(output)
+            on_event.({:tool_call_completed, %{"call_id" => call_id, "output" => encoded_output}})
+
+            %{
+              "type" => "function_call_output",
+              "call_id" => call_id,
+              "output" => encoded_output
+            }
+
+          {:error, error} ->
+            on_event.({:tool_call_failed, %{"call_id" => call_id, "error" => error}})
+
+            %{
+              "type" => "function_call_output",
+              "call_id" => call_id,
+              "output" => Jason.encode!(%{"error" => error})
+            }
+        end
       end)
 
     {:ok, tool_outputs}
   rescue
     _exception -> {:error, :invalid_response}
   end
+
+  defp execute_tool(tool_module, name, arguments, context) do
+    tool_module.execute(name, arguments, context)
+  rescue
+    exception -> {:error, Exception.message(exception)}
+  end
+
+  defp tool_module(options), do: Keyword.get(options, :tool_module, RepositoryFile)
 
   defp chat_stream_request(api_key, request, options) do
     request_options = Keyword.get(options, :request_options, [])

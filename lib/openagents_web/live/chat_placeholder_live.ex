@@ -39,7 +39,16 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     ]
 
   import OpenAgentsWeb.AI.Reasoning,
-    only: [reasoning: 1, reasoning_trigger: 1, reasoning_content: 1]
+    only: [
+      reasoning: 1,
+      reasoning_trigger: 1,
+      reasoning_content: 1,
+      tool: 1,
+      tool_header: 1,
+      tool_content: 1,
+      tool_input: 1,
+      tool_output: 1
+    ]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -51,6 +60,8 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
      |> assign(:messages, [])
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
+     |> assign(:assistant_tool_calls, [])
+     |> assign(:assistant_blocks, [])
      |> assign(:reasoning_started_at, nil)
      |> assign(:streaming?, false)
      |> assign(:stream_task_ref, nil)
@@ -74,7 +85,10 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
   def handle_info({:openrouter_stream_event, stream_id, {:text_delta, delta}}, socket) do
     case socket.assigns do
       %{stream_id: ^stream_id, streaming?: true} ->
-        {:noreply, update(socket, :assistant_response, &(&1 <> delta))}
+        {:noreply,
+         socket
+         |> update(:assistant_response, &(&1 <> delta))
+         |> append_streaming_delta(:content, delta)}
 
       _stale_stream ->
         {:noreply, socket}
@@ -84,11 +98,52 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
   def handle_info({:openrouter_stream_event, stream_id, {:reasoning_delta, delta}}, socket) do
     case socket.assigns do
       %{stream_id: ^stream_id, streaming?: true} ->
-        {:noreply, update(socket, :assistant_reasoning, &((&1 || "") <> delta))}
+        {:noreply,
+         socket
+         |> update(:assistant_reasoning, &((&1 || "") <> delta))
+         |> append_streaming_delta(:reasoning, delta)}
 
       _stale_stream ->
         {:noreply, socket}
     end
+  end
+
+  def handle_info(
+        {:openrouter_stream_event, stream_id, {:tool_call_started, tool_call}},
+        socket
+      ) do
+    case socket.assigns do
+      %{stream_id: ^stream_id, streaming?: true} ->
+        {:noreply,
+         socket
+         |> update(:assistant_tool_calls, &(&1 ++ [tool_call_view(tool_call)]))
+         |> append_tool_block(tool_call_view(tool_call))}
+
+      _stale_stream ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info(
+        {:openrouter_stream_event, stream_id, {:tool_call_completed, tool_result}},
+        socket
+      ) do
+    update_streaming_tool(socket, stream_id, tool_result["call_id"], fn tool_call ->
+      %{
+        tool_call
+        | output: format_tool_json(tool_result["output"]),
+          state: "output-available"
+      }
+    end)
+  end
+
+  def handle_info(
+        {:openrouter_stream_event, stream_id, {:tool_call_failed, tool_result}},
+        socket
+      ) do
+    update_streaming_tool(socket, stream_id, tool_result["call_id"], fn tool_call ->
+      %{tool_call | error: tool_result["error"], state: "output-error"}
+    end)
   end
 
   def handle_info(
@@ -100,6 +155,9 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     assistant_content = completion["assistant_content"] || socket.assigns.assistant_response
     reasoning = completion["reasoning_summary"] || socket.assigns.assistant_reasoning
 
+    assistant_blocks =
+      reconcile_assistant_blocks(socket.assigns.assistant_blocks, assistant_content, reasoning)
+
     {:noreply,
      socket
      |> append_assistant_message(
@@ -108,10 +166,14 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
        completion,
        nil,
        reasoning,
-       reasoning_duration(socket)
+       reasoning_duration(socket),
+       socket.assigns.assistant_tool_calls,
+       assistant_blocks
      )
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
+     |> assign(:assistant_tool_calls, [])
+     |> assign(:assistant_blocks, [])
      |> assign(:reasoning_started_at, nil)
      |> assign(:streaming?, false)
      |> assign(:stream_task_ref, nil)
@@ -127,10 +189,16 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
        socket.assigns.stream_id,
        socket.assigns.assistant_response,
        nil,
-       error_message(reason)
+       error_message(reason),
+       socket.assigns.assistant_reasoning,
+       reasoning_duration(socket),
+       socket.assigns.assistant_tool_calls,
+       finalize_assistant_blocks(socket.assigns.assistant_blocks)
      )
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
+     |> assign(:assistant_tool_calls, [])
+     |> assign(:assistant_blocks, [])
      |> assign(:reasoning_started_at, nil)
      |> assign(:streaming?, false)
      |> assign(:stream_task_ref, nil)
@@ -147,10 +215,16 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
        socket.assigns.stream_id,
        socket.assigns.assistant_response,
        nil,
-       error_message(:provider_unavailable)
+       error_message(:provider_unavailable),
+       socket.assigns.assistant_reasoning,
+       reasoning_duration(socket),
+       socket.assigns.assistant_tool_calls,
+       finalize_assistant_blocks(socket.assigns.assistant_blocks)
      )
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
+     |> assign(:assistant_tool_calls, [])
+     |> assign(:assistant_blocks, [])
      |> assign(:reasoning_started_at, nil)
      |> assign(:streaming?, false)
      |> assign(:stream_task_ref, nil)
@@ -170,7 +244,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
       flush
     >
       <section id="chat-placeholder" class="relative flex min-h-0 flex-1 flex-col bg-background">
-        <div class="flex min-h-0 flex-1 px-4 pb-44 pt-6">
+        <div class="flex min-h-0 flex-1 px-4">
           <.conversation
             id="chat-placeholder-transcript"
             class="w-full"
@@ -194,18 +268,17 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
                   from={Atom.to_string(message.role)}
                   data-message-role={Atom.to_string(message.role)}
                 >
-                  <.reasoning
-                    :if={message.role == :assistant and message.reasoning}
-                    id={"chat-placeholder-reasoning-#{message.id}"}
-                    open={false}
-                  >
-                    <.reasoning_trigger duration={message.reasoning_duration} />
-                    <.reasoning_content text={message.reasoning} />
-                  </.reasoning>
-                  <.message_content text={message.content}>
-                    <p :if={message.error} id={"chat-placeholder-error-#{message.id}"} role="status">
-                      {message.error}
-                    </p>
+                  <%= if message.role == :assistant do %>
+                    <.assistant_block
+                      :for={{block, index} <- Enum.with_index(message.blocks)}
+                      id={"chat-placeholder-block-#{message.id}-#{index}"}
+                      block={block}
+                    />
+                    <.message_content :if={message.error}>
+                      <p id={"chat-placeholder-error-#{message.id}"} role="status">
+                        {message.error}
+                      </p>
+                    </.message_content>
                     <p
                       :if={message.completion}
                       id={"chat-placeholder-response-metadata-#{message.id}"}
@@ -213,7 +286,9 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
                     >
                       OpenRouter · {message.completion["object"]} · {message.completion["model"]}
                     </p>
-                  </.message_content>
+                  <% else %>
+                    <.message_content text={message.content} />
+                  <% end %>
                 </.message>
 
                 <.message
@@ -221,22 +296,11 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
                   id="chat-placeholder-streaming-assistant-message"
                   from="assistant"
                 >
-                  <.reasoning
-                    :if={@streaming?}
-                    id="chat-placeholder-streaming-reasoning"
-                    open={true}
-                  >
-                    <.reasoning_trigger streaming={true} duration={0} />
-                    <.reasoning_content
-                      :if={@assistant_reasoning}
-                      text={@assistant_reasoning}
-                      streaming
-                    />
-                  </.reasoning>
-                  <.message_content
-                    id="chat-placeholder-response"
-                    text={@assistant_response}
-                    streaming={@streaming?}
+                  <.assistant_block
+                    :for={{block, index} <- Enum.with_index(@assistant_blocks)}
+                    id={"chat-placeholder-streaming-block-#{index}"}
+                    block={block}
+                    streaming
                   />
                 </.message>
               </div>
@@ -316,9 +380,11 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
     task =
       Task.Supervisor.async_nolink(OpenAgents.ProviderTaskSupervisor, fn ->
-        OpenRouter.stream(request, fn event ->
-          send(owner, {:openrouter_stream_event, stream_id, event})
-        end)
+        OpenRouter.stream(
+          request,
+          fn event -> send(owner, {:openrouter_stream_event, stream_id, event}) end,
+          tool_context: %{user: socket.assigns.current_user}
+        )
       end)
 
     {:noreply,
@@ -327,6 +393,8 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
      |> update(:messages, &(&1 ++ [user_message(stream_id, message)]))
      |> assign(:assistant_response, "")
      |> assign(:assistant_reasoning, nil)
+     |> assign(:assistant_tool_calls, [])
+     |> assign(:assistant_blocks, [reasoning_block("")])
      |> assign(:reasoning_started_at, System.monotonic_time(:second))
      |> assign(:streaming?, true)
      |> assign(:stream_task_ref, task.ref)
@@ -335,11 +403,16 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
   end
 
   defp user_message(id, content),
-    do: %{id: id, role: :user, content: content, completion: nil, error: nil, history?: true}
-
-  defp append_assistant_message(socket, id, content, completion, error) do
-    append_assistant_message(socket, id, content, completion, error, nil, nil)
-  end
+    do: %{
+      id: id,
+      role: :user,
+      content: content,
+      completion: nil,
+      error: nil,
+      history?: true,
+      tool_calls: [],
+      blocks: []
+    }
 
   defp append_assistant_message(
          socket,
@@ -348,7 +421,9 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
          completion,
          error,
          reasoning,
-         reasoning_duration
+         reasoning_duration,
+         tool_calls,
+         blocks
        ) do
     assistant = %{
       id: id,
@@ -361,7 +436,9 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
       provider_status: if(completion && completion["assistant_message_id"], do: "completed"),
       provider_reasoning_items: completion && completion["reasoning_items"],
       reasoning: reasoning,
-      reasoning_duration: reasoning_duration
+      reasoning_duration: reasoning_duration,
+      tool_calls: tool_calls,
+      blocks: blocks
     }
 
     update(socket, :messages, &(&1 ++ [assistant]))
@@ -421,4 +498,168 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
   end
 
   defp reasoning_duration(_socket), do: nil
+
+  attr :id, :string, required: true
+  attr :tool_call, :map, required: true
+  attr :open, :boolean, default: false
+
+  defp tool_call_component(assigns) do
+    ~H"""
+    <.tool id={@id} open={@open || @tool_call.state != "output-available"}>
+      <.tool_header
+        type={"tool-#{@tool_call.name}"}
+        title={@tool_call.name}
+        state={@tool_call.state}
+      />
+      <.tool_content>
+        <.tool_input input={@tool_call.arguments} />
+        <.tool_output output={@tool_call.output} error_text={@tool_call.error} />
+      </.tool_content>
+    </.tool>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :block, :map, required: true
+  attr :streaming, :boolean, default: false
+
+  defp assistant_block(assigns) do
+    ~H"""
+    <%= case @block.type do %>
+      <% :reasoning -> %>
+        <.reasoning id={@id} open={@streaming && is_nil(@block.duration)}>
+          <.reasoning_trigger
+            streaming={@streaming && is_nil(@block.duration)}
+            duration={@block.duration || 0}
+          />
+          <.reasoning_content
+            :if={@block.text != ""}
+            text={@block.text}
+            streaming={@streaming && is_nil(@block.duration)}
+          />
+        </.reasoning>
+      <% :tool -> %>
+        <.tool_call_component id={@id} tool_call={@block.tool_call} open />
+      <% :content -> %>
+        <.message_content id={@id} text={@block.text} streaming={@streaming} />
+    <% end %>
+    """
+  end
+
+  defp update_streaming_tool(socket, stream_id, call_id, update_tool) do
+    case socket.assigns do
+      %{stream_id: ^stream_id, streaming?: true} ->
+        {:noreply,
+         socket
+         |> update(:assistant_tool_calls, &update_tool_call(&1, call_id, update_tool))
+         |> update(:assistant_blocks, fn blocks ->
+           Enum.map(blocks, fn
+             %{type: :tool, tool_call: %{call_id: ^call_id} = tool_call} = block ->
+               %{block | tool_call: update_tool.(tool_call)}
+
+             block ->
+               block
+           end)
+         end)}
+
+      _stale_stream ->
+        {:noreply, socket}
+    end
+  end
+
+  defp format_tool_json(value) when is_binary(value) do
+    case Jason.decode(value) do
+      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
+      {:error, _reason} -> value
+    end
+  end
+
+  defp format_tool_json(value), do: Jason.encode!(value, pretty: true)
+
+  defp tool_call_view(tool_call) do
+    %{
+      call_id: tool_call["call_id"],
+      name: tool_call["name"],
+      arguments: format_tool_json(tool_call["arguments"]),
+      output: nil,
+      error: nil,
+      state: "input-available"
+    }
+  end
+
+  defp update_tool_call(tool_calls, call_id, update_tool) do
+    Enum.map(tool_calls, fn
+      %{call_id: ^call_id} = tool_call -> update_tool.(tool_call)
+      tool_call -> tool_call
+    end)
+  end
+
+  defp append_streaming_delta(socket, type, delta) do
+    update(socket, :assistant_blocks, fn blocks ->
+      case List.last(blocks) do
+        %{type: ^type} = block ->
+          List.replace_at(blocks, -1, %{block | text: block.text <> delta})
+
+        _other ->
+          finalize_assistant_blocks(blocks) ++ [streaming_block(type, delta)]
+      end
+    end)
+  end
+
+  defp append_tool_block(socket, tool_call) do
+    update(socket, :assistant_blocks, fn blocks ->
+      finalize_assistant_blocks(blocks) ++ [%{type: :tool, tool_call: tool_call}]
+    end)
+  end
+
+  defp streaming_block(:reasoning, text), do: reasoning_block(text)
+  defp streaming_block(:content, text), do: %{type: :content, text: text}
+
+  defp reasoning_block(text) do
+    %{
+      type: :reasoning,
+      text: text,
+      started_at: System.monotonic_time(:second),
+      duration: nil
+    }
+  end
+
+  defp finalize_assistant_blocks(blocks) do
+    blocks
+    |> Enum.map(fn
+      %{type: :reasoning, duration: nil} = block ->
+        %{block | duration: max(System.monotonic_time(:second) - block.started_at, 1)}
+
+      block ->
+        block
+    end)
+    |> Enum.reject(&(&1.type == :reasoning and &1.text == ""))
+  end
+
+  defp reconcile_assistant_blocks(blocks, content, reasoning) do
+    blocks = finalize_assistant_blocks(blocks)
+
+    blocks =
+      if Enum.any?(blocks, &(&1.type == :reasoning)) or not is_binary(reasoning) or
+           reasoning == "" do
+        blocks
+      else
+        [%{reasoning_block(reasoning) | duration: 1} | blocks]
+      end
+
+    case Enum.find_index(Enum.reverse(blocks), &(&1.type == :content)) do
+      nil when is_binary(content) and content != "" ->
+        blocks ++ [%{type: :content, text: content}]
+
+      nil ->
+        blocks
+
+      reversed_index when is_binary(content) ->
+        index = length(blocks) - reversed_index - 1
+        List.update_at(blocks, index, &%{&1 | text: content})
+
+      _index ->
+        blocks
+    end
+  end
 end

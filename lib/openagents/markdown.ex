@@ -227,6 +227,7 @@ defmodule OpenAgents.Markdown do
       |> drop_incomplete_html_tag()
       |> drop_incomplete_block_marker()
       |> close_inline_code()
+      |> finish_partial_emphasis_closer()
       |> close_emphasis()
     end
   end
@@ -298,6 +299,41 @@ defmodule OpenAgents.Markdown do
     |> String.replace("```", "")
     |> String.graphemes()
     |> Enum.count(&(&1 == "`"))
+  end
+
+  # A closing delimiter can arrive one character at a time. At the intermediate
+  # `**bold*` prefix, appending a full `**` produces `**bold***`, which CommonMark
+  # renders as bold text followed by a literal asterisk. Add only the missing
+  # part of the closer. If the shorter trailing delimiter is already balanced,
+  # it belongs to a nested span and must remain untouched.
+  defp finish_partial_emphasis_closer(text) do
+    case Regex.run(~r/(\*+|_+|~+)\z/u, text, capture: :all_but_first) do
+      [tail] -> finish_partial_emphasis_closer(text, tail)
+      nil -> text
+    end
+  end
+
+  defp finish_partial_emphasis_closer(text, tail) do
+    character = String.first(tail)
+    tail_length = String.length(tail)
+    shorter_marker = String.duplicate(character, tail_length)
+
+    shorter_marker_balanced? =
+      shorter_marker in @emphasis_markers and not unbalanced?(text, shorter_marker)
+
+    partial_opener =
+      Enum.find(@emphasis_markers, fn marker ->
+        String.first(marker) == character and
+          String.length(marker) > tail_length and
+          unbalanced?(text, marker) and
+          content_after_last?(text, marker)
+      end)
+
+    if partial_opener && not shorter_marker_balanced? do
+      text <> String.duplicate(character, String.length(partial_opener) - tail_length)
+    else
+      text
+    end
   end
 
   defp close_emphasis(text) do

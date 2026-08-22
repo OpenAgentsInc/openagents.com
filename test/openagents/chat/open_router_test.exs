@@ -3,6 +3,28 @@ defmodule OpenAgents.Chat.OpenRouterTest do
 
   alias OpenAgents.Chat.OpenRouter
 
+  defmodule RepositoryFileStub do
+    @moduledoc false
+
+    def definitions, do: OpenAgents.Chat.Tools.RepositoryFile.definitions()
+
+    def execute("read_repository_file", arguments, %{user_id: "user-test"}) do
+      assert_arguments = Jason.decode!(arguments)
+      "OpenAgentsInc/openagents.com" = assert_arguments["repository"]
+      "README.md" = assert_arguments["path"]
+
+      {:ok,
+       %{
+         "repository" => "OpenAgentsInc/openagents.com",
+         "ref" => "main",
+         "path" => "README.md",
+         "content" => "# OpenAgents\n",
+         "size_bytes" => 13,
+         "truncated" => false
+       }}
+    end
+  end
+
   setup {Req.Test, :verify_on_exit!}
 
   test "sends an OpenRouter-compatible Ox Alpha request with a free fallback" do
@@ -475,36 +497,26 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert_receive {:openrouter_event, {:text_delta, " stream"}}
   end
 
-  test "executes the demo tool and continues the Responses conversation" do
+  test "reads a repository file and continues the Responses conversation" do
     Req.Test.expect(__MODULE__, fn conn ->
       assert conn.request_path == "/api/v1/responses"
 
-      assert [
-               %{
-                 "type" => "function",
-                 "name" => "get_demo_time",
-                 "strict" => true,
-                 "parameters" => %{"type" => "object", "additionalProperties" => false}
-               }
-             ] = conn.body_params["tools"]
+      assert Enum.map(conn.body_params["tools"], & &1["name"]) == [
+               "read_repository_file",
+               "list_repository_directory"
+             ]
+
+      assert conn.body_params["instructions"] =~
+               "Never claim that a file or directory exists unless a tool result confirms it"
+
+      assert Enum.all?(conn.body_params["tools"], fn tool ->
+               tool["type"] == "function" and tool["strict"] == true and
+                 tool["parameters"]["additionalProperties"] == false
+             end)
 
       body =
-        sse(%{
-          "type" => "response.done",
-          "response" => %{
-            "object" => "response",
-            "model" => "stealth/ox-alpha",
-            "output" => [
-              %{
-                "type" => "function_call",
-                "id" => "fc_demo",
-                "call_id" => "call_demo",
-                "name" => "get_demo_time",
-                "arguments" => "{}"
-              }
-            ]
-          }
-        }) <> "data: [DONE]\n\n"
+        Path.expand("../../fixtures/openrouter/responses_tool_call.sse", __DIR__)
+        |> File.read!()
 
       conn
       |> Plug.Conn.put_resp_content_type("text/event-stream")
@@ -517,11 +529,25 @@ defmodule OpenAgents.Chat.OpenRouterTest do
       assert [
                %{"type" => "message", "role" => "user"},
                %{
+                 "type" => "reasoning",
+                 "id" => "rs_demo",
+                 "status" => "completed",
+                 "summary" => [
+                   %{
+                     "type" => "summary_text",
+                     "text" => "The user asked to read a repository file."
+                   }
+                 ],
+                 "encrypted_content" => "encrypted-demo-reasoning"
+               },
+               %{
                  "type" => "function_call",
                  "id" => "fc_demo",
                  "call_id" => "call_demo",
-                 "name" => "get_demo_time",
-                 "arguments" => "{}"
+                 "name" => "read_repository_file",
+                 "arguments" =>
+                   "{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}",
+                 "status" => "completed"
                },
                %{
                  "type" => "function_call_output",
@@ -530,13 +556,19 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                }
              ] = conn.body_params["input"]
 
-      assert %{"timezone" => "UTC", "source" => "OpenAgents demo tool", "time" => _time} =
-               Jason.decode!(tool_output)
+      assert %{
+               "repository" => "OpenAgentsInc/openagents.com",
+               "path" => "README.md",
+               "content" => "# OpenAgents\n"
+             } = Jason.decode!(tool_output)
 
       body =
-        sse(%{"type" => "response.content_part.delta", "delta" => "The demo tool ran."}) <>
+        sse(%{
+          "type" => "response.content_part.delta",
+          "delta" => "OpenAgents is an agent platform."
+        }) <>
           sse(%{
-            "type" => "response.done",
+            "type" => "response.completed",
             "response" => %{
               "object" => "response",
               "model" => "stealth/ox-alpha",
@@ -549,7 +581,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                   "content" => [
                     %{
                       "type" => "output_text",
-                      "text" => "The demo tool ran.",
+                      "text" => "OpenAgents is an agent platform.",
                       "annotations" => []
                     }
                   ]
@@ -565,18 +597,38 @@ defmodule OpenAgents.Chat.OpenRouterTest do
 
     parent = self()
 
-    assert {:ok, %{"assistant_content" => "The demo tool ran."}} =
+    assert {:ok, %{"assistant_content" => "OpenAgents is an agent platform."}} =
              OpenRouter.stream(
                %{
                  "model" => "stealth/ox-alpha",
-                 "messages" => [%{"role" => "user", "content" => "What time is it?"}]
+                 "messages" => [%{"role" => "user", "content" => "Summarize the README."}]
                },
                &send(parent, {:openrouter_event, &1}),
                api_key: "test-openrouter-key",
+               tool_module: RepositoryFileStub,
+               tool_context: %{user_id: "user-test"},
                request_options: [plug: {Req.Test, __MODULE__}]
              )
 
-    assert_receive {:openrouter_event, {:text_delta, "The demo tool ran."}}
+    assert_receive {:openrouter_event, {:text_delta, "OpenAgents is an agent platform."}}
+
+    assert_receive {:openrouter_event,
+                    {:tool_call_started,
+                     %{
+                       "call_id" => "call_demo",
+                       "name" => "read_repository_file",
+                       "arguments" =>
+                         "{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}"
+                     }}}
+
+    assert_receive {:openrouter_event,
+                    {:tool_call_completed, %{"call_id" => "call_demo", "output" => tool_output}}}
+
+    assert %{
+             "repository" => "OpenAgentsInc/openagents.com",
+             "path" => "README.md",
+             "content" => "# OpenAgents\n"
+           } = Jason.decode!(tool_output)
   end
 
   defp sse(event), do: "data: " <> Jason.encode!(event) <> "\n\n"

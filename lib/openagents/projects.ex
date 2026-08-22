@@ -216,18 +216,48 @@ defmodule OpenAgents.Projects do
   end
 
   def list_project_items(%Project{id: project_id, repository_id: repository_id}) do
-    ProjectItem
-    |> where(project_id: ^project_id, repository_id: ^repository_id)
+    project_items_query(project_id, repository_id)
     |> order_by(asc: :id)
+    |> preload(issue: :repository)
+    |> Repo.all()
+  end
+
+  def list_visible_project_items(
+        %Project{id: project_id, repository_id: repository_id},
+        user
+      ) do
+    readable =
+      from(repository in Repositories.readable_by(Repository, user), select: repository.id)
+
+    project_items_query(project_id, repository_id)
+    |> where([item], item.issue_repository_id in subquery(readable))
+    |> order_by(asc: :id)
+    |> preload(issue: :repository)
     |> Repo.all()
   end
 
   def get_project_item!(%Project{id: project_id, repository_id: repository_id}, id) do
-    Repo.get_by!(ProjectItem,
+    ProjectItem
+    |> Repo.get_by!(
       id: id,
       project_id: project_id,
       repository_id: repository_id
     )
+    |> Repo.preload(issue: :repository)
+  end
+
+  def get_visible_project_item!(
+        %Project{id: project_id, repository_id: repository_id},
+        id,
+        user
+      ) do
+    readable =
+      from(repository in Repositories.readable_by(Repository, user), select: repository.id)
+
+    project_items_query(project_id, repository_id)
+    |> where([item], item.id == ^id and item.issue_repository_id in subquery(readable))
+    |> preload(issue: :repository)
+    |> Repo.one!()
   end
 
   def create_project_item(attrs, project, actor \\ nil)
@@ -236,6 +266,7 @@ defmodule OpenAgents.Projects do
       when is_nil(actor) or is_struct(actor, User) do
     attrs = to_string_map(attrs)
     values = Map.get(attrs, "values", %{})
+    issue_repository_id = Map.get(attrs, "issue_repository_id", project.repository_id)
 
     result =
       case Map.get(attrs, "issue_number") do
@@ -244,6 +275,7 @@ defmodule OpenAgents.Projects do
           |> ProjectItem.changeset(%{
             "project_id" => project.id,
             "repository_id" => project.repository_id,
+            "issue_repository_id" => issue_repository_id,
             "values" => values
           })
           |> Ecto.Changeset.apply_action(:insert)
@@ -251,7 +283,7 @@ defmodule OpenAgents.Projects do
         issue_number ->
           issue =
             Repo.get_by!(Issue,
-              repository_id: project.repository_id,
+              repository_id: issue_repository_id,
               number: issue_number
             )
 
@@ -260,6 +292,7 @@ defmodule OpenAgents.Projects do
             "project_id" => project.id,
             "issue_id" => issue.id,
             "repository_id" => project.repository_id,
+            "issue_repository_id" => issue_repository_id,
             "values" => values
           })
           |> Repo.insert()
@@ -272,7 +305,7 @@ defmodule OpenAgents.Projects do
           "has_issue" => match?(%ProjectItem{issue_id: id} when id != nil, item)
         })
 
-        {:ok, item}
+        {:ok, Repo.preload(item, issue: :repository)}
 
       result ->
         result
@@ -310,6 +343,12 @@ defmodule OpenAgents.Projects do
       nil -> 1
       number -> number + 1
     end
+  end
+
+  defp project_items_query(project_id, repository_id) do
+    from(item in ProjectItem,
+      where: item.project_id == ^project_id and item.repository_id == ^repository_id
+    )
   end
 
   defp number_conflict?(changeset) do

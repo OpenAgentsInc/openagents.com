@@ -50,7 +50,10 @@ defmodule OpenAgentsWeb.ProjectController do
       }) do
     repository = visible_repository!(conn, owner, repo)
     project = Projects.get_project_by_number!(repository, parse_id!(project_number))
-    render(conn, :items, items: Projects.list_project_items(project))
+
+    render(conn, :items,
+      items: Projects.list_visible_project_items(project, conn.assigns[:current_user])
+    )
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
@@ -66,12 +69,15 @@ defmodule OpenAgentsWeb.ProjectController do
     repository = writable_repository!(conn, owner, repo)
     project = Projects.get_project_by_number!(repository, parse_id!(project_number))
 
-    case cast_number(params["issue_number"]) do
+    case issue_reference(conn, repository, params) do
       :error ->
         unprocessable(conn, %{issue_number: ["is invalid"]})
 
-      {:ok, issue_number} ->
-        params = Map.put(params, "issue_number", issue_number)
+      {:ok, source_repository, issue_number} ->
+        params =
+          params
+          |> Map.put("issue_number", issue_number)
+          |> Map.put("issue_repository_id", source_repository.id)
 
         case Projects.create_project_item(params, project, conn.assigns.current_user) do
           {:ok, item} ->
@@ -100,7 +106,13 @@ defmodule OpenAgentsWeb.ProjectController do
       ) do
     repository = writable_repository!(conn, owner, repo)
     project = Projects.get_project_by_number!(repository, parse_id!(project_number))
-    item = Projects.get_project_item!(project, parse_id!(item_id))
+
+    item =
+      Projects.get_visible_project_item!(
+        project,
+        parse_id!(item_id),
+        conn.assigns.current_user
+      )
 
     if is_map(Map.get(params, "values", %{})) do
       case Projects.update_project_item(item, params) do
@@ -187,6 +199,23 @@ defmodule OpenAgentsWeb.ProjectController do
   end
 
   defp cast_number(_other), do: :error
+
+  defp issue_reference(conn, _project_repository, %{"issue" => issue}) when is_map(issue) do
+    with owner when is_binary(owner) <- issue["owner"],
+         repo when is_binary(repo) <- issue["repo"],
+         {:ok, number} <- cast_number(issue["number"]) do
+      {:ok, visible_repository!(conn, owner, repo), number}
+    else
+      _invalid -> :error
+    end
+  end
+
+  defp issue_reference(_conn, project_repository, params) do
+    case cast_number(params["issue_number"]) do
+      {:ok, number} -> {:ok, project_repository, number}
+      :error -> :error
+    end
+  end
 
   defp unprocessable(conn, errors) do
     conn

@@ -58,7 +58,11 @@ defmodule OpenAgents.ProjectItems do
     repository_id = repository_id_for(repository, Map.get(attrs, "project_id"))
 
     %ProjectItem{}
-    |> ProjectItem.changeset(Map.put(attrs, "repository_id", repository_id))
+    |> ProjectItem.changeset(
+      attrs
+      |> Map.put("repository_id", repository_id)
+      |> Map.put_new("issue_repository_id", repository.id)
+    )
     |> Repo.insert()
   end
 

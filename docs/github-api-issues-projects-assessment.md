@@ -71,12 +71,19 @@ These are current measured behaviors:
   writable membership for the PAT principal.
 - Resource reads and mutations include repository ownership in their database
   query. Composite foreign keys reject cross-repository comments, label and
-  assignee links, milestones, and project items.
+  assignee links, and milestones. A project item stores separate project and
+  source-issue repository identities, so one board can include a readable
+  issue from another repository without weakening project write authority.
 - Issue and milestone numbers are repository-local. Project numbers are also
   repository-local for the repository-shaped LiveView surface.
 - Project list, show, item, update-item, and field actions resolve the repository
   from the route. Public repositories allow anonymous reads. Private reads and
   every write require membership in that repository.
+- Item creation accepts either the legacy repository-local `issue_number` or
+  an `issue` object with `owner`, `repo`, and `number`. Cross-repository adds
+  require write access to the project repository and read access to the source
+  repository. Item lists omit source issues that the current viewer cannot
+  read.
 - Assignee reads return active repository members with writable roles, and
   issue assignment accepts only those members.
 

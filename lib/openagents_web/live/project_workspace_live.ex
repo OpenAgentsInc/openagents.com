@@ -70,11 +70,13 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
 
   # Zero debounce means tests: refresh synchronously on the change message so
   # assertions need no waiting.
-  defp schedule_refresh(socket) when @refresh_debounce_ms == 0 do
-    load(socket)
+  defp schedule_refresh(socket) do
+    if @refresh_debounce_ms == 0,
+      do: load(socket),
+      else: schedule_debounced_refresh(socket)
   end
 
-  defp schedule_refresh(socket) do
+  defp schedule_debounced_refresh(socket) do
     case socket.assigns.refresh_timer_ref do
       nil ->
         assign(

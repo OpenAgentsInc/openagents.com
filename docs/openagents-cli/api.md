@@ -160,6 +160,19 @@ printf '%s' '{"issue_number":11,"values":{"Status":"To Do"}}' | \
   repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/items
 ```
 
+To add an issue from another repository, identify its repository explicitly.
+You must be able to write the project and read the source issue repository:
+
+```sh
+printf '%s' '{"issue":{"owner":"SOURCE_OWNER","repo":"SOURCE_REPOSITORY","number":37},"values":{"Status":"To Do"}}' | \
+  openagents api -X POST --input - \
+  repos/PROJECT_OWNER/PROJECT_REPOSITORY/projectsV2/PROJECT_NUMBER/items
+```
+
+Item responses include the source issue's `owner`, `repo`, `number`, `url`,
+and `html_url`. The legacy `issue_number` form continues to select an issue
+from the project repository.
+
 Update the stored values for an item:
 
 ```sh

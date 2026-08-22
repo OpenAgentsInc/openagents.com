@@ -34,9 +34,21 @@ defmodule OpenAgentsWeb.ProjectJSON do
   end
 
   defp item_json(item) do
+    issue = item.issue
+    repository = issue.repository
+    base_url = OpenAgentsWeb.Endpoint.url()
+
     %{
       id: item.id,
       issue_id: item.issue_id,
+      issue: %{
+        owner: repository.owner,
+        repo: repository.name,
+        number: issue.number,
+        url:
+          "#{base_url}/api/v3/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
+        html_url: "#{base_url}/#{repository.owner}/#{repository.name}/issues/#{issue.number}"
+      },
       values: item.values
     }
   end

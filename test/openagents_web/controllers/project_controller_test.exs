@@ -175,6 +175,63 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert issue_id == issue.id
     end
 
+    test "POST .../items adds a readable issue from another repository", %{
+      conn: conn,
+      project: project
+    } do
+      source =
+        repository_fixture(%{owner: "SourceOrg", name: "source-api", visibility: "public"})
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Cross-repository work"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "SourceOrg", repo: "source-api", number: issue.number}}
+        )
+
+      assert %{
+               "items" => [
+                 %{
+                   "issue_id" => issue_id,
+                   "issue" => %{
+                     "owner" => "SourceOrg",
+                     "repo" => "source-api",
+                     "number" => number,
+                     "html_url" => html_url
+                   }
+                 }
+               ]
+             } = json_response(conn, 201)
+
+      assert issue_id == issue.id
+      assert number == issue.number
+      assert html_url =~ "/SourceOrg/source-api/issues/#{issue.number}"
+      assert [%{issue_repository_id: source_id}] = Projects.list_project_items(project)
+      assert source_id == source.id
+    end
+
+    test "POST .../items hides an unreadable source repository", %{
+      conn: conn,
+      project: project
+    } do
+      source =
+        repository_fixture(%{owner: "SecretOrg", name: "secret-api", visibility: "private"})
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Private work"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "SecretOrg", repo: "secret-api", number: issue.number}}
+        )
+
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert Projects.list_project_items(project) == []
+    end
+
     test "POST .../projectsV2/:project_number/items stores field values", %{
       conn: conn,
       project: project,

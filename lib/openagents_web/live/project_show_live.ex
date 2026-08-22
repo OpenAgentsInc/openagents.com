@@ -14,7 +14,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
     repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
     project = Projects.get_project_by_number!(repository, String.to_integer(number))
-    items = project_items(repository, project)
+    items = project_items(project, socket.assigns.current_user)
     issue_options = issue_options(repository)
 
     {:ok,
@@ -47,7 +47,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       {:ok, _item} ->
         {:noreply,
          socket
-         |> assign(:items, project_items(socket.assigns.repository, project))
+         |> assign(:items, project_items(project, socket.assigns.current_user))
          |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
          |> put_flash(:info, "Issue added to project")}
 
@@ -56,10 +56,10 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     end
   end
 
-  defp project_items(repository, project) do
-    Projects.list_project_items(project)
+  defp project_items(project, user) do
+    Projects.list_visible_project_items(project, user)
     |> Enum.map(fn item ->
-      issue = Issues.get_issue!(repository, item.issue_id)
+      issue = item.issue
       status = get_in(item.values, ["Status"]) || "To Do"
       Map.merge(item, %{issue: issue, status: status})
     end)
@@ -127,14 +127,16 @@ defmodule OpenAgentsWeb.ProjectShowLive do
               <%= for item <- @items, item.status == status do %>
                 <article class="card !m-0 !p-3">
                   <.link
-                    navigate={~p"/#{@owner}/#{@repo}/issues/#{item.issue.number}"}
+                    navigate={
+                      ~p"/#{item.issue.repository.owner}/#{item.issue.repository.name}/issues/#{item.issue.number}"
+                    }
                     class="btn px-0 text-sm font-semibold"
                     data-variant="link"
                   >
                     {item.issue.title}
                   </.link>
                   <span class="text-xs text-muted-foreground block">
-                    #{item.issue.number}
+                    {item.issue.repository.owner}/{item.issue.repository.name}#{item.issue.number}
                   </span>
                   <div class="flex flex-wrap gap-1 mt-2">
                     <%= for label <- item.issue.labels || [] do %>

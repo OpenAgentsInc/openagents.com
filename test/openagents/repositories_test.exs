@@ -122,7 +122,7 @@ defmodule OpenAgents.RepositoriesTest do
     end
   end
 
-  test "project-item and comment constraints reject cross-repository parents", %{
+  test "project-item and comment constraints reject mismatched repository identities", %{
     initial: initial,
     second: second,
     user: user
@@ -136,7 +136,8 @@ defmodule OpenAgents.RepositoriesTest do
              |> ProjectItem.changeset(%{
                project_id: project.id,
                issue_id: second_issue.id,
-               repository_id: initial.id
+               repository_id: initial.id,
+               issue_repository_id: initial.id
              })
              |> Repo.insert()
 

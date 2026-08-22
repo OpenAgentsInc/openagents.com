@@ -14,6 +14,7 @@ defmodule OpenAgents.Release.AppupTest do
 
   @appup_file Path.expand("../../../rel/openagents.appup.exs", __DIR__)
   @environment [
+    "OPENAGENTS_RELEASE_VSN",
     "RELUP_FROM",
     "RELUP_TO",
     "RELUP_FROM_EBIN",
@@ -33,6 +34,13 @@ defmodule OpenAgents.Release.AppupTest do
     end)
 
     :ok
+  end
+
+  test "plain releases keep the appup and project versions aligned" do
+    Enum.each(@environment, &System.delete_env/1)
+
+    assert {String.to_charlist(Mix.Project.config()[:version]), [], []} ==
+             @appup_file |> Code.eval_file() |> elem(0)
   end
 
   test "covers a changed module the fixed proof set never named" do

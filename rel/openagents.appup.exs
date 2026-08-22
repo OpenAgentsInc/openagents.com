@@ -40,7 +40,7 @@
        )
 
      is_nil(to) and is_nil(from) ->
-       {String.to_charlist(System.get_env("OPENAGENTS_RELEASE_VSN", "0.2.0")), [], []}
+       {String.to_charlist(System.get_env("OPENAGENTS_RELEASE_VSN", "0.2.3")), [], []}
 
      true ->
        raise "RELUP_FROM and RELUP_TO must be set together"

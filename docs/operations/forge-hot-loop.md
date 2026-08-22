@@ -138,6 +138,12 @@ next patch version only when a compatible full-release package needs a new
 version. Reserve a minor-version change for a deliberate compatibility or
 feature boundary.
 
+When a full release changes the application version, commit the same default
+version in `mix.exs` and `rel/openagents.appup.exs`. The sidecar reads that
+source identity into its build manifest, and deployment nodes compare it with
+the running application. If those versions drift, direct preparation fails
+with `runtime_toolchain_mismatch` on every node.
+
 If classification returns `needs_rolling_replace`, keep that receipt and use
 this fallback order:
 

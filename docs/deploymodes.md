@@ -194,6 +194,13 @@ The application version and source revision serve different purposes. A new
 commit does not require a new application version when the direct path can
 deploy it.
 
+After a full release changes the application version, update the default in
+`mix.exs` and the plain-release default in `rel/openagents.appup.exs` to the
+same version. The Forge builder compiles the candidate application
+specification from that source default, and each deployment node compares it
+with its running release. Leaving the source default behind causes every later
+direct candidate to fail with `runtime_toolchain_mismatch`.
+
 ## Receipts and status
 
 `/status` and `/api/status` expose the active Forge lane, current target,

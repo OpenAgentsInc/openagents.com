@@ -320,7 +320,10 @@ defmodule OpenAgentsWeb.AI.Conversation do
       ]}
       {@rest}
     >
-      <div :if={@text} class="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <div
+        :if={@text}
+        class="message-markdown size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+      >
         {Markdown.to_html(@text, streaming: @streaming)}
       </div>
       {render_slot(@inner_block)}

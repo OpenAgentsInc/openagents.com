@@ -237,11 +237,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
                     id="chat-placeholder-response"
                     text={@assistant_response}
                     streaming={@streaming?}
-                  >
-                    <p :if={@streaming? and @assistant_response == ""} role="status">
-                      Generating response…
-                    </p>
-                  </.message_content>
+                  />
                 </.message>
               </div>
             </.conversation_content>

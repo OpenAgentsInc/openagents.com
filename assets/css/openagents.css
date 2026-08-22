@@ -2726,7 +2726,19 @@
   }
 
   .message-markdown > * + * {
-    margin-block-start: 0.75em;
+    margin-block-start: 1em;
+  }
+
+  .message-markdown p + p {
+    margin-block-start: 1.25em;
+  }
+
+  .message-markdown :is(p, ul, ol, pre, blockquote) + :is(h1, h2, h3, h4) {
+    margin-block-start: 1.5em;
+  }
+
+  .message-markdown :is(h1, h2, h3, h4) + :is(p, ul, ol) {
+    margin-block-start: 0.5em;
   }
 
   .message-markdown :is(h1, h2, h3, h4) {

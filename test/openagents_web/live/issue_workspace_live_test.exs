@@ -224,7 +224,7 @@ defmodule OpenAgentsWeb.IssueWorkspaceLiveTest do
              )
     end
 
-    test "a burst of writes coalesces into one refresh", context do
+    test "a burst of writes converges to every new issue", context do
       {:ok, view, _html} = live(context.conn, ~p"/issues")
 
       Enum.each(1..5, fn n ->
@@ -232,8 +232,8 @@ defmodule OpenAgentsWeb.IssueWorkspaceLiveTest do
         send(view.pid, {:issues_changed, context.private.id})
       end)
 
-      # With the test debounce at zero every armed timer fires immediately; what
-      # matters here is that the page converges to all five rows in one piece.
+      # Tests use a zero debounce so the page converges without waiting on a
+      # wall-clock timer. Production uses the re-armed debounce path.
       _ = :sys.get_state(view.pid)
 
       html = render(view)

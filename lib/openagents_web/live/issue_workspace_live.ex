@@ -90,13 +90,16 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
                          do: 0,
                          else: 250
 
-  # Zero debounce means tests: refresh synchronously on the change message so
-  # assertions need no waiting.
-  defp schedule_refresh(socket) when @refresh_debounce_ms == 0 do
-    load(socket)
+  defp schedule_refresh(socket) do
+    if @refresh_debounce_ms == 0 do
+      # Tests refresh synchronously so assertions do not depend on time.
+      load(socket)
+    else
+      rearm_refresh(socket)
+    end
   end
 
-  defp schedule_refresh(socket) do
+  defp rearm_refresh(socket) do
     case socket.assigns.refresh_timer_ref do
       nil ->
         assign(

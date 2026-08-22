@@ -19,6 +19,10 @@ defmodule OpenAgentsWeb.OG.Rasterizer do
 
   @timeout_ms 5_000
 
+  # The eight bytes every PNG starts with. The card is checked against them
+  # before it is served, because the failure this guards against answers 200.
+  @png_signature <<0x89, "PNG\r\n", 0x1A, "\n">>
+
   @type error :: :unavailable | :busy | :rasterizer_failed | :timeout | {:exit, term()}
 
   @doc """
@@ -85,15 +89,22 @@ defmodule OpenAgentsWeb.OG.Rasterizer do
   defp run(bin, svg, opts) do
     timeout = Keyword.get(opts, :timeout_ms, @timeout_ms)
     source = temp_path("svg")
+    target = temp_path("png")
 
     try do
       File.write!(source, svg)
 
-      task = Task.async(fn -> System.cmd(bin, port_args(source), stderr_to_stdout: true) end)
+      task =
+        Task.async(fn ->
+          System.cmd(bin, port_args(source, target),
+            stderr_to_stdout: true,
+            env: environment()
+          )
+        end)
 
       case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-        {:ok, {png, 0}} when is_binary(png) and byte_size(png) > 0 ->
-          {:ok, png}
+        {:ok, {diagnostics, 0}} ->
+          read_card(target, diagnostics)
 
         {:ok, {_output, status}} ->
           Logger.warning("og_rasterizer_failed exit=#{status}")
@@ -110,11 +121,52 @@ defmodule OpenAgentsWeb.OG.Rasterizer do
       error in File.Error -> {:error, {:file, error.reason}}
     after
       File.rm(source)
+      File.rm(target)
     end
   end
 
-  defp port_args(source),
-    do: ["-f", "png", "-w", "1200", "-h", "630", "--keep-aspect-ratio", source]
+  # The image comes off disk, never off the pipe. librsvg writes the PNG to
+  # `-o` and its warnings to stderr, and this call merges stderr into stdout
+  # deliberately -- so that a warning is logged rather than lost -- which is
+  # exactly why the bytes cannot come from there. They did once: a container
+  # whose fontconfig had no writable cache emitted "No writable cache
+  # directories" five times per render, the collector returned those 240 bytes
+  # with the PNG behind them, the signature was no longer at byte zero, and
+  # every card on the site failed to decode while the endpoint answered 200.
+  defp read_card(target, diagnostics) do
+    log_diagnostics(diagnostics)
+
+    case File.read(target) do
+      {:ok, <<@png_signature::binary, _rest::binary>> = png} ->
+        {:ok, png}
+
+      {:ok, _other} ->
+        # Exit zero and bytes that are not a PNG: the binary is telling the
+        # truth about its exit and lying about its output. Fail to the
+        # committed card rather than serve something no decoder accepts.
+        Logger.warning("og_rasterizer_not_png")
+        {:error, :rasterizer_failed}
+
+      {:error, reason} ->
+        Logger.warning("og_rasterizer_unreadable code=#{reason}")
+        {:error, :rasterizer_failed}
+    end
+  end
+
+  defp log_diagnostics(""), do: :ok
+
+  defp log_diagnostics(diagnostics) do
+    # One bounded line. The binary's chatter is operational evidence, not card
+    # content, and it must never reach a response body again.
+    Logger.warning("og_rasterizer_diagnostics=#{inspect(String.slice(diagnostics, 0, 200))}")
+  end
+
+  # fontconfig wants a writable cache directory and `nobody` has no home, so
+  # without this every render pays for a miss and says so on stderr.
+  defp environment, do: [{"XDG_CACHE_HOME", System.tmp_dir!()}]
+
+  defp port_args(source, target),
+    do: ["-f", "png", "-w", "1200", "-h", "630", "--keep-aspect-ratio", "-o", target, source]
 
   defp temp_path(extension),
     do:

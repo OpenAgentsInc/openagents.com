@@ -227,18 +227,20 @@ The 2026-08-22 activation established this baseline:
 - The exact-SHA release gate passed all 13 stages in 163 seconds, including
   2,040 tests, direct transaction, relup, rolling replacement, infrastructure
   contracts, and disposable PostgreSQL release smoke tests.
-- All three production nodes run revision `4bf3f0c` from immutable application
-  digest `sha256:345220949cf29ae652879624df45db2b871926418bd3bb6f8d085fc9f9e3d8ab`
+- All three production nodes run structural baseline revision `3479f12` from
+  immutable application digest
+  `sha256:f85db0085f33d8ad9f0b5823ec8276d5d4ee6b9b09765d98f5480a7be9009459`
   with builder digest
-  `sha256:a55ba9a80b781d953c24a254fc755541dbb954297ef92f81c982a58d13aafa9f`.
-- The one-time structural baseline built in about 127 seconds and settled as
-  `live` with a 542-module receipt. Later compatible changes use that manifest
-  for direct classification.
+  `sha256:a259afaa7899e535e08edf78782be15871939beea67730553572189928c87642`.
+- Forge classified the activation change as `needs_rolling_replace`, and the
+  operator settled it as `live` only after every node reported revision
+  `3479f12`, complete cluster membership, and local health. Later compatible
+  changes use that manifest for direct classification.
 - Restarting a node reported boot convergence `ready: true`, reason
   `image_matches_live`, and the exact baseline SHA before admission.
-- `/api/status` reported the Forge lane as `active`. The configured GitHub
-  mirror accepted `git ls-remote` from the application identity and reported
-  `current` after its freshness check.
+- `/api/status` reported the Forge lane as `active`. A push sent only to Forge
+  reached GitHub through the configured mirror, and `MirrorWatch` reported
+  `current` immediately after each restarted node joined the fleet.
 - Production's small boot partitions required removing obsolete build
   containers before pruning immutable images. The startup metadata and the
   repository-owned fleet template now remove those retired containers and

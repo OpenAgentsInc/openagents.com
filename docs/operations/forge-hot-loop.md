@@ -231,11 +231,20 @@ The 2026-08-22 activation established this baseline:
 - The exact-SHA release gate passed all 13 stages in 163 seconds, including
   2,040 tests, direct transaction, relup, rolling replacement, infrastructure
   contracts, and disposable PostgreSQL release smoke tests.
-- All three production nodes run structural baseline revision `3479f12` from
+- All three production nodes first ran structural baseline revision `3479f12` from
   immutable application digest
   `sha256:f85db0085f33d8ad9f0b5823ec8276d5d4ee6b9b09765d98f5480a7be9009459`
   with builder digest
   `sha256:a259afaa7899e535e08edf78782be15871939beea67730553572189928c87642`.
+- The fleet then moved to compiler-workspace baseline `2ab95a2`, application
+  digest
+  `sha256:2f992f90222068dbe4d3d31db20b0c28e2cd786be18047ff36342f3dbd8309f5`,
+  and builder digest
+  `sha256:fadd181dd0cde5efaa848090b7513dc9e08110ae7a1bafb132b1bae1109376de`.
+  The exact-SHA gate passed 2,042 tests. The operator rebuilt the same SHA
+  once with the new builder and settled that no-byte-change target against
+  the already-running image. This records a manifest whose compiler source
+  paths use the stable repository workspace before measuring direct loads.
 - Forge classified the activation change as `needs_rolling_replace`, and the
   operator settled it as `live` only after every node reported revision
   `3479f12`, complete cluster membership, and local health. Later compatible

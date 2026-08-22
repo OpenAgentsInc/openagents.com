@@ -1,11 +1,10 @@
 # SCV planning
 
-Date: 2026-08-20
+Date: 2026-08-22
 
-Status: OpenCode worker and Codex propose-only driver implemented; Codex runs
-now retain durable leases, normalized events, and terminal reports; isolated
-staging qualification, durable write effects, and autonomous deployment remain
-disabled
+Status: OpenCode worker, Codex propose-only driver, and operator-started
+read-only deployment lane implemented; durable write effects and autonomous
+promotion remain disabled
 
 ## Outcome
 
@@ -26,11 +25,12 @@ receipts preserve the SCV's identity and progress across those events.
 The intended end state includes automatic deployment. The first implementation
 must not bypass the repository's current safety contracts:
 
-- GitHub remains canonical until the proof-gated cutover in
+- The Forge is canonical after the proof-gated cutover in
   [ADR 0007](decisions/0007-cut-over-to-forge-canonical-source-control-after-proof.md).
-- Forge fleet deployment remains disabled until the isolated staging gates in
-  the [integration hardening plan](2026-08-20-integration-hardening-and-staging-readiness-recommendations.md)
-  pass.
+  SCV candidates must use its authenticated push and promotion boundaries.
+- Forge fleet deployment is active. The SCV deployment lane remains a bounded,
+  operator-started, read-only work job and does not grant repository writes or
+  promotion authority.
 - `SELF-EDIT-001` currently requires a human promotion. Enabling an SCV to
   promote a candidate requires an explicit invariant and architecture amendment,
   a typed service principal, and a policy-bound promotion receipt. Do not encode
@@ -1053,11 +1053,11 @@ Advance the integration ref through the normal authenticated Forge push path so
 the WAL remains ref authority. Use compare-and-swap against the recorded base.
 Do not update a bare repository ref directly from application code.
 
-Before Forge becomes canonical, keep an SCV in propose-only mode and reconcile
-its run refs through the existing GitHub review process. After the ADR 0007
-cutover, decide whether `scv/integration` becomes the default branch or merges
-into it through another policy-controlled fast-forward. Do not operate two
-writable canonical histories.
+The Forge is canonical. Keep an SCV in propose-only mode until a separately
+admitted write policy exists. Decide whether `scv/integration` becomes the
+default branch or merges into it through another policy-controlled
+fast-forward. Do not operate a second writable history through the GitHub
+mirror.
 
 ### Workspace lifecycle
 
@@ -1652,7 +1652,8 @@ The runtime boundary should reject:
 - an executor path under `/tmp` in staging or production;
 - an automatic mode before Forge deployment, boot convergence, durable
   artifacts, and isolated staging are enabled;
-- `production_auto` while production deployment remains globally disabled;
+- `production_auto` without a separate production-autonomy admission and
+  policy receipt;
 - multiple active runs in the first policy revision;
 - multiple repository writers for one integration history;
 - a benchmark comparison across incompatible provenance;

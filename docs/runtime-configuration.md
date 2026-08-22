@@ -1,6 +1,6 @@
 # Runtime configuration
 
-Date: 2026-08-20
+Date: 2026-08-22
 
 Status: Current
 
@@ -9,11 +9,11 @@ runtime settings. It runs before migrations, workers, or the endpoint. Invalid
 configuration raises a diagnostic containing only the setting name and its
 requirement; it never echoes a value.
 
-Production releases require `OPENAGENTS_ENVIRONMENT=staging` or `production`.
-Production remains locked: `OPENAGENTS_ENVIRONMENT=production` is refused while
-`OPENAGENTS_PRODUCTION_DEPLOY_ENABLED=false`. Do not change that setting until
-the staging matrix and soak in the hardening plan are complete and an operator
-records a separate production decision.
+Deployed releases require `OPENAGENTS_ENVIRONMENT=staging` or `production`.
+Production startup fails closed unless
+`OPENAGENTS_PRODUCTION_DEPLOY_ENABLED=true`. The production cutover recorded
+that decision on 2026-08-21; a new environment must still set the value
+explicitly and satisfy the rest of this contract.
 
 ## Readiness report
 
@@ -121,26 +121,26 @@ The compiled defaults cap concurrency at two simultaneous SCVs, the wall clock
 at 15 minutes, and captured output at 16 MB. The lane runs read-only against a
 disposable clone of a forge repository at an exact revision.
 
-## Required release settings
+## Required deployed-release settings
 
-All settings in this section are mandatory in a production release unless
-marked conditional. An empty value is accepted only where the table explicitly
-says "empty disables." Secrets come from the staging secret manager through
-the runtime identity; never put them in images, build arguments, repository
-URLs, receipts, or checked-in environment files.
+All settings in this section are mandatory in a staging or production release
+unless marked conditional. An empty value is accepted only where the table
+explicitly says "empty disables." Secrets come from the environment's secret
+manager through the runtime identity; never put them in images, build
+arguments, repository URLs, receipts, or checked-in environment files.
 
 | Group | Environment setting | Requirement |
 | --- | --- | --- |
-| Release | `OPENAGENTS_ENVIRONMENT` | `staging`; `production` remains separately locked |
+| Release | `OPENAGENTS_ENVIRONMENT` | `staging` or `production` |
 | Release | `OPENAGENTS_STAGING_GATE` | Integer `0` through `16`; feature admission is tied to it |
 | Release | `OPENAGENTS_STAGING_CLEANUP_ENABLED` | `true` only at staging Gate 12 or later; always `false` elsewhere |
-| Release | `OPENAGENTS_PRODUCTION_DEPLOY_ENABLED` | `false` until a later production decision |
-| Release | `OPENAGENTS_IMAGE_DIGEST` | Exact `sha256:` image digest at staging Gate 12 and later; empty before that gate |
-| Endpoint | `PHX_HOST` | Exactly `staging.openagents.com` in staging |
-| Endpoint | `OPENAGENTS_ALLOWED_ORIGINS` | Comma-separated exact HTTPS origins including `https://staging.openagents.com` |
+| Release | `OPENAGENTS_PRODUCTION_DEPLOY_ENABLED` | `true` only for an admitted production release; `false` in staging |
+| Release | `OPENAGENTS_IMAGE_DIGEST` | Exact `sha256:` image digest in production and at staging Gate 12 or later; empty only before that staging gate |
+| Endpoint | `PHX_HOST` | Exactly `staging.openagents.com` in staging; use the admitted public host in production |
+| Endpoint | `OPENAGENTS_ALLOWED_ORIGINS` | Comma-separated exact HTTPS origins including the environment's `PHX_HOST` |
 | Endpoint | `OPENAGENTS_HTTPS_ALIASES` | Comma-separated hostnames; empty means no aliases |
 | Endpoint | `OPENAGENTS_SECURE_COOKIES` | `true` in staging and production |
-| Endpoint | `SECRET_KEY_BASE` | Staging-only secret |
+| Endpoint | `SECRET_KEY_BASE` | Environment-specific secret |
 | Endpoint | `PORT` | Port `1` through `65535` |
 | Database | `OPENAGENTS_DATABASE_MODE` | `url` or `socket` |
 | Database | `DATABASE_URL` | Required only in `url` mode |
@@ -148,14 +148,14 @@ URLs, receipts, or checked-in environment files.
 | Database | `OPENAGENTS_DATABASE_IPV6` | Explicit `true` or `false` |
 | Database | `POOL_SIZE` | Integer `1` through `200` |
 | Database | `OPENAGENTS_MIGRATE_ON_BOOT` | `true` in staging and production |
-| GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Staging OAuth application credentials |
+| GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | OAuth application credentials for the selected environment |
 | GitHub | `GITHUB_REDIRECT_URI` | Exact HTTPS callback on `PHX_HOST` |
 | GitHub | `GITHUB_OAUTH_SCOPES` | Exactly `repo,read:org`; repository import needs retained repository access and organization creation needs membership access |
 | GitHub | `OPENAGENTS_ADMIN_GITHUB_IDS` | Comma-separated immutable numeric GitHub IDs allowed to use operator surfaces; never use logins |
-| GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte staging key |
+| GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte key for the selected environment |
 | GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY_ID` | Bounded active-key identifier prefixed with `development-`, `test-`, `staging-`, or `production-` to match the runtime |
 | GitHub | `GITHUB_TOKEN_DECRYPTION_KEYS_JSON` | Optional map of at most 16 same-environment prior keys used only during rewrap; omit the active ID |
-| Providers | `OPENAI_API_KEY` | Staging-only provider secret; required by the current text provider |
+| Providers | `OPENAI_API_KEY` | Environment-specific provider secret; required by the current text provider |
 | Providers | `OPENAGENTS_INFERENCE_PROXY_URL` | HTTPS URL without credentials when computers are enabled; empty disables |
 | Computers | `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS` | `300` through `2592000`; Gate 5 uses the 30-day maximum |
 | Recording | `VOICE_RECORDING_ENCRYPTION_KEY` | Base64-encoded 32-byte key when recording is enabled; empty disables recording storage |
@@ -169,6 +169,10 @@ Every feature flag is a required literal `true` or `false` in a release. The
 compile-time default and the Gate 5 staging override are deliberately the same
 safe value unless noted. Advancing `OPENAGENTS_STAGING_GATE` admits a feature;
 it does not enable it automatically.
+
+The table records compiled defaults and the Gate 5 staging template. It is not
+a live production feature inventory. Run `bin/config-readiness` inside the
+target release to inspect its redacted feature booleans.
 
 | Feature | Environment setting | Default | Gate 5 staging | Earliest staging gate |
 | --- | --- | --- | --- | --- |

@@ -1,8 +1,8 @@
 # OpenAgents architecture
 
-Date: 2026-08-20
+Date: 2026-08-22
 
-Status: Current product architecture and accepted hardening target
+Status: Current production architecture
 
 ## Purpose
 
@@ -187,7 +187,12 @@ authority.
 
 ## Runtime and staging topology
 
-The accepted target has two isolated staging lanes:
+Production runs one OpenAgents release on a three-node BEAM fleet. PostgreSQL
+holds durable product and deployment authority. The Forge owns Git refs,
+promotion targets, build receipts, and deployment receipts. Boot convergence
+keeps a restarted node out of service until it matches the live target.
+
+Qualification keeps two isolated staging lanes:
 
 - A web lane proves Phoenix, LiveView, PostgreSQL, authentication, chat, voice,
   data rights, and provider behavior without distributed deployment enabled.
@@ -196,8 +201,8 @@ The accepted target has two isolated staging lanes:
 
 Both lanes use staging-only hosts, credentials, buckets, repositories, service
 accounts, and a PostgreSQL instance that does not share a production failure
-domain. Production is out of scope until all hardening gates, the complete
-staging matrix, failure injection, and the 15-minute pinned-candidate soak pass.
+domain. Use staging for browser, migration, configuration, distributed-cluster,
+and failure-injection evidence before a production promotion requires it.
 
 `OpenAgents.RuntimeConfig` validates the complete behavior-changing settings
 boundary before migrations or traffic. The
@@ -205,17 +210,17 @@ boundary before migrations or traffic. The
 feature profile, durable storage requirements, staging-gate admission, and
 content-free readiness report.
 
-## Source control transition
+## Source control authority
 
-GitHub remains the repository's temporary canonical remote during staging
-hardening. The self-hosted forge becomes canonical only through an explicit
-cutover after its Git, mirror, artifact, rollback, and recovery gates pass. The
-cutover changes contributor instructions and push automation in the same
-candidate. After cutover, the forge pushes a read-only GitHub mirror and direct
-GitHub pushes become invalid.
+The self-hosted Forge is canonical. Contributors and deployment automation push
+accepted work to the owned Forge. `MirrorWatch` exports the accepted branch to
+GitHub and reports mirror lag separately from deployment state. A GitHub mirror
+update cannot promote a deployment, and a direct GitHub push does not become
+production authority.
 
-Do not describe the cutover as complete while contributor clones and automated
-pushes still target GitHub.
+Read [ADR 0007](decisions/0007-cut-over-to-forge-canonical-source-control-after-proof.md)
+and the [Forge hot loop runbook](operations/forge-hot-loop.md) for the cutover
+decision and current operator procedure.
 
 ## Decision records
 

@@ -14,11 +14,14 @@ The typed settings, safe feature profile, and redacted readiness command are in
 Repository creation, one-time GitHub import, and the terminal client are
 documented in the [OpenAgents CLI guide](docs/openagents-cli/index.md).
 
-## Capability status
+## Production status
 
-No part of this repository is approved for production deployment yet.
+OpenAgents runs at [openagents.com](https://openagents.com) on a three-node
+production fleet. The owned Forge is the canonical Git remote for this
+repository, and `MirrorWatch` exports accepted `main` commits to GitHub. Every
+deployment starts from an exact commit that passed the release gate.
 
-### Implemented and locally gated
+### Active capabilities
 
 - GitHub OAuth, encrypted server-side GitHub token storage, sessions, and
   account-scoped data rights.
@@ -37,29 +40,24 @@ No part of this repository is approved for production deployment yet.
   interruption recovery, rolling replacement, repository contracts, and a
   disposable packaged-release smoke test.
 
-"Implemented" means the code and local tests exist. It does not mean the
-feature has passed staging, security review, failure injection, or a soak.
+Availability still depends on repository access, account authority, and the
+runtime feature profile. A source module or passing local test does not by
+itself establish that a feature is enabled for every production user.
 
-### Disabled by default or staging-only
+### Controlled capabilities
 
 - Voice, recording, semantic recall, experimental program paths, and deployment
   workers remain controlled by runtime configuration.
-- Direct BEAM loading, relup installation, rolling replacement, and boot
-  convergence require isolated three-node staging proof before they can be
-  enabled outside a disposable environment.
-- The self-hosted forge is being hardened. GitHub remains the canonical remote
-  for the OpenAgents platform repository until the proof-gated cutover in ADR
-  0007; newly created hosted repositories use OpenAgents as their source of
-  truth.
+- Forge direct loading accepts only verified BEAM changes whose modules match
+  the production allowlist. Structural changes use a packaged relup or rolling
+  replacement, and boot convergence prevents a restarted node from serving an
+  older target.
+- Staging remains the qualification environment for changes that require
+  browser, distributed-cluster, failure-injection, migration, or configuration
+  evidence before production promotion.
 
-### Planned or blocked on hardening
-
-- Staging qualification and release of repository creation, GitHub import, and
-  the OpenAgents CLI.
-- Separate web and distributed staging lanes, a full regression matrix,
-  failure-injection drills, and a 48-hour soak.
-- Any production rollout. Production remains explicitly out of scope until the
-  staging plan is complete and separately approved.
+Read the [Forge hot loop runbook](docs/operations/forge-hot-loop.md) for the
+current deployment contract and production evidence.
 
 ## Architecture
 
@@ -118,9 +116,9 @@ before you bootstrap, plan, or apply any staging resource.
 
 ## Contributing and source control
 
-Read `AGENTS.md` before changing the application. GitHub is temporarily the
-canonical remote during staging hardening. The forge becomes canonical only
-after the durability, mirror, restore, and deployment proofs in ADR 0007 pass.
+Read `AGENTS.md` before changing the application. Push accepted work to the
+owned Forge. `MirrorWatch` maintains GitHub as the public mirror; do not treat
+an independently pushed GitHub branch as production authority.
 
 ## License
 

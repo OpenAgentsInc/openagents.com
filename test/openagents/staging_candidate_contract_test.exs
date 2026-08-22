@@ -153,7 +153,7 @@ defmodule OpenAgents.StagingCandidateContractTest do
     common = File.read!("ops/relup-proof/common.sh")
 
     assert common =~ "key=$(proof_key) || return $?"
-    assert common =~ ~s|$repo_root/.git/openagents/relup-proof/$key|
-    refute common =~ ~s|$repo_root/.git/openagents/relup-proof/$(proof_key)|
+    assert common =~ ~s|$git_common_dir/openagents/relup-proof/$key|
+    refute common =~ ~s|$git_common_dir/openagents/relup-proof/$(proof_key)|
   end
 end

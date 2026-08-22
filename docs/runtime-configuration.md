@@ -207,7 +207,7 @@ discovery, node identity, cookie, and bounded distribution ports.
 | --- | --- |
 | `OPENAGENTS_FORGE_REPOSITORIES` | Exactly `openagents.com` |
 | `OPENAGENTS_FORGE_OWNER` | Exactly `OpenAgentsInc` |
-| `OPENAGENTS_FORGE_INTERNAL_GIT_URL` | HTTP(S) service URL with no embedded credentials |
+| `OPENAGENTS_FORGE_INTERNAL_GIT_URL` | Credential-free HTTP(S) owner root, such as `http://127.0.0.1:8080/OpenAgentsInc`; do not include the retired `/git` prefix |
 | `OPENAGENTS_FORGE_OPERATOR_TOKEN` | Secret required when the forge is enabled; empty while disabled |
 | `OPENAGENTS_FORGE_MIRROR_URLS_JSON` | Optional JSON object from repository name to credential-free git mirror URL; empty disables one-way GitHub mirroring |
 | `OPENAGENTS_FORGE_BUILD_EXECUTOR` | `sidecar` |
@@ -226,7 +226,7 @@ discovery, node identity, cookie, and bounded distribution ports.
 | `OPENAGENTS_FORGE_DEPLOY_TOKEN_TTL_MS` | `120000`; admitted range 30 seconds to 30 minutes and at least eight deployment timeouts |
 | `OPENAGENTS_FORGE_BOOT_RETRY_MIN_MS` | `1000`; admitted range 100 milliseconds to one minute |
 | `OPENAGENTS_FORGE_BOOT_RETRY_MAX_MS` | `30000`; admitted range one to 300 seconds and not less than the minimum |
-| `OPENAGENTS_FORGE_ROLLING_PROVIDER` | `gcp` when fleet deployment is enabled; empty while disabled |
+| `OPENAGENTS_FORGE_ROLLING_PROVIDER` | `gcp` for the automated staging fallback; production leaves it empty and uses an explicit operator-directed rollout when direct loading and relup cannot apply the candidate |
 | `OPENAGENTS_GCP_ROLLING_PROJECT_ID` | Isolated staging project; must differ from `OPENAGENTS_PRODUCTION_PROJECT_ID` |
 | `OPENAGENTS_PRODUCTION_PROJECT_ID` | Production project used only as a fail-closed comparison value |
 | `OPENAGENTS_GCP_ROLLING_ZONE` | Zone that contains the three stable staging instances |

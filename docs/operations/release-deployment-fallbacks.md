@@ -2,13 +2,15 @@
 
 Date: 2026-08-20
 
-Status: Implemented. Production uses the relup lane for compatible application
-releases and the coordinated rolling lane for structural changes.
+Status: Implemented. Production uses the Forge direct-load loop first, a relup
+for compatible full releases, and an operator-directed rolling replacement for
+remaining structural changes.
 
 ## Purpose
 
-Use this runbook when a candidate cannot use the direct BEAM transaction. The
-classifier must choose one strategy for the complete candidate:
+Use this runbook only after the Forge classifier refuses a direct BEAM
+transaction. The classifier must choose one strategy for the complete
+candidate:
 
 - Use a relup for a packaged `X.Y.Z` transition when the generated appup,
   target system, exact revisions, artifact digests, state schemas, and reverse
@@ -170,10 +172,11 @@ The script records the content-addressed `sha256:` image ID under
 `.git/openagents/images/<full-sha>.json`. A mutable tag is a convenience label,
 not deployment identity. Pass only the digest to the replacement provider.
 
-`OpenAgents.Forge.RollingReplacement` owns the provider-neutral rollout. Gate
-12 must implement `OpenAgents.Forge.RollingProvider` for the isolated staging
-infrastructure. Keep machine inventory, credentials, addresses, and provider
-resource names outside the repository.
+`OpenAgents.Forge.RollingReplacement` owns the provider-neutral rollout.
+Staging uses the GCP provider for automated replacement. Production permits no
+implicit provider: an operator must execute and verify the immutable image
+rollout, then settle the retained Forge target. Keep machine inventory,
+credentials, addresses, and provider resource names outside the repository.
 
 The provider reports its exact connected infrastructure inventory through
 `members/0`. A hidden controller must not include itself or a temporary RPC

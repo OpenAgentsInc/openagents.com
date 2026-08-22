@@ -159,10 +159,11 @@ convergence interval.
 | `OPENAGENTS_FORGE_BOOT_RETRY_MIN_MS` | Initial convergence retry interval |
 | `OPENAGENTS_FORGE_BOOT_RETRY_MAX_MS` | Maximum convergence retry interval |
 
-Keep `OPENAGENTS_FEATURE_FORGE_DEPLOY=false` and
-`OPENAGENTS_FEATURE_BOOT_CONVERGENCE=false` until the isolated distributed
-staging lane exists and Gate 11 adds the relup and rolling-replacement
-fallbacks.
+Production enables `OPENAGENTS_FEATURE_FORGE_DEPLOY` and
+`OPENAGENTS_FEATURE_BOOT_CONVERGENCE` after pinning the serving and builder
+images. Staging must also configure its isolated rolling provider before it
+enables the complete automated fallback lane. `/status` reports the active
+state, current stage, timing receipts, boot convergence, and mirror freshness.
 
 ## Verification
 

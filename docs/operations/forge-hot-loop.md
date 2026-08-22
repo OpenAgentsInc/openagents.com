@@ -2,8 +2,8 @@
 
 Date: 2026-08-21
 
-Status: Relup and mirroring are active in production. The automated direct-load
-loop still requires fleet enablement.
+Status: Active in production. The Forge loop is the default deployment path
+for allowlisted code changes. Relup and rolling replacement remain fallbacks.
 
 This is the operator procedure for the fast deployment lane: push to the owned
 forge, promote, and watch a code-only change go live across the fleet in
@@ -16,10 +16,10 @@ enablement work.
 | Path | State | Evidence |
 | --- | --- | --- |
 | Direct BEAM transaction on production | Works | `fa4b792` loaded across three nodes via the transaction protocol; `live` target and deployment receipt recorded; uptimes unbroken |
-| Automated push → promote → build → hot-load loop | Not yet operating | No receipted automated deploy exists, so `/api/status` reports `loop.last_ms: null` and `push_to_live_ms: null` |
+| Automated push → promote → build → hot-load loop | Active | The web role runs `Builder`, `HotLoader`, and `Janitor`; every fleet node runs the pinned builder sidecar; `/status` reports the lane as **Active** and exposes target, build, deploy, and timing receipts |
 | General relup lane | Active in production | `RelupPackage` binds source and target revisions, release versions, state schemas, target system, and artifact digests before `RelupDeployment` upgrades one node at a time. Production upgraded `0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds without restarting the BEAM. |
 | Forge-to-GitHub mirror | Active in production | The production mirror uses a write-enabled deploy key. `MirrorWatch` runs independently of the deploy lane, repairs drift every five minutes, and reports freshness. Forge and GitHub exposed 10 identical refs after the production drill. |
-| Rolling image replacement | Works, default for structural changes | Current release tooling path |
+| Rolling image replacement | Available for structural changes | Production requires an operator-directed rollout when the classifier returns `needs_rolling_replace`; staging can use the configured GCP provider |
 
 Two consequences worth stating plainly:
 
@@ -29,12 +29,14 @@ Two consequences worth stating plainly:
   The classifier must refuse them for direct loading and route them to a full
   release path.
 
-## Why the metrics read null
+## Status reporting
 
-- `loop.last_ms` and the median come from deploy receipts whose result is
-  `live` with an integer `push_to_live_ms`. The manual `fa4b792`
-  application produced a receipt without timing, so the projection has no
-  sample yet. The first automated loop deploy populates both.
+- `/status` shows whether the Forge lane is **Active** or **Off**, the current
+  target and stage, the latest build and deployment receipt, the most recent
+  and median push-to-live times, boot convergence, and mirror freshness.
+- `loop.last_ms` and the median come from automated `live` receipts with an
+  integer `push_to_live_ms`. They remain empty until the first automated
+  direct-load deployment completes.
 - Mirror state `off` means no repository has a configured mirror URL
   (`OPENAGENTS_FORGE_MIRROR_URLS_JSON` defaults to an empty map). Mirroring
   feeds GitHub; it plays no part in the deploy loop.
@@ -51,7 +53,9 @@ Every link below exists in code and runs in this order:
    writes a request to the build queue, and waits. The builder sidecar claims
    it, fetches the commit into its warm workspace, compiles incrementally,
    hashes every BEAM, diffs against the baseline manifest, classifies the
-   changed set, and writes the response plus a digest-addressed artifact.
+   changed set, and writes the response plus a digest-addressed artifact. The
+   sidecar uses a fresh source checkout for isolation and a persistent `_build`
+   and dependency cache for speed. A new pinned builder image seeds that cache.
 4. **Verify**: `Builder` re-verifies digest and manifest, advances the target
    to `built` with module list and classification, then broadcasts
    `forge:builds`.
@@ -62,9 +66,9 @@ Every link below exists in code and runs in this order:
 6. **Receipt**: a `live` deployment writes the deploy receipt including
    `push_to_live_ms`, measured from the push receipt.
 
-## Enablement checklist
+## Activation state
 
-Work top to bottom; each step gates the next.
+The production fleet uses this configuration:
 
 1. **Publish the builder image.** Build the `forge-builder` Docker target from
    the same revision as the serving image and push it to Artifact Registry
@@ -88,39 +92,50 @@ Work top to bottom; each step gates the next.
    whole `OpenAgentsWeb.` layer plus `OpenAgents.Changelog`,
    `OpenAgents.Forge.Browse`, `OpenAgents.BuildInfo`, and the scratch prefix,
    with boot-time classification self-tests.
-6. **Optional — turn the mirror on** by configuring a mirror URL for
+6. **Optional: Turn the mirror on** by configuring a mirror URL for
    `openagents.com`. This only affects the public status projection and GitHub
    mirroring, never deploys.
 
-## First automated drill
+## Deploy through the Forge loop
 
-Run this once enablement completes; it is also the regression check after any
-builder change.
+Use this procedure for every routine deployment. Do not start with an image
+roll.
 
-1. Pick a commit that changes only allowlisted modules (a template or
-   LiveView edit is ideal).
-2. Push it to the forge remote:
+1. Push the exact commit to the forge remote:
    `git push openagents <sha>:main`. Confirm the push receipt on
    `/admin/forge`.
-3. Promote the new SHA from `/admin/forge`.
-4. Watch the target walk `promoted → building → built → deploying → live`.
-5. Assert the deploy receipt shows `result: live`, a nonzero module count, and
+2. Promote the new SHA from `/admin/forge`.
+3. Watch the target walk `promoted → building → built → deploying → live` on
+   `/status` or `/admin/forge`.
+4. Assert the deploy receipt shows `result: live`, a nonzero module count, and
    a populated `push_to_live_ms`. Then confirm `/api/status` now reports
    `forge.loop.last_ms`.
-6. Restart one node and verify boot convergence restores the same revision
+5. Restart one node after changing the builder or boot-convergence machinery,
+   and verify boot convergence restores the same revision
    before it serves.
 
-Expect the first real build to take minutes: the loop's economics assume the
-warm workspace that the first build creates. Subsequent web-layer diffs should
-land in seconds. Receipts measure pipeline time from push ack to live, not
-human reaction time.
+The first build after replacing the builder image can take minutes while it
+seeds the persistent cache. Subsequent web-layer diffs should land in seconds.
+Receipts measure pipeline time from push acknowledgment to live, not operator
+reaction time.
+
+If classification returns `needs_rolling_replace`, keep that receipt and use
+this fallback order:
+
+1. Package and deploy a relup when the complete release pair passes appup,
+   digest, state-schema, and reverse-path validation.
+2. Use an operator-directed immutable image rollout for configuration,
+   dependencies, ERTS, native code, migrations, assets, or another structural
+   change that cannot use a relup.
+3. Settle the original target with the fallback result so its verified build
+   becomes the baseline for later direct-load classification.
 
 ## Failure modes
 
 | Symptom | Meaning | Action |
 | --- | --- | --- |
 | Target stalls at `building`, fails `build_timeout` | No sidecar claimed the request | Check the builder container is running and the queue volume is shared |
-| `needs_rolling_replace` with `structural_reasons` | Honest refusal: config, dependencies, assets, or release files changed | Ride the image-roll path; this is correct behavior |
+| `needs_rolling_replace` with `structural_reasons` | Honest refusal: config, dependencies, assets, or release files changed | Try the packaged relup path; use an operator-directed image rollout when the release is incompatible |
 | `needs_rolling_replace` with `off_allowlist:` reasons | The diff touched modules outside the allowlist | Widen deliberately in config, or route around the change |
 | Artifact verification failure | Digest or manifest mismatch between builder and coordinator | Treat as a builder defect; inspect the retained build output |
 | A node restarts mid-fleet-deploy | Membership recheck pauses phases | Boot convergence holds the node out until it converges |

@@ -2,13 +2,14 @@
 
 Date: 2026-08-21
 
-Status: Enablement runbook for the automated direct-load deploy loop
+Status: Relup and mirroring are active in production. The automated direct-load
+loop still requires fleet enablement.
 
 This is the operator procedure for the fast deployment lane: push to the owned
 forge, promote, and watch a code-only change go live across the fleet in
-seconds without an image build. It also records why the loop reads as
-disconnected today (`forge.loop.last_ms: null`, mirror `off`) and exactly what
-flips it on.
+seconds without an image build. It also describes the production relup path,
+the independent GitHub mirror repair worker, and the remaining direct-load
+enablement work.
 
 ## Verified state of the lanes
 
@@ -16,16 +17,17 @@ flips it on.
 | --- | --- | --- |
 | Direct BEAM transaction on production | Works | `fa4b792` loaded across three nodes via the transaction protocol; `live` target and deployment receipt recorded; uptimes unbroken |
 | Automated push → promote → build → hot-load loop | Not yet operating | No receipted automated deploy exists, so `/api/status` reports `loop.last_ms: null` and `push_to_live_ms: null` |
-| General relup lane | Manual tools only | `RelupDeployment` admits any distinct `X.Y.Z` pair, but the classifier emits only `direct_candidate` or `needs_rolling_replace`, `RelupDeployment.run/2` has no caller outside tests, and the release gate runs neither packaging script. Relups are not production-approved (`release-deployment-fallbacks.md`) |
+| General relup lane | Active in production | `RelupPackage` binds source and target revisions, release versions, state schemas, target system, and artifact digests before `RelupDeployment` upgrades one node at a time. Production upgraded `0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds without restarting the BEAM. |
+| Forge-to-GitHub mirror | Active in production | The production mirror uses a write-enabled deploy key. `MirrorWatch` runs independently of the deploy lane, repairs drift every five minutes, and reports freshness. Forge and GitHub exposed 10 identical refs after the production drill. |
 | Rolling image replacement | Works, default for structural changes | Current release tooling path |
 
 Two consequences worth stating plainly:
 
 - Code-only changes do **not** require an image roll once the loop is enabled;
   the whole web layer is allowlisted.
-- The current `main` (PostHog analytics, `73ff250`) touches
-  `config/config.exs` and `config/runtime.exs`, which the classifier must
-  refuse as structural. That change rides rolling replacement correctly.
+- Changes to `config/config.exs` or `config/runtime.exs` remain structural.
+  The classifier must refuse them for direct loading and route them to a full
+  release path.
 
 ## Why the metrics read null
 
@@ -34,8 +36,8 @@ Two consequences worth stating plainly:
   application produced a receipt without timing, so the projection has no
   sample yet. The first automated loop deploy populates both.
 - Mirror state `off` means no repository has a configured mirror URL
-  (`OPENAGENTS_FORGE_MIRROR_URLS` defaults to empty). Mirroring feeds GitHub;
-  it plays no part in the deploy loop.
+  (`OPENAGENTS_FORGE_MIRROR_URLS_JSON` defaults to an empty map). Mirroring
+  feeds GitHub; it plays no part in the deploy loop.
 
 ## The chain, as wired
 
@@ -79,9 +81,9 @@ Work top to bottom; each step gates the next.
    `forge_build_dir`, and `forge_artifact_dir` on durable state disks. Runtime
    configuration validates these when the deploy lane is enabled.
 4. **Enable the deploy lane flag** (`OPENAGENTS_FEATURE_FORGE_DEPLOY=true`).
-   This starts `Builder`, `HotLoader`, `Janitor`, and `MirrorWatch` under
-   `OpenAgents.Forge.Supervisor`. Boot convergence is already proven on this
-   fleet.
+   This starts `Builder`, `HotLoader`, and `Janitor` under
+   `OpenAgents.Forge.Supervisor`. `MirrorWatch` runs under the same supervisor
+   regardless of this flag. Boot convergence is already proven on this fleet.
 5. **Allowlist**: no change needed. Baked configuration already admits the
    whole `OpenAgentsWeb.` layer plus `OpenAgents.Changelog`,
    `OpenAgents.Forge.Browse`, `OpenAgents.BuildInfo`, and the scratch prefix,
@@ -126,9 +128,9 @@ human reaction time.
 A `reverted` outcome still warrants checking fleet convergence even though
 this design captures each node's prior object code for exact rollback.
 
-## The relup lane generalized, but nothing drives it
+## Use the production relup lane
 
-As of 2026-08-21 (later), the mechanism handles arbitrary version pairs:
+The mechanism handles arbitrary version pairs:
 
 1. **Coordinator admission is general.** `RelupDeployment` admits any distinct
    `X.Y.Z` pair whose state versions stay within `[1, 2]` and never regress —
@@ -142,7 +144,7 @@ As of 2026-08-21 (later), the mechanism handles arbitrary version pairs:
    state schema. `mix openagents.relup` then checks the generated relup against
    the same diff, so packaging fails rather than shipping a relup that would
    install part of a revision.
-3. **Packaging and install proofs exist as tools.**
+3. **Packaging and install proofs produce deployable artifacts.**
    `ops/forge/package-relup.sh --from-version A --to-version B [--from-rev]
    [--to-rev]` builds both releases in isolated worktrees, generates the
    two-way relup, embeds it, and emits digest-addressed tarballs plus a
@@ -155,32 +157,58 @@ As of 2026-08-21 (later), the mechanism handles arbitrary version pairs:
    refuses to run unless `OPENAGENTS_RELUP_PROOF_DISPOSABLE=1`, the URL host is
    loopback, and the database name contains `proof`, `smoke`, or `test`.
 
-What is not true yet, and is engineering work rather than operator work:
+`OpenAgents.Forge.RelupPackage` closes the package-to-deployment boundary. It
+rejects a package unless its source revision matches the running revision, its
+target system matches the node, and its target tar matches the manifest
+digest. It then constructs the bounded fleet request and calls
+`RelupDeployment.run/2`. The coordinator verifies the target gate receipt,
+rechecks exact membership between nodes, verifies the installed target
+revision, and keeps the reverse release when it makes the target permanent.
 
-- **No code calls the lane.** `RelupDeployment.run/2` has no caller outside
-  tests. Nothing classifies a candidate as a relup, builds the request, or
-  triggers a fleet relup; an operator drives the two scripts by hand.
-- **The release gate does not run either script.** `ops/ci/gate.sh` runs
-  `ops/relup-proof/run.sh`, `version-chain.sh`, and `kill-during-install.sh`,
-  which exercise the pinned `0.1.0 → 0.2.0` pair only. Neither
-  `package-relup.sh` nor `install-proof.sh` is a gate stage, so no receipt
-  binds a general pair to a candidate SHA.
-- **Nothing binds a package to its gate receipt.** `package.json` records the
-  revisions it was built from, but `RelupDeployment` verifies the receipt for
-  `request.sha` without checking that the artifact came from that revision.
+Use patch versions for routine releases, such as `0.2.0` to `0.2.1`. Change
+the minor version only when the release introduces a deliberate compatibility
+or feature boundary. Never reuse a release version for different bytes;
+`RelupNode` records the artifact digest for every unpacked version and rejects
+a conflicting reuse.
 
-Operator work still required before the lane carries production traffic:
-
-- Production approval recorded against
-  [`docs/operations/release-deployment-fallbacks.md`](release-deployment-fallbacks.md),
-  which remains the authority that relups are not production-approved.
-- A staging rehearsal of `package-relup.sh` followed by `install-proof.sh`
-  against a disposable database, before any fleet use.
+The production drill on 2026-08-21 upgraded three nodes from
+`0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds. Every node returned
+`permanent`, retained `0.2.0` as `old`, reported the exact target revision,
+and preserved its uptime. The operator used the documented emergency gate
+override because the release was an explicitly authorized recovery and
+enablement operation. Use a normal exact-SHA gate receipt for routine relups.
 
 Note on scope: hot-load diffs and relups remain different artifact classes.
 A BEAM-diff artifact cannot drive `release_handler`; only a full release
 package can. That is why the build lane's classification stays two-class and
 the relup lane consumes its own packages.
+
+## Operate the GitHub mirror
+
+Set `OPENAGENTS_FORGE_MIRROR_URLS_JSON` to a repository-to-URL JSON object.
+Use a credential-free SSH URL such as
+`ssh://github.com/OpenAgentsInc/openagents.com.git`; provide authentication
+through a node-side SSH key and `GIT_SSH_COMMAND`. Never put a credential in
+the URL or instance metadata.
+
+`Pushes.mirror_storage_key/1` resolves the logical repository name to its
+canonical storage UUID before reading refs. This distinction matters for
+migrated repositories whose display name and storage key differ.
+`MirrorWatch` runs even when `OPENAGENTS_FEATURE_FORGE_DEPLOY=false`, compares
+the canonical `main` ref every five minutes, retries a full mirror push on
+drift, and publishes `current` or `lagging` status.
+
+After a rollout or storage repair, force convergence before validating the
+mirror:
+
+```elixir
+storage_key = OpenAgents.Forge.Pushes.mirror_storage_key("openagents.com")
+:ok = OpenAgents.Forge.Sync.ensure_cluster_fresh(storage_key)
+:ok = OpenAgents.Forge.Pushes.mirror_now("openagents.com")
+```
+
+Compare complete, sorted `git ls-remote` output from Forge and GitHub. Do not
+accept a matching `main` branch as proof if another branch or tag differs.
 
 ## References
 

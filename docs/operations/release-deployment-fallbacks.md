@@ -2,23 +2,24 @@
 
 Date: 2026-08-20
 
-Status: Implemented. The isolated staging fleet uses the coordinated rolling
-lane, and production uses the same one-node-at-a-time health boundary.
+Status: Implemented. Production uses the relup lane for compatible application
+releases and the coordinated rolling lane for structural changes.
 
 ## Purpose
 
 Use this runbook when a candidate cannot use the direct BEAM transaction. The
 classifier must choose one strategy for the complete candidate:
 
-- Use a relup only for the supported `0.1.0` to `0.2.0` application transition
-  and its tested reverse transition.
+- Use a relup for a packaged `X.Y.Z` transition when the generated appup,
+  target system, exact revisions, artifact digests, state schemas, and reverse
+  path pass validation.
 - Use rolling replacement for ERTS, OTP, dependency, native-code, asset,
   configuration, migration, module-deletion, or otherwise unclassified
   changes.
 
-The relup lane is not production-approved. Use rolling replacement in
-production only with explicit operator authority, an immutable image digest,
-two remaining healthy nodes, and exact revision checks after each replacement.
+Production relups and rolling replacements require explicit operator authority.
+For a rolling replacement, also require an immutable image digest, two
+remaining healthy nodes, and exact revision checks after each replacement.
 
 ## Local release gate
 
@@ -56,14 +57,22 @@ recovery. Do not use it for an ordinary release.
 
 ## Relup lane
 
-### Supported transition
+### Supported transitions
 
-The repository owns one explicit two-way transition:
+`RelupDeployment` accepts any distinct semantic `X.Y.Z` pair when the state
+schema remains in the supported range and does not regress. The generated
+appup remains the authoritative compatibility check. If it cannot describe
+the complete module change, package generation or
+`release_handler.check_install_release/1` refuses the transition.
 
 | Direction | Application version | State schema |
 | --- | --- | --- |
-| Upgrade | `0.1.0` to `0.2.0` | 1 to 2 |
-| Downgrade | `0.2.0` to `0.1.0` | 2 to 1 |
+| Upgrade | `X.Y.Z` to a distinct semantic version | 1 or 2 to the same or a higher supported schema |
+| Downgrade | The embedded reverse transition | The target schema back to the packaged source schema |
+
+Use patch versions for routine releases. Reserve a minor-version change for a
+deliberate compatibility or feature boundary. Never publish different bytes
+under an existing version.
 
 `OpenAgents.ReleaseState` is a supervised, long-lived process with a versioned
 `OpenAgents.ReleaseState.State` struct. `code_change/3` preserves the PID and
@@ -72,16 +81,27 @@ advanced update explicitly. Do not add a version transition until its forward,
 reverse, and re-upgrade state paths have focused tests and a real packaged-node
 proof.
 
-Build the release pair and relup:
+Build a digest-addressed release pair and relup:
 
 ```sh
-ops/relup-proof/run.sh
+ops/forge/package-relup.sh \
+  --from-version 0.2.0 \
+  --to-version 0.2.1 \
+  --from-rev SOURCE_SHA \
+  --to-rev TARGET_SHA \
+  --out-dir /path/to/package
 ```
 
-The script builds explicit release versions, generates both directions with
-`mix openagents.relup`, embeds the generated `relup` in the candidate tar, and
-caches checksummed proof artifacts under `.git/openagents/relup-proof/<sha>/`.
-It never deletes a shared release directory.
+The script builds each exact revision in an isolated worktree, generates both
+directions with `mix openagents.relup`, embeds the generated `relup` in the
+candidate tar, and writes a `package.json` manifest with source and target
+revisions, versions, state schemas, target system, and SHA-256 digests. It
+never deletes a shared release directory.
+
+`OpenAgents.Forge.RelupPackage.deploy/2` validates that manifest against the
+running revision and system architecture before it reads the bounded target
+artifact and calls `RelupDeployment`. A stale package cannot upgrade a fleet
+that another deployment has already replaced.
 
 Run the live state and interruption drills against a disposable database:
 
@@ -99,19 +119,26 @@ ops/relup-proof/kill-during-install.sh
 
 `OpenAgents.Forge.RelupDeployment` performs this sequence:
 
-1. Verify the complete local gate receipt for the candidate SHA.
-2. Snapshot the exact sorted member set and configured fleet size.
-3. Stage one node's release tar in a digest-addressed cache.
-4. Verify the cached and consumable tar digests.
-5. Restore the consumable tar from cache, then unpack it.
-6. Generate version-specific runtime configuration and run
+1. Validate the package source revision, target system, and target artifact
+   digest.
+2. Verify the complete local gate receipt for the candidate SHA.
+3. Snapshot the exact sorted member set and configured fleet size.
+4. Stage one node's release tar in a digest-addressed cache.
+5. Verify the cached and consumable tar digests.
+6. Restore the consumable tar from cache, then unpack it.
+7. Generate version-specific runtime configuration and run
    `release_handler.check_install_release/1`.
-7. Install the candidate without changing the permanent release.
-8. Verify current release status, application readiness, and the expected
-   migrated state schema.
-9. Make the release permanent, verify permanence, and recheck exact fleet
+8. Install the candidate without changing the permanent release.
+9. Verify current release status, exact target revision, application readiness,
+   and the expected migrated state schema.
+10. Make the release permanent, verify permanence, and recheck exact fleet
    membership.
-10. Start the next node only after the previous node passes every check.
+11. Start the next node only after the previous node passes every check.
+
+The 2026-08-21 production drill upgraded three nodes from
+`0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds. All nodes returned
+`permanent`, retained `0.2.0` as the reverse release, and preserved their
+uptimes.
 
 If post-install health or permanence verification fails, the coordinator
 installs the reverse relup, verifies the prior release and state schema, restores

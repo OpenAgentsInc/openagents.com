@@ -31,20 +31,18 @@ After this audit was measured, two claims moved:
    transaction protocol — `live` Forge target and deployment receipt recorded,
    boot convergence satisfied, process uptimes unbroken. The operator assembled
    and applied the artifact manually; no receipted automated deploy exists yet.
-2. **"Nothing needs re-implementing" holds for the hot-load loop only.** The
-   general relup path was, at measurement time, unconnected: `BuildArtifact`
-   classifies only `direct_candidate` and `needs_rolling_replace`, and
-   `RelupDeployment` accepted only the fixed `0.1.0 → 0.2.0` proof transition.
-   Later the same day the relup **mechanism** was generalized — coordinator
-   admission, appup generation from the two builds' compiled modules,
-   packaging, and install proofs; see
-   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md). The
-   **lane** is still not connected: no classifier emits a relup class,
-   `RelupDeployment.run/2` has no caller outside tests, the release gate runs
-   neither `ops/forge/package-relup.sh` nor
-   `ops/relup-proof/install-proof.sh`, and no receipt binds a package to the
-   revision it was built from. Those are engineering gaps, not operator ones.
-   Production approval for the lane also remains an open operator decision.
+2. **The general relup lane now carries production traffic.** The mechanism
+   now admits arbitrary semantic version pairs, generates appup instructions
+   from exact compiled-module diffs, and emits digest-addressed packages.
+   `OpenAgents.Forge.RelupPackage` binds the package to the running source
+   revision, target revision, operating system and architecture, release
+   versions, state schemas, and target artifact digest before it calls
+   `RelupDeployment`. On 2026-08-21, production upgraded three nodes from
+   `0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds without restarting the
+   BEAM. The classifier still does not select relup automatically; an operator
+   builds and submits the package when direct loading refuses a compatible
+   application release. See
+   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md).
 
 ---
 

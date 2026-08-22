@@ -364,7 +364,13 @@ defmodule OpenAgentsWeb.OG do
     :crypto.mac(:hmac, :sha256, secret, "openagents-og-cards-v1")
   end
 
-  defp template_revision, do: "1"
+  # Bump when the rendering changes, not only when a card's content does. The
+  # version segment is a content digest, so a fix to the renderer produces the
+  # same URL as the bug did -- and every cache holding the bad bytes, including
+  # Slack's and a reader's browser, keeps serving them under a `max-age=21600,
+  # immutable` response that will not revalidate. Revision 2 is the corrupt-PNG
+  # fix: cards rendered before it carried librsvg's stderr ahead of the image.
+  defp template_revision, do: "2"
 
   defp base_url, do: String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
 

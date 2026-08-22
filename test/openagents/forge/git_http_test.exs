@@ -125,6 +125,8 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert receipt.wal_seq == 0
     assert receipt.refs["refs/heads/main"]["new"] == sha
     assert receipt.refs["refs/heads/main"]["old"] == nil
+    assert [logical_receipt] = Forge.recent_pushes(repository.name)
+    assert logical_receipt.id == receipt.id
 
     # Deploy signal fired.
     assert_receive {:forge_push, %{repo: storage_key, wal_seq: 0}}, 2_000

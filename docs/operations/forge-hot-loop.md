@@ -68,7 +68,9 @@ Every link below exists in code and runs in this order:
    the artifact to `OpenAgents.Forge.Deployment` for the transactional
    prepare → canary → fleet apply → verify → commit sequence.
 6. **Receipt**: a `live` deployment writes the deploy receipt including
-   `push_to_live_ms`, measured from the push receipt.
+   `push_to_live_ms`, measured from the push receipt. Receipt lookup resolves
+   the configured repository name to its canonical storage key because Git
+   writes use the opaque storage key while targets use the public name.
 
 ## Activation state
 

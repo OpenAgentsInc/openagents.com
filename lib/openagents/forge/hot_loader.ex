@@ -15,7 +15,7 @@ defmodule OpenAgents.Forge.HotLoader do
   alias OpenAgents.Forge.BuildArtifact
   alias OpenAgents.Forge.Deployment
   alias OpenAgents.Forge.DeployReceipt
-  alias OpenAgents.Forge.PushReceipt
+  alias OpenAgents.Forge.{Pushes, PushReceipt}
   alias OpenAgents.Forge.Targets
   alias OpenAgents.Repo
 
@@ -293,8 +293,10 @@ defmodule OpenAgents.Forge.HotLoader do
   # Push→live duration: the push receipt whose refs advanced some ref to
   # this sha marks when the loop started.
   defp push_to_live_ms(repo, sha) do
+    repo_keys = Pushes.receipt_repo_keys(repo)
+
     PushReceipt
-    |> where([p], p.repo == ^repo)
+    |> where([p], p.repo in ^repo_keys)
     |> order_by([p], desc: p.inserted_at)
     |> limit(100)
     |> Repo.all()

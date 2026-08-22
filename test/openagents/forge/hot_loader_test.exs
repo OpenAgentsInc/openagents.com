@@ -298,6 +298,39 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     assert receipt.push_to_live_ms >= 0
   end
 
+  test "push_to_live_ms resolves a logical repository to its receipt storage key", %{
+    loader: loader
+  } do
+    storage_key = Ecto.UUID.generate()
+
+    OpenAgents.Repositories.Repository
+    |> where([repository], repository.name == "openagents.com")
+    |> Repo.update_all(set: [storage_key: storage_key])
+
+    %{name: name, binary: binary} = compiled_scratch_module()
+    sha = unique_sha()
+    target = insert_target(sha, "built")
+    artifact = artifact([{name, binary}], sha)
+
+    {:ok, _push} =
+      %PushReceipt{}
+      |> PushReceipt.changeset(%{
+        repo: storage_key,
+        wal_seq: System.unique_integer([:positive]),
+        principal: "test-op",
+        refs: %{
+          "refs/heads/main" => %{"old" => String.duplicate("0", 40), "new" => sha}
+        }
+      })
+      |> Repo.insert()
+
+    broadcast_build_ready(loader, build_payload(target, sha, artifact))
+
+    receipt = deploy_receipt(sha)
+    assert receipt.result == "live"
+    assert is_integer(receipt.push_to_live_ms)
+  end
+
   test "push_to_live_ms is nil when no push receipt matches", %{loader: loader} do
     %{name: name, binary: binary} = compiled_scratch_module()
 

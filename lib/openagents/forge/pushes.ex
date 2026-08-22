@@ -266,6 +266,14 @@ defmodule OpenAgents.Forge.Pushes do
 
   def mirror_storage_key(repo), do: repo
 
+  @doc "Return the logical and canonical repository keys used by derived push receipts."
+  def receipt_repo_keys(repo) when is_binary(repo) do
+    [repo, mirror_storage_key(repo)]
+    |> Enum.uniq()
+  end
+
+  def receipt_repo_keys(repo), do: [repo]
+
   defp storage_key_for_storage_key(storage_key) do
     Repo.one(
       from repository in Repository,

@@ -15,7 +15,7 @@ defmodule OpenAgents.Forge do
 
   import Ecto.Query
 
-  alias OpenAgents.Forge.PushReceipt
+  alias OpenAgents.Forge.{Pushes, PushReceipt}
   alias OpenAgents.Repo
 
   @doc "Whether the forge endpoint is enabled (default true; env-gated in prod)."
@@ -25,8 +25,10 @@ defmodule OpenAgents.Forge do
 
   @doc "Recent push receipts for one repo, newest first, bounded."
   def recent_pushes(repo, limit \\ 20) do
+    repo_keys = Pushes.receipt_repo_keys(repo)
+
     PushReceipt
-    |> where([p], p.repo == ^repo)
+    |> where([p], p.repo in ^repo_keys)
     |> order_by([p], desc: p.wal_seq)
     |> limit(^limit)
     |> Repo.all()

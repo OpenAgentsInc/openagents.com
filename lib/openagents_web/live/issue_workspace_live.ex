@@ -58,14 +58,62 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
   ]
 
   def mount(_params, _session, socket) do
+    if connected?(socket), do: Repositories.subscribe_all_issues()
+
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:involvements, @involvements)
+     |> assign(:refresh_timer_ref, nil)
      |> assign(
        :any_repository?,
        Repositories.any_visible_repository?(socket.assigns.current_user)
      )}
+  end
+
+  # Live updates across every repository. Any committed issue write anywhere
+  # re-reads the current page through this viewer's own authorization — the
+  # same `readable_by` predicate the initial load used — so a viewer who keeps
+  # the page open converges instead of drifting. Bursts coalesce: each change
+  # (re)arms one timer and only the last fires a re-read.
+  def handle_info({:issues_changed, _repository_id}, socket) do
+    {:noreply, schedule_refresh(socket)}
+  end
+
+  def handle_info(:refresh_issues_now, socket) do
+    {:noreply, socket |> assign(:refresh_timer_ref, nil) |> load()}
+  end
+
+  def handle_info(_other, socket), do: {:noreply, socket}
+
+  @refresh_debounce_ms if Application.compile_env(:openagents, :runtime_environment) == :test,
+                         do: 0,
+                         else: 250
+
+  # Zero debounce means tests: refresh synchronously on the change message so
+  # assertions need no waiting.
+  defp schedule_refresh(socket) when @refresh_debounce_ms == 0 do
+    load(socket)
+  end
+
+  defp schedule_refresh(socket) do
+    case socket.assigns.refresh_timer_ref do
+      nil ->
+        assign(
+          socket,
+          :refresh_timer_ref,
+          Process.send_after(self(), :refresh_issues_now, @refresh_debounce_ms)
+        )
+
+      ref when is_reference(ref) ->
+        Process.cancel_timer(ref)
+
+        assign(
+          socket,
+          :refresh_timer_ref,
+          Process.send_after(self(), :refresh_issues_now, @refresh_debounce_ms)
+        )
+    end
   end
 
   def handle_params(params, _url, socket) do

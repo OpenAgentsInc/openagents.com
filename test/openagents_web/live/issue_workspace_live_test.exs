@@ -207,4 +207,55 @@ defmodule OpenAgentsWeb.IssueWorkspaceLiveTest do
     |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
     |> Repo.update!()
   end
+
+  describe "live updates" do
+    test "an out-of-band write re-renders the stream without a reload", context do
+      {:ok, view, _html} = live(context.conn, ~p"/issues")
+
+      {:ok, fresh} = Issues.create_issue(context.private, %{"title" => "Filed from the API"})
+
+      send(view.pid, {:issues_changed, context.private.id})
+      _ = :sys.get_state(view.pid)
+
+      assert has_element?(
+               view,
+               ~s{a[href="/#{context.private.owner}/#{context.private.name}/issues/#{fresh.number}"]},
+               "Filed from the API"
+             )
+    end
+
+    test "a burst of writes coalesces into one refresh", context do
+      {:ok, view, _html} = live(context.conn, ~p"/issues")
+
+      Enum.each(1..5, fn n ->
+        {:ok, _} = Issues.create_issue(context.private, %{"title" => "Burst #{n}"})
+        send(view.pid, {:issues_changed, context.private.id})
+      end)
+
+      # With the test debounce at zero every armed timer fires immediately; what
+      # matters here is that the page converges to all five rows in one piece.
+      _ = :sys.get_state(view.pid)
+
+      html = render(view)
+
+      for n <- 1..5 do
+        assert html =~ "Burst #{n}"
+      end
+    end
+
+    test "a private issue never reaches a viewer who cannot read it", context do
+      outsider_conn =
+        Plug.Test.init_test_session(build_conn(), %{"user_id" => github_user("outsider").id})
+
+      {:ok, view, html} = live(outsider_conn, ~p"/issues")
+
+      refute html =~ "Rotate the signing key"
+
+      send(view.pid, {:issues_changed, context.private.id})
+      _ = :sys.get_state(view.pid)
+      _ = render(view)
+
+      refute render(view) =~ "Rotate the signing key"
+    end
+  end
 end

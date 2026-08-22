@@ -842,6 +842,8 @@ defmodule OpenAgents.Repositories do
   end
 
   @doc "Subscribes the caller to one repository's issue activity."
+  @all_issues_topic "issues:all"
+
   def subscribe_issues(repository_id),
     do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, issues_topic(repository_id))
 
@@ -861,9 +863,19 @@ defmodule OpenAgents.Repositories do
       issues_topic(repository_id),
       {:issues_changed, repository_id}
     )
+
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      @all_issues_topic,
+      {:issues_changed, repository_id}
+    )
   end
 
   defp issues_topic(repository_id), do: "issues:" <> repository_id
+
+  @doc "Receives `{:issues_changed, repository_id}` for every repository at once."
+  def subscribe_all_issues,
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @all_issues_topic)
 
   @doc "Seeds GitHub's default label vocabulary onto a new or imported repository."
   def seed_default_labels!(%Repository{} = repository) do

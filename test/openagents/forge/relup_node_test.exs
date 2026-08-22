@@ -6,6 +6,8 @@ defmodule OpenAgents.Forge.RelupNodeTest do
   alias OpenAgents.ReleaseState.State
   alias OpenAgents.Test.ReleaseHandler
 
+  @sha String.duplicate("a", 40)
+
   describe "a schema 1 to schema 2 upgrade" do
     setup do
       start_supervised!(
@@ -17,6 +19,7 @@ defmodule OpenAgents.Forge.RelupNodeTest do
       artifact = "immutable release artifact"
 
       request = %{
+        sha: @sha,
         release_name: "openagents",
         from_version: "0.1.0",
         to_version: "0.2.0",
@@ -30,6 +33,7 @@ defmodule OpenAgents.Forge.RelupNodeTest do
         release_root: root,
         release_handler: ReleaseHandler,
         generate_config: fn _version -> :ok end,
+        revision: fn -> @sha end,
         health: fn -> %{"ready" => true} end,
         state: fn -> %{schema_version: 2} end
       ]
@@ -113,6 +117,7 @@ defmodule OpenAgents.Forge.RelupNodeTest do
       artifact = "immutable 0.3.0 artifact"
 
       request = %{
+        sha: @sha,
         release_name: "openagents",
         from_version: "0.2.0",
         to_version: "0.3.0",
@@ -126,6 +131,7 @@ defmodule OpenAgents.Forge.RelupNodeTest do
         release_root: release_root(),
         release_handler: ReleaseHandler,
         generate_config: fn _version -> :ok end,
+        revision: fn -> @sha end,
         health: fn -> %{"ready" => true} end,
         state: fn -> ReleaseState.snapshot(state) end
       ]

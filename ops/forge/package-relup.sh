@@ -72,6 +72,9 @@ fi
 
 from_sha=$(git -C "$repo_root" rev-parse --verify "${from_rev}^{commit}")
 to_sha=$(git -C "$repo_root" rev-parse --verify "${to_rev}^{commit}")
+target_system=$(erl -noshell -eval 'io:format("~s", [erlang:system_info(system_architecture)]), halt().' 2>/dev/null)
+
+[ -n "$target_system" ] || { echo "could not determine the release target system" >&2; exit 1; }
 
 build_root=$(mktemp -d "${TMPDIR:-/tmp}/openagents-relup-package.XXXXXX")
 assets_digested=0
@@ -113,6 +116,7 @@ env -u RELUP_FROM -u RELUP_TO -u OPENAGENTS_RELUP_PATH \
   OPENAGENTS_RELEASE_PATH="$build_root/from/release" \
   OPENAGENTS_RELEASE_VSN="$from_version" \
   OPENAGENTS_RELUP_STATE_VERSION="$from_state" \
+  OPENAGENTS_BUILD_REVISION="$from_sha" \
   sh -c 'cd "$1" && mix do compile --force --warnings-as-errors + release --overwrite' sh "$build_root/from"
 
 # The appup derives its instruction list from these two module sets, so every
@@ -129,6 +133,7 @@ env -u OPENAGENTS_RELUP_PATH \
   OPENAGENTS_RELEASE_PATH="$build_root/to/release" \
   OPENAGENTS_RELEASE_VSN="$to_version" \
   OPENAGENTS_RELUP_STATE_VERSION="$to_state" \
+  OPENAGENTS_BUILD_REVISION="$to_sha" \
   RELUP_FROM="$from_version" \
   RELUP_TO="$to_version" \
   RELUP_FROM_EBIN="$from_ebin" \
@@ -156,6 +161,7 @@ env \
   OPENAGENTS_RELEASE_VSN="$to_version" \
   OPENAGENTS_RELUP_PATH="$build_root/relup" \
   OPENAGENTS_RELUP_STATE_VERSION="$to_state" \
+  OPENAGENTS_BUILD_REVISION="$to_sha" \
   RELUP_FROM="$from_version" \
   RELUP_TO="$to_version" \
   RELUP_FROM_EBIN="$from_ebin" \
@@ -190,6 +196,7 @@ cat >"$publish_root/package.json" <<EOF
   "to_version": "$to_version",
   "from_state_version": $from_state,
   "to_state_version": $to_state,
+  "target_system": "$target_system",
   "from_artifact_digest": "$from_digest",
   "to_artifact_digest": "$to_digest",
   "relup_digest": "$relup_digest"

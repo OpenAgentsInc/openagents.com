@@ -141,6 +141,7 @@ defmodule OpenAgents.Forge.RelupNode do
     with true <-
            release_status(request.to_version, opts) == expected_status or
              {:error, :release_status_mismatch},
+         true <- build_revision(opts) == request.sha or {:error, :revision_mismatch},
          %{"ready" => true} <- health_report(opts),
          %{schema_version: schema} <- state_snapshot(opts),
          true <- schema == request.to_state_version or {:error, :state_version_mismatch} do
@@ -325,6 +326,7 @@ defmodule OpenAgents.Forge.RelupNode do
   end
 
   defp health_report(opts), do: Keyword.get(opts, :health, &OpenAgents.Cluster.local_report/0).()
+  defp build_revision(opts), do: Keyword.get(opts, :revision, &OpenAgents.BuildInfo.revision/0).()
   defp state_snapshot(opts), do: Keyword.get(opts, :state, &ReleaseState.snapshot/0).()
 
   defp release_basename(request), do: "#{request.release_name}-#{request.to_version}"

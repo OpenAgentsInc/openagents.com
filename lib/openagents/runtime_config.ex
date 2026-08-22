@@ -956,15 +956,23 @@ defmodule OpenAgents.RuntimeConfig do
         true
 
       true ->
-        match?(
-          {:ok, %URI{scheme: scheme, host: host, userinfo: nil}}
-          when scheme in ["http", "https", "git", "ssh"] and is_binary(host),
-          URI.new(url)
-        )
+        case URI.new(url) do
+          {:ok, %URI{scheme: scheme, host: host, userinfo: userinfo}}
+          when scheme in ["http", "https", "git", "ssh"] and is_binary(host) ->
+            is_nil(userinfo) or (scheme == "ssh" and clean_ssh_username?(userinfo))
+
+          _invalid ->
+            false
+        end
     end
   end
 
   defp clean_mirror_url?(_url), do: false
+
+  defp clean_ssh_username?(userinfo) do
+    is_binary(userinfo) and userinfo != "" and
+      not String.contains?(userinfo, [":", "@", "/", "\\"])
+  end
 
   defp clean_service_url?(url) do
     case URI.new(url) do

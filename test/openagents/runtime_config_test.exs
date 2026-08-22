@@ -229,6 +229,13 @@ defmodule OpenAgents.RuntimeConfigTest do
              staging_settings()
              |> Map.put(:forge_mirror_urls, %{"openagents.com" => "/var/lib/openagents/mirror"})
              |> RuntimeConfig.validate()
+
+    assert {:ok, _config} =
+             staging_settings()
+             |> Map.put(:forge_mirror_urls, %{
+               "openagents.com" => "ssh://git@github.com/OpenAgentsInc/openagents.com.git"
+             })
+             |> RuntimeConfig.validate()
   end
 
   test "startup refuses an empty tool catalog when tools are enabled" do

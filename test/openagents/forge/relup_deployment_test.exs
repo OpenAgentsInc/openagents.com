@@ -221,6 +221,7 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
         release_root: root,
         release_handler: ReleaseHandler,
         generate_config: fn _version -> :ok end,
+        revision: fn -> request().sha end,
         health: &unready_once/0,
         state: fn -> ReleaseState.snapshot(state) end
       ]

@@ -149,6 +149,13 @@ defmodule OpenAgents.Forge.MirrorWatchTest do
       Application.put_env(:openagents, :forge_mirror_urls, %{"openagents.com" => url})
       assert OpenAgents.Forge.Pushes.mirror_url("openagents.com") == nil
     end
+
+    Application.put_env(:openagents, :forge_mirror_urls, %{
+      "openagents.com" => "ssh://git@github.com/OpenAgentsInc/openagents.com.git"
+    })
+
+    assert OpenAgents.Forge.Pushes.mirror_url("openagents.com") ==
+             "ssh://git@github.com/OpenAgentsInc/openagents.com.git"
   end
 
   defp incident_count do

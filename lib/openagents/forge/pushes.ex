@@ -268,9 +268,11 @@ defmodule OpenAgents.Forge.Pushes do
 
       true ->
         case URI.new(url) do
-          {:ok, %URI{scheme: scheme, host: host, userinfo: nil}}
+          {:ok, %URI{scheme: scheme, host: host, userinfo: userinfo}}
           when scheme in ["http", "https", "git", "ssh"] and is_binary(host) ->
-            url
+            if is_nil(userinfo) or (scheme == "ssh" and clean_ssh_username?(userinfo)),
+              do: url,
+              else: nil
 
           _credentialed_or_invalid ->
             nil
@@ -279,4 +281,9 @@ defmodule OpenAgents.Forge.Pushes do
   end
 
   defp clean_mirror_url(_invalid), do: nil
+
+  defp clean_ssh_username?(userinfo) do
+    is_binary(userinfo) and userinfo != "" and
+      not String.contains?(userinfo, [":", "@", "/", "\\"])
+  end
 end

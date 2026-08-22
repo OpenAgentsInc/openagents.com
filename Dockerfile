@@ -163,7 +163,7 @@ RUN sed -i \
       /etc/apt/sources.list.d/debian.sources \
   && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99snapshot \
   && apt-get update \
-  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates curl git unzip fontconfig librsvg2-bin \
+  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates curl git openssh-client unzip fontconfig librsvg2-bin \
   && rm -rf /var/lib/apt/lists/*
 
 # Server-side image rendering (Open Graph cards) reads system fonts through

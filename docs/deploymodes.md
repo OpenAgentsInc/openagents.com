@@ -201,6 +201,11 @@ application specification with that identity, and each deployment node
 compares it with its running release. Leaving `VERSION` behind causes every
 later direct candidate to fail with `runtime_toolchain_mismatch`.
 
+Startup and migration jobs must read the installed release version from
+`/app/releases/start_erl.data`. Do not embed a release version in instance
+metadata or an operator script. A hard-coded value can leave normal web startup
+healthy while making the next migration or release command unusable.
+
 ## Receipts and status
 
 `/status` and `/api/status` expose the active Forge lane, current target,

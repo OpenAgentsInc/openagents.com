@@ -48,6 +48,7 @@ defmodule OpenAgents.Release.AppupTest do
 
     assert File.read!(@dockerfile) =~ "ARG OPENAGENTS_RELEASE_VSN\n"
     refute File.read!(@dockerfile) =~ "ARG OPENAGENTS_RELEASE_VSN="
+    assert File.read!(@dockerfile) =~ "COPY VERSION mix.exs mix.lock ./"
   end
 
   test "covers a changed module the fixed proof set never named" do

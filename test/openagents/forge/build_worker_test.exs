@@ -35,7 +35,9 @@ defmodule OpenAgents.Forge.BuildWorkerTest do
     build_fun = fn claimed, workspace ->
       assert claimed["build_id"] == build_id
       assert claimed["source_sha"] == @sha
-      assert Path.basename(workspace) == build_id
+
+      assert Path.basename(workspace) ==
+               "repo-" <> (:sha256 |> :crypto.hash(@repo) |> Base.encode16(case: :lower))
 
       {:ok, [%{module: Atom.to_string(module), binary: binary}],
        BuildArtifact.current_toolchain(), [], retained}
@@ -78,7 +80,45 @@ defmodule OpenAgents.Forge.BuildWorkerTest do
 
     assert {:ok, []} = File.ls(Path.join(queue, "requests"))
     assert {:ok, []} = File.ls(Path.join(queue, "running"))
-    refute File.exists?(Path.join([builds, "jobs", build_id]))
+    assert {:ok, []} = File.ls(Path.join(builds, "jobs"))
+  end
+
+  test "reuses one stable compiler workspace path across build attempts", context do
+    baseline = ArtifactFixtures.create!(@repo, String.duplicate("b", 40), []).manifest
+    first_id = Ecto.UUID.generate()
+    second_id = Ecto.UUID.generate()
+    [{module, binary}] = Code.compile_string("defmodule OpenAgents.Scratch.StablePath do\nend")
+    :code.purge(module)
+    :code.delete(module)
+    parent = self()
+
+    build_fun = fn _request, workspace ->
+      send(parent, {:workspace, workspace})
+
+      {:ok, [%{module: Atom.to_string(module), binary: binary}],
+       BuildArtifact.current_toolchain(), [], "ok"}
+    end
+
+    write_request!(context.queue, request(first_id, baseline))
+
+    assert :processed =
+             BuildWorker.run_once(context.queue, context.artifacts, context.builds,
+               build_fun: build_fun
+             )
+
+    assert_receive {:workspace, first_workspace}
+
+    write_request!(context.queue, request(second_id, baseline))
+
+    assert :processed =
+             BuildWorker.run_once(context.queue, context.artifacts, context.builds,
+               build_fun: build_fun
+             )
+
+    assert_receive {:workspace, second_workspace}
+    assert first_workspace == second_workspace
+    refute String.contains?(first_workspace, first_id)
+    refute String.contains?(second_workspace, second_id)
   end
 
   test "unknown request fields fail before the build callback runs", context do

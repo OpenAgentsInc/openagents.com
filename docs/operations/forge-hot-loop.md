@@ -56,6 +56,10 @@ Every link below exists in code and runs in this order:
    changed set, and writes the response plus a digest-addressed artifact. The
    sidecar uses a fresh source checkout for isolation and a persistent `_build`
    and dependency cache for speed. A new pinned builder image seeds that cache.
+   The checkout reuses one repository-scoped absolute path across serial build
+   attempts. Mix records source paths in compiler manifests and BEAM line
+   tables, so a build-ID-specific path would make unchanged modules appear
+   different and force unnecessary rolling replacements.
 4. **Verify**: `Builder` re-verifies digest and manifest, advances the target
    to `built` with module list and classification, then broadcasts
    `forge:builds`.

@@ -76,7 +76,7 @@ defmodule OpenAgents.Forge.BuildWorker do
 
   defp execute(request, artifacts, builds, started, opts) do
     build_id = request["build_id"]
-    workspace = Path.join([builds, "jobs", build_id])
+    workspace = workspace_path(builds, request["repo"])
     output_tmp = Path.join([artifacts, "output", ".#{build_id}.tmp"])
 
     try do
@@ -578,6 +578,16 @@ defmodule OpenAgents.Forge.BuildWorker do
   end
 
   defp build_id_from_path(path), do: path |> Path.basename(".json")
+
+  # Mix records source paths in compiler manifests and BEAM line tables. A
+  # build-ID workspace changes those paths on every attempt, which makes an
+  # unchanged module look different and defeats direct-diff classification.
+  # Each sidecar processes requests serially, so a repository-scoped stable
+  # path preserves isolation between repositories and stable BEAM identities.
+  defp workspace_path(builds, repo) do
+    identity = :sha256 |> :crypto.hash(repo) |> Base.encode16(case: :lower)
+    Path.join([builds, "jobs", "repo-" <> identity])
+  end
 
   defp error_code(reason) do
     reason

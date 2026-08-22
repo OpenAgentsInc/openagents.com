@@ -227,6 +227,62 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
              Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
   end
 
+  test "relup settlement makes the verified package the live baseline", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _relup} = Targets.advance(target.id, "needs_rolling_replace")
+
+    build_digest = String.duplicate("a", 64)
+    package_digest = String.duplicate("c", 64)
+    package_manifest_digest = String.duplicate("d", 64)
+
+    insert_build_receipt!(
+      target,
+      %{"classification" => "needs_rolling_replace", "source_sha" => sha},
+      build_digest
+    )
+
+    result =
+      relup_result(sha, "live")
+      |> Map.put(:artifact_digest, package_digest)
+      |> Map.put(:package_manifest_digest, package_manifest_digest)
+
+    assert {:ok, %{target: live, receipt: receipt}} =
+             Targets.finish_relup_deployment(target.id, result)
+
+    assert live.status == "live"
+    assert live.details["deployment_lane"] == "relup"
+    assert live.details["artifact_digest"] == package_digest
+    assert live.details["build_artifact_digest"] == build_digest
+    assert receipt.result == "live"
+    assert receipt.artifact_digest == package_digest
+    assert receipt.manifest_digest == package_manifest_digest
+    assert receipt.push_to_live_ms == 53_876
+
+    assert receipt.node_results == %{
+             "openagents@10.42.0.11" => "permanent",
+             "openagents@10.42.0.12" => "permanent"
+           }
+  end
+
+  test "relup settlement refuses a nonpermanent live result", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _relup} = Targets.advance(target.id, "needs_rolling_replace")
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+
+    result =
+      relup_result(sha, "live")
+      |> put_in([:node_results, "openagents@10.42.0.12"], "current")
+
+    assert {:error, :invalid_relup_result} =
+             Targets.finish_relup_deployment(target.id, result)
+
+    assert Repo.get!(OpenAgents.Forge.Target, target.id).status == "needs_rolling_replace"
+  end
+
   test "rolling replacement records a complete large module inventory", %{sha: sha} do
     {:ok, target} = Targets.promote("demo", sha, "operator:test")
     {:ok, _building} = Targets.advance(target.id, "building")
@@ -383,6 +439,25 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
       },
       error_code: nil,
       recovery: nil
+    }
+  end
+
+  defp relup_result(sha, status) do
+    %{
+      schema: "openagents.relup-deployment.v1",
+      sha: sha,
+      from_revision: String.duplicate("b", 40),
+      artifact_digest: String.duplicate("c", 64),
+      package_manifest_digest: String.duplicate("d", 64),
+      from_version: "0.2.0",
+      to_version: "0.2.1",
+      status: status,
+      node_results: %{
+        "openagents@10.42.0.11" => "permanent",
+        "openagents@10.42.0.12" => "permanent"
+      },
+      error_code: nil,
+      duration_ms: 53_876
     }
   end
 end

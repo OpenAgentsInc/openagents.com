@@ -8,9 +8,9 @@ defmodule OpenAgents.Forge.Targets do
   another promotion, receipted like any other. Status advances through the
   deploy lane (`promoted → building → built → deploying →
   live | failed | reverted | needs_rolling_replace`) with bounded details
-  at every step. An operator-approved rolling replacement can settle a
-  `needs_rolling_replace` target as `live` or `failed` with a second immutable
-  receipt. The `forge:target` broadcast is what wakes the builder.
+  at every step. An operator-approved relup or rolling replacement can settle
+  a `needs_rolling_replace` target as `live` or `failed` with a second
+  immutable receipt. The `forge:target` broadcast is what wakes the builder.
   """
 
   import Ecto.Query
@@ -255,6 +255,119 @@ defmodule OpenAgents.Forge.Targets do
   end
 
   @doc """
+  Settle an operator-approved relup against its verified Forge build.
+
+  The relup coordinator returns the bounded result passed to this function.
+  Settlement succeeds only for the newest target, only after Forge classified
+  it as `needs_rolling_replace`, and only when a complete build receipt exists.
+  The target update and the second immutable deployment receipt commit in one
+  transaction. The original classification receipt remains intact.
+  """
+  def finish_relup_deployment(target_id, relup_result) when is_map(relup_result) do
+    result =
+      :global.trans({{:forge_target_deploy, target_id}, self()}, fn ->
+        Repo.transaction(fn ->
+          target = Repo.get(Target, target_id, lock: "FOR UPDATE") || Repo.rollback(:not_found)
+
+          current_id =
+            Target
+            |> where([t], t.repo == ^target.repo)
+            |> order_by([t], desc: t.inserted_at)
+            |> limit(1)
+            |> select([t], t.id)
+            |> Repo.one()
+
+          if current_id != target.id, do: Repo.rollback(:superseded_target)
+
+          unless target.status == "needs_rolling_replace" do
+            requested_status = result_value(relup_result, :status) || "invalid"
+            Repo.rollback({:invalid_transition, target.status, requested_status})
+          end
+
+          relup =
+            case validate_relup_result(relup_result, target.sha) do
+              {:ok, relup} -> relup
+              {:error, reason} -> Repo.rollback(reason)
+            end
+
+          build =
+            BuildReceipt
+            |> where([b], b.target_id == ^target.id and b.status == "complete")
+            |> order_by([b], desc: b.inserted_at)
+            |> limit(1)
+            |> Repo.one()
+
+          if is_nil(build), do: Repo.rollback(:complete_build_receipt_not_found)
+
+          deployment_id = Ecto.UUID.generate()
+          now = DateTime.utc_now()
+
+          details = %{
+            "artifact_digest" => relup.artifact_digest,
+            "build_artifact_digest" => build.artifact_digest,
+            "deployment_id" => deployment_id,
+            "deployment_lane" => "relup",
+            "from_revision" => relup.from_revision,
+            "from_version" => relup.from_version,
+            "package_manifest_digest" => relup.package_manifest_digest,
+            "relup_duration_ms" => relup.duration_ms,
+            "relup_error_code" => relup.error_code,
+            "relup_node_results" => relup.node_results,
+            "to_version" => relup.to_version
+          }
+
+          target =
+            target
+            |> Target.status_changeset(relup.status, details)
+            |> Repo.update!()
+
+          receipt_attrs = %{
+            artifact_digest: relup.artifact_digest,
+            completed_at: now,
+            deployment_id: deployment_id,
+            error_code: relup.error_code,
+            expected_nodes: relup.expected_nodes,
+            manifest_digest: relup.package_manifest_digest,
+            modules: build.modules,
+            node_results: relup.node_results,
+            nodes:
+              Enum.map(relup.expected_nodes, fn node ->
+                "#{node}=#{relup.node_results[node]}"
+              end),
+            push_to_live_ms: relup.duration_ms,
+            repo: target.repo,
+            result: relup.status,
+            rollback_verified:
+              relup.status == "failed" and
+                Enum.all?(relup.node_results, fn {_node, status} -> status == "reversed" end),
+            sha: target.sha,
+            started_at: DateTime.add(now, -relup.duration_ms, :millisecond),
+            target_id: target.id
+          }
+
+          receipt =
+            %DeployReceipt{}
+            |> DeployReceipt.changeset(receipt_attrs)
+            |> Repo.insert()
+            |> case do
+              {:ok, receipt} -> receipt
+              {:error, changeset} -> Repo.rollback({:invalid_receipt, changeset})
+            end
+
+          %{target: target, receipt: receipt}
+        end)
+      end)
+
+    with {:ok, %{target: target} = committed} <- result do
+      broadcast_status(target)
+      {:ok, committed}
+    end
+  end
+
+  def finish_relup_deployment(_target_id, _relup_result),
+    do: {:error, :invalid_relup_result}
+
+  @doc """
   Settle an operator-approved rolling replacement against its verified build.
 
   The rolling coordinator returns the bounded result passed to this function.
@@ -361,6 +474,70 @@ defmodule OpenAgents.Forge.Targets do
   def finish_rolling_replacement(_target_id, _rolling_result),
     do: {:error, :invalid_rolling_result}
 
+  defp validate_relup_result(result, target_sha) do
+    schema = result_value(result, :schema)
+    sha = result_value(result, :sha)
+    from_revision = result_value(result, :from_revision)
+    artifact_digest = result_value(result, :artifact_digest)
+    package_manifest_digest = result_value(result, :package_manifest_digest)
+    from_version = result_value(result, :from_version)
+    to_version = result_value(result, :to_version)
+    status = result_value(result, :status)
+    node_results = result_value(result, :node_results)
+    error_code = result_value(result, :error_code)
+    duration_ms = result_value(result, :duration_ms)
+
+    cond do
+      schema != "openagents.relup-deployment.v1" ->
+        {:error, :invalid_relup_result}
+
+      sha != target_sha ->
+        {:error, :relup_sha_mismatch}
+
+      not valid_sha?(from_revision) ->
+        {:error, :invalid_relup_result}
+
+      not valid_digest?(artifact_digest) or not valid_digest?(package_manifest_digest) ->
+        {:error, :invalid_relup_result}
+
+      not valid_version?(from_version) or not valid_version?(to_version) or
+          from_version == to_version ->
+        {:error, :invalid_relup_result}
+
+      status not in ~w(live failed) ->
+        {:error, :invalid_relup_result}
+
+      not valid_node_results?(node_results) ->
+        {:error, :invalid_relup_result}
+
+      not valid_duration?(duration_ms) ->
+        {:error, :invalid_relup_result}
+
+      status == "live" and
+          (Enum.any?(node_results, fn {_node, node_status} -> node_status != "permanent" end) or
+             not is_nil(error_code)) ->
+        {:error, :invalid_relup_result}
+
+      status == "failed" and not bounded_error?(error_code) ->
+        {:error, :invalid_relup_result}
+
+      true ->
+        {:ok,
+         %{
+           artifact_digest: artifact_digest,
+           duration_ms: duration_ms,
+           error_code: error_code,
+           expected_nodes: node_results |> Map.keys() |> Enum.sort(),
+           from_revision: from_revision,
+           from_version: from_version,
+           node_results: node_results,
+           package_manifest_digest: package_manifest_digest,
+           status: status,
+           to_version: to_version
+         }}
+    end
+  end
+
   defp validate_rolling_result(result, target_sha) do
     schema = result_value(result, :schema)
     sha = result_value(result, :sha)
@@ -421,6 +598,18 @@ defmodule OpenAgents.Forge.Targets do
 
   defp valid_sha?(value) when is_binary(value), do: Regex.match?(~r/\A[0-9a-f]{40}\z/, value)
   defp valid_sha?(_value), do: false
+
+  defp valid_digest?(value) when is_binary(value),
+    do: Regex.match?(~r/\A[0-9a-f]{64}\z/, value)
+
+  defp valid_digest?(_value), do: false
+
+  defp valid_version?(value) when is_binary(value),
+    do: Regex.match?(~r/\A[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?\z/, value)
+
+  defp valid_version?(_value), do: false
+
+  defp valid_duration?(value), do: is_integer(value) and value in 0..86_400_000
 
   defp valid_image_digest?(value) when is_binary(value),
     do: Regex.match?(~r/\Asha256:[0-9a-f]{64}\z/, value)

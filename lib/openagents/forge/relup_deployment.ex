@@ -182,8 +182,14 @@ defmodule OpenAgents.Forge.RelupDeployment do
       not Regex.match?(@sha_pattern, Map.get(request, :sha, "")) ->
         {:error, :invalid_git_sha}
 
+      not Regex.match?(@sha_pattern, Map.get(request, :from_revision, "")) ->
+        {:error, :invalid_from_git_sha}
+
       not Regex.match?(@digest_pattern, Map.get(request, :artifact_digest, "")) ->
         {:error, :invalid_artifact_digest}
+
+      not Regex.match?(@digest_pattern, Map.get(request, :package_manifest_digest, "")) ->
+        {:error, :invalid_package_manifest_digest}
 
       not is_binary(Map.get(request, :artifact_bytes)) ->
         {:error, :invalid_artifact}
@@ -231,7 +237,9 @@ defmodule OpenAgents.Forge.RelupDeployment do
     %{
       schema: "openagents.relup-deployment.v1",
       sha: request.sha,
+      from_revision: request.from_revision,
       artifact_digest: request.artifact_digest,
+      package_manifest_digest: request.package_manifest_digest,
       from_version: request.from_version,
       to_version: request.to_version,
       status: status,

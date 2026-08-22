@@ -148,6 +148,21 @@ the prior permanent release, and aborts before touching another node. If the
 reverse path fails, keep the node out of readiness and move to operator-directed
 rolling recovery.
 
+After the coordinator returns, settle its bounded result against the retained
+Forge target:
+
+```elixir
+OpenAgents.Forge.Targets.finish_relup_deployment(target_id, relup_result)
+```
+
+Settlement accepts only the newest target in `needs_rolling_replace`, requires
+the target's complete verified build receipt, and verifies the target SHA,
+source SHA, package manifest digest, target artifact digest, release versions,
+duration, and per-node permanence. It changes the target to `live` or `failed`
+and inserts a second immutable deployment receipt in one transaction. A
+successful settlement makes that build the baseline for later direct-load
+classification.
+
 `OpenAgents.Forge.RelupNode` retains the immutable tar in
 `releases/.openagents-relup-cache/<sha256>.tar.gz`. It copies those exact bytes
 back to the filename consumed by `unpack_release/1` before every attempt. This
@@ -207,8 +222,8 @@ last-known-good SHA and digest, waits for that node's full health, records the
 recovery result, and aborts. It never replaces a second node while the first is
 missing or unhealthy.
 
-After the coordinator returns, settle its bounded result against the Forge
-target:
+After the rolling coordinator returns, settle its bounded result against the
+Forge target:
 
 ```elixir
 OpenAgents.Forge.Targets.finish_rolling_replacement(target_id, rolling_result)

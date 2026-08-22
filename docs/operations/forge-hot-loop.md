@@ -147,7 +147,10 @@ this fallback order:
    dependencies, ERTS, native code, migrations, assets, or another structural
    change that cannot use a relup.
 3. Settle the original target with the fallback result so its verified build
-   becomes the baseline for later direct-load classification.
+   becomes the baseline for later direct-load classification. Call
+   `OpenAgents.Forge.Targets.finish_relup_deployment/2` for a relup or
+   `OpenAgents.Forge.Targets.finish_rolling_replacement/2` for a rolling
+   replacement.
 
 ## Failure modes
 
@@ -274,6 +277,11 @@ The 2026-08-22 activation established this baseline:
 - Forge and GitHub exposed `b3ae6c6` as `main`, and the public status endpoint
   reported the mirror `current`. Every node also reported the same hot
   artifact digest and target SHA.
+- The documentation and CLI parity release upgraded the three-node fleet from
+  `0.2.0@bd6c808` to `0.2.1@cf23f84` through a packaged relup in 53.876
+  seconds. Every node returned `permanent`, the exact-SHA gate passed all 13
+  stages and 2,044 tests, and the retained Forge target was settled with the
+  relup package and manifest digests.
 - Forge classified the activation change as `needs_rolling_replace`, and the
   operator settled it as `live` only after every node reported revision
   `3479f12`, complete cluster membership, and local health. Later compatible
@@ -288,11 +296,11 @@ The 2026-08-22 activation established this baseline:
   repository-owned fleet template now remove those retired containers and
   replace the disposable builder sidecar before pulling a new builder image.
 
-The activation did not change the application version from `0.2.0`. Keep that
-version for direct loads. For full compatible packages, increment only the
-patch component. Change the minor component only for a planned compatibility
-boundary, and never increment a release version merely to record a source
-commit.
+The initial activation did not change the application version from `0.2.0`.
+Keep a release version unchanged for direct loads. For full compatible
+packages, increment only the patch component. Change the minor component only
+for a planned compatibility boundary, and never increment a release version
+merely to record a source commit.
 
 After a rollout or storage repair, force convergence before validating the
 mirror:

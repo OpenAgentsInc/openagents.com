@@ -9,7 +9,9 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
   alias OpenAgents.Test.ReleaseHandler
 
   @sha String.duplicate("a", 40)
+  @from_sha String.duplicate("c", 40)
   @digest String.duplicate("b", 64)
+  @manifest_digest String.duplicate("d", 64)
   @nodes [:first@local, :second@local, :third@local]
 
   test "upgrades and makes each node permanent before touching the next" do
@@ -101,6 +103,7 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
   defp request do
     %{
       sha: @sha,
+      from_revision: @from_sha,
       release_name: "openagents",
       from_version: "0.1.0",
       to_version: "0.2.0",
@@ -108,6 +111,7 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
       to_state_version: 2,
       artifact_bytes: "artifact",
       artifact_digest: @digest,
+      package_manifest_digest: @manifest_digest,
       expected_nodes: @nodes,
       expected_fleet_size: 3
     }
@@ -161,6 +165,14 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
                  gate_verifier: fn @sha -> {:ok, %{}} end,
                  rpc: fn _, _, _, _, _ -> {:ok, %{}} end
                )
+    end
+
+    test "refuses a malformed source revision or package manifest digest" do
+      assert {:error, :invalid_from_git_sha} =
+               RelupDeployment.run(request() |> Map.put(:from_revision, "not-a-sha"))
+
+      assert {:error, :invalid_package_manifest_digest} =
+               RelupDeployment.run(request() |> Map.put(:package_manifest_digest, "short"))
     end
 
     test "refuses state version regression and unsupported state versions" do

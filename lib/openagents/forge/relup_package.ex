@@ -20,7 +20,7 @@ defmodule OpenAgents.Forge.RelupPackage do
   def load(directory, opts \\ [])
 
   def load(directory, opts) when is_binary(directory) do
-    with {:ok, manifest} <- read_manifest(directory),
+    with {:ok, manifest, package_manifest_digest} <- read_manifest(directory),
          :ok <- validate_manifest(manifest, opts),
          {:ok, artifact_bytes} <- read_artifact(directory, manifest),
          :ok <- verify_artifact(artifact_bytes, manifest["to_artifact_digest"]) do
@@ -30,6 +30,7 @@ defmodule OpenAgents.Forge.RelupPackage do
       {:ok,
        %{
          sha: manifest["to_revision"],
+         from_revision: manifest["from_revision"],
          release_name: manifest["release_name"],
          from_version: manifest["from_version"],
          to_version: manifest["to_version"],
@@ -37,6 +38,7 @@ defmodule OpenAgents.Forge.RelupPackage do
          to_state_version: manifest["to_state_version"],
          artifact_bytes: artifact_bytes,
          artifact_digest: manifest["to_artifact_digest"],
+         package_manifest_digest: package_manifest_digest,
          expected_nodes: nodes,
          expected_fleet_size: length(nodes)
        }}
@@ -47,11 +49,24 @@ defmodule OpenAgents.Forge.RelupPackage do
 
   @doc "Validate a relup package and deploy it one node at a time."
   def deploy(directory, opts \\ []) do
+    started_at = System.monotonic_time(:millisecond)
+
     with {:ok, request} <- load(directory, opts) do
       deployment_opts =
         Keyword.drop(opts, [:current_revision, :expected_nodes, :system_architecture])
 
-      RelupDeployment.run(request, deployment_opts)
+      case RelupDeployment.run(request, deployment_opts) do
+        {status, result} when status in [:ok, :error] and is_map(result) ->
+          {status,
+           Map.put(
+             result,
+             :duration_ms,
+             System.monotonic_time(:millisecond) - started_at
+           )}
+
+        other ->
+          other
+      end
     end
   end
 
@@ -62,7 +77,7 @@ defmodule OpenAgents.Forge.RelupPackage do
          true <- stat.type == :regular and stat.size <= @maximum_manifest_bytes,
          {:ok, bytes} <- File.read(path),
          {:ok, manifest} <- Jason.decode(bytes) do
-      {:ok, manifest}
+      {:ok, manifest, digest(bytes)}
     else
       {:error, :enoent} -> {:error, :missing_package_manifest}
       {:error, %Jason.DecodeError{}} -> {:error, :invalid_package_manifest_json}

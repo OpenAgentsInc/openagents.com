@@ -19,10 +19,12 @@ defmodule OpenAgents.Forge.RelupPackageTest do
              )
 
     assert request.sha == @to_sha
+    assert request.from_revision == @from_sha
     assert request.from_version == "0.2.0"
     assert request.to_version == "0.3.0"
     assert request.expected_nodes == [:first@local, :second@local]
     assert request.artifact_bytes == "target release"
+    assert request.package_manifest_digest =~ ~r/\A[0-9a-f]{64}\z/
   end
 
   test "refuses a package for another revision, platform, or artifact" do

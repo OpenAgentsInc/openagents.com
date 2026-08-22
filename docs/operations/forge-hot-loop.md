@@ -1,12 +1,12 @@
 # Forge hot loop runbook
 
-Date: 2026-08-21
+Date: 2026-08-22
 
 Status: Active in production. The Forge loop is the default deployment path
 for allowlisted code changes. Relup and rolling replacement remain fallbacks.
 
 This is the operator procedure for the fast deployment lane: push to the owned
-forge, promote, and watch a code-only change go live across the fleet in
+forge, promote, and watch a compatible change go live across the fleet in
 seconds without an image build. It also describes the production relup path,
 the independent GitHub mirror repair worker, and the production activation
 evidence.
@@ -23,11 +23,18 @@ evidence.
 
 Two consequences worth stating plainly:
 
-- Code-only changes do **not** require an image roll once the loop is enabled;
+- BEAM-only changes do **not** require an image roll once the loop is enabled;
   the whole web layer is allowlisted.
 - Changes to `config/config.exs` or `config/runtime.exs` remain structural.
   The classifier must refuse them for direct loading and route them to a full
   release path.
+- Changes under `priv/` remain structural because a BEAM transaction cannot
+  install runtime programs, migrations, or other release-private files. The
+  classifier preserves the more specific `assets_changed` and
+  `migration_changed` reasons for `priv/static/` and `priv/repo/migrations/`.
+  `priv/docs/` is the deliberate exception: `DocsCatalog` embeds every page as
+  an external compiler resource, so its allowlisted BEAM carries the complete
+  immutable documentation snapshot.
 
 ## Status reporting
 
@@ -148,6 +155,7 @@ this fallback order:
 | --- | --- | --- |
 | Target stalls at `building`, fails `build_timeout` | No sidecar claimed the request | Check the builder container is running and the queue volume is shared |
 | `needs_rolling_replace` with `structural_reasons` | Honest refusal: config, dependencies, assets, or release files changed | Try the packaged relup path; use an operator-directed image rollout when the release is incompatible |
+| `needs_rolling_replace` with `release_priv_changed` | Nonembedded runtime content under `priv/` changed | Use a packaged release so every node receives the new private files; do not settle the target from a BEAM-only load |
 | `needs_rolling_replace` with `off_allowlist:` reasons | The diff touched modules outside the allowlist | Widen deliberately in config, or route around the change |
 | Artifact verification failure | Digest or manifest mismatch between builder and coordinator | Treat as a builder defect; inspect the retained build output |
 | A node restarts mid-fleet-deploy | Membership recheck pauses phases | Boot convergence holds the node out until it converges |

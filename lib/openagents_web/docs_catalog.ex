@@ -2,10 +2,13 @@ defmodule OpenAgentsWeb.DocsCatalog do
   @moduledoc """
   The documentation's table of contents, and the loader for its pages.
 
-  Pages are Markdown files under `priv/docs`, read at runtime and rendered
-  through `OpenAgents.Markdown`, which is the same safe CommonMark path the
-  chat surface uses. Documentation is content, not code, so it lives in files
-  a writer can edit rather than in HEEx a writer cannot.
+  Pages are Markdown files under `priv/docs`, embedded as one immutable
+  compile-time snapshot, and rendered through `OpenAgents.Markdown`, which is
+  the same safe CommonMark path the chat surface uses. Each source is an
+  external compiler resource, so editing Markdown recompiles this allowlisted
+  module and the Forge can deploy the complete snapshot transactionally.
+  Documentation remains content that a writer can edit rather than HEEx that a
+  writer cannot.
 
   Every page here documents something a visitor can actually reach today. A
   documentation site that describes features that do not exist is worse than
@@ -13,6 +16,14 @@ defmodule OpenAgentsWeb.DocsCatalog do
   in. `route` is the surface each page describes, and `DocsCatalogTest`
   asserts every one of them resolves in the router.
   """
+
+  @docs_dir Path.expand("../../priv/docs", __DIR__)
+  @doc_files Path.wildcard(Path.join(@docs_dir, "*.md"))
+  for path <- @doc_files, do: @external_resource(path)
+
+  @pages Map.new(@doc_files, fn path ->
+           {path |> Path.basename() |> Path.rootname(), File.read!(path)}
+         end)
 
   @sections [
     %{
@@ -175,7 +186,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
   end
 
   @doc """
-  Read and render one page.
+  Render one page from the compiled documentation snapshot.
 
   Returns the rendered HTML, the headings found in it, and the Markdown source
   it came from, so a page, its table of contents, and the text the copy button
@@ -183,8 +194,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
   """
   def render(slug) do
     with %{} = item <- fetch(slug),
-         path = Path.join(source_dir(), "#{slug}.md"),
-         {:ok, markdown} <- File.read(path) do
+         {:ok, markdown} <- Map.fetch(@pages, slug) do
       toc = headings(markdown)
       # Authored prose, not a message: the source is wrapped for editing, and
       # those wraps are not line breaks the reader should see.

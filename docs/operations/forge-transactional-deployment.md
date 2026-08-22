@@ -1,8 +1,9 @@
 # Forge transactional deployment
 
-Date: 2026-08-20
+Date: 2026-08-22
 
-Status: Implemented locally; keep staging deployment disabled until the Gate 12 distributed staging lane exists
+Status: Active in production for verified BEAM-only candidates. Use the packaged
+relup or rolling-replacement lane for structural candidates.
 
 ## Purpose
 
@@ -14,6 +15,11 @@ terminal receipt as one coordinated deployment outcome.
 Use this lane only for artifacts classified as `direct_candidate` whose every
 changed module matches the operator-owned allowlist. Send structural changes to
 the relup or rolling-replacement lanes.
+
+The source classifier treats nonembedded release-private files under `priv/` as
+structural. Direct loading cannot install those files even when the same commit
+also changes an allowlisted module. `priv/docs/` is the deliberate exception:
+`DocsCatalog` compiles every Markdown file into its allowlisted BEAM artifact.
 
 ## Preconditions
 

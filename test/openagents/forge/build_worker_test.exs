@@ -194,6 +194,16 @@ defmodule OpenAgents.Forge.BuildWorkerTest do
     assert File.read!(Path.join([cache.deps, "sample", "mix.exs"])) == "dep"
   end
 
+  test "classifies nonembedded release-private files as structural" do
+    assert BuildWorker.classify_source_paths(["priv/docs/cli-api.md"]) == []
+
+    assert BuildWorker.classify_source_paths([
+             "priv/programs/sarah/program.md",
+             "priv/static/app.css",
+             "priv/repo/migrations/20260822000000_add_example.exs"
+           ]) == ["assets_changed", "migration_changed", "release_priv_changed"]
+  end
+
   test "expired request IDs cannot be revived by a later attempt", context do
     expired_id = Ecto.UUID.generate()
     fresh_id = Ecto.UUID.generate()

@@ -286,12 +286,18 @@ defmodule OpenAgents.Forge.BuildWorker do
       reasons =
         diff
         |> String.split("\n", trim: true)
-        |> Enum.flat_map(&structural_reason/1)
-        |> Enum.uniq()
-        |> Enum.sort()
+        |> classify_source_paths()
 
       {:ok, reasons}
     end
+  end
+
+  @doc false
+  def classify_source_paths(paths) when is_list(paths) do
+    paths
+    |> Enum.flat_map(&structural_reason/1)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp structural_reason("mix.lock"), do: ["dependency_lock_changed"]
@@ -302,6 +308,8 @@ defmodule OpenAgents.Forge.BuildWorker do
   defp structural_reason("assets/" <> _path), do: ["assets_changed"]
   defp structural_reason("priv/static/" <> _path), do: ["assets_changed"]
   defp structural_reason("priv/repo/migrations/" <> _path), do: ["migration_changed"]
+  defp structural_reason("priv/docs/" <> _path), do: []
+  defp structural_reason("priv/" <> _path), do: ["release_priv_changed"]
   defp structural_reason("rel/" <> _path), do: ["release_changed"]
   defp structural_reason("native/" <> _path), do: ["nif_changed"]
   defp structural_reason("c_src/" <> _path), do: ["nif_changed"]

@@ -485,6 +485,10 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
               mirror: {mirror_text(@projection["forge"]["mirror"])}
             </p>
 
+            <p class="status-forge__intro" id="status-forge-policy">
+              deploy policy: direct hot load → relup → rolling replacement
+            </p>
+
             <div :if={@projection["forge"]["recent_deploys"] != []} class="status-forge__history">
               <h3>Recent deploys</h3>
               <ul class="status-events">

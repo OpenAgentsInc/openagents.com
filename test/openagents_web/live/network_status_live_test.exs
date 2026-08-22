@@ -192,6 +192,7 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
 
       assert html =~ "promoted by operator"
       assert html =~ "13.2s"
+      assert html =~ "deploy policy: direct hot load → relup → rolling replacement"
       refute html =~ "55554444"
       refute html =~ "HiddenModuleName"
       # Full sha never appears — only the short form.

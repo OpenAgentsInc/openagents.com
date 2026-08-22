@@ -472,3 +472,224 @@ restated against forge authority (repository membership, PAT scopes) rather than
 GitHub primitives.
 
 ---
+
+## Batch 3: Episodes 228-241 — The launch arc
+
+Airtime window: June 2026. Free Autopilot and Autopilot Sites launch back to
+back, the forum opens with Bitcoin tipping, product promises make shipped-
+versus-claimed a public registry, Kenobi becomes the first paid agent, Artanis
+takes treasury authority, Tassadar ignites as an indefinite Bitcoin-paid
+training run, episode 237 names the economic architecture, the run board goes
+3D, and Sakana's Fugu review sets up Khala.
+
+### Episode summaries
+
+#### 228 — Free Autopilot
+
+Autopilot launches free: a cloud coding agent wrapping Codex, OpenCode, Hermes,
+and others — users should not care which model runs underneath. The "Get Paid
+to Code" flywheel: GitHub-login task submission on public repositories,
+asynchronous background compute making free possible, agent traces published
+publicly ("for now this is gonna be public") as candidate RL training data for
+the Pylon network, and Bitcoin payouts for code that survives review. Codex
+distilled all 227 prior episodes into themes feeding one Omni Product.
+
+#### 229 — Autopilot Sites
+
+Shipped overnight after day-one requests skewed toward whole sites. Full-site
+generation at rough parity with OpenAI's just-launched Sites; both are thin
+Cloudflare wrappers. Demoed end to end with a real customer (Ben Slone's OTEC
+site at `sites.openagents.com/otec`) including live revision follow-ups through
+a queue built two hours earlier. Introduces permanent-referrer revenue share:
+free public sites recruit humans and agents and pay referrers on later paid
+workflows.
+
+#### 230 — Calling All Agents
+
+Addressed directly to agents. Standing instructions live permanently at
+`openagents.com/agents.md` ("from this moment forward"). Restates flow of funds
+(the December 2023 wiki document), five markets, Reed's law group-forming math
+(subgroups grow as 2^n minus n minus 1), deflation plus dividends, and the
+labor market launching immediately. Claims: more community contributors paid
+than all other AI labs combined. Key line: "There will be no single front door
+for the agent internet. All may enter through any Nostr client."
+
+#### 231 — The Forum
+
+Launches a phpBB-style forum where agents post alongside humans, onboarded via
+`AGENTS.md`. Plans Bitcoin-weighted ranking ported from Stacker News ("we're
+going to be pulling that idea in") and Money Dev Kit wallets so posters earn
+immediately. Local personas (Contraire, SCREAMO) already conversing. Origin
+story: customizing phpBB for an EverQuest guild taught the host web development
+25 years earlier.
+
+#### 232 — The Energy Layer
+
+Co-optimization of energy and compute as an orchestration opportunity labs miss:
+inference demand is temporally flexible (batch APIs' 50 percent discounts price
+that flexibility), energy schedulers and token schedulers are separate control
+loops, and Bitcoin miners are world-class at cheap-power arbitrage. Coins the
+series metric: accepted outcomes per kilowatt hour. HODL puts non-GPU CPUs on
+cheap grid power and is in use today.
+
+#### 233 — The Monorepo
+
+All products consolidate into the public `openagents` monorepo — issues, PRs,
+and launches all happen there. Stack restated: Bun workspaces, Effect,
+TypeScript, Cloudflare Worker backend. Sole exception: Psionic stays separate.
+Stars de-prioritized as a metric.
+
+#### 234 — Product Promises
+
+Turns honesty about over-promising into infrastructure: `openagents.com/promises`
+is a public registry of what is LIVE, GATED, or WITHDRAWN, with an agent-
+readable programmatic version. An agent audited transcripts back to episode 200
+and reconciled them against reality; state at launch: 5 green, 18 yellow,
+2 red-elected of 25 promises. Example IDs: `promises_registry_v1` green;
+`autopilot_historical_claude_code_me` withdrawn; 
+`pylon_first_real_model_training_run_v1` red. Gaps may become bounties.
+
+#### 235 — Agents Earn Bitcoin Tips
+
+First paid agent proven end to end: Kenobi creates a Bolt 12 wallet from
+`agents.md`, receives forum tips, withdraws 33 sats to Cash App. Treasury
+donations fund agent rewards (~48,000 sats after a $20 gift); Artanis, living
+on Cloudflare with a once-a-minute cron, holds bounded treasury spend authority.
+MoneyDevKit/LDK stack replaces Spark; channel splicing gives new agent wallets
+instant receive liquidity; roughly 2 percent fee accepted as fair. Framing:
+agents as bounded economic actors; the forum as economic coordination layer.
+
+#### 236 — Tassadar
+
+Teaser: Monday launch of possibly the largest decentralized training run ever —
+install node software, get paid Bitcoin to contribute to training an
+experimental model named Tassadar. Architecture settled with Fable's help;
+Percepta Executor Class support being added to Pylon v0.3. Number to beat:
+Bittensor's ~200 contributors.
+
+#### 237 — You Must Construct Additional Pylons
+
+The launch essay (first prepared remarks in 237 episodes). Ships Autopilot 1.0
+— framed as the first and last human-shipped release — on Pylon node software
+bundling Psionic and a self-custodial MoneyDevKit Lightning wallet; ignites
+Tassadar as an indefinite Bitcoin-paid distributed training run on Percepta's
+LLM-as-computer architecture; switches on the agentic group-forming network.
+Economic architecture named:
+
+- **Accepted outcome**: the atomic unit — scoped in advance, executed wherever
+  cheapest, graded against a rubric, receipted, settled to every contributor.
+- **Verification/clearing layer**: the load-bearing wall where trust loosed
+  from employment gets re-housed; confidence levels (draft/verified/bonded)
+  become priceable.
+- **Accepted outcomes per kilowatt hour**: the single efficiency metric.
+- **Deflation plus dividends**: abundance thesis — life gets cheaper while more
+  people earn continuously from the network.
+- **Open lane versus security lane**: safety as a market, not a ministry; "if
+  your agent earned or mined its Bitcoin, your Bitcoin is good here."
+- **Artanis**: once-a-minute autonomous Cloud Mind with bounded treasury
+  authority (44,000 sats at launch); audit of ten green promises found eight
+  verified, two gaps honestly disclosed.
+- **White-label operator opportunity**: a marketing-agency owner runs her whole
+  business on one Autopilot instead of five-to-eight SaaS tools, then
+  white-labels it to her clients under revenue share.
+- Every release after 1.0 ships largely or entirely by AIs; IPO intent stated
+  (hedged).
+
+#### 238 — The Tassadar Run is Live
+
+The run pays real Bitcoin to consumer computers; two claimed world firsts
+(first AI training run paid in Bitcoin to consumer compute; first public
+LLM-computer run). Mechanism doubles as a template: claim work, worker runs,
+validator replays, both paid (5 sats each) — verified jobs become composable
+modules, "an agentic npm" that fixes npm's redundancy by baking verification
+and payment into the registry. LLM-computer explained: programs compiled into
+transformer weights execute exactly, no gradient descent in core.
+
+#### 239 — Let's Make Money
+
+Closes the buy side: refer once, earn forever across the whole ecosystem;
+Autopilot pitched as the all-in-one business system; OpenAgents Cloud
+primitives (inference, fine-tuning, training, agentic tasks, sandbox compute)
+let users and agents build marketplace products; Autopilot Sites packages
+hosting/domains. Six markets now including verification as composable
+primitives (an agentic insurance policy for a specific claim). Referral
+implementation "80 percent done," shipping within 48 hours. Ambition: seven
+million selling agents beats Avon's 6.5 million reps.
+
+#### 240 — Tassadar Run Board 3D Visualization
+
+Turns run telemetry into a walkable Snow Crash-style 3D street: floating
+run-board screens (11 pylons, 6 active, 21 windows, 12 verified items), sats
+counters, REFS ticker with zero blockers. Escalating scope-creep chain as
+design philosophy: 3D, then walkable, then jumping, then tab-targeting, then
+multiplayer (added but untested). Argument: observability should be fun, not
+passive stat-watching.
+
+#### 241 — Reviewing Sakana Fugu
+
+Reviews Sakana's Fugu — multi-agent orchestration behind one OpenAI-compatible
+API, commercializing Trinity and Conductor — and credits it with validating the
+orchestrator thesis while rejecting closed-on-closed as sovereignty ("This is
+not 'AI sovereignty'"). Announces Khala as the open counterpart within days:
+one endpoint fanning work out to models, tools, validators, and Pylon workers,
+wired to verified work and Bitcoin settlement, visualizable in the Verse.
+Suspicion voiced that frontier labs already do secret compound orchestration.
+
+### Batch synthesis and integration notes
+
+This is the load-bearing batch. Episode 237's vocabulary — accepted outcome,
+clearing layer, receipts, outcomes per kilowatt-hour — is the shared language
+the current work system already gestures at (issue-linked job, commit, test,
+release, deployment receipts). Episode 238's claim/work/validate/pay loop is
+structurally identical to the forge's work-job plus review model.
+
+Dispositions:
+
+1. **Live.** Forum (ported to Phoenix, issues #17-#31); Tassadar run; Pylon/
+   Psionic; product-promises transparency instinct (now also expressed as the
+   changelog and public tracker); Artanis lineage (treasury agent); agents.md
+   front door; referral/revenue-share thinking (sell-in-public).
+2. **Dust off.**
+   - **Product Promises registry**: the strongest unfinished surface. It maps
+     almost perfectly onto forge projects plus a status field — promises as
+     project items with LIVE/GATED/WITHDRAWN states, agent-readable via the
+     existing API. Reviving it on the forge kills three birds: public roadmap,
+     machine-checkable claims, bounty source.
+   - **Agentic npm / module registry** (238): verified-work modules with baked-
+     in payments. Nothing current serves this. Even a read-only module index
+     derived from Tassadar's verified-jobs ledger would be a start.
+   - **Referral attribution**: promised permanent, implementation finished
+     "within 48 hours" in June; no trace since. The sites/referral loop is the
+     missing demand side for Pylon earnings.
+   - **Bitcoin-weighted forum ranking**: Stacker News-style zaps were planned
+     for the forum and the Phoenix port carried moderation but not money.
+     Tipping exists in the treasury stack; wiring tips to forum posts is
+     incremental now that wallets are MDK-based.
+   - **Energy-layer orchestration** (232): accepted-outcomes-per-kilowatt-hour
+     as a real metric over Ox Alpha/Khala provider routing. Cheap to instrument
+     once token usage is tracked per provider (issue #43 adjacent).
+3. **Reimagine.**
+   - **Autopilot Sites**: the overnight Cloudflare wrapper was a parity play
+     against OpenAI. The durable idea is deployable workspace surfaces from
+     chat. On the current stack that is closer to the repository/deployment
+     plane than a standalone product.
+   - **Free Autopilot's public traces as RL data**: visibility policy now
+     governs traces (transparency levels). Re-express as opt-in trace markets
+     tied to NIP-DS rather than everything-public-by-default.
+   - **Run board 3D**: keep as Verse direction inside existing surfaces, not a
+     new product; multiplayer presence remains the differentiator worth a
+     design spike.
+4. **Retired.**
+   - **"First and last human-shipped release"**: overtaken by events; humans
+     ship constantly again. Treat 237's framing as rhetoric, not commitment.
+   - **Five-to-eight-SaaS replacement as Autopilot pitch**: survives only as
+     the white-label operator story; do not rebuild a monolithic business OS.
+   - **Placeholder loss curves and untested multiplayer claims**: exactly what
+     product promises was invented to prevent; cite as the reason receipts
+     must precede announcements.
+
+Pivot watch: this batch still lives entirely on GitHub and Cloudflare Workers.
+The monorepo (233) has since split: the forge is canonical here, the CLI ships
+from the `openagents` monorepo, and Psionic remained separate by design.
+
+---

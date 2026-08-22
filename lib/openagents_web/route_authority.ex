@@ -47,6 +47,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
     # read is one person's.
     "/issues",
     "/projects",
+    # The forum. Reading and posting happen signed in, matching the other
+    # workspace-wide surfaces.
+    "/forum",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",
@@ -134,6 +137,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: "/admin/scv/accounts"}),
     do: declaration(:operator, "configured operator GitHub ID", "scv:account:connect", true)
+
+  defp policy(%{path: "/admin/forum/claims"}),
+    do: declaration(:operator, "configured operator GitHub ID", "forum:identity:link", true)
 
   defp policy(%{path: "/admin/recordings"}),
     do: declaration(:operator, "configured operator GitHub ID", "voice:recording:list", false)

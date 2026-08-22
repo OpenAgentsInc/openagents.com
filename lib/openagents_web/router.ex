@@ -118,6 +118,10 @@ defmodule OpenAgentsWeb.Router do
       # which page you arrived from.
       live "/issues", IssueWorkspaceLive, :index
       live "/projects", ProjectWorkspaceLive, :index
+      live "/forum", ForumHomeLive, :index
+      live "/forum/f/:slug", ForumBoardLive, :show
+      live "/forum/t/:id", ForumTopicLive, :show
+      live "/forum/claim", ForumClaimLive, :new
 
       live "/:owner/:repo/issues/new", IssueNewLive, :new
 
@@ -195,6 +199,7 @@ defmodule OpenAgentsWeb.Router do
       live "/forge", AdminForgeLive, :index
       live "/recordings", AdminRecordingsLive, :index
       live "/scv/accounts", AdminScvAccountsLive, :index
+      live "/forum/claims", AdminForumLinksLive, :index
     end
 
     get "/recordings/:id/audio", AdminRecordingController, :show

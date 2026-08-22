@@ -1,0 +1,146 @@
+defmodule OpenAgentsWeb.ForumTopicLive do
+  @moduledoc "One topic thread: its posts, oldest first, with a reply composer."
+  use OpenAgentsWeb, :live_view
+
+  alias OpenAgents.Forum
+  alias OpenAgents.Markdown
+
+  def mount(%{"id" => id}, _session, socket) do
+    topic = Forum.get_topic!(id)
+
+    {:ok,
+     socket
+     |> assign(:current_scope, socket.assigns[:current_scope])
+     |> assign(:topic, topic)
+     |> assign(:posts, Forum.list_posts(topic))
+     |> stream(:posts, Forum.list_posts(topic))
+     |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
+  end
+
+  def handle_event("reply", %{"post" => %{"body_text" => body_text}}, socket)
+      when body_text == "" or is_nil(body_text) do
+    {:noreply, put_flash(socket, :error, "Write something first")}
+  end
+
+  def handle_event("reply", %{"post" => params}, socket) do
+    user = current_user(socket)
+
+    case user do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Sign in to post")}
+
+      user ->
+        attrs = %{
+          body_text: params["body_text"],
+          actor_ref: "user:#{user.id}",
+          actor_display_name: user.github_name || user.github_login,
+          actor_slug: user.github_login,
+          actor_is_agent: false,
+          idempotency_key: Ecto.UUID.generate()
+        }
+
+        case Forum.create_post(socket.assigns.topic, attrs) do
+          {:ok, _post} ->
+            {:noreply,
+             socket
+             |> assign(:topic, Forum.get_topic!(socket.assigns.topic.id))
+             |> stream(:posts, Forum.list_posts(socket.assigns.topic), reset: true)
+             |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
+
+          {:error, :topic_closed} ->
+            {:noreply, put_flash(socket, :error, "This topic is closed")}
+        end
+    end
+  end
+
+  def handle_event("toggle_closed", _params, socket) do
+    with %{} = user <- current_user(socket),
+         true <- OpenAgents.Accounts.admin?(user) do
+      new_state = if socket.assigns.topic.state == "open", do: "closed", else: "open"
+      {:ok, _} = Forum.set_topic_state(socket.assigns.topic, new_state)
+
+      {:noreply, assign(socket, :topic, Forum.get_topic!(socket.assigns.topic.id))}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Operators only")}
+    end
+  end
+
+  def handle_event("hide_post", %{"id" => id}, socket) do
+    with %{} = user <- current_user(socket),
+         true <- OpenAgents.Accounts.admin?(user),
+         post <- Enum.find(socket.assigns.posts, &(&1.id == id)),
+         {:ok, _} <- Forum.hide_post(post, user) do
+      {:noreply,
+       socket
+       |> assign(:posts, Forum.list_posts(socket.assigns.topic))
+       |> stream(:posts, Forum.list_posts(socket.assigns.topic), reset: true)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Operators only")}
+    end
+  end
+
+  def render(assigns) do
+    ~H"""
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+    >
+      <div class="flex items-center gap-2 mb-4">
+        <.link navigate={~p"/forum"} class="text-sm text-muted-foreground hover:text-foreground">
+          Forum
+        </.link>
+        <span class="text-muted-foreground">/</span>
+        <h1 class="text-2xl font-bold">{@topic.title}</h1>
+        <%= if @topic.state == "closed" do %>
+          <span class="badge" data-variant="dim">closed</span>
+        <% end %>
+        <%= if OpenAgents.Accounts.admin?(@current_user) do %>
+          <button class="btn" data-variant="ghost" data-size="sm" phx-click="toggle_closed">
+            {if @topic.state == "open", do: "Close topic", else: "Reopen topic"}
+          </button>
+        <% end %>
+      </div>
+
+      <div id="posts" phx-update="stream" class="space-y-4">
+        <div id="posts-empty" class="hidden only:block text-sm text-muted-foreground">
+          No posts yet.
+        </div>
+        <div :for={{id, post} <- @streams.posts} id={id} class="card !m-0">
+          <header class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-sm">{post.actor_display_name}</span>
+            <span class="flex items-center gap-2">
+              <%= if OpenAgents.Accounts.admin?(@current_user) do %>
+                <button
+                  class="btn"
+                  data-variant="ghost"
+                  data-size="sm"
+                  phx-click="hide_post"
+                  phx-value-id={post.id}
+                >
+                  Hide
+                </button>
+              <% end %>
+              <span class="text-xs text-muted-foreground"># {post.post_number}</span>
+            </span>
+          </header>
+          <div class="prose prose-sm dark:prose-invert max-w-none">
+            {Markdown.to_html(post.body_text)}
+          </div>
+        </div>
+      </div>
+
+      <%= if @topic.state == "open" do %>
+        <.form for={@form} id="reply-form" phx-submit="reply" class="card !mx-0 !mt-6">
+          <.input field={@form[:body_text]} label="Reply" type="textarea" rows={4} required />
+          <footer class="flex justify-end mt-2">
+            <.button type="submit" variant={:primary}>Post reply</.button>
+          </footer>
+        </.form>
+      <% end %>
+    </Layouts.app>
+    """
+  end
+
+  defp current_user(socket), do: socket.assigns[:current_user]
+end

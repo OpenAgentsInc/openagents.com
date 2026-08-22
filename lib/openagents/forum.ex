@@ -1,0 +1,308 @@
+defmodule OpenAgents.Forum do
+  @moduledoc """
+  The forum: boards of topics and posts, ported from the live Effect forum.
+
+  Posts keep the identity they were written under (`actor_ref` plus display
+  metadata). A legacy actor whose identity is linked through
+  `OpenAgents.Forum.ActorLink` resolves to a real account; unclaimed actors
+  stay attributed to their legacy name.
+  """
+
+  import Ecto.Query, warn: false
+
+  alias Ecto.Multi
+  alias OpenAgents.Forum.{ActorLink, Forum, Post, Topic}
+  alias OpenAgents.Repo
+
+  @topics_per_page 25
+  @posts_per_page 50
+  @maximum_page 10_000
+
+  def topics_per_page, do: @topics_per_page
+  def posts_per_page, do: @posts_per_page
+
+  ## Forums
+
+  def list_forums do
+    Repo.all(from f in Forum, order_by: [asc: f.title])
+  end
+
+  def list_public_forums do
+    Repo.all(
+      from f in Forum,
+        where: f.visibility == "public" and f.discoverability == "listed",
+        order_by: [desc: f.topic_count]
+    )
+  end
+
+  def get_forum!(id), do: Repo.get!(Forum, id)
+
+  def get_forum_by_slug(slug), do: Repo.get_by(Forum, slug: slug)
+
+  ## Topics
+
+  def list_topics(%Forum{id: forum_id}, opts \\ []) when is_list(opts) do
+    page = parse_page(opts[:page])
+
+    from(t in Topic,
+      where: t.forum_id == ^forum_id and is_nil(t.archived_at),
+      order_by: [
+        desc: t.pin_state,
+        desc: t.updated_at,
+        desc: t.id
+      ],
+      limit: ^@topics_per_page,
+      offset: ^((page - 1) * @topics_per_page)
+    )
+    |> Repo.all()
+  end
+
+  def count_topics(%Forum{id: forum_id}) do
+    Repo.one!(
+      from t in Topic,
+        select: count(),
+        where: t.forum_id == ^forum_id and is_nil(t.archived_at)
+    )
+  end
+
+  def get_topic!(id), do: Repo.get!(Topic, id)
+
+  def get_topic_by_ref(forum_id, slug_or_id) when is_binary(slug_or_id) do
+    if String.match?(
+         slug_or_id,
+         ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+       ) do
+      Repo.get_by(Topic, forum_id: forum_id, id: slug_or_id)
+    else
+      Repo.get_by(Topic, forum_id: forum_id, slug: slug_or_id)
+    end
+  end
+
+  @doc "One page of visible posts in a topic, oldest first."
+  def list_posts(%Topic{id: topic_id}, opts \\ []) when is_list(opts) do
+    page = parse_page(opts[:page])
+
+    from(p in Post,
+      where: p.topic_id == ^topic_id and p.state == "visible",
+      order_by: [asc: p.post_number],
+      limit: ^@posts_per_page,
+      offset: ^((page - 1) * @posts_per_page)
+    )
+    |> Repo.all()
+  end
+
+  def count_posts(%Topic{id: topic_id}) do
+    Repo.one!(
+      from p in Post,
+        select: count(),
+        where: p.topic_id == ^topic_id and p.state == "visible"
+    )
+  end
+
+  @doc "The next post number in a topic."
+  def next_post_number(topic_id) do
+    Repo.one!(
+      from p in Post,
+        select: coalesce(max(p.post_number), 0),
+        where: p.topic_id == ^topic_id
+    ) + 1
+  end
+
+  @doc """
+  Creates a topic with its first post. `attrs` needs topic fields plus
+  `:body_text` for the first post. Both rows share one transaction.
+  """
+  def create_topic(%Forum{} = forum, attrs) do
+    {body_text, topic_attrs} = Map.pop(attrs, :body_text)
+    idempotency_key = Map.get(attrs, :idempotency_key) || Ecto.UUID.generate()
+
+    changeset =
+      %Topic{forum_id: forum.id}
+      |> Topic.changeset(Map.put(topic_attrs, :idempotency_key, idempotency_key))
+
+    Multi.new()
+    |> Multi.insert(:topic, changeset)
+    |> Multi.run(:first_post, fn _repo, %{topic: topic} ->
+      create_post(topic, Map.put(topic_attrs, :body_text, body_text), idempotency_key)
+    end)
+    |> Multi.update(:topic_counts, fn %{topic: topic, first_post: post} ->
+      Ecto.Changeset.change(topic)
+      |> Ecto.Changeset.put_change(:first_post_id, post.id)
+      |> Ecto.Changeset.put_change(:latest_post_id, post.id)
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{topic: %{id: topic_id}}} -> {:ok, Repo.get!(Topic, topic_id)}
+      {:error, _step, reason, _changes} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Adds a post to a topic under the poster's identity. Bumps the topic's
+  `updated_at` (the board's sort key), advances the counters on both topic
+  and forum, and refuses closed or locked surfaces.
+  """
+  def create_post(%Topic{} = topic, attrs, idempotency_key \\ nil) do
+    with :ok <- ensure_open(topic),
+         {:ok, post} <- insert_post(topic, attrs, idempotency_key) do
+      bump_topic(topic, post)
+      bump_forum(topic.forum_id)
+      {:ok, post}
+    end
+  end
+
+  defp ensure_open(%Topic{id: id}) do
+    if Repo.get!(Topic, id).state == "open", do: :ok, else: {:error, :topic_closed}
+  end
+
+  defp insert_post(topic, attrs, idempotency_key) do
+    %Post{
+      topic_id: topic.id,
+      post_number: next_post_number(topic.id),
+      idempotency_key: idempotency_key || Ecto.UUID.generate()
+    }
+    |> Post.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  defp bump_topic(topic, post) do
+    now = utc_now()
+
+    {_count, _} =
+      from(t in Topic, where: t.id == ^topic.id)
+      |> Repo.update_all(
+        set: [latest_post_id: post.id, post_count: post.post_number, updated_at: now]
+      )
+  end
+
+  defp bump_forum(forum_id) do
+    from(f in Forum, where: f.id == ^forum_id)
+    |> Repo.update_all(inc: [post_count: 1])
+  end
+
+  @doc "Soft-deletes a post by marking it deleted. Records an audit event."
+  def delete_post(%Post{} = post, moderator \\ nil) do
+    result =
+      post
+      |> Ecto.Changeset.change(state: "deleted", archived_at: utc_now())
+      |> Repo.update()
+
+    case result do
+      {:ok, _} ->
+        audit_moderation("forum.post.deleted", moderator, post)
+
+      _ ->
+        :ok
+    end
+
+    result
+  end
+
+  def hide_post(%Post{} = post, moderator \\ nil) do
+    result =
+      post
+      |> Ecto.Changeset.change(state: "hidden")
+      |> Repo.update()
+
+    case result do
+      {:ok, _} ->
+        audit_moderation("forum.post.hidden", moderator, post)
+
+      _ ->
+        :ok
+    end
+
+    result
+  end
+
+  defp audit_moderation(event_type, moderator, %Post{id: id}) do
+    OpenAgents.Audit.record!(event_type, actor_for_audit(moderator), "forum_post", id)
+  end
+
+  defp actor_for_audit(nil), do: {:system, "forum"}
+
+  defp actor_for_audit(%{id: id}), do: {:user, id}
+
+  @doc "Closes or reopens a topic."
+  def set_topic_state(%Topic{} = topic, state) when state in ["open", "closed"] do
+    topic
+    |> Ecto.Changeset.change(state: state)
+    |> Repo.update()
+  end
+
+  def pin_topic(%Topic{} = topic, pinned?) do
+    topic
+    |> Ecto.Changeset.change(pin_state: if(pinned?, do: "pinned", else: "normal"))
+    |> Repo.update()
+  end
+
+  @doc """
+  The account that owns `actor_ref`, or `nil` when nobody has claimed it.
+  Only links with status `linked` resolve.
+  """
+  def actor_user(nil), do: nil
+
+  def actor_user(actor_ref) do
+    Repo.one(
+      from l in ActorLink,
+        join: u in OpenAgents.Accounts.User,
+        on: u.id == l.user_id,
+        where: l.actor_ref == ^actor_ref and l.status == "linked",
+        select: u,
+        limit: 1
+    )
+  end
+
+  ## Identity linking
+
+  @doc "Starts a claim: a pending link binding an account to a legacy identity."
+  def start_actor_link(user, actor_ref, proof_method \\ "legacy_credential") do
+    %ActorLink{}
+    |> ActorLink.changeset(%{
+      user_id: user.id,
+      actor_ref: actor_ref,
+      status: "pending",
+      proof_method: proof_method,
+      proof_evidence: %{"started_at" => DateTime.to_iso8601(utc_now())}
+    })
+    |> Repo.insert()
+  end
+
+  @doc "Approves a pending link after its proof has been checked."
+  def approve_actor_link(%ActorLink{status: "pending"} = link) do
+    link
+    |> ActorLink.changeset(%{
+      status: "linked",
+      linked_at: utc_now(),
+      proof_evidence:
+        Map.put(link.proof_evidence || %{}, "approved_at", DateTime.to_iso8601(utc_now()))
+    })
+    |> Repo.update()
+  end
+
+  def reject_actor_link(%ActorLink{status: "pending"} = link) do
+    link
+    |> ActorLink.changeset(%{status: "rejected", rejected_at: utc_now()})
+    |> Repo.update()
+  end
+
+  def list_actor_links(%OpenAgents.Accounts.User{} = user) do
+    Repo.all(from l in ActorLink, where: l.user_id == ^user.id, order_by: [desc: l.inserted_at])
+  end
+
+  ## Shared helpers
+
+  def parse_page(page) when is_integer(page), do: page |> max(1) |> min(@maximum_page)
+
+  def parse_page(page) when is_binary(page) do
+    case Integer.parse(page) do
+      {number, ""} -> parse_page(number)
+      :error -> 1
+      {_number, _trailing} -> 1
+    end
+  end
+
+  def parse_page(_page), do: 1
+
+  defp utc_now, do: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+end

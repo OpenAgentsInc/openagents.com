@@ -247,6 +247,25 @@ The 2026-08-22 activation established this baseline:
   once with the new builder and settled that no-byte-change target against
   the already-running image. This records a manifest whose compiler source
   paths use the stable repository workspace before measuring direct loads.
+- The final structural baseline is `4b08e65`, application digest
+  `sha256:3e0ca5b88f9d2d8c198e38028f0a76323ddb6eae24890da84283f9b59212a0b4`,
+  and builder digest
+  `sha256:04a44da1679c3d693143130c5da38dbc788ce3c1046f72f59161565f4303a628`.
+  Its exact-SHA release gate passed all 13 stages and 2,043 tests. All three
+  nodes reported boot convergence ready, complete cluster membership, and
+  that exact structural image before the direct-load proof.
+- Revision `b3ae6c6` then changed the status LiveView and reached all three
+  nodes through the automated direct-load path. The deployment loaded two
+  BEAM modules without an image roll and recorded `push_to_live_ms: 84299`.
+  `/status` exposes that measured duration and the default fallback order as
+  `direct,relup,rolling`.
+- After the direct load, the operator restarted one production node. Boot
+  convergence restored the two-module artifact from its local durable cache
+  on the first attempt, held the node until it was ready, and rejoined both
+  peers. This proves that a node restart does not discard the hot revision.
+- Forge and GitHub exposed `b3ae6c6` as `main`, and the public status endpoint
+  reported the mirror `current`. Every node also reported the same hot
+  artifact digest and target SHA.
 - Forge classified the activation change as `needs_rolling_replace`, and the
   operator settled it as `live` only after every node reported revision
   `3479f12`, complete cluster membership, and local health. Later compatible
@@ -261,8 +280,11 @@ The 2026-08-22 activation established this baseline:
   repository-owned fleet template now remove those retired containers and
   replace the disposable builder sidecar before pulling a new builder image.
 
-The activation did not change the application version from `0.2.0`. Do not
-increment a release version merely to record a source commit.
+The activation did not change the application version from `0.2.0`. Keep that
+version for direct loads. For full compatible packages, increment only the
+patch component. Change the minor component only for a planned compatibility
+boundary, and never increment a release version merely to record a source
+commit.
 
 After a rollout or storage repair, force convergence before validating the
 mirror:

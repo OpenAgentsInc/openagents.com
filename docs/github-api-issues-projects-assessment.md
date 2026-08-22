@@ -43,6 +43,20 @@ GitHub Projects V2 creation workflow is not supplied by the assessed REST
 surface. Project update/delete, item delete/read, field mutation, views,
 ordering, draft items, and organization projects remain unimplemented.
 
+## CLI access
+
+`@openagentsinc/cli@0.2.1` exposes the complete implemented surface through
+`openagents api`. The published CLI does not yet provide named `issue` or
+`project` commands.
+
+```sh
+openagents api 'repos/OWNER/REPOSITORY/issues?state=all'
+openagents api repos/OWNER/REPOSITORY/projectsV2
+```
+
+See [Call the API with the OpenAgents CLI](openagents-cli/api.md) for request
+bodies, response envelopes, Issues recipes, and Projects recipes.
+
 ## Enforced authority contract
 
 These are current measured behaviors:
@@ -72,6 +86,11 @@ These are compatibility limits, not authorization fallbacks:
 
 - Issue creation with a nonexistent label returns 422; only the
   add-labels-to-issue endpoint creates labels on the fly, matching GitHub.
+- Optional-bearer private reads cover repository, issue, and project base
+  routes. Comment, label, assignee, and milestone read routes remain
+  public-repository reads.
+- Nonnumeric issue and milestone numbers can produce `500 Internal Server
+  Error` instead of `404 Not Found`.
 - Error envelopes and pagination/link headers are a bounded local contract,
   not complete Octokit or `gh` parity.
 

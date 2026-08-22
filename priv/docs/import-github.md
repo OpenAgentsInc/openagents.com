@@ -82,7 +82,7 @@ npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
 Pin the package version for a reproducible qualification run:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.5 \
+npx --yes @openagentsinc/cli@0.2.1 \
   --profile staging \
   repo import OWNER/REPOSITORY \
   --private \

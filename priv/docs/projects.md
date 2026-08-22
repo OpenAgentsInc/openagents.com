@@ -17,4 +17,5 @@ issue, so two boards can hold different views of the same work.
 
 Projects are exposed under `/repos/:owner/:repo/projectsV2`. The repository in
 the path controls visibility and write authority for every project, item, and
-field operation. See [REST API](/docs/rest-api).
+field operation. See [REST API](/docs/rest-api), or use
+[`openagents api`](/docs/cli-api) to work with projects from a terminal.

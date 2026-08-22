@@ -2,7 +2,11 @@
 
 **Date:** 2026-08-21
 **Commits measured:** `81e4c25eb5b5` (`openagents/main`, the forge) for the API; `5bd0061e4f6e` in the `openagents` monorepo for `packages/openagents-cli` (package version `0.1.7`)
-**Status:** Stages 1, 2, and 7 shipped. Stage 1 added `openagents api` in `@openagentsinc/cli@0.2.1`. Stages 2 and 7 added optional-bearer issue reads and repository-scoped Projects V2 routes on 2026-08-22. Historical measurements below retain the original findings.
+**Status:** Stage 1 and Stage 7 shipped. The issue portion of Stage 2 shipped;
+ancillary comment, label, assignee, and milestone reads remain public-only.
+Stage 1 added `openagents api` in `@openagentsinc/cli@0.2.1`. Stage 7 added
+repository-scoped Projects V2 routes on 2026-08-22. Historical measurements
+below retain the original findings.
 **Question:** Does the CLI only cover repository upload? What of the Issues and Projects API does it reach? Should that coverage be generated from an OpenAPI document instead of hand-written? What is the fastest honest path to managing issues and projects from a terminal?
 **Method:** direct reading of `lib/openagents_web/router.ex`, every controller it routes to under `/api/v3`, the contexts behind them (`lib/openagents/issues.ex`, `labels.ex`, `milestones.ex`, `projects.ex`, `repositories.ex`), the auth plugs, `lib/openagents_web/route_authority.ex`, `priv/api-contracts/repositories-v1.json` and its controller and test, and `docs/openagents-cli/`; plus direct reading of all 21 source files in the `openagents` monorepo at `packages/openagents-cli/src/` and its tests. The CLI lives in a different repository, so every CLI citation names it. Claims that neither repository can settle are in section 7 with the command that would settle them.
 
@@ -15,10 +19,19 @@
 > write policy to every project operation, and supports authenticated reads of
 > private issues. The `initial_repository!/0` and `initial_path/0` shortcuts no
 > longer exist. The findings below describe the pre-remediation surface.
+> The CLI guides now document `openagents api`, Issues and Projects recipes,
+> and the absence of named `issue` and `project` commands. The stale claim that
+> `repo delete` and generic API access were unavailable is fixed.
 
-The owner is right. The CLI is repository-shaped and reaches **none** of the Issues and Projects API.
+At the measured commits, the owner was right: the CLI was repository-shaped
+and reached **none** of the Issues and Projects API.
 
-The numbers are clean. The router exposes **50 routes under `/api/v3`** (`lib/openagents_web/router.ex:229`, `:253`, `:259`). The CLI calls **11 of them** — the authenticated user, repository create, list, view, delete, the two import routes, import status, and the two device-authorization routes. Those 11 are exactly the routes named in the hand-written contract document at `priv/api-contracts/repositories-v1.json:18`. The other **39 routes — every issue, comment, label, milestone, assignee, and project endpoint — have no CLI surface at all**, and the CLI's own documentation says so: `docs/openagents-cli/command-reference.md:3` scopes the tool to "authentication and hosted repositories", and `:171` lists a generic API command among the things the release does not provide.
+At those commits, the router exposed **50 routes under `/api/v3`**
+(`lib/openagents_web/router.ex:229`, `:253`, `:259`). The CLI called **11 of
+them**: the authenticated user, repository create, list, view, delete, the two
+import routes, import status, and the two device-authorization routes. The
+other **39 routes** had no CLI surface. The current `openagents api` command
+now reaches them without adding named commands.
 
 There is **no OpenAPI document**. What exists instead is a 99-line hand-written JSON artifact served at `/api/contracts/repositories-v1.json` (`lib/openagents_web/router.ex:222`). It lists endpoints as opaque `"METHOD /path"` strings, has no types, no request bodies, no response schemas, and no status codes. It covers 11 of the 50 routes. Nothing derives it from the router, and nothing verifies it against the router.
 
@@ -93,7 +106,11 @@ Both copies currently hash to `5be86539258c38d5249887ff2628680b1f90c93909d6e83e8
 
 Confirmed, with one refinement. "Repo upload stuff" understates it slightly — the CLI also does device-flow authentication, credential storage, Git credential-helper installation, repository listing, viewing, cloning, and deletion, and it waits on durable provisioning and import state machines. But on the substance the belief is exactly right: **the CLI has no issue, comment, label, milestone, assignee, or project command, and calls no endpoint in those families.** Its own reference documentation states the boundary (`docs/openagents-cli/command-reference.md:3`, `:171`) and its `README.md` in the monorepo has sections only for install, API selection, sign-in, and repositories.
 
-One documentation defect found in passing, relevant because it is evidence for section 4: `docs/openagents-cli/command-reference.md:173` says the release "does not provide `repo delete`" while the same file documents `repo delete` in full at `:122`, the command exists at `cli.ts:756`, and `docs/openagents-cli/index.md:34` describes it as available. A hand-maintained description drifted from the thing it describes, in the smallest possible surface, in the same file.
+One documentation defect found at the measured commit remains relevant as
+evidence for section 4: the command reference said the release did not provide
+`repo delete` while the same file documented the command. The 2026-08-22
+documentation reconciliation fixed that contradiction and added the missing
+generic API reference.
 
 ---
 
@@ -332,7 +349,7 @@ Each stage is independently shippable and independently useful. Sizes are rough 
 
 ### Stage 1 — Ship `openagents api` (CLI repository only, small) — SHIPPED 2026-08-21
 
-Add one leaf command taking a path, an optional `-X/--method`, repeated `-f key=value` body fields or `--input -` for raw JSON, and honoring the existing `--json` and profile flags. **Seam:** `packages/openagents-cli/src/cli.ts` plus a thin passthrough client in the `openagents` monorepo; no schema, no server change. **Size:** 150–250 lines with tests. **Effect:** every one of the 50 endpoints becomes reachable from a terminal, and every future endpoint arrives free. Also update `docs/openagents-cli/command-reference.md:171`, which currently lists a generic API command among the things the release does not provide, and fix the stale `repo delete` claim on the same line while you are in there.
+Add one leaf command taking a path, an optional `-X/--method`, repeated `-f key=value` body fields or `--input -` for raw JSON, and honoring the existing `--json` and profile flags. **Seam:** `packages/openagents-cli/src/cli.ts` plus a thin passthrough client in the `openagents` monorepo; no schema, no server change. **Size:** 150–250 lines with tests. **Effect:** every one of the 50 endpoints becomes reachable from a terminal, and every future endpoint arrives free. The CLI documentation reconciliation on 2026-08-22 removed the stale claims that generic API access and `repo delete` were unavailable and added tested Issues and Projects recipes.
 
 **What shipped.** `eaa2aa1006` in the `openagents` monorepo, released as
 `@openagentsinc/cli@0.2.1`. The command is `openagents api <path>`: a path
@@ -366,7 +383,11 @@ returns real-looking JSON describing one hardcoded repository rather than
 yours. A passthrough is faithful by design: it exposes those surfaces exactly
 as they are, including where they are wrong.
 
-### Stage 2 — Let an authenticated caller read their own private issues (this repository only, medium)
+### Stage 2 — Let an authenticated caller read their own private issues (this repository only, medium) — PARTIALLY SHIPPED 2026-08-22
+
+Issue list and detail reads now accept an optional bearer and authorize private
+repository members. The comment, label, milestone, and assignee read routes
+remain in the public-read pipeline, so the broader stage is not complete.
 
 Move the issue, comment, label, milestone, and assignee read routes (`router.ex:235`–`:246`) from `pipe_through :api` into `pipe_through :optional_forge_api`, and change the resolution calls in `IssueController`, `CommentController`, `IssueLabelController`, `IssueAssigneeController`, `LabelController`, `MilestoneController`, and `AssigneeController` from `Repositories.get_public_by_path!/2` to `Repositories.get_visible_by_path!/3`, threading `conn.assigns.current_user` (which the optional plug sets to `nil` for anonymous callers). The visibility filters inside `Issues.get_issue_by_path!/3` (`issues.ex:159`), `Issues.get_comment_by_path!/3`, `Labels.get_label_by_path!/3`, and `Milestones.get_milestone_by_path!/3` need the same treatment. **Seam:** router pipelines, ten or so controller call sites, four context queries, and the `RouteAuthority` policy at `route_authority.ex:184`, whose `:public_read` classification for these paths becomes wrong. **Size:** medium; mechanical but wide, and every one of these controllers already has a test file to extend. **Effect:** additive and backward-compatible — anonymous callers see exactly what they see today; the change is that a bearer token now widens the result instead of being discarded. Without this, sections 3.1 ranks 1, 2, 8, and 9 only ever work on public repositories, so this gates most of the value of Stage 3.
 
@@ -397,11 +418,18 @@ Unpin the project surface from `Repositories.initial_repository!()` (`projects.e
 
 ### What makes issue management usable this week versus complete
 
-Stages 1 and 2 make it usable — the passthrough covers everything, and the read fix makes private repositories work. Stage 3 makes it pleasant. Stages 4 through 7 make it complete. Stage 5 is what makes it stay correct, and it is deliberately not early: deriving a document from a surface that Stages 2, 4, and 7 are still reshaping means regenerating it three times.
+Stage 1 makes every implemented route reachable. The shipped portion of Stage
+2 makes private issue list and detail reads usable. Completing Stage 2 makes
+the ancillary issue workflow usable for private repositories, and Stage 3
+makes the common workflow concise. Stages 4 through 7 complete more of the
+contract. Stage 5 keeps the server and client descriptions aligned.
 
 ### The cross-repository cost, and how to handle it
 
-The CLI ships from the `openagents` monorepo as `@openagentsinc/cli`, published to npm at version `0.1.7`, with its own `verify` pipeline (format, lint, typecheck, test, build) and its own release cadence. This repository deploys on its own. Four rules keep that from becoming a coordination tax:
+The CLI ships from the `openagents` monorepo as `@openagentsinc/cli`, currently
+published to npm at version `0.2.1`, with its own `verify` pipeline (format,
+lint, typecheck, test, and build) and its own release cadence. This repository
+deploys on its own. Four rules keep that from becoming a coordination tax:
 
 1. **Order every stage server-first.** A released CLI in a user's `$PATH` will meet a deployed server. The reverse — a server change that only works with an unreleased CLI — creates a window where the published tool is broken. Stages 2, 4, and 7 land and deploy before the CLI stage that depends on them.
 2. **Never require simultaneous merges.** Each stage above touches exactly one repository, by construction. Stage 2 is additive: anonymous reads keep their current behavior, so no released CLI breaks.
@@ -422,8 +450,10 @@ Not everything here needs changing, and two decisions are better than they look:
 
 ## 7. Open questions
 
-- **Does the published npm package's vendored contract match the deployed server's?** Both working copies hash to `5be86539258c…`, but a stale local build in the CLI's gitignored `dist/` carries `9355cac5191e…`, which suggests the constant has changed at least once. Settle with `npm pack @openagentsinc/cli@0.1.7`, then `shasum -a 256 package/contracts/repositories-v1.json`, and compare against `curl -s https://openagents.com/api/contracts/repositories-v1.json | shasum -a 256`.
-- **Is the absence of any visibility predicate on the four project reads intentional?** `ProjectController.index`, `show`, `items`, and `fields` apply none (`project_controller.ex:8`, `:41`, `:53`, `:144`), unlike every sibling controller. The pinning to one repository may be masking it. A test asserting that a project on a private repository is not listed anonymously would settle the policy either way.
+- **Does the published npm package's vendored contract match the deployed server's?** Both measured working copies hash to `5be86539258c…`, but the CLI still verifies only its vendored copy. Compare the packed `@openagentsinc/cli@0.2.1` artifact with the deployed `/api/contracts/repositories-v1.json`, then make the comparison a staging verification failure.
+- **Which ancillary reads should accept an optional bearer?** Repository,
+  issue, and project base reads now authorize private repository members.
+  Comment, label, assignee, and milestone reads remain public-only.
 - **Is `forge:read` in `route_authority.ex:184` an aspiration or a mistake?** If the intent is a read-only token scope, it needs adding to `@allowed_scopes` (`lib/openagents/api_tokens.ex:12`) and a `:forge_read_api` pipeline; if not, the label should say `forge:write`. Settle by asking whether a token that can file an issue should also be able to delete a repository, which is today's answer.
 - **Does anything consume the `{"issues": [...]}` envelope, or could the list endpoints move to bare arrays for GitHub compatibility?** Settle by grepping the `openagents` monorepo and this repository's web layer for consumers before Stage 5 freezes the shape into a generated document.
 - **What is the intended pagination convention across the whole API?** Repositories use opaque cursors and issues are offset-paged internally. Stage 4 has to pick one, and the choice belongs to whoever owns the contract document, not to the first endpoint that needs a page.

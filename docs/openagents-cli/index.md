@@ -2,7 +2,8 @@
 
 The OpenAgents CLI (`openagents`) manages OpenAgents-hosted Git repositories
 from a terminal. It uses the same repository API as the OpenAgents web
-interface and leaves Git data transfer to standard Git.
+interface, leaves Git data transfer to standard Git, and can call any
+implemented API route.
 
 The CLI is available from npm. OpenAgents qualified repository imports on
 staging before deploying the same server revision to the production fleet.
@@ -15,7 +16,7 @@ Install the CLI globally for regular use, or run a one-time command through
 
 ```sh
 npm install --global @openagentsinc/cli
-npx --yes @openagentsinc/cli@latest --version
+npx --yes @openagentsinc/cli@latest --help
 ```
 
 Do not configure a persistent Git credential helper through `npx`. Install the
@@ -33,10 +34,13 @@ The first release lets you:
 - Clone repositories and configure Git authentication.
 - Delete a repository you own with explicit confirmation.
 - Push, pull, and fetch through Git smart HTTP.
+- Call Issues, Projects, and other implemented API routes with
+  `openagents api`.
 - Use JSON output and stable exit codes in scripts and agents.
 
-Pull requests, continuous GitHub mirroring, SSH transport, rulesets, and
-self-update are not part of this release.
+Named `issue` and `project` commands, pull requests, continuous GitHub
+mirroring, SSH transport, rulesets, and self-update are not part of this
+release.
 
 ## Namespaces and access
 
@@ -88,4 +92,5 @@ access.
 - [Import a GitHub repository](import-github.md)
 - [Clone, push, and pull](git.md)
 - [Delete a repository](delete-repository.md)
+- [Call the API](api.md)
 - [CLI command reference](command-reference.md)

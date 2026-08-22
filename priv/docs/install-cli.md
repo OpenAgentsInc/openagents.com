@@ -9,8 +9,15 @@ Install the CLI globally when you use it regularly:
 
 ```sh
 npm install --global @openagentsinc/cli
-openagents --version
+npm list --global @openagentsinc/cli --depth=0
+openagents --help
 ```
+
+`@openagentsinc/cli@0.2.1` contains an older embedded `--version` value and
+reports `0.1.7`. Use the npm package listing to verify that release until a
+later CLI release corrects the embedded value. Follow
+[`OpenAgentsInc/openagents` issue 1](/OpenAgentsInc/openagents/issues/1) for the
+correction.
 
 Install the latest release again when you want to update:
 
@@ -26,7 +33,7 @@ Use `npx` when you want to run one CLI command without installing the package
 globally:
 
 ```sh
-npx --yes @openagentsinc/cli@latest --version
+npx --yes @openagentsinc/cli@latest --help
 npx --yes @openagentsinc/cli@latest repo list
 ```
 
@@ -34,7 +41,7 @@ Pin the package version when a script or qualification run must be
 reproducible:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.4 --version
+npx --yes @openagentsinc/cli@0.2.1 --help
 ```
 
 Place every `openagents` argument after the package name:
@@ -201,4 +208,5 @@ hosts and never places a token in a Git URL or process argument.
 - [Create a repository](/docs/create-repository)
 - [Import from GitHub](/docs/import-github)
 - [Clone, push, and pull](/docs/clone-push-pull)
+- [Call the API with the CLI](/docs/cli-api)
 - [CLI command reference](/docs/cli-command-reference)

@@ -9,11 +9,18 @@ command. The package requires Node.js 20 or later.
 npm install --global @openagentsinc/cli
 ```
 
-Verify the installed version:
+Verify the installed npm package and command:
 
 ```sh
-openagents --version
+npm list --global @openagentsinc/cli --depth=0
+openagents --help
 ```
+
+`@openagentsinc/cli@0.2.1` contains an older embedded `--version` value and
+reports `0.1.7`. Use the npm package listing to verify that release until a
+later CLI release corrects the embedded value. Follow
+[`OpenAgentsInc/openagents` issue 1](https://openagents.com/OpenAgentsInc/openagents/issues/1)
+for the correction.
 
 To update after a release, install the latest npm package again:
 
@@ -28,14 +35,14 @@ The CLI does not include an `openagents update` command.
 Use `npx` when you want to run one command without a global installation:
 
 ```sh
-npx --yes @openagentsinc/cli@latest --version
+npx --yes @openagentsinc/cli@latest --help
 npx --yes @openagentsinc/cli@latest repo list
 ```
 
 Pin a version for a reproducible run:
 
 ```sh
-npx --yes @openagentsinc/cli@0.1.4 --version
+npx --yes @openagentsinc/cli@0.2.1 --help
 ```
 
 Place all CLI arguments after the package name:
@@ -205,4 +212,5 @@ hosts and never places a token in a Git URL or process argument.
 
 - [Create a repository](create-repository.md)
 - [Clone, push, and pull](git.md)
+- [Call the API](api.md)
 - [CLI command reference](command-reference.md)

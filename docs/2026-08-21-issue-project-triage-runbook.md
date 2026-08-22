@@ -304,7 +304,41 @@ The standing policy, publishable anywhere the tracker is announced:
 Reporters who later become contributors get roles through the members page;
 that is a deliberate human decision, not an automatic upgrade.
 
-### API recipes
+### CLI and API recipes
+
+Use `openagents api` for the normal terminal workflow. It selects the API
+origin, reads the stored `oa_pat_` credential, and keeps successful JSON on
+standard output.
+
+Read open issues:
+
+```sh
+openagents api \
+  'repos/OpenAgentsInc/openagents.com/issues?state=open'
+```
+
+Create an issue with an existing label:
+
+```sh
+printf '%s' \
+  '{"title":"Search returns duplicates","body":"Steps to reproduce...","labels":["bug"]}' | \
+  openagents api -X POST --input - \
+  repos/OpenAgentsInc/openagents.com/issues
+```
+
+Close an issue as not planned:
+
+```sh
+printf '%s' '{"state":"closed","state_reason":"not_planned"}' | \
+  openagents api -X PATCH --input - \
+  repos/OpenAgentsInc/openagents.com/issues/42
+```
+
+The published CLI does not yet provide named `issue` or `project` commands.
+See [Call the API with the OpenAgents CLI](openagents-cli/api.md) for project,
+item, and scripting examples.
+
+Use `curl` when you need to verify the HTTP boundary without the CLI.
 
 Read (anonymous, public repository):
 

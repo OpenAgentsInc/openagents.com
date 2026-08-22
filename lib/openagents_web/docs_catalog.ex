@@ -67,6 +67,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
           title: "CLI command reference",
           icon: "square-code",
           route: "/repositories"
+        },
+        %{
+          slug: "cli-api",
+          title: "Call the API with the CLI",
+          icon: "square-code",
+          route: "/api/v3/repos/:owner/:repo/issues"
         }
       ]
     },

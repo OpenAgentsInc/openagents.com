@@ -2,7 +2,8 @@
 
 OpenAgents hosts Git repositories and serves them through Git smart HTTP. You
 can create and import repositories in the browser or manage them from a
-terminal with the OpenAgents CLI (`openagents`).
+terminal with the OpenAgents CLI (`openagents`). The CLI can also call Issues,
+Projects, and other implemented API routes.
 
 ## What you can do
 
@@ -15,10 +16,12 @@ The current release lets you:
 - Clone repositories and configure Git authentication.
 - Delete a repository you own with explicit confirmation.
 - Push, pull, and fetch with standard Git.
+- Call Issues, Projects, and other API routes with `openagents api`.
 - Use JSON output and stable exit codes in scripts and agents.
 
-The current release does not provide pull requests, continuous GitHub
-mirroring, SSH transport, rulesets, or a self-update command.
+The current release does not provide named `issue` or `project` commands, pull
+requests, continuous GitHub mirroring, SSH transport, rulesets, or a
+self-update command.
 
 ## Choose how to run the CLI
 
@@ -27,13 +30,13 @@ configure Git authentication that remains available after the current command:
 
 ```sh
 npm install --global @openagentsinc/cli
-openagents --version
+openagents --help
 ```
 
 Use `npx` for one command without a global installation:
 
 ```sh
-npx --yes @openagentsinc/cli@latest --version
+npx --yes @openagentsinc/cli@latest --help
 npx --yes @openagentsinc/cli@latest repo list
 ```
 
@@ -121,4 +124,5 @@ After you sign in, open [Repositories](/repositories).
 - [Import from GitHub](/docs/import-github)
 - [Clone, push, and pull](/docs/clone-push-pull)
 - [Delete a repository](/docs/delete-repository)
+- [Call the API with the CLI](/docs/cli-api)
 - [CLI command reference](/docs/cli-command-reference)

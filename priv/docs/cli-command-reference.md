@@ -1,6 +1,8 @@
 # OpenAgents CLI command reference
 
-The `openagents` command manages authentication and hosted repositories.
+The `openagents` command manages authentication and hosted repositories. It
+also sends authenticated requests to OpenAgents API routes that do not have a
+named command yet.
 
 ```text
 openagents <subcommand> [flags]
@@ -131,6 +133,44 @@ history, issues, projects, and import records. You must pass `--yes`. When you
 omit the repository, the CLI infers it from an exact OpenAgents `origin`
 remote on the selected API origin.
 
+## Call an API route
+
+```text
+openagents api [flags] <path>
+```
+
+A path without a leading slash resolves under `/api/v3/`. For example,
+`repos/OWNER/REPOSITORY/issues` and
+`/api/v3/repos/OWNER/REPOSITORY/issues` name the same route. An absolute path
+must start with `/api/` and stay on the selected API origin.
+
+| Flag | Description |
+| --- | --- |
+| `--method METHOD`, `-X METHOD` | Use `GET`, `POST`, `PATCH`, `PUT`, or `DELETE`. The default is `GET`, or `POST` when the request has a body. |
+| `--field KEY=VALUE`, `-f KEY=VALUE` | Add a repeatable string field to a JSON object body. |
+| `--input FILE` | Read the complete JSON body from a file. Use `-` for standard input. |
+| `--header 'NAME: VALUE'`, `-H 'NAME: VALUE'` | Add a repeatable request header. The CLI refuses an `Authorization` override. |
+
+Use `--input` when a body contains numbers, booleans, arrays, nested objects,
+or `null`. `--field` sends every value as a JSON string. The two body options
+are mutually exclusive.
+
+```sh
+openagents api repos/OWNER/REPOSITORY/issues
+openagents api -X POST -f title="Search returns duplicates" \
+  -f body="Steps to reproduce" \
+  repos/OWNER/REPOSITORY/issues
+printf '%s' '{"state":"closed","state_reason":"completed"}' | \
+  openagents api -X PATCH --input - \
+  repos/OWNER/REPOSITORY/issues/41
+```
+
+The command writes a successful response body as JSON. A non-`2xx` response
+writes the API error and request ID to standard error and exits with the
+status-specific CLI exit code.
+
+See [Call the API with the CLI](/docs/cli-api) for Issues and Projects recipes.
+
 ## Use JSON in noninteractive processes
 
 With `--json`, stdout contains machine-readable output. Human progress and
@@ -170,9 +210,11 @@ and terminates its child Git process.
 
 ## Know which commands are unavailable
 
-This release does not provide `repo delete`, `repo mirror`, pull-request,
-ruleset, SSH-key, generic API, or self-update commands. Use only commands shown
-by the installed version's `--help` output.
+This release does not provide named `issue` or `project` commands, repository
+mirroring, pull-request commands, ruleset commands, SSH-key commands, or a
+self-update command. Use `openagents api` for the implemented Issues and
+Projects routes, and use only commands shown by the installed version's
+`--help` output.
 
 ## Next steps
 
@@ -180,3 +222,4 @@ by the installed version's `--help` output.
 - [Create a repository](/docs/create-repository)
 - [Import from GitHub](/docs/import-github)
 - [Clone, push, and pull](/docs/clone-push-pull)
+- [Call the API with the CLI](/docs/cli-api)

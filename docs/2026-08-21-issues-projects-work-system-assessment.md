@@ -2,8 +2,9 @@
 
 Date: 2026-08-21
 
-Status: Proposed plan for organizing the OpenAgents backlog and completing the
-Issues and Projects product
+Status: Active program. The three projects and initial tracking issues exist in
+production. Private issue reads and repository-scoped Projects V2 routes have
+shipped; the remaining tracks stay open.
 
 ## Decision summary
 
@@ -27,16 +28,16 @@ shippable changes. Until native sub-issues ship, use a checklist in the
 tracking issue and keep every checklist entry linked to a real issue.
 
 Finish the server contract before building rich clients on top of it. The
-current API lets a token create an issue in a private repository and then
-cannot read it back, leaves issue lists unbounded, and pins Projects V2 to the
-initial repository. Those defects can make a polished CLI confidently do the
-wrong thing.
+private issue-read asymmetry and initial-repository Projects V2 pin are fixed.
+Issue lists remain unbounded, ancillary issue-resource reads remain
+public-repository only, and the Projects model still lacks lifecycle and
+cross-repository operations.
 
 The generic `openagents api` command landed in the `openagents` monorepo at
-`eaa2aa1006`, so every current route is already reachable from a terminal.
-Named issue and project commands are now in flight in another agent's work.
-Treat that CLI lane as active work: do not start a second implementation, and
-do not make the server plan depend on an unmerged CLI branch.
+`eaa2aa1006` and ships in `@openagentsinc/cli@0.2.1`, so every current route is
+reachable from a terminal. The published CLI does not include named `issue` or
+`project` commands. Coordinate with any active CLI task before you start D1
+through D5, and do not make the server plan depend on an unmerged CLI branch.
 
 ## Scope and evidence
 
@@ -64,6 +65,29 @@ The transcripts provide product background, not implementation instructions.
 The repository's code, tests, authority ledger, and current operator decisions
 remain the executable constraints.
 
+## Current work records
+
+Production now uses the structure recommended by this assessment:
+
+- Project 1, **openagents.com roadmap**, holds the public product outcomes.
+- Project 2, **Issues and Projects delivery**, holds the server and CLI
+  delivery work.
+- Project 3, **Agent work and provenance**, holds issue-to-agent and
+  issue-to-release work.
+- Issue 9, **Deliver the Issues and Projects work system**, tracks the delivery
+  program.
+- Issue 10, **Connect issues to agent work and release receipts**, tracks the
+  provenance program.
+- Issues 4 and 8 closed after private issue reads and repository-scoped
+  Projects V2 routes deployed.
+- Issues 5, 6, and 7 remain open for pagination and filters, request-origin
+  URLs, and route-authority reconciliation.
+- `OpenAgentsInc/openagents` issue 1 tracks the published CLI's stale embedded
+  version value without duplicating the named-command work.
+
+The project item statuses reflect deployed work, not branch state. Update them
+only after the target environment has a release receipt.
+
 ## What exists now
 
 ### Issues
@@ -86,7 +110,8 @@ The issue system already supports more than the current project board shows:
 
 Important missing issue capabilities include:
 
-- Authenticated API reads for private repositories.
+- Optional-bearer private reads for comments, labels, assignees, and
+  milestones. Issue list and issue detail private reads have shipped.
 - A documented, bounded API pagination contract and the web filters on the
   API list route.
 - Cross-repository and organization issue API views.
@@ -114,11 +139,8 @@ The project system currently supports:
 The project layer remains an early implementation, not a complete work
 system:
 
-- Projects V2 API reads and creation resolve through the initial-repository
-  constants instead of the repository or namespace requested by the caller.
-- Project API reads do not apply the same visibility rule as their sibling
-  issue routes.
-- The API has inconsistent creation and read paths.
+- Repository-scoped Projects V2 routes now resolve the repository in the path,
+  apply public or member visibility, and use one consistent route family.
 - The board cannot remove, reorder, or move an item directly. It does not
   render an item activity trail or show why an item changed status.
 - The web board ignores the project's stored field definitions and always
@@ -140,9 +162,9 @@ That gives scripts immediate access to the existing Issues and Projects API.
 
 The generic command is not the end-user issue experience. Named commands need
 repository inference, concise tables, issue-number arguments, editor support,
-confirmation for destructive actions, and stable machine output. That work is
-in flight elsewhere. The server should provide correct, testable routes while
-the CLI agent owns the named command experience.
+confirmation for destructive actions, and stable machine output. They are not
+part of the published CLI. The server must keep providing correct, testable
+routes while a coordinated CLI task owns the named command experience.
 
 ### Agent and receipt infrastructure
 
@@ -323,8 +345,10 @@ numbers. Create each item as an issue in the repository named in the
 | A6 | `openagents.com` | Publish a complete derived API route inventory | CI derives the route list from the router and fails when the published contract omits a route. Response schemas may remain incremental and explicit. |
 | A7 | `openagents` | Compare the CLI contract with the configured server | CLI verification fetches the published contract from staging and fails on divergence instead of hashing only its vendored copy. |
 
-A1 through A5 precede a stable named CLI release. A6 and A7 can follow after
-the routes stop moving, but the route-coverage failure should land early.
+A1 is partially complete: optional-bearer issue reads shipped, while ancillary
+comment, label, assignee, and milestone reads remain. A2 through A5 still
+precede a stable named CLI release. A6 and A7 can follow after the routes stop
+moving, but the route-coverage failure should land early.
 
 ### Track B: Complete the issue work record
 
@@ -357,13 +381,14 @@ manual triage loop.
 | C9 | `openagents.com` | Add public project reading | Anonymous users can read a project only when every exposed item and field is safe under the project's visibility policy. |
 | C10 | `openagents.com` | Add project activity and live updates | Item and field changes update connected clients and record who changed what. |
 
-C1 and C2 require a written migration and URL compatibility decision. Do not
-silently reinterpret existing repository-local project numbers.
+C1 shipped through repository-scoped routes without reinterpreting existing
+repository-local project numbers. C2 still requires a written ownership and
+cross-repository membership decision.
 
 ### Track D: Finish the named CLI experience
 
-This track belongs to the agent already working in the `openagents` monorepo.
-Use this list to coordinate scope, not to start duplicate work.
+The published `openagents` monorepo does not contain these named commands. Use
+this list to coordinate with any active CLI task and avoid duplicate work.
 
 | ID | Repository | Issue | Completion signal |
 | --- | --- | --- | --- |
@@ -416,9 +441,9 @@ new executor.
 
 ### Phase 1: Make the current contract safe to build on
 
-Complete A1 through A5 and C1. This phase fixes authorization, pagination,
-origins, errors, route authority, and project addressing. Deploy it before the
-named CLI reads or project commands claim support.
+Complete the remaining A1 work and A2 through A5. C1 has shipped. This phase
+finishes authorization, pagination, origins, errors, and route authority.
+Deploy it before named CLI reads claim complete private-resource support.
 
 ### Phase 2: Complete core project operations
 
@@ -546,18 +571,18 @@ the issue that merge rather than deployment defines completion.
 Answer these questions in decision records before migrations or public API
 changes make the answers expensive to revise.
 
-## Immediate next actions
+## Next actions
 
-1. Create the **Issues and Projects delivery** tracking issue from this
-   document and add A1, A2, A3, A5, and C1 as its first child issues.
-2. Identify the active named-CLI task and link D1 through D5 to it without
-   duplicating its implementation.
-3. Create a decision record for project ownership and cross-repository items.
-4. Add owners, milestones, acceptance criteria, and linked implementation
+1. Finish issue 5 for bounded issue API pagination and filters.
+2. Finish issue 6 for request-origin URLs and issue 7 for route-authority
+   reconciliation.
+3. Create a decision record for project ownership and cross-repository items
+   before C2 changes the repository-local model.
+4. Coordinate D1 through D5 with the active CLI owner, if one exists. Keep
+   `openagents api` documented and supported until named commands qualify.
+5. Add owners, milestones, acceptance criteria, and linked implementation
    issues to the current roadmap cards. Move them to the six-status workflow
    after C6 lands.
-5. Fix server authorization and project addressing before qualifying named
-   commands.
-6. Add the issue-to-work-job relationship as a read-only link after the core
-   server correction lands.
-7. Use the resulting system to track every later change in this plan.
+6. Add the issue-to-work-job relationship as a read-only link under issue 10.
+7. Use these Issues and Projects records to track every later change in this
+   plan.

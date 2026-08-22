@@ -122,6 +122,38 @@ defmodule OpenAgents.Forge.BuildWorkerTest do
     refute File.exists?(old_log)
   end
 
+  test "creates durable Mix cache paths outside disposable job workspaces", context do
+    assert :idle =
+             BuildWorker.run_once(context.queue, context.artifacts, context.builds,
+               build_fun: fn _request, _workspace -> flunk("no request should run") end
+             )
+
+    cache = BuildWorker.cache_paths(context.builds)
+
+    assert File.dir?(cache.build)
+    assert File.dir?(cache.deps)
+    refute String.starts_with?(cache.build, Path.join(context.builds, "jobs"))
+  end
+
+  test "seeds the durable Mix cache from the pinned builder image once", context do
+    source = Path.join(context.builds, "image")
+    File.mkdir_p!(Path.join([source, "_build", "prod", "lib", "sample"]))
+    File.mkdir_p!(Path.join([source, "deps", "sample"]))
+    File.write!(Path.join([source, "_build", "prod", "lib", "sample", "sample.app"]), "app")
+    File.write!(Path.join([source, "deps", "sample", "mix.exs"]), "dep")
+
+    assert :idle = BuildWorker.run_once(context.queue, context.artifacts, context.builds)
+    assert :ok = BuildWorker.seed_cache!(context.builds, source)
+
+    cache = BuildWorker.cache_paths(context.builds)
+    assert File.read!(Path.join([cache.build, "lib", "sample", "sample.app"])) == "app"
+    assert File.read!(Path.join([cache.deps, "sample", "mix.exs"])) == "dep"
+
+    File.write!(Path.join([source, "deps", "sample", "mix.exs"]), "changed")
+    assert :ok = BuildWorker.seed_cache!(context.builds, source)
+    assert File.read!(Path.join([cache.deps, "sample", "mix.exs"])) == "dep"
+  end
+
   test "expired request IDs cannot be revived by a later attempt", context do
     expired_id = Ecto.UUID.generate()
     fresh_id = Ecto.UUID.generate()

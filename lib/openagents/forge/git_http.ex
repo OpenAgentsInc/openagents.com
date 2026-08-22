@@ -261,7 +261,18 @@ defmodule OpenAgents.Forge.GitHTTP do
   end
 
   defp operational_access(repository) do
-    if repository.storage_key in Repos.allowed_repos(),
+    owner = repository.namespace.slug
+
+    configured? =
+      Enum.any?(Repos.allowed_repos(), fn allowed ->
+        allowed in [
+          repository.storage_key,
+          repository.name,
+          "#{owner}/#{repository.name}"
+        ]
+      end)
+
+    if configured?,
       do: :ok,
       else: {:error, 404, "unknown repository"}
   end

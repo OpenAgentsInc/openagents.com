@@ -127,9 +127,10 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
           else: Application.delete_env(:openagents, :forge_repos)
       end)
 
-      {:ok, _view, html} = live(conn, ~p"/status")
+      {:ok, view, html} = live(conn, ~p"/status")
 
       assert html =~ "Rapid deploys"
+      assert has_element?(view, "#status-forge-state")
       assert html =~ "No deploys yet"
     end
 

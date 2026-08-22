@@ -245,6 +245,7 @@ if [ -n "$builder_image" ] || [ -n "$builder_digest" ]; then
     --name openagents-builder \
     --network host \
     --restart always \
+    --user 0:65534 \
     --env-file /run/openagents/builder.env \
     --volume "$state_root/workspace:$state_root/workspace" \
     --volume "$state_root/artifacts:$state_root/artifacts" \

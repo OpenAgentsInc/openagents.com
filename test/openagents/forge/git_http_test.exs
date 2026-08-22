@@ -229,6 +229,32 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert output =~ "404" or output =~ "not found" or output =~ "unknown"
   end
 
+  test "the operator can access a configured UUID-backed repository", %{
+    base: base,
+    port: port,
+    repository: repository
+  } do
+    operator_token = "forge_operator_test_token_0123456789"
+    previous_token = Application.get_env(:openagents, :forge_operator_token)
+    previous_repos = Application.get_env(:openagents, :forge_repos)
+
+    Application.put_env(:openagents, :forge_operator_token, operator_token)
+    Application.put_env(:openagents, :forge_repos, [repository.name])
+
+    on_exit(fn ->
+      Application.put_env(:openagents, :forge_operator_token, previous_token)
+      Application.put_env(:openagents, :forge_repos, previous_repos)
+    end)
+
+    url =
+      "http://x:#{operator_token}@127.0.0.1:#{port}/git-http-owner/demo.git"
+
+    work = seed_clone!(base, url)
+    commit_and_push!(work, "operator.txt", "operator\n", "Operator commit")
+
+    assert [_receipt] = Forge.recent_pushes(repository.storage_key)
+  end
+
   test "Git RPC reauthenticates a token after ref advertisement", %{
     api_token: api_token,
     token: token,

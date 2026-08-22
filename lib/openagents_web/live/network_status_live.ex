@@ -103,6 +103,7 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
     projection =
       projection
       |> Map.put_new("forge", %{
+        "state" => "off",
         "target" => nil,
         "recent_targets" => [],
         "recent_deploys" => [],
@@ -414,7 +415,15 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
           </div>
 
           <.card id="status-forge">
-            <h2>Rapid deploys</h2>
+            <div class="status-node__head">
+              <h2>Rapid deploys</h2>
+              <.badge
+                id="status-forge-state"
+                variant={if @projection["forge"]["state"] == "active", do: :success, else: :warning}
+              >
+                {@projection["forge"]["state"]}
+              </.badge>
+            </div>
             <p class="status-forge__intro">
               Code moves through the OpenAgents forge: a push is promoted by an
               operator, built into just the changed modules, and hot-loaded

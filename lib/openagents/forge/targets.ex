@@ -18,7 +18,7 @@ defmodule OpenAgents.Forge.Targets do
   alias OpenAgents.Analytics
   alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.DeployReceipt
-  alias OpenAgents.Forge.Target
+  alias OpenAgents.Forge.{Pushes, Target}
   alias OpenAgents.Repo
 
   @statuses ~w(promoted building built deploying live failed reverted needs_rolling_replace)
@@ -492,8 +492,9 @@ defmodule OpenAgents.Forge.Targets do
   end
 
   defp commit_exists?(repo, sha) do
-    OpenAgents.Forge.Sync.ensure_fresh(repo)
-    path = OpenAgents.Forge.Repos.bare_path(repo)
+    storage_key = Pushes.mirror_storage_key(repo)
+    OpenAgents.Forge.Sync.ensure_fresh(storage_key)
+    path = OpenAgents.Forge.Repos.bare_path(storage_key)
 
     case OpenAgents.Forge.Repos.git(path, ["cat-file", "-e", sha <> "^{commit}"]) do
       {_, 0} -> true

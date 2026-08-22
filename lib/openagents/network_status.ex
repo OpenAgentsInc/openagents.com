@@ -144,6 +144,11 @@ defmodule OpenAgents.NetworkStatus do
 
     %{
       "repo" => repo,
+      "state" =>
+        if(Application.get_env(:openagents, :forge_deploy_lane_enabled, false),
+          do: "active",
+          else: "off"
+        ),
       "target" => targets |> List.first() |> public_target(),
       "recent_targets" => Enum.map(targets, &public_target/1),
       "recent_deploys" => Enum.map(deploys, &public_deploy/1),

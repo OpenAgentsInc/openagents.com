@@ -20,7 +20,7 @@ defmodule OpenAgents.Forge.Pushes do
 
   require Logger
 
-  alias OpenAgents.Analytics
+  alias OpenAgents.{Analytics, Repositories}
   alias OpenAgents.Forge.{GitHTTP, PushReceipt, Repos, Sync, WAL}
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
@@ -58,6 +58,7 @@ defmodule OpenAgents.Forge.Pushes do
         case persist(repo, body, refs_after, principal) do
           {:ok, seq} ->
             Repos.record_applied_seq!(repo, seq)
+            record_repository_activity(repo)
 
             capture_push_received(
               repo,
@@ -97,6 +98,27 @@ defmodule OpenAgents.Forge.Pushes do
   end
 
   defp capture_push_received(_repo, :error, _before, _after, _started_at), do: :ok
+
+  # Repository timestamps are a derived product projection, not part of the
+  # WAL acknowledgment barrier. A database outage must not turn a persisted
+  # push into an apparent client failure, because retrying would duplicate a
+  # push the forge already accepted.
+  defp record_repository_activity(repo) do
+    case Repositories.record_push_activity(repo) do
+      :ok ->
+        :ok
+
+      {:error, :repository_not_found} ->
+        :ok
+    end
+  rescue
+    error ->
+      Logger.warning(
+        "forge_push_repository_activity_failed code=#{OpenAgents.OperationalLog.code(error)}"
+      )
+
+      :ok
+  end
 
   # ── WAL persist (ack barrier) ───────────────────────────────────────────
 

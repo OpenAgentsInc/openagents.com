@@ -53,6 +53,30 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     assert has_element?(view, "#repositories-#{repository.id}-stage")
   end
 
+  test "repository index shows accepted push activity without a reload", %{conn: conn} do
+    user = github_user("repository-live-push-activity", "push-activity-owner")
+
+    assert {:ok, repository, :created} =
+             Repositories.create_user_repository(
+               user,
+               %{name: "active-repository", visibility: "private"},
+               "push-activity-repository"
+             )
+
+    stale_at = DateTime.add(DateTime.utc_now(), -86_400, :second)
+
+    repository
+    |> Ecto.Changeset.change(updated_at: stale_at)
+    |> Repo.update!()
+
+    {:ok, view, _html} = live(log_in(conn, user), ~p"/repositories")
+    timestamp = "#repositories-#{repository.id}-updated"
+
+    assert has_element?(view, timestamp, "Updated 1d ago")
+    assert :ok = Repositories.record_push_activity(repository.storage_key)
+    assert has_element?(view, timestamp, "Updated just now")
+  end
+
   test "repository index removes a repository deleted after mount", %{conn: conn} do
     user = github_user("repository-live-removal", "removal-owner")
 

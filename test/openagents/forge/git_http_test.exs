@@ -108,6 +108,16 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     user: user
   } do
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, "forge:pushes")
+    Repositories.subscribe_repository_changes()
+
+    stale_at = DateTime.add(DateTime.utc_now(), -86_400, :second)
+
+    Repo.update_all(
+      from(candidate in OpenAgents.Repositories.Repository,
+        where: candidate.id == ^repository.id
+      ),
+      set: [updated_at: stale_at]
+    )
 
     work = seed_clone!(base, url)
     commit_and_push!(work, "hello.txt", "hello forge\n", "first commit")
@@ -131,6 +141,12 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     # Deploy signal fired.
     assert_receive {:forge_push, %{repo: storage_key, wal_seq: 0}}, 2_000
     assert storage_key == repository.storage_key
+
+    assert_receive {:repository_changed, repository_id}, 2_000
+    assert repository_id == repository.id
+
+    refreshed_repository = Repo.get!(OpenAgents.Repositories.Repository, repository.id)
+    assert DateTime.after?(refreshed_repository.updated_at, stale_at)
 
     assert %AuditEvent{event_type: "repository.git.write", repository_id: repository_id} =
              Repo.get_by(AuditEvent,

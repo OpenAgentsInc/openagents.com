@@ -500,6 +500,25 @@ defmodule OpenAgents.Repositories do
     )
   end
 
+  @doc "Records accepted Git activity and refreshes repository-list subscribers."
+  def record_push_activity(storage_key, occurred_at \\ DateTime.utc_now())
+      when is_binary(storage_key) do
+    case Repo.update_all(
+           from(repository in Repository,
+             where: repository.storage_key == ^storage_key,
+             select: repository.id
+           ),
+           set: [updated_at: occurred_at]
+         ) do
+      {1, [repository_id]} ->
+        broadcast_repository_change(repository_id)
+        :ok
+
+      {0, []} ->
+        {:error, :repository_not_found}
+    end
+  end
+
   defp provisioning_topic(repository_id), do: "repository:" <> repository_id
   defp repository_changes_topic, do: "repositories:changes"
 

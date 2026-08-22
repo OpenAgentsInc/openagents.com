@@ -240,7 +240,10 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
         <.badge :if={@repository.lifecycle_state != "ready"} variant={state_variant(@repository)}>
           {@repository.lifecycle_state}
         </.badge>
-        <span class="ml-auto shrink-0 text-xs text-muted-foreground">
+        <span
+          id={"#{@id}-updated"}
+          class="ml-auto shrink-0 text-xs text-muted-foreground"
+        >
           Updated {relative_time(@repository.updated_at)}
         </span>
       </div>

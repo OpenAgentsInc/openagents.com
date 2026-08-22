@@ -92,6 +92,41 @@ defmodule OpenAgentsWeb.ComponentsLiveTest do
     assert has_element?(view, ".repo-tabs__tab .repo-tabs__count", "12")
   end
 
+  test "the tool page walks every tool state", %{conn: conn} do
+    # The status badge is the taxonomy this component exists for. A page that
+    # showed one successful call would document the state nobody needs help
+    # reading and hide the six that matter.
+    {:ok, view, _html} = live(conn, ~p"/components/ai-tool")
+
+    for state <- ~w(
+          input-streaming input-available output-available output-error
+          approval-requested approval-responded output-denied
+        ) do
+      assert has_element?(view, "#demo-tool-#{state}"),
+             "the tool page does not show the #{state} state"
+    end
+  end
+
+  test "the composer page shows all four submit statuses", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/components/ai-prompt-input")
+
+    for status <- ~w(ready submitted streaming error) do
+      assert has_element?(view, "#demo-submit-#{status}"),
+             "the composer page does not show the #{status} submit control"
+    end
+
+    # The streaming control is a stop button, not a disabled send: it is the one
+    # status where the reader still has something to do.
+    assert has_element?(view, ~s{#demo-submit-streaming[aria-label="Stop"]})
+  end
+
+  test "the reasoning page shows the block both open and closed", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/components/ai-reasoning")
+
+    assert has_element?(view, "details#demo-reasoning-open[open]")
+    refute has_element?(view, "details#demo-reasoning-closed[open]")
+  end
+
   test "the catalog exposes no nonfunctional theme control", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/components")
 

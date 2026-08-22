@@ -205,6 +205,29 @@ defmodule OpenAgentsWeb.AI.EvidenceTest do
       assert text(html, "#ic-one button") == "example.com"
     end
 
+    test "a source written with attributes alone still renders" do
+      # `<:source url=... title=... />` is the ordinary call: the slot's three
+      # attributes already say everything a source has, so the natural markup is
+      # self-closing and carries no inner block. That used to raise.
+      html =
+        render_component(&Evidence.inline_citation/1,
+          id: "ic-bare",
+          inner_block: [block(:inner_block, "the claim")],
+          source: [
+            %{
+              __slot__: :source,
+              inner_block: nil,
+              url: "https://example.com/a",
+              title: "A",
+              description: "Why it is cited"
+            }
+          ]
+        )
+
+      assert text(html, "#ic-bare button") == "example.com"
+      assert html =~ "Why it is cited"
+    end
+
     test "the chip points at the card it opens" do
       html =
         render_component(&Evidence.inline_citation/1,

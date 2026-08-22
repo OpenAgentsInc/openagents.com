@@ -30,6 +30,24 @@ defmodule OpenAgentsWeb.ComponentCatalogTest do
     end
   end
 
+  test "every catalog entry names a glyph the icon component can render" do
+    for item <- ComponentCatalog.items() do
+      assert OpenAgentsWeb.Icons.exists?(item.icon),
+             "#{item.slug} names the icon #{inspect(item.icon)}, which is not vendored. " <>
+               "The sidebar renders it on every component page, so a typo here is a " <>
+               "runtime error on the whole library."
+    end
+  end
+
+  test "every exclusion names a function component that still exists" do
+    # A stale exclusion is worse than none: the entry it once described is
+    # gone, and the next component to take that name is silently uncatalogued.
+    for {module, excluded} <- ComponentCatalog.documented_modules(), name <- excluded do
+      assert name in function_components(module),
+             "#{inspect(module)} excludes #{inspect(name)}, which it no longer defines"
+    end
+  end
+
   test "the catalog covers every public function component in the documented modules" do
     for {module, excluded} <- ComponentCatalog.documented_modules() do
       catalogued =

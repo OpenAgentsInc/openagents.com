@@ -6,10 +6,19 @@ defmodule OpenAgentsWeb.ComponentCatalog do
   function component in `OpenAgentsWeb.UI` and the documented layout modules to
   appear here, so the catalog cannot drift behind the supported API.
 
-  `OpenAgentsWeb.UI` is the only product component module. It combines the
-  vendored Basecoat structure with the OpenAgents style pack. Icon demos use the
-  preferred vendored Apps SDK set; see `docs/ICONS.md` for the exceptional
-  Heroicons fallback policy and current fallback inventory.
+  `OpenAgentsWeb.UI` is the general product component module: it combines the
+  vendored Basecoat structure with the OpenAgents style pack, and new reusable
+  primitives start there. Surface modules beside it — the SCV graph, the landing
+  page, the issue tracker, and the four AI Elements ports under
+  `OpenAgentsWeb.AI` — hold composition that is specific to one surface. Icon
+  demos use the preferred vendored Apps SDK set; see `docs/ICONS.md` for the
+  exceptional Heroicons fallback policy and current fallback inventory.
+
+  The `OpenAgentsWeb.AI` modules are catalogued one entry per family rather than
+  one per function. `reasoning/1` and the trigger and body it wraps are one
+  entry, because they are one thing a caller reaches for, and the parts are only
+  legible inside the composition. The parts are excluded in
+  `documented_modules/0` with the family that demonstrates them.
   """
 
   @sections [
@@ -617,6 +626,246 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Repository breadcrumb and tab bar with issue counts."
         }
       ]
+    },
+    %{
+      title: "AI conversation",
+      items: [
+        %{
+          slug: "ai-conversation",
+          title: "Conversation",
+          icon: "chat",
+          source: "OpenAgentsWeb.AI.Conversation.conversation/1",
+          summary:
+            "The transcript scroller, pinned to the newest turn until the reader leaves it."
+        },
+        %{
+          slug: "ai-message",
+          title: "Message",
+          icon: "comment",
+          source: "OpenAgentsWeb.AI.Conversation.message/1",
+          summary: "One turn: a face, a Markdown body, and the controls under it."
+        },
+        %{
+          slug: "ai-shimmer",
+          title: "Shimmer",
+          icon: "sparkle",
+          source: "OpenAgentsWeb.AI.Conversation.shimmer/1",
+          summary: "A highlight travelling through a line, so waiting reads as work."
+        },
+        %{
+          slug: "ai-suggestions",
+          title: "Suggestions",
+          icon: "lightbulb",
+          source: "OpenAgentsWeb.AI.Conversation.suggestions/1",
+          summary:
+            "Openers the reader can send unedited, on a row that scrolls rather than wraps."
+        },
+        %{
+          slug: "ai-toolbar",
+          title: "Conversation toolbar",
+          icon: "settings-slider",
+          source: "OpenAgentsWeb.AI.Conversation.toolbar/1",
+          summary: "The bar that floats over a transcript, named so the keyboard can reach it."
+        },
+        %{
+          slug: "ai-controls",
+          title: "Conversation controls",
+          icon: "tools",
+          source: "OpenAgentsWeb.AI.Conversation.controls/1",
+          summary: "Grouped actions that stay legible over whatever they sit on."
+        },
+        %{
+          slug: "ai-persona",
+          title: "Persona",
+          icon: "agent",
+          source: "OpenAgentsWeb.AI.Conversation.persona/1",
+          summary: "Who is answering, and what they are doing right now."
+        }
+      ]
+    },
+    %{
+      title: "AI reasoning",
+      items: [
+        %{
+          slug: "ai-reasoning",
+          title: "Reasoning",
+          icon: "brain",
+          source: "OpenAgentsWeb.AI.Reasoning.reasoning/1",
+          summary:
+            "Model thinking on native disclosure: open while it streams, closed once it lands."
+        },
+        %{
+          slug: "ai-chain-of-thought",
+          title: "Chain of thought",
+          icon: "nodes",
+          source: "OpenAgentsWeb.AI.Reasoning.chain_of_thought/1",
+          summary: "Steps down a rail, each one complete, active, or still pending."
+        },
+        %{
+          slug: "ai-tool",
+          title: "Tool call",
+          icon: "settings-wrench",
+          source: "OpenAgentsWeb.AI.Reasoning.tool/1",
+          summary: "One call and its states, from streaming input to a denied result."
+        },
+        %{
+          slug: "ai-task",
+          title: "Task",
+          icon: "tasks",
+          source: "OpenAgentsWeb.AI.Reasoning.task/1",
+          summary: "A piece of finished work and the files it touched."
+        },
+        %{
+          slug: "ai-plan",
+          title: "Plan",
+          icon: "notebook-check",
+          source: "OpenAgentsWeb.AI.Reasoning.plan/1",
+          summary: "Intended steps on a card whose body collapses while its footer stays."
+        },
+        %{
+          slug: "ai-checkpoint",
+          title: "Checkpoint",
+          icon: "flag",
+          source: "OpenAgentsWeb.AI.Reasoning.checkpoint/1",
+          summary: "A point the run can be restored to, marked in the transcript."
+        }
+      ]
+    },
+    %{
+      title: "AI composer",
+      items: [
+        %{
+          slug: "ai-prompt-input",
+          title: "Prompt input",
+          icon: "chat-compose",
+          source: "OpenAgentsWeb.AI.PromptInput.prompt_input/1",
+          summary: "The composer: a Phoenix form, a growing textarea, and a toolbar under it."
+        },
+        %{
+          slug: "ai-prompt-input-action-menu",
+          title: "Composer action menu",
+          icon: "plus-circle",
+          source: "OpenAgentsWeb.AI.PromptInput.prompt_input_action_menu/1",
+          summary: "Attach and capture actions on a native popover, with no script."
+        },
+        %{
+          slug: "ai-prompt-input-model-select",
+          title: "Composer model select",
+          icon: "dropdown",
+          source: "OpenAgentsWeb.AI.PromptInput.prompt_input_model_select/1",
+          summary: "A real select for the model, so the composer form carries the choice."
+        },
+        %{
+          slug: "ai-attachments",
+          title: "Attachments",
+          icon: "paperclip",
+          source: "OpenAgentsWeb.AI.PromptInput.attachments/1",
+          summary: "Staged files as a grid, an inline row, or a list, each with an empty state."
+        },
+        %{
+          slug: "ai-speech-input",
+          title: "Speech input",
+          icon: "mic",
+          source: "OpenAgentsWeb.AI.PromptInput.speech_input/1",
+          summary: "Push-to-talk whose whole visual state is CSS keyed off data attributes."
+        },
+        %{
+          slug: "ai-mic-selector",
+          title: "Microphone selector",
+          icon: "voice",
+          source: "OpenAgentsWeb.AI.PromptInput.mic_selector/1",
+          summary: "Which device is listening, filled in from the browser after mount."
+        },
+        %{
+          slug: "ai-model-selector",
+          title: "Model selector",
+          icon: "search",
+          source: "OpenAgentsWeb.AI.PromptInput.model_selector/1",
+          summary: "A searchable model palette on a popover, filtered in the browser."
+        },
+        %{
+          slug: "ai-queue",
+          title: "Queue",
+          icon: "stack",
+          source: "OpenAgentsWeb.AI.PromptInput.queue/1",
+          summary: "Turns waiting to be sent, in sections that collapse."
+        }
+      ]
+    },
+    %{
+      title: "AI evidence",
+      items: [
+        %{
+          slug: "ai-code-block",
+          title: "Code block",
+          icon: "square-code",
+          source: "OpenAgentsWeb.AI.Evidence.code_block/1",
+          summary: "Filename, language, actions, and line numbers that cannot be selected."
+        },
+        %{
+          slug: "ai-snippet",
+          title: "Snippet",
+          icon: "clipboard-copy",
+          source: "OpenAgentsWeb.AI.Evidence.snippet/1",
+          summary: "One command in a read-only field, beside the control that copies it."
+        },
+        %{
+          slug: "ai-terminal",
+          title: "Terminal",
+          icon: "terminal",
+          source: "OpenAgentsWeb.AI.Evidence.terminal/1",
+          summary: "Command output on a fixed dark ground, with a caret while it runs."
+        },
+        %{
+          slug: "ai-sources",
+          title: "Sources",
+          icon: "book-open",
+          source: "OpenAgentsWeb.AI.Evidence.sources/1",
+          summary: "What an answer was drawn from: counted first, listed on request."
+        },
+        %{
+          slug: "ai-inline-citation",
+          title: "Inline citation",
+          icon: "quote",
+          source: "OpenAgentsWeb.AI.Evidence.inline_citation/1",
+          summary: "A hostname chip mid-sentence that opens onto the sources behind it."
+        },
+        %{
+          slug: "ai-context",
+          title: "Context meter",
+          icon: "usage",
+          source: "OpenAgentsWeb.AI.Evidence.context/1",
+          summary: "How much of the window a turn spent, stated as a number and as an arc."
+        },
+        %{
+          slug: "ai-artifact",
+          title: "Artifact",
+          icon: "document",
+          source: "OpenAgentsWeb.AI.Evidence.artifact/1",
+          summary: "Something the model produced, framed with the actions that act on it."
+        },
+        %{
+          slug: "ai-confirmation",
+          title: "Confirmation",
+          icon: "shield-check",
+          source: "OpenAgentsWeb.AI.Evidence.confirmation/1",
+          summary: "An ask before an irreversible step, which keeps showing its answer."
+        },
+        %{
+          slug: "ai-question",
+          title: "Question",
+          icon: "question-mark-circle",
+          source: "OpenAgentsWeb.AI.Evidence.question/1",
+          summary: "Choices as real radios or checkboxes, plus room to say something else."
+        },
+        %{
+          slug: "ai-image",
+          title: "Image",
+          icon: "file-image",
+          source: "OpenAgentsWeb.AI.Evidence.image/1",
+          summary: "A generated image in a frame that cannot push the page around."
+        }
+      ]
     }
   ]
 
@@ -645,7 +894,146 @@ defmodule OpenAgentsWeb.ComponentCatalog do
       OpenAgentsWeb.UI.Graph => [:graph_defs, :graph_surface],
       OpenAgentsWeb.Components.RepoHeader => [],
       OpenAgentsWeb.UI.Landing => [],
-      OpenAgentsWeb.UI.Circle => []
+      OpenAgentsWeb.UI.Circle => [],
+      # The AI Elements ports are catalogued one entry per family, not one per
+      # function. A family is a head a caller reaches for and the parts it is
+      # composed from; the parts are excluded here and demoed inside the head's
+      # page, where the composition is the thing worth reading.
+      OpenAgentsWeb.AI.Conversation => [
+        # The scroller's own parts: the column of turns, the placeholder it
+        # shows when there are none, and the pinned control. All three are
+        # demoed through `conversation/1`.
+        :conversation_content,
+        :conversation_empty_state,
+        :conversation_scroll_button,
+        # A turn is assembled from these four in the order the caller chooses,
+        # so they are demoed through `message/1`.
+        :message_content,
+        :message_avatar,
+        :message_actions,
+        :message_action,
+        # One opener out of the row; demoed through `suggestions/1`.
+        :suggestion
+      ],
+      OpenAgentsWeb.AI.Reasoning => [
+        # The disclosure summary and the streamed body; demoed through
+        # `reasoning/1`, which is where the open and closed states read.
+        :reasoning_trigger,
+        :reasoning_content,
+        # The header, body, steps, search results, and figures of a chain;
+        # demoed through `chain_of_thought/1`.
+        :chain_of_thought_header,
+        :chain_of_thought_content,
+        :chain_of_thought_step,
+        :chain_of_thought_search_results,
+        :chain_of_thought_search_result,
+        :chain_of_thought_image,
+        # A call's header, state badge, body, arguments, and result. The state
+        # badge carries the taxonomy, so all seven states are demoed through
+        # `tool/1` rather than on a page of their own.
+        :tool_header,
+        :tool_status_badge,
+        :tool_content,
+        :tool_input,
+        :tool_output,
+        # The summary, body, entries, and file chips of one task; demoed
+        # through `task/1`.
+        :task_trigger,
+        :task_content,
+        :task_item,
+        :task_item_file,
+        # A plan's name, prose, actions, and disclosure control. `plan/1` takes
+        # slots, so these only make sense inside it and are demoed there.
+        :plan_title,
+        :plan_description,
+        :plan_action,
+        :plan_trigger,
+        # The glyph and the restore control inside a checkpoint; demoed through
+        # `checkpoint/1`.
+        :checkpoint_icon,
+        :checkpoint_trigger
+      ],
+      OpenAgentsWeb.AI.PromptInput => [
+        # The composer's shell: the input group, the textarea bound to the
+        # form field, the two bands around it, and the toolbar that holds the
+        # tools and the submit control. All demoed through `prompt_input/1`,
+        # which is the only place their geometry is legible.
+        :prompt_input_body,
+        :prompt_input_textarea,
+        :prompt_input_header,
+        :prompt_input_footer,
+        :prompt_input_toolbar,
+        :prompt_input_tools,
+        :prompt_input_button,
+        :prompt_input_submit,
+        # The popover, its list, its rows, and the two actions that ship with
+        # it; demoed through `prompt_input_action_menu/1`.
+        :prompt_input_action_menu_trigger,
+        :prompt_input_action_menu_content,
+        :prompt_input_action_menu_item,
+        :prompt_input_action_add_attachments,
+        :prompt_input_action_add_screenshot,
+        # One option in the composer's model select; demoed through
+        # `prompt_input_model_select/1`.
+        :prompt_input_model_select_item,
+        # One staged file and its parts. The three layout variants are what
+        # distinguish them, so they are demoed together through
+        # `attachments/1`.
+        :attachment,
+        :attachment_preview,
+        :attachment_info,
+        :attachment_remove,
+        :attachment_empty,
+        # One device in the microphone list; demoed through `mic_selector/1`.
+        :mic_selector_item,
+        # The trigger, the search field, and the list, groups, rows, and
+        # trimmings of the model palette; demoed through `model_selector/1`,
+        # where the filtering hook is what makes them worth looking at.
+        :model_selector_trigger,
+        :model_selector_input,
+        :model_selector_list,
+        :model_selector_empty,
+        :model_selector_group,
+        :model_selector_item,
+        :model_selector_name,
+        :model_selector_shortcut,
+        :model_selector_separator,
+        :model_selector_logo,
+        :model_selector_logo_group,
+        # A queue's sections, rows, and the attachments hanging off a row; all
+        # demoed through `queue/1`.
+        :queue_section,
+        :queue_section_trigger,
+        :queue_section_label,
+        :queue_section_content,
+        :queue_list,
+        :queue_item,
+        :queue_item_indicator,
+        :queue_item_content,
+        :queue_item_description,
+        :queue_item_actions,
+        :queue_item_action,
+        :queue_item_attachment,
+        :queue_item_image,
+        :queue_item_file,
+        :queue_empty
+      ],
+      OpenAgentsWeb.AI.Evidence => [
+        # One line of terminal output; demoed through `terminal/1`, which owns
+        # the ground it is legible against.
+        :terminal_line,
+        # One source in the list; demoed through `sources/1`.
+        :source,
+        # The contents of a citation's card; demoed through
+        # `inline_citation/1`, since the card only exists inside it.
+        :inline_citation_source,
+        :inline_citation_quote,
+        # A control in an artifact's header; demoed through `artifact/1`.
+        :artifact_action,
+        # The approve and deny controls; demoed through `confirmation/1`,
+        # which is what decides whether they are still shown.
+        :confirmation_action
+      ]
     }
   end
 end

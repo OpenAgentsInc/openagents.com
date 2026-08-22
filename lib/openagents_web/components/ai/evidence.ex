@@ -388,7 +388,11 @@ defmodule OpenAgentsWeb.AI.Evidence do
               url={source[:url]}
               description={source[:description]}
             >
-              {render_slot(source)}
+              <%!-- The slot's three attributes already say everything a source
+                    has, so `<:source url=... title=... />` is the ordinary call
+                    and carries no content. `render_slot/1` on an entry whose
+                    `inner_block` is nil raises, so ask before rendering. --%>
+              {source[:inner_block] && render_slot(source)}
             </.inline_citation_source>
           </span>
         </span>

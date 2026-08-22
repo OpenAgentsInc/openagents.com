@@ -40,9 +40,32 @@ and synchronizes it across tabs.
 
 ## Specialized components
 
-`OpenAgentsWeb.Components.RepoHeader.repo_header/1` is the only catalogued
+`OpenAgentsWeb.Components.RepoHeader.repo_header/1` is the catalogued
 forge-specific component. Surface-specific components can live in a focused
 module when they encode real domain composition rather than a generic control.
+`OpenAgentsWeb.UI.Graph`, `OpenAgentsWeb.UI.Landing`, and
+`OpenAgentsWeb.UI.Circle` are the other surface modules.
+
+## AI Elements
+
+Four modules under `OpenAgentsWeb.AI` are ported from Vercel's AI Elements
+(MIT). Each moduledoc names the substitutions the port made, so a later reader
+can tell a deliberate swap from a typo:
+
+| Module | What it covers |
+| --- | --- |
+| `AI.Conversation` | Transcript scroller, turns, suggestions, toolbar, persona |
+| `AI.Reasoning` | Reasoning, chain of thought, tool calls, tasks, plans, checkpoints |
+| `AI.PromptInput` | Composer, action menu, attachments, speech, model selectors, queue |
+| `AI.Evidence` | Code blocks, terminals, sources, citations, artifacts, questions |
+
+These four modules are catalogued **one entry per family**, not one per
+function: `reasoning/1` and the trigger and body it wraps are one catalog
+entry, because they are one thing a caller reaches for and the parts are only
+legible inside the composition. Register the family head and exclude its parts
+in `ComponentCatalog.documented_modules/0`, naming the family that demonstrates
+each part. Around 110 components across the four modules would otherwise
+produce an index rather than a catalog.
 
 ## Extension rules
 

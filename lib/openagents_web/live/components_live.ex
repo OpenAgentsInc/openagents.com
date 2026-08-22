@@ -11,6 +11,10 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgentsWeb.AI.Conversation
+  alias OpenAgentsWeb.AI.Evidence
+  alias OpenAgentsWeb.AI.PromptInput
+  alias OpenAgentsWeb.AI.Reasoning
   alias OpenAgentsWeb.ComponentCatalog
   alias OpenAgentsWeb.UI.Circle
   alias OpenAgentsWeb.UI.Graph
@@ -190,6 +194,90 @@ defmodule OpenAgentsWeb.ComponentsLive do
     }
   ]
 
+  # One call per tool state. `tool_status_badge/1` is the taxonomy, so the page
+  # that demonstrates a tool call has to walk all seven; a single successful
+  # call would document the one state nobody needs help reading.
+  @demo_tool_calls [
+    %{
+      state: "input-streaming",
+      name: "grep",
+      input: ~s({"pattern": "capability_manifest", "path": "lib/openage),
+      output: nil,
+      error: nil
+    },
+    %{
+      state: "input-available",
+      name: "read",
+      input: ~s({"path": "lib/openagents/cloud/placement.ex", "offset": 1, "limit": 120}),
+      output: nil,
+      error: nil
+    },
+    %{
+      state: "output-available",
+      name: "bash",
+      input: ~s({"command": "mix test test/openagents/forge/targets_test.exs --seed 0"}),
+      output: "Finished in 2.4 seconds\n1416 tests, 0 failures, 14 excluded",
+      error: nil
+    },
+    %{
+      state: "output-error",
+      name: "bash",
+      input: ~s({"command": "mix precommit"}),
+      output: nil,
+      error: "** (Mix) Formatter would change lib/openagents_web/live/chat_live.ex"
+    },
+    %{
+      state: "approval-requested",
+      name: "write",
+      input: ~s({"path": "lib/openagents/forge/targets.ex", "bytes": 4213}),
+      output: nil,
+      error: nil
+    },
+    %{
+      state: "approval-responded",
+      name: "write",
+      input: ~s({"path": "lib/openagents/forge/targets.ex", "bytes": 4213}),
+      output: "Approved by mason. 3 hunks written.",
+      error: nil
+    },
+    %{
+      state: "output-denied",
+      name: "bash",
+      input: ~s({"command": "git push openagents HEAD:main"}),
+      output: nil,
+      error: "Denied by mason: this run is not allowed to push."
+    }
+  ]
+
+  # Real Elixir rather than a fragment, so the line-number gutter and the
+  # horizontal overflow are both exercised the way they will be in use.
+  @demo_code """
+  def admit(%Run{} = run, fleet) do
+    with :ok <- Capability.fresh?(run.manifest),
+         {:ok, node} <- Placement.choose(fleet, run.requirements) do
+      {:ok, %{run | node: node, admitted_at: DateTime.utc_now()}}
+    else
+      {:error, :manifest_expired} = error -> error
+      {:error, reason} -> {:error, {:unplaceable, reason}}
+    end
+  end
+  """
+
+  @demo_terminal_output """
+  $ mix test test/openagents/forge/targets_test.exs --seed 0
+  Running ExUnit with seed: 0, max_cases: 20
+
+  ....................
+
+  Finished in 2.4 seconds (0.9s async, 1.5s sync)
+  20 tests, 0 failures
+
+  $ mix test test/openagents/forge/targets_test.exs --seed 1
+  Running ExUnit with seed: 1, max_cases: 20
+
+  ......F.............
+  """
+
   # Everyone `git shortlog -sn` names on this repository, most commits first.
   @demo_repo_contributors [%{name: "AtlantisPleb"}, %{name: "Christopher David"}]
 
@@ -358,9 +446,17 @@ defmodule OpenAgentsWeb.ComponentsLive do
         as: :demo
       )
 
+    # The composer is a real `to_form/2` assign, because that is the only way
+    # `prompt_input_textarea/1` can be bound to a field rather than a string.
+    composer_form =
+      to_form(%{"message" => "Which module decides whether an SCV run is admitted?"},
+        as: :composer
+      )
+
     {:ok,
      socket
      |> assign(:form, form)
+     |> assign(:composer_form, composer_form)
      |> assign(:rows, @sample_rows)
      |> assign(:openagents_icons, @openagents_icons)
      |> assign(:demo_user, @demo_user)
@@ -407,15 +503,24 @@ defmodule OpenAgentsWeb.ComponentsLive do
     {:noreply, put_flash(socket, :info, "Demo form submitted. Nothing was saved.")}
   end
 
+  # `speech_input/1` requires the name of an event to push recognized text to.
+  # Without a matching clause the catalog page would crash the first time
+  # someone spoke into it, which is a worse demo than no demo.
+  def handle_event("demo_transcript", %{"text" => text}, socket) do
+    {:noreply, assign(socket, :composer_form, to_form(%{"message" => text}, as: :composer))}
+  end
+
   @impl true
   def render(%{live_action: :index} = assigns) do
     ~H"""
     <div id="components-index">
       <h1 class="text-3xl font-semibold mb-4">Component library</h1>
       <p class="text-muted-foreground mb-8 text-pretty max-w-[68ch]">
-        Live examples of every supported function component in <code>OpenAgentsWeb.UI</code>, <code>OpenAgentsWeb.Layouts</code>, and the
+        Live examples of every supported function component in <code>OpenAgentsWeb.UI</code>, <code>OpenAgentsWeb.Layouts</code>, the surface modules beside them, and the
         repository header. A test asserts this page covers every public component
-        in those modules.
+        in those modules. The <code>OpenAgentsWeb.AI</code>
+        sections are catalogued one entry per family, so a page there shows a
+        whole composition rather than one of its parts.
         Planned GitHub-shaped components are listed in <code>docs/component-library.md</code>.
       </p>
 
@@ -460,6 +565,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
 
   attr :item, :map, required: true
   attr :form, :any, default: nil
+  attr :composer_form, :any, default: nil
   attr :rows, :list, default: []
   attr :openagents_icons, :list, default: []
   attr :demo_user, :map, default: nil
@@ -2625,6 +2731,1356 @@ defmodule OpenAgentsWeb.ComponentsLive do
           <:glyph><Circle.issue_state state="closed" reason="not_planned" /></:glyph>
         </Circle.field_menu_item>
       </div>
+    </div>
+    """
+  end
+
+  # ── AI conversation ───────────────────────────────────────────────────────
+  # Ported from Vercel's AI Elements. Each page composes a whole family the way
+  # a caller composes it, and shows the states the family exists to keep apart:
+  # a tool call has seven, and a demo of one of them documents nothing.
+
+  defp component_demo(%{item: %{slug: "ai-conversation"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Two boxes: the outer one positions and clips, the inner one scrolls. That split is
+        what lets the scroll control hold still at the bottom edge while the transcript
+        moves behind it. A colocated hook keeps the viewport pinned while the reader is
+        already at the bottom, and lets go the moment they scroll up.
+      </p>
+      <Conversation.conversation
+        id="demo-conversation"
+        class="h-72 rounded-lg border border-border"
+      >
+        <Conversation.conversation_content class="space-y-6 p-4">
+          <Conversation.message from="system">
+            <Conversation.message_content text="Run `scv.13` opened on `OpenAgentsInc/openagents.com`." />
+          </Conversation.message>
+          <Conversation.message from="user">
+            <Conversation.message_content text="Why did scv-13 revert its own patch?" />
+          </Conversation.message>
+          <Conversation.message from="assistant">
+            <Conversation.message_avatar name="Sarah" />
+            <Conversation.message_content text="`targets_test.exs` stayed red after the third attempt, so the run hit the revert rule in `SELF-EDIT-001` and put the worktree back where it found it." />
+          </Conversation.message>
+          <Conversation.message from="user">
+            <Conversation.message_content text="Show me the third attempt." />
+          </Conversation.message>
+          <Conversation.message from="assistant">
+            <Conversation.message_avatar name="Sarah" />
+            <Conversation.message_content
+              text="Reading the transcript for attempt three"
+              streaming
+            />
+          </Conversation.message>
+        </Conversation.conversation_content>
+      </Conversation.conversation>
+      <p class="text-sm text-base-content/60">
+        With nothing in it the same scroller carries a placeholder rather than an empty
+        box, and the scroll control is left off, because there is nowhere to go.
+      </p>
+      <Conversation.conversation
+        id="demo-conversation-empty"
+        scroll_button={false}
+        class="h-44 rounded-lg border border-border"
+      >
+        <Conversation.conversation_content class="grid h-full place-items-center p-4">
+          <Conversation.conversation_empty_state
+            icon="chat"
+            title="No messages yet"
+            description="Ask about a repository, or start an SCV run."
+          />
+        </Conversation.conversation_content>
+      </Conversation.conversation>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-message"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A turn is a row of siblings the caller orders, not one component with a slot per
+        position: an assistant turn wants a face, a body, and controls; a user turn wants
+        only a body, and dropping a part should not mean passing an empty slot. The <code>from</code>
+        attribute lands as the marker class every rule inside the body reads, which is
+        what moves a user turn to the right and gives it a bubble.
+      </p>
+      <div class="space-y-6">
+        <Conversation.message id="demo-message-user" from="user">
+          <Conversation.message_content text="Which module decides whether an SCV run is admitted?" />
+        </Conversation.message>
+
+        <Conversation.message id="demo-message-assistant" from="assistant">
+          <Conversation.message_avatar name="Sarah" />
+          <Conversation.message_content text="`OpenAgents.Forge.Targets` scores the candidates and `Placement` admits one. The refusal path is the interesting half: an expired capability manifest is refused before scoring, so it never reaches the queue." />
+          <Conversation.message_actions>
+            <Conversation.message_action label="Copy">
+              <UI.icon name="copy" class="size-4" />
+            </Conversation.message_action>
+            <Conversation.message_action label="Regenerate">
+              <UI.icon name="regenerate" class="size-4" />
+            </Conversation.message_action>
+            <Conversation.message_action label="Good answer">
+              <UI.icon name="thumb-up" class="size-4" />
+            </Conversation.message_action>
+            <Conversation.message_action label="Bad answer">
+              <UI.icon name="thumb-down" class="size-4" />
+            </Conversation.message_action>
+          </Conversation.message_actions>
+        </Conversation.message>
+
+        <Conversation.message id="demo-message-streaming" from="assistant">
+          <Conversation.message_avatar name="Sarah" />
+          <Conversation.message_content
+            text="Checking whether `Placement.admit/2` is still"
+            streaming
+          />
+        </Conversation.message>
+
+        <Conversation.message id="demo-message-system" from="system">
+          <Conversation.message_content text="Budget window exhausted. The run resumes at the next window." />
+        </Conversation.message>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The streaming turn is the one worth reading twice. Its text ends mid-sentence and
+        still renders, because <code>streaming</code>
+        tells the Markdown renderer to close what the model has not closed yet.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-shimmer"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A highlight travelling through the text rather than a spinner beside it: the words
+        stay readable the whole time, so waiting says what it is waiting for. <code>spread</code>
+        widens the band, which is how a long line and a short one can take the same time
+        to sweep.
+      </p>
+      <div class="space-y-3">
+        <Conversation.shimmer id="demo-shimmer-short" text="Thinking" />
+        <Conversation.shimmer
+          id="demo-shimmer-line"
+          text="Reading lib/openagents/forge/targets.ex"
+        />
+        <Conversation.shimmer
+          id="demo-shimmer-wide"
+          text="Planning the change across four files"
+          spread={4}
+        />
+        <Conversation.shimmer
+          id="demo-shimmer-heading"
+          text="Working"
+          tag="h3"
+          class="text-lg font-medium"
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-suggestions"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Openers a reader can send unedited. The row scrolls sideways rather than wrapping,
+        because a wrapped set changes height as it changes length, and a control that
+        moves the composer down the page every time the model finishes is worse than one
+        the reader has to scroll.
+      </p>
+      <Conversation.suggestions id="demo-suggestions">
+        <Conversation.suggestion suggestion="What changed in this repository today?" />
+        <Conversation.suggestion suggestion="Why did the last SCV run refuse?" />
+        <Conversation.suggestion suggestion="Open an issue for the flaky targets test" />
+        <Conversation.suggestion suggestion="Summarise the staging deploy" variant={:secondary} />
+        <Conversation.suggestion suggestion="Show me the diff" variant={:ghost} size={:xs} />
+      </Conversation.suggestions>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-toolbar"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The bar that floats over a transcript. It takes a <code>label</code>
+        because a bar of icon buttons with no name is a set of unexplained glyphs to
+        anyone not looking at it.
+      </p>
+      <div class="relative h-40 rounded-lg border border-border bg-muted/30">
+        <Conversation.toolbar id="demo-toolbar" label="Transcript actions">
+          <Conversation.message_action label="Search this run">
+            <UI.icon name="search" class="size-4" />
+          </Conversation.message_action>
+          <Conversation.message_action label="Export transcript">
+            <UI.icon name="download" class="size-4" />
+          </Conversation.message_action>
+          <Conversation.message_action label="Share run">
+            <UI.icon name="share" class="size-4" />
+          </Conversation.message_action>
+        </Conversation.toolbar>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-controls"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The same idea one level down: a group of actions that has to stay legible over
+        whatever it sits on. Here it sits over the transcript ground rather than the page
+        ground, which is the case the treatment exists for.
+      </p>
+      <div class="relative h-40 rounded-lg border border-border bg-muted/30 p-4">
+        <Conversation.controls id="demo-controls" label="Run controls">
+          <UI.button variant={:ghost} size={:sm}>
+            <UI.icon name="pause" class="size-4" /> Pause
+          </UI.button>
+          <UI.button variant={:ghost} size={:sm}>
+            <UI.icon name="stop" class="size-4" /> Stop
+          </UI.button>
+          <UI.button variant={:ghost} size={:sm}>
+            <UI.icon name="arrow-rotate-cw" class="size-4" /> Retry
+          </UI.button>
+        </Conversation.controls>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-persona"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Upstream this is a WebGL canvas playing one of six remote animations. What
+        survived the port is the contract: a fixed set of states, one presence marker, and
+        a name. Two states borrow a marker rather than introduce a colour — <code>thinking</code>
+        reads as running and <code>asleep</code>
+        as ended — and the marker is decorative, because the word beside it already says
+        it.
+      </p>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Conversation.persona id="demo-persona-idle" name="Sarah" state="idle" />
+        <Conversation.persona id="demo-persona-listening" name="Sarah" state="listening" />
+        <Conversation.persona id="demo-persona-thinking" name="Sarah" state="thinking" />
+        <Conversation.persona id="demo-persona-speaking" name="Sarah" state="speaking" />
+        <Conversation.persona id="demo-persona-asleep" name="Sarah" state="asleep" />
+        <Conversation.persona
+          id="demo-persona-labelled"
+          name="scv-13"
+          state="thinking"
+          status_label="Reverting the third attempt"
+        />
+      </div>
+    </div>
+    """
+  end
+
+  # ── AI reasoning ──────────────────────────────────────────────────────────
+
+  defp component_demo(%{item: %{slug: "ai-reasoning"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        A native <code>details</code>, so the disclosure needs no script and carries its
+        own <code>aria-expanded</code>. The server writes the initial state, which keeps
+        "open while it streams, closed once it lands" a LiveView decision: pass
+        <code phx-no-curly-interpolation>open={@streaming}</code>
+        and re-render. A reader who toggles it owns it until the next render of that
+        attribute.
+      </p>
+      <Reasoning.reasoning id="demo-reasoning-open" open>
+        <Reasoning.reasoning_trigger streaming />
+        <Reasoning.reasoning_content
+          text="The question is about admission, not scoring. `Targets` ranks candidates, but the refusal happens earlier"
+          streaming
+        />
+      </Reasoning.reasoning>
+      <Reasoning.reasoning id="demo-reasoning-closed">
+        <Reasoning.reasoning_trigger duration={12} />
+        <Reasoning.reasoning_content text="The question is about admission, not scoring. `Targets` ranks candidates, but the refusal happens earlier, in the capability check, so an expired manifest never reaches the queue." />
+      </Reasoning.reasoning>
+      <p class="text-sm text-base-content/60">
+        Open above, closed below. The trigger says the same thing either way, and it is
+        the only part that changes when the stream ends: the pulsing "Thinking…" becomes
+        a duration.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-chain-of-thought"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Steps down a rail. <code>status</code>
+        is the whole design: the step being worked reads at full strength, the ones behind
+        it are muted, and the ones ahead are dimmed further, so the reader's eye lands on
+        the present without an animation asking it to.
+      </p>
+      <Reasoning.chain_of_thought id="demo-cot" open>
+        <Reasoning.chain_of_thought_header>
+          Answering a question about this repository
+        </Reasoning.chain_of_thought_header>
+        <Reasoning.chain_of_thought_content>
+          <Reasoning.chain_of_thought_step
+            icon="search"
+            label="Search for the admission path"
+            description="Ranked by how often each file names a capability manifest."
+            status={:complete}
+          >
+            <Reasoning.chain_of_thought_search_results>
+              <Reasoning.chain_of_thought_search_result>
+                lib/openagents/forge/targets.ex
+              </Reasoning.chain_of_thought_search_result>
+              <Reasoning.chain_of_thought_search_result>
+                lib/openagents/cloud/placement.ex
+              </Reasoning.chain_of_thought_search_result>
+              <Reasoning.chain_of_thought_search_result>
+                docs/cloud/INVARIANTS.md
+              </Reasoning.chain_of_thought_search_result>
+            </Reasoning.chain_of_thought_search_results>
+          </Reasoning.chain_of_thought_step>
+          <Reasoning.chain_of_thought_step
+            icon="document"
+            label="Read Placement.admit/2"
+            description="The refusal is ahead of the scoring, not inside it."
+            status={:complete}
+          />
+          <Reasoning.chain_of_thought_step
+            icon="chart"
+            label="Check the last twenty runs for the same refusal"
+            status={:active}
+          >
+            <Reasoning.chain_of_thought_image caption="Refusals by reason, last twenty runs">
+              <img src={~p"/images/logo.svg"} alt="" class="h-24 w-auto opacity-60" />
+            </Reasoning.chain_of_thought_image>
+          </Reasoning.chain_of_thought_step>
+          <Reasoning.chain_of_thought_step
+            icon="edit-pencil"
+            label="Write the answer"
+            status={:pending}
+          />
+        </Reasoning.chain_of_thought_content>
+      </Reasoning.chain_of_thought>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-tool"}} = assigns) do
+    assigns = assign(assigns, :tool_calls, @demo_tool_calls)
+
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        Seven states, all of them here, because the badge is the taxonomy and one happy
+        call documents none of it. Four describe a call's own progress — arguments still
+        arriving, arguments complete, a result, a failure — and three describe a call that
+        needed a person: waiting on approval, answered, and refused.
+      </p>
+      <Reasoning.tool :for={call <- @tool_calls} id={"demo-tool-#{call.state}"} open>
+        <Reasoning.tool_header type={"tool-" <> call.name} tool_name={call.name} state={call.state} />
+        <Reasoning.tool_content>
+          <Reasoning.tool_input input={call.input} />
+          <Reasoning.tool_output
+            :if={call.output || call.error}
+            output={call.output}
+            error_text={call.error}
+          />
+        </Reasoning.tool_content>
+      </Reasoning.tool>
+      <p class="text-sm text-base-content/60">
+        Arguments and results are preformatted text, not highlighted code: the code-block
+        port is <.link
+          patch={~p"/components/ai-code-block"}
+          class="underline underline-offset-2 hover:no-underline"
+        >a separate component</.link>, and claiming syntax highlighting that is not
+        happening would be worse than plain text.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-task"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        What one piece of work did, and which files it touched. Open by default, as
+        upstream: a task is written into the transcript once it is finished, so the first
+        thing a reader wants is its contents, not its title.
+      </p>
+      <Reasoning.task id="demo-task-open" open>
+        <Reasoning.task_trigger title="Fixed the flaky targets test" />
+        <Reasoning.task_content>
+          <Reasoning.task_item>
+            Read
+            <Reasoning.task_item_file>
+              test/openagents/forge/targets_test.exs
+            </Reasoning.task_item_file>
+          </Reasoning.task_item>
+          <Reasoning.task_item>
+            Found the ordering assumption in
+            <Reasoning.task_item_file>lib/openagents/forge/targets.ex</Reasoning.task_item_file>
+          </Reasoning.task_item>
+          <Reasoning.task_item>
+            Sorted the candidates by identifier before scoring
+          </Reasoning.task_item>
+          <Reasoning.task_item>
+            Ran <code>mix test --seed 0</code>: 1416 passed, 14 excluded
+          </Reasoning.task_item>
+        </Reasoning.task_content>
+      </Reasoning.task>
+      <Reasoning.task id="demo-task-closed" open={false}>
+        <Reasoning.task_trigger title="Checked the staging fleet before starting" />
+        <Reasoning.task_content>
+          <Reasoning.task_item>
+            Read
+            <Reasoning.task_item_file>infra/staging/outputs.tf</Reasoning.task_item_file>
+          </Reasoning.task_item>
+        </Reasoning.task_content>
+      </Reasoning.task>
+      <p class="text-sm text-base-content/60">
+        The second one is closed, which is what a long run needs: everything the agent did
+        stays in the transcript, and only the task under discussion stays open.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-plan"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The one part of this batch that takes slots rather than siblings. A <code>details</code>
+        hides every child but its summary, and this footer has to stay visible while the
+        body collapses — approving a plan you cannot see is the one thing to prevent — so
+        the parent places the footer outside the collapsing region.
+      </p>
+      <Reasoning.plan id="demo-plan" open>
+        <:header>
+          <div>
+            <Reasoning.plan_title>Make the targets test deterministic</Reasoning.plan_title>
+            <Reasoning.plan_description>
+              Four steps, two of them in files this run has already read.
+            </Reasoning.plan_description>
+          </div>
+          <Reasoning.plan_trigger />
+        </:header>
+        <Reasoning.task id="demo-plan-step-1" open={false}>
+          <Reasoning.task_trigger title="Sort candidates by identifier before scoring" />
+          <Reasoning.task_content>
+            <Reasoning.task_item>
+              <Reasoning.task_item_file>lib/openagents/forge/targets.ex</Reasoning.task_item_file>
+            </Reasoning.task_item>
+          </Reasoning.task_content>
+        </Reasoning.task>
+        <Reasoning.task id="demo-plan-step-2" open={false}>
+          <Reasoning.task_trigger title="Assert the order, not just the membership" />
+          <Reasoning.task_content>
+            <Reasoning.task_item>
+              <Reasoning.task_item_file>
+                test/openagents/forge/targets_test.exs
+              </Reasoning.task_item_file>
+            </Reasoning.task_item>
+          </Reasoning.task_content>
+        </Reasoning.task>
+        <Reasoning.task id="demo-plan-step-3" open={false}>
+          <Reasoning.task_trigger title="Run the suite at three seeds" />
+          <Reasoning.task_content>
+            <Reasoning.task_item>mix test --seed 0, --seed 1, --seed 2</Reasoning.task_item>
+          </Reasoning.task_content>
+        </Reasoning.task>
+        <:footer>
+          <Reasoning.plan_action>
+            <UI.button variant={:primary} size={:sm}>Approve</UI.button>
+          </Reasoning.plan_action>
+          <Reasoning.plan_action>
+            <UI.button variant={:outline} size={:sm}>Ask for changes</UI.button>
+          </Reasoning.plan_action>
+        </:footer>
+      </Reasoning.plan>
+      <p class="text-sm text-base-content/60">
+        Collapse it with the control in its header. The two actions stay where they are.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-checkpoint"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A point the run can be returned to, drawn as a rule across the transcript so it
+        reads as a division rather than another message. The rule fills whatever width the
+        controls leave, which is why the label and the action can be any length.
+      </p>
+      <div class="space-y-4">
+        <Reasoning.checkpoint id="demo-checkpoint-plain">
+          <Reasoning.checkpoint_icon />
+          <span class="px-2 text-xs">Before the rebase onto main</span>
+        </Reasoning.checkpoint>
+        <Reasoning.checkpoint id="demo-checkpoint-restore">
+          <Reasoning.checkpoint_icon />
+          <span class="px-2 text-xs">After attempt two</span>
+          <Reasoning.checkpoint_trigger tooltip="Restore the worktree to this point">
+            Restore
+          </Reasoning.checkpoint_trigger>
+        </Reasoning.checkpoint>
+        <Reasoning.checkpoint id="demo-checkpoint-current">
+          <Reasoning.checkpoint_icon name="saved-filled-xs" />
+          <span class="px-2 text-xs text-foreground">Current</span>
+        </Reasoning.checkpoint>
+      </div>
+      <p class="text-sm text-base-content/60">
+        Upstream the restore control carries a Radix tooltip. There is no tooltip
+        primitive here, so <code>tooltip</code>
+        becomes the native <code>title</code>: same text, no script, still announced.
+      </p>
+    </div>
+    """
+  end
+
+  # ── AI composer ───────────────────────────────────────────────────────────
+
+  defp component_demo(%{item: %{slug: "ai-prompt-input"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        A real Phoenix form around a real input group. The textarea is bound to a <code>Phoenix.HTML.FormField</code>, not to a loose string, so the composer submits
+        the way every other form in this app does. Everything else — the growing height,
+        Enter to submit, dropped and pasted files — is one colocated hook, because none of
+        it can be expressed in markup.
+      </p>
+      <PromptInput.prompt_input
+        id="demo-prompt-input"
+        for={@composer_form}
+        accept="image/*,text/*"
+        phx-submit="save"
+      >
+        <:drop_overlay>Drop files to attach them</:drop_overlay>
+        <PromptInput.prompt_input_body>
+          <PromptInput.prompt_input_textarea
+            field={@composer_form[:message]}
+            placeholder="Ask about this repository, or start a run"
+          />
+        </PromptInput.prompt_input_body>
+        <PromptInput.prompt_input_toolbar>
+          <PromptInput.prompt_input_tools>
+            <PromptInput.prompt_input_action_menu_trigger menu="demo-prompt-input-actions" />
+            <PromptInput.prompt_input_button tooltip="Search the web">
+              <UI.icon name="globe" class="size-4" />
+            </PromptInput.prompt_input_button>
+            <PromptInput.prompt_input_model_select
+              name="composer[model]"
+              value="claude-opus-5"
+            >
+              <PromptInput.prompt_input_model_select_item value="claude-opus-5" selected>
+                Claude Opus 5
+              </PromptInput.prompt_input_model_select_item>
+              <PromptInput.prompt_input_model_select_item value="claude-sonnet-4">
+                Claude Sonnet 4
+              </PromptInput.prompt_input_model_select_item>
+            </PromptInput.prompt_input_model_select>
+          </PromptInput.prompt_input_tools>
+          <PromptInput.prompt_input_submit id="demo-prompt-input-submit" status={:ready} />
+        </PromptInput.prompt_input_toolbar>
+      </PromptInput.prompt_input>
+      <PromptInput.prompt_input_action_menu id="demo-prompt-input-actions">
+        <PromptInput.prompt_input_action_menu_content>
+          <PromptInput.prompt_input_action_add_attachments for="demo-prompt-input" />
+          <PromptInput.prompt_input_action_add_screenshot />
+        </PromptInput.prompt_input_action_menu_content>
+      </PromptInput.prompt_input_action_menu>
+
+      <p class="text-sm text-base-content/60">
+        The submit control is four controls, not one control with four colours. Each
+        status draws a different glyph and carries a different accessible name, and the
+        streaming one is a stop button rather than a disabled send — which is the only
+        state where the reader has something to do.
+      </p>
+      <div class="flex flex-wrap items-center gap-6">
+        <div :for={status <- [:ready, :submitted, :streaming, :error]} class="space-y-2">
+          <PromptInput.prompt_input_submit id={"demo-submit-#{status}"} status={status} />
+          <p class="text-xs text-base-content/60">{status}</p>
+        </div>
+      </div>
+
+      <p class="text-sm text-base-content/60">
+        With a header and a footer, the same group carries staged attachments above the
+        text and a note below it, and the input group grows rather than scrolling.
+      </p>
+      <PromptInput.prompt_input id="demo-prompt-input-full" for={@composer_form} phx-submit="save">
+        <PromptInput.prompt_input_header>
+          <PromptInput.attachments variant={:inline}>
+            <PromptInput.attachment variant={:inline}>
+              <PromptInput.attachment_preview
+                variant={:inline}
+                media_category={:source}
+                filename="targets.ex"
+              />
+              <PromptInput.attachment_info variant={:inline} label="targets.ex" />
+              <PromptInput.attachment_remove variant={:inline} label="Remove targets.ex" />
+            </PromptInput.attachment>
+          </PromptInput.attachments>
+        </PromptInput.prompt_input_header>
+        <PromptInput.prompt_input_body>
+          <PromptInput.prompt_input_textarea
+            id="demo-prompt-input-full-textarea"
+            field={@composer_form[:message]}
+          />
+        </PromptInput.prompt_input_body>
+        <PromptInput.prompt_input_footer>
+          This run can read the repository. It cannot push.
+        </PromptInput.prompt_input_footer>
+        <PromptInput.prompt_input_toolbar>
+          <PromptInput.prompt_input_tools>
+            <PromptInput.speech_input
+              id="demo-prompt-input-speech"
+              transcript_event="demo_transcript"
+            />
+          </PromptInput.prompt_input_tools>
+          <PromptInput.prompt_input_submit id="demo-prompt-input-full-submit" status={:streaming} />
+        </PromptInput.prompt_input_toolbar>
+      </PromptInput.prompt_input>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-prompt-input-action-menu"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Upstream this is a Radix dropdown. Here it is the native popover API: click out to
+        dismiss,
+        <UI.kbd>Esc</UI.kbd>
+        to close, the trigger as the anchor, and no script. The two actions that ship with
+        it are the two the composer always has — reach the file input, and capture the
+        screen.
+      </p>
+      <div class="flex items-center gap-3">
+        <PromptInput.prompt_input_action_menu_trigger menu="demo-action-menu" />
+        <span class="text-sm text-base-content/60">Open the menu</span>
+      </div>
+      <PromptInput.prompt_input_action_menu id="demo-action-menu" label="Composer actions">
+        <PromptInput.prompt_input_action_menu_content>
+          <PromptInput.prompt_input_action_add_attachments for="demo-prompt-input" />
+          <PromptInput.prompt_input_action_add_screenshot />
+          <PromptInput.prompt_input_action_menu_item>
+            <UI.icon name="folder" class="mr-2 size-4" /> Add a repository
+          </PromptInput.prompt_input_action_menu_item>
+        </PromptInput.prompt_input_action_menu_content>
+      </PromptInput.prompt_input_action_menu>
+      <p class="text-sm text-base-content/60">
+        The attach action names the composer it belongs to rather than holding a reference
+        to it, because the file input it clicks is rendered by that composer.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-prompt-input-model-select"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A real <code>select</code>, which is the point: the model is part of what the
+        composer submits, so it should arrive in the same params as the text rather than
+        in client state the server has to be told about. The trigger is styled down to the
+        toolbar's height so it sits in the row rather than on it.
+      </p>
+      <div class="flex flex-wrap items-center gap-4">
+        <PromptInput.prompt_input_model_select name="demo[model]" value="claude-opus-5">
+          <PromptInput.prompt_input_model_select_item value="claude-opus-5" selected>
+            Claude Opus 5
+          </PromptInput.prompt_input_model_select_item>
+          <PromptInput.prompt_input_model_select_item value="claude-sonnet-4">
+            Claude Sonnet 4
+          </PromptInput.prompt_input_model_select_item>
+          <PromptInput.prompt_input_model_select_item value="claude-haiku-4">
+            Claude Haiku 4
+          </PromptInput.prompt_input_model_select_item>
+        </PromptInput.prompt_input_model_select>
+
+        <PromptInput.prompt_input_model_select
+          id="demo-model-select-disabled"
+          name="demo[locked_model]"
+          value="claude-opus-5"
+          label="Model, fixed by the run"
+          disabled
+        >
+          <PromptInput.prompt_input_model_select_item value="claude-opus-5" selected>
+            Claude Opus 5
+          </PromptInput.prompt_input_model_select_item>
+        </PromptInput.prompt_input_model_select>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The second one is fixed, which is what a resumed run needs: changing the model
+        mid-run would make the transcript describe two different agents.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-attachments"}} = assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <p class="text-sm text-base-content/60">
+        Three layouts for the same file. <code>:grid</code>
+        is the thumbnail wall above the composer, <code>:inline</code>
+        is the chip row that fits inside it, and <code>:list</code>
+        is the full-width row a review surface wants. The preview falls back to the glyph
+        for the file's category, which is how an audio file stays distinguishable from a
+        document with no thumbnail to show.
+      </p>
+
+      <div class="space-y-2">
+        <p class="text-xs uppercase tracking-wide text-base-content/60">Grid</p>
+        <PromptInput.attachments id="demo-attachments-grid" variant={:grid}>
+          <PromptInput.attachment variant={:grid}>
+            <PromptInput.attachment_preview
+              variant={:grid}
+              media_category={:image}
+              src={~p"/images/logo.svg"}
+              filename="graph.svg"
+            />
+            <PromptInput.attachment_remove variant={:grid} label="Remove graph.svg" />
+          </PromptInput.attachment>
+          <PromptInput.attachment variant={:grid}>
+            <PromptInput.attachment_preview
+              variant={:grid}
+              media_category={:document}
+              filename="receipt.pdf"
+            />
+            <PromptInput.attachment_remove variant={:grid} label="Remove receipt.pdf" />
+          </PromptInput.attachment>
+          <PromptInput.attachment variant={:grid}>
+            <PromptInput.attachment_preview
+              variant={:grid}
+              media_category={:audio}
+              filename="standup.m4a"
+            />
+            <PromptInput.attachment_remove variant={:grid} label="Remove standup.m4a" />
+          </PromptInput.attachment>
+        </PromptInput.attachments>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs uppercase tracking-wide text-base-content/60">Inline</p>
+        <PromptInput.attachments id="demo-attachments-inline" variant={:inline}>
+          <PromptInput.attachment variant={:inline}>
+            <PromptInput.attachment_preview
+              variant={:inline}
+              media_category={:source}
+              filename="targets.ex"
+            />
+            <PromptInput.attachment_info variant={:inline} label="targets.ex" />
+            <PromptInput.attachment_remove variant={:inline} label="Remove targets.ex" />
+          </PromptInput.attachment>
+          <PromptInput.attachment variant={:inline}>
+            <PromptInput.attachment_preview
+              variant={:inline}
+              media_category={:video}
+              filename="repro.mp4"
+            />
+            <PromptInput.attachment_info variant={:inline} label="repro.mp4" />
+            <PromptInput.attachment_remove variant={:inline} label="Remove repro.mp4" />
+          </PromptInput.attachment>
+        </PromptInput.attachments>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs uppercase tracking-wide text-base-content/60">List</p>
+        <PromptInput.attachments id="demo-attachments-list" variant={:list}>
+          <PromptInput.attachment variant={:list}>
+            <PromptInput.attachment_preview
+              variant={:list}
+              media_category={:source}
+              filename="placement.ex"
+            />
+            <PromptInput.attachment_info
+              variant={:list}
+              label="lib/openagents/cloud/placement.ex"
+              media_type="text/x-elixir"
+            />
+            <PromptInput.attachment_remove variant={:list} label="Remove placement.ex" />
+          </PromptInput.attachment>
+          <PromptInput.attachment variant={:list}>
+            <PromptInput.attachment_preview
+              variant={:list}
+              media_category={:unknown}
+              filename="fleet.tfstate"
+            />
+            <PromptInput.attachment_info
+              variant={:list}
+              label="infra/staging/fleet.tfstate"
+              media_type="application/json"
+            />
+            <PromptInput.attachment_remove variant={:list} label="Remove fleet.tfstate" />
+          </PromptInput.attachment>
+        </PromptInput.attachments>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs uppercase tracking-wide text-base-content/60">Empty</p>
+        <PromptInput.attachment_empty id="demo-attachments-empty" />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-speech-input"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Push-to-talk. The hook detects the Web Speech API, falls back to <code>MediaRecorder</code>, and disables itself when neither exists — then publishes
+        what it found on the wrapper, so the whole treatment, including the three
+        staggered rings while recording, is CSS keyed off data attributes rather than a
+        re-render.
+      </p>
+      <div class="flex flex-wrap items-center gap-8">
+        <PromptInput.speech_input id="demo-speech" transcript_event="demo_transcript" />
+        <PromptInput.speech_input
+          id="demo-speech-disabled"
+          transcript_event="demo_transcript"
+          disabled
+        />
+      </div>
+      <p class="text-sm text-base-content/60">
+        Recognized text arrives as an ordinary LiveView event. Recorded audio cannot
+        travel in one, so in the fallback the hook writes the blob onto a file input the
+        caller names, and disables itself when there is no such input to write to.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-mic-selector"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A native <code>select</code>
+        the browser fills in after mount, which is why it carries <code>phx-update="ignore"</code>: the device list is knowledge the client has and
+        the server does not, and a re-render must not throw it away. Until permission is
+        granted the list is the placeholder alone, which is honest — the browser refuses
+        to name devices it has not been allowed to.
+      </p>
+      <div class="flex flex-wrap items-center gap-4">
+        <PromptInput.mic_selector id="demo-mic-selector" name="demo[mic]" />
+        <PromptInput.mic_selector id="demo-mic-selector-seeded" name="demo[seeded_mic]">
+          <PromptInput.mic_selector_item value="default" selected>
+            MacBook Pro Microphone
+          </PromptInput.mic_selector_item>
+          <PromptInput.mic_selector_item value="usb-1">
+            Shure MV7 (14ed:1012)
+          </PromptInput.mic_selector_item>
+        </PromptInput.mic_selector>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The second one is seeded from the server so the shape is visible here. In use, the
+        hook replaces whatever it finds.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-model-selector"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The composer's select is for two models. This is for thirty: a native popover
+        holding a search field, grouped rows, and shortcuts. Filtering runs in the browser
+        against text already on the page, so typing costs no round trip and an empty
+        result has words rather than a blank panel.
+      </p>
+      <div class="flex items-center gap-3">
+        <PromptInput.model_selector_trigger panel="demo-model-selector">
+          <PromptInput.model_selector_logo src={~p"/images/logo.svg"} provider="OpenAgents" />
+          <PromptInput.model_selector_name>Claude Opus 5</PromptInput.model_selector_name>
+        </PromptInput.model_selector_trigger>
+        <span class="text-sm text-base-content/60">Open, then type to filter</span>
+      </div>
+      <PromptInput.model_selector id="demo-model-selector" label="Select a model">
+        <PromptInput.model_selector_input placeholder="Search models..." />
+        <PromptInput.model_selector_list>
+          <PromptInput.model_selector_group heading="Anthropic">
+            <PromptInput.model_selector_item value="Claude Opus 5" selected>
+              <PromptInput.model_selector_name>Claude Opus 5</PromptInput.model_selector_name>
+              <PromptInput.model_selector_shortcut>⌘1</PromptInput.model_selector_shortcut>
+            </PromptInput.model_selector_item>
+            <PromptInput.model_selector_item value="Claude Sonnet 4">
+              <PromptInput.model_selector_name>Claude Sonnet 4</PromptInput.model_selector_name>
+              <PromptInput.model_selector_shortcut>⌘2</PromptInput.model_selector_shortcut>
+            </PromptInput.model_selector_item>
+            <PromptInput.model_selector_item value="Claude Haiku 4">
+              <PromptInput.model_selector_name>Claude Haiku 4</PromptInput.model_selector_name>
+            </PromptInput.model_selector_item>
+          </PromptInput.model_selector_group>
+          <PromptInput.model_selector_separator />
+          <PromptInput.model_selector_group heading="On this fleet">
+            <PromptInput.model_selector_item value="Psion 1B pretrained">
+              <PromptInput.model_selector_name>Psion 1B</PromptInput.model_selector_name>
+            </PromptInput.model_selector_item>
+          </PromptInput.model_selector_group>
+          <PromptInput.model_selector_empty />
+        </PromptInput.model_selector_list>
+      </PromptInput.model_selector>
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-base-content/60">Several providers behind one row:</span>
+        <PromptInput.model_selector_logo_group>
+          <PromptInput.model_selector_logo src={~p"/images/logo.svg"} provider="OpenAgents" />
+          <PromptInput.model_selector_logo src={~p"/images/logo.svg"} provider="Psionic" />
+        </PromptInput.model_selector_logo_group>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-queue"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Turns the reader has already written but not yet sent. Each section is a native <code>details</code>, so the chevron rotates off the element's own
+        <code>open</code>
+        attribute and the disclosure works before any JavaScript loads.
+      </p>
+      <PromptInput.queue id="demo-queue">
+        <PromptInput.queue_section open>
+          <PromptInput.queue_section_trigger>
+            <PromptInput.queue_section_label label="queued" count={2}>
+              <:icon><UI.icon name="clock" class="size-4" /></:icon>
+            </PromptInput.queue_section_label>
+          </PromptInput.queue_section_trigger>
+          <PromptInput.queue_section_content>
+            <PromptInput.queue_list>
+              <PromptInput.queue_item>
+                <PromptInput.queue_item_indicator />
+                <PromptInput.queue_item_content>
+                  Run the suite at three seeds and report the flaky ones
+                  <PromptInput.queue_item_description>
+                    Sends after the current turn
+                  </PromptInput.queue_item_description>
+                </PromptInput.queue_item_content>
+                <PromptInput.queue_item_actions>
+                  <PromptInput.queue_item_action label="Remove from the queue">
+                    <UI.icon name="x" class="size-4" />
+                  </PromptInput.queue_item_action>
+                </PromptInput.queue_item_actions>
+              </PromptInput.queue_item>
+              <PromptInput.queue_item>
+                <PromptInput.queue_item_indicator />
+                <PromptInput.queue_item_content>
+                  Open an issue for whatever stays red
+                  <PromptInput.queue_item_attachment>
+                    <PromptInput.queue_item_file>targets_test.exs</PromptInput.queue_item_file>
+                    <PromptInput.queue_item_image src={~p"/images/logo.svg"} alt="" />
+                  </PromptInput.queue_item_attachment>
+                </PromptInput.queue_item_content>
+              </PromptInput.queue_item>
+            </PromptInput.queue_list>
+          </PromptInput.queue_section_content>
+        </PromptInput.queue_section>
+
+        <PromptInput.queue_section open={false}>
+          <PromptInput.queue_section_trigger>
+            <PromptInput.queue_section_label label="sent" count={1}>
+              <:icon><UI.icon name="check" class="size-4" /></:icon>
+            </PromptInput.queue_section_label>
+          </PromptInput.queue_section_trigger>
+          <PromptInput.queue_section_content>
+            <PromptInput.queue_list>
+              <PromptInput.queue_item>
+                <PromptInput.queue_item_indicator completed />
+                <PromptInput.queue_item_content completed>
+                  Which module decides whether an SCV run is admitted?
+                </PromptInput.queue_item_content>
+              </PromptInput.queue_item>
+            </PromptInput.queue_list>
+          </PromptInput.queue_section_content>
+        </PromptInput.queue_section>
+      </PromptInput.queue>
+
+      <p class="text-sm text-base-content/60">With nothing waiting:</p>
+      <PromptInput.queue id="demo-queue-empty">
+        <PromptInput.queue_empty />
+      </PromptInput.queue>
+    </div>
+    """
+  end
+
+  # ── AI evidence ───────────────────────────────────────────────────────────
+
+  defp component_demo(%{item: %{slug: "ai-code-block"}} = assigns) do
+    assigns = assign(assigns, :code, @demo_code)
+
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        Chrome, line numbers, and a copy affordance, but no syntax highlighting: the
+        source tokenizes with Shiki in the browser, which is a second rendering engine
+        this page has not earned. The numbers come from a CSS counter, so selecting the
+        block copies the code without them.
+      </p>
+      <Evidence.code_block
+        id="demo-code-block"
+        code={@code}
+        language="elixir"
+        filename="lib/openagents/cloud/placement.ex"
+        show_line_numbers
+      >
+        <:actions>
+          <UI.text_button>Open in the repository</UI.text_button>
+        </:actions>
+      </Evidence.code_block>
+      <p class="text-sm text-base-content/60">
+        Without a filename, a language, or actions, the header holds only the copy
+        control, and the numbers can be left off for a fragment nobody is going to cite by
+        line.
+      </p>
+      <Evidence.code_block id="demo-code-block-bare" code={@code} />
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-snippet"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        One command in a read-only field rather than in a paragraph, so a reader can
+        select it, tab to it, and copy it without selecting the prose around it. The
+        prefix is decorative: it says "this is a shell command" without becoming part of
+        what gets copied.
+      </p>
+      <div class="space-y-3">
+        <Evidence.snippet id="demo-snippet-shell" code="mix precommit" prefix="$" />
+        <Evidence.snippet
+          id="demo-snippet-long"
+          code="git fetch openagents && git rebase openagents/main && git push openagents HEAD:main"
+          prefix="$"
+          label="Push to the forge"
+        />
+        <Evidence.snippet
+          id="demo-snippet-plain"
+          code="OPENAGENTS_RELEASE_VSN=0.3.0"
+          copy={false}
+          label="Environment variable"
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-terminal"}} = assigns) do
+    assigns = assign(assigns, :output, @demo_terminal_output)
+
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        A fixed dark ground rather than a themed one, because terminal output means the
+        colours the program chose, and repainting them by palette would make the same run
+        look like two different runs. Escape sequences are not parsed: strip them before
+        passing the output, or the reader sees them.
+      </p>
+      <Evidence.terminal
+        id="demo-terminal-streaming"
+        title="scv-13 — mix test"
+        output={@output}
+        status="Running"
+        streaming
+      >
+        <:actions>
+          <UI.text_button>Stop</UI.text_button>
+        </:actions>
+      </Evidence.terminal>
+      <p class="text-sm text-base-content/60">
+        Composed by hand instead, one line at a time, when the prompt matters as much as
+        the output.
+      </p>
+      <Evidence.terminal id="demo-terminal-lines" title="scv-13 — worktree">
+        <Evidence.terminal_line>git status --short</Evidence.terminal_line>
+        <Evidence.terminal_line prompt=" ">M lib/openagents/forge/targets.ex</Evidence.terminal_line>
+        <Evidence.terminal_line prompt=" ">
+          M test/openagents/forge/targets_test.exs
+        </Evidence.terminal_line>
+        <Evidence.terminal_line>git stash list</Evidence.terminal_line>
+      </Evidence.terminal>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-sources"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The count comes first and the list only on request, which is the right default for
+        something a reader checks rather than reads: they want to know an answer was
+        grounded before they want to know in what. A native <code>details</code>, so it needs no script.
+      </p>
+      <Evidence.sources id="demo-sources" count={4}>
+        <Evidence.source
+          href="https://openagents.com/OpenAgentsInc/openagents.com"
+          title="lib/openagents/cloud/placement.ex"
+        />
+        <Evidence.source
+          href="https://openagents.com/OpenAgentsInc/openagents.com"
+          title="docs/cloud/INVARIANTS.md"
+        />
+        <Evidence.source href="https://hexdocs.pm/phoenix_live_view" title="Phoenix.LiveView" />
+        <Evidence.source href="https://openagents.com/OpenAgentsInc/openagents.com" />
+      </Evidence.sources>
+      <p class="text-sm text-base-content/60">
+        The last one has no title, so it falls back to the address. A source that cannot
+        be named is still a source, and hiding it would overstate how much of the answer
+        is accounted for.
+      </p>
+      <Evidence.sources id="demo-sources-open" count={1} open>
+        <Evidence.source
+          href="https://openagents.com/OpenAgentsInc/openagents.com"
+          title="AGENTS.md"
+        />
+      </Evidence.sources>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-inline-citation"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A hostname chip mid-sentence, so the reader can see what a claim rests on without
+        leaving the line. The card opens on hover and on focus within, which is what makes
+        it reachable from the keyboard; the source paginates its sources in a carousel,
+        and they are simply listed here, because a citation is scoped to one claim and the
+        count stays small.
+      </p>
+      <p class="max-w-[68ch] text-sm leading-relaxed">
+        An expired capability manifest is refused before scoring <Evidence.inline_citation id="demo-citation">
+          rather than ranked last
+          <:source
+            url="https://openagents.com/OpenAgentsInc/openagents.com/blob/main/docs/cloud/INVARIANTS.md"
+            title="Cloud invariants"
+            description="Admission checks capability freshness ahead of placement."
+          />
+          <:source
+            url="https://openagents.com/OpenAgentsInc/openagents.com/blob/main/lib/openagents/cloud/placement.ex"
+            title="Placement.admit/2"
+          />
+        </Evidence.inline_citation>, so it never reaches the queue at all.
+      </p>
+      <p class="max-w-[68ch] text-sm leading-relaxed">
+        The quote treatment carries the sentence a source actually said: <Evidence.inline_citation id="demo-citation-quote">
+          the refusal is a policy decision
+          <:source url="https://openagents.com/OpenAgentsInc/openagents.com" title="AGENTS.md" />
+        </Evidence.inline_citation>.
+      </p>
+      <Evidence.inline_citation_quote>
+        Treat invariant changes as policy changes.
+      </Evidence.inline_citation_quote>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-context"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        How much of the window a turn spent, said twice: as a percentage and as an arc, so
+        the meter survives greyscale and a screen reader alike. The ring is a masked conic
+        gradient rather than a drawn arc, because inline SVG is not allowed in a product
+        surface here. Costs are attributes — there is no pricing table in this app, so a
+        caller that knows the price passes it.
+      </p>
+      <div class="flex flex-wrap items-center gap-6">
+        <Evidence.context
+          id="demo-context"
+          used_tokens={128_400}
+          max_tokens={1_000_000}
+          input_tokens={96_000}
+          output_tokens={12_400}
+          reasoning_tokens={14_000}
+          cached_tokens={6_000}
+          input_cost={0.29}
+          output_cost={0.19}
+          reasoning_cost={0.21}
+          cached_cost={0.01}
+          total_cost={0.70}
+        />
+        <Evidence.context id="demo-context-high" used_tokens={870_000} max_tokens={1_000_000} />
+        <Evidence.context id="demo-context-over" used_tokens={1_120_000} max_tokens={1_000_000} />
+      </div>
+      <p class="text-sm text-base-content/60">
+        The third one is over budget. A bar that silently pins at full hides the one state
+        worth seeing, so it clamps its width, turns to the danger tone, and says so in an
+        attribute a test can assert on.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-artifact"}} = assigns) do
+    assigns = assign(assigns, :code, @demo_code)
+
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Something the model produced, framed so the actions that act on it sit beside its
+        name rather than under its contents. The body is whatever the artifact is — a
+        patch, a document, a chart — and scrolls on its own, so a long artifact does not
+        push the rest of the turn off the page.
+      </p>
+      <Evidence.artifact
+        id="demo-artifact"
+        title="targets.ex"
+        description="Sorts candidates by identifier before scoring"
+        class="h-72"
+      >
+        <:actions>
+          <Evidence.artifact_action icon="copy" label="Copy the patch" />
+          <Evidence.artifact_action icon="download" label="Download the patch" />
+          <Evidence.artifact_action
+            icon="external-link"
+            label="Open in the repository"
+            tooltip="Open lib/openagents/forge/targets.ex"
+          />
+        </:actions>
+        <Evidence.code_block id="demo-artifact-code" code={@code} language="elixir" copy={false} />
+      </Evidence.artifact>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-confirmation"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        An ask before a step that cannot be taken back, and — the part that matters — it
+        keeps showing its answer afterwards. A confirmation that vanishes once decided
+        leaves a transcript that cannot say who allowed what, which is exactly what a
+        transcript is for.
+      </p>
+      <Evidence.confirmation
+        id="demo-confirmation-requested"
+        state={:requested}
+        title="Push scv-13's branch to the forge and open a pull request?"
+      >
+        <:actions>
+          <Evidence.confirmation_action variant={:primary}>Approve</Evidence.confirmation_action>
+          <Evidence.confirmation_action variant={:outline}>Deny</Evidence.confirmation_action>
+        </:actions>
+      </Evidence.confirmation>
+      <Evidence.confirmation
+        id="demo-confirmation-approved"
+        state={:approved}
+        title="Push scv-13's branch to the forge and open a pull request?"
+        reason="Approved by mason. The suite was green at three seeds."
+      />
+      <Evidence.confirmation
+        id="demo-confirmation-denied"
+        state={:denied}
+        title="Force-push over the staging branch?"
+        reason="Denied by mason. Another run owns that branch."
+      />
+      <p class="text-sm text-base-content/60">
+        The decided ones carry no controls, because there is nothing left to decide, and
+        the reason is where the transcript earns its keep.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-question"}} = assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <p class="text-sm text-base-content/60">
+        Both halves matter. A model that can only offer choices asks the wrong question
+        sooner or later, and one that only offers a text box makes the reader redo work it
+        has already done. The choices are real radio and checkbox inputs styled as chips,
+        so selection, keyboard behaviour, and submission are the browser's job.
+      </p>
+      <Evidence.question
+        id="demo-question-single"
+        prompt="Which branch should scv-13 work on?"
+        description="The repository has three branches with recent commits."
+        name="branch"
+        selection_mode={:single}
+        selected={["main"]}
+        text_label="Something else?"
+        placeholder="Name a branch"
+        submit_label="Use this branch"
+      >
+        <:option value="main">main</:option>
+        <:option value="codex/repository-cli-docs">codex/repository-cli-docs</:option>
+        <:option value="feat/ai-elements-catalog">feat/ai-elements-catalog</:option>
+      </Evidence.question>
+
+      <Evidence.question
+        id="demo-question-multiple"
+        prompt="Which surfaces should the run touch?"
+        name="surface"
+        selection_mode={:multiple}
+        selected={["catalog", "tests"]}
+        text="Leave the CSS alone; another run owns it."
+        submit_label="Start the run"
+      >
+        <:option value="catalog">Component catalog</:option>
+        <:option value="demos">Demo pages</:option>
+        <:option value="tests">Tests</:option>
+        <:option value="css">Stylesheet</:option>
+      </Evidence.question>
+
+      <Evidence.question
+        id="demo-question-answered"
+        prompt="Which branch should scv-13 work on?"
+        name="answered_branch"
+        selected={["main"]}
+        disabled
+        submit_label="Answered"
+      >
+        <:option value="main">main</:option>
+        <:option value="codex/repository-cli-docs">codex/repository-cli-docs</:option>
+      </Evidence.question>
+      <p class="text-sm text-base-content/60">
+        The third one is answered and disabled, which is the state the source could not
+        reach: its submit control disabled itself from React state, so here the server
+        decides, and an answered question stays legible in the transcript.
+      </p>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "ai-image"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A generated image cannot travel through Markdown here: the sanitizer's allowlist
+        has no <code>img</code>
+        in it, so an image written into a model's prose is dropped before it reaches the
+        page. It arrives as attributes instead — either a source or the base64 and media
+        type a model returns, which become a data URI.
+      </p>
+      <div class="flex flex-wrap items-start gap-6">
+        <Evidence.image
+          id="demo-image"
+          src={~p"/images/logo.svg"}
+          alt="The OpenAgents mark"
+          class="max-w-48"
+        />
+        <Evidence.image
+          id="demo-image-wide"
+          src={~p"/images/og-card-default.png"}
+          alt="The default social card for openagents.com"
+          class="max-w-md"
+        />
+      </div>
+      <p class="text-sm text-base-content/60">
+        <code>alt</code>
+        is required rather than defaulted. A generated image is exactly the case where
+        nothing nearby says what it shows, so an empty alternative would make the whole
+        message disappear for a reader who cannot see it.
+      </p>
     </div>
     """
   end

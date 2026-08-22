@@ -17,6 +17,9 @@ orchestration, memory, voice, delegated work, connected computers, and operator
 surfaces. The application does not divide these features between a public shell
 and a private product service.
 
+For shared vocabulary — forge versus GitHub, push versus deploy, computer
+versus machine, which receipt, which module — read `docs/taxonomy.md`.
+
 ## System map
 
 ```text

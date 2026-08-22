@@ -1,5 +1,12 @@
 This is a web application written using the Phoenix web framework.
 
+## Vocabulary
+
+Read `docs/taxonomy.md` before writing docs, commit messages, or product copy.
+It defines what each word means here — forge versus GitHub, push versus
+deploy, computer versus machine, which receipt, which module — and the naming
+rules that keep them straight.
+
 ## Communication style
 
 All text in this repo — docs, README, `AGENTS.md`, commit messages, and agent responses — follows the [Google Developer Documentation Style Guide](https://developers.google.com/style). When writing or reviewing text, read the `google-developer-style` skill at `.agents/skills/google-developer-style/SKILL.md`.

@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "the composer takes focus when the conversation opens", %{conn: conn} do
     conn = log_in_github_user(conn, "composer-focus-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # Declarative rather than a hook call, so it also fires when the composer
     # remounts - returning from the memory surface, for instance.
@@ -18,7 +18,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "the composer error renders as the eyebrow inside the card", %{conn: conn} do
     conn = log_in_github_user(conn, "composer-eyebrow-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     view
     |> form("#message-form", chat: %{message: "   "})
@@ -35,7 +35,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "sending a message resets the composer so the draft cannot stick", %{conn: conn} do
     conn = log_in_github_user(conn, "composer-clear-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     view
     |> form("#message-form", chat: %{message: "The draft must not remain after send."})
@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   test "the sidebar carries the shared destinations for an account that has written",
        %{conn: conn} do
     conn = log_in_chatting_user(conn, "computers-nav-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # Computers, Memory and Leaderboard are destinations for everyone, so they
     # sit in the application sidebar rather than appearing only on chat.
@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "chat contributes its rows to the one application sidebar", %{conn: conn} do
     conn = log_in_github_user(conn, "sidebar-shell-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # Chat used to render a second, complete application shell inside the
     # first: its own brand, rail and account footer, nested in the padded main
@@ -107,11 +107,11 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "the admin row renders only for an operator", %{conn: conn} do
     conn = log_in_github_user(conn, "admin-chip-hidden-browser")
-    {:ok, _view, html} = live(conn, ~p"/chat")
+    {:ok, _view, html} = live(conn, ~p"/sarah")
     refute html =~ ~s(id="open-admin")
 
     conn = log_in_admin_user(recycle(conn), "admin-chip-visible-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
     # Admin is one row in the sidebar footer for an operator on every page,
     # rather than a row that exists only on chat.
     assert has_element?(view, ~s(#sidebar .sidebar-footer #open-admin[href="/admin"]))
@@ -123,12 +123,12 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     Application.put_env(:openagents, :conversation_reset_enabled, true)
     conn = log_in_github_user(conn, "reset-visible-browser")
-    {:ok, _view, html} = live(conn, ~p"/chat")
+    {:ok, _view, html} = live(conn, ~p"/sarah")
     assert html =~ ~s(id="reset-conversation")
 
     Application.put_env(:openagents, :conversation_reset_enabled, false)
     conn = log_in_github_user(recycle(conn), "reset-hidden-browser")
-    {:ok, _view, html} = live(conn, ~p"/chat")
+    {:ok, _view, html} = live(conn, ~p"/sarah")
     refute html =~ ~s(id="reset-conversation")
   end
 
@@ -149,7 +149,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   test "presents one continuing conversation after authentication", %{conn: conn} do
     user = github_user("live-browser")
     conn = log_in_github_user(conn, "live-browser")
-    assert {:ok, view, html} = live(conn, ~p"/chat")
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
 
     assert html =~ "OpenAgents"
     assert html =~ "Message Sarah"
@@ -195,7 +195,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     end)
 
     conn = log_in_github_user(conn, "voice-recording-off-user")
-    assert {:ok, view, html} = live(conn, ~p"/chat")
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
 
     assert html =~ ~s(id="voice-controller")
     refute has_element?(view, "#voice-recording-disclosure")
@@ -205,7 +205,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   test "a connected LiveView refuses events after the account is banned", %{conn: conn} do
     user = github_user("live-ban-user")
     conn = log_in_github_user(conn, "live-ban-user")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
     assert {:ok, _banned} = OpenAgents.Accounts.ban_user(user, "manual_abuse_review")
 
     view |> form("#message-form", chat: %{message: "still here?"}) |> render_submit()
@@ -221,7 +221,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     token = "voice-live-browser-credential-000000000000000000"
     user = github_user(token)
     conn = log_in_github_user(conn, token)
-    assert {:ok, view, html} = live(conn, ~p"/chat")
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
 
     assert html =~ ~s(id="voice-controller")
     assert html =~ ~s(phx-hook="VoiceController")
@@ -291,7 +291,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     token = "voice-typed-inject-credential-00000000000000000"
     user = github_user(token)
     conn = log_in_github_user(conn, token)
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
 
     conversation = Conversations.get_conversation_for_user(user)
 
@@ -340,7 +340,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   } do
     user = github_user("live-voice-delta-browser")
     conn = log_in_github_user(conn, "live-voice-delta-browser")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
     conversation = Conversations.get_conversation_for_user(user)
 
     send(view.pid, {
@@ -394,9 +394,9 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     user = github_user(key)
     conn = log_in_github_user(conn, key)
 
-    assert {:ok, first_view, first_html} = live(conn, ~p"/chat")
+    assert {:ok, first_view, first_html} = live(conn, ~p"/sarah")
     GenServer.stop(first_view.pid)
-    assert {:ok, _second_view, second_html} = live(conn, ~p"/chat")
+    assert {:ok, _second_view, second_html} = live(conn, ~p"/sarah")
 
     assert first_html =~ "Hello. I&#39;m Sarah—an OpenAgent. What are we working on?"
     assert second_html =~ "Hello. I&#39;m Sarah—an OpenAgent. What are we working on?"
@@ -419,7 +419,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "turn execution receives the installed Sarah persona and default role", %{conn: conn} do
     conn = log_in_github_user(conn, "persona-browser")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
 
     view
     |> form("#message-form", chat: %{message: "[inspect-persona]"})
@@ -434,7 +434,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   test "sends, streams, and durably stores a complete turn", %{conn: conn} do
     user = github_user("durable-turn-user")
     conn = log_in_github_user(conn, "durable-turn-user")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
     conversation = Conversations.get_conversation_for_user(user)
 
     view
@@ -486,7 +486,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "each message carries a labeled hover toolbar and an accessible timestamp", %{conn: conn} do
     conn = log_in_github_user(conn, "toolbar-browser-credential-000000000000000000000")
-    assert {:ok, view, html} = live(conn, ~p"/chat")
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
 
     view
     |> form("#message-form", chat: %{message: "Toolbar please."})
@@ -528,7 +528,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     assert {:ok, _running_step, :started} = Conversations.start_tool_step(step)
 
     conn = log_in_github_user(conn, token)
-    assert {:ok, view, html} = live(conn, ~p"/chat")
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
 
     # The event header renders the durable scrubbed values: the subject
     # sentence plus the bounded argument excerpt, per issue #79.
@@ -568,7 +568,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     %{turn: turn, receipt: receipt, step: step} = begin_tool_turn(token, "bounded-query")
 
     conn = log_in_github_user(conn, token)
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
     assert render(view) =~ "Getting ready for a look back through this conversation"
 
     assert {:ok, _running_step, :started} = Conversations.start_tool_step(step)
@@ -643,7 +643,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     conn = log_in_github_user(conn, "tool-cancel-live-browser-credential-000000000000")
 
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
 
     view
     |> form("#message-form", chat: %{message: "[cancel-tool-loop]"})
@@ -677,7 +677,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     on_exit(fn -> Application.delete_env(:openagents, :test_tool_observer) end)
 
     conn = log_in_github_user(conn, "queue-live-browser-credential-00000000000000")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # Start a turn that stays active (its tool blocks).
     view |> form("#message-form", chat: %{message: "[cancel-tool-loop]"}) |> render_submit()
@@ -726,7 +726,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     local_user = github_user(local_token)
     local_conn = log_in_github_user(conn, local_token)
-    assert {:ok, local_view, local_html} = live(local_conn, ~p"/chat")
+    assert {:ok, local_view, local_html} = live(local_conn, ~p"/sarah")
     refute local_html =~ "private-live-boundary-marker-73"
 
     local_view
@@ -791,7 +791,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     on_exit(fn -> Application.delete_env(:openagents, :test_provider_observer) end)
 
     conn = log_in_github_user(conn, token)
-    assert {:ok, view, html} = live(conn, ~p"/chat")
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
     refute html =~ secret
     refute inspect(:sys.get_state(view.pid).socket.assigns) =~ secret
 
@@ -855,7 +855,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
   test "the transcript is a conversation of messages, not a hand-rolled scroller", %{conn: conn} do
     conn = log_in_github_user(conn, "conversation-composition-browser-00000000")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # The scroller is `conversation/1`: a log region whose inner box scrolls,
     # so the return-to-newest control can hold still against the bottom edge.
@@ -883,7 +883,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     on_exit(fn -> Application.delete_env(:openagents, :test_tool_observer) end)
 
     conn = log_in_github_user(conn, "prompt-input-composition-browser-000000")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # The form is `prompt_input/1`: its hook owns Enter-to-submit and the
     # auto-resize the retired `.Composer` hook used to do by hand.
@@ -917,7 +917,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     on_exit(fn -> Application.delete_env(:openagents, :test_tool_observer) end)
 
     conn = log_in_github_user(conn, "queue-composition-browser-0000000000000")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     view |> form("#message-form", chat: %{message: "[cancel-tool-loop]"}) |> render_submit()
     assert_receive {:test_tool_executed, _tool_pid, "block", _scope_ref}, 1_000
@@ -950,7 +950,7 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     %{turn: turn, step: step} = begin_tool_turn(token, "composition-query")
 
     conn = log_in_github_user(conn, token)
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # Requested, before the step starts: `tool_status_badge/1` reads
     # `input-streaming`, which it labels Pending.

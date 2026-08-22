@@ -103,7 +103,7 @@ defmodule OpenAgentsWeb.Router do
 
     live_session :authenticated,
       on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
-      live "/chat", ChatLive, :index
+      live "/sarah", ChatLive, :index
       live "/memory", MemoryLive, :index
       live "/computers", ComputersLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
@@ -153,6 +153,23 @@ defmodule OpenAgentsWeb.Router do
 
     get "/memory/export", MemoryExportController, :show
     delete "/github/connection", AuthController, :disconnect
+  end
+
+  # The chat surface is a placeholder for the upcoming product, and it is
+  # operator-only: the gate runs twice, as a plug on the initial request and as
+  # an on_mount hook on the LiveView, the same belt-and-suspenders the /admin
+  # scope uses. Everyone else is redirected to home rather than shown a login
+  # wall for a page they cannot open.
+  scope "/", OpenAgentsWeb do
+    pipe_through [:browser, :authenticated, :operator]
+
+    live_session :operator_chat,
+      on_mount: [
+        {OpenAgentsWeb.UserAuth, :ensure_authenticated},
+        {OpenAgentsWeb.UserAuth, :ensure_admin}
+      ] do
+      live "/chat", ChatPlaceholderLive, :index
+    end
   end
 
   # Reading issues is a public activity on a public repository, the way code
@@ -253,6 +270,16 @@ defmodule OpenAgentsWeb.Router do
   end
 
   scope "/api/v3", OpenAgentsWeb do
+    pipe_through :forge_write_api
+
+    # Forum writes. Reads are public and live in the optional-auth scope.
+    post "/forum/topics", ForumApiController, :create_topic
+    post "/forum/topics/:topic_id/posts", ForumApiController, :create_post
+    post "/forum/claims", ForumApiController, :create_claim
+    get "/forum/claims", ForumApiController, :list_claims
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
     pipe_through :optional_forge_api
 
     get "/repos/:owner/:repo", RepositoryController, :show
@@ -262,6 +289,11 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :show
     get "/repos/:owner/:repo/projectsV2/:project_number/items", ProjectController, :items
     get "/repos/:owner/:repo/projectsV2/:project_number/fields", ProjectController, :fields
+
+    # The forum reads. Posting and claiming live behind the write scope.
+    get "/forum", ForumApiController, :boards
+    get "/forum/topics", ForumApiController, :topics
+    get "/forum/topics/:id", ForumApiController, :show_topic
   end
 
   scope "/api/v3", OpenAgentsWeb do

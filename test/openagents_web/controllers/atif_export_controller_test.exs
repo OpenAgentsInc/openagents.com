@@ -61,7 +61,7 @@ defmodule OpenAgentsWeb.AtifExportControllerTest do
 
   test "the chat command bar carries the export chip as a download link", %{conn: conn} do
     conn = log_in_github_user(conn, "atif-export-chip-browser")
-    assert {:ok, view, _html} = live(conn, ~p"/chat")
+    assert {:ok, view, _html} = live(conn, ~p"/sarah")
 
     assert has_element?(view, ~s(a#export-atif[href="/data/export/atif"][download]))
   end

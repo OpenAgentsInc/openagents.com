@@ -711,7 +711,10 @@ defmodule OpenAgentsWeb.Layouts do
   slot :extra, doc: "rows contributed by the current page"
 
   defp sidebar(assigns) do
-    assigns = assign(assigns, :agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
+    assigns =
+      assigns
+      |> assign(:agent_surfaces?, agent_surfaces?(assigns[:current_scope]))
+      |> assign(:operator?, admin?(assigns[:current_scope]))
 
     ~H"""
     <aside id="sidebar" class="sidebar" aria-hidden="true">
@@ -719,6 +722,13 @@ defmodule OpenAgentsWeb.Layouts do
 
       <nav class="sidebar-nav" aria-label="OpenAgents surfaces">
         <Layouts.sidebar_link path={~p"/"} label="Home" icon="home" patchable={false} />
+        <Layouts.sidebar_link
+          :if={@operator?}
+          path={~p"/chat"}
+          label="Chat"
+          icon="chats"
+          patchable={false}
+        />
         <Layouts.sidebar_link
           path={~p"/repositories"}
           label="Repositories"
@@ -754,7 +764,7 @@ defmodule OpenAgentsWeb.Layouts do
         open
         state={@sidebar_sections}
       >
-        <Layouts.sidebar_link path={~p"/chat"} label="Chat" icon="chat" patchable={false} />
+        <Layouts.sidebar_link path={~p"/sarah"} label="Chat" icon="chat" patchable={false} />
         <Layouts.sidebar_link
           path={~p"/computers"}
           label="Computers"

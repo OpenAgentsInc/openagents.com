@@ -6,7 +6,7 @@ defmodule OpenAgentsWeb.ChatSidebarSectionsTest do
 
   test "the work section is hidden while there is no background work", %{conn: conn} do
     conn = log_in_github_user(conn, "sidebar-sections-empty-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     refute has_element?(view, "#sidebar-work")
 
@@ -32,7 +32,7 @@ defmodule OpenAgentsWeb.ChatSidebarSectionsTest do
     {:ok, running} = Work.mark_job_running(job, %{})
     {:ok, finished} = Work.finish_job(running.id, "completed")
 
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     assert has_element?(view, ~s(#sidebar-job-#{job.id}[data-status="completed"]))
     assert has_element?(view, "#sidebar-job-#{job.id} .sidebar-row__title", "Collect the release")
@@ -65,7 +65,7 @@ defmodule OpenAgentsWeb.ChatSidebarSectionsTest do
         goal: "Rebuild the staging index"
       })
 
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     # Both placements are in the document and the stylesheet shows exactly one:
     # the sidebar section below 1280px, the rail above it.
@@ -82,7 +82,7 @@ defmodule OpenAgentsWeb.ChatSidebarSectionsTest do
     user = github_user("sidebar-sections-job-broadcast-browser")
     conn = log_in_github_user(conn, "sidebar-sections-job-broadcast-browser")
 
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
     refute has_element?(view, "#sidebar-work")
 
     {:ok, conversation} = Conversations.ensure_conversation(user)

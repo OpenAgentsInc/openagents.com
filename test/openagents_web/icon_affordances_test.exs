@@ -14,7 +14,7 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
   describe "icon-only controls" do
     test "the composer send control is named even though it shows only a glyph", %{conn: conn} do
       conn = log_in_github_user(conn, "icon-send-user")
-      {:ok, view, html} = live(conn, ~p"/chat")
+      {:ok, view, html} = live(conn, ~p"/sarah")
 
       assert has_element?(view, ~s(#send-message[aria-label="Send"]))
 
@@ -31,7 +31,7 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
 
     test "notice dismissal keeps its name after losing the word CLOSE", %{conn: conn} do
       conn = log_in_github_user(conn, "icon-close-user")
-      {:ok, view, _html} = live(conn, ~p"/chat")
+      {:ok, view, _html} = live(conn, ~p"/sarah")
 
       assert has_element?(view, ~s(#client-error [aria-label="Dismiss notice"]))
     end
@@ -40,7 +40,7 @@ defmodule OpenAgentsWeb.IconAffordancesTest do
   describe "glyphs beside words" do
     test "are decorative, so the control is announced once", %{conn: conn} do
       conn = log_in_github_user(conn, "icon-decorative-user")
-      {:ok, view, _html} = live(conn, ~p"/chat")
+      {:ok, view, _html} = live(conn, ~p"/sarah")
 
       for id <- ~w(load-older) do
         refute has_element?(view, "##{id} svg[aria-label]"),

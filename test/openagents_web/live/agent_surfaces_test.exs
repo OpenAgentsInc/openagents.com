@@ -22,9 +22,11 @@ defmodule OpenAgentsWeb.AgentSurfacesTest do
       {:ok, view, _html} = live(conn, ~p"/leaderboard")
 
       refute has_element?(view, @section)
-      refute has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
+      refute has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/sarah"]))
       refute has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/memory"]))
       refute has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/computers"]))
+      # The operator-only chat surface is hidden from a non-operator too.
+      refute has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
     end
 
     test "an account that has written to her does", %{conn: conn} do
@@ -32,9 +34,10 @@ defmodule OpenAgentsWeb.AgentSurfacesTest do
       {:ok, view, _html} = live(conn, ~p"/leaderboard")
 
       assert has_element?(view, @section)
-      assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
+      assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/sarah"]))
       assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/memory"]))
       assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/computers"]))
+      refute has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
     end
 
     test "an operator does, without having written", %{conn: conn} do
@@ -42,6 +45,18 @@ defmodule OpenAgentsWeb.AgentSurfacesTest do
       {:ok, view, _html} = live(conn, ~p"/leaderboard")
 
       assert has_element?(view, @section)
+      assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/sarah"]))
+      # The operator's own chat surface sits in the main nav, above
+      # Repositories.
+      assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
+
+      html = render(view)
+      assert {chat_at, _len} = :binary.match(html, ~s(href="/chat"))
+
+      assert {repositories_at, _len} =
+               :binary.match(html, ~s(href="/repositories"))
+
+      assert chat_at < repositories_at
     end
 
     test "the rest of the sidebar is unaffected either way", %{conn: conn} do
@@ -59,7 +74,7 @@ defmodule OpenAgentsWeb.AgentSurfacesTest do
   describe "earning her" do
     test "the first message reveals the section without a reload", %{conn: conn} do
       conn = log_in_github_user(conn, "first-message-account")
-      {:ok, view, _html} = live(conn, ~p"/chat")
+      {:ok, view, _html} = live(conn, ~p"/sarah")
 
       refute has_element?(view, @section)
 

@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
 
   test "no work and no delegation means no rail at all", %{conn: conn} do
     conn = log_in_github_user(conn, "delegation-idle-browser")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     refute has_element?(view, "#chat-rail")
     refute has_element?(view, "#delegation-rail")
@@ -23,7 +23,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     %{conn: conn, machine: machine} =
       delegation_owner(conn, "delegation-live-browser", "rail-box")
 
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     caller = start_delegation(machine, "claude")
     FakeController.chunk(caller.pid, caller.request_id, "hello from the machine")
@@ -93,7 +93,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     %{conn: conn, machine: machine} =
       delegation_owner(conn, "delegation-truncation-browser", "cap-box")
 
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     caller = start_delegation(machine, "claude")
     filler = String.duplicate("a", @maximum_event_bytes)
@@ -121,7 +121,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
       delegation_owner(conn, "delegation-supersede-browser", "first-box")
 
     second_machine = paired_machine(user, "second-box")
-    {:ok, view, _html} = live(conn, ~p"/chat")
+    {:ok, view, _html} = live(conn, ~p"/sarah")
 
     first = start_delegation(first_machine, "claude")
     FakeController.chunk(first.pid, first.request_id, "first delegation working")
@@ -164,8 +164,8 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
       delegation_owner(conn, "delegation-owner-browser", "owned-box")
 
     other_conn = log_in_github_user(build_conn(), "delegation-outsider-browser")
-    {:ok, owner_view, _owner_html} = live(owner_conn, ~p"/chat")
-    {:ok, other_view, _other_html} = live(other_conn, ~p"/chat")
+    {:ok, owner_view, _owner_html} = live(owner_conn, ~p"/sarah")
+    {:ok, other_view, _other_html} = live(other_conn, ~p"/sarah")
 
     caller = start_delegation(machine, "claude")
     FakeController.chunk(caller.pid, caller.request_id, "owner-only progress")

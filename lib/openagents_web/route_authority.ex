@@ -32,7 +32,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   ]
 
   @authenticated_browser_prefixes [
-    "/chat",
+    "/sarah",
     "/computers",
     "/voice/",
     "/data",
@@ -128,6 +128,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: "/logout"}),
     do: declaration(:authenticated_browser, "encrypted browser session", "session:delete", true)
+
+  defp policy(%{path: "/chat"}),
+    do: declaration(:operator, "configured operator GitHub ID", "chat:preview", false)
 
   defp policy(%{path: "/admin/analytics"}),
     do: declaration(:operator, "configured operator GitHub ID", "analytics:read", false)
@@ -289,7 +292,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope(_path), do: "product:self"
 
   defp browser_mutation?(path, :get),
-    do: path in ["/chat", "/memory", "/computers", "/settings/api-tokens"]
+    do: path in ["/sarah", "/memory", "/computers", "/settings/api-tokens"]
 
   defp browser_mutation?(_path, _verb), do: true
 

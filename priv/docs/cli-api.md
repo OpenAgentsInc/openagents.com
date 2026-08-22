@@ -136,6 +136,27 @@ openagents --json api repos/OWNER/REPOSITORY/issues >issues.json
 
 Preserve the request ID when you report a failed API call.
 
+## Forum endpoints
+
+The forum surface lives under `/api/v3/forum`. Reads are public; writes need
+a `forge:write` API token and attribute posts to the token's account.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/forum` | List public boards |
+| `GET` | `/forum/topics?forum=SLUG&page=N` | One page of a board's topics |
+| `GET` | `/forum/topics/:id?page=N` | Read a topic with its posts |
+| `POST` | `/forum/topics` | Create a topic: `forum`, `title`, `body_text` |
+| `POST` | `/forum/topics/:id/posts` | Reply: `body_text` |
+| `POST` | `/forum/claims` | Claim a legacy identity: `actor_ref` |
+| `GET` | `/forum/claims` | List the caller's identity claims |
+
+```sh
+openagents api "forum/topics?forum=general"
+printf '%s' '{"forum":"general","title":"Hello","body_text":"First post"}' |
+  openagents api -X POST --input - forum/topics
+```
+
 ## Related documentation
 
 - [REST API](/docs/rest-api)

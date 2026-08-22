@@ -31,7 +31,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
       |> recycle()
       |> get(~p"/auth/github/callback?code=valid-code&state=#{state}")
 
-    assert redirected_to(authenticated) == ~p"/chat"
+    assert redirected_to(authenticated) == ~p"/sarah"
     user_id = get_session(authenticated, "user_id")
     assert {:ok, user} = Accounts.get_active_user(user_id)
     assert user.github_id == 501
@@ -49,7 +49,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     cookie = authenticated |> get_resp_header("set-cookie") |> Enum.join(";")
     refute cookie =~ "ephemeral-github-token"
 
-    first_browser = authenticated |> recycle() |> get(~p"/chat")
+    first_browser = authenticated |> recycle() |> get(~p"/sarah")
     # The brand mark is the application's, once, in the sidebar. Chat used to
     # render a second "SARAH" mark in a header belonging to its own rail.
     assert html_response(first_browser, 200) =~ "OpenAgents"
@@ -59,7 +59,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
       build_conn()
       |> init_test_session(%{"user_id" => user.id})
 
-    assert {:ok, _view, _html} = live(second_browser, ~p"/chat")
+    assert {:ok, _view, _html} = live(second_browser, ~p"/sarah")
     assert Conversations.get_conversation_for_user(user).id == conversation.id
 
     replay =
@@ -83,7 +83,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
       |> recycle()
       |> get(~p"/auth/github/callback?code=valid-code&state=#{state}")
 
-    assert redirected_to(authenticated) == ~p"/chat"
+    assert redirected_to(authenticated) == ~p"/sarah"
     assert {:ok, _user} = authenticated |> get_session("user_id") |> Accounts.get_active_user()
   end
 
@@ -120,7 +120,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
       |> init_test_session(%{"user_id" => user.id})
       |> delete(~p"/github/connection")
 
-    assert redirected_to(disconnected) == ~p"/chat"
+    assert redirected_to(disconnected) == ~p"/sarah"
     retained_identity = Accounts.get_user(user.id)
     assert retained_identity.github_token_ciphertext == nil
     assert retained_identity.github_token_key_id == nil
@@ -145,7 +145,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
       |> init_test_session(%{"user_id" => user.id})
       |> delete(~p"/github/connection")
 
-    assert redirected_to(refused) == ~p"/chat"
+    assert redirected_to(refused) == ~p"/sarah"
     assert get_resp_header(refused, "cache-control") == ["no-store"]
     retained = Accounts.get_user(user.id)
     assert retained.github_token_ciphertext == user.github_token_ciphertext

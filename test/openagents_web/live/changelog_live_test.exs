@@ -62,7 +62,7 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
 
     # Chat is a sidebar row, so the page carries no chip back to it.
     refute html =~ ~s(id="return-to-conversation")
-    assert html =~ ~s(href="/chat")
+    assert html =~ ~s(href="/sarah")
   end
 
   test "publishes no node internals", %{conn: conn} do

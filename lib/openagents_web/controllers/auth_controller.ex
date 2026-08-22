@@ -44,7 +44,7 @@ defmodule OpenAgentsWeb.AuthController do
       |> put_session("user_id", active_user.id)
       |> put_session(@identity_session_key, identity(active_user))
       |> put_resp_header("cache-control", "no-store")
-      |> redirect(to: ~p"/chat")
+      |> redirect(to: ~p"/sarah")
     else
       {:error, :banned} -> auth_failure(conn, "banned")
       {:error, _reason} -> auth_failure(conn, "failed")
@@ -83,13 +83,13 @@ defmodule OpenAgentsWeb.AuthController do
         conn
         |> put_flash(:info, "GitHub tools disconnected and the retained grant was revoked.")
         |> put_resp_header("cache-control", "no-store")
-        |> redirect(to: ~p"/chat")
+        |> redirect(to: ~p"/sarah")
 
       {:error, _reason} ->
         conn
         |> put_flash(:error, "GitHub tools could not be disconnected. Try again.")
         |> put_resp_header("cache-control", "no-store")
-        |> redirect(to: ~p"/chat")
+        |> redirect(to: ~p"/sarah")
     end
   end
 

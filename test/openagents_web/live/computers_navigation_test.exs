@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.ComputersNavigationTest do
     assert has_element?(view, "#computers-page")
     assert has_element?(view, "#computers-manager")
     refute has_element?(view, "header.command-bar")
-    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/chat"]))
+    assert has_element?(view, ~s(#sidebar a.sidebar-row__hit[href="/sarah"]))
     assert has_element?(view, "#account-bar-trigger")
   end
 

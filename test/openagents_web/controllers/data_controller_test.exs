@@ -163,7 +163,7 @@ defmodule OpenAgentsWeb.DataControllerTest do
       |> log_in_github_user(token)
       |> delete_data("DELETE MY SARAH DATA")
 
-    assert redirected_to(deleted) == ~p"/chat"
+    assert redirected_to(deleted) == ~p"/sarah"
     assert get_session(deleted, "user_id") == user.id
 
     assert Repo.get(OpenAgents.Conversations.Visitor, owner.id) == nil
@@ -296,7 +296,7 @@ defmodule OpenAgentsWeb.DataControllerTest do
       |> log_in_github_user(token)
       |> reset_data()
 
-    assert redirected_to(reset) == ~p"/chat"
+    assert redirected_to(reset) == ~p"/sarah"
     assert get_session(reset, "user_id") == user.id
 
     assert Repo.get(OpenAgents.Conversations.Visitor, owner.id) == nil

@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.LeaderboardLiveTest do
     assert html =~ ~s(id="account-bar-trigger")
     # Chat is a sidebar row, so the page carries no chip back to it.
     refute html =~ ~s(id="return-to-conversation")
-    assert html =~ ~s(href="/chat")
+    assert html =~ ~s(href="/sarah")
   end
 
   test "explains itself when no account has spent a token", %{conn: conn} do

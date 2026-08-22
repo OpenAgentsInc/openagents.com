@@ -53,6 +53,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/device/authorizations" => :anonymous,
       "post /api/v3/device/authorizations/token" => :anonymous,
       # pipe_through :optional_forge_api — public reads, bearer-widened.
+      "get /api/v3/forum" => :optional_bearer,
+      "get /api/v3/forum/topics" => :optional_bearer,
+      "get /api/v3/forum/topics/:id" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/issues" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/issues/:issue_number" => :optional_bearer,
@@ -79,6 +82,11 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/orgs/:org/repos" => :required_bearer,
       "post /api/v3/orgs/:org/repos/imports" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues" => :required_bearer,
+      # pipe_through :forge_write_api — forum writes and identity claims.
+      "post /api/v3/forum/topics" => :required_bearer,
+      "post /api/v3/forum/topics/:topic_id/posts" => :required_bearer,
+      "post /api/v3/forum/claims" => :required_bearer,
+      "get /api/v3/forum/claims" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/labels" => :required_bearer,

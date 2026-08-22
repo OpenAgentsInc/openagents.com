@@ -28,7 +28,7 @@ defmodule OpenAgentsWeb.AccountChromeTest do
         })
 
       assert user.github_name == "Ada Lovelace"
-      {:ok, _view, html} = live(conn, ~p"/chat")
+      {:ok, _view, html} = live(conn, ~p"/sarah")
 
       assert html =~ "Ada Lovelace"
       assert html =~ "@#{user.github_login}"
@@ -40,7 +40,7 @@ defmodule OpenAgentsWeb.AccountChromeTest do
       assert user.github_name == nil
 
       conn = log_in_github_user(conn, "nameless-account")
-      {:ok, _view, html} = live(conn, ~p"/chat")
+      {:ok, _view, html} = live(conn, ~p"/sarah")
 
       # The handle becomes the display name, and is not then repeated beneath
       # itself as a qualifier.
@@ -59,7 +59,7 @@ defmodule OpenAgentsWeb.AccountChromeTest do
   describe "connection chrome" do
     test "the conversation states no connection status at all", %{conn: conn} do
       conn = log_in_github_user(conn, "connection-user")
-      {:ok, view, html} = live(conn, ~p"/chat")
+      {:ok, view, html} = live(conn, ~p"/sarah")
 
       # Removed at the owner's direction. A bar that reads CONNECTED whenever
       # the page is working spends permanent space to say nothing: the only
@@ -74,7 +74,7 @@ defmodule OpenAgentsWeb.AccountChromeTest do
   describe "composer chrome" do
     test "drops the keyboard hint line", %{conn: conn} do
       conn = log_in_github_user(conn, "composer-hint-user")
-      {:ok, _view, html} = live(conn, ~p"/chat")
+      {:ok, _view, html} = live(conn, ~p"/sarah")
 
       refute html =~ "FOR A NEW LINE"
       refute html =~ "TO SEND"

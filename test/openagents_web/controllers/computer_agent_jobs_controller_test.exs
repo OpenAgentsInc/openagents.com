@@ -23,7 +23,7 @@ defmodule OpenAgentsWeb.ComputerAgentJobsControllerTest do
        end}
     )
 
-    {:ok, view, _html} = live(browser_conn(conn, user), ~p"/chat")
+    {:ok, view, _html} = live(browser_conn(conn, user), ~p"/sarah")
 
     response =
       build_conn()

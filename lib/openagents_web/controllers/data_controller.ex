@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.DataController do
     with {:ok, user, owner, conversation} <- scope(conn),
          {:ok, :deleted} <- DataRights.delete(user, owner, conversation) do
       conn
-      |> redirect(to: ~p"/chat")
+      |> redirect(to: ~p"/sarah")
     else
       {:error, :text_turn_in_progress} ->
         conn |> put_status(:conflict) |> text("Stop Sarah's typed response before deletion.")
@@ -66,7 +66,7 @@ defmodule OpenAgentsWeb.DataController do
     if DataRights.reset_enabled?() do
       with {:ok, user, owner, conversation} <- scope(conn),
            {:ok, :deleted} <- DataRights.delete(user, owner, conversation) do
-        redirect(conn, to: ~p"/chat")
+        redirect(conn, to: ~p"/sarah")
       else
         {:error, :text_turn_in_progress} ->
           conn |> put_status(:conflict) |> text("Stop Sarah's typed response before the reset.")

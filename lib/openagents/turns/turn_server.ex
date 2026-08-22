@@ -20,7 +20,7 @@ defmodule OpenAgents.Turns.TurnServer do
   }
 
   alias OpenAgents.Providers.{ProviderEvent, Request, ToolOutput}
-  alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}
+  alias OpenAgents.Tools.{ConversationExecutionContext, Registry, Runner}
 
   @maximum_tool_calls 16
   @maximum_continuations 16
@@ -346,7 +346,7 @@ defmodule OpenAgents.Turns.TurnServer do
       required_side_effect: "read_only",
       surface: "text",
       data_scope: "browser_conversation",
-      authorities: execution_authorities(),
+      authorities: ConversationExecutionContext.authorities(),
       exact_proposal: true
     })
   end
@@ -367,7 +367,7 @@ defmodule OpenAgents.Turns.TurnServer do
       required_side_effect: Atom.to_string(tool.side_effect),
       surface: "text",
       data_scope: tool.required_scope,
-      authorities: execution_authorities(),
+      authorities: ConversationExecutionContext.authorities(),
       proposal: proposal,
       exact_proposal: true
     })
@@ -432,19 +432,17 @@ defmodule OpenAgents.Turns.TurnServer do
         raw_arguments: pending_tool.raw_arguments
       }
 
-      execution_context = %ExecutionContext{
-        scope: "browser_conversation",
-        scope_ref: "conversation:#{state.turn.conversation_id}",
-        authorities: execution_authorities(),
-        approval_receipts: machine_approval_receipts(state),
-        surface: "text",
-        conversation_id: state.turn.conversation_id,
-        current_user_message_id: state.turn.user_message_id,
-        owner_visitor_id: state.owner.id,
-        memory_snapshot_ref: state.receipt.memory_snapshot_ref,
-        profile_memory_snapshot_ref: state.profile_memory_snapshot.ref,
-        module_registry_snapshot: state.tool_snapshot
-      }
+      execution_context =
+        ConversationExecutionContext.build(%{
+          surface: "text",
+          conversation_id: state.turn.conversation_id,
+          current_user_message_id: state.turn.user_message_id,
+          owner_visitor_id: state.owner.id,
+          owner_user_id: state.owner.user_id,
+          memory_snapshot_ref: state.receipt.memory_snapshot_ref,
+          profile_memory_snapshot_ref: state.profile_memory_snapshot.ref,
+          module_registry_snapshot: state.tool_snapshot
+        })
 
       cancellation = state.cancellation
       snapshot = state.tool_snapshot
@@ -801,36 +799,6 @@ defmodule OpenAgents.Turns.TurnServer do
       "completed_at" => now
     }
   end
-
-  # Approval receipts admitted for this turn's owner: one per paired machine
-  # (the pairing IS the operator approval), plus the SCV deployment receipt
-  # when — and only when — this account is an OpenAgents operator. A
-  # non-operator turn simply carries no SCV receipt, so `SurfacePolicy` refuses
-  # the call independently of the check inside `SCV.Deployments.start/2`.
-  defp machine_approval_receipts(state) do
-    scope_ref = "conversation:#{state.turn.conversation_id}"
-
-    Machines.approval_receipts(state.owner.user_id, scope_ref) ++
-      OpenAgents.SCV.Deployments.approval_receipts(owner_account(state), scope_ref)
-  end
-
-  defp owner_account(%{owner: %{user_id: user_id}}) when is_binary(user_id),
-    do: OpenAgents.Repo.get(OpenAgents.Accounts.User, user_id)
-
-  defp owner_account(_state), do: nil
-
-  defp execution_authorities,
-    do:
-      MapSet.new([
-        "computer.control",
-        "conversation.read",
-        "github.read",
-        "memory.read",
-        "memory.write",
-        "module.discover",
-        "scv.deploy",
-        "work.delegate"
-      ])
 
   defp host_attribution_policy do
     policy = %{

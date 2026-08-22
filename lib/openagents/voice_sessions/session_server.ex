@@ -6,9 +6,9 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
   require Logger
 
   alias OpenAgents.Voice
-  alias OpenAgents.{Conversations, Machines, Repo}
+  alias OpenAgents.{Conversations, Repo}
   alias OpenAgents.Conversations.Conversation
-  alias OpenAgents.Tools.{ExecutionContext, Runner}
+  alias OpenAgents.Tools.{ConversationExecutionContext, Runner}
   alias OpenAgents.Tools.Registry, as: ToolRegistry
 
   alias OpenAgents.Voice.{
@@ -654,36 +654,17 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
 
     context = state.response_context
 
-    execution_context = %ExecutionContext{
-      scope: "browser_conversation",
-      scope_ref: "conversation:#{state.session.conversation_id}",
-      # Voice carries the same computer authorities AND the same machine
-      # approval receipts as a text turn: pairing a machine in the browser is
-      # the operator's approval, so effectful computer_run/computer_agent work
-      # from voice too. The machine's own local policy stays the real guardrail
-      # (the audit's "machine is the policy authority").
-      authorities:
-        MapSet.new([
-          "conversation.read",
-          "github.read",
-          "memory.read",
-          "memory.write",
-          "computer.control",
-          "module.discover",
-          "work.delegate"
-        ]),
-      approval_receipts:
-        Machines.approval_receipts(
-          state.owner.user_id,
-          "conversation:#{state.session.conversation_id}"
-        ),
-      surface: "voice",
-      conversation_id: state.session.conversation_id,
-      current_user_message_id: context.user_message_id,
-      owner_visitor_id: state.owner.id,
-      memory_snapshot_ref: context.memory_snapshot_ref,
-      profile_memory_snapshot_ref: context.profile_memory_snapshot_ref
-    }
+    execution_context =
+      ConversationExecutionContext.build(%{
+        surface: "voice",
+        conversation_id: state.session.conversation_id,
+        current_user_message_id: context.user_message_id,
+        owner_visitor_id: state.owner.id,
+        owner_user_id: state.owner.user_id,
+        memory_snapshot_ref: context.memory_snapshot_ref,
+        profile_memory_snapshot_ref: context.profile_memory_snapshot_ref,
+        module_registry_snapshot: state.tool_snapshot
+      })
 
     cancellation = :atomics.new(1, [])
     snapshot = state.tool_snapshot

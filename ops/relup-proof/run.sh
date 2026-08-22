@@ -41,6 +41,11 @@ env -u RELUP_FROM -u RELUP_TO -u OPENAGENTS_RELUP_PATH \
   OPENAGENTS_RELUP_STATE_VERSION="1" \
   mix do compile --force --warnings-as-errors + release --overwrite
 
+# The 0.2.0 appup diffs the two builds' compiled modules. Both builds share
+# this checkout's _build, so copy 0.1.0's ebin out before 0.2.0 overwrites it.
+from_ebin="$build_root/ebin-0.1.0"
+cp -R "$repo_root/_build/prod/lib/openagents/ebin" "$from_ebin"
+
 echo "Building explicit 0.2.0 release resource"
 env -u OPENAGENTS_RELUP_PATH \
   MIX_ENV=prod \
@@ -49,13 +54,23 @@ env -u OPENAGENTS_RELUP_PATH \
   OPENAGENTS_RELUP_STATE_VERSION="2" \
   RELUP_FROM="0.1.0" \
   RELUP_TO="0.2.0" \
+  RELUP_FROM_EBIN="$from_ebin" \
+  RELUP_FROM_STATE="1" \
+  RELUP_TO_STATE="2" \
   mix do compile --force --warnings-as-errors + release --overwrite
+
+to_ebin="$build_root/ebin-0.2.0"
+cp -R "$repo_root/_build/prod/lib/openagents/ebin" "$to_ebin"
 
 echo "Generating forward and reverse relup"
 MIX_ENV=prod mix openagents.relup \
   --target "$build_root/release-0.2.0/releases/0.2.0/openagents" \
   --from "$build_root/release-0.1.0/releases/0.1.0/openagents" \
-  --outdir "$build_root"
+  --outdir "$build_root" \
+  --from-ebin "$from_ebin" \
+  --to-ebin "$to_ebin" \
+  --from-state 1 \
+  --to-state 2
 
 echo "Reassembling 0.2.0 with the generated relup"
 env \
@@ -66,6 +81,9 @@ env \
   OPENAGENTS_RELUP_STATE_VERSION="2" \
   RELUP_FROM="0.1.0" \
   RELUP_TO="0.2.0" \
+  RELUP_FROM_EBIN="$from_ebin" \
+  RELUP_FROM_STATE="1" \
+  RELUP_TO_STATE="2" \
   mix release --overwrite
 
 cp "$build_root/release-0.1.0/openagents-0.1.0.tar.gz" "$publish_root/openagents-0.1.0.tar.gz"

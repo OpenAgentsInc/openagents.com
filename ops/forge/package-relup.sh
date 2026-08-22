@@ -115,6 +115,14 @@ env -u RELUP_FROM -u RELUP_TO -u OPENAGENTS_RELUP_PATH \
   OPENAGENTS_RELUP_STATE_VERSION="$from_state" \
   sh -c 'cd "$1" && mix do compile --force --warnings-as-errors + release --overwrite' sh "$build_root/from"
 
+# The appup derives its instruction list from these two module sets, so every
+# module that differs between the revisions is covered. Both sides must be
+# _build ebin directories: protocol consolidation happens later, in `mix
+# release`, and comparing a release ebin against a _build ebin would report
+# modules as added or deleted that neither revision touched.
+from_ebin="$build_root/from/_build/prod/lib/openagents/ebin"
+[ -d "$from_ebin" ] || { echo "missing from-build ebin: $from_ebin" >&2; exit 1; }
+
 echo "Building $to_version release resource"
 env -u OPENAGENTS_RELUP_PATH \
   MIX_ENV=prod \
@@ -123,13 +131,23 @@ env -u OPENAGENTS_RELUP_PATH \
   OPENAGENTS_RELUP_STATE_VERSION="$to_state" \
   RELUP_FROM="$from_version" \
   RELUP_TO="$to_version" \
+  RELUP_FROM_EBIN="$from_ebin" \
+  RELUP_FROM_STATE="$from_state" \
+  RELUP_TO_STATE="$to_state" \
   sh -c 'cd "$1" && mix do compile --force --warnings-as-errors + release --overwrite' sh "$build_root/to"
+
+to_ebin="$build_root/to/_build/prod/lib/openagents/ebin"
+[ -d "$to_ebin" ] || { echo "missing to-build ebin: $to_ebin" >&2; exit 1; }
 
 echo "Generating the two-way relup"
 (cd "$build_root/to" && MIX_ENV=prod mix openagents.relup \
   --target "$build_root/to/release/releases/$to_version/openagents" \
   --from "$build_root/from/release/releases/$from_version/openagents" \
-  --outdir "$build_root")
+  --outdir "$build_root" \
+  --from-ebin "$from_ebin" \
+  --to-ebin "$to_ebin" \
+  --from-state "$from_state" \
+  --to-state "$to_state")
 
 echo "Reassembling $to_version with the embedded relup"
 env \
@@ -140,6 +158,9 @@ env \
   OPENAGENTS_RELUP_STATE_VERSION="$to_state" \
   RELUP_FROM="$from_version" \
   RELUP_TO="$to_version" \
+  RELUP_FROM_EBIN="$from_ebin" \
+  RELUP_FROM_STATE="$from_state" \
+  RELUP_TO_STATE="$to_state" \
   sh -c 'cd "$1" && mix release --overwrite' sh "$build_root/to"
 
 tar -tzf "$build_root/to/release/openagents-$to_version.tar.gz" |

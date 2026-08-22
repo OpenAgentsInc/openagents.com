@@ -20,7 +20,7 @@ What is missing is **enablement**, and it is fenced deliberately:
 
 Meanwhile every production deploy rides the structural class: one immutable image built locally under amd64 emulation (~9 minutes for commit `eda094c`), pushed to Artifact Registry, qualified on staging, then rolled one node at a time (~7 minutes). Push-to-live measured about 23 minutes on 2026-08-21 for a release whose changes were mostly hot-loadable LiveView and template work — the exact class Sarah moved in seconds.
 
-Closing the gap is operator work, not engineering work: apply the staging Terraform, run Gates 12–15 against the real builder image, pin the builder digest into fleet metadata, flip the feature flags, then extend the runbooks with the consolidated decision table and drill lessons listed in section 5.
+Closing the gap for the direct-load lane is operator work: apply the staging Terraform, run Gates 12–15 against the real builder image, pin the builder digest into fleet metadata, flip the feature flags, then extend the runbooks with the consolidated decision table and drill lessons listed in section 5. The general relup lane is the exception — it still needs engineering work, described in the addendum below.
 
 ### Addendum: post-measurement production events (2026-08-21, later)
 
@@ -35,10 +35,16 @@ After this audit was measured, two claims moved:
    general relup path was, at measurement time, unconnected: `BuildArtifact`
    classifies only `direct_candidate` and `needs_rolling_replace`, and
    `RelupDeployment` accepted only the fixed `0.1.0 → 0.2.0` proof transition.
-   Later the same day the relup lane was connected for general version pairs —
-   coordinator admission, appup generation, packaging, and install proofs; see
-   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md).
-   Production approval for the lane remains an open operator decision.
+   Later the same day the relup **mechanism** was generalized — coordinator
+   admission, appup generation from the two builds' compiled modules,
+   packaging, and install proofs; see
+   [`docs/operations/forge-hot-loop.md`](operations/forge-hot-loop.md). The
+   **lane** is still not connected: no classifier emits a relup class,
+   `RelupDeployment.run/2` has no caller outside tests, the release gate runs
+   neither `ops/forge/package-relup.sh` nor
+   `ops/relup-proof/install-proof.sh`, and no receipt binds a package to the
+   revision it was built from. Those are engineering gaps, not operator ones.
+   Production approval for the lane also remains an open operator decision.
 
 ---
 

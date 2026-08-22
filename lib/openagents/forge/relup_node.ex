@@ -37,27 +37,65 @@ defmodule OpenAgents.Forge.RelupNode do
     end
   end
 
-  @doc "Restore the consumable tar and unpack it when needed."
+  @doc """
+  Restore the consumable tar and unpack it when needed.
+
+  A release version already known to `release_handler` is only reused when it
+  was unpacked from these exact artifact bytes, recorded next to the immutable
+  cache. Re-cutting a version from a different revision therefore fails closed
+  instead of installing whatever the node unpacked the first time.
+  """
   def unpack(request, opts \\ []) do
     with :ok <- restage(request, opts) do
-      if release_known?(request.to_version, opts) do
-        {:ok, %{"phase" => "unpacked", "restaged" => true}}
-      else
-        expected_version = to_charlist(request.to_version)
+      cond do
+        not release_known?(request.to_version, opts) ->
+          perform_unpack(request, opts)
 
-        case handler_call(opts, :unpack_release, [to_charlist(release_basename(request))]) do
-          {:ok, ^expected_version} ->
-            {:ok, %{"phase" => "unpacked", "restaged" => true}}
+        unpacked_digest(request, opts) == request.artifact_digest ->
+          {:ok, %{"phase" => "unpacked", "restaged" => true}}
 
-          {:error, reason} ->
-            {:error, {:unpack_failed, safe_code(reason)}}
-
-          _other ->
-            {:error, :unexpected_unpack_result}
-        end
+        true ->
+          {:error, :unpacked_version_conflict}
       end
     end
   end
+
+  defp perform_unpack(request, opts) do
+    expected_version = to_charlist(request.to_version)
+
+    # Record the intent before unpacking, so an interrupted unpack retries from
+    # the same bytes instead of reading as a conflicting version.
+    with :ok <- record_unpacked_digest(request, opts) do
+      case handler_call(opts, :unpack_release, [to_charlist(release_basename(request))]) do
+        {:ok, ^expected_version} ->
+          {:ok, %{"phase" => "unpacked", "restaged" => true}}
+
+        {:error, reason} ->
+          {:error, {:unpack_failed, safe_code(reason)}}
+
+        _other ->
+          {:error, :unexpected_unpack_result}
+      end
+    end
+  end
+
+  defp unpacked_digest(request, opts) do
+    case File.read(unpacked_digest_path(request, opts)) do
+      {:ok, digest} -> String.trim(digest)
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp record_unpacked_digest(request, opts) do
+    File.mkdir_p!(cache_dir(opts))
+    File.write!(unpacked_digest_path(request, opts), request.artifact_digest)
+    :ok
+  rescue
+    _error -> {:error, :release_directory_unavailable}
+  end
+
+  defp unpacked_digest_path(request, opts),
+    do: Path.join(cache_dir(opts), "unpacked-#{request.to_version}")
 
   @doc "Generate runtime configuration and preflight the relup."
   def check_install(request, opts \\ []) do

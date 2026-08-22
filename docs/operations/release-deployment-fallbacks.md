@@ -124,6 +124,13 @@ rolling recovery.
 back to the filename consumed by `unpack_release/1` before every attempt. This
 restaging step is mandatory after an interrupted install.
 
+The node also records which artifact each unpacked version came from, in
+`releases/.openagents-relup-cache/unpacked-<version>`. Reusing an already
+unpacked version requires the recorded digest to match the request, so
+re-cutting a version number from a different revision fails with
+`unpacked_version_conflict` instead of installing the bytes the node unpacked
+the first time. Recover by cutting a new version number for the new revision.
+
 ## Rolling replacement lane
 
 Build a local immutable image only after the exact release gate passes:

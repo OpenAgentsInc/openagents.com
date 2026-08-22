@@ -29,6 +29,13 @@ defmodule OpenAgents.Test.ReleaseHandler do
   def install_release(version) do
     version = to_string(version)
 
+    # Stands in for the relup's own instructions, which run inside
+    # install_release: the module updates and the ReleaseState code change.
+    case Agent.get(__MODULE__, &Map.get(&1, :on_install)) do
+      nil -> :ok
+      installer -> installer.(version)
+    end
+
     Agent.update(__MODULE__, fn state ->
       releases =
         Enum.map(state.releases, fn {name, found, applications, status} ->
@@ -65,6 +72,7 @@ defmodule OpenAgents.Test.ReleaseHandler do
   end
 
   defp other_version(version) do
-    if to_string(version) == "0.2.0", do: ~c"0.1.0", else: ~c"0.2.0"
+    {from, to} = Agent.get(__MODULE__, &Map.get(&1, :pair, {"0.1.0", "0.2.0"}))
+    if to_string(version) == to, do: to_charlist(from), else: to_charlist(to)
   end
 end

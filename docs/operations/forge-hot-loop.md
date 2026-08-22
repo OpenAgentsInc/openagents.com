@@ -16,7 +16,7 @@ flips it on.
 | --- | --- | --- |
 | Direct BEAM transaction on production | Works | `fa4b792` loaded across three nodes via the transaction protocol; `live` target and deployment receipt recorded; uptimes unbroken |
 | Automated push → promote → build → hot-load loop | Not yet operating | No receipted automated deploy exists, so `/api/status` reports `loop.last_ms: null` and `push_to_live_ms: null` |
-| General relup lane | Proof harness only | The classifier emits only `direct_candidate` or `needs_rolling_replace`; `RelupDeployment` admits only the fixed `0.1.0 → 0.2.0` proof transition while production already runs `0.2.0`. Relups are not production-approved (`release-deployment-fallbacks.md`) |
+| General relup lane | Manual tools only | `RelupDeployment` admits any distinct `X.Y.Z` pair, but the classifier emits only `direct_candidate` or `needs_rolling_replace`, `RelupDeployment.run/2` has no caller outside tests, and the release gate runs neither packaging script. Relups are not production-approved (`release-deployment-fallbacks.md`) |
 | Rolling image replacement | Works, default for structural changes | Current release tooling path |
 
 Two consequences worth stating plainly:
@@ -126,38 +126,56 @@ human reaction time.
 A `reverted` outcome still warrants checking fleet convergence even though
 this design captures each node's prior object code for exact rollback.
 
-## The relup lane is now connected
+## The relup lane generalized, but nothing drives it
 
-As of 2026-08-21 (later), the three gaps recorded below are closed in code:
+As of 2026-08-21 (later), the mechanism handles arbitrary version pairs:
 
 1. **Coordinator admission is general.** `RelupDeployment` admits any distinct
    `X.Y.Z` pair whose state versions stay within `[1, 2]` and never regress —
    matching what `RelupNode` already enforced per node. The packaged appup on
    the target nodes remains the real gate: `check_install_release` refuses
    honestly when no relup can be produced between two versions.
-2. **Appup generation works for any admitted pair.** `rel/openagents.appup.exs`
-   generates forward and reverse instructions from `RELUP_FROM`/`RELUP_TO`
-   for arbitrary distinct versions instead of raising outside the proof
-   transition.
+2. **Appup generation describes the pair it was built from.**
+   `rel/openagents.appup.exs` asks `OpenAgents.Release.Appup` to diff the two
+   builds' compiled modules and emits one instruction per module that differs,
+   plus the advanced `ReleaseState` update carrying each direction's target
+   state schema. `mix openagents.relup` then checks the generated relup against
+   the same diff, so packaging fails rather than shipping a relup that would
+   install part of a revision.
 3. **Packaging and install proofs exist as tools.**
    `ops/forge/package-relup.sh --from-version A --to-version B [--from-rev]
    [--to-rev]` builds both releases in isolated worktrees, generates the
    two-way relup, embeds it, and emits digest-addressed tarballs plus a
    `package.json` ready for deployment requests.
-   `ops/relup-proof/install-proof.sh` then proves the pair against a live
+   `ops/relup-proof/install-proof.sh` then proves that package against a live
    single-node release: forward install, permanent commit, reverse rollback,
-   and re-upgrade, asserting `ReleaseState` observations survive every
-   transition. Both were executed successfully for `0.2.0 → 0.3.0`.
+   and re-upgrade, asserting each `release_handler` result, both state
+   schemas, node readiness, and `ReleaseState` retention. It reads the versions
+   and schemas from `package.json`, and it creates and drops a database, so it
+   refuses to run unless `OPENAGENTS_RELUP_PROOF_DISPOSABLE=1`, the URL host is
+   loopback, and the database name contains `proof`, `smoke`, or `test`.
 
-Still required before the lane carries production traffic — operator work,
-not engineering work:
+What is not true yet, and is engineering work rather than operator work:
+
+- **No code calls the lane.** `RelupDeployment.run/2` has no caller outside
+  tests. Nothing classifies a candidate as a relup, builds the request, or
+  triggers a fleet relup; an operator drives the two scripts by hand.
+- **The release gate does not run either script.** `ops/ci/gate.sh` runs
+  `ops/relup-proof/run.sh`, `version-chain.sh`, and `kill-during-install.sh`,
+  which exercise the pinned `0.1.0 → 0.2.0` pair only. Neither
+  `package-relup.sh` nor `install-proof.sh` is a gate stage, so no receipt
+  binds a general pair to a candidate SHA.
+- **Nothing binds a package to its gate receipt.** `package.json` records the
+  revisions it was built from, but `RelupDeployment` verifies the receipt for
+  `request.sha` without checking that the artifact came from that revision.
+
+Operator work still required before the lane carries production traffic:
 
 - Production approval recorded against
   [`docs/operations/release-deployment-fallbacks.md`](release-deployment-fallbacks.md),
   which remains the authority that relups are not production-approved.
-- Wiring `package-relup.sh` into automation so a promoted SHA packages and
-  deploys without manual steps. Until then the lane is driven by the same
-  commands above, which are safe to rehearse on staging.
+- A staging rehearsal of `package-relup.sh` followed by `install-proof.sh`
+  against a disposable database, before any fleet use.
 
 Note on scope: hot-load diffs and relups remain different artifact classes.
 A BEAM-diff artifact cannot drive `release_handler`; only a full release

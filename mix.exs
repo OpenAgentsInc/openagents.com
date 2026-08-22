@@ -24,7 +24,10 @@ defmodule OpenAgents.MixProject do
         ]
       ],
       deps: deps(),
-      compilers: [:appup, :phoenix_live_view] ++ Mix.compilers(),
+      # `:appup` runs last because rel/openagents.appup.exs derives its
+      # instruction list from this build's compiled modules through
+      # OpenAgents.Release.Appup, which only exists once :elixir has run.
+      compilers: [:phoenix_live_view] ++ Mix.compilers() ++ [:appup],
       appup: "rel/openagents.appup.exs",
       releases: releases(),
       listeners: [Phoenix.CodeReloader]

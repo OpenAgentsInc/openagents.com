@@ -1,7 +1,12 @@
 defmodule OpenAgents.Forge.RelupDeploymentTest do
-  use ExUnit.Case, async: true
+  # Not async: the reverse-direction case drives the real RelupNode against the
+  # singleton test release handler.
+  use ExUnit.Case, async: false
 
   alias OpenAgents.Forge.RelupDeployment
+  alias OpenAgents.ReleaseState
+  alias OpenAgents.ReleaseState.State
+  alias OpenAgents.Test.ReleaseHandler
 
   @sha String.duplicate("a", 40)
   @digest String.duplicate("b", 64)
@@ -181,6 +186,98 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
                )
     end
   end
+
+  describe "the reverse direction on a same-schema pair" do
+    test "restores the from release, its permanence, and the process state" do
+      state = start_supervised!({ReleaseState, name: nil})
+      :ok = ReleaseState.observe("retained", state)
+
+      installer = fn
+        "0.3.0" -> migrate(state, ~c"0.2.0", schema_version: 2)
+        "0.2.0" -> migrate(state, {:down, ~c"0.3.0"}, schema_version: 2)
+      end
+
+      start_supervised!(
+        {ReleaseHandler,
+         %{
+           releases: [{~c"openagents", ~c"0.2.0", [], :permanent}],
+           pair: {"0.2.0", "0.3.0"},
+           on_install: installer
+         }}
+      )
+
+      artifact = "immutable 0.3.0 artifact"
+
+      root =
+        Path.join(
+          System.tmp_dir!(),
+          "openagents-relup-fleet-#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(Path.join(root, "releases"))
+      on_exit(fn -> File.rm_rf!(root) end)
+
+      node_opts = [
+        release_root: root,
+        release_handler: ReleaseHandler,
+        generate_config: fn _version -> :ok end,
+        health: &unready_once/0,
+        state: fn -> ReleaseState.snapshot(state) end
+      ]
+
+      request =
+        request()
+        |> Map.merge(%{
+          from_version: "0.2.0",
+          to_version: "0.3.0",
+          from_state_version: 2,
+          to_state_version: 2,
+          artifact_bytes: artifact,
+          artifact_digest: sha256(artifact),
+          expected_nodes: [Node.self()],
+          expected_fleet_size: 1
+        })
+
+      assert {:error, %{status: "failed"}} =
+               RelupDeployment.run(request,
+                 members: fn -> [Node.self()] end,
+                 gate_verifier: fn @sha -> {:ok, %{}} end,
+                 rpc: fn _node, module, function, arguments, _timeout ->
+                   apply(module, function, arguments ++ [node_opts])
+                 end
+               )
+
+      assert %State{schema_version: 2, observations: ["retained"], integrity: integrity} =
+               ReleaseState.snapshot(state)
+
+      assert is_binary(integrity)
+
+      assert Enum.any?(ReleaseHandler.which_releases(), fn {_name, version, _apps, status} ->
+               to_string(version) == "0.2.0" and status == :permanent
+             end)
+    end
+  end
+
+  # The post-install health check fails once, which is what sends the node down
+  # the reverse path; every later check reports ready.
+  defp unready_once do
+    case Process.get(:relup_health_calls, 0) do
+      0 ->
+        Process.put(:relup_health_calls, 1)
+        %{"ready" => false}
+
+      _later ->
+        %{"ready" => true}
+    end
+  end
+
+  defp migrate(pid, version, extra) do
+    :ok = :sys.suspend(pid)
+    :ok = :sys.change_code(pid, ReleaseState, version, extra)
+    :ok = :sys.resume(pid)
+  end
+
+  defp sha256(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
 
   defp drain_messages(acc) do
     receive do

@@ -3,13 +3,31 @@ defmodule Mix.Tasks.Openagents.Relup do
   Generates a two-way `relup` in an explicit output directory.
 
       mix openagents.relup --target /path/to/0.2.0/openagents \
-        --from /path/to/0.1.0/openagents --outdir /tmp/proof
+        --from /path/to/0.1.0/openagents --outdir /tmp/proof \
+        --from-ebin /path/to/0.1.0/_build/prod/lib/openagents/ebin \
+        --to-ebin /path/to/0.2.0/_build/prod/lib/openagents/ebin \
+        --from-state 1 --to-state 2
+
+  The `ebin` and state arguments are required: after generating the relup the
+  task checks it against `OpenAgents.Release.Appup`, so a relup that covers
+  fewer modules than the two builds differ in fails here rather than
+  half-upgrading a node.
   """
 
   use Mix.Task
 
-  @shortdoc "Generates an explicit two-way OpenAgents relup"
-  @switches [target: :string, from: :string, outdir: :string]
+  alias OpenAgents.Release.Appup
+
+  @shortdoc "Generates and verifies an explicit two-way OpenAgents relup"
+  @switches [
+    target: :string,
+    from: :string,
+    outdir: :string,
+    from_ebin: :string,
+    to_ebin: :string,
+    from_state: :integer,
+    to_state: :integer
+  ]
 
   @impl true
   def run(arguments) do
@@ -21,7 +39,7 @@ defmodule Mix.Tasks.Openagents.Relup do
 
     target = required_path!(options, :target)
     from = required_path!(options, :from)
-    outdir = required_directory!(options, :outdir)
+    outdir = created_directory!(options, :outdir)
 
     paths =
       [target, from]
@@ -44,7 +62,17 @@ defmodule Mix.Tasks.Openagents.Relup do
            warnings_as_errors: true
          ) do
       {:ok, _relup, _module, []} ->
-        Mix.shell().info("Generated #{Path.join(outdir, "relup")}")
+        relup = Path.join(outdir, "relup")
+
+        covered =
+          Appup.verify_relup!(relup,
+            from_ebin: required_directory!(options, :from_ebin),
+            to_ebin: required_directory!(options, :to_ebin),
+            from_state_version: Keyword.fetch!(options, :from_state),
+            to_state_version: Keyword.fetch!(options, :to_state)
+          )
+
+        Mix.shell().info("Generated #{relup}, covering #{length(covered)} modules")
 
       {:ok, _relup, module, warnings} ->
         Mix.raise(
@@ -67,10 +95,18 @@ defmodule Mix.Tasks.Openagents.Relup do
       else: Mix.raise("--#{key} must name a release resource without the .rel suffix")
   end
 
-  defp required_directory!(options, key) do
+  defp created_directory!(options, key) do
     path = options |> Keyword.fetch!(key) |> Path.expand()
     File.mkdir_p!(path)
     path
+  end
+
+  defp required_directory!(options, key) do
+    path = options |> Keyword.fetch!(key) |> Path.expand()
+
+    if File.dir?(path),
+      do: path,
+      else: Mix.raise("--#{String.replace(to_string(key), "_", "-")} must name a directory")
   end
 
   defp format(module, function, value) do

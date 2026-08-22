@@ -1731,22 +1731,43 @@ Evidence: `ops/ci/gate.sh`, `.githooks/pre-push`,
 Status: Current
 
 Direct BEAM candidates use an exact-fleet prepare, canary, apply, verify,
-commit, and rollback transaction. The supported `0.1.0` to `0.2.0` application
-transition uses a two-way relup, versioned process state, node-by-node health
-checks, and reverse installation. Every structural or unclassified candidate
-uses digest-addressed rolling replacement with readiness drain, remaining-
-capacity and quorum checks, exact rejoin verification, and last-known-good
-image recovery. A failed relup or replacement aborts before another node
-changes.
+commit, and rollback transaction. An application transition between any two
+concrete `X.Y.Z` versions uses a two-way relup, versioned process state,
+node-by-node health checks, and reverse installation. Every structural or
+unclassified candidate uses digest-addressed rolling replacement with readiness
+drain, remaining-capacity and quorum checks, exact rejoin verification, and
+last-known-good image recovery. A failed relup or replacement aborts before
+another node changes.
+
+A packaged relup describes the two revisions it was built from. The appup is
+derived from both builds' compiled modules, so the relup carries an instruction
+for every module whose code differs, and packaging refuses when the generated
+relup omits one. A node therefore cannot install part of a revision while
+reporting itself converged. A version that a node already unpacked from
+different artifact bytes is refused rather than reused.
+
+The reverse path restores the `from` release rather than a fixed one. Each
+direction's target state schema travels in the appup, so a downgrade migrates
+process state to the schema the `from` release compiled — including a pair
+whose schemas match, which keeps its schema instead of being forced back to
+schema 1. Reverse verification checks release status, node readiness, and that
+exact schema before it restores permanence, and a downgrade that is given no
+target schema refuses instead of guessing.
 
 All deployment workers remain disabled until isolated staging proves their
 complete provider and topology. Current means that the local mechanism and its
 refusal and recovery paths exist; it does not authorize staging or production.
+`OpenAgents.Forge.RelupDeployment.run/2` has no production caller, and the
+release gate runs neither `ops/forge/package-relup.sh` nor
+`ops/relup-proof/install-proof.sh`.
 
 Evidence: `OpenAgents.Forge.Deployment`, `OpenAgents.Forge.RelupDeployment`,
 `OpenAgents.Forge.RelupNode`, `OpenAgents.ReleaseState`,
-`OpenAgents.Forge.RollingReplacement`,
+`OpenAgents.Release.Appup`, `OpenAgents.Forge.RollingReplacement`,
 `test/openagents/forge/relup_deployment_test.exs`,
+`test/openagents/forge/relup_node_test.exs`,
+`test/openagents/release/appup_test.exs`,
+`test/openagents/cluster/code_change_test.exs`,
 `test/openagents/forge/rolling_replacement_test.exs`, and
 `docs/operations/release-deployment-fallbacks.md`.
 
@@ -1981,7 +2002,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
 | RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs` |
-| RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
+| RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
 | REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/forge/git_http_test.exs` |

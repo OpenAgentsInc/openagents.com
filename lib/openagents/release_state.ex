@@ -2,10 +2,15 @@ defmodule OpenAgents.ReleaseState do
   @moduledoc """
   Holds bounded runtime observations across supported release upgrades.
 
-  The process uses an explicitly versioned state struct. The `0.1.0` release
-  uses schema 1 and the `0.2.0` release uses schema 2. A two-way relup calls
-  `code_change/3`, which preserves the PID and observations while adding or
-  removing schema 2's integrity field.
+  The process uses an explicitly versioned state struct whose schema is
+  compiled into each release from `OPENAGENTS_RELUP_STATE_VERSION`. A two-way
+  relup calls `code_change/3`, which preserves the PID and observations while
+  adding or removing schema 2's integrity field.
+
+  The target schema is explicit, not positional: `OpenAgents.Release.Appup`
+  puts the installing release's schema in the appup's `extra` term for each
+  direction. A pair whose schemas match on both sides therefore keeps its
+  schema through a downgrade instead of being forced back to schema 1.
   """
 
   use GenServer
@@ -67,17 +72,34 @@ defmodule OpenAgents.ReleaseState do
   end
 
   @impl true
-  def code_change({:down, _from_version}, %State{} = state, _extra) do
-    {:ok, state_for(1, state.observations)}
+  def code_change({:down, _from_version}, %State{} = state, extra) do
+    # A downgrade runs this clause in the new module before the old code is
+    # loaded, so the target schema belongs to the release being installed and
+    # this module cannot infer it. The appup carries it in `extra`; without it
+    # the migration refuses rather than guessing a schema.
+    case target_schema(extra) do
+      {:ok, schema} -> {:ok, state_for(schema, state.observations)}
+      :error -> {:error, :missing_downgrade_schema_version}
+    end
   end
 
-  def code_change(_from_version, %State{schema_version: 1} = state, _extra) do
-    {:ok, state_for(2, state.observations)}
+  def code_change(_from_version, %State{} = state, extra) do
+    # An upgrade runs in the release being installed, so this release's own
+    # compiled schema is the target when the appup names none.
+    case target_schema(extra) do
+      {:ok, schema} -> {:ok, state_for(schema, state.observations)}
+      :error -> {:ok, state_for(@current_schema, state.observations)}
+    end
   end
 
-  def code_change(_from_version, %State{} = state, _extra) do
-    {:ok, state_for(@current_schema, state.observations)}
+  defp target_schema(extra) when is_list(extra) do
+    Enum.find_value(extra, :error, fn
+      {:schema_version, schema} when schema in [1, 2] -> {:ok, schema}
+      _other -> nil
+    end)
   end
+
+  defp target_schema(_extra), do: :error
 
   defp state_for(1, observations) do
     %State{schema_version: 1, observations: observations, integrity: nil}

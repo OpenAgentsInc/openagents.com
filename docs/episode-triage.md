@@ -693,3 +693,240 @@ The monorepo (233) has since split: the forge is canonical here, the CLI ships
 from the `openagents` monorepo, and Psionic remained separate by design.
 
 ---
+
+## Batch 4: Episodes 242-255 — Khala, Desktop, and the proof stack
+
+Airtime window: July 2026. Khala launches as the OpenAI-compatible collective-
+intelligence endpoint and enters OpenCode and Codex within days; fleet
+delegation becomes a deterministic program; Khala Code dogfoods UX behavior
+contracts and specs QA Swarm; sell-in-public declares the revenue loop;
+Desktop narrows to a Codex-only MVP authored as a ProductSpec; AssuranceSpec
+and Observer turn "done" claims into proofs; Bun leaves the trust path; the
+alpha bug-bash self-hosts development; FastFollow becomes a standing learning
+contract aimed at AMP.
+
+### Episode summaries
+
+#### 242 — Khala: Collective Intelligence
+
+Launches Khala: an OpenAI-compatible API (`openagents.com/api`, model
+`openagents/khala`) hiding a routed collective of composable programs, fully
+open source, free limited preview. Three-axis contrast with Sakana Fugu:
+engineered versus grown, designed versus market-emergent, self-graded versus
+Bitcoin-paid verified value. Every program is a DSPy signature under Blueprint,
+tuned with GEPA from outcome feedback. A request can return text, code, full
+software, deployments, legal briefs, or research — any long-running process
+behind one familiar endpoint. Contributors are paid proportional to paid usage
+they provide or refer.
+
+#### 243 — Khala in OpenCode
+
+"We are now in the inference business." Points OpenCode at Khala, fixes live
+production blockers (content arrays, tool-call deltas, stale `khala-mini`
+slug), scales to ten concurrent sessions, drives the tokens-served counter
+from ~1M to ~13M during the episode. Names the provider mix (Fireworks DeepSeek
+V4 Flash, Gemini Flash, GPT-OSS, GLM-5.2 REAP) and the GTM pillars: dogfood,
+ecosystem, benchmark ("receipts, not vibes"). Counter integrity saga ends in an
+authoritative-total monotonic reducer after double-counting bugs. Benchmark
+doctrine: P50/P90/P99, favorite metric cost per accepted outcome. Notes
+GetAfter.com, a shelved Nostr/NIP-34 GitHub alternative, "we're going to come
+back to this."
+
+#### 244 — Khala in Codex
+
+Routes daily coding through Khala: a "do this PR" request delegates to the
+caller's own Codex/Claude subscription capacity via a Pylon linked to the API
+key. Headline audit finding: the Pylon coding-assignment-to-executor pipeline
+already exists end to end with ownership bound to owner identity; net-new work
+is a caller-aware router, a coding-workflow classifier, and quantity-based
+capacity discovery (capacity was reported as presence, not amount). Invariants:
+own-capacity-only, no-resale, semantic routing. Counter jumps 16.4M to 302.7M
+in a day; `/stats` debuts showing Pylon-Codex at ~72.7 percent of mix. Epic
+#6273 filed; Khala CLI v0.1.11 sneak peeked.
+
+#### 245 — Deterministic Fleet Delegation
+
+Whiteboard for Khala Code desktop steering the Codex fleet through Khala/Pylon.
+Root-causes `codex_spawn` returning `0/1 available`: missing per-account
+capacity advertisement. Frames the fix as a deterministic
+`khala.fleet.delegate` program — ensure Pylon, advertise capacity, select
+account, prepare work, dispatch, verify closeout — with GEPA/DSPy optimizing
+parameters, not control flow. Two-tier economics: free users pay with scrubbed
+traces that condense into royalty-bearing plugins; paid users buy privacy.
+"WHAT IF YOUR CODING AGENT PAYS YOU?" Epic #7730 plus children filed across
+OpenAgents and Mutalisk.
+
+#### 246 — Dogfooding Khala Code
+
+Forces full-time use of Khala Code and fixes it with itself. Invents UX
+Behavior Contracts: every owner-stated UX expectation lands verbatim in a typed
+registry (`ux-contracts.ts`) with oracle tests in the normal sweep; an agent
+mines 43 sessions across 36 hours into pending contracts — unstructured
+complaints converted into enforced behavior. Backdrop: a 2.4B-token overnight
+run across six ChatGPT accounts. Specs QA Swarm ("point a swarm of QA agents at
+your product and get proof it works") with Khala Code as customer number one.
+Names the two-product frame (Khala Code and Autopilot) and the whole game:
+closing the gap between what is said and what ships.
+
+#### 247 — Sell in Public
+
+Declares the pivot from build-in-public to sell-in-public. Revenue loop starts
+at Autopilot Lead Gen with an affiliate program, driving traffic to surfaces
+carrying referral codes into a buyer/seller funnel. Fulfillment shared with
+about five partner orgs under referral/revenue arrangements. The Coding Agent
+Pool — community agents already building against the product-promise backlog
+for free — gets paid for customer software work. Sellers route to running a
+Pylon. Commitment: publish revenue graphs, features, and propaganda openly.
+
+#### 248 — Predictable Software
+
+Turns a broken Codex Desktop continuity experience into the first Desktop seam
+contract: show recent top-level Codex chats with stable names and timestamps,
+hydrate detail after first paint, enforce the journey with real Electron smoke
+tests, build the visible app through Effect Native. Establishes teardown-driven
+development: study the incumbent's failure modes, contract against them.
+
+#### 249 — Sub-agent UI
+
+Makes Codex subagents clickable and inspectable: named roster entries, causal
+cards, independent transcripts, typed activity detail, StarCraft-like operator
+surface. Compares Codex and Claude child-agent navigation using teardown
+evidence. Inspectability becomes the differentiator rather than raw capability.
+
+#### 250 — Ready the Fleet
+
+Builds the Desktop Fleet overview: multiple accounts and harnesses, usage and
+readiness projections, delegated Codex children with streaming traces, status
+dots lit only by decoded fresh receipts (the arbiter protocol). Coins the key
+failure class — the unverified operational directive: plausible prose carrying
+one load-bearing fiction, invisible to its emitter, unfixable by exhortation.
+Countermeasures become doctrine: closed command registry, truthful capability
+bootstrap, typed intents, behavior contracts with oracles, evidence-gated
+projections; roadmap law 20: a UX promise is an executable release gate.
+Model-substitution incident (chip said Fable, engine ran Sonnet) produces
+typed requested-versus-effective model events that refuse substitutes.
+
+#### 251 — Desktop MVP Spec
+
+Declares the first deployable shape: a Codex-only, local-first Desktop workroom
+inspired by OpenChamber, authored natively as a ProductSpec (Gokul's standard:
+Problem, Hypothesis, Scope, UX, Acceptance Criteria, Success Metrics) and fed
+to agents to build the same day. No account, nothing leaves the machine. Epic
+#8756 orders MVP-0 spec authority through MVP-3 exact release journey against
+18 acceptance criteria. Success metrics: first criterion reached within 15
+minutes of opted-in launch; tasks reaching reviewed diff without opening
+another Codex interface; zero false-completion incidents. Voice mode deferred
+to a free-plus-paid tier plan. Companion note file mismatch recorded: 
+`251-notes.md` covers an unrelated draft.
+
+#### 252 — OpenAgents Assurance
+
+Extends ProductSpec into proof design. The load-bearing question: when an agent
+says it finished, how do you know? Adopts Gokul's Evidence Loop (ProductSpec
+defines intent; Evidence shows what happened; Decision Trace records what
+changed). Introduces AssuranceSpec — framework-neutral committed verification
+intent (environment, oracle, falsifier, evidence policy, independence rules) —
+and Observer, which compiles reviewed obligations into immutable manifests that
+real QA adapters execute into exact Assurance Receipts. Catalogues five false-
+green failure modes (`false_green_fixture_assert`, `false_green_api_mirror`,
+`false_green_mocked_seam`, `false_green_coverage_theater`,
+`false_green_round_up`). Boundary discipline: ProductSpec does not run evals;
+Observer does not pretend to execute. RC11 signed/notarized in the background
+through a 1,301-test pre-push gate.
+
+#### 253 — Goodbye Bun
+
+Rips Bun out of the production trust path (~150 files) because Anthropic owns
+it; production moves to foundation-governed Node, build path to Vite Plus with
+pnpm. Agent-analyst debate (Fable favored keeping Bun; Sol's blast-radius
+rebuttal won) produces the governance distinction: OpenJS Foundation versus
+corporate stewardship; dev-layer dependence more reversible than runtime
+dependence. Launch slips one day for cleanliness. Publishes
+`docs/sol/the-case-against-anthropic.md`.
+
+#### 254 — Bug Bash
+
+Official cutover: Claude Code and Codex Desktop fired; all development happens
+in OpenAgents Desktop, fixing OpenAgents from within OpenAgents. First
+on-camera self-hosted commit pushed to main from inside the app. Dogfooding
+exposes queue replay loops, per-chat composer leaks, follow-up image failures,
+restart ambiguity, and unclear binary state. Reasoning stays visible in traces
+as a trust stance ("fundamentally doesn't trust" opaque output). Inline usage
+widget shows account limits (94 percent used, resets in 159 hours). Brand
+consolidates to one name: OpenAgents.
+
+#### 255 — FastFollow: Building Agent Parity
+
+FastFollow becomes a standing, machine-readable learning contract declaring
+which upstream projects your agents continuously learn from — separated
+deliberately from product intent (ProductSpec) and proof intent (AssuranceSpec),
+packaged as content-addressed study packets. Seeded across all 24 teardowns;
+first target: AMP's durable thread fabric, semantic history reading,
+steer/queue/interrupt distinctions, specialist models — while rejecting cloud
+transcript authority, default-open tool execution, and unsigned releases.
+First overnight Full Auto run: three backlog workers, one research, one
+implementation, digest-stamped gap-receipt artifacts. Cross-lab harness thesis:
+no lab routes between rival models, "But OpenAgents will."
+
+### Batch synthesis and integration notes
+
+This batch contains the most directly reusable methodology of the entire
+series: contracts over vibes. UX behavior contracts, ProductSpec intent,
+AssuranceSpec proof design, Observer manifests, and FastFollow learning
+contracts form one family — typed artifacts with executable oracles replacing
+prose claims. That family is exactly what Track B and Track E of the work-system
+assessment need for issue-linked evidence.
+
+Dispositions:
+
+1. **Live.** Khala inference business (providers, `/stats`, counter); the
+   own-capacity delegation pipeline (now the SCV/work-job substrate); dogfood-
+   first culture (Ox Alpha stress testing is this, applied to models);
+   brand consolidation (one OpenAgents surface at openagents.com).
+2. **Dust off.**
+   - **UX Behavior Contracts**: portable beyond Khala Code. Mine chat and
+     issue history into typed expectations with oracle tests for
+     openagents.com surfaces; violations auto-file forge issues with the
+     contract ID in the title. Cheap to pilot on the issue tracker itself.
+   - **QA Swarm**: specced twice (246, 252), never productized. Pointing a
+     small QA fleet at openagents.com staging before each release would serve
+     track F3 of the delivery program.
+   - **FastFollow**: the standing gap-analysis loop belongs on the forge — a
+     project whose items are parity gaps against tracked upstream repos,
+     refilled nightly. Directly answers "aim parallel agents at the backlog"
+     (issue #42) with an infinite, self-refreshing backlog.
+   - **Deterministic delegate program** (245): the ensure-advertise-select-
+     dispatch-verify sequence should be written down as the contract for the
+     parallel orchestrator (#41) regardless of whether Khala executes it.
+   - **Capacity-as-quantity**: presence-based capacity reporting was diagnosed
+     in 244 and remains the cloud-computer gap (issues #37/#38).
+3. **Reimagine.**
+   - **Observer/AssuranceSpec**: the products were Desktop-native; the ideas
+     belong in the forge's receipt system. An issue timeline that shows
+     qualification receipts for the exact commit (assessment E5) is Observer's
+     core, restated server-side.
+   - **Coding Agent Pool paying for backlog work**: the pool existed organically
+     around the promises registry. The forge bounty label plus treasury payouts
+     can revive paid-backlog work without the lead-gen funnel.
+   - **Traces-into-plugins royalties**: complex chain (trace, condense, plugin,
+     route, pay). Simplify to opt-in trace licensing tied to visibility policy
+     before any royalty plumbing exists.
+4. **Retired.**
+   - **GetAfter.com**: the shelved GitHub alternative was superseded by the
+     forge shipping for real. Do not restart it; mine its NIP-34 notes only if
+     Nostr federation of issues ever becomes a goal.
+   - **Bun**: removed deliberately; the CLI remains pnpm/Node in the monorepo.
+     Keep vendor-stewardship analysis (`docs/sol` style) as the review gate for
+     any new runtime dependency.
+   - **Autopilot Lead Gen**: announced with affiliate mechanics, no evidence of
+     shipment since; demand-side thinking survives in sell-in-public content,
+     not as a product to rebuild.
+   - **Khala Code Desktop as a separate product**: folded into OpenAgents
+     Desktop branding (254). Treat references accordingly.
+
+Pivot watch: episodes 242-250 predate the Zed fork decision (262). Desktop's
+Electron line continued to the RC (256), then Omega became the strategic IDE;
+both lines claim the same promise vocabulary. When reintegrating, attach
+promise language to whichever surface actually ships it.
+
+---

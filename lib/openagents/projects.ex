@@ -158,6 +158,8 @@ defmodule OpenAgents.Projects do
           "repo" => repository.name
         })
 
+        Repositories.broadcast_projects(repository.id)
+
         {:ok, project}
 
       result ->
@@ -181,9 +183,27 @@ defmodule OpenAgents.Projects do
     project
     |> Project.changeset(attrs)
     |> Repo.update()
+    |> case do
+      {:ok, project} ->
+        Repositories.broadcast_projects(project.repository_id)
+        {:ok, project}
+
+      result ->
+        result
+    end
   end
 
-  def delete_project(%Project{} = project), do: Repo.delete(project)
+  def delete_project(%Project{} = project) do
+    Repo.delete(project)
+    |> case do
+      {:ok, project} ->
+        Repositories.broadcast_projects(project.repository_id)
+        {:ok, project}
+
+      result ->
+        result
+    end
+  end
 
   def change_project(%Repository{id: repository_id}, %Project{} = project, attrs) do
     attrs = attrs |> to_string_map() |> Map.put("repository_id", repository_id)

@@ -877,6 +877,42 @@ defmodule OpenAgents.Repositories do
   def subscribe_all_issues,
     do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @all_issues_topic)
 
+  @doc "Subscribes the caller to one repository's project activity."
+  @all_projects_topic "projects:all"
+
+  def subscribe_projects(repository_id),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, projects_topic(repository_id))
+
+  def unsubscribe_projects(repository_id),
+    do: Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, projects_topic(repository_id))
+
+  @doc """
+  Announces that one repository's projects moved.
+
+  Called after the owning transaction commits. The message carries the
+  repository id and nothing else, so every subscriber re-reads through its own
+  visibility and authorization predicates.
+  """
+  def broadcast_projects(repository_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      projects_topic(repository_id),
+      {:projects_changed, repository_id}
+    )
+
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      @all_projects_topic,
+      {:projects_changed, repository_id}
+    )
+  end
+
+  defp projects_topic(repository_id), do: "projects:" <> repository_id
+
+  @doc "Receives `{:projects_changed, repository_id}` for every repository at once."
+  def subscribe_all_projects,
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @all_projects_topic)
+
   @doc "Seeds GitHub's default label vocabulary onto a new or imported repository."
   def seed_default_labels!(%Repository{} = repository) do
     Enum.each(@default_labels, fn {name, color, description} ->

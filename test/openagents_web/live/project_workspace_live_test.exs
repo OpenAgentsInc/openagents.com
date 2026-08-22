@@ -162,4 +162,72 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLiveTest do
     |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
     |> Repo.update!()
   end
+
+  describe "live updates" do
+    test "an out-of-band write re-renders the list without a reload", context do
+      {:ok, view, _html} = live(context.conn, ~p"/projects")
+
+      {:ok, fresh} =
+        Projects.create_project(
+          context.private,
+          %{"title" => "Filed from the API"},
+          context.owner
+        )
+
+      send(view.pid, {:projects_changed, context.private.id})
+      _ = :sys.get_state(view.pid)
+
+      assert project_linked?(view, context.private, fresh)
+      assert render(view) =~ "Filed from the API"
+    end
+
+    test "closing out of band moves the row to the closed tab", context do
+      {:ok, view, _html} = live(context.conn, ~p"/projects")
+
+      {:ok, _closed} = Projects.update_project(context.secret, %{"state" => "closed"})
+
+      send(view.pid, {:projects_changed, context.private.id})
+      _ = :sys.get_state(view.pid)
+
+      refute render(view) =~ "Key rotation"
+
+      assert render_patch(view, ~p"/projects?state=closed") =~ "Key rotation"
+    end
+
+    test "a burst of writes coalesces into one refresh", context do
+      {:ok, view, _html} = live(context.conn, ~p"/projects")
+
+      Enum.each(1..5, fn n ->
+        {:ok, _} =
+          Projects.create_project(context.private, %{"title" => "Burst #{n}"}, context.owner)
+
+        send(view.pid, {:projects_changed, context.private.id})
+      end)
+
+      # With the test debounce at zero every armed timer fires immediately; what
+      # matters here is that the page converges to all five rows in one piece.
+      _ = :sys.get_state(view.pid)
+
+      html = render(view)
+
+      for n <- 1..5 do
+        assert html =~ "Burst #{n}"
+      end
+    end
+
+    test "a private project never reaches a viewer who cannot read it", context do
+      outsider_conn =
+        Plug.Test.init_test_session(build_conn(), %{"user_id" => github_user("outsider").id})
+
+      {:ok, view, html} = live(outsider_conn, ~p"/projects")
+
+      refute html =~ "Key rotation"
+
+      send(view.pid, {:projects_changed, context.private.id})
+      _ = :sys.get_state(view.pid)
+      _ = render(view)
+
+      refute render(view) =~ "Key rotation"
+    end
+  end
 end

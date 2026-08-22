@@ -3,7 +3,7 @@ defmodule OpenAgents.Modules.RouterTest do
 
   alias OpenAgents.Modules.{Router, RoutingPolicy, SurfacePolicy}
   alias OpenAgents.Provenance.Canonical
-  alias OpenAgents.Tools.Registry
+  alias OpenAgents.Tools.{Registry, ScvDeploy}
 
   test "identical intent, policy, and catalog select the same deterministic baseline" do
     snapshot = Registry.current!()
@@ -157,7 +157,7 @@ defmodule OpenAgents.Modules.RouterTest do
     assert decision.reason == "deterministic_baseline_selected"
   end
 
-  test "machine-effect modules route under the paired-machine policy but not the default" do
+  test "machine-effect modules route under paired-machine and operator policies" do
     snapshot = Registry.current!()
     artifact = Map.fetch!(snapshot.modules, {"sarah.tool.computer_run.v1", 1})
     proposal = reference(artifact, snapshot.digest)
@@ -181,11 +181,39 @@ defmodule OpenAgents.Modules.RouterTest do
                  "side_effect_policy_refused" in &1["reasons"])
            )
 
-    assert {:ok, selected} =
-             Router.route(snapshot, RoutingPolicy.paired_machine(), machine_input)
+    for policy <- [RoutingPolicy.paired_machine(), RoutingPolicy.operator()] do
+      assert {:ok, selected} = Router.route(snapshot, policy, machine_input)
+      assert selected.status == "selected"
+      assert selected.selected == proposal
+    end
+  end
 
+  test "SCV deployment routes only under the operator policy" do
+    assert {:ok, snapshot} = Registry.build([ScvDeploy])
+    artifact = Map.fetch!(snapshot.modules, {"sarah.tool.scv_deploy.v1", 1})
+    proposal = reference(artifact, snapshot.digest)
+
+    scv_input =
+      Map.merge(input(), %{
+        required_capability: "scv.deploy",
+        required_side_effect: "external_effect",
+        authorities: MapSet.new(["scv.deploy"]),
+        proposal: proposal,
+        exact_proposal: true
+      })
+
+    for policy <- [RoutingPolicy.default(), RoutingPolicy.paired_machine()] do
+      assert {:ok, refused} = Router.route(snapshot, policy, scv_input)
+      assert refused.status == "refused"
+      assert refused.selected == nil
+      assert Enum.any?(refused.rejected, &("residency_refused" in &1["reasons"]))
+    end
+
+    operator_policy = RoutingPolicy.operator()
+    assert {:ok, selected} = Router.route(snapshot, operator_policy, scv_input)
     assert selected.status == "selected"
     assert selected.selected == proposal
+    assert {:ok, ^artifact} = Router.revalidate(selected, snapshot, operator_policy, scv_input)
   end
 
   test "an unadmitted routing program identity is rejected before it can propose" do

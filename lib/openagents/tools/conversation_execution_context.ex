@@ -7,8 +7,10 @@ defmodule OpenAgents.Tools.ConversationExecutionContext do
   one surface cannot silently leave the other surface behind.
   """
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Accounts.User
   alias OpenAgents.Machines
+  alias OpenAgents.Modules.RoutingPolicy
   alias OpenAgents.Repo
   alias OpenAgents.SCV.Deployments
   alias OpenAgents.Tools.ExecutionContext
@@ -27,6 +29,20 @@ defmodule OpenAgents.Tools.ConversationExecutionContext do
   @doc "The authority set shared by every conversation transport."
   @spec authorities() :: MapSet.t(String.t())
   def authorities, do: @authorities
+
+  @doc "The routing policy admitted for a conversation owner."
+  @spec routing_policy(String.t() | nil) :: RoutingPolicy.t()
+  def routing_policy(user_id) when is_binary(user_id) do
+    user = Repo.get(User, user_id)
+
+    cond do
+      Accounts.admin?(user) -> RoutingPolicy.operator()
+      Machines.active_machine?(user_id) -> RoutingPolicy.paired_machine()
+      true -> RoutingPolicy.default()
+    end
+  end
+
+  def routing_policy(_user_id), do: RoutingPolicy.default()
 
   @doc "Build a tool execution context for a text or voice conversation."
   @spec build(map()) :: ExecutionContext.t()

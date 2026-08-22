@@ -11,7 +11,6 @@ defmodule OpenAgents.Turns.TurnServer do
     Machines,
     Modules.Lifecycle,
     Modules.Router,
-    Modules.RoutingPolicy,
     Modules.RoutingReceipts,
     Preferences,
     ProfileMemory,
@@ -150,7 +149,7 @@ defmodule OpenAgents.Turns.TurnServer do
          current_usage: nil,
          usage: nil,
          tool_snapshot: tool_snapshot,
-         routing_policy: routing_policy(owner),
+         routing_policy: ConversationExecutionContext.routing_policy(owner.user_id),
          program_snapshot: program_snapshot,
          pending_tool: nil,
          tool_call_count: 0,
@@ -164,14 +163,6 @@ defmodule OpenAgents.Turns.TurnServer do
        }}
     else
       {:error, reason} -> {:stop, reason}
-    end
-  end
-
-  defp routing_policy(owner) do
-    if Machines.active_machine?(owner.user_id) do
-      RoutingPolicy.paired_machine()
-    else
-      RoutingPolicy.default()
     end
   end
 

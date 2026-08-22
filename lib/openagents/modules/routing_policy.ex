@@ -78,6 +78,37 @@ defmodule OpenAgents.Modules.RoutingPolicy do
     policy
   end
 
+  @doc """
+  Policy for an OpenAgents operator using capacity owned by OpenAgents.
+
+  This policy admits the SCV module's external effect and residency into the
+  routing stage. Execution still requires the module-specific operator receipt,
+  and `OpenAgents.SCV.Deployments` independently verifies the operator again
+  before it spends capacity.
+  """
+  @spec operator() :: t()
+  def operator do
+    {:ok, policy} =
+      new(%{
+        id: "sarah.routing.policy.operator.v1",
+        allowed_residencies: [
+          "application_postgres",
+          "application_process",
+          "host",
+          "openagents_capacity",
+          "operator_machine"
+        ],
+        allowed_approval_classes: [
+          "exact_current_user_consent",
+          "explicit_operator_approval",
+          "host_policy"
+        ],
+        allowed_side_effects: ["external_effect", "read_only", "reversible_write"]
+      })
+
+    policy
+  end
+
   @spec new(map()) :: {:ok, t()} | {:error, atom()}
   def new(attributes) when is_map(attributes) do
     base = default()

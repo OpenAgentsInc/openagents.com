@@ -3,7 +3,9 @@ defmodule OpenAgents.Tools.ConversationExecutionContextTest do
 
   alias OpenAgents.AccountsFixtures
   alias OpenAgents.Conversations
-  alias OpenAgents.Modules.SurfacePolicy
+  alias OpenAgents.Machines
+  alias OpenAgents.Modules.{Router, RoutingPolicy, SurfacePolicy}
+  alias OpenAgents.Provenance.Canonical
   alias OpenAgents.Tools.{ConversationExecutionContext, Registry, ScvDeploy}
 
   setup do
@@ -38,6 +40,31 @@ defmodule OpenAgents.Tools.ConversationExecutionContextTest do
     assert {:ok, snapshot} = Registry.build([ScvDeploy])
     assert {:ok, artifact} = Registry.module_for_tool(snapshot, "scv_deploy", 1)
     assert :ok = SurfacePolicy.authorize_execution(artifact, voice)
+
+    assert %RoutingPolicy{id: "sarah.routing.policy.operator.v1"} =
+             policy = ConversationExecutionContext.routing_policy(user.id)
+
+    proposal = %{
+      "module_id" => artifact.module_id,
+      "version" => artifact.version,
+      "artifact_digest" => artifact.artifact_digest,
+      "registry_digest" => snapshot.digest
+    }
+
+    route_input = %{
+      intent_digest: Canonical.sha256("deploy an SCV"),
+      required_capability: "scv.deploy",
+      required_side_effect: "external_effect",
+      surface: "text",
+      data_scope: "browser_conversation",
+      authorities: text.authorities,
+      proposal: proposal,
+      exact_proposal: true
+    }
+
+    assert {:ok, decision} = Router.route(snapshot, policy, route_input)
+    assert decision.status == "selected"
+    assert {:ok, ^artifact} = Router.revalidate(decision, snapshot, policy, route_input)
   end
 
   test "non-operators receive the shared authorities without an SCV receipt" do
@@ -57,6 +84,27 @@ defmodule OpenAgents.Tools.ConversationExecutionContextTest do
 
     assert {:error, :module_approval_required} =
              SurfacePolicy.authorize_execution(artifact, context)
+
+    assert %RoutingPolicy{id: "sarah.routing.policy.default.v1"} =
+             ConversationExecutionContext.routing_policy(user.id)
+  end
+
+  test "an active paired machine retains the paired-machine routing policy" do
+    user = AccountsFixtures.repository_user_fixture("conversation-context-machine")
+
+    {:ok, %{code: code}} =
+      Machines.start_pairing(%{
+        "name" => "context-machine",
+        "tier" => "probe",
+        "platform" => "linux-x64",
+        "agent_version" => "0.1.0",
+        "roots" => ["/workspace"]
+      })
+
+    assert {:ok, _machine} = Machines.approve_pairing(user, code)
+
+    assert %RoutingPolicy{id: "sarah.routing.policy.paired-machine.v1"} =
+             ConversationExecutionContext.routing_policy(user.id)
   end
 
   defp build(surface, conversation, user) do

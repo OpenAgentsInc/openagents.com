@@ -173,11 +173,11 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
         <div class="flex min-h-0 flex-1 px-4 pb-44 pt-6">
           <.conversation
             id="chat-placeholder-transcript"
-            class="mx-auto w-full max-w-3xl"
+            class="w-full"
             scroll_button={false}
           >
             <.conversation_content class={[
-              "min-h-full px-0",
+              "mx-auto min-h-full w-full max-w-3xl px-0",
               if(@messages == [], do: "justify-center", else: "justify-end")
             ]}>
               <.conversation_empty_state

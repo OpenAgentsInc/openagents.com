@@ -104,14 +104,14 @@ openagents api repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/items
 openagents api repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/fields
 ```
 
-Create a project and add an issue. `issue_id` is the numeric database ID in the
-issue response, not its repository-local issue number:
+Create a project and add an issue. `issue_number` is the repository-local issue
+number, such as `11` in `repos/OWNER/REPOSITORY/issues/11`:
 
 ```sh
 openagents api -X POST -f title="Release readiness" \
   repos/OWNER/REPOSITORY/projectsV2
 
-printf '%s' '{"issue_id":42,"values":{"Status":"To Do"}}' | \
+printf '%s' '{"issue_number":11,"values":{"Status":"To Do"}}' | \
   openagents api -X POST --input - \
   repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/items
 ```

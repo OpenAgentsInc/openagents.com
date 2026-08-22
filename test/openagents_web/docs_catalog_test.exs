@@ -88,7 +88,8 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     assert api.markdown =~ "openagents api"
     assert api.markdown =~ ".issues[]"
     assert api.markdown =~ "projectsV2/PROJECT_NUMBER/items"
-    assert api.markdown =~ "numeric database ID"
+    assert api.markdown =~ ~s({"issue_number":11)
+    refute api.markdown =~ ~s({"issue_id":42)
     assert api.markdown =~ "does not provide `openagents issue`"
     assert api.markdown =~ "`openagents project` commands"
   end

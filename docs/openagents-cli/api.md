@@ -151,11 +151,11 @@ openagents api -X POST -f title="Release readiness" \
   repos/OWNER/REPOSITORY/projectsV2
 ```
 
-Add an issue to a project. `issue_id` is the issue's numeric database ID from
-the issue response, not its repository-local issue number:
+Add an issue to a project. `issue_number` is the repository-local issue number,
+such as `11` in `repos/OWNER/REPOSITORY/issues/11`:
 
 ```sh
-printf '%s' '{"issue_id":42,"values":{"Status":"To Do"}}' | \
+printf '%s' '{"issue_number":11,"values":{"Status":"To Do"}}' | \
   openagents api -X POST --input - \
   repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/items
 ```

@@ -623,128 +623,27 @@ body.sidebar-open {
 
 /* Chat UI (OpenAgents) */
 
-.chat-transcript {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 24px;
-  overflow-y: auto;
-  overscroll-behavior: none;
-}
-
-.message-row {
-  display: flex;
-  max-width: 720px;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.message-row--assistant {
-  align-self: flex-start;
-}
-
-.message-row--user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-
-.message-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.message-time {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
+/* The transcript and the composer are AI Elements now — `conversation`,
+ * `message`, `message_content`, and `prompt_input` carry the column, the
+ * asymmetry, the bubble, and the input group that used to live here as
+ * `.chat-transcript`, `.message-row`, `.message-body`, `.message-bubble`,
+ * `.composer`, `.composer-card`, `.composer-grid`, `.composer-input`, and
+ * `.composer-trailing`. Those rules are gone rather than left to outrank the
+ * utilities that replaced them: everything in this file is unlayered, so it
+ * beats every Tailwind layer, and a leftover `background` here would have
+ * silently repainted the ported bubble.
+ *
+ * One declaration survives, because no utility states it: the line breaks a
+ * person actually typed. */
 
 .message-content {
-  color: var(--text-primary);
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.message-bubble {
-  max-width: 560px;
-  padding: 10px 14px;
-  border-radius: 16px;
-  border-bottom-right-radius: 4px;
-  background: var(--accent);
-  color: var(--text-primary);
-}
-
-.composer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--ink-raised);
-  background: var(--ink-void);
-}
-
-.composer-card {
-  position: relative;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 6px;
-  border: 1px solid var(--ink-raised);
-  border-radius: 24px;
-  background: var(--ink-surface);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.composer-card:focus-within {
-  border-color: var(--text-dim);
-}
-
-.composer-grid {
-  display: grid;
-  align-items: end;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  min-height: 44px;
-}
-
-.composer-input {
-  resize: none;
-  min-height: 36px;
-  max-height: 200px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 18px;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
-  outline: none;
-}
-
-.composer-input::placeholder {
-  color: var(--text-muted);
-}
-
-/* The card is the control, so the card carries the focus state. Basecoat's
-   `.textarea:focus` paints a 3px ring, and the composer autofocuses on mount,
-   so that ring drew a second rounded rectangle inside the card from the moment
-   the page loaded. `.composer-card:focus-within` already states the same
-   thing, once, on the right element. */
-.composer-input:focus,
-.composer-input:focus-visible {
-  border: 0;
-  box-shadow: none;
-  outline: none;
-}
-
-.composer-trailing {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-inline-end: 4px;
-  padding-block-end: 4px;
-}
-
+/* The chat composer's send control is `prompt_input_submit/1` now. What is
+ * left on this class is the voice spike's start control, which is not part of
+ * the product surface and has no primitive of its own. */
 .send-action {
   display: inline-flex;
   width: 36px;

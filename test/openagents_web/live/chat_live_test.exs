@@ -454,9 +454,14 @@ defmodule OpenAgentsWeb.ChatLiveTest do
 
     # Asymmetry carries the roles (DESIGN.md, Message row): the person's
     # message is the tinted bubble, Sarah's stays bare prose with no bubble
-    # and no avatar column.
-    assert has_element?(view, ".message-row--user .message-content.message-bubble")
-    refute has_element?(view, ".message-row--assistant .message-bubble")
+    # and no avatar column. The bubble is AI Elements' now — `message/1` marks
+    # the row `is-user` and `message_content/1`'s `group-[.is-user]:` rules
+    # paint it — so the marker is what this asserts, not the retired
+    # `.message-bubble` class the marker replaced.
+    assert has_element?(view, ~s(.message-row--user[data-from="user"].is-user .message-content))
+    assert has_element?(view, ".message-row--assistant.is-assistant .message-content")
+    refute has_element?(view, ".message-row--assistant.is-user")
+    refute has_element?(view, ".message-bubble")
     refute has_element?(view, ".message-row .avatar")
 
     persisted =
@@ -536,13 +541,13 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     refute html =~ step.provider_item_id
     refute html =~ step.provider_response_id
 
-    # The disclosure anatomy: an aria-expanded chevron button controlling a
-    # details region that carries the bounded arguments.
-    assert has_element?(
-             view,
-             ~s(#tool-activity-step-#{step.id} button[aria-expanded="false"][aria-controls="tool-activity-step-#{step.id}-details"])
-           )
-
+    # The disclosure anatomy: the step is an AI Elements `tool/1`, so the
+    # control is a native `<summary>` inside a closed `<details>` rather than
+    # a button carrying `aria-expanded`. The browser supplies the disclosure
+    # semantics and the keyboard operation; the server writes the initial
+    # state, and a stream re-insert closes the row again.
+    assert has_element?(view, "details#tool-activity-step-#{step.id}:not([open]) > summary")
+    assert has_element?(view, "#tool-activity-step-#{step.id} summary", "Running")
     assert has_element?(view, "#tool-activity-step-#{step.id}-details")
     assert html =~ "ARGUMENTS"
 
@@ -839,6 +844,138 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     refute response.resp_body =~ "tool_outputs"
     refute response.resp_body =~ "instructions"
     refute response.resp_body =~ "INTERNAL_TEST_PAYLOAD"
+  end
+
+  # ── The AI Elements composition ─────────────────────────────────────────────
+  # The surface is built from the ported components rather than from bespoke
+  # chat CSS. What follows checks the composition itself: that the parts are
+  # the ported ones, and that the state each of them needs from the LiveView
+  # actually reaches it. A screenshot cannot tell a `div` that looks like a
+  # transcript from one the scroll hook can follow.
+
+  test "the transcript is a conversation of messages, not a hand-rolled scroller", %{conn: conn} do
+    conn = log_in_github_user(conn, "conversation-composition-browser-00000000")
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    # The scroller is `conversation/1`: a log region whose inner box scrolls,
+    # so the return-to-newest control can hold still against the bottom edge.
+    assert has_element?(view, "#conversation[role=log]")
+    assert has_element?(view, ~s(#conversation-viewport[data-conversation-viewport="true"]))
+    assert has_element?(view, ~s(#conversation-scroll-button[data-conversation-scroll-button]))
+
+    # `.TranscriptScroll` wraps it rather than replacing it: the AI Elements
+    # hook pins to the newest turn, and this one keeps the copied-link anchor,
+    # the prepend position, and the server's scroll event.
+    assert has_element?(view, ~s(#transcript[phx-hook$=".TranscriptScroll"] #conversation))
+
+    # The turns are `conversation_content/1` holding the stream.
+    assert has_element?(view, "#conversation #conversation-content.message-list")
+    assert has_element?(view, ~s(#conversation-content #messages[phx-update="stream"]))
+
+    # Each turn is `message/1` carrying the marker `message_content/1` reads.
+    assert has_element?(view, ~s(#messages [data-from="assistant"].is-assistant))
+    assert has_element?(view, ~s([data-from="assistant"] .message-content))
+    assert has_element?(view, ~s([data-from="assistant"] .message-toolbar))
+  end
+
+  test "the composer is a prompt input that states its submit status", %{conn: conn} do
+    Application.put_env(:openagents, :test_tool_observer, self())
+    on_exit(fn -> Application.delete_env(:openagents, :test_tool_observer) end)
+
+    conn = log_in_github_user(conn, "prompt-input-composition-browser-000000")
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    # The form is `prompt_input/1`: its hook owns Enter-to-submit and the
+    # auto-resize the retired `.Composer` hook used to do by hand.
+    assert has_element?(view, ~s(form#message-form[phx-hook$=".PromptInput"]))
+    assert has_element?(view, ~s(#message-form[data-submit-on-enter="true"]))
+
+    # The control is `prompt_input_textarea/1`, which is what makes it the
+    # input group's control rather than a textarea that happens to be inside.
+    assert has_element?(view, ~s(#chat_message[data-slot="input-group-control"]))
+    assert has_element?(view, ~s(#message-form [data-slot="input-group"] #chat_message))
+
+    # Idle: the send control is a submit button in the ready state.
+    assert has_element?(view, ~s(#send-message[type="submit"][data-status="ready"]))
+
+    view |> form("#message-form", chat: %{message: "[cancel-tool-loop]"}) |> render_submit()
+    assert_receive {:test_tool_executed, _tool_pid, "block", _scope_ref}, 1_000
+
+    # A turn is in flight: the status says so, and the control still submits,
+    # because a message sent now queues rather than being refused.
+    assert has_element?(view, ~s(#send-message[type="submit"][data-status="submitted"]))
+    assert has_element?(view, ~s(#send-message[aria-label="Queue message"]))
+    assert has_element?(view, "#message-form #cancel-turn")
+
+    view |> element("#cancel-turn") |> render_click()
+
+    assert eventually(fn -> has_element?(view, ~s(#send-message[data-status="ready"])) end)
+  end
+
+  test "queued messages are a queue, and each row still drops itself", %{conn: conn} do
+    Application.put_env(:openagents, :test_tool_observer, self())
+    on_exit(fn -> Application.delete_env(:openagents, :test_tool_observer) end)
+
+    conn = log_in_github_user(conn, "queue-composition-browser-0000000000000")
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    view |> form("#message-form", chat: %{message: "[cancel-tool-loop]"}) |> render_submit()
+    assert_receive {:test_tool_executed, _tool_pid, "block", _scope_ref}, 1_000
+
+    view |> form("#message-form", chat: %{message: "Wait your turn."}) |> render_submit()
+
+    # `queue/1` holding one `queue_section/1`, which is a native details so the
+    # disclosure works before any JavaScript loads.
+    assert has_element?(view, ~s(#message-queue[data-slot="queue"]))
+    assert has_element?(view, "#message-queue details#message-queue-section[open] > summary")
+    assert has_element?(view, "#message-queue-section summary", "1 QUEUED")
+
+    # One `queue_item/1` per waiting message, still carrying its own control.
+    assert has_element?(view, "#message-queue li[id^=queued-]", "Wait your turn.")
+
+    assert has_element?(
+             view,
+             ~s(#message-queue button[phx-click="dequeue_message"][aria-label="Remove queued message"])
+           )
+
+    view
+    |> element(~s(#message-queue button[phx-click="dequeue_message"]))
+    |> render_click()
+
+    refute has_element?(view, "#message-queue")
+  end
+
+  test "a tool call is a tool block whose badge states the step's real state", %{conn: conn} do
+    token = "tool-composition-browser-credential-000000000000"
+    %{turn: turn, step: step} = begin_tool_turn(token, "composition-query")
+
+    conn = log_in_github_user(conn, token)
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    # Requested, before the step starts: `tool_status_badge/1` reads
+    # `input-streaming`, which it labels Pending.
+    assert has_element?(view, "details#tool-activity-step-#{step.id} > summary", "Pending")
+
+    assert {:ok, _running_step, :started} = Conversations.start_tool_step(step)
+
+    assert eventually(fn ->
+             has_element?(view, "#tool-activity-step-#{step.id} summary", "Running")
+           end)
+
+    assert {:ok, _refused_step} =
+             Conversations.complete_tool_step(
+               step,
+               tool_outcome(step, "refused", "policy_refused")
+             )
+
+    # A refusal is `output-denied`, not a generic error: the badge says Denied,
+    # and the expansion still states the exact durable status word.
+    assert eventually(fn ->
+             has_element?(view, "#tool-activity-step-#{step.id} summary", "Denied") and
+               has_element?(view, "#tool-activity-step-#{step.id}-details", "refused")
+           end)
+
+    assert {:ok, _cancelled_turn} = Conversations.cancel_turn(turn)
   end
 
   defp begin_tool_turn(token, query) do

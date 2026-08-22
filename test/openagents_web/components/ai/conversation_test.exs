@@ -246,10 +246,16 @@ defmodule OpenAgentsWeb.AI.ConversationTest do
       assert String.trim(text) == "Thinking"
       assert {"style", "--spread: 16px"} in attributes
 
+      # The sweep is the `shimmer-sweep` keyframes in `openagents.css`, which
+      # select on this marker. The stand-in `animate-pulse` is gone: two
+      # animations on one element and the shorthand simply replaces the first,
+      # so the band would have breathed instead of travelling.
+      assert {"data-shimmer", "true"} in attributes
+
       class = Enum.find_value(attributes, fn {name, value} -> name == "class" && value end)
       assert class =~ "bg-clip-text"
       assert class =~ "text-transparent"
-      assert class =~ "animate-pulse"
+      refute class =~ "animate-pulse"
       assert class =~ "motion-reduce:animate-none"
       assert class =~ "var(--color-muted-foreground)"
     end

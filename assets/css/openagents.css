@@ -2692,27 +2692,24 @@
 
   /* ── Transcript ─────────────────────────────────────────────────────────── */
 
+  /* Not a scroller any more: `conversation/1` is, and it clips at its own
+     box so the return-to-newest control can hold still against the bottom
+     edge. What is left here is the column the conversation fills. */
   .transcript {
     display: flex;
     min-height: 0;
     flex: 1;
     flex-direction: column;
-    gap: 24px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 8px 24px 24px;
   }
 
+  /* A reading column, centred, so a wide window does not stretch prose to the
+     full width of a desktop display. The composer below uses the same measure,
+     so the two share one axis. The display, direction, gap, and padding are
+     `conversation_content/1`'s. */
   .message-list {
-    display: flex;
     width: 100%;
     max-width: 46rem;
-    flex-direction: column;
-    /* A reading column, centred, so a wide window does not stretch prose to
-       the full width of a desktop display. The composer below uses the same
-       measure, so the two share one axis. */
     margin-inline: auto;
-    gap: 20px;
   }
 
   .history-control {
@@ -2721,9 +2718,9 @@
     padding-block: 4px;
   }
 
+  /* Colour and size come from `message_content/1`'s own utilities, which
+     outrank this layer; what is left is the prose rhythm inside a turn. */
   .message-markdown {
-    color: var(--text-body);
-    font-size: 0.9375rem;
     line-height: 1.65;
     word-break: break-word;
   }
@@ -2790,10 +2787,8 @@
 
   /* ── Message chrome ─────────────────────────────────────────────────────── */
 
+  /* `message_actions/1` supplies the row; this supplies its voice. */
   .message-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
     color: var(--text-dim);
   }
 
@@ -2822,34 +2817,13 @@
     line-height: 1rem;
   }
 
+  /* `queue/1` and its parts draw the queue itself. All this states is that
+     the queue shares the composer's measure and sits above it. */
   .message-queue {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .message-queue__item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px dashed var(--line);
-    border-radius: var(--radius-lg);
-    padding: 8px 10px;
-  }
-
-  .message-queue__label {
-    color: var(--text-dim);
-    font-size: 0.6875rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .message-queue__text {
-    min-width: 0;
-    flex: 1;
-    color: var(--text-muted);
-    font-size: 0.875rem;
-    overflow-wrap: anywhere;
+    width: 100%;
+    max-width: 46rem;
+    margin-inline: auto;
+    margin-block-end: 8px;
   }
 
   /* ── Composer ───────────────────────────────────────────────────────────── */
@@ -2863,14 +2837,19 @@
     padding: 0 24px 20px;
   }
 
-  .composer-eyebrow {
-    display: flex;
+  /* `prompt_input/1`'s form is `w-full`, so the reading measure the composer
+     shares with the transcript is stated here rather than by the component. */
+  .composer {
+    width: 100%;
     max-width: 46rem;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
     margin-inline: auto;
-    padding-block-end: 8px;
+  }
+
+  /* Inside the input group's leading strip now, so it no longer carries a
+     measure or a margin of its own — only its voice, and the full width of
+     the strip it fills. */
+  .composer-eyebrow {
+    width: 100%;
     color: var(--text-dim);
     font-size: 0.75rem;
   }
@@ -2923,13 +2902,12 @@
 
   /* ── Activity ───────────────────────────────────────────────────────────── */
 
+  /* Each step is a `tool/1` block, which carries its own bottom margin, so
+     this states the measure and nothing about the spacing between them. */
   .tool-activity {
-    display: flex;
     width: 100%;
     max-width: 46rem;
-    flex-direction: column;
     margin-inline: auto;
-    gap: 4px;
   }
 
   .job-rollup {
@@ -3455,42 +3433,66 @@
     opacity: 0.6;
   }
 
-  .delegation-summary__dismiss,
-  .message-queue__dismiss {
+  .delegation-summary__dismiss {
     flex: none;
     margin-inline-start: auto;
   }
 }
 
-/* ── Composer action states ───────────────────────────────────────────────── */
+/* ── Composer and transcript tails ────────────────────────────────────────── */
 
-/* One control, three jobs: send, stop a running turn, and end a voice session.
- * Each states its job in shape and colour rather than only in its glyph. */
+/* Send, stop, and end-a-call are `prompt_input_submit/1` and
+ * `prompt_input_button/1` now, and each states its job through the button
+ * variant it is given. What is left here is the two boxes those controls sit
+ * in. */
 
 @layer components {
-  .send-action--stop {
-    background: var(--danger);
-    color: var(--control-inverse-fg);
-  }
-
-  .send-action--voice,
-  .send-action--voice-end {
-    background: transparent;
-    border: 1px solid var(--line-strong);
-    color: var(--icon-primary);
-  }
-
-  .send-action--voice-end {
-    border-color: var(--danger);
-    color: var(--danger);
-  }
-
   .voice-controller--in-composer {
     width: 100%;
   }
 
   .tool-activity--live {
     padding-block-start: 4px;
+  }
+}
+
+/* ── Shimmer ──────────────────────────────────────────────────────────────── */
+
+/* The sweep behind `OpenAgentsWeb.AI.Conversation.shimmer/1`. AI Elements
+ * animates `background-position` with `motion/react` across a gradient 250% as
+ * wide as the box, clipped to the glyphs: a bright band travels through muted
+ * text and the text reads as still arriving. The component carries the whole
+ * gradient and marks itself `data-shimmer`; the movement is this rule.
+ *
+ * The declaration it overrides — `[background-position:50%_center]` — is a
+ * Tailwind utility, and utilities outrank `@layer components`. An animation
+ * wins anyway: animated values sit above all normal declarations in the
+ * cascade whatever layer they came from. That is also why the component had to
+ * drop `animate-pulse` rather than have it overridden — two animations on one
+ * element, and the later `animation` shorthand simply replaces the earlier. */
+
+@keyframes shimmer-sweep {
+  from {
+    background-position: 100% center;
+  }
+
+  to {
+    background-position: 0% center;
+  }
+}
+
+@layer components {
+  [data-shimmer="true"] {
+    animation: shimmer-sweep 2s linear infinite;
+  }
+
+  /* Stated twice on purpose: the component also carries
+     `motion-reduce:animate-none`, and whichever of the two lands first, the
+     band holds still. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-shimmer="true"] {
+      animation: none;
+    }
   }
 }
 

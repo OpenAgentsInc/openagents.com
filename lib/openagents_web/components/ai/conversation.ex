@@ -419,11 +419,14 @@ defmodule OpenAgentsWeb.AI.Conversation do
   Text that reads as still arriving.
 
   The source animates `background-position` across a 250%-wide gradient with
-  `motion/react`, which needs a `@keyframes` rule this port may not add. The
-  gradient machinery is kept exactly — clipped to the glyphs, muted base, bright
-  band — and held at the centre, and the life comes from Tailwind's own
-  `animate-pulse`. The band sweeps in AI Elements and breathes here; restoring
-  the sweep is one `@keyframes` rule in the stylesheet.
+  `motion/react`. The gradient machinery is kept exactly — clipped to the
+  glyphs, muted base, bright band — and the sweep comes from the `shimmer-sweep`
+  keyframes in `assets/css/openagents.css`, which the `data-shimmer` marker
+  below selects. An animation outranks the `[background-position:50%_center]`
+  utility that sets the resting position, so the band moves rather than sitting
+  still. `motion-reduce:animate-none` stops it, and the stylesheet states the
+  same guard, so a reader who asked for less motion gets a still band from
+  whichever rule lands first.
 
   The highlight also moves from `--color-background` to `--color-foreground`.
   AI Elements is a light-first surface where the page ground is the brightest
@@ -452,7 +455,7 @@ defmodule OpenAgentsWeb.AI.Conversation do
         "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-foreground),#0000_calc(50%+var(--spread)))]",
         "[background-repeat:no-repeat,padding-box] [background-position:50%_center]",
         "[background-image:var(--bg),linear-gradient(var(--color-muted-foreground),var(--color-muted-foreground))]",
-        "animate-pulse motion-reduce:animate-none",
+        "motion-reduce:animate-none",
         @class
       ]}
       style={"--spread: #{@dynamic_spread}px"}

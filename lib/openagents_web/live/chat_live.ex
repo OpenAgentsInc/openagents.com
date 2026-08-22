@@ -19,6 +19,45 @@ defmodule OpenAgentsWeb.ChatLive do
   alias OpenAgentsWeb.ToolActivity
   alias OpenAgentsWeb.UI
 
+  # The chat surface is composed from the ported AI Elements, not from bespoke
+  # chat CSS: the transcript is `conversation`/`message`, the composer is
+  # `prompt_input`, queued messages are `queue`, and a tool call is `tool`.
+  # Imported rather than aliased so the call sites still read as AI Elements.
+  import OpenAgentsWeb.AI.Conversation,
+    only: [
+      conversation: 1,
+      conversation_content: 1,
+      message: 1,
+      message_content: 1,
+      message_actions: 1,
+      message_action: 1,
+      shimmer: 1
+    ]
+
+  import OpenAgentsWeb.AI.PromptInput,
+    only: [
+      prompt_input: 1,
+      prompt_input_textarea: 1,
+      prompt_input_header: 1,
+      prompt_input_toolbar: 1,
+      prompt_input_tools: 1,
+      prompt_input_button: 1,
+      prompt_input_submit: 1,
+      queue: 1,
+      queue_section: 1,
+      queue_section_trigger: 1,
+      queue_section_label: 1,
+      queue_section_content: 1,
+      queue_list: 1,
+      queue_item: 1,
+      queue_item_indicator: 1,
+      queue_item_content: 1,
+      queue_item_actions: 1,
+      queue_item_action: 1
+    ]
+
+  import OpenAgentsWeb.AI.Reasoning, only: [tool: 1, tool_header: 1, tool_content: 1]
+
   # The sidebar's calls and work sections are bounded projections, not
   # unbounded lists: the last eight of each, recomputed on the same PubSub
   # broadcasts that drive the transcript.
@@ -706,76 +745,82 @@ defmodule OpenAgentsWeb.ChatLive do
 
       <div id="openagents-app" class="chat-shell">
         <main class="app-main">
-          <section
-            id="transcript"
-            class="transcript"
-            aria-label="Conversation transcript"
-            phx-hook=".TranscriptScroll"
-          >
-            <div :if={@has_older?} class="history-control">
-              <.text_button id="load-older" phx-click="load_older">
-                <.icon name="history" /> LOAD EARLIER MESSAGES
-              </.text_button>
-            </div>
+          <%!-- `conversation/1` owns the scroller and the return-to-newest
+                control; this wrapper exists only to carry `.TranscriptScroll`,
+                which owns the three things the AI Elements hook does not: the
+                copied-link anchor, scroll preservation when older messages are
+                prepended, and the server's own scroll-to-bottom event. --%>
+          <div id="transcript" class="transcript" phx-hook=".TranscriptScroll">
+            <.conversation id="conversation" aria-label="Conversation transcript">
+              <.conversation_content id="conversation-content" class="message-list">
+                <div :if={@has_older?} class="history-control">
+                  <.text_button id="load-older" phx-click="load_older">
+                    <.icon name="history" /> LOAD EARLIER MESSAGES
+                  </.text_button>
+                </div>
 
-            <%!-- Cloned into each rendered code block by the TranscriptActions
-                  hook, so the copy affordance ships from the template (vendored
-                  glyph, accessible name) rather than being built in script. --%>
-            <template id="code-copy-template">
-              <.button
-                variant={:ghost}
-                size={:xs}
-                class="code-copy"
-                aria-label="Copy code"
-                data-copy-kind="code"
-              >
-                <.icon name="copy" />
-              </.button>
-            </template>
+                <%!-- Cloned into each rendered code block by the TranscriptActions
+                      hook, so the copy affordance ships from the template (vendored
+                      glyph, accessible name) rather than being built in script. --%>
+                <template id="code-copy-template">
+                  <.button
+                    variant={:ghost}
+                    size={:xs}
+                    class="code-copy"
+                    aria-label="Copy code"
+                    data-copy-kind="code"
+                  >
+                    <.icon name="copy" />
+                  </.button>
+                </template>
 
-            <div
-              id="messages"
-              class="message-list"
-              phx-update="stream"
-              aria-live="polite"
-              phx-hook=".TranscriptActions"
-            >
-              <.message_row
-                :for={{dom_id, message} <- @streams.messages}
-                id={dom_id}
-                message={message}
-                paced_items={@paced_voice_items}
-                activity={Map.get(@message_activity, message.id, [])}
-                rollup={Map.get(@job_rollups, message.id)}
-              />
-            </div>
+                <%!-- `display: contents`, so the stream container the hook and the
+                      tests need does not become a second box between the turns and
+                      the column that spaces them. --%>
+                <div
+                  id="messages"
+                  class="contents"
+                  phx-update="stream"
+                  phx-hook=".TranscriptActions"
+                >
+                  <.message_row
+                    :for={{dom_id, message} <- @streams.messages}
+                    id={dom_id}
+                    message={message}
+                    paced_items={@paced_voice_items}
+                    activity={Map.get(@message_activity, message.id, [])}
+                    rollup={Map.get(@job_rollups, message.id)}
+                  />
+                </div>
 
-            <%!-- Voice tool activity has no assistant message to attach to until a
-                  transcript lands, so a live session's steps render at the tail of
-                  the transcript. Text turns attach activity to their assistant
-                  message row instead, so this never duplicates them. --%>
-            <section
-              :if={@active_turn == nil and @tool_activity != []}
-              id="live-tool-activity"
-              class="tool-activity tool-activity--live"
-              role="status"
-              aria-live="polite"
-              aria-atomic="false"
-              aria-label="Sarah activity"
-            >
-              <.activity_event
-                :for={activity <- @tool_activity}
-                id={"live-tool-activity-step-#{activity.id}"}
-                activity={activity}
-              />
-            </section>
+                <%!-- Voice tool activity has no assistant message to attach to until a
+                      transcript lands, so a live session's steps render at the tail of
+                      the transcript. Text turns attach activity to their assistant
+                      message row instead, so this never duplicates them. --%>
+                <section
+                  :if={@active_turn == nil and @tool_activity != []}
+                  id="live-tool-activity"
+                  class="tool-activity tool-activity--live"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="false"
+                  aria-label="Sarah activity"
+                >
+                  <.activity_event
+                    :for={activity <- @tool_activity}
+                    id={"live-tool-activity-step-#{activity.id}"}
+                    activity={activity}
+                  />
+                </section>
 
-            <%!-- Below the desktop breakpoint the live delegation projection
-                  renders inline at the transcript tail on the event-header
-                  expansion pattern, instead of as a rail. One projection,
-                  two placements; the stylesheet shows exactly one. --%>
-            <.delegation_inline :if={@delegation} delegation={@delegation} />
-          </section>
+                <%!-- Below the desktop breakpoint the live delegation projection
+                      renders inline at the transcript tail on the event-header
+                      expansion pattern, instead of as a rail. One projection,
+                      two placements; the stylesheet shows exactly one. --%>
+                <.delegation_inline :if={@delegation} delegation={@delegation} />
+              </.conversation_content>
+            </.conversation>
+          </div>
 
           <footer class="composer-region">
             <section
@@ -828,40 +873,52 @@ defmodule OpenAgentsWeb.ChatLive do
       </div>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".TranscriptScroll">
+        // Follows the AI Elements conversation's own `.StickToBottom`, which
+        // owns pinning to the newest turn and the scroll-to-newest control.
+        // What is left here is what that hook does not do: land on a copied
+        // message link, hold the reader's place when older messages are
+        // prepended above them, and honour the server's scroll-to-bottom event.
         export default {
           mounted() {
             this.preserveNextUpdate = false
+            this.viewport = this.el.querySelector("[data-conversation-viewport]")
             // A copied message link lands here as /chat#<row id>: scroll the
             // row into view and flash it once. The flash animation is killed
             // by the global reduced-motion rule, so the mechanic stays
             // motion-safe.
+            //
+            // On the next frame, not now. This element is the conversation's
+            // parent, so its hook mounts first, and the conversation's own
+            // mount then pins the viewport to the newest turn — which would
+            // scroll straight past the row the link named. Landing a frame
+            // later both wins that race and moves the viewport off the bottom,
+            // which unpins the other hook so it stays where the reader was
+            // sent.
             const anchor = window.location.hash.slice(1)
             const target = anchor && document.getElementById(anchor)
             if (target && this.el.contains(target)) {
-              target.scrollIntoView({ block: "center" })
-              target.setAttribute("data-flash", "")
-              setTimeout(() => target.removeAttribute("data-flash"), 1600)
-            } else {
-              this.scrollToBottom()
+              requestAnimationFrame(() => {
+                target.scrollIntoView({ block: "center" })
+                target.setAttribute("data-flash", "")
+                setTimeout(() => target.removeAttribute("data-flash"), 1600)
+              })
             }
             this.handleEvent("chat:scroll-bottom", () => this.scrollToBottom())
             this.handleEvent("history:prepend", () => { this.preserveNextUpdate = true })
           },
           beforeUpdate() {
-            this.previousHeight = this.el.scrollHeight
-            this.previousTop = this.el.scrollTop
-            this.wasNearBottom = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < 120
+            if (!this.viewport) return
+            this.previousHeight = this.viewport.scrollHeight
+            this.previousTop = this.viewport.scrollTop
           },
           updated() {
-            if (this.preserveNextUpdate) {
-              this.el.scrollTop = this.previousTop + (this.el.scrollHeight - this.previousHeight)
-              this.preserveNextUpdate = false
-            } else if (this.wasNearBottom) {
-              this.scrollToBottom()
-            }
+            if (!this.viewport || !this.preserveNextUpdate) return
+            this.viewport.scrollTop =
+              this.previousTop + (this.viewport.scrollHeight - this.previousHeight)
+            this.preserveNextUpdate = false
           },
           scrollToBottom() {
-            this.el.scrollTop = this.el.scrollHeight
+            if (this.viewport) this.viewport.scrollTop = this.viewport.scrollHeight
           }
         }
       </script>
@@ -925,45 +982,21 @@ defmodule OpenAgentsWeb.ChatLive do
       </script>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".Composer">
+        // The AI Elements `.PromptInput` hook on the form owns auto-resize and
+        // Enter-to-submit. What is left here is the pair of server events that
+        // drive the control from the LiveView: focus it when a turn ends, and
+        // empty it after LiveView has read the submitted form.
         export default {
           mounted() {
-            this.card = this.el.closest(".composer-card")
-            this.resize()
-            this.el.addEventListener("input", () => this.resize())
-            this.el.addEventListener("keydown", event => {
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                event.preventDefault()
-                if (!this.el.disabled && this.el.value.trim()) this.el.form.requestSubmit()
-              }
-            })
             this.handleEvent("composer:focus", () => this.el.focus())
             // LiveView reads FormData during the submit event. Clearing here
             // races that read and can send an empty message.
             this.handleEvent("composer:clear", () => this.clear())
           },
-          updated() { this.resize() },
           clear() {
             this.el.value = ""
-            this.resize()
-          },
-          resize() {
-            this.el.style.height = "auto"
-            this.el.style.height = `${Math.min(this.el.scrollHeight, 208)}px`
-            // One line keeps the card's single collapsed row; a newline or
-            // wrapped growth flips data-expanded and the grid-template-areas
-            // swap reorganizes the card. Re-measured on every input and patch,
-            // so LiveView updates cannot strand a stale attribute.
-            if (!this.oneLine) {
-              const style = getComputedStyle(this.el)
-              this.oneLine =
-                parseFloat(style.lineHeight) +
-                parseFloat(style.paddingTop) +
-                parseFloat(style.paddingBottom)
-            }
-            const expanded =
-              this.el.value.includes("\n") || this.el.scrollHeight > this.oneLine + 2
-            if (this.card) this.card.toggleAttribute("data-expanded", expanded)
-            this.el.toggleAttribute("data-overflowing", this.el.scrollHeight > 208)
+            // Hands the resize back to the form's hook rather than repeating it.
+            this.el.dispatchEvent(new Event("input", { bubbles: true }))
           }
         }
       </script>
@@ -1576,54 +1609,67 @@ defmodule OpenAgentsWeb.ChatLive do
   attr :id, :string, required: true
   attr :activity, :map, required: true
 
-  # One durable tool step as an event header: the collapsed title says what
-  # actually ran, and the expansion carries the bounded durable details —
-  # including the executor disclosure, which lives here now rather than on
-  # every collapsed row.
+  # One durable tool step as an AI Elements tool block: the summary says what
+  # actually ran and states the step's real state as a word beside a status
+  # badge, and the expansion carries the bounded durable details — including
+  # the executor disclosure, which lives here rather than on every collapsed
+  # row. `<details>` supplies the disclosure, so no script and no ARIA to keep
+  # in sync; a stream re-insert collapses the row again, which is honest.
   defp activity_event(assigns) do
     ~H"""
-    <.event_header
-      id={@id}
-      status={@activity.status}
-      title={ToolActivity.title(@activity)}
-      title_attribute={ToolActivity.title_attribute(@activity)}
-      status_note={ToolActivity.status_note(@activity)}
-      timestamp={ToolActivity.timestamp(@activity)}
-    >
-      <dl class="event-detail">
-        <div :if={arguments = ToolActivity.arguments_pretty(@activity)}>
-          <dt>ARGUMENTS</dt>
-          <dd><pre>{arguments}</pre></dd>
-        </div>
-        <div :if={result = ToolActivity.payload_pretty(Map.get(@activity, :result))}>
-          <dt>RESULT</dt>
-          <dd><pre>{result}</pre></dd>
-        </div>
-        <div :if={error = ToolActivity.payload_pretty(Map.get(@activity, :error))}>
-          <dt>ERROR</dt>
-          <dd><pre>{error}</pre></dd>
-        </div>
-        <div :if={detail = ToolActivity.executor_detail(@activity)}>
-          <dt>EXECUTOR</dt>
-          <dd>
-            <span :if={Map.get(@activity, :executor_id)} class="event-detail__executor-id">
-              {@activity.executor_id}
-            </span>
-            {detail}
-          </dd>
-        </div>
-        <div>
-          <dt>STATUS</dt>
-          <dd>{@activity.status}</dd>
-        </div>
-        <div :if={timeline = ToolActivity.timeline(@activity)}>
-          <dt>TIMELINE</dt>
-          <dd>{timeline}</dd>
-        </div>
-      </dl>
-    </.event_header>
+    <.tool id={@id}>
+      <.tool_header
+        title={ToolActivity.title(@activity)}
+        type="dynamic-tool"
+        tool_name={@activity.tool_name}
+        state={tool_state(@activity.status)}
+      />
+      <.tool_content id={"#{@id}-details"}>
+        <dl class="event-detail">
+          <div :if={arguments = ToolActivity.arguments_pretty(@activity)}>
+            <dt>ARGUMENTS</dt>
+            <dd><pre>{arguments}</pre></dd>
+          </div>
+          <div :if={result = ToolActivity.payload_pretty(Map.get(@activity, :result))}>
+            <dt>RESULT</dt>
+            <dd><pre>{result}</pre></dd>
+          </div>
+          <div :if={error = ToolActivity.payload_pretty(Map.get(@activity, :error))}>
+            <dt>ERROR</dt>
+            <dd><pre>{error}</pre></dd>
+          </div>
+          <div :if={detail = ToolActivity.executor_detail(@activity)}>
+            <dt>EXECUTOR</dt>
+            <dd>
+              <span :if={Map.get(@activity, :executor_id)} class="event-detail__executor-id">
+                {@activity.executor_id}
+              </span>
+              {detail}
+            </dd>
+          </div>
+          <div>
+            <dt>STATUS</dt>
+            <dd>{@activity.status}</dd>
+          </div>
+          <div :if={timeline = ToolActivity.timeline(@activity)}>
+            <dt>TIMELINE</dt>
+            <dd>{timeline}</dd>
+          </div>
+        </dl>
+      </.tool_content>
+    </.tool>
     """
   end
+
+  # The durable step statuses mapped onto the AI SDK tool-part states the
+  # ported `tool_header/1` badge reads. Every terminal status that is not a
+  # success or a refusal is an error state; the expansion still states the
+  # exact word, so nothing is lost by the narrower vocabulary.
+  defp tool_state("requested"), do: "input-streaming"
+  defp tool_state("running"), do: "input-available"
+  defp tool_state("succeeded"), do: "output-available"
+  defp tool_state("refused"), do: "output-denied"
+  defp tool_state(_failed_cancelled_unavailable_or_interrupted), do: "output-error"
 
   attr :id, :string, required: true
   attr :message, :map, required: true
@@ -1633,17 +1679,45 @@ defmodule OpenAgentsWeb.ChatLive do
 
   # The transcript's asymmetry carries the roles (DESIGN.md, Message row): a
   # person's message is a right-aligned tinted bubble, Sarah's is bare
-  # full-measure prose. Role labels and avatars retired with it; provenance
-  # that means something — VOICE TRANSCRIPT / INTERRUPTED, the rare SYSTEM
-  # row — keeps its label.
+  # full-measure prose. Both now come from AI Elements: `message/1` carries the
+  # `is-user`/`is-assistant` marker and `message_content/1` reads it for the
+  # bubble. Role labels and avatars retired with the asymmetry; provenance that
+  # means something — VOICE TRANSCRIPT / INTERRUPTED, the rare SYSTEM row —
+  # keeps its label.
+  #
+  # `items-end` on a person's row is the one thing the components do not
+  # supply: `message/1` pushes the row to the right edge and
+  # `message_content/1` pushes the bubble inside it, but the toolbar above the
+  # bubble is the row's own child and would otherwise stay at the left.
   defp message_row(assigns) do
+    # The four content branches are mutually exclusive, so the conditions are
+    # derived once here rather than restated on each of them.
+    paced? = paced_live_transcript?(assigns.message, assigns.paced_items)
+    written? = assigns.message.content != ""
+
+    assigns =
+      assigns
+      |> assign(:paced?, paced? and written?)
+      |> assign(:report?, assigns.rollup != nil and written?)
+      |> assign(
+        :prose?,
+        assigns.rollup == nil and written? and not paced? and markdown?(assigns.message)
+      )
+      |> assign(
+        :plain?,
+        assigns.rollup == nil and written? and not paced? and not markdown?(assigns.message)
+      )
+      |> assign(:streaming?, assigns.message.status == "streaming")
+
     ~H"""
-    <article
+    <.message
       id={@id}
+      from={@message.role}
       class={[
         "message-row",
         "message-row--#{@message.role}",
-        @message.work_job_id && "message-row--report"
+        @message.work_job_id && "message-row--report",
+        @message.role == "user" && "items-end"
       ]}
       data-status={@message.status}
       data-modality={@message.modality}
@@ -1651,7 +1725,7 @@ defmodule OpenAgentsWeb.ChatLive do
       <%!-- Floating hover toolbar: copy, copy-link, and the inline timestamp —
             the timestamps' first home in the transcript. Hover/focus-within
             reveals it; touch keeps it visible (Phase D grammar). --%>
-      <div class="message-toolbar" role="toolbar" aria-label="Message actions">
+      <.message_actions class="message-toolbar" role="toolbar" aria-label="Message actions">
         <time
           :if={@message.inserted_at}
           id={"#{@id}-time"}
@@ -1661,98 +1735,89 @@ defmodule OpenAgentsWeb.ChatLive do
         >
           {Calendar.strftime(@message.inserted_at, "%H:%M")}
         </time>
-        <.button
+        <.message_action
           id={"#{@id}-copy"}
-          variant={:ghost}
-          size={:xs}
+          label="Copy message"
           class="message-toolbar__button"
-          aria-label="Copy message"
           data-copy-kind="message"
         >
           <.icon name="copy" />
-        </.button>
-        <.button
+        </.message_action>
+        <.message_action
           id={"#{@id}-copy-link"}
-          variant={:ghost}
-          size={:xs}
+          label="Copy message link"
           class="message-toolbar__button"
-          aria-label="Copy message link"
           data-copy-kind="link"
         >
           <.icon name="link" />
-        </.button>
-      </div>
-      <div class="message-body">
-        <.badge
-          :if={@message.role not in ["assistant", "user"]}
-          variant={:dim}
-          class="message-provenance"
-        >
-          {role_label(@message.role)}
-        </.badge>
-        <section
-          :if={@activity != []}
-          id={"tool-activity-#{@id}"}
-          class="tool-activity"
-          role="status"
-          aria-live="polite"
-          aria-atomic="false"
-          aria-label="Sarah activity"
-        >
-          <.activity_event
-            :for={activity <- @activity}
-            id={"tool-activity-step-#{activity.id}"}
-            activity={activity}
-          />
-        </section>
-        <.badge :if={@message.modality == "voice"} variant={:dim} class="message-provenance">
-          VOICE TRANSCRIPT{if @message.interrupted, do: " / INTERRUPTED", else: ""}
-        </.badge>
-        <%!-- A deep-work report renders as a rollup header: how long the job
-              worked and how its steps ended, expanding to the report itself. --%>
-        <.event_header
-          :if={@rollup}
-          id={"job-rollup-#{@id}"}
-          status={rollup_status(@rollup)}
-          title={rollup_title(@rollup)}
-          status_note={rollup_status_note(@rollup)}
-          timestamp={@rollup.completed_at}
-          class="job-rollup"
-        >
-          <:chips>
-            <.badge :if={@rollup.succeeded_count > 0} variant={:success}>
-              {@rollup.succeeded_count} SUCCEEDED
-            </.badge>
-            <.badge :if={@rollup.refused_count > 0} variant={:warning}>
-              {@rollup.refused_count} REFUSED
-            </.badge>
-          </:chips>
-          <div :if={@message.content != ""} class="message-content message-markdown">
-            {OpenAgents.Markdown.to_html(@message.content, streaming: @message.status == "streaming")}
-          </div>
-        </.event_header>
-        <div
-          :if={
-            !@rollup and @message.content != "" and
-              not paced_live_transcript?(@message, @paced_items) and
-              markdown?(@message)
-          }
+        </.message_action>
+      </.message_actions>
+      <.badge
+        :if={@message.role not in ["assistant", "user"]}
+        variant={:dim}
+        class="message-provenance"
+      >
+        {role_label(@message.role)}
+      </.badge>
+      <section
+        :if={@activity != []}
+        id={"tool-activity-#{@id}"}
+        class="tool-activity"
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        aria-label="Sarah activity"
+      >
+        <.activity_event
+          :for={activity <- @activity}
+          id={"tool-activity-step-#{activity.id}"}
+          activity={activity}
+        />
+      </section>
+      <.badge :if={@message.modality == "voice"} variant={:dim} class="message-provenance">
+        VOICE TRANSCRIPT{if @message.interrupted, do: " / INTERRUPTED", else: ""}
+      </.badge>
+      <%!-- A deep-work report renders as a rollup header: how long the job
+            worked and how its steps ended, expanding to the report itself. --%>
+      <.event_header
+        :if={@rollup}
+        id={"job-rollup-#{@id}"}
+        status={rollup_status(@rollup)}
+        title={rollup_title(@rollup)}
+        status_note={rollup_status_note(@rollup)}
+        timestamp={@rollup.completed_at}
+        class="job-rollup"
+      >
+        <:chips>
+          <.badge :if={@rollup.succeeded_count > 0} variant={:success}>
+            {@rollup.succeeded_count} SUCCEEDED
+          </.badge>
+          <.badge :if={@rollup.refused_count > 0} variant={:warning}>
+            {@rollup.refused_count} REFUSED
+          </.badge>
+        </:chips>
+        <.message_content
+          :if={@report?}
           class="message-content message-markdown"
-        >
-          {OpenAgents.Markdown.to_html(@message.content, streaming: @message.status == "streaming")}
-        </div>
+          text={@message.content}
+          streaming={@streaming?}
+        />
+      </.event_header>
+      <.message_content
+        :if={@prose?}
+        class="message-content message-markdown"
+        text={@message.content}
+        streaming={@streaming?}
+      />
+      <.message_content :if={@plain?}>
         <p
-          :if={
-            !@rollup and @message.content != "" and
-              not paced_live_transcript?(@message, @paced_items) and
-              not markdown?(@message)
-          }
-          class={["message-content", @message.role == "user" && "message-bubble"]}
+          class="message-content"
           phx-no-format
         >{@message.content}</p>
+      </.message_content>
+      <.message_content :if={@paced?}>
         <p
-          :if={@message.content != "" and paced_live_transcript?(@message, @paced_items)}
-          class={["message-content", @message.role == "user" && "message-bubble"]}
+          class="message-content"
           id={"#{@id}-paced"}
           phx-hook="PacedTranscript"
           phx-update="ignore"
@@ -1760,21 +1825,20 @@ defmodule OpenAgentsWeb.ChatLive do
           data-item-id={@message.provider_item_id}
         >
         </p>
-        <.badge
-          :if={label = status_label(@message.status)}
-          variant={message_status_variant(@message.status)}
-          class="message-status"
-        >
-          <.status_indicator
-            :if={@message.status == "streaming"}
-            state="streaming"
-            label={label}
-            decorative
-          />
-          {label}
-        </.badge>
-      </div>
-    </article>
+      </.message_content>
+      <.badge
+        :if={label = status_label(@message.status)}
+        variant={message_status_variant(@message.status)}
+        class="message-status"
+      >
+        <.status_indicator :if={@streaming?} state="streaming" label={label} decorative />
+        <%!-- Text that is still arriving reads as still arriving: the band
+              sweeps across the word while the turn runs, and settles into
+              plain text the moment it stops. --%>
+        <.shimmer :if={@streaming?} tag="span" text={label} />
+        <span :if={!@streaming?}>{label}</span>
+      </.badge>
+    </.message>
     """
   end
 
@@ -1786,32 +1850,47 @@ defmodule OpenAgentsWeb.ChatLive do
 
   defp composer_stack(assigns) do
     ~H"""
-    <ul
-      :if={@message_queue != []}
-      id="message-queue"
-      class="message-queue"
-      aria-label="Queued messages"
-    >
-      <li :for={item <- @message_queue} id={"queued-#{item.id}"} class="message-queue__item">
-        <span class="message-queue__label">QUEUED</span>
-        <span class="message-queue__text">{item.content}</span>
-        <.button
-          variant={:ghost}
-          size={:xs}
-          class="message-queue__dismiss"
-          aria-label="Remove queued message"
-          phx-click="dequeue_message"
-          phx-value-id={item.id}
-        >
-          <.icon name="x" />
-        </.button>
-      </li>
-    </ul>
+    <%!-- Messages waiting on the running turn, as the AI Elements queue: one
+          collapsible section stating how many are lined up, and a row each with
+          the control that drops it before it runs. --%>
+    <.queue :if={@message_queue != []} id="message-queue" class="message-queue">
+      <.queue_section id="message-queue-section" aria-label="Queued messages">
+        <.queue_section_trigger>
+          <.queue_section_label label="QUEUED" count={length(@message_queue)} />
+        </.queue_section_trigger>
+        <.queue_section_content>
+          <.queue_list>
+            <.queue_item :for={item <- @message_queue} id={"queued-#{item.id}"}>
+              <div class="flex items-start gap-2">
+                <.queue_item_indicator />
+                <.queue_item_content>{item.content}</.queue_item_content>
+                <.queue_item_actions>
+                  <.queue_item_action
+                    label="Remove queued message"
+                    phx-click="dequeue_message"
+                    phx-value-id={item.id}
+                  >
+                    <.icon name="x" />
+                  </.queue_item_action>
+                </.queue_item_actions>
+              </div>
+            </.queue_item>
+          </.queue_list>
+        </.queue_section_content>
+      </.queue_section>
+    </.queue>
 
-    <.form for={@form} id="message-form" class="composer" phx-submit="send_message">
-      <div class="composer-card">
+    <.prompt_input
+      id="message-form"
+      for={@form}
+      class="composer"
+      phx-submit="send_message"
+    >
+      <%!-- The error is the strip above the control, which is where the input
+            group puts anything that belongs to the composer but is not the
+            composer. --%>
+      <.prompt_input_header :if={@composer_error}>
         <.alert
-          :if={@composer_error}
           id="composer-error"
           variant={:danger}
           appearance={:row}
@@ -1820,46 +1899,47 @@ defmodule OpenAgentsWeb.ChatLive do
         >
           <p>{@composer_error}</p>
         </.alert>
+      </.prompt_input_header>
 
-        <div class="composer-grid">
-          <.textarea
-            id={@form[:message].id}
-            name={@form[:message].name}
-            value={@form[:message].value}
-            class="composer-input"
-            placeholder="Message Sarah"
-            aria-label="Message Sarah"
-            rows="1"
-            maxlength="8000"
-            autocomplete="off"
-            aria-describedby={if @composer_error, do: "composer-error"}
-            phx-mounted={JS.focus()}
-            phx-hook=".Composer"
+      <.prompt_input_textarea
+        field={@form[:message]}
+        placeholder="Message Sarah"
+        aria-label="Message Sarah"
+        rows="1"
+        maxlength="8000"
+        autocomplete="off"
+        aria-describedby={if @composer_error, do: "composer-error"}
+        phx-mounted={JS.focus()}
+        phx-hook=".Composer"
+      />
+
+      <.prompt_input_toolbar>
+        <%!-- Nothing sits at the leading edge of this composer yet — no
+              attachments, no model select — so the controls are pushed to the
+              trailing edge rather than an empty group being drawn opposite
+              them. --%>
+        <.prompt_input_tools class="ml-auto">
+          <.voice_session_buttons :if={@voice_enabled?} active_turn={@active_turn} />
+          <%!-- Stop stays its own control rather than `on_stop` on the submit:
+                a message sent while a turn runs queues, so send and stop are
+                two live actions, not one control in two states. --%>
+          <.prompt_input_button
+            :if={@active_turn}
+            id="cancel-turn"
+            variant={:destructive}
+            aria-label="Stop response"
+            phx-click="cancel_turn"
+          >
+            <.icon name="stop" class="size-4" />
+          </.prompt_input_button>
+          <.prompt_input_submit
+            id="send-message"
+            status={if @active_turn, do: :submitted, else: :ready}
+            label={if @active_turn, do: "Queue message", else: "Send"}
           />
-          <div class="composer-trailing">
-            <.voice_session_buttons :if={@voice_enabled?} active_turn={@active_turn} />
-            <.button
-              :if={@active_turn}
-              id="cancel-turn"
-              variant={:ghost}
-              class="send-action send-action--stop"
-              aria-label="Stop response"
-              phx-click="cancel_turn"
-            >
-              <.icon name="stop" />
-            </.button>
-            <.button
-              id="send-message"
-              type="submit"
-              class="send-action"
-              aria-label={if @active_turn, do: "Queue message", else: "Send"}
-            >
-              <.icon name="arrow-up" />
-            </.button>
-          </div>
-        </div>
-      </div>
-    </.form>
+        </.prompt_input_tools>
+      </.prompt_input_toolbar>
+    </.prompt_input>
     """
   end
 
@@ -1881,60 +1961,48 @@ defmodule OpenAgentsWeb.ChatLive do
 
   defp voice_session_buttons(assigns) do
     ~H"""
-    <.button
+    <.prompt_input_button
       id="voice-start"
-      type="button"
-      variant={:ghost}
-      class="send-action send-action--voice"
+      variant={:outline}
       disabled={@active_turn != nil}
       aria-label="Start voice"
     >
-      <.icon name="mic" />
-    </.button>
-    <.button
+      <.icon name="mic" class="size-4" />
+    </.prompt_input_button>
+    <.prompt_input_button
       id="voice-mute"
-      type="button"
-      variant={:ghost}
-      class="send-action send-action--voice"
+      variant={:outline}
       hidden
       disabled
       aria-label="Mute microphone"
       aria-pressed="false"
     >
-      <.icon name="mic-off" />
-    </.button>
-    <.button
+      <.icon name="mic-off" class="size-4" />
+    </.prompt_input_button>
+    <.prompt_input_button
       id="voice-interrupt"
-      type="button"
-      variant={:ghost}
-      class="send-action send-action--voice"
+      variant={:outline}
       hidden
       disabled
       aria-label="Interrupt Sarah"
     >
-      <.icon name="stop" />
-    </.button>
-    <.button
-      id="voice-unlock"
-      type="button"
-      variant={:ghost}
-      class="send-action send-action--voice"
-      hidden
-      aria-label="Enable audio"
-    >
-      <.icon name="sound-on-read-out-loud-speaker" />
-    </.button>
-    <.button
+      <.icon name="stop" class="size-4" />
+    </.prompt_input_button>
+    <.prompt_input_button id="voice-unlock" variant={:outline} hidden aria-label="Enable audio">
+      <.icon name="sound-on-read-out-loud-speaker" class="size-4" />
+    </.prompt_input_button>
+    <%!-- Ending a call is the one destructive control in the row, so it keeps
+          the danger hue the retired `.send-action--voice-end` gave it. --%>
+    <.prompt_input_button
       id="voice-end"
-      type="button"
-      variant={:ghost}
-      class="send-action send-action--voice send-action--voice-end"
+      variant={:outline}
+      class="text-danger"
       hidden
       disabled
       aria-label="End voice"
     >
-      <.icon name="x-circle" />
-    </.button>
+      <.icon name="x-circle" class="size-4" />
+    </.prompt_input_button>
     """
   end
 end

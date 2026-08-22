@@ -18,6 +18,7 @@ defmodule OpenAgentsWeb.IssueJSON do
   defp issue_json(issue, assigns) do
     owner = Map.get(assigns, :owner, "OpenAgents")
     repo = Map.get(assigns, :repo, "openagents")
+    url_base = url_base(assigns)
 
     %{
       id: issue.id,
@@ -36,9 +37,13 @@ defmodule OpenAgentsWeb.IssueJSON do
       created_at: issue.inserted_at,
       updated_at: issue.updated_at,
       closed_at: issue.closed_at,
-      html_url: "https://openagents.com/#{owner}/#{repo}/issues/#{issue.number}",
-      url: "https://openagents.com/api/v3/repos/#{owner}/#{repo}/issues/#{issue.number}"
+      html_url: "#{url_base}/#{owner}/#{repo}/issues/#{issue.number}",
+      url: "#{url_base}/api/v3/repos/#{owner}/#{repo}/issues/#{issue.number}"
     }
+  end
+
+  defp url_base(assigns) do
+    Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
   end
 
   defp translate_error({msg, opts}) do

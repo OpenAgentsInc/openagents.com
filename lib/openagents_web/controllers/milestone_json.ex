@@ -28,8 +28,12 @@ defmodule OpenAgentsWeb.MilestoneJSON do
       due_on: milestone.due_on,
       open_issues: milestone.open_issues,
       closed_issues: milestone.closed_issues,
-      url: "https://openagents.com/api/v3/repos/#{owner}/#{repo}/milestones/#{milestone.number}"
+      url: "#{url_base(assigns)}/api/v3/repos/#{owner}/#{repo}/milestones/#{milestone.number}"
     }
+  end
+
+  defp url_base(assigns) do
+    Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
   end
 
   defp translate_error({msg, opts}) do

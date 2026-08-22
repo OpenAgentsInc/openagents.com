@@ -26,7 +26,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
       assert %{"labels" => [label]} = json_response(conn, 200)
 
       assert label["url"] ==
-               "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug"
+               "http://www.example.com/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug"
     end
 
     test "GET /api/v3/repos/:owner/:repo/labels returns an empty list", %{conn: conn} do

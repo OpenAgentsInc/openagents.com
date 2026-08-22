@@ -24,6 +24,7 @@ defmodule OpenAgentsWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
   end
 
   pipeline :authenticated_api do
@@ -37,11 +38,13 @@ defmodule OpenAgentsWeb.Router do
 
   pipeline :forge_write_api do
     plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
   end
 
   pipeline :optional_forge_api do
     plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
     plug OpenAgentsWeb.Plugs.OptionalApiTokenAuth, scope: "forge:write"
   end
 

@@ -26,8 +26,12 @@ defmodule OpenAgentsWeb.LabelJSON do
       description: label.description,
       default: false,
       url:
-        "https://openagents.com/api/v3/repos/#{owner}/#{repo}/labels/#{URI.encode(label.name, &URI.char_unreserved?/1)}"
+        "#{url_base(assigns)}/api/v3/repos/#{owner}/#{repo}/labels/#{URI.encode(label.name, &URI.char_unreserved?/1)}"
     }
+  end
+
+  defp url_base(assigns) do
+    Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
   end
 
   defp translate_error({msg, opts}) do

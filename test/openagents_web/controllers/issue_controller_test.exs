@@ -138,6 +138,34 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
   end
 
+  describe "request origin URLs" do
+    test "issue URLs reflect the request host", %{conn: conn} do
+      {:ok, _issue} = Issues.create_issue(repository(), %{title: "Origin issue"})
+
+      conn =
+        conn
+        |> Map.replace!(:host, "staging.example.com")
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => [issue]} = json_response(conn, 200)
+
+      assert issue["html_url"] =~
+               "http://staging.example.com/OpenAgentsInc/openagents.com/issues/"
+    end
+
+    test "a forwarded host header does not replace the request origin", %{conn: conn} do
+      {:ok, _issue} = Issues.create_issue(repository(), %{title: "Forwarded issue"})
+
+      conn =
+        conn
+        |> put_req_header("x-forwarded-host", "evil.example.net")
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => [issue]} = json_response(conn, 200)
+      refute issue["html_url"] =~ "evil.example.net"
+    end
+  end
+
   defp repository do
     Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

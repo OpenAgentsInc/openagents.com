@@ -39,7 +39,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
       assert rendered["closed_issues"] == 1
 
       assert rendered["url"] ==
-               "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"
+               "http://www.example.com/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"
     end
 
     test "GET /api/v3/repos/:owner/:repo/milestones returns an empty list", %{conn: conn} do

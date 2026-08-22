@@ -3,8 +3,16 @@ defmodule OpenAgentsWeb.IssueJSON do
   Renders GitHub-compatible issue JSON.
   """
 
-  def render("index.json", %{issues: issues} = assigns) do
-    %{issues: Enum.map(issues, &issue_json(&1, assigns))}
+  def render("index.json", %{issues: issues, pagination: pagination} = assigns) do
+    %{
+      issues: Enum.map(issues, &issue_json(&1, assigns)),
+      pagination: %{
+        page: pagination.page,
+        per_page: pagination.per_page,
+        total: pagination.total,
+        total_pages: total_pages(pagination.total, pagination.per_page)
+      }
+    }
   end
 
   def render("show.json", %{issue: issue} = assigns) do
@@ -41,6 +49,10 @@ defmodule OpenAgentsWeb.IssueJSON do
       url: "#{url_base}/api/v3/repos/#{owner}/#{repo}/issues/#{issue.number}"
     }
   end
+
+  defp total_pages(0, _per_page), do: 1
+
+  defp total_pages(total, per_page), do: ceil(total / per_page)
 
   defp url_base(assigns) do
     Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")

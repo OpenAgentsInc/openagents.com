@@ -6,6 +6,9 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   alias OpenAgents.Issues
   alias OpenAgents.Repositories
 
+  import OpenAgents.MilestonesFixtures
+  import OpenAgents.LabelsFixtures
+
   describe "index" do
     test "GET /api/v3/repos/:owner/:repo/issues lists open issues by default", %{
       conn: conn
@@ -168,5 +171,84 @@ defmodule OpenAgentsWeb.IssueControllerTest do
 
   defp repository do
     Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
+  end
+
+  describe "pagination and filters" do
+    test "index returns bounded pagination metadata", %{conn: conn} do
+      {:ok, _issue} = Issues.create_issue(repository(), %{title: "Counted issue"})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => issues, "pagination" => pagination} = json_response(conn, 200)
+      assert length(issues) <= Issues.per_page()
+      assert pagination["page"] == 1
+      assert pagination["per_page"] == Issues.per_page()
+      assert pagination["total"] == 1
+      assert pagination["total_pages"] == 1
+    end
+
+    test "index filters by label, assignee, milestone, and search", %{conn: conn} do
+      milestone_fixture(repository(), %{number: 3, title: "Sprint 3"})
+      label_fixture(repository(), %{name: "bug", color: "d73a4a"})
+
+      octavia = github_user("assignee-filter", "octavia")
+      {:ok, _membership} = Repositories.add_member(repository(), octavia, "owner")
+
+      {:ok, _matched} =
+        Issues.create_issue(repository(), %{
+          title: "Wombat routing",
+          labels: [%{"name" => "bug"}],
+          assignees: [%{"login" => "octavia"}],
+          milestone: %{"number" => 3}
+        })
+
+      {:ok, _other} = Issues.create_issue(repository(), %{title: "Unrelated"})
+
+      for params <- [
+            %{"labels" => "bug"},
+            %{"assignee" => "octavia"},
+            %{"milestone" => "3"},
+            %{"q" => "wombat"}
+          ] do
+        conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?#{params}")
+        assert %{"issues" => [issue], "pagination" => %{"total" => 1}} = json_response(conn, 200)
+        assert issue["title"] == "Wombat routing"
+      end
+    end
+
+    test "index pages through results in a stable order", %{conn: conn} do
+      Enum.each(1..30, fn n ->
+        {:ok, _} = Issues.create_issue(repository(), %{title: "Paged #{n}"})
+      end)
+
+      first = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => page_one, "pagination" => %{"total_pages" => 2}} =
+               json_response(first, 200)
+
+      assert length(page_one) == Issues.per_page()
+
+      second =
+        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?page=2")
+
+      assert %{"issues" => page_two} = json_response(second, 200)
+      assert length(page_two) == 30 - Issues.per_page()
+      page_one_titles = MapSet.new(page_one, & &1["title"])
+      refute Enum.any?(page_two, &MapSet.member?(page_one_titles, &1["title"]))
+    end
+
+    test "index rejects an unknown state with a stable error", %{conn: conn} do
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=bogus")
+
+      assert %{"errors" => %{"state" => [message]}} = json_response(conn, 422)
+      assert message =~ "open"
+    end
+
+    test "index rejects a non-integer page with a stable error", %{conn: conn} do
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?page=zero")
+
+      assert %{"errors" => %{"page" => [message]}} = json_response(conn, 422)
+      assert message =~ "positive integer"
+    end
   end
 end

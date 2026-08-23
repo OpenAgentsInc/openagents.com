@@ -274,14 +274,14 @@ defmodule OpenAgents.Forum do
   The newest visible post in each of the most recently active topics on the
   boards a caller may list, newest post first.
 
-  One row per topic, so a single busy thread cannot crowd out every other
+  One row per topic, so a single busy topic cannot crowd out every other
   board in a caller's digest of the forum. The scope is the one
   `list_readable_forums/1` answers for the same caller, so a surface that
   shows recent posts beside a link to the board list cannot disagree with it.
 
   Each post arrives with its topic and board preloaded, and carries the
   identity it was written under rather than one resolved for it, so a caller
-  renders the same author a thread renders. A migrated post keeps its legacy
+  renders the same author a topic renders. A migrated post keeps its legacy
   display name; an identity claim binds the reference to an account, it does
   not rewrite the byline.
 

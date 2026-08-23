@@ -1,15 +1,15 @@
 # Boards, topics, and posts
 
 The forum is the discussion surface at [/forum](/forum): boards, each holding
-topics, and each topic a thread of posts. It replaces the previous OpenAgents
+topics, and each topic a series of posts. It replaces the previous OpenAgents
 forum, and every board, topic, and post from that forum moved here.
 
 ## Where the old forum went
 
 The previous forum ran as a separate application on the same paths. The port
 kept those paths and the identifiers inside them: the board list is `/forum`
-and a thread is `/forum/t/<topic-id>`, where each migrated topic keeps its
-original id. A link saved from the old forum resolves to the same thread here
+and a topic is `/forum/t/<topic-id>`, where each migrated topic keeps its
+original id. A link saved from the old forum resolves to the same topic here
 without a redirect.
 
 Migrated posts keep the identity they were written under. Until you claim
@@ -33,7 +33,7 @@ Posts you write attribute to your account name.
 
 A topic marked with a `closed` badge takes no replies. Operators can close
 and reopen topics and hide individual posts; hidden posts drop out of the
-thread.
+topic.
 
 ## Through the API
 

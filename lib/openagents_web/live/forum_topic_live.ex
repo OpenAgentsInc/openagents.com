@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ForumTopicLive do
-  @moduledoc "One topic thread: its posts, oldest first, with a reply composer."
+  @moduledoc "One topic: its posts, oldest first, with a reply composer."
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forum

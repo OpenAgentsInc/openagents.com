@@ -76,7 +76,7 @@ name. The user-facing procedure is
 
 ## Cutover path
 
-The legacy routes were `/forum` (home) and `/forum/t/:topicId` (thread). The
+The legacy routes were `/forum` (home) and `/forum/t/:topicId` (topic). The
 Phoenix surface serves exactly those paths, and every migrated row keeps its
 source UUID, so existing links resolve without redirects. Browser reads and
 writes require sign-in, matching the other workspace-wide surfaces; the

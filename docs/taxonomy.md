@@ -90,8 +90,8 @@ the issue and project controllers, which serve the local forge.
 spans several families, each tied to its own invariants: turn receipts,
 push receipts, build and deployment receipts, consent receipts, outcome
 receipts. *Checkpoint receipts are proposed and unclaimed; they would record
-a session save point and its link to a forge commit.* Always say which one
-when it matters. Session context is not stored by pushing a metadata branch
+a thread's save point and its link to a forge commit.* Always say which one
+when it matters. A thread transcript is not stored by pushing a metadata branch
 to GitHub. The forge already hosts the Git; PostgreSQL already hosts the
 evidence. A trace is a projection of that evidence, not a receipt.
 
@@ -175,60 +175,89 @@ authority.
 **Memory planes** — account-scoped, consent-gated projections: conversation
 recall (hybrid lexical + semantic), profile memory, learned preferences,
 experience memory, graph memory. All disposable except the authoritative
-messages and tool steps underneath them. *Search over coding-agent session
-history (checkpoints, trailers, and receipts) is proposed and unclaimed as a
-use of these planes, not a second index.*
+messages and tool steps underneath them. *Search over thread history
+(checkpoints, trailers, and receipts) is proposed and unclaimed as a use of
+these planes, not a second index.*
 
-### Coding-agent sessions
+### Threads
 
-Every italicized term in this section is proposed and unclaimed: no issue on
-the tracker claims it, so none of them has an owner, a date, or a plan. Treat them as reserved vocabulary that stops two people inventing two
-words for the same thing, not as a roadmap. Before building one, file the
-issue; when it ships, drop the italics and cite the code.
+A **thread** is the unit of agent work. Everything in this section describes a
+thread, or the evidence a thread leaves behind.
 
-These terms describe *why* a forge commit changed. Evidence lives in
-PostgreSQL receipts. The portable, redacted projection of that evidence is a
-trace. The forge already hosts Git, so there is no separate metadata remote
-and no metadata branch to export to GitHub.
+The italicized terms are proposed and unclaimed: no issue on the tracker claims
+them, so none has an owner, a date, or a plan. Treat them as reserved
+vocabulary that stops two people inventing two words for the same thing, not as
+a roadmap. Before building one, file the issue; when it ships, drop the italics
+and cite the code.
 
-**Coding-agent session** — *a complete interaction with a coding agent from
-start to finish: prompts, responses, tool steps, code changes, checkpoints,
-token usage, and line attribution. Distinct from a Phoenix or LiveView
-session. Spans one or more turns. Proposed as a named product unit; today
-the durable pieces are turns, work jobs, and SCV runs.*
+**Thread** — a bounded body of agent work: one objective, its turns, its
+transcript, and its budget. A thread is plural and disposable, and a user has
+as many as they have pieces of work.
 
-**Session context** — the prompts, responses, tool activity, code changes,
-and metadata that explain what happened during a coding-agent session.
-Authoritative copies live in PostgreSQL (messages, tool steps, receipts),
-not on a Git branch.
+Say thread, and mean this one. Four other things in and around this product
+have worn the word or its synonyms:
 
-**Nested session** — *a child session created when an agent spawns another
-agent or subagent during the same body of work. Proposed as a first-class
-roster and transcript link on the forge; do not flatten it into the parent
-turn.*
+- A **conversation** is Sarah's, and there is exactly one per user (DATA-002),
+  running as long as the account does. A thread is not a conversation and must
+  not be stored in one.
+- A **Phoenix session** and a **LiveView session** are transport. So is
+  `terminal-session.ts` in the CLI, and so is a **voice session**.
+- A forum **topic** is a series of posts. Prose sometimes calls one a thread;
+  the schema, the routes, and the API all say topic, and so should you.
+- `driver_thread_id` on an SCV run holds the *driver's* thread id — an opaque
+  foreign identifier — not this record's.
 
-**Checkpoint** — *a save point in a coding-agent session, linked to a forge
+The word follows Codex, whose app-server protocol is thread-first and is the
+contract `OpenAgents.SCV.Executor.CodexAppServer` already speaks: `thread/start`,
+`thread/turns/list`, `thread/status/changed`, and dozens more under `thread`.
+Codex does use `session`, and for the other sense: its seven `session/*` methods
+open, execute in, and terminate a shell. One protocol, both words, each for what
+this glossary means by it. It also matches the containment this codebase already
+has, because a thread holds turns exactly as a conversation does. ACP
+calls the same concept a session on the wire, so `session/new` opens a thread's
+ACP-side runtime; that is a mapping at one boundary, not a second name for the
+record. Two executors already disagree about the word, so some mapping is
+unavoidable, and the record takes the name that matches its shape.
+
+*The durable `threads` table is proposed.* Today the pieces are spread across
+turns, work jobs, box runs, and SCV runs, and only SCV runs are free of a
+conversation. See the audit in `docs/2026-08-23-thread-primitive-audit.md`.
+
+**Thread transcript** — the prompts, responses, tool activity, code changes,
+and metadata that explain what happened in a thread. Authoritative copies live
+in PostgreSQL (messages, tool steps, receipts), not on a Git branch. The
+portable, redacted projection of that evidence is a trace.
+
+**Nested thread** — *a child thread created when an agent spawns another agent
+or subagent during the same body of work. Proposed as a first-class roster and
+transcript link on the forge; do not flatten it into the parent turn.*
+
+The remaining terms describe *why* a forge commit changed. The forge already
+hosts Git, so there is no separate metadata remote and no metadata branch to
+export to GitHub.
+
+**Checkpoint** — *a save point in a thread, linked to a forge
 commit when the work is committed. Persistent checkpoints are receipts in
 PostgreSQL, not objects on a Git branch. Compact SCV checkpoints are
 structured state (facts, evidence refs, decisions, remaining work), not a
 transcript dump. Proposed as a named receipt family.*
 
 **Checkpoint linking** — *the join from a forge commit to the checkpoint
-and session context behind it. Proposed. A commit trailer or an explicit
+and thread transcript behind it. Proposed. A commit trailer or an explicit
 API write records the join; free-form commit messages are not the
 authority.*
 
 **Rewind** — *restoring the worktree to an earlier checkpoint during an
-active session. Proposed. Rewind is a local worktree operation; it is not
+active thread. Proposed. Rewind is a local worktree operation; it is not
 a forge reset and not a GitHub force-push.*
 
-**Shadow branch** — *a temporary local Git branch that holds intra-session
+**Shadow branch** — *a temporary local Git branch that holds intra-thread
 snapshots so rewind does not commit onto the working branch. Named with a
 worktree identifier so concurrent worktrees do not collide. Never pushed
 to the forge or to GitHub. Proposed.*
 
 **Commit trailer** — structured metadata appended to a Git commit message.
-Forge commit pages already display trailers, including an agent-session
+Forge commit pages already display trailers, including an agent-thread
 trailer when one produced the commit, and changelog entries can be sourced
 from a trailer. *Trailers that carry a checkpoint identifier and line
 attribution are proposed.*
@@ -244,8 +273,8 @@ repositories, branches, and time windows. Proposed. A dispatch is a
 projection, not a receipt.*
 
 **Skill** — *a reusable workflow that teaches a coding agent to search
-session history, explain a change from receipts, review a branch with
-intent context, or hand off a session. Proposed as a product surface.
+thread history, explain a change from receipts, review a branch with
+intent context, or hand off a thread. Proposed as a product surface.
 Operator skill files under `.agents/skills/` are local tooling, not this
 term.*
 
@@ -533,12 +562,13 @@ is exactly one component system; adding a second is forbidden.
    When checkpoints exist, they are a receipt family, not a Git branch.
 6. **Module means two things.** Elixir module or module artifact — say which.
 7. **An invariant is not true until its proof runs green.**
-8. **Say which session.** A coding-agent session is not a Phoenix session.
-   Session transcripts belong in PostgreSQL, not on a ref the GitHub mirror
-   would export.
+8. **Agent work is a thread.** A thread is not Sarah's one conversation
+   (DATA-002), not a Phoenix or voice session, and not a forum topic. Thread
+   transcripts belong in PostgreSQL, not on a ref the GitHub mirror would
+   export. ACP says session on the wire; the record is still a thread.
 9. **Say which trace.** An agent trace is an ATIF document. A Decision Trace
    is ProductSpec history. A Chrome trace is a profile artifact. A trace is
-   not a receipt and not a coding-agent session.
+   not a receipt and not a thread.
 10. **Say which delegation target.** A Box is provisioned, capped, and
     reclaimed. A Computer is someone's machine, present or absent. The kind
     travels in the identifier, so never write a bare target id.

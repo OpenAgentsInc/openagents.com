@@ -85,7 +85,7 @@ defmodule OpenAgentsWeb.ForumApiController do
 
   @doc """
   Closes, reopens, or pins a topic. Operators only, matching the controls the
-  web thread offers them.
+  web topic offers them.
   """
   def update_topic(conn, %{"id" => id} = params) do
     with :ok <- ensure_operator(conn),

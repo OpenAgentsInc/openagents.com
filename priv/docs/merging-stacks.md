@@ -18,12 +18,13 @@ curl -X POST \
   -H "Authorization: Bearer $OPENAGENTS_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"pull_requests": [117, 118], "merge_method": "merge"}' \
+  -d '{"pull_request_number": 118, "merge_method": "merge"}' \
   https://openagents.com/api/v3/repos/acme/api/stacks/1/merge
 ```
 
-- `pull_requests` must be a contiguous prefix from the bottom of the stack.
-  A gap or a middle-only selection is refused.
+- `pull_request_number` names the highest layer to land. The operation
+  merges the contiguous prefix from the bottom of the stack through that
+  layer.
 - `merge_method` is `merge`, `squash`, or `rebase`.
 - `expected_stack_version` and expected head OIDs are optional guards; when
   supplied, a stack that moved since you read it fails the merge instead of

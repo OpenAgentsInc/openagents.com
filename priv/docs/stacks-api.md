@@ -95,7 +95,7 @@ curl -X POST -H "$auth" -H "Content-Type: application/json" \
 # Land layers 1 and 2; layer 3 restacks automatically.
 curl -X POST -H "$auth" -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"pull_requests": [1, 2], "merge_method": "merge"}' $repo/stacks/1/merge
+  -d '{"pull_request_number": 2, "merge_method": "merge"}' $repo/stacks/1/merge
 ```
 
 ## Next steps

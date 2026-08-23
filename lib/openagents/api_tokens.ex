@@ -3,6 +3,7 @@ defmodule OpenAgents.ApiTokens do
 
   import Ecto.Query
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Accounts.User
   alias OpenAgents.Audit
   alias OpenAgents.ApiTokens.ApiToken
@@ -14,21 +15,56 @@ defmodule OpenAgents.ApiTokens do
   # `deployments:promote` fleet scope: holding it lets a caller address the
   # deployment API, while repository membership and environment policy still
   # decide what it may deploy.
+  # `deployments:promote` is the operator-only fleet promotion scope. It is
+  # deliberately absent from every ordinary issuance path: the list below only
+  # says the scope exists, and `privileged_scopes/0` says who may hold one.
   @allowed_scopes [
     "chat:account",
     "forge:write",
     "deployments:write",
+    "deployments:promote",
     "box:control",
     "computer:control"
   ]
+  @privileged_scopes ["deployments:promote"]
+  @default_lifetime_days 30
   @maximum_lifetime_days 90
+  @privileged_maximum_lifetime_days 7
+
+  @doc "Every scope a credential may carry."
+  @spec allowed_scopes() :: [String.t()]
+  def allowed_scopes, do: @allowed_scopes
+
+  @doc """
+  Scopes that only a current operator may be issued.
+
+  A privileged scope authorizes a fleet-wide action, so it is never mixed into
+  an ordinary credential, never selectable by an ordinary account, and never
+  issued for longer than `#{@privileged_maximum_lifetime_days}` days.
+  """
+  @spec privileged_scopes() :: [String.t()]
+  def privileged_scopes, do: @privileged_scopes
+
+  @doc "Whether this scope set contains a scope only an operator may hold."
+  @spec privileged?([String.t()]) :: boolean()
+  def privileged?(scopes) when is_list(scopes),
+    do: Enum.any?(scopes, &(&1 in @privileged_scopes))
+
+  def privileged?(_scopes), do: false
+
+  @doc "The longest lifetime this scope set may be issued for, in days."
+  @spec maximum_lifetime_days([String.t()]) :: pos_integer()
+  def maximum_lifetime_days(scopes) do
+    if privileged?(scopes), do: @privileged_maximum_lifetime_days, else: @maximum_lifetime_days
+  end
 
   @spec create(User.t(), map()) ::
           {:ok, ApiToken.t(), String.t()} | {:error, Ecto.Changeset.t() | atom()}
-  def create(%User{id: user_id}, attributes) when is_map(attributes) do
+  def create(%User{id: user_id} = user, attributes) when is_map(attributes) do
     with {:ok, name} <- name(attributes),
          {:ok, scopes} <- scopes(attributes),
-         {:ok, lifetime_days} <- lifetime_days(attributes) do
+         :ok <- authorize_scopes(user, scopes),
+         {:ok, lifetime_days} <- lifetime_days(attributes, scopes) do
       id = Ecto.UUID.generate()
       secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
       plaintext = @prefix <> id <> "." <> secret
@@ -156,20 +192,43 @@ defmodule OpenAgents.ApiTokens do
     end
   end
 
-  defp lifetime_days(attributes) do
-    case Map.get(attributes, "lifetime_days") || Map.get(attributes, :lifetime_days) || 30 do
-      days when is_integer(days) and days in 1..@maximum_lifetime_days -> {:ok, days}
-      days when is_binary(days) -> parse_lifetime_days(days)
+  # A privileged credential is checked twice: once here, so a non-operator can
+  # never be issued one, and again on every request, so losing operator
+  # standing takes effect before the next call rather than at expiry.
+  defp authorize_scopes(%User{} = user, scopes) do
+    cond do
+      not privileged?(scopes) -> :ok
+      Accounts.admin?(user) -> :ok
+      true -> {:error, :invalid_api_token}
+    end
+  end
+
+  # An omitted lifetime takes the shorter of the ordinary default and the
+  # scope set's ceiling. An explicit lifetime above that ceiling is refused
+  # rather than silently shortened, so a caller never believes it holds a
+  # longer-lived credential than it does.
+  defp lifetime_days(attributes, scopes) do
+    maximum = maximum_lifetime_days(scopes)
+
+    requested =
+      Map.get(attributes, "lifetime_days") || Map.get(attributes, :lifetime_days) ||
+        min(@default_lifetime_days, maximum)
+
+    case requested do
+      days when is_integer(days) and days >= 1 and days <= maximum -> {:ok, days}
+      days when is_binary(days) -> parse_lifetime_days(days, maximum)
       _invalid -> {:error, :invalid_api_token}
     end
   end
 
-  defp parse_lifetime_days(value) do
+  defp parse_lifetime_days(value, maximum) do
     case Integer.parse(value) do
-      {days, ""} when days in 1..@maximum_lifetime_days -> {:ok, days}
+      {days, ""} when days >= 1 -> if days <= maximum, do: {:ok, days}, else: error()
       _invalid -> {:error, :invalid_api_token}
     end
   end
+
+  defp error, do: {:error, :invalid_api_token}
 
   defp digest(value), do: :crypto.hash(:sha256, value)
 end

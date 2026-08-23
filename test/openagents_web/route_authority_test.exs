@@ -225,6 +225,45 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            }
   end
 
+  test "fleet promotion is an operator mutation, not a generic api v3 write" do
+    create = route!(:post, "/api/v3/admin/forge/targets")
+    show = route!(:get, "/api/v3/admin/forge/targets/:id")
+    index = route!(:get, "/api/v3/admin/forge/targets")
+
+    for route <- [create, show, index] do
+      assert route.class == :operator, inspect(route)
+      assert route.principal == "current operator holding a privileged bearer token"
+      assert route.scope == "deployments:promote"
+    end
+
+    assert create.mutation
+    refute show.mutation
+    refute index.mutation
+
+    # The tenant deployment plane is a different scope on a different path, and
+    # neither the generic /api/v3 write catch-all nor `deployments:write`
+    # reaches fleet promotion.
+    tenant = route!(:post, "/api/v3/repos/:owner/:repo/deployments")
+    assert tenant.scope == "deployments:write"
+    assert tenant.class == :authenticated_api
+
+    for path <- ["/api/v3/admin/forge/targets", "/api/v3/admin/forge/targets/:id"] do
+      assert Phoenix.Router.route_info(
+               OpenAgentsWeb.Router,
+               "GET",
+               String.replace(path, ":id", "00000000-0000-4000-8000-000000000001"),
+               "stage.openagents.com"
+             ).pipe_through == [:fleet_promotion_api]
+    end
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "POST",
+             "/api/v3/admin/forge/targets",
+             "stage.openagents.com"
+           ).pipe_through == [:fleet_promotion_api]
+  end
+
   defp route!(verb, path) do
     Enum.find(RouteAuthority.inventory(), &(&1.verb == to_string(verb) and &1.path == path)) ||
       flunk("missing route #{verb} #{path}")

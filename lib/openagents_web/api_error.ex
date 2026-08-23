@@ -47,7 +47,14 @@ defmodule OpenAgentsWeb.ApiError do
     "label_not_on_issue" => {404, "Label does not exist on this issue"},
     "dependency_not_found" => {404, "Not a prerequisite of this issue"},
     "validation_failed" => {422, "Validation Failed"},
-    "delete_failed" => {422, "The resource could not be removed"}
+    "delete_failed" => {422, "The resource could not be removed"},
+    # Fleet promotion (FLEETPROMOTE-001). A caller that scripts a release has to
+    # tell "you may not do this" from "someone promoted first" from "those bytes
+    # are not in the forge", so each is its own code with its own status.
+    "not_operator" => {403, "The credential's account is not a current operator"},
+    "idempotency_conflict" => {409, "That idempotency key already names different bytes"},
+    "precondition_failed" => {409, "The fleet target changed before this request"},
+    "unknown_commit" => {422, "Only a commit pushed to the forge is promotable"}
   }
 
   @doc """

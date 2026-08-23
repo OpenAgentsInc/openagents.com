@@ -178,6 +178,24 @@ defmodule OpenAgentsWeb.ConnCase do
     put_api_token_for_user(conn, user, ["deployments:write"])
   end
 
+  @doc """
+  Authenticate an existing account for operator fleet promotion.
+
+  The scope is issuable only to a current operator, so the account must
+  already hold operator standing when the credential is minted. Revoking that
+  standing afterwards is exactly the case the API has to refuse.
+  """
+  def put_promotion_api_token(conn, %OpenAgents.Accounts.User{} = user) do
+    put_api_token_for_user(conn, user, ["deployments:promote"])
+  end
+
+  @doc "Authenticate an account holding every scope except `deployments:promote`."
+  def put_unprivileged_api_token(conn, %OpenAgents.Accounts.User{} = user) do
+    scopes = OpenAgents.ApiTokens.allowed_scopes() -- OpenAgents.ApiTokens.privileged_scopes()
+
+    put_api_token_for_user(conn, user, scopes)
+  end
+
   def put_chat_api_token(conn, key) when is_binary(key) do
     user = github_user("api-token-" <> key)
     put_api_token_for_user(conn, user, ["chat:account"])

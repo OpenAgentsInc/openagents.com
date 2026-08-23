@@ -430,6 +430,58 @@ printf '%s' '{"status":"linked"}' |
   openagents api -X PATCH --input - forum/claims/CLAIM_ID
 ```
 
+## Fleet promotion endpoints
+
+These three routes promote the OpenAgents release itself and are operator
+only. A profile whose token lacks the `deployments:promote` scope, or whose
+account is not a current operator, is refused before the request reaches the
+controller.
+
+```sh
+openagents api -X POST --input promotion.json admin/forge/targets
+openagents api admin/forge/targets/TARGET_ID
+openagents api admin/forge/targets
+```
+
+`promotion.json` names the repository, one full 40-character commit SHA that
+has already been pushed, the environment, a caller-generated idempotency key,
+and optionally the target ID the caller believes is current:
+
+```json
+{
+  "repo": "openagents.com",
+  "sha": "0000000000000000000000000000000000000000",
+  "environment": "production",
+  "idempotency_key": "release-2026-08-23-0001",
+  "expected_current_target_id": "00000000-0000-4000-8000-000000000001"
+}
+```
+
+Creating a promotion answers `202 Accepted` and returns the immutable target
+ID, the exact SHA, the initial status, a `status_url`, and the request ID. It
+does not wait for the build or the deployment; poll the target until
+`terminal` is true. Replaying the same key with the same body answers `200 OK`
+with `"replayed": true` and the original target; replaying it with a different
+body answers `409 idempotency_conflict`. A stale
+`expected_current_target_id` answers `409 precondition_failed`.
+
+Refusals use the shared `/api/v3` error envelope, so a script branches on
+`code`:
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `unauthenticated` | 401 | No credential, or one without `deployments:promote`. |
+| `not_operator` | 403 | The credential's account is not a current operator. |
+| `not_found` | 404 | No such target. |
+| `idempotency_conflict` | 409 | That key already names different bytes. |
+| `precondition_failed` | 409 | The fleet target moved on. |
+| `unknown_commit` | 422 | The SHA is not in the forge. Push it first. |
+| `validation_failed` | 422 | `errors` names the field that was rejected. |
+
+See [API authentication](../api-authentication.md) for how to obtain the
+credential and [the production deploy runbook](../operations/production-deploy-runbook.md)
+for where promotion sits in a release.
+
 ## Related documentation
 
 - [CLI command reference](command-reference.md)

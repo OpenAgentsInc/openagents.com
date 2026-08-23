@@ -7,12 +7,18 @@ defmodule OpenAgentsWeb.AdminForgeLive do
   receipted with the operator's identity. Only WAL-pushed SHAs are
   promotable; everything else here is a read-only projection that updates
   live off the forge PubSub topics.
+
+  The button decides nothing itself. It hands the click to
+  `OpenAgents.Forge.Promotion`, the same context
+  `OpenAgentsWeb.FleetTargetController` calls, so the browser and the
+  operator API cannot drift into two different promotion policies.
   """
 
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Accounts
   alias OpenAgents.Forge
+  alias OpenAgents.Forge.Promotion
   alias OpenAgents.Forge.Targets
 
   @impl true
@@ -39,11 +45,16 @@ defmodule OpenAgentsWeb.AdminForgeLive do
     unless Accounts.admin?(socket.assigns.current_user) do
       {:noreply, redirect(socket, to: ~p"/")}
     else
-      operator = "operator:" <> to_string(socket.assigns.current_user.github_id)
+      attrs = %{
+        "environment" => "production",
+        "repo" => socket.assigns.repo,
+        "sha" => sha,
+        "source" => "operator_console"
+      }
 
       socket =
-        case Targets.promote(socket.assigns.repo, sha, operator, commit_store: &git_store/2) do
-          {:ok, _target} ->
+        case Promotion.promote(socket.assigns.current_user, attrs) do
+          {:ok, _promotion} ->
             put_flash(socket, :info, "Promoted #{String.slice(sha, 0, 12)} as the fleet target.")
 
           {:error, :unknown_sha} ->
@@ -87,16 +98,6 @@ defmodule OpenAgentsWeb.AdminForgeLive do
 
   defp primary_repo do
     OpenAgents.Forge.Repos.allowed_repos() |> List.first() || "openagents.com"
-  end
-
-  defp git_store(repo, sha) do
-    OpenAgents.Forge.Sync.ensure_fresh(repo)
-    path = OpenAgents.Forge.Repos.bare_path(repo)
-
-    case OpenAgents.Forge.Repos.git(path, ["cat-file", "-e", sha <> "^{commit}"]) do
-      {_, 0} -> :ok
-      _ -> :error
-    end
   end
 
   defp short(sha) when is_binary(sha), do: String.slice(sha, 0, 12)

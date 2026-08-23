@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
 
   use OpenAgentsWeb, :live_view
 
-  alias OpenAgents.DeviceAuthorizations
+  alias OpenAgents.{ApiTokens, DeviceAuthorizations}
 
   @impl true
   def mount(params, _session, socket) do
@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
     {:ok,
      socket
      |> assign(:page_title, "Authorize OpenAgents CLI")
-     |> assign(:authorization, DeviceAuthorizations.get_pending_by_user_code(user_code))
+     |> assign_authorization(DeviceAuthorizations.get_pending_by_user_code(user_code))
      |> assign(:decided, nil)
      |> assign(:form, code_form(user_code))}
   end
@@ -23,7 +23,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
 
     {:noreply,
      socket
-     |> assign(:authorization, DeviceAuthorizations.get_pending_by_user_code(user_code))
+     |> assign_authorization(DeviceAuthorizations.get_pending_by_user_code(user_code))
      |> assign(:decided, nil)
      |> assign(:form, code_form(user_code))}
   end
@@ -93,8 +93,18 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
             </div>
             <div>
               <p class="font-medium">Requested access</p>
-              <p class="text-sm text-muted-foreground">
-                Create and manage repositories as you through <code>forge:write</code>. The CLI never receives your GitHub token.
+              <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
+                <li :for={scope <- @authorization.scopes} class="flex items-baseline gap-2">
+                  <code>{scope}</code>
+                  <span>{scope_description(scope)}</span>
+                </li>
+              </ul>
+              <p :if={@privileged?} class="mt-3 text-sm font-medium text-foreground">
+                This request includes operator authority over the OpenAgents fleet. Authorize it
+                only if you started this login yourself.
+              </p>
+              <p class="mt-3 text-sm text-muted-foreground">
+                The CLI never receives your GitHub token.
               </p>
             </div>
             <div class="flex flex-wrap justify-end gap-3">
@@ -108,6 +118,12 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
     """
   end
 
+  defp assign_authorization(socket, authorization) do
+    socket
+    |> assign(:authorization, authorization)
+    |> assign(:privileged?, authorization != nil and ApiTokens.privileged?(authorization.scopes))
+  end
+
   defp decide(%{assigns: %{authorization: nil}} = socket, _transition, _decision),
     do: {:noreply, put_flash(socket, :error, "This code is invalid or expired.")}
 
@@ -118,18 +134,30 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
       {:ok, _authorization} ->
         {:noreply,
          socket
-         |> assign(:authorization, nil)
+         |> assign_authorization(nil)
          |> assign(:decided, decision)}
 
       {:error, _reason} ->
         {:noreply,
          socket
-         |> assign(:authorization, nil)
+         |> assign_authorization(nil)
          |> put_flash(:error, "This code is invalid or expired.")}
     end
   end
 
   defp code_form(user_code), do: to_form(%{"user_code" => user_code}, as: :device)
+
+  defp scope_description("forge:write"),
+    do: "Create and manage repositories, issues, and pull requests as you."
+
+  defp scope_description("deployments:promote"),
+    do: "Promote a pushed commit as the OpenAgents fleet target."
+
+  defp scope_description("deployments:write"), do: "Deploy a repository you can write to."
+  defp scope_description("chat:account"), do: "Read and write your account chat."
+  defp scope_description("box:control"), do: "Start and stop Boxes in your conversations."
+  defp scope_description("computer:control"), do: "Control the Computers you have connected."
+  defp scope_description(_scope), do: "Scoped access to one OpenAgents surface."
 
   defp normalize_code(code) when is_binary(code),
     do: code |> String.trim() |> String.upcase()

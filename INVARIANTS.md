@@ -1284,7 +1284,9 @@ behavior except through the receipted pipeline. Concretely:
 - **Promotion is an operator action.** No OpenAgents tool can promote, deploy, or
   hot-load. The job's report links the pushed SHA; the `/admin/forge`
   Promote click (ADMIN-001 as amended) is the human approval receipt, and
-  the allowlist of hot-loadable modules remains operator-owned data.
+  the allowlist of hot-loadable modules remains operator-owned data. The
+  operator API under FLEETPROMOTE-001 is the same approval by a scripted
+  operator, not a way around one.
 - **Receipts reconstruct what ran.** Tool outcome receipts carry the commit
   SHA of every push; push, build, and deploy receipts chain from that SHA;
   together they let an operator reconstruct exactly which code was live
@@ -1423,7 +1425,7 @@ artifact digest; a branch or tag is provenance, never something resolved later.
 The plane authenticates a human holding `deployments:write` or a short-lived
 workflow grant. `forge:write` is not deployment authority, and no route in this
 plane reaches the operator fleet-promotion surface behind
-`deployments:promote`. A private repository is readable only by a member, and
+`deployments:promote`, which FLEETPROMOTE-001 governs. A private repository is readable only by a member, and
 cross-repository reads, approvals, cancellations, and provider bindings are
 denied.
 
@@ -1505,6 +1507,63 @@ Evidence: `OpenAgents.Deployments.Execution`,
 `OpenAgents.Deployments.SecretResolver`, `OpenAgents.Deployments.Worker`,
 `OpenAgents.RuntimeSupervisor`, `test/openagents/deployments_test.exs`, and
 `test/openagents/runtime_config_test.exs`.
+
+## Fleet release authority
+
+### FLEETPROMOTE-001 — Fleet promotion needs the operator scope and live operator standing
+
+Status: Current
+
+Promoting a commit as the OpenAgents fleet target is release authority over
+this system, not a tenant action. DEPLOYPLANE-001 governs a repository
+deploying its own code under `deployments:write`; this governs the OpenAgents
+release itself, and no route in that plane reaches it.
+
+Two conditions authorize every promotion, and holding one is never enough:
+the credential carries the exact `deployments:promote` scope, and
+`OpenAgents.Accounts.admin?/1` is true for the promoting account at request
+time. The second check is what makes operator removal effective immediately,
+including for an unexpired privileged token. Authority is never inferred from
+a login, a repository membership, a Git push credential, or `forge:write`.
+Only a current operator can be issued the scope at all, and a privileged
+credential's maximum lifetime is shorter than an ordinary one's.
+
+Identity is exact. A promotion names one full 40-character commit SHA that the
+WAL-backed repository already contains, so a push never promotes itself and
+the API cannot ask for "whatever is newest". A caller-generated idempotency
+key names one promotion: the same key with the same bytes returns the original
+target, and the same key with different bytes is refused. An optional
+expected-current-target ID is a compare-and-set precondition, so two
+concurrent operators cannot unknowingly supersede each other.
+
+The `/admin/forge` **Promote** button and `POST /api/v3/admin/forge/targets`
+are one authority path, not two implementations of one policy. Both call
+`OpenAgents.Forge.Promotion`, which calls `OpenAgents.Forge.Targets.promote/4`,
+so both write the same append-only `forge_fleet_targets` receipt carrying the
+promoting operator's identity in `promoted_by`, and both broadcast the same
+lifecycle event. The API states an intent only: the builder, classifier,
+direct-load, relup, and rolling-replacement lanes still own execution. A
+promotion publishes no image identity and admits no node; RELEASE-006 governs
+what a booting node may run, and this surface never widens it.
+
+Every attempt — granted or refused — records bounded audit evidence naming the
+operator, the repository, the environment, the source channel, the request ID,
+and a digest of the idempotency key. Neither the plaintext credential nor the
+plaintext key is ever stored, and a status response discloses no node
+identity, filesystem path, or unrestricted failure detail.
+
+Refusals carry the one `/api/v3` envelope, `OpenAgentsWeb.ApiError`, with a
+stable code per refusal reason so a release client can tell "you may not do
+this" from "someone promoted first" from "those bytes are not in the forge".
+
+Evidence: `OpenAgents.Forge.Promotion`, `OpenAgents.Forge.Targets`,
+`OpenAgentsWeb.Plugs.OperatorApiTokenAuth`,
+`OpenAgentsWeb.FleetTargetController`, `OpenAgentsWeb.AdminForgeLive`,
+`OpenAgents.ApiTokens`, `OpenAgentsWeb.RouteAuthority`,
+`OpenAgentsWeb.ApiRouteAuthority`, `OpenAgentsWeb.ApiError`,
+`test/openagents/forge/promotion_test.exs`,
+`test/openagents_web/controllers/fleet_target_controller_test.exs`, and
+`test/openagents_web/route_authority_test.exs`.
 
 ## Interface and release
 
@@ -1818,10 +1877,14 @@ conversation.
 Amended 2026-08-18 (forge deploy lane, issue #119): the forge panel at
 `/admin/forge` is the one deliberate exception, and it is a narrow one. Its
 only write is promoting an already-pushed commit as the fleet deploy target
-(`OpenAgents.Forge.Targets.promote/3`), receipted with the promoting operator's
-identity in the append-only `forge_fleet_targets` ledger. Only SHAs present
-in the WAL-backed repository are promotable, so the surface cannot introduce
-code — it can only approve code that already survived the push path. It
+(`OpenAgents.Forge.Promotion`, which calls `OpenAgents.Forge.Targets`),
+receipted with the promoting operator's identity in the append-only
+`forge_fleet_targets` ledger. Only SHAs present in the WAL-backed repository
+are promotable, so the surface cannot introduce code — it can only approve
+code that already survived the push path. Amended again for issue #57: the
+same promotion is reachable without a browser at
+`POST /api/v3/admin/forge/targets`, through the same context and under
+FLEETPROMOTE-001, which is stricter than a browser session rather than looser. It
 still cannot touch any account, conversation, message, ban, or product
 configuration; ADMIN-001's read-only rule continues to bind everything else
 on the operator surface, including the original `/admin` panel unchanged. It
@@ -2715,6 +2778,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DEPLOYPLANE-003 | `test/openagents/deployments/policy_test.exs`, `test/openagents/deployments_test.exs` |
 | DEPLOYPLANE-004 | `test/openagents/deployments/lifecycle_test.exs`, `test/openagents/deployments_test.exs` |
 | DEPLOYPLANE-005 | `test/openagents/deployments_test.exs`, `test/openagents/runtime_config_test.exs` |
+| FLEETPROMOTE-001 | `test/openagents/forge/promotion_test.exs`, `test/openagents_web/controllers/fleet_target_controller_test.exs`, `test/openagents_web/route_authority_test.exs` |
 | VOICE-001 | `test/openagents/voice/config_test.exs` |
 | VOICE-002 | `test/openagents_web/controllers/voice_call_controller_test.exs` |
 | VOICE-003 | `test/openagents/voice_test.exs`, `test/openagents/voice_sessions_test.exs` |

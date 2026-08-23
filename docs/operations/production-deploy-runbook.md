@@ -135,9 +135,11 @@ replacement performs. Never print secret values.
 
 ## 5. Promote and classify
 
-Promote the exact SHA through `/admin/forge`. The target moves
-`promoted → building → built`, and the classifier decides the deployment
-route:
+Promote the exact SHA through `/admin/forge`, or through the operator API
+described in [Promote without a browser](#promote-without-a-browser). Both
+paths call `OpenAgents.Forge.Promotion`, so they apply one policy and write
+one kind of receipt. The target moves `promoted → building → built`, and the
+classifier decides the deployment route:
 
 - **Direct deploy**: the diff touches only allowlisted BEAM modules. The
   forge hot loop handles it; watch the target go `deploying → live`.
@@ -145,6 +147,73 @@ route:
   dependencies, assets, ERTS, or release-private files. Continue below.
 
 Keep the classification receipt.
+
+### Promote without a browser
+
+Release tooling, scripts, and incident recovery use the operator API instead
+of a browser session. It requires the `deployments:promote` scope *and* live
+operator standing, checked on every request. `forge:write` cannot promote a
+fleet target, and neither can the tenant plane's `deployments:write`.
+
+Bootstrap a credential through the device authorization flow, which asks for
+the scope by name:
+
+```sh
+curl --request POST \
+  --header "Content-Type: application/json" \
+  --data '{"scope": "deployments:promote"}' \
+  https://openagents.com/api/v3/device/authorizations
+```
+
+Open `/device` in a signed-in operator browser, confirm the code, and read the
+requested scope shown on the approval page. Then exchange the device code:
+
+```sh
+curl --request POST \
+  --header "Content-Type: application/json" \
+  --data '{"device_code": "'"$DEVICE_CODE"'"}' \
+  https://openagents.com/api/v3/device/authorizations/token
+```
+
+Approval is refused unless the approving account is a current operator. A
+privileged credential expires in at most 7 days, so release tooling
+re-authorizes rather than holding long-lived fleet authority.
+
+Promote one exact, already-pushed SHA:
+
+```sh
+curl --request POST \
+  --header "Authorization: Bearer $OPENAGENTS_PROMOTE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "repo": "openagents.com",
+    "sha": "'"$SHA"'",
+    "environment": "production",
+    "idempotency_key": "release-2026-08-23-0001",
+    "expected_current_target_id": "'"$CURRENT_TARGET_ID"'"
+  }' \
+  https://openagents.com/api/v3/admin/forge/targets
+```
+
+The response is `202 Accepted` with the immutable target ID, the exact SHA,
+the initial status, a `status_url`, and the request ID. It does not wait for
+the build or the deployment. Poll the status URL until `terminal` is true, or
+until `status` is `needs_rolling_replace` and you continue at step 7:
+
+```sh
+openagents api admin/forge/targets/$TARGET_ID
+openagents api admin/forge/targets
+```
+
+Refusals carry the shared `/api/v3` error envelope. Three codes matter during
+an incident:
+
+- `idempotency_conflict` (409) — that key already names different bytes. Pick a
+  new key rather than reusing one.
+- `precondition_failed` (409) — someone promoted while you were preparing.
+  Re-read the current target before deciding again.
+- `unknown_commit` (422) — the SHA is not in the forge. Push it first; a push
+  never promotes itself.
 
 ## 6. Migration job
 

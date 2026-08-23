@@ -117,4 +117,38 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
 
     assert json_response(expired, 400) == %{"code" => "access_denied"}
   end
+
+  test "a privileged scope can be requested but only an operator may grant it", %{conn: conn} do
+    %{"device_code" => device_code, "user_code" => user_code, "scope" => scope} =
+      conn
+      |> post(~p"/api/v3/device/authorizations", %{"scope" => "deployments:promote"})
+      |> json_response(201)
+
+    assert scope == "deployments:promote"
+
+    ordinary = github_user("device-privileged-ordinary")
+    assert {:error, :access_denied} = OpenAgents.DeviceAuthorizations.approve(user_code, ordinary)
+
+    operator = github_user("device-privileged-operator")
+    grant_operator(operator)
+    assert {:ok, _authorization} = OpenAgents.DeviceAuthorizations.approve(user_code, operator)
+
+    claimed =
+      conn
+      |> recycle()
+      |> post(~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+
+    assert %{"scope" => "deployments:promote", "expires_in" => expires_in} =
+             json_response(claimed, 200)
+
+    # Seven days, the privileged ceiling, not the ordinary thirty.
+    assert expires_in <= 7 * 24 * 60 * 60
+  end
+
+  test "an unknown scope is refused rather than silently narrowed", %{conn: conn} do
+    refused =
+      post(conn, ~p"/api/v3/device/authorizations", %{"scope" => "deployments:everything"})
+
+    assert json_response(refused, 400) == %{"code" => "invalid_scope"}
+  end
 end

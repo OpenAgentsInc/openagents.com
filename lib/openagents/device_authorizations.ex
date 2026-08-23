@@ -1,8 +1,18 @@
 defmodule OpenAgents.DeviceAuthorizations do
-  @moduledoc "Short-lived, one-claim browser authorization for the OpenAgents CLI."
+  @moduledoc """
+  Short-lived, one-claim browser authorization for the OpenAgents CLI.
+
+  A device authorization may *request* any scope the credential model admits,
+  including the operator-only `deployments:promote`. Requesting is not
+  holding: the approver sees the requested scopes on the approval page, and a
+  request for a privileged scope is refused unless the approving account is a
+  current operator. That is what lets an operator bootstrap a release CLI
+  without issuing the credential from a settings page.
+  """
 
   import Ecto.Query
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Accounts.User
   alias OpenAgents.ApiTokens
   alias OpenAgents.DeviceAuthorizations.DeviceAuthorization
@@ -12,7 +22,11 @@ defmodule OpenAgents.DeviceAuthorizations do
   @interval_seconds 5
   @maximum_create_attempts 3
 
-  def create, do: create(@maximum_create_attempts)
+  def create(scopes \\ ["forge:write"])
+
+  def create(scopes) when is_list(scopes), do: create(scopes, @maximum_create_attempts)
+
+  def create(_scopes), do: {:error, :invalid_scopes}
 
   def get_pending_by_user_code(user_code) when is_binary(user_code) do
     now = DateTime.utc_now()
@@ -27,14 +41,14 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def get_pending_by_user_code(_user_code), do: nil
 
-  def approve(user_code, %User{status: "active", id: user_id}) do
-    transition(user_code, "approved", user_id)
+  def approve(user_code, %User{status: "active", id: user_id} = user) do
+    transition(user_code, "approved", user_id, user)
   end
 
   def approve(_user_code, %User{}), do: {:error, :access_denied}
 
-  def deny(user_code, %User{status: "active", id: user_id}) do
-    transition(user_code, "denied", user_id)
+  def deny(user_code, %User{status: "active", id: user_id} = user) do
+    transition(user_code, "denied", user_id, user)
   end
 
   def deny(_user_code, %User{}), do: {:error, :access_denied}
@@ -49,9 +63,9 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def poll(_device_code), do: {:error, :access_denied}
 
-  defp create(0), do: {:error, :authorization_unavailable}
+  defp create(_scopes, 0), do: {:error, :authorization_unavailable}
 
-  defp create(attempts_left) do
+  defp create(scopes, attempts_left) do
     device_code = random_url_token(32)
     user_code = random_user_code()
     expires_at = DateTime.add(DateTime.utc_now(), @ttl_seconds, :second)
@@ -61,7 +75,8 @@ defmodule OpenAgents.DeviceAuthorizations do
       device_code_digest: digest(device_code),
       user_code_digest: digest(user_code),
       expires_at: expires_at,
-      interval_seconds: @interval_seconds
+      interval_seconds: @interval_seconds,
+      scopes: scopes
     })
     |> Repo.insert()
     |> case do
@@ -71,12 +86,12 @@ defmodule OpenAgents.DeviceAuthorizations do
       {:error, changeset} ->
         if Keyword.has_key?(changeset.errors, :device_code_digest) or
              Keyword.has_key?(changeset.errors, :user_code_digest),
-           do: create(attempts_left - 1),
+           do: create(scopes, attempts_left - 1),
            else: {:error, changeset}
     end
   end
 
-  defp transition(user_code, next_state, user_id) do
+  defp transition(user_code, next_state, user_id, user) do
     now = DateTime.utc_now()
 
     result =
@@ -91,7 +106,12 @@ defmodule OpenAgents.DeviceAuthorizations do
           )
 
         case authorization do
-          %DeviceAuthorization{} ->
+          %DeviceAuthorization{scopes: scopes} = authorization ->
+            if next_state == "approved" and ApiTokens.privileged?(scopes) and
+                 not Accounts.admin?(user) do
+              Repo.rollback(:access_denied)
+            end
+
             attrs =
               if next_state == "approved",
                 do: [state: "approved", user_id: user_id, approved_at: now],
@@ -159,11 +179,15 @@ defmodule OpenAgents.DeviceAuthorizations do
       else: {:error, :authorization_pending}
   end
 
-  defp claim(%DeviceAuthorization{} = authorization, %User{status: "active"} = user, now) do
+  defp claim(
+         %DeviceAuthorization{scopes: scopes} = authorization,
+         %User{status: "active"} = user,
+         now
+       ) do
     case ApiTokens.create(user, %{
            name: "OpenAgents CLI",
-           scopes: ["forge:write"],
-           lifetime_days: 30
+           scopes: scopes,
+           lifetime_days: min(30, ApiTokens.maximum_lifetime_days(scopes))
          }) do
       {:ok, api_token, plaintext} ->
         authorization

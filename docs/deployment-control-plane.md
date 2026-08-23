@@ -5,7 +5,11 @@ How a deployment intent becomes an executed run, and what stops it.
 This plane serves tenants: a repository deploys its own code to its own
 environments. It is not the forge fleet-promotion surface. Promoting the
 OpenAgents release itself remains operator-only behind `deployments:promote`,
-and nothing described here can reach it.
+and nothing described here can reach it. That surface is
+`OpenAgents.Forge.Promotion` behind `POST /api/v3/admin/forge/targets`; it
+requires the privileged scope *and* live operator standing, and it is
+documented in [API authentication](api-authentication.md) and the
+[production deploy runbook](operations/production-deploy-runbook.md).
 
 ## The contract
 

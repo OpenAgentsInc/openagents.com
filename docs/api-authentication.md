@@ -378,6 +378,44 @@ a tool outcome reaches the provider or client. This redaction does not make
 chat content public or nonsensitive: store the bearer token securely and treat
 the event journal as account data.
 
+### Fleet promotion credentials
+
+The `deployments:promote` scope promotes a pushed commit as the OpenAgents
+fleet target. It is the only privileged scope in the credential model, and it
+is not a wider version of anything else: `forge:write` cannot promote a fleet
+target, and neither can the tenant deployment plane's `deployments:write`.
+
+Two conditions authorize each request, and holding one is never enough:
+
+- The bearer token carries `deployments:promote` exactly. A token holding
+  every other scope receives the same `401 unauthenticated` refusal as a
+  missing or expired credential.
+- `OpenAgents.Accounts.admin?/1` is true for the token's owner at request
+  time. Removing an account from the operator allowlist refuses its next
+  request with `403 not_operator`, without waiting for the token to expire.
+  Both refusals use the shared `/api/v3` error envelope.
+
+Issuance is gated the same way. Only a current operator can be issued the
+scope, the credential expires in at most 7 days rather than 90, and creation,
+use, refusal, and revocation are recorded in the audit log without the
+plaintext credential.
+
+A device authorization may request the scope by name, so an operator can
+bootstrap release tooling without minting the credential from a settings page:
+
+```sh
+curl --request POST \
+  --header "Content-Type: application/json" \
+  --data '{"scope": "deployments:promote"}' \
+  https://openagents.com/api/v3/device/authorizations
+```
+
+The approval page at `/device` names every requested scope and marks a
+privileged request plainly. Approval by a non-operator is refused.
+
+Promotion itself is documented in the
+[production deploy runbook](operations/production-deploy-runbook.md).
+
 ## Browser JSON routes
 
 `/api/tokens`, `/api/computers`, and `/api/computer-agent-jobs` support the

@@ -33,10 +33,11 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
       :device_code_digest,
       :user_code_digest,
       :expires_at,
-      :interval_seconds
+      :interval_seconds,
+      :scopes
     ])
     |> put_change(:state, "pending")
-    |> put_change(:scopes, ["forge:write"])
+    |> validate_scopes()
     |> validate_required([
       :device_code_digest,
       :user_code_digest,
@@ -50,5 +51,22 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
     |> unique_constraint(:user_code_digest)
     |> check_constraint(:state, name: :device_authorizations_state_check)
     |> check_constraint(:interval_seconds, name: :device_authorizations_interval_check)
+  end
+
+  # The requested scopes are shown to the approver, so they must be real
+  # scopes rather than free text. Nothing here decides whether this person may
+  # grant them; `OpenAgents.DeviceAuthorizations.approve/2` does that.
+  defp validate_scopes(changeset) do
+    allowed = OpenAgents.ApiTokens.allowed_scopes()
+
+    case get_field(changeset, :scopes) do
+      scopes when is_list(scopes) and scopes != [] ->
+        if Enum.all?(scopes, &(&1 in allowed)),
+          do: put_change(changeset, :scopes, Enum.uniq(scopes)),
+          else: add_error(changeset, :scopes, "is not an allowed scope set")
+
+      _empty ->
+        put_change(changeset, :scopes, ["forge:write"])
+    end
   end
 end

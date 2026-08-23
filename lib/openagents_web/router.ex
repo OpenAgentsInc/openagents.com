@@ -114,6 +114,15 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.DeploymentPrincipal
   end
 
+  # Promoting the OpenAgents release itself is not a tenant action, so it has
+  # a scope of its own that no ordinary account can hold, and operator standing
+  # is rechecked on every request rather than trusted from issuance.
+  pipeline :fleet_promotion_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.OperatorApiTokenAuth, scope: "deployments:promote"
+  end
+
   pipeline :optional_forge_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -601,6 +610,14 @@ defmodule OpenAgentsWeb.Router do
     get "/forum", ForumApiController, :boards
     get "/forum/topics", ForumApiController, :topics
     get "/forum/topics/:id", ForumApiController, :show_topic
+  end
+
+  scope "/api/v3/admin/forge", OpenAgentsWeb do
+    pipe_through :fleet_promotion_api
+
+    post "/targets", FleetTargetController, :create
+    get "/targets", FleetTargetController, :index
+    get "/targets/:id", FleetTargetController, :show
   end
 
   scope "/api/v3", OpenAgentsWeb do

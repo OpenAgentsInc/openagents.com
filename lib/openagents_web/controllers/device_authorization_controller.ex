@@ -3,10 +3,10 @@ defmodule OpenAgentsWeb.DeviceAuthorizationController do
 
   use OpenAgentsWeb, :controller
 
-  alias OpenAgents.DeviceAuthorizations
+  alias OpenAgents.{ApiTokens, DeviceAuthorizations}
 
-  def create(conn, _params) do
-    case DeviceAuthorizations.create() do
+  def create(conn, params) do
+    case DeviceAuthorizations.create(requested_scopes(params)) do
       {:ok, authorization, device_code, user_code} ->
         verification_uri = OpenAgentsWeb.Endpoint.url() <> "/device"
 
@@ -20,11 +20,29 @@ defmodule OpenAgentsWeb.DeviceAuthorizationController do
           "verification_uri_complete" =>
             verification_uri <> "?" <> URI.encode_query(%{"user_code" => user_code}),
           "expires_in" => DateTime.diff(authorization.expires_at, DateTime.utc_now(), :second),
-          "interval" => authorization.interval_seconds
+          "interval" => authorization.interval_seconds,
+          "scope" => Enum.join(authorization.scopes, " ")
         })
+
+      {:error, %Ecto.Changeset{}} ->
+        error(conn, :bad_request, "invalid_scope")
+
+      {:error, :invalid_scopes} ->
+        error(conn, :bad_request, "invalid_scope")
 
       {:error, _reason} ->
         error(conn, :service_unavailable, "authorization_unavailable")
+    end
+  end
+
+  # A device authorization may request any real scope, including the
+  # operator-only one. Approval, not this parameter, decides whether the
+  # requester may hold it.
+  defp requested_scopes(params) do
+    case params["scope"] || params["scopes"] do
+      scope when is_binary(scope) -> String.split(scope, " ", trim: true)
+      scopes when is_list(scopes) -> Enum.filter(scopes, &(&1 in ApiTokens.allowed_scopes()))
+      _absent -> ["forge:write"]
     end
   end
 

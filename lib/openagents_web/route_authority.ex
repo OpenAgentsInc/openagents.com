@@ -472,6 +472,19 @@ defmodule OpenAgentsWeb.RouteAuthority do
         false
       )
 
+  # Fleet promotion is release authority over OpenAgents itself, so it is
+  # classified before every /api/v3 rule below it: an operator credential
+  # holding `deployments:promote`, never the generic write catch-all, and never
+  # the tenant plane's `deployments:write`.
+  defp policy(%{path: "/api/v3/admin/forge/targets" <> _path, verb: verb}),
+    do:
+      declaration(
+        :operator,
+        "current operator holding a privileged bearer token",
+        "deployments:promote",
+        verb not in [:get, :head]
+      )
+
   # The deployment control plane has no anonymous surface. Reading a deployment
   # discloses what a repository ships and when, so every route here authenticates
   # a tenant principal, and none of them carries the operator fleet authority

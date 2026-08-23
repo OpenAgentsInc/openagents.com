@@ -277,6 +277,12 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
         {:required_bearer, :stack, :legacy},
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/abort" =>
         {:required_bearer, :stack, :legacy},
+      # pipe_through :fleet_promotion_api — operator-only fleet promotion. The
+      # bearer must carry `deployments:promote` and its account must be a
+      # current operator, so no tenant credential reaches these three routes.
+      "post /api/v3/admin/forge/targets" => {:required_bearer, :fleet_target, :envelope},
+      "get /api/v3/admin/forge/targets" => {:required_bearer, :fleet_target, :envelope},
+      "get /api/v3/admin/forge/targets/:id" => {:required_bearer, :fleet_target, :envelope},
       # pipe_through :deployments_api — tenant deployment authority only. No
       # route here is anonymous, and none of them reaches the operator fleet
       # promotion surface.

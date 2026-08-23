@@ -297,6 +297,42 @@ historical agent authorship remains unchanged.
 Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 and `test/openagents/agents_test.exs`.
 
+### CAPACITY-002 — Box fan-out admission is bounded and durable
+
+Status: Current
+
+Fan-out admission records one durable plan and one logical item per requested
+Box. PostgreSQL-backed admission locks enforce conversation, owner, and global
+active limits before provider creation. Queued items retain their labels and
+request order, hold no provider resource, and promote when a Box stops.
+Generated labels are sequential within a conversation and remain stable for
+the Box lifetime.
+Admission records an estimated hourly burn rate, and conversation and owner
+burn-rate ceilings are separate from accumulated usage. Later settlement must
+use its own durable usage quantity rather than treating the current active
+burn rate as historical spend.
+
+Evidence: `OpenAgents.Box`, `OpenAgents.Box.Fanout`, and
+`test/openagents/box_fanout_test.exs`.
+
+### CAPACITY-003 — Box lifecycle reconciliation is one-way and observable
+
+Status: Current
+
+The supervised Box reconciler runs every 60 seconds. It refreshes mutable or
+unsettled ledger rows against the provider, gives each provider request a
+15-second receive timeout, reclaims Boxes after a 3,600-second TTL or 1,800
+seconds of inactivity, and records the stop reason, lifetime, and settled cost. A live
+non-terminal run prevents idle reclamation. Provider-terminal and
+provider-missing responses release capacity and promote queued work. Provider
+transport failures and rate limits record retry backoff without changing
+lifecycle state. Provider Boxes without a ledger claim are reported durably;
+only Boxes carrying this deployment's ownership marker in the provider `name`
+are stopped. Reconciliation never resumes or recreates a Box.
+
+Evidence: `OpenAgents.Box.Reconciler`, `OpenAgents.Box.Usage`, and
+`test/openagents/box_reconciler_test.exs`.
+
 ### WORK-002 — Detached Box runs reconcile from durable evidence
 
 Status: Current
@@ -2345,6 +2381,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
+| CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
+| CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |

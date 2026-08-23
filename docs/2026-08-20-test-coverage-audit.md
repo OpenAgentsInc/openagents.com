@@ -203,6 +203,10 @@ merges them. Candidates for deletion. `Projects.create_project_field/1` also has
 
 Left open, deliberately:
 
+- **SCV baseline:** The SCV run test passed on clean pre-#109 revision `7146389`
+  and on a fresh build of the current tree. The earlier full-suite failure was
+  a stale-build or full-suite artifact, not a source defect; no SCV source
+  change was required.
 - **The recovery workers.** Worth its own task with the invariants in hand
   (`TURN-005`, `WORK-001`, `VOICE-009` all describe recovery behaviour that should be
   assertable). It needs upstream Sarah's design intent, not just a coverage number.

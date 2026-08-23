@@ -57,6 +57,40 @@ provider request. Agent participation credentials receive
 `{"error":{"code":"agent_box_control_forbidden"}}`; linked-agent Box control is
 available only after the linked human grants the `box:control` scope.
 
+Request several Boxes with one durable admission plan:
+
+```sh
+openagents api -X POST --input fanout.json \
+  conversations/CONVERSATION_ID/boxes/fanout
+openagents api conversations/CONVERSATION_ID/boxes/fanout/PLAN_ID
+```
+
+The request body contains a positive `count`, optional `labels`, and an
+optional `budgeted` flag. The response identifies admitted and queued logical
+Boxes, their labels, queue reasons, estimated hourly burn rates, and the
+effective conversation, owner, global, and burn-rate limits. The burn-rate
+limits bound the current hourly provider estimate; they are not accumulated
+usage totals. Queued entries do not create a provider Box until capacity
+becomes available. Omitted labels are assigned sequentially per conversation
+and remain stable for the Box lifetime.
+
+The supervised lifecycle reconciler runs every 60 seconds. It refreshes every
+mutable or unsettled ledger row against the provider, stops Boxes after 3,600
+seconds, and reclaims idle Boxes after 1,800 seconds without activity. Each
+provider request has a 15-second receive timeout. Activity includes the most
+recent durable Box run. A live non-terminal run prevents idle reclamation.
+Provider-terminal and provider-missing responses release capacity and promote
+queued work. Transport failures and `429` responses leave lifecycle state
+unchanged and use retry backoff. The reconciler reports and stops provider
+Boxes without a ledger claim only when they carry this deployment's provider
+ownership marker in the provider Box `name`. It reports unmarked provider Boxes
+as foreign evidence and leaves them alone. It never resumes or recreates a Box.
+
+Accumulated usage is available through `OpenAgents.Box.Usage`. It reports Box
+lifetime in seconds and settled provider cost in micro-USD by conversation or
+owner. These totals are distinct from the active hourly burn-rate estimate
+used by fan-out admission.
+
 ### Assignment credentials
 
 A linked human can grant and revoke Box control for an agent:

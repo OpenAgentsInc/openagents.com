@@ -41,7 +41,12 @@ defmodule OpenAgents.BoxTest do
     %{
       "box" =>
         Map.merge(
-          %{"id" => @box_id, "state" => "ready", "setupStatus" => "done"},
+          %{
+            "id" => @box_id,
+            "state" => "ready",
+            "setupStatus" => "done",
+            "name" => Box.provider_ownership_marker()
+          },
           overrides
         )
     }
@@ -62,6 +67,14 @@ defmodule OpenAgents.BoxTest do
         assert payload["setupScript"] =~ "opencode.ai/install"
         assert payload["setupScript"] =~ "openrouter/stealth/ox-alpha"
 
+        Req.Test.json(conn, box_body(%{"state" => "provisioning", "setupStatus" => "pending"}))
+      end)
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        assert conn.method == "PATCH"
+        assert conn.request_path == "/boxes/#{@box_id}"
+        {:ok, raw, conn} = Plug.Conn.read_body(conn)
+        assert Jason.decode!(raw)["name"] == Box.provider_ownership_marker()
         Req.Test.json(conn, box_body(%{"state" => "provisioning", "setupStatus" => "pending"}))
       end)
 
@@ -100,6 +113,11 @@ defmodule OpenAgents.BoxTest do
 
     test "surfaces a failed setup honestly", %{conversation_id: cid} do
       Req.Test.expect(__MODULE__, fn conn ->
+        Req.Test.json(conn, box_body(%{"setupStatus" => "pending"}))
+      end)
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        assert conn.method == "PATCH"
         Req.Test.json(conn, box_body(%{"setupStatus" => "pending"}))
       end)
 

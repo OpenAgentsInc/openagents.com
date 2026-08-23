@@ -23,16 +23,37 @@ defmodule OpenAgents.Box.Client do
     request(:post, "/boxes", json: attributes, headers: [{"idempotency-key", idempotency_key}])
   end
 
+  @doc "Lists provider Boxes visible to this deployment account."
+  @spec list_boxes() :: {:ok, body()} | {:error, term()}
+  def list_boxes, do: list_boxes([])
+
+  @spec list_boxes(keyword()) :: {:ok, body()} | {:error, term()}
+  def list_boxes(options) when is_list(options), do: request(:get, "/boxes", options)
+
   @doc "Reads one box's current state and setup status."
   @spec get_box(String.t()) :: {:ok, body()} | {:error, term()}
-  def get_box(box_id) when is_binary(box_id) do
-    with :ok <- validate_box_id(box_id), do: request(:get, "/boxes/#{box_id}", [])
+  def get_box(box_id) when is_binary(box_id), do: get_box(box_id, [])
+
+  @spec get_box(String.t(), keyword()) :: {:ok, body()} | {:error, term()}
+  def get_box(box_id, options) when is_binary(box_id) and is_list(options) do
+    with :ok <- validate_box_id(box_id), do: request(:get, "/boxes/#{box_id}", options)
   end
 
   @doc "Stops and archives a box; a snapshot remains available for resume."
   @spec stop_box(String.t()) :: {:ok, body()} | {:error, term()}
-  def stop_box(box_id) when is_binary(box_id) do
-    with :ok <- validate_box_id(box_id), do: request(:post, "/boxes/#{box_id}/stop", [])
+  def stop_box(box_id) when is_binary(box_id), do: stop_box(box_id, [])
+
+  @spec stop_box(String.t(), keyword()) :: {:ok, body()} | {:error, term()}
+  def stop_box(box_id, options) when is_binary(box_id) and is_list(options) do
+    with :ok <- validate_box_id(box_id), do: request(:post, "/boxes/#{box_id}/stop", options)
+  end
+
+  @doc "Updates provider box metadata used by lifecycle ownership checks."
+  @spec update_box(String.t(), map()) :: {:ok, body()} | {:error, term()}
+  def update_box(box_id, attributes) when is_binary(box_id) and is_map(attributes) do
+    with :ok <- validate_box_id(box_id) do
+      request(:patch, "/boxes/#{box_id}", json: attributes)
+    end
   end
 
   @doc "Runs one shell command on a box and returns its captured result."
@@ -362,9 +383,9 @@ defmodule OpenAgents.Box.Client do
       base_url = settings[:base_url] || @default_base_url
 
       request_options =
-        options
-        |> Keyword.put(:receive_timeout, settings[:receive_timeout_ms] || 630_000)
-        |> Keyword.merge(settings[:request_options] || [])
+        (settings[:request_options] || [])
+        |> Keyword.put_new(:receive_timeout, settings[:receive_timeout_ms] || 630_000)
+        |> Keyword.merge(options)
         |> Keyword.put(:auth, {:bearer, api_key})
         |> Keyword.put_new(:retry, retry_policy(method))
         |> Keyword.put_new(:max_retries, 2)

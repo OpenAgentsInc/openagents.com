@@ -162,6 +162,34 @@ credentials are refused with
 `{"error":{"code":"agent_box_control_forbidden"}}` until linked-agent Box
 control is implemented.
 
+Admit several Boxes with one plan:
+
+```sh
+openagents api -X POST --input fanout.json \
+  conversations/CONVERSATION_ID/boxes/fanout
+openagents api conversations/CONVERSATION_ID/boxes/fanout/PLAN_ID
+```
+
+The plan records labels, admitted and queued entries, queue reasons, estimated
+hourly burn rates, and the effective capacity limits. The burn-rate limits
+bound the current hourly provider estimate, while accumulated usage remains a
+separate quantity for later settlement. A queued entry does not provision a
+provider Box. Omitted labels are assigned sequentially per conversation and
+remain stable for the Box lifetime.
+
+The supervised lifecycle reconciler runs every 60 seconds. It checks mutable or
+unsettled ledger rows and gives each provider request a 15-second receive
+timeout. It enforces the 3,600-second TTL and the 1,800-second idle timeout based on Box activity,
+including the latest durable run. A live non-terminal run prevents idle
+reclamation. Provider-terminal and provider-missing responses release capacity
+and promote queued work. Transport failures and `429` responses leave lifecycle
+state unchanged and use retry backoff. Provider Boxes without a ledger claim
+are reported; only Boxes carrying this deployment's provider ownership marker
+are stopped. The marker is the provider Box `name`; unmarked Boxes are left
+alone. Reconciliation never resumes or recreates a Box.
+Accumulated lifetime and settled cost are queryable separately from the active
+hourly burn-rate estimate used for admission.
+
 Long-running work uses durable runs instead of the synchronous command route:
 
 ```sh

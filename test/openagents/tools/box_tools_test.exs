@@ -68,7 +68,12 @@ defmodule OpenAgents.Tools.BoxToolsTest do
     %{
       "box" =>
         Map.merge(
-          %{"id" => @box_id, "state" => "ready", "setupStatus" => "done"},
+          %{
+            "id" => @box_id,
+            "state" => "ready",
+            "setupStatus" => "done",
+            "name" => OpenAgents.Box.provider_ownership_marker()
+          },
           overrides
         )
     }
@@ -113,6 +118,12 @@ defmodule OpenAgents.Tools.BoxToolsTest do
     context: context
   } do
     Req.Test.expect(__MODULE__, fn conn ->
+      Req.Test.json(conn, box_body(%{"setupStatus" => "pending"}))
+    end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      assert conn.method == "PATCH"
+      assert conn.request_path == "/boxes/#{@box_id}"
       Req.Test.json(conn, box_body(%{"setupStatus" => "pending"}))
     end)
 

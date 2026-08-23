@@ -57,7 +57,8 @@ defmodule OpenAgents.Application do
         OpenAgentsWeb.BoxRateLimiter,
         {Registry, keys: :unique, name: OpenAgents.BoxRunRegistry},
         OpenAgents.BoxRunSupervisor,
-        OpenAgents.BoxRunRecovery
+        OpenAgents.BoxRunRecovery,
+        OpenAgents.Box.Reconciler
       ] ++ analytics_children() ++ [OpenAgentsWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

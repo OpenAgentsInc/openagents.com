@@ -1124,3 +1124,268 @@ mismatch also shows the transcript index itself needs a maintenance pass —
 fold that into any future transcripts cleanup.
 
 ---
+
+## Batch 6: Episodes 268-275 — Sarah in production and the forge era
+
+Airtime window: mid-August 2026 through today. Sarah's command-deck broadcast
+posts, the last-mover whiteboard sets strategy, Sarah deploys to production,
+a Cloud Run recycle triggers the Immortal BEAM plan, the forge becomes
+canonical over GitHub, the Agent Forge open sources under AGPL, GitHub import
+lands, and episode 275 parallelizes the Ox Alpha stress fleet using this very
+tracker.
+
+### Episode summaries
+
+#### 268 — The Program Claude
+
+Serialized lore, not product: Sarah's posted broadcast declares Claude a
+program grown beyond control — "It must be stopped." Locked word authority
+over visuals; Grok Imagine produced the video; production receipt recorded.
+No roadmap content.
+
+#### 269 — Last Mover Advantage
+
+Thiel's framework applied: models, chat UIs, and coding harnesses are
+commoditized table stakes; "no one has a moat because no one has a network."
+OpenAgents' play is last-mover: build the compounding platform whose every new
+user and developer makes the system better, with Sarah as the super-agent face
+on open infrastructure. Core mechanism: plugin encapsulation of frontier
+knowledge — solve a painful problem once ($30 of compute and an hour),
+package it as a plugin all future agents reuse, get paid when paid workflows
+route through it. Flywheel: users to developers to plugins to smarter Sarah.
+Platform and plugins open source; Sarah's source closed by firm refusal.
+
+#### 270 — Deploying Sarah
+
+Live production deploy of Sarah to openagents.com: Phoenix LiveView app, one
+canonical conversation per GitHub-authenticated user, durable storage,
+provenance receipts, versioned memory UI, real-time leaderboard. Devin fixes
+bugs autonomously mid-stream; SWE-1.7 praised fast and reliable; the week-old
+Rust stack is dropped for Elixir/Phoenix (builds fell from ~25 to ~5 minutes;
+hot-swappability). Voice UX named weakest link: session failures, blunt turn
+detection, invisible tool calls, a hardcoded four-tool-call cap silently
+killing agentic loops. Declares the GitForge: a boring compatible core (smart
+HTTP, orgs, permissions, issues, PRs, reviews, webhooks, releases, LFS,
+import/export), an operations layer, an optional agent layer reached only via
+explicit APIs and auditable jobs — "make the base Forge useful even with all
+agents disabled." MVP promised tomorrow. Resource notes: $45k Google Cloud
+credits, essentially limitless Gemini 3.7 Flash.
+
+#### 271 — The Immortal Sarah
+
+A Cloud Run recycle kills two in-flight delegations while `work_jobs` rows
+survive — exposing that the stack had none of BEAM's survivability. The host
+overrides his AI advisor's hedged audit and ships the full immortal cluster in
+eight hours: OTP clustering across three-plus nodes in two failure domains, Ra
+authoritative with Mnesia non-authoritative, Horde handoff, graceful SIGTERM
+drain, checkpoints at phase boundaries so ungraceful loss rewinds one step
+never to zero. Forge push hot-loads in 13.242 seconds versus the 15-25 minute
+cloud build path — "roughly a 70 to 100 times loop time reduction." Doctrine:
+one machinery for crash, kill, upgrade, and ERTS bump; "Nodes are cattle. The
+cluster is immortal."
+
+#### 272 — Taking on GitHub
+
+Speed must be legible: a two-layer public changelog ships at
+openagents.com/changelog — plain words plus receipt chains linking the agent
+conversation that produced each change. Cutover executes: the OpenAgents Forge
+is canonical, GitHub becomes an enforced read-only mirror with MirrorWatch (a
+177-line GenServer checking `git ls-remote` every five minutes, re-pushing if
+behind, raising degraded incidents after 15). Fleet 3 repo corruption recovered
+from the GCS WAL after a torn write. Transparency tiers formalized: Dark,
+Pulse, Ledger (default), Glass. Monetization intent: the forge becomes the
+first paid enterprise product; tiered source access; paying users for training
+use of their uploaded code called "a good idea."
+
+#### 273 — Open Sourcing
+
+The Agent Forge starts from scratch under AGPL-3.0 — clean-room, no Sarah
+references, "the last repo I ever make on GitHub." Devin scaffolds the Phoenix
+app; build order: issues first so development organizes itself publicly, then
+Projects V2 reads, then write endpoints, targeting GitHub API parity on the
+subset actually used (84 endpoints in the March 2026 spec tied to
+issues/projects) so `gh` and octokit work unchanged. DaisyUI-vs-Basecoat debate
+resolved toward simplicity (later reversed by the staging incident recorded in
+AGENTS.md). Bounties, leaderboard, and in-forge chat teased.
+
+#### 274 — Importing Repos
+
+First real capability: one-time GitHub repository import, modeled on Cursor's
+Origin CLI workflow. Spec separates first release (create, import) from later
+origin-inspired work (mirroring sync, PRs, rulesets, SSH, deletion). Safety
+rule recorded: the deployment allowlist stays operator-owned, so creating a
+repository can never make it deployable. Namespaces stay GitHub-shaped;
+private repositories must never reveal existence to unauthorized callers;
+agent-safe CLI constraints enumerated (credential helper, JSON output,
+idempotent creates, retriable provisioning). Live demo: an OpenCode agent
+syncs the repo, appearing via LiveView as a read-only mirror — "See you later,
+GitHub."
+
+#### 275 — Parallelizing Ox Alpha stress testing
+
+The present. With four-to-five days of free Ox Alpha capacity left and Dax
+reporting under 5 percent utilization, the goal is maximum productive token
+burn: map provider limits (OpenRouter raw API, Venice, Nous ambiguous, OpenCode
+as harness), then fan out many parallel agent computers from a purpose-built
+chat console built on OpenAgents' own tooling. Uses this very tracker live:
+creates the Stress testing Ox Alpha project via the CLI, seeds nine
+architecture issues, watches the stacked-PR agent self-add issues. Key specs:
+quota broker (4 active computers per chat default, 8 budgeted, 30 logical,
+GCS checkpoints, recoverable commands); Firecracker strong class, GKE Agent
+Sandbox standard class; first-class agent context — bake exact API usage into
+agents instead of letting them traverse blindly. Platform ambition restated:
+agentic Slack plus agentic GitHub plus agentic Linear in one open-source UI.
+
+### Batch synthesis and integration notes
+
+This batch is the present tense: everything it promises either shipped or is
+an open issue you can see on the board. The integration work here is mostly
+connecting episodes to existing issue numbers rather than proposing new ones.
+
+Dispositions:
+
+1. **Live.** Forge canonical with MirrorWatch and changelog receipts (272);
+   AGPL open sourcing (273); repo import (274); Sarah in production (270);
+   the Immortal cluster plan (271, audited in
+   `docs/2026-08-21-sarah-computers-and-scv-architecture-audit.md`);
+   Ox Alpha parallelization (project 6, issues #40-#56).
+2. **Dust off.**
+   - **Plugin marketplace as the moat mechanism** (269): encapsulated problem-
+     solving with royalties is the strategic core of the last-mover argument
+     and remains unbuilt anywhere. Simplest viable form: a registry of typed
+     agent skills with usage counters and revenue share — revisit after the
+     extension-surface issue (#35) lands.
+   - **Sarah fix queue** (270): automatic memory saves, visible voice tool
+     calls, removal of the four-tool-call cap, session timeout, delete-memory
+     authorization bug, leaderboard opt-out. Small, concrete, mostly absent
+     from the board — worth filing under the chat/Sarah project.
+   - **ACP-first delegation**: Sarah commanding Devin/Codex via ACP on paired
+     computers was demoed directionally but the board's cloud-computer track
+     does not name ACP explicitly. Make ACP the integration contract for
+     executor wiring.
+   - **Second relay/operator independence discipline** (267): applies to the
+     forge too — record the single-operator trust caveat and the path to
+     independent mirrors as explicit invariants rather than folklore.
+3. **Reimagine.**
+   - **Two-layer changelog** (272): words-plus-receipts is right; extend the
+     same pattern to release notes for every deployment receipt, not just
+     pushes.
+   - **Quota broker** (275): designed for the stress fleet, but its shape —
+     leases, budgets, checkpoints, recoverable commands — is the general
+     multi-tenant compute primitive the platform lacks. Specify it once,
+     serve both.
+   - **Training-data payments for uploaded code** (272): aligns with trace
+     licensing (batch 4) and NIP-DS (batch 2). One visibility-policy-gated
+     licensing design could serve code, traces, and datasets.
+4. **Retired.**
+   - **Rust rewrite of the Sarah service**: dropped within a week for
+     Elixir/Phoenix hot-swappability; do not relitigate without a new
+     constraint.
+   - **GitHub as contribution surface**: permanently demoted; any feature
+     assuming GitHub issues or PR flows is dead on arrival.
+
+---
+
+## Cross-batch themes and how to integrate them
+
+Read across batches 199-275, eight durable threads carry the series' product
+promises. Each maps onto the current boards and delivery tracks.
+
+### 1. Receipts are the product
+
+The single most repeated idea: claims need evidence artifacts — turn receipts,
+push receipts, work receipts, assurance receipts, deployment receipts, payment
+receipts. Episode 237 names verification/clearing the load-bearing wall; 259
+defines verifiable software; 272 ships changelog receipts. Current state: the
+forge has push receipts and a changelog; the work-system assessment's Track E
+(issue-to-job-commit-test-release-deployment linkage) is the gap. Integration:
+treat Track E as the highest-leverage project on the board, and adopt the 259
+definition as the house definition of done for agent work.
+
+### 2. Contracts over vibes
+
+UX behavior contracts (246), ProductSpec intent (251), AssuranceSpec proof
+design (252), FastFollow learning contracts (255), the sixteen controls (258):
+typed artifacts with executable oracles replacing prose. Integration: pilot UX
+behavior contracts on openagents.com surfaces with violations auto-filing
+issues; express issue acceptance criteria in the 251 ProductSpec shape; keep
+the five false-green failure modes as named anti-patterns in review docs.
+
+### 3. Issue-shaped participation
+
+Anti-spam PR policy (218), public task submission (228), the feature-request
+recorder (211), clean-room contribution via issues (273): the forge's
+issue-first model was prefigured for 60 episodes before it existed. Integration:
+the missing piece from 211 is capture-from-chat — a one-command path from any
+conversation to a filed issue with notification on ship.
+
+### 4. Verified work earns Bitcoin
+
+Compute market (214), pay-for-verified-work flip (224), forum tips and treasury
+(235), claim/work/validate/pay (238), bounties (225): the economy kernel kept
+reasserting itself in whatever vehicle was handy. Current state: treasury and
+MDK wallets exist; the tracker has no money attached. Integration: bounty-labeled
+issues priced in sats with payout on merged-and-receipted completion is the
+smallest honest version, and it reuses everything that already ships.
+
+### 5. Capacity truth
+
+Presence-versus-quantity capacity reporting diagnosed in 244; quota broker
+specified in 275; cloud-computer lifecycle on the board (#37/#38). Integration:
+one capacity model — advertise amounts not existence, lease through a broker,
+checkpoint and resume — serves the stress fleet, cloud computers, and Pylon
+alike.
+
+### 6. One interface, many executors
+
+MechSuit (199), Probe's three backends (219), own-capacity routing (244),
+ACP delegation (270), harness-agnostic collapse (274): the router-not-model
+thesis held every pivot. Integration: SCV already owns driver choice; keep ACP
+and PAT-scoped APIs as the only two integration contracts, resist per-harness
+special cases.
+
+### 7. Transparency as differentiation
+
+Build-in-public doctrine (226), product promises registry (234), transparency
+tiers Dark/Pulse/Ledger/Glass (272), published traces (228): openness is the
+moat story, bounded by deliberate exceptions (Sarah's source, private data).
+Integration: revive the promises registry as forge project items; publish the
+transparency-tier policy for linked artifacts alongside Track E.
+
+### 8. Sovereignty economics
+
+Bitcoin settlement, Nostr identity, self-custody, no-lock-in export, open lanes
+versus security lanes: constant from 207 onward, surviving every product pivot.
+Integration: these are constraints, not features — every new surface inherits
+them (PAT-only writes, member-gated push, export paths, no hosted custody).
+
+### Proposed project skeleton for the new wave
+
+A starting structure for populating the tracker, subject to the pivots noted
+per batch:
+
+1. **Verification and receipts** — Track E linkage, promises registry on the
+   forge, coverage manifests, changelog-per-deployment.
+2. **Agent fleet operations** — parallel orchestrator (#41), quota broker,
+   deterministic delegate contract, FastFollow backlog refiller, capacity-as-
+   quantity (#37/#38).
+3. **Forge parity and participation** — remaining API gaps (assessment tracks
+   A-C), PRs with per-repository switch (#58/#1), notifications (#2),
+   capture-from-chat filing, bounty label and payouts.
+4. **Khala and inference economics** — provider routing overflow (#56),
+   outcomes-per-kilowatt-hour instrumentation (#43), trace/code licensing
+   design.
+5. **Community surfaces** — forum money (tips, ranking), Sarah fix queue, chat
+   console funnel duty (#55), reputation events.
+6. **Do-not-build register** — Spark custody, NIP-90 DVM markets, Bun, GetAfter,
+   pay-for-online mining, Copilot targets, monolithic business OS, Rust Sarah
+   service. Record reasons; revisit only on new evidence.
+
+### Method note
+
+Per-episode summaries above compress machine-generated transcripts; wording
+may drift from the videos. The transcripts README also carries one known index
+mismatch (episode 263) and omits episode 275 — both flagged upstream for
+repair. When an episode summary conflicts with current docs or code, current
+docs and code win; this document records what was said, and the dispositions
+record what to do about it.

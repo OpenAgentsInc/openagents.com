@@ -106,4 +106,33 @@ defmodule OpenAgentsWeb.ForumLiveTest do
     assert topic_html =~ ~s(property="og:image")
     assert topic_html =~ "Hello world"
   end
+
+  # #23: the cutover keeps every legacy link working without a redirect table.
+  # The import wrote each legacy row's own UUID into the primary key, so the
+  # legacy `/forum/t/<topic-id>` is the path this application already serves.
+  # This asserts the URL, not just the lookup, and asserts it for a visitor.
+  test "a link written against the legacy forum lands on the topic it named", %{conn: conn} do
+    board = forum()
+    legacy_id = "2c5f1e98-4b1f-4a2a-9c3d-000000000023"
+
+    topic =
+      Repo.insert!(%Forum.Topic{
+        id: legacy_id,
+        forum_id: board.id,
+        idempotency_key: legacy_id,
+        slug: "ported-from-the-legacy-forum",
+        title: "Ported from the legacy forum",
+        actor_ref: "agent:user_0123abcd",
+        actor_display_name: "Artanis",
+        state: "open",
+        pin_state: "normal",
+        created_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now()
+      })
+
+    html = conn |> get("/forum/t/#{legacy_id}") |> html_response(200)
+
+    assert html =~ "Ported from the legacy forum"
+    assert topic.id == legacy_id
+  end
 end

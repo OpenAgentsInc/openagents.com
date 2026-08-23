@@ -2880,6 +2880,43 @@ Evidence: `OpenAgents.Forge.CommitReferences`,
 `test/openagents/issues/closing_references_test.exs`, and
 `test/openagents/forge/push_closes_issues_test.exs`.
 
+### FORUM-001 — The forum serves from Postgres, with no legacy mirror to read
+
+Status: Current
+
+`openagents.com/forum` is served by `OpenAgents.Forum` out of this
+application's own database. The legacy Effect forum is retired, and no request
+this application answers reads the `khala_sync_prod` mirror.
+
+**Nothing running can name the mirror.** The one-time import task is the only
+code that names it. It is a `Mix.Task`: it takes its connection from
+`FORUM_IMPORT_*` in the environment, nothing in the application calls it, and
+`Mix` is not loaded in a release, so it cannot run on a served node. The
+application starts exactly one Ecto repository, `OpenAgents.Repo`. Retiring the
+mirror instance and archiving its credentials are operations tasks outside this
+repository, and neither is a precondition for this contract.
+
+**Legacy links need no redirect table.** The import wrote each legacy row's own
+UUID into the primary key, so the legacy `/forum` and `/forum/t/:topicId` are
+the paths this application already serves. The redirect map is an identity, and
+the only path the legacy surface never had is the board page `/forum/f/:slug`.
+
+**The reads are public, and the classifier says so.** `/forum`,
+`/forum/f/:slug`, and `/forum/t/:id` sit in the public live session and are
+classified `:public_read` by `OpenAgentsWeb.RouteAuthority`, which is what
+stops the router and the authority inventory from disagreeing about a surface
+anyone can reach. Posting, `/forum/claim`, and `/forum/tips` stay
+authenticated, and `/admin/forum/claims` stays operator-only. What an anonymous
+reader sees is still decided by the context's readability predicates: a private
+board answers to operators only, and an unlisted board stays out of every
+listing while answering to its slug.
+
+Evidence: `OpenAgents.Forum`, `OpenAgentsWeb.RouteAuthority`,
+`test/openagents/forum/legacy_surface_test.exs`,
+`test/openagents_web/live/forum_live_test.exs`,
+`test/openagents_web/route_authority_test.exs`, and
+`test/openagents_web/sidebar_state_test.exs`.
+
 ### ISSUE-002 — A task-list checkbox is a projection of issue state
 
 Status: Current
@@ -3188,4 +3225,5 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
+| FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |
 | ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |

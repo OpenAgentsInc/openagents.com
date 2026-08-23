@@ -76,11 +76,27 @@ name. The user-facing procedure is
 
 ## Cutover path
 
-The legacy routes were `/forum` (home) and `/forum/t/:topicId` (topic). The
-Phoenix surface serves exactly those paths, and every migrated row keeps its
-source UUID, so existing links resolve without redirects. Browser reads and
-writes require sign-in, matching the other workspace-wide surfaces; the
-`/api/v3/forum` reads are public and writes require a `forge:write` token.
+The cutover is complete. `openagents.com/forum` serves this implementation,
+and nothing points at the legacy surface.
 
-No runtime dependency on `khala_sync_prod` remains after the import.
-Retiring that instance is a separate operations task.
+The legacy routes were `/forum` (home) and `/forum/t/:topicId` (topic). This
+surface serves exactly those paths, and every migrated row keeps its source
+UUID, so the redirect map is an identity rather than a table: a legacy link is
+a URL this application already answers. `/forum/f/:slug`, the board page, is
+the one path the legacy surface never had.
+
+Browser reads are public. An anonymous visitor reaches the board list, a
+board, and a topic, and the sidebar row points every reader at the forum
+rather than only signed-in accounts. Posting, claiming a legacy identity at
+`/forum/claim`, and setting a tip destination at `/forum/tips` still need an
+account. The `/api/v3/forum` reads are public, and writes require a
+`forge:write` token.
+
+No runtime dependency on `khala_sync_prod` remains. The only code that names
+the mirror is the one-time import task: it reads its connection from
+`FORUM_IMPORT_*` in the environment, nothing in the application calls it, and
+it cannot run on a served node because `Mix` is not loaded in a release.
+`INVARIANTS.md` records this as FORUM-001 and names the test that proves it.
+
+Retiring the mirror instance and archiving its credentials are operations
+tasks outside this repository.

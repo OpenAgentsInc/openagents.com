@@ -43,8 +43,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/memory",
     "/device",
     "/repositories",
-    # The forum. Reading and posting happen signed in, matching the other
-    # workspace-wide surfaces.
+    # The signed-in forum surfaces: claiming a legacy identity and setting a
+    # tip destination. The board, topic, and home reads are public and are
+    # classified above; this prefix covers what is left under `/forum`.
     "/forum",
     # The inbox addresses exactly one account, so it has nothing to show a
     # visitor who has not identified themselves.
@@ -141,6 +142,20 @@ defmodule OpenAgentsWeb.RouteAuthority do
         "forge:projects:web",
         false
       )
+
+  # The forum reads. Public since the cutover retired the legacy surface: the
+  # context's readability predicates decide what an anonymous reader sees, and
+  # posting still requires an account. `/forum/claim` and `/forum/tips` stay
+  # behind the authenticated prefix.
+  defp policy(%{path: path, verb: verb})
+       when path in ["/forum", "/forum/f/:slug", "/forum/t/:id"] and verb in [:get, :head],
+       do:
+         declaration(
+           :public_read,
+           "anonymous visitor or signed-in person",
+           "forum:web",
+           false
+         )
 
   defp policy(%{path: "/auth/github", verb: :post}),
     do: declaration(:authenticated_browser, "explicit OAuth applicant", "identity:connect", true)

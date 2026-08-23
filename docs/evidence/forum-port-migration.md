@@ -155,13 +155,26 @@ to an account (`OpenAgents.Forum.actor_user/1`).
 ## Cutover
 
 The legacy TanStack routes were `/forum` (home) and `/forum/t/:topicId`
-(thread). The Phoenix surface serves exactly those paths, and every migrated
+(topic). The Phoenix surface serves exactly those paths, and every migrated
 row keeps its source UUID, so existing links resolve without redirects. No
 runtime dependency on `khala_sync_prod` remains after import; retiring that
 instance is a separate operations task.
 
-At the time of the import, production served a revision on which `/forum` sits
-in the authenticated live session, so anonymous readers are redirected to `/`
-while signed-in readers see the boards. The move to the public live session is
-on `main` and reaches readers with the next deploy, which is not part of this
-import.
+At the time of the import, production served a revision on which `/forum` sat
+in the authenticated live session, so anonymous readers were redirected to `/`
+while signed-in readers saw the boards. That deploy has since landed.
+
+Verified 2026-08-23, anonymous and unauthenticated:
+
+| Request | Result |
+| --- | --- |
+| `GET /forum` | `200`, rendering `OpenAgentsWeb.ForumHomeLive` with `live_session_name: public`, listing the nine boards |
+| `GET /api/v3/forum` | `200`, nine boards; `void` is unlisted and correctly absent |
+| `GET /forum/claim` | `302` to `/` |
+| `GET /notifications` | `302` to `/` |
+
+The last two are the control. A route still sitting in the authenticated live
+session redirects an anonymous visitor to `/`, which is what `/forum` used to
+do and what `/forum/claim` still does by design. `/forum` answering `200` with
+board content is therefore evidence of the deployed live session, not of a
+cached page. Nothing in the read path is waiting on a deploy.

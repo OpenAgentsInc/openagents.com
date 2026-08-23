@@ -372,15 +372,12 @@ defmodule OpenAgentsWeb.Layouts do
       <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
         <UI.icon name="trophy-top" /> Leaderboard
       </.link>
-      <%!-- Signed in only, and directly under Leaderboard. `/forum` is behind
-      the authenticated scope, so a row for a visitor would be a link to a
-      login wall rather than to the forum. --%>
-      <.link
-        :if={@current_user}
-        id="open-forum"
-        navigate={~p"/forum"}
-        class="sidebar-footer__link"
-      >
+      <%!-- Directly under Leaderboard, and shown to everyone. The forum reads
+      are public, so a visitor following this row reaches the boards rather
+      than a login wall. No DOM id: the component gallery renders this footer
+      beside the shell's own, and a fixed id would be duplicated on that page
+      now that the row no longer depends on a session. --%>
+      <.link navigate={~p"/forum"} class="sidebar-footer__link">
         <UI.icon name="forum" /> Forum
       </.link>
       <.link

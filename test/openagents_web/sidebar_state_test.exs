@@ -80,10 +80,16 @@ defmodule OpenAgentsWeb.SidebarStateTest do
       assert has_element?(view, ~s(#sidebar .sidebar-footer a[href="/forum"]))
     end
 
-    test "a visitor does not, because the forum needs a session", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/leaderboard")
+    # #23: the cutover made the forum reads public, so the row is no longer a
+    # link to a login wall. The docs shell is where a visitor meets the footer
+    # at all -- the application shell renders no sidebar for one -- so that is
+    # where the row has to appear.
+    test "a visitor sees it on the docs shell, because the forum reads are public",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/docs")
 
-      refute has_element?(view, ~s(.sidebar-footer a[href="/forum"]))
+      assert has_element?(view, ~s(.sidebar-footer a[href="/forum"]))
+      assert has_element?(view, ~s(.sidebar-footer a[href="/leaderboard"]))
     end
   end
 

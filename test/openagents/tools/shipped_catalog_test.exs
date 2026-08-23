@@ -1,6 +1,6 @@
 defmodule OpenAgents.Tools.ShippedCatalogTest do
   @moduledoc """
-  The shipped tool catalog is a closed, read-only set (TOOL-005).
+  The shipped tool catalog is a closed, read-only set (TOOL-006).
 
   These assertions read `config/config.exs` directly rather than the ambient
   `:tools` application environment, because the test environment deliberately

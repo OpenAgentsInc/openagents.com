@@ -3,6 +3,16 @@
 **Date:** 2026-08-23
 **Commit measured:** `7b980b2589ce` on `openagents/main`, the forge
 **Status:** The cut in section 5 shipped with this document. Sections 1 to 4 are the historical record of the 37-tool catalog it replaced.
+
+> **Update, later on 2026-08-23.** Issue #156 landed while this was in flight,
+> in `a8beb6dd` — "Resolve the caller's visitor, and offer only tools that
+> caller can reach". It fixes the `owner_visitor_id` defect in summary finding
+> 1 and adds `OpenAgents.Tools.Reach`, a declared `reach:` requirement on each
+> tool that the selector applies before ranking. Section 9 records what that
+> changes. Sections 1, 3, and 4 describe the catalog and the callers **before**
+> that commit; re-measure them against `Reach` before quoting them as current.
+> The cut and its criteria are unaffected: #156 narrows the offer, this
+> narrows the catalog, and section 9 explains why both are wanted.
 **Question:** Why does asking the agent to list its tools produce a wall of modules that mostly refuse, what did each of those tools actually do, and what has to be true before any of them comes back?
 **Method:** direct reading of the `:tools` list in `config/config.exs`, all 37 registered modules under `lib/openagents/tools/`, the eight context resolvers they share, every `ExecutionContext` construction site in `lib/`, `OpenAgents.Tools.Registry`, `OpenAgents.Tools.Selector`, `OpenAgents.Tools.AdmittedCatalog`, `OpenAgents.Tools.Runner`, `OpenAgents.Modules.SurfacePolicy`, `INVARIANTS.md`, and the tests that read the installed catalog. Prompt-budget figures in section 8 come from building the real registry and measuring the encoded provider definitions; the script and its output are described there. Claims this repository cannot settle are in section 10.
 
@@ -540,7 +550,7 @@ different costs to reverse.
 | --- | --- | --- | --- |
 | **Removed** | The module is deleted from `lib/openagents/tools/` | Rewrite it | **Nothing.** All 37 modules stay in the tree. |
 | **Unregistered** | The module exists, compiles, and is under test, but is absent from `:tools`, so no snapshot contains it and no caller can name it | One config line plus the section 6 criteria | The 31 tools cut here |
-| **Not offered** | The module is registered, but a given caller is not shown it | Nothing; it is per-turn | Not used by this lane. It is the mechanism `Tools.Selector` and `AdmittedCatalog` already provide, and what #156 narrows. |
+| **Not offered** | The module is registered, but a given caller is not shown it | Nothing; it is per-turn | Not used by this lane. It is the mechanism `Tools.Selector` and `AdmittedCatalog` provide, and it is now a first-class, declared property: #156's `OpenAgents.Tools.Reach` makes each tool state the caller requirement it has, and the selector drops unreachable tools before ranking. |
 
 The translation of Omega's rule is that **unregistered is strictly safer than
 not offered**, and this lane used the safer one. A not-offered tool is still in
@@ -610,30 +620,47 @@ Two caveats, stated because they bound the claim.
 
 ## 9. Where this meets issue #156
 
-Two lanes are narrowing the same funnel from different ends and must not fight.
+Two lanes narrowed the same funnel from different ends, and both have now
+landed.
 
-- **#156 narrows the offering.** It changes who is shown a tool, by deriving
-  `ExecutionContext.authorities` from what the person actually has instead of
-  granting a fixed 13, and by fixing `owner_visitor_id` at
-  `lib/openagents/chat/account_turns.ex:273`. Its files are
-  `lib/openagents/chat/` and `lib/openagents/tools/selector.ex`.
+- **#156 narrows the offering.** It changes who is shown a tool. It resolves
+  the caller's visitor correctly instead of substituting an account id, and it
+  gives each tool a declared `reach:` — `:signed_in_owner`, `:paired_computer`,
+  `:operator` — that the selector applies before ranking, so an unreachable
+  tool takes neither a top-K slot nor an always-include slot. That is
+  TOOL-005. Its files are `lib/openagents/chat/`, `lib/openagents/tools/reach.ex`,
+  and `lib/openagents/tools/selector.ex`.
 - **This lane narrows the catalog.** It changes what exists to be offered, in
-  `config/config.exs`. It touches no file in `lib/`.
+  `config/config.exs`. That is TOOL-006. It touches no file in `lib/`.
 
 They compose in one direction and conflict in none: a smaller catalog filtered
-by a narrower authority set is smaller still. The interaction to watch is that
-**#156 landing makes several criteria in section 6 cheaper, not moot.** Once
-`owner_visitor_id` is a real Visitor id, the eleven tools that refuse only for
-that reason satisfy criterion 1 for the account caller, and criterion 2 becomes
-the authority check rather than a review question. That is the intended
-build-back trigger: #156 landing should be followed by a re-admission pass, not
-by a revert of this cut.
+by reach is smaller still. Neither substitutes for the other, and it is worth
+saying why, because "#156 already hides the broken tools" is the obvious
+argument for reverting this cut.
 
-Neither lane should assume the other's state. This document describes
-`7b980b2589ce`; if #156 has landed when you read it, re-measure section 4
-before quoting it.
+Reach answers *can this caller use this tool*. It cannot answer *can any
+caller use this tool*. The seven tools in summary findings 2 and 3 — the
+workspace family, `open_pull_request`, and `code_check` — fail for reasons
+reach does not model: a workspace type no caller constructs, a receipt no
+caller can mint, an authority no caller holds. They declare no reach
+requirement and would still be offered. Reach also does not ask whether a
+tool's declared effect matches what it does, or whether its description says
+when not to use it, or whether it earns its prompt budget. Those are section
+6's criteria, and they are why admission stays a decision rather than a
+computation.
 
----
+What #156 does change is the price of build-back. Several criteria in section
+6 are now cheaper to satisfy, and one is nearly free:
+
+- Criterion 1 — the eleven tools that refused only because of the
+  `owner_visitor_id` defect now work for the account caller.
+- Criterion 2 — reach is the mechanical form of "an authority the caller
+  genuinely holds" for the three requirements it models, so a tool that
+  declares its reach honestly has satisfied that criterion for those cases.
+
+That is the intended trigger. The next re-admission pass should start from the
+tools whose only blocker was #156, re-measure section 4 against `Reach`, and
+bring them back in a change that names the criteria each one now meets.
 
 ## 10. What this document cannot settle
 
@@ -668,7 +695,7 @@ before quoting it.
 - `lib/openagents/tools/conversation_execution_context.ex`, `execution_context.ex`
 - `lib/openagents/turns/turn_server.ex`, `lib/openagents/chat/account_turns.ex`, `lib/openagents/chat/open_router/tool_runtime.ex`, `lib/openagents/work/job_server.ex`, `lib/openagents/voice/context_capture.ex`
 - `lib/openagents/modules/surface_policy.ex`, `lib/openagents/runtime_config.ex`
-- `INVARIANTS.md` — TOOL-001 through TOOL-005, MODULE-001, MODULE-003, MODULE-004, DEGRADE-002
+- `INVARIANTS.md` — TOOL-001 through TOOL-006, MODULE-001, MODULE-003, MODULE-004, DEGRADE-002
 - `docs/taxonomy.md`, `docs/2026-08-23-openagents-coder-cli-spec.md`
 - `test/openagents/tools/shipped_catalog_test.exs`
 - The Omega zero-base mode design in the `openagents` monorepo, `docs/omega/2026-07-26-omega-zero-base-mode.md`, for the removed / disabled / not-rendered taxonomy section 7 translates

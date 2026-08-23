@@ -223,7 +223,7 @@ defmodule OpenAgents.StagingCleanupTest do
       Projects.create_project_field(%{
         name: "Status",
         data_type: "single_select",
-        options: %{},
+        options: %{"values" => ["Todo", "Done"]},
         project_id: project.id
       })
 

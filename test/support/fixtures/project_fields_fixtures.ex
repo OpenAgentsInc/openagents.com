@@ -27,7 +27,7 @@ defmodule OpenAgents.ProjectFieldsFixtures do
     {:ok, project_field} =
       attrs
       |> Enum.into(%{
-        data_type: "some data_type",
+        data_type: "text",
         name: "some name",
         options: %{},
         project_id: project.id

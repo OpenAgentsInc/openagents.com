@@ -16,12 +16,25 @@ defmodule OpenAgents.Projects do
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
 
-  def list_projects(%Repository{id: repository_id}) do
+  @doc """
+  The projects of one repository, in board order.
+
+  Archived projects are out of the working set, so they are left out unless
+  `archived: true` asks for them. Nothing else about them changes: an archived
+  board reads, and comes back, exactly as it was.
+  """
+  def list_projects(repository, opts \\ [])
+
+  def list_projects(%Repository{id: repository_id}, opts) when is_list(opts) do
     Project
     |> where(repository_id: ^repository_id)
+    |> filter_archived(Keyword.get(opts, :archived, false))
     |> order_by(asc: :number)
     |> Repo.all()
   end
+
+  defp filter_archived(query, true), do: query
+  defp filter_archived(query, _excluded), do: where(query, [project], is_nil(project.archived_at))
 
   @projects_per_page 25
 
@@ -75,6 +88,7 @@ defmodule OpenAgents.Projects do
     )
     |> maybe_filter_project_state(Keyword.get(opts, :state, "open"))
     |> maybe_filter_project_owner(Keyword.get(opts, :owner))
+    |> filter_archived(Keyword.get(opts, :archived, false))
   end
 
   defp maybe_filter_project_state(query, "all"), do: query
@@ -178,6 +192,22 @@ defmodule OpenAgents.Projects do
   def update_project(%Project{} = project, attrs), do: update_project(project, attrs, nil)
 
   @doc """
+  Moves `project` into the archive, attributed to `actor`.
+
+  Archiving is orthogonal to closing. A closed project says the work it tracked
+  reached an end; an archived project says the board is out of the working set,
+  whatever became of the work. Archiving is reversible through
+  `restore_project/2`, and it is the precondition the API puts in front of a
+  project delete.
+  """
+  def archive_project(%Project{} = project, actor \\ nil),
+    do: update_project(project, %{"archived" => true}, actor)
+
+  @doc "Brings `project` back out of the archive, attributed to `actor`."
+  def restore_project(%Project{} = project, actor \\ nil),
+    do: update_project(project, %{"archived" => false}, actor)
+
+  @doc """
   Updates `project` and records what changed in its activity log.
 
   Every accepted change to the title, description, or state appends one
@@ -197,31 +227,62 @@ defmodule OpenAgents.Projects do
         attrs
       end
 
-    changeset = Project.changeset(project, attrs)
+    {attrs, archived_error} = put_archived_at(project, attrs)
 
-    Repo.transaction(fn ->
-      case Repo.update(changeset) do
-        {:ok, updated} ->
-          Enum.each(activity_bodies(changeset), fn body ->
-            case insert_note(updated, %{"body" => body, "kind" => "activity"}, actor) do
-              {:ok, _note} -> :ok
-              {:error, note_changeset} -> Repo.rollback(note_changeset)
-            end
-          end)
-
-          updated
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
+    changeset =
+      case archived_error do
+        nil -> Project.changeset(project, attrs)
+        message -> Ecto.Changeset.add_error(Project.changeset(project, attrs), :archived, message)
       end
-    end)
-    |> case do
-      {:ok, project} ->
-        Repositories.broadcast_projects(project.repository_id)
-        {:ok, project}
 
-      result ->
-        result
+    if changeset.valid? do
+      Repo.transaction(fn ->
+        case Repo.update(changeset) do
+          {:ok, updated} ->
+            Enum.each(activity_bodies(changeset), fn body ->
+              case insert_note(updated, %{"body" => body, "kind" => "activity"}, actor) do
+                {:ok, _note} -> :ok
+                {:error, note_changeset} -> Repo.rollback(note_changeset)
+              end
+            end)
+
+            updated
+
+          {:error, changeset} ->
+            Repo.rollback(changeset)
+        end
+      end)
+      |> case do
+        {:ok, project} ->
+          Repositories.broadcast_projects(project.repository_id)
+          {:ok, project}
+
+        result ->
+          result
+      end
+    else
+      {:error, changeset}
+    end
+  end
+
+  # `archived` is a boolean on the wire because that is the question a caller
+  # is asking. The column is a timestamp because the answer is worth dating.
+  # Re-archiving an archived project keeps the original timestamp: the board
+  # left the working set once.
+  defp put_archived_at(project, attrs) do
+    case Map.pop(attrs, "archived") do
+      {nil, attrs} ->
+        {attrs, nil}
+
+      {true, attrs} ->
+        at = project.archived_at || DateTime.truncate(DateTime.utc_now(), :second)
+        {Map.put(attrs, "archived_at", at), nil}
+
+      {false, attrs} ->
+        {Map.put(attrs, "archived_at", nil), nil}
+
+      {_other, attrs} ->
+        {attrs, "is invalid"}
     end
   end
 
@@ -233,7 +294,8 @@ defmodule OpenAgents.Projects do
       [
         {:state, &"Changed the state to `#{&1}`."},
         {:title, &"Changed the title to #{inspect(&1)}."},
-        {:description, &describe_description_change/1}
+        {:description, &describe_description_change/1},
+        {:archived_at, &describe_archive_change/1}
       ],
       fn {field, describe} ->
         case Ecto.Changeset.fetch_change(changeset, field) do
@@ -248,6 +310,18 @@ defmodule OpenAgents.Projects do
   defp describe_description_change(""), do: "Removed the description."
   defp describe_description_change(_value), do: "Updated the description."
 
+  defp describe_archive_change(nil), do: "Restored the project from the archive."
+  defp describe_archive_change(_at), do: "Archived the project."
+
+  @doc """
+  Deletes `project` along with its fields and items.
+
+  The items go, the issues stay. A project item is a reference to a canonical
+  issue, so deleting the board that referenced it must never delete the work.
+  Notes and activity cascade from the database. Project item events do not:
+  they are append-only, and the record of what a promise did outlives the board
+  that carried it.
+  """
   def delete_project(%Project{} = project) do
     Repo.transaction(fn ->
       Repo.delete_all(from field in ProjectField, where: field.project_id == ^project.id)
@@ -668,18 +742,327 @@ defmodule OpenAgents.Projects do
     |> Repo.all()
   end
 
-  def create_project_field(attrs) do
+  @doc "One field of `project`, by id."
+  def get_project_field!(%Project{id: project_id}, id),
+    do: Repo.get_by!(ProjectField, id: id, project_id: project_id)
+
+  def create_project_field(attrs), do: create_project_field(attrs, nil)
+
+  @doc """
+  Declares one field on a project, attributed to `actor`.
+
+  A project carries at most one `promise_state` field, because the promise
+  registry reads a single stored state per item.
+  """
+  def create_project_field(attrs, actor) when is_nil(actor) or is_struct(actor, User) do
     changeset =
       %ProjectField{}
       |> ProjectField.changeset(attrs)
       |> PromiseRegistry.validate_field()
+      |> validate_promise_field_available()
 
-    if changeset.valid? and promise_field_available?(changeset) do
-      Repo.insert(changeset)
+    if changeset.valid? do
+      Repo.transaction(fn ->
+        case Repo.insert(changeset) do
+          {:ok, field} ->
+            record_field_activity(field.project_id, "Added the field `#{field.name}`.", actor)
+            field
+
+          {:error, changeset} ->
+            Repo.rollback(changeset)
+        end
+      end)
     else
       {:error, changeset}
     end
   end
+
+  @doc """
+  Updates one field of `project`, attributed to `actor`.
+
+  A field's name is the key its values are stored under on every item, so a
+  rename rewrites that key across the project's items in the same transaction:
+  a rename that left the values behind would silently empty the column.
+
+  The data type never changes. Values already stored were written against the
+  old type, and reinterpreting them is a destructive change wearing an edit's
+  clothes — declare a new field instead.
+
+  Options grow freely, and an option written as an object keeps its identifier
+  while its label changes. Removing an option that items still carry is
+  refused, so a removal cannot strand the values that chose it.
+  """
+  def update_project_field(project, field, attrs, actor \\ nil)
+
+  def update_project_field(
+        %Project{id: project_id} = project,
+        %ProjectField{project_id: project_id} = field,
+        attrs,
+        actor
+      )
+      when is_nil(actor) or is_struct(actor, User) do
+    attrs = attrs |> to_string_map() |> Map.take(["name", "data_type", "options"])
+
+    changeset =
+      field
+      |> ProjectField.changeset(Map.put(attrs, "project_id", field.project_id))
+      |> refuse_data_type_change()
+      |> PromiseRegistry.validate_field()
+      |> refuse_stranded_options(project, field)
+
+    if changeset.valid? do
+      Repo.transaction(fn ->
+        case Repo.update(changeset) do
+          {:ok, updated} ->
+            rename_item_values(project, field.name, updated.name)
+
+            Enum.each(field_activity_bodies(field, updated), fn body ->
+              record_field_activity(project.id, body, actor)
+            end)
+
+            updated
+
+          {:error, changeset} ->
+            Repo.rollback(changeset)
+        end
+      end)
+      |> case do
+        {:ok, updated} ->
+          Repositories.broadcast_projects(project.repository_id)
+          {:ok, updated}
+
+        result ->
+          result
+      end
+    else
+      {:error, changeset}
+    end
+  end
+
+  @doc """
+  Removes one field of `project`, attributed to `actor`.
+
+  A field whose values items still carry is preserved instead: deleting it
+  would leave those values keyed to a column nothing declares, which is data
+  loss reported as success.
+  """
+  def delete_project_field(project, field, actor \\ nil)
+
+  def delete_project_field(
+        %Project{id: project_id} = project,
+        %ProjectField{project_id: project_id} = field,
+        actor
+      )
+      when is_nil(actor) or is_struct(actor, User) do
+    case count_items_carrying(project, field.name) do
+      0 ->
+        Repo.transaction(fn ->
+          Repo.delete!(field)
+          record_field_activity(project.id, "Removed the field `#{field.name}`.", actor)
+          field
+        end)
+        |> case do
+          {:ok, deleted} ->
+            Repositories.broadcast_projects(project.repository_id)
+            {:ok, deleted}
+
+          result ->
+            result
+        end
+
+      count ->
+        {:error,
+         field
+         |> ProjectField.changeset(%{})
+         |> Ecto.Changeset.add_error(
+           :name,
+           "is still carried by #{count} #{pluralize(count, "item")}"
+         )}
+    end
+  end
+
+  defp pluralize(1, word), do: word
+  defp pluralize(_count, word), do: word <> "s"
+
+  # A rename is a key rewrite on every item of the project. Postgres does it in
+  # one statement: drop the old key, then write the value back under the new
+  # one.
+  defp rename_item_values(_project, name, name), do: :ok
+
+  defp rename_item_values(%Project{id: project_id}, old_name, new_name) do
+    from(item in ProjectItem,
+      where:
+        item.project_id == ^project_id and
+          fragment("jsonb_exists(?, ?::text)", item.values, ^old_name),
+      update: [
+        set: [
+          values:
+            fragment(
+              "(? - ?::text) || jsonb_build_object(?::text, ? -> ?::text)",
+              item.values,
+              ^old_name,
+              ^new_name,
+              item.values,
+              ^old_name
+            )
+        ]
+      ]
+    )
+    |> Repo.update_all([])
+
+    :ok
+  end
+
+  defp count_items_carrying(%Project{id: project_id}, name) do
+    Repo.aggregate(
+      from(item in ProjectItem,
+        where:
+          item.project_id == ^project_id and
+            fragment("jsonb_exists(?, ?::text)", item.values, ^name)
+      ),
+      :count
+    )
+  end
+
+  defp refuse_data_type_change(changeset) do
+    case Ecto.Changeset.fetch_change(changeset, :data_type) do
+      {:ok, _data_type} ->
+        Ecto.Changeset.add_error(
+          changeset,
+          :data_type,
+          "cannot change once the field exists; declare a new field instead"
+        )
+
+      :error ->
+        changeset
+    end
+  end
+
+  defp refuse_stranded_options(changeset, %Project{} = project, %ProjectField{} = field) do
+    case Ecto.Changeset.fetch_change(changeset, :options) do
+      :error ->
+        changeset
+
+      {:ok, _options} ->
+        kept = ProjectField.option_ids(Ecto.Changeset.apply_changes(changeset))
+        removed = ProjectField.option_ids(field) -- kept
+
+        case options_in_use(project, field.name, removed) do
+          [] ->
+            changeset
+
+          in_use ->
+            Ecto.Changeset.add_error(
+              changeset,
+              :options,
+              "cannot drop #{Enum.map_join(in_use, ", ", &"`#{&1}`")} while items still carry them"
+            )
+        end
+    end
+  end
+
+  defp options_in_use(_project, _name, []), do: []
+
+  defp options_in_use(%Project{id: project_id}, name, removed) do
+    Repo.all(
+      from item in ProjectItem,
+        where:
+          item.project_id == ^project_id and
+            fragment("?->>?::text", item.values, ^name) in ^removed,
+        select: fragment("?->>?::text", item.values, ^name),
+        distinct: true
+    )
+  end
+
+  defp field_activity_bodies(%ProjectField{} = before, %ProjectField{} = now) do
+    rename =
+      if before.name != now.name,
+        do: ["Renamed the field `#{before.name}` to `#{now.name}`."],
+        else: []
+
+    options =
+      if before.options != now.options,
+        do: ["Updated the options of the field `#{now.name}`."],
+        else: []
+
+    rename ++ options
+  end
+
+  defp record_field_activity(project_id, body, actor) do
+    case Repo.get(Project, project_id) do
+      nil ->
+        :ok
+
+      %Project{} = project ->
+        case insert_note(project, %{"body" => body, "kind" => "activity"}, actor) do
+          {:ok, _note} -> :ok
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+    end
+  end
+
+  defp validate_promise_field_available(changeset) do
+    if promise_field_available?(changeset) do
+      changeset
+    else
+      Ecto.Changeset.add_error(
+        changeset,
+        :data_type,
+        "already exists on this project"
+      )
+    end
+  end
+
+  # Only values a declared field claims are checked. A value under a key no
+  # field declares passes through untouched: a board can carry notes the
+  # schema has not caught up with, and rejecting them would break every client
+  # that stored a value before its field existed.
+  defp validate_field_values(%Project{} = project, values) when is_map(values) do
+    errors =
+      project
+      |> list_project_fields()
+      |> Enum.flat_map(fn field ->
+        case Map.fetch(values, field.name) do
+          :error -> []
+          {:ok, nil} -> []
+          {:ok, value} -> field_value_errors(field, value)
+        end
+      end)
+
+    case errors do
+      [] -> :ok
+      errors -> {:error, %{values: errors}}
+    end
+  end
+
+  defp validate_field_values(_project, _values), do: :ok
+
+  defp field_value_errors(%ProjectField{data_type: "text", name: name}, value)
+       when not is_binary(value),
+       do: ["#{name} must be text"]
+
+  defp field_value_errors(%ProjectField{data_type: "number", name: name}, value)
+       when not is_number(value),
+       do: ["#{name} must be a number"]
+
+  defp field_value_errors(%ProjectField{data_type: "date", name: name}, value) do
+    case is_binary(value) and Date.from_iso8601(value) do
+      {:ok, _date} -> []
+      _invalid -> ["#{name} must be an ISO 8601 date"]
+    end
+  end
+
+  defp field_value_errors(%ProjectField{data_type: "single_select"} = field, value) do
+    if value in ProjectField.option_ids(field) do
+      []
+    else
+      ["#{field.name} must be one of the field's options"]
+    end
+  end
+
+  # A promise state carries its own gate checks in `PromiseRegistry`, which
+  # reports richer reasons than "not one of the options" would.
+  defp field_value_errors(%ProjectField{}, _value), do: []
 
   def list_project_item_events(%ProjectItem{id: item_id}, opts \\ []) do
     page = max(parse_page(opts[:page]), 1)
@@ -721,6 +1104,12 @@ defmodule OpenAgents.Projects do
   end
 
   defp prepare_promise_values(project, values, actor, exclude_id) do
+    with :ok <- validate_field_values(project, values) do
+      prepare_promise_values!(project, values, actor, exclude_id)
+    end
+  end
+
+  defp prepare_promise_values!(project, values, actor, exclude_id) do
     case PromiseRegistry.validate_values(project, values, actor) do
       {:ok, values} ->
         if PromiseRegistry.registry?(project) do

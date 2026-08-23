@@ -11,13 +11,24 @@ config :openagents, :runtime_environment, :test
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
+#
+# POOL_SIZE caps the checkout pool. Several partitions running at once against
+# one PostgreSQL server can exhaust `max_connections` between them, and the
+# first symptom is an unrelated-looking connection failure in whichever run
+# started last.
+test_pool_size =
+  case System.get_env("POOL_SIZE") do
+    nil -> System.schedulers_online() * 2
+    size -> String.to_integer(size)
+  end
+
 config :openagents, OpenAgents.Repo,
   username: System.get_env("USER") || "christopherdavid",
   password: "",
   socket_dir: "/tmp",
   database: "openagents_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
-  pool_size: System.schedulers_online() * 2
+  pool_size: test_pool_size
 
 # Test-only GitHub OAuth and vault keys. GitHub is mocked in tests.
 config :openagents, :github_oauth,

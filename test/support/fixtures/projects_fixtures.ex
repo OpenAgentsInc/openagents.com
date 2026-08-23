@@ -13,7 +13,7 @@ defmodule OpenAgents.ProjectsFixtures do
         repository,
         Enum.into(attrs, %{
           owner: "some owner",
-          state: "some state",
+          state: "open",
           title: "some title"
         })
       )

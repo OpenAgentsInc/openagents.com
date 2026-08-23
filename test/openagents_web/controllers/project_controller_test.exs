@@ -927,7 +927,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{
             name: "Status",
-            data_type: "single_select",
+            data_type: "text",
             project_id: other_project.id
           }
         )
@@ -952,7 +952,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
         project_field_fixture(%{
           project_id: project.id,
           name: "Status",
-          data_type: "single_select"
+          data_type: "text"
         })
 
       assert get(
@@ -990,7 +990,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert post(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
-               %{name: "Priority", data_type: "single_select"}
+               %{name: "Priority", data_type: "text"}
              )
              |> json_response(404) == %{"message" => "Not Found"}
 
@@ -1228,6 +1228,570 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                  ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
                )
                |> json_response(200)
+    end
+  end
+
+  describe "lifecycle" do
+    test "PATCH projectsV2/:number closes, reopens, and archives a project", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+
+      assert %{"state" => "closed", "archived" => false} =
+               conn |> patch(path, %{state: "closed"}) |> json_response(200)
+
+      assert %{"state" => "open", "archived" => false} =
+               conn |> patch(path, %{state: "open"}) |> json_response(200)
+
+      assert %{"state" => "open", "archived" => true, "archived_at" => archived_at} =
+               conn |> patch(path, %{archived: true}) |> json_response(200)
+
+      assert is_binary(archived_at)
+      assert Projects.get_project_by_number!(repository(), project.number).archived_at
+
+      assert %{"archived" => false, "archived_at" => nil} =
+               conn |> patch(path, %{archived: false}) |> json_response(200)
+
+      refute Projects.get_project_by_number!(repository(), project.number).archived_at
+    end
+
+    test "PATCH projectsV2/:number rejects a non-boolean archived flag", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+          archived: "sideways"
+        })
+
+      assert json_response(conn, 422) == %{"errors" => %{"archived" => ["is invalid"]}}
+      refute Projects.get_project_by_number!(repository(), project.number).archived_at
+    end
+
+    test "lifecycle transitions appear in the project's activity, attributed to the actor", %{
+      conn: conn
+    } do
+      project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+
+      assert json_response(patch(conn, path, %{state: "closed"}), 200)
+      assert json_response(patch(conn, path, %{archived: true}), 200)
+
+      assert %{"notes" => notes} =
+               conn
+               |> get(
+                 ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?kind=activity"
+               )
+               |> json_response(200)
+
+      bodies = Enum.map(notes, & &1["body"])
+      assert Enum.any?(bodies, &(&1 =~ "Archived the project."))
+      assert Enum.any?(bodies, &(&1 =~ "Changed the state to `closed`."))
+      assert Enum.all?(notes, &(get_in(&1, ["author", "login"]) == "alice"))
+    end
+
+    test "DELETE projectsV2/:number refuses a project that is not archived", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        delete(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}")
+
+      assert %{"errors" => %{"archived" => [message]}} = json_response(conn, 422)
+      assert message =~ "archived"
+      assert Projects.get_project_by_number!(repository(), project.number)
+    end
+
+    test "DELETE projectsV2/:number removes an archived project, its fields, and its items", %{
+      conn: conn
+    } do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      {:ok, issue} = create_issue(%{title: "Tracked"})
+      item = project_item_fixture(%{project_id: project.id, issue_id: issue.id})
+      field = project_field_fixture(%{project_id: project.id, name: "Status", data_type: "text"})
+
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+      assert json_response(patch(conn, path, %{archived: true}), 200)
+      assert response(delete(conn, path), 204) == ""
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Projects.get_project_by_number!(repository(), project.number)
+      end
+
+      refute OpenAgents.Repo.get(OpenAgents.ProjectItems.ProjectItem, item.id)
+      refute OpenAgents.Repo.get(OpenAgents.ProjectFields.ProjectField, field.id)
+      # A project item is a reference to a canonical issue. Deleting the board
+      # must never delete the work it pointed at.
+      assert OpenAgents.Repo.get(OpenAgents.Issues.Issue, issue.id)
+    end
+
+    test "DELETE projectsV2/:number hides a private repository from a non-member", %{conn: conn} do
+      project = project_fixture(%{title: "Alice only", owner: "alice"})
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+      assert json_response(patch(conn, path, %{archived: true}), 200)
+
+      mallory = put_forge_api_token(build_conn(), "project-mallory-delete", "mallory")
+
+      assert delete(mallory, path) |> json_response(404) == %{"message" => "Not Found"}
+      assert Projects.get_project_by_number!(repository(), project.number)
+    end
+
+    test "an archived project stays out of the default list and returns on request", %{
+      conn: conn
+    } do
+      kept = project_fixture(%{title: "Kept", owner: "alice"})
+      retired = project_fixture(%{title: "Retired", owner: "alice"})
+
+      assert json_response(
+               patch(
+                 conn,
+                 ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{retired.number}",
+                 %{archived: true}
+               ),
+               200
+             )
+
+      assert %{"projects" => listed} =
+               conn
+               |> get(~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
+               |> json_response(200)
+
+      assert Enum.map(listed, & &1["number"]) == [kept.number]
+
+      assert %{"projects" => all} =
+               conn
+               |> get(~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2?archived=true")
+               |> json_response(200)
+
+      assert Enum.sort(Enum.map(all, & &1["number"])) == Enum.sort([kept.number, retired.number])
+    end
+  end
+
+  describe "field validation" do
+    test "POST fields rejects an unsupported data type", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{name: "Status", data_type: "rocket"}
+        )
+
+      assert %{"errors" => %{"data_type" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.list_project_fields(project) == []
+    end
+
+    test "POST fields rejects a duplicate name, ignoring case", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+
+      assert json_response(post(conn, path, %{name: "Status", data_type: "text"}), 201)
+
+      conn = post(conn, path, %{name: "status", data_type: "text"})
+
+      assert %{"errors" => %{"name" => [_ | _]}} = json_response(conn, 422)
+      assert length(Projects.list_project_fields(project)) == 1
+    end
+
+    test "POST fields allows the same name on a different project", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      other = project_fixture(%{title: "Other", owner: "alice"})
+
+      for board <- [project, other] do
+        assert json_response(
+                 post(
+                   conn,
+                   ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{board.number}/fields",
+                   %{name: "Status", data_type: "text"}
+                 ),
+                 201
+               )
+      end
+    end
+
+    test "POST fields requires options for a single select", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{name: "Status", data_type: "single_select"}
+        )
+
+      assert %{"errors" => %{"options" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.list_project_fields(project) == []
+    end
+
+    test "POST fields rejects duplicate option identifiers", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{name: "Status", data_type: "single_select", options: %{values: ["Todo", "Todo"]}}
+        )
+
+      assert %{"errors" => %{"options" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.list_project_fields(project) == []
+    end
+
+    test "POST fields keeps explicit option identifiers alongside their names", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{
+            name: "Status",
+            data_type: "single_select",
+            options: %{
+              values: [%{id: "todo", name: "To do"}, %{id: "done", name: "Done"}]
+            }
+          }
+        )
+
+      assert %{"fields" => [%{"options" => options}]} = json_response(conn, 201)
+
+      assert options == %{
+               "values" => [
+                 %{"id" => "todo", "name" => "To do"},
+                 %{"id" => "done", "name" => "Done"}
+               ]
+             }
+    end
+
+    test "POST fields rejects options on a data type that carries none", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          %{name: "Points", data_type: "number", options: %{values: ["1", "2"]}}
+        )
+
+      assert %{"errors" => %{"options" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.list_project_fields(project) == []
+    end
+  end
+
+  describe "update_field" do
+    setup do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      field =
+        project_field_fixture(%{
+          project_id: project.id,
+          name: "Status",
+          data_type: "single_select",
+          options: %{"values" => ["Todo", "Done"]}
+        })
+
+      %{project: project, field: field}
+    end
+
+    test "PATCH fields/:field_id renames a field and rewrites stored item values", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      item = project_item_fixture(%{project_id: project.id, values: %{"Status" => "Todo"}})
+
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          %{name: "Stage"}
+        )
+
+      assert %{"fields" => [%{"name" => "Stage", "id" => id}]} = json_response(conn, 200)
+      assert id == field.id
+      assert Projects.get_project_item!(project, item.id).values == %{"Stage" => "Todo"}
+    end
+
+    test "PATCH fields/:field_id refuses to change the data type", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          %{data_type: "text"}
+        )
+
+      assert %{"errors" => %{"data_type" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.get_project_field!(project, field.id).data_type == "single_select"
+    end
+
+    test "PATCH fields/:field_id adds an option", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          %{options: %{values: ["Todo", "In progress", "Done"]}}
+        )
+
+      assert %{"fields" => [%{"options" => %{"values" => values}}]} = json_response(conn, 200)
+      assert values == ["Todo", "In progress", "Done"]
+    end
+
+    test "PATCH fields/:field_id refuses to remove an option items still carry", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      item = project_item_fixture(%{project_id: project.id, values: %{"Status" => "Todo"}})
+
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          %{options: %{values: ["Done"]}}
+        )
+
+      assert %{"errors" => %{"options" => [message]}} = json_response(conn, 422)
+      assert message =~ "Todo"
+
+      assert Projects.get_project_field!(project, field.id).options == %{
+               "values" => ["Todo", "Done"]
+             }
+
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Todo"}
+    end
+
+    test "PATCH fields/:field_id refuses a name another field already carries", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      project_field_fixture(%{project_id: project.id, name: "Priority", data_type: "text"})
+
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          %{name: "Priority"}
+        )
+
+      assert %{"errors" => %{"name" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.get_project_field!(project, field.id).name == "Status"
+    end
+
+    test "PATCH fields/:field_id returns 404 for a field on another project", %{
+      conn: conn,
+      field: field
+    } do
+      other = project_fixture(%{title: "Other", owner: "alice"})
+
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{other.number}/fields/#{field.id}",
+          %{name: "Stage"}
+        )
+
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
+    end
+
+    test "PATCH fields/:field_id hides a private repository from a non-member", %{
+      project: project,
+      field: field
+    } do
+      mallory = put_forge_api_token(build_conn(), "project-mallory-field", "mallory")
+
+      assert patch(
+               mallory,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+               %{name: "Mine now"}
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert Projects.get_project_field!(project, field.id).name == "Status"
+    end
+  end
+
+  describe "delete_field" do
+    setup do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      field =
+        project_field_fixture(%{
+          project_id: project.id,
+          name: "Status",
+          data_type: "single_select",
+          options: %{"values" => ["Todo", "Done"]}
+        })
+
+      %{project: project, field: field}
+    end
+
+    test "DELETE fields/:field_id removes a field no item carries", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      conn =
+        delete(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
+        )
+
+      assert response(conn, 204) == ""
+      assert Projects.list_project_fields(project) == []
+    end
+
+    test "DELETE fields/:field_id refuses a field items still carry", %{
+      conn: conn,
+      project: project,
+      field: field
+    } do
+      item = project_item_fixture(%{project_id: project.id, values: %{"Status" => "Todo"}})
+
+      conn =
+        delete(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
+        )
+
+      assert %{"errors" => %{"name" => [message]}} = json_response(conn, 422)
+      assert message =~ "1"
+      assert Projects.get_project_field!(project, field.id)
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Todo"}
+    end
+
+    test "DELETE fields/:field_id hides a private repository from a non-member", %{
+      project: project,
+      field: field
+    } do
+      mallory = put_forge_api_token(build_conn(), "project-mallory-field-delete", "mallory")
+
+      assert delete(
+               mallory,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert Projects.get_project_field!(project, field.id)
+    end
+  end
+
+  describe "item values against stored fields" do
+    setup do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      {:ok, issue} = create_issue(%{title: "Tracked"})
+
+      project_field_fixture(%{
+        project_id: project.id,
+        name: "Status",
+        data_type: "single_select",
+        options: %{"values" => ["Todo", "Done"]}
+      })
+
+      project_field_fixture(%{project_id: project.id, name: "Points", data_type: "number"})
+      project_field_fixture(%{project_id: project.id, name: "Due", data_type: "date"})
+
+      %{project: project, issue: issue}
+    end
+
+    test "POST items accepts a value a field declares", %{
+      conn: conn,
+      project: project,
+      issue: issue
+    } do
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{
+            issue_number: issue.number,
+            values: %{"Status" => "Done", "Points" => 3, "Due" => "2026-09-01"}
+          }
+        )
+
+      assert %{"items" => [%{"values" => values}]} = json_response(conn, 201)
+      assert values == %{"Status" => "Done", "Points" => 3, "Due" => "2026-09-01"}
+    end
+
+    test "POST items rejects a value outside a single select's options", %{
+      conn: conn,
+      project: project,
+      issue: issue
+    } do
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue_number: issue.number, values: %{"Status" => "Sideways"}}
+        )
+
+      assert %{"errors" => %{"values" => [message]}} = json_response(conn, 422)
+      assert message =~ "Status"
+      assert Projects.list_project_items(project) == []
+    end
+
+    test "POST items rejects a non-numeric number and a non-ISO date", %{
+      conn: conn,
+      project: project,
+      issue: issue
+    } do
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
+
+      assert %{"errors" => %{"values" => [_ | _]}} =
+               conn
+               |> post(path, %{issue_number: issue.number, values: %{"Points" => "many"}})
+               |> json_response(422)
+
+      assert %{"errors" => %{"values" => [_ | _]}} =
+               conn
+               |> post(path, %{issue_number: issue.number, values: %{"Due" => "next Tuesday"}})
+               |> json_response(422)
+
+      assert Projects.list_project_items(project) == []
+    end
+
+    test "POST items keeps a value for a field the project has not declared", %{
+      conn: conn,
+      project: project,
+      issue: issue
+    } do
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue_number: issue.number, values: %{"Squad" => "Platform"}}
+        )
+
+      assert %{"items" => [%{"values" => %{"Squad" => "Platform"}}]} = json_response(conn, 201)
+    end
+
+    test "PATCH items/:item_id rejects a value outside a single select's options", %{
+      conn: conn,
+      project: project,
+      issue: issue
+    } do
+      item =
+        project_item_fixture(%{
+          project_id: project.id,
+          issue_id: issue.id,
+          values: %{"Status" => "Todo"}
+        })
+
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          %{values: %{"Status" => "Sideways"}}
+        )
+
+      assert %{"errors" => %{"values" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Todo"}
     end
   end
 

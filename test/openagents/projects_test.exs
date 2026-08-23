@@ -27,11 +27,11 @@ defmodule OpenAgents.ProjectsTest do
     end
 
     test "create_project/1 with valid data creates a project" do
-      valid_attrs = %{owner: "some owner", state: "some state", title: "some title", number: 42}
+      valid_attrs = %{owner: "some owner", state: "open", title: "some title", number: 42}
 
       assert {:ok, %Project{} = project} = Projects.create_project(repository(), valid_attrs)
       assert project.owner == "some owner"
-      assert project.state == "some state"
+      assert project.state == "open"
       assert project.title == "some title"
       assert project.number == 42
     end
@@ -45,14 +45,14 @@ defmodule OpenAgents.ProjectsTest do
 
       update_attrs = %{
         owner: "some updated owner",
-        state: "some updated state",
+        state: "closed",
         title: "some updated title",
         number: 43
       }
 
       assert {:ok, %Project{} = project} = Projects.update_project(project, update_attrs)
       assert project.owner == "some updated owner"
-      assert project.state == "some updated state"
+      assert project.state == "closed"
       assert project.title == "some updated title"
       assert project.number == 43
     end
@@ -468,14 +468,14 @@ defmodule OpenAgents.ProjectsTest do
       {:ok, mine} =
         Projects.create_project_field(%{
           name: "Status",
-          data_type: "single_select",
+          data_type: "text",
           project_id: project.id
         })
 
       {:ok, _theirs} =
         Projects.create_project_field(%{
           name: "Status",
-          data_type: "single_select",
+          data_type: "text",
           project_id: other.id
         })
 
@@ -512,6 +512,159 @@ defmodule OpenAgents.ProjectsTest do
                data_type: ["can't be blank"],
                project_id: ["can't be blank"]
              } = errors_on(changeset)
+    end
+  end
+
+  describe "project lifecycle" do
+    import OpenAgents.ProjectsFixtures
+
+    alias OpenAgents.Projects.Project
+
+    test "create_project/2 refuses a state outside the lifecycle" do
+      assert {:error, changeset} =
+               Projects.create_project(repository(), %{
+                 title: "Roadmap",
+                 owner: "OpenAgents",
+                 state: "sideways"
+               })
+
+      assert %{state: ["is invalid"]} = errors_on(changeset)
+    end
+
+    test "the database refuses a state the changeset never produces" do
+      project = project_fixture(repository())
+
+      assert_raise Postgrex.Error, ~r/projects_state_check/, fn ->
+        OpenAgents.Repo.update_all(
+          from(p in Project, where: p.id == ^project.id),
+          set: [state: "sideways"]
+        )
+      end
+    end
+
+    test "archive_project/2 and restore_project/2 move a project in and out of the archive" do
+      project = project_fixture(repository(), %{title: "Roadmap"})
+
+      assert {:ok, archived} = Projects.archive_project(project, nil)
+      assert archived.archived_at
+      assert Project.archived?(archived)
+      # Archiving is orthogonal to open and closed: a board is retired without
+      # claiming the work it tracked is finished.
+      assert archived.state == project.state
+
+      assert {:ok, restored} = Projects.restore_project(archived, nil)
+      refute restored.archived_at
+      refute Project.archived?(restored)
+    end
+
+    test "archiving and restoring append actor-attributed activity" do
+      user = repository_user_fixture("archivist")
+      project = project_fixture(repository(), %{title: "Roadmap"})
+
+      {:ok, archived} = Projects.archive_project(project, user)
+      {:ok, _restored} = Projects.restore_project(archived, user)
+
+      {notes, _total} = Projects.list_project_notes_page(project, kind: "activity")
+      bodies = Enum.map(notes, & &1.body)
+
+      assert Enum.any?(bodies, &(&1 =~ "Archived the project."))
+      assert Enum.any?(bodies, &(&1 =~ "Restored the project from the archive."))
+      assert Enum.all?(notes, &(&1.author_user_id == user.id))
+    end
+
+    test "list_projects/2 excludes archived projects unless asked" do
+      kept = project_fixture(repository(), %{title: "Kept"})
+      retired = project_fixture(repository(), %{title: "Retired"})
+      {:ok, _} = Projects.archive_project(retired, nil)
+
+      assert Enum.map(Projects.list_projects(repository()), & &1.id) == [kept.id]
+
+      assert repository()
+             |> Projects.list_projects(archived: true)
+             |> Enum.map(& &1.id)
+             |> Enum.sort() == Enum.sort([kept.id, retired.id])
+    end
+  end
+
+  describe "project field lifecycle" do
+    import OpenAgents.ProjectItemsFixtures
+
+    setup do
+      {:ok, project} =
+        Projects.create_project(repository(), %{title: "Roadmap", owner: "OpenAgents"})
+
+      %{project: project}
+    end
+
+    test "create_project_field/1 refuses a duplicate name on the same project", %{
+      project: project
+    } do
+      attrs = %{"project_id" => project.id, "name" => "Status", "data_type" => "text"}
+
+      assert {:ok, _field} = Projects.create_project_field(attrs)
+
+      assert {:error, changeset} =
+               Projects.create_project_field(%{attrs | "name" => "STATUS"})
+
+      assert %{name: [_ | _]} = errors_on(changeset)
+    end
+
+    test "create_project_field/1 refuses an unsupported data type", %{project: project} do
+      assert {:error, changeset} =
+               Projects.create_project_field(%{
+                 "project_id" => project.id,
+                 "name" => "Status",
+                 "data_type" => "rocket"
+               })
+
+      assert %{data_type: [_ | _]} = errors_on(changeset)
+    end
+
+    test "update_project_field/3 rewrites the stored key on every item", %{project: project} do
+      {:ok, field} =
+        Projects.create_project_field(%{
+          "project_id" => project.id,
+          "name" => "Status",
+          "data_type" => "single_select",
+          "options" => %{"values" => ["Todo", "Done"]}
+        })
+
+      one =
+        project_item_fixture(repository(), %{
+          project_id: project.id,
+          values: %{"Status" => "Todo"}
+        })
+
+      two =
+        project_item_fixture(repository(), %{
+          project_id: project.id,
+          values: %{"Status" => "Done", "Squad" => "Platform"}
+        })
+
+      assert {:ok, renamed} = Projects.update_project_field(project, field, %{"name" => "Stage"})
+      assert renamed.name == "Stage"
+
+      assert Projects.get_project_item!(project, one.id).values == %{"Stage" => "Todo"}
+
+      assert Projects.get_project_item!(project, two.id).values == %{
+               "Stage" => "Done",
+               "Squad" => "Platform"
+             }
+    end
+
+    test "delete_project_field/2 preserves a field an item still carries", %{project: project} do
+      {:ok, field} =
+        Projects.create_project_field(%{
+          "project_id" => project.id,
+          "name" => "Status",
+          "data_type" => "text"
+        })
+
+      project_item_fixture(repository(), %{project_id: project.id, values: %{"Status" => "Todo"}})
+
+      assert {:error, changeset} = Projects.delete_project_field(project, field)
+      assert %{name: [_ | _]} = errors_on(changeset)
+      assert Projects.get_project_field!(project, field.id)
     end
   end
 

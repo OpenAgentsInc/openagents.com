@@ -98,17 +98,15 @@ defmodule OpenAgents.ProjectFieldsTest do
       refute Map.has_key?(errors_on(changeset), :name)
     end
 
-    test "create_project_field/1 does not declare a foreign key constraint" do
-      # `project_fields.project_id` references `projects` in the database but the
-      # changeset never calls `foreign_key_constraint/2`, so a dangling id blows
-      # up rather than returning an error changeset. Characterised, not endorsed.
-      assert_raise Ecto.ConstraintError, fn ->
-        ProjectFields.create_project_field(%{
-          name: "Status",
-          data_type: "text",
-          project_id: 2_147_483_000
-        })
-      end
+    test "create_project_field/1 reports a dangling project as an error changeset" do
+      assert {:error, changeset} =
+               ProjectFields.create_project_field(%{
+                 name: "Status",
+                 data_type: "text",
+                 project_id: 2_147_483_000
+               })
+
+      assert %{project_id: ["does not exist"]} = errors_on(changeset)
     end
 
     test "update_project_field/2 with valid data updates the project_field" do
@@ -116,7 +114,7 @@ defmodule OpenAgents.ProjectFieldsTest do
 
       update_attrs = %{
         name: "some updated name",
-        data_type: "some updated data_type",
+        data_type: "single_select",
         options: %{"values" => ["a"]}
       }
 
@@ -124,8 +122,17 @@ defmodule OpenAgents.ProjectFieldsTest do
                ProjectFields.update_project_field(project_field, update_attrs)
 
       assert project_field.name == "some updated name"
-      assert project_field.data_type == "some updated data_type"
+      assert project_field.data_type == "single_select"
       assert project_field.options == %{"values" => ["a"]}
+    end
+
+    test "update_project_field/2 refuses an unsupported data type" do
+      project_field = project_field_fixture(repository())
+
+      assert {:error, changeset} =
+               ProjectFields.update_project_field(project_field, %{data_type: "rocket"})
+
+      assert %{data_type: ["is invalid"]} = errors_on(changeset)
     end
 
     test "update_project_field/2 can move a field to another project" do

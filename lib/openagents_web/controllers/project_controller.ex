@@ -5,9 +5,16 @@ defmodule OpenAgentsWeb.ProjectController do
   alias OpenAgents.Projects.Project
   alias OpenAgents.Repositories
 
-  def index(conn, %{"owner" => owner, "repo" => repo}) do
+  @doc """
+  The repository's projects.
+
+  Archived projects are out of the working set, so the list leaves them out
+  until `archived=true` asks for them.
+  """
+  def index(conn, %{"owner" => owner, "repo" => repo} = params) do
     repository = visible_repository!(conn, owner, repo)
-    render(conn, :index, projects: Projects.list_projects(repository))
+    projects = Projects.list_projects(repository, archived: params["archived"] == "true")
+    render(conn, :index, projects: projects)
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
@@ -44,11 +51,15 @@ defmodule OpenAgentsWeb.ProjectController do
   end
 
   @doc """
-  Updates the title, description, or state of one project.
+  Updates the title, description, state, or archive standing of one project.
 
   Authority is a writable membership in the repository the path names, the same
-  boundary every other project write reads. `description` is Markdown, and
-  `state` is `open` or `closed`.
+  boundary every other project write reads. `description` is Markdown, `state`
+  is `open` or `closed`, and `archived` is a boolean.
+
+  Closing and reopening move `state`. Archiving is a separate axis: a closed
+  project says the work reached an end, an archived project says the board left
+  the working set, whatever became of the work.
   """
   def update(
         conn,
@@ -60,7 +71,7 @@ defmodule OpenAgentsWeb.ProjectController do
       ) do
     repository = writable_repository!(conn, owner, repo)
     project = Projects.get_project_by_number!(repository, parse_id!(project_number))
-    attrs = Map.take(params, ["title", "description", "state"])
+    attrs = params |> Map.take(["title", "description", "state", "archived"]) |> cast_archived()
 
     cond do
       attrs == %{} ->
@@ -79,6 +90,38 @@ defmodule OpenAgentsWeb.ProjectController do
             |> put_status(:unprocessable_entity)
             |> render(:error, changeset: changeset)
         end
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  @doc """
+  Deletes one project, its fields, its items, and its item events.
+
+  The policy is two keys, not one: a writable membership in the repository, and
+  a project already in the archive. The board surface pairs its delete control
+  with a confirmation prompt; an API caller has no prompt, so archiving is the
+  deliberate step that stands in for one. The referenced issues are untouched —
+  an item points at canonical work rather than owning it.
+  """
+  def delete(conn, %{
+        "owner" => owner,
+        "repo" => repo,
+        "project_number" => project_number
+      }) do
+    repository = writable_repository!(conn, owner, repo)
+    project = Projects.get_project_by_number!(repository, parse_id!(project_number))
+
+    if Project.archived?(project) do
+      case Projects.delete_project(project) do
+        {:ok, %Project{}} ->
+          send_resp(conn, :no_content, "")
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          unprocessable_changeset(conn, changeset)
+      end
+    else
+      unprocessable(conn, %{archived: ["the project must be archived before it deletes"]})
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -198,8 +241,15 @@ defmodule OpenAgentsWeb.ProjectController do
     end
   end
 
-  defp valid_state?(%{"state" => state}), do: state in ["open", "closed"]
+  defp valid_state?(%{"state" => state}), do: state in Project.states()
   defp valid_state?(_attrs), do: true
+
+  # A JSON client sends a boolean; a form-encoded client sends the word. Both
+  # mean the same thing, and anything else stays invalid so the context can say
+  # so.
+  defp cast_archived(%{"archived" => "true"} = attrs), do: %{attrs | "archived" => true}
+  defp cast_archived(%{"archived" => "false"} = attrs), do: %{attrs | "archived" => false}
+  defp cast_archived(attrs), do: attrs
 
   def items(
         conn,
@@ -364,7 +414,7 @@ defmodule OpenAgentsWeb.ProjectController do
       |> Map.take(["name", "data_type", "options"])
       |> Map.put("project_id", project.id)
 
-    case Projects.create_project_field(attrs) do
+    case Projects.create_project_field(attrs, conn.assigns.current_user) do
       {:ok, field} ->
         conn
         |> put_status(:created)
@@ -374,6 +424,71 @@ defmodule OpenAgentsWeb.ProjectController do
         conn
         |> put_status(:unprocessable_entity)
         |> render(:error, changeset: changeset)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  @doc """
+  Updates one field of a project.
+
+  A rename carries the values with it: the field name is the key an item stores
+  its value under, so the rename rewrites that key on every item of the project
+  in the same transaction. The data type never changes, and an option items
+  still carry cannot be dropped.
+  """
+  def update_field(
+        conn,
+        %{
+          "owner" => owner,
+          "repo" => repo,
+          "project_number" => project_number,
+          "field_id" => field_id
+        } = params
+      ) do
+    repository = writable_repository!(conn, owner, repo)
+    project = Projects.get_project_by_number!(repository, parse_id!(project_number))
+    field = Projects.get_project_field!(project, parse_id!(field_id))
+    attrs = Map.take(params, ["name", "data_type", "options"])
+
+    if attrs == %{} do
+      unprocessable(conn, %{base: ["no updatable field was given"]})
+    else
+      case Projects.update_project_field(project, field, attrs, conn.assigns.current_user) do
+        {:ok, field} ->
+          render(conn, :fields, fields: [field])
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          unprocessable_changeset(conn, changeset)
+      end
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  @doc """
+  Removes one field of a project.
+
+  A field whose values items still carry is preserved and the request returns
+  `422`: deleting it would leave those values keyed to a column nothing
+  declares, which is data loss reported as success.
+  """
+  def delete_field(conn, %{
+        "owner" => owner,
+        "repo" => repo,
+        "project_number" => project_number,
+        "field_id" => field_id
+      }) do
+    repository = writable_repository!(conn, owner, repo)
+    project = Projects.get_project_by_number!(repository, parse_id!(project_number))
+    field = Projects.get_project_field!(project, parse_id!(field_id))
+
+    case Projects.delete_project_field(project, field, conn.assigns.current_user) do
+      {:ok, _field} ->
+        send_resp(conn, :no_content, "")
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        unprocessable_changeset(conn, changeset)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)

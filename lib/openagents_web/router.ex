@@ -686,6 +686,16 @@ defmodule OpenAgentsWeb.Router do
     delete "/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id",
            ProjectController,
            :delete_note
+
+    patch "/repos/:owner/:repo/projectsV2/:project_number/fields/:field_id",
+          ProjectController,
+          :update_field
+
+    delete "/repos/:owner/:repo/projectsV2/:project_number/fields/:field_id",
+           ProjectController,
+           :delete_field
+
+    delete "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :delete
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

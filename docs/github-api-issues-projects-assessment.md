@@ -33,18 +33,78 @@ locks, dependencies, sub-issues, and suggestion APIs are not implemented.
 | Method | Path |
 | --- | --- |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2` |
-| `GET, PATCH` | `/repos/{owner}/{repo}/projectsV2/{project_number}` |
+| `GET, PATCH, DELETE` | `/repos/{owner}/{repo}/projectsV2/{project_number}` |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/notes` |
 | `PATCH, DELETE` | `/repos/{owner}/{repo}/projectsV2/{project_number}/notes/{note_id}` |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items` |
 | `PATCH` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}` |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/fields` |
+| `PATCH, DELETE` | `/repos/{owner}/{repo}/projectsV2/{project_number}/fields/{field_id}` |
 | `GET` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events` |
 
 The project-creation endpoint is an OpenAgents extension because the comparable
 GitHub Projects V2 creation workflow is not supplied by the assessed REST
-surface. Project delete, item delete/read, field mutation, views, ordering,
-draft items, and organization projects remain unimplemented.
+surface. Item delete and read, field read by id, views, ordering, draft items,
+and organization projects remain unimplemented.
+
+### The project lifecycle
+
+A project moves along two independent axes:
+
+- `state` is `open` or `closed`, and `PATCH` moves it. Closing says the work the
+  board tracked reached an end; reopening says it did not.
+- `archived` is a boolean, and `PATCH` moves it too. Archiving says the board
+  left the working set, whatever became of the work. It is reversible, and it
+  records `archived_at`.
+
+Keeping the archive off `state` means every reader of `open` and `closed` — the
+API, the board, the workspace tabs — keeps reading the two values it always
+read. A project object reports both `archived` and `archived_at`, so a client
+never infers one axis from the other.
+
+`GET /repos/{owner}/{repo}/projectsV2` leaves archived projects out. Pass
+`archived=true` to include them.
+
+`DELETE` on a project needs two keys, not one: a writable membership in the
+repository, and a project already in the archive. A project that is not archived
+returns `422` and is preserved. The board pairs its delete control with a
+confirmation prompt; an API caller has no prompt, so archiving is the deliberate
+step that stands in for one. Deleting removes the project's fields and items,
+never the issues those items referenced, and never the append-only item event
+history.
+
+### Project fields
+
+A field declares one stored column of a board. Its `data_type` is `text`,
+`number`, `date`, `single_select`, or the OpenAgents `promise_state`, checked in
+the changeset and again by a database constraint.
+
+- Names are unique within a project, compared without case. The name is the key
+  an item stores its value under, so two fields sharing one would make a stored
+  value ambiguous.
+- `single_select` and `promise_state` carry a non-empty `options.values` list.
+  Every other data type carries no options.
+- An option is either a name, where the name is its identifier, or an object
+  with a string `id` and `name`, where the identifier survives a relabel. An
+  item stores the identifier.
+- A `PATCH` rename rewrites the stored key on every item of the project in the
+  same transaction, so a rename never empties the column.
+- A `PATCH` never changes `data_type`. Values already stored were written
+  against the old type, and reinterpreting them is a destructive change wearing
+  an edit's clothes.
+- A `PATCH` may add options. Dropping an option that items still carry returns
+  `422` and names the identifiers still in use.
+- A `DELETE` on a field that items still carry returns `422` and preserves both
+  the field and the values.
+
+Item values are checked against the fields a project declares: a `single_select`
+value must name one of the field's options, a `number` must be a number, and a
+`date` must be an ISO 8601 date. A value under a key no field declares passes
+through untouched, so a board can carry a value written before its field
+existed.
+
+Project lifecycle and field changes append an actor-attributed activity entry,
+readable at `.../notes?kind=activity`.
 
 ### Differences from GitHub Projects V2
 
@@ -115,9 +175,14 @@ These are current measured behaviors:
 - Project list, show, update, item, update-item, field, and note actions resolve
   the repository from the route. Public repositories allow anonymous reads.
   Private reads and every write require membership in that repository.
-- A project update accepts only `title`, `description`, and `state`, and rejects
-  a `state` other than `open` or `closed` with `422`. Repository and owner
-  overrides in the request body are dropped.
+- A project update accepts only `title`, `description`, `state`, and `archived`,
+  and rejects a `state` other than `open` or `closed`, or a non-boolean
+  `archived`, with `422`. Repository and owner overrides in the request body are
+  dropped.
+- Project delete, field update, and field delete resolve the repository from the
+  route and require a writable membership in it, the same boundary every other
+  project write reads. A non-member receives `404` for all three, so a private
+  repository's projects and fields stay indistinguishable from missing ones.
 - A project note stores both its project and its repository, and reads carry both
   in the query, so a note cannot be read or written across a repository
   boundary. Editing or deleting a note requires authorship: another member with

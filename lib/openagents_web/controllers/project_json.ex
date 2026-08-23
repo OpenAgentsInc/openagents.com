@@ -63,6 +63,12 @@ defmodule OpenAgentsWeb.ProjectJSON do
       description: project.description,
       owner: project.owner,
       state: project.state,
+      # `archived` is orthogonal to `state`: a closed project says the work
+      # reached an end, an archived project says the board left the working
+      # set. Both are reported so a client never has to infer one from the
+      # other.
+      archived: OpenAgents.Projects.Project.archived?(project),
+      archived_at: project.archived_at,
       created_at: project.inserted_at,
       updated_at: project.updated_at
     }

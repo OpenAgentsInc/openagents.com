@@ -1235,6 +1235,8 @@ GCS checkpoints, recoverable commands); Firecracker strong class, GKE Agent
 Sandbox standard class; first-class agent context — bake exact API usage into
 agents instead of letting them traverse blindly. Platform ambition restated:
 agentic Slack plus agentic GitHub plus agentic Linear in one open-source UI.
+The [Ox Alpha provider limit snapshot](2026-08-23-ox-alpha-provider-limits.md)
+records the verified capacity and the remaining authenticated probes.
 
 ### Batch synthesis and integration notes
 

@@ -110,6 +110,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/merge" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue" =>
         :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/abort" =>

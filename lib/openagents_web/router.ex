@@ -453,6 +453,7 @@ defmodule OpenAgentsWeb.Router do
     post "/repos/:owner/:repo/stacks", StackController, :create
     post "/repos/:owner/:repo/stacks/:stack_number/append", StackController, :append
     post "/repos/:owner/:repo/stacks/:stack_number/rebase", StackController, :rebase
+    post "/repos/:owner/:repo/stacks/:stack_number/merge", StackController, :merge
 
     post "/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue",
          StackController,

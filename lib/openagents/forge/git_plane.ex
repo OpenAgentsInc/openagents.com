@@ -56,6 +56,25 @@ defmodule OpenAgents.Forge.GitPlane do
     end
   end
 
+  @doc "The tree OID of a commit."
+  def tree_of(repo, rev) do
+    with :ok <- check_rev(rev),
+         :ok <- Sync.ensure_fresh(repo) do
+      case git(repo, ["rev-parse", "--verify", "--quiet", "--end-of-options", rev <> "^{tree}"]) do
+        {output, 0} -> {:ok, String.trim(output)}
+        _other -> {:error, :not_found}
+      end
+    end
+  end
+
+  @doc "The author identity of a commit: name, email, and strict ISO date."
+  def commit_author(repo, rev) do
+    with :ok <- check_rev(rev),
+         :ok <- Sync.ensure_fresh(repo) do
+      author_of(Repos.bare_path(repo), rev)
+    end
+  end
+
   @doc "The parent commit OIDs of a commit, in order (empty for a root commit)."
   def parents(repo, rev) do
     with :ok <- check_rev(rev),
@@ -280,6 +299,53 @@ defmodule OpenAgents.Forge.GitPlane do
       _other ->
         {:error, :not_found}
     end
+  end
+
+  @doc """
+  Create one commit object for `tree` with the given `parents` and `message`,
+  without moving any ref.
+
+  The new commit is unreachable until a ref moves to it through
+  `batch_update_refs/3`. Pass `author: %{name: ..., email: ..., date: ...}`
+  to preserve an original author; the forge service identity is both the
+  default author and always the committer, and the commit is unsigned
+  (`docs/stacked-prs.md` section 12.5).
+  """
+  def commit_tree(repo, tree, parents, message, opts \\ [])
+      when is_list(parents) and parents != [] and is_binary(message) do
+    with :ok <- check_oid(tree),
+         :ok <- check_parent_oids(parents),
+         :ok <- Sync.ensure_fresh(repo) do
+      path = Repos.bare_path(repo)
+      author = Keyword.get(opts, :author) || forge_author()
+
+      env = [
+        {"GIT_AUTHOR_NAME", author.name},
+        {"GIT_AUTHOR_EMAIL", author.email},
+        {"GIT_AUTHOR_DATE", author.date},
+        {"GIT_COMMITTER_NAME", @committer_name},
+        {"GIT_COMMITTER_EMAIL", @committer_email}
+      ]
+
+      parent_args = Enum.flat_map(parents, &["-p", &1])
+
+      case git_with_stdin(path, ["commit-tree", tree | parent_args], message, env) do
+        {output, 0} -> {:ok, String.trim(output)}
+        _other -> {:error, :commit_tree_failed}
+      end
+    end
+  end
+
+  defp check_parent_oids(parents) do
+    if Enum.all?(parents, &valid_oid?/1), do: :ok, else: {:error, :not_found}
+  end
+
+  defp forge_author do
+    %{
+      name: @committer_name,
+      email: @committer_email,
+      date: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
   end
 
   ## Retention refs

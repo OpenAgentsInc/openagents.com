@@ -3,10 +3,11 @@ defmodule OpenAgents.Stacks.OperationWorker do
   Claims and executes durable stack operations.
 
   The worker polls `stack_operations` for pending rows (and running rows
-  whose lease expired, which recovers a crashed worker) and executes them
-  through `OpenAgents.Stacks.Restack`. Claiming uses `FOR UPDATE SKIP
-  LOCKED`, so multiple nodes never execute the same operation twice inside
-  one lease window.
+  whose lease expired, which recovers a crashed worker) and dispatches
+  each row by kind: rebases run through `OpenAgents.Stacks.Restack` and
+  merges through `OpenAgents.Stacks.Merge`. Claiming uses `FOR UPDATE
+  SKIP LOCKED`, so multiple nodes never execute the same operation twice
+  inside one lease window.
   """
   use GenServer
 
@@ -16,6 +17,7 @@ defmodule OpenAgents.Stacks.OperationWorker do
 
   alias OpenAgents.OperationalLog
   alias OpenAgents.Repo
+  alias OpenAgents.Stacks.Merge
   alias OpenAgents.Stacks.Operation
   alias OpenAgents.Stacks.Restack
 
@@ -30,7 +32,7 @@ defmodule OpenAgents.Stacks.OperationWorker do
 
   def drain(server \\ __MODULE__), do: GenServer.call(server, :drain, 30_000)
 
-  def run_once(executor \\ &Restack.execute/1) when is_function(executor, 1) do
+  def run_once(executor \\ &execute/1) when is_function(executor, 1) do
     case claim_next() do
       nil ->
         :idle
@@ -41,10 +43,14 @@ defmodule OpenAgents.Stacks.OperationWorker do
     end
   end
 
+  @doc "Dispatches one claimed operation to its kind's executor."
+  def execute(%Operation{kind: "rebase"} = operation), do: Restack.execute(operation)
+  def execute(%Operation{kind: "merge"} = operation), do: Merge.execute(operation)
+
   @impl true
   def init(options) do
     state = %{
-      executor: Keyword.get(options, :executor, &Restack.execute/1),
+      executor: Keyword.get(options, :executor, &execute/1),
       poll_interval_ms: Keyword.get(options, :poll_interval_ms, poll_interval_ms())
     }
 

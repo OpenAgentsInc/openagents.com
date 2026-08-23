@@ -414,6 +414,109 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
+  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/merge" do
+    test "accepts a merge, exposes the operation, and replays retries", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-merge", repository)
+
+      assert %{"number" => 1} =
+               conn
+               |> put_req_header("idempotency-key", "merge-create-1")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1]})
+               |> json_response(201)
+
+      body = %{pull_request_number: pr_1, merge_method: "merge"}
+
+      merge_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-1")
+        |> post("#{path(repository)}/1/merge", body)
+
+      assert %{
+               "id" => operation_id,
+               "kind" => "merge",
+               "state" => "pending",
+               "replayed" => false
+             } = json_response(merge_conn, 202)
+
+      assert %{"health" => "operation_in_progress"} =
+               json_response(get(conn, "#{path(repository)}/1"), 200)
+
+      replay_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-1")
+        |> post("#{path(repository)}/1/merge", body)
+
+      assert %{"id" => ^operation_id, "replayed" => true} = json_response(replay_conn, 202)
+
+      show_conn = get(conn, "#{path(repository)}/1/operations/#{operation_id}")
+      assert %{"id" => ^operation_id, "state" => "pending"} = json_response(show_conn, 200)
+    end
+
+    test "rejects a queue action, a stranger PR, and a bad method", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-merge-invalid", repository)
+
+      assert %{"number" => 1} =
+               conn
+               |> put_req_header("idempotency-key", "merge-invalid-create")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1]})
+               |> json_response(201)
+
+      queue_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-queue-1")
+        |> post("#{path(repository)}/1/merge", %{
+          pull_request_number: pr_1,
+          merge_method: "merge",
+          merge_action: "queue"
+        })
+
+      assert %{"code" => "merge_queue_unavailable"} = json_response(queue_conn, 409)
+
+      stranger_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-stranger-1")
+        |> post("#{path(repository)}/1/merge", %{
+          pull_request_number: 999_999,
+          merge_method: "merge"
+        })
+
+      assert %{"code" => "pull_request_not_in_stack"} = json_response(stranger_conn, 422)
+
+      method_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-method-1")
+        |> post("#{path(repository)}/1/merge", %{
+          pull_request_number: pr_1,
+          merge_method: "octopus"
+        })
+
+      assert %{"code" => "invalid_request"} = json_response(method_conn, 422)
+    end
+
+    test "refuses a caller without write access", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-merge-outsider")
+
+      conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-forbidden-1")
+        |> post("#{path(repository)}/1/merge", %{
+          pull_request_number: pr_1,
+          merge_method: "merge"
+        })
+
+      assert json_response(conn, 403)
+    end
+  end
+
   describe "GET /api/v3/repos/:owner/:repo/stacks" do
     test "reads are public for a public repository", %{conn: conn} do
       repository = repository_fixture()

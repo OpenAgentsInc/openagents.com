@@ -13,7 +13,7 @@ defmodule OpenAgents.Stacks.StackEvent do
   @foreign_key_type :binary_id
   @timestamps_opts [type: :utc_datetime_usec]
 
-  @event_types ~w(pull_request_stack.created pull_request_stack.appended pull_request_stack.rebased pull_request.synchronize)
+  @event_types ~w(pull_request_stack.created pull_request_stack.appended pull_request_stack.rebased pull_request_stack.merged pull_request.synchronize)
 
   schema "pull_request_stack_events" do
     belongs_to :stack, OpenAgents.Stacks.Stack

@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.StackController do
 
   alias OpenAgents.Repositories
   alias OpenAgents.Stacks
+  alias OpenAgents.Stacks.Merge
   alias OpenAgents.Stacks.Restack
   alias OpenAgentsWeb.ControllerHelpers
 
@@ -63,6 +64,28 @@ defmodule OpenAgentsWeb.StackController do
     with {:ok, idempotency_key} <- idempotency_key(conn),
          {:ok, {operation, replay_state}} <-
            Restack.request_from_api(
+             repository,
+             ControllerHelpers.integer_param!(number),
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      conn
+      |> put_status(:accepted)
+      |> render(:operation, operation: operation, replay_state: replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def merge(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {operation, replay_state}} <-
+           Merge.request_from_api(
              repository,
              ControllerHelpers.integer_param!(number),
              params,
@@ -157,7 +180,8 @@ defmodule OpenAgentsWeb.StackController do
               :stack_not_open,
               :operation_in_progress,
               :operation_not_waiting,
-              :operation_not_abortable
+              :operation_not_abortable,
+              :merge_queue_unavailable
             ],
        do: conflict(conn, reason)
 
@@ -176,7 +200,8 @@ defmodule OpenAgentsWeb.StackController do
               :already_stacked,
               :not_stack_top,
               :resolution_not_found,
-              :resolution_parent_mismatch
+              :resolution_parent_mismatch,
+              :pull_request_not_in_stack
             ] do
     conn
     |> put_status(:unprocessable_entity)
@@ -209,6 +234,12 @@ defmodule OpenAgentsWeb.StackController do
   defp message(:operation_not_waiting), do: "The operation is not waiting for a resolution."
   defp message(:operation_not_abortable), do: "The operation can no longer be aborted."
   defp message(:resolution_not_found), do: "The resolution commit does not exist."
+
+  defp message(:merge_queue_unavailable),
+    do: "The merge queue is not available; use a direct merge."
+
+  defp message(:pull_request_not_in_stack),
+    do: "The pull request is not an active entry of this stack."
 
   defp message(:resolution_parent_mismatch),
     do: "The resolution commit does not build on the persisted parent."

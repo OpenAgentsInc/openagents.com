@@ -4,7 +4,9 @@ defmodule OpenAgents.Tools.WorkspaceBashTest do
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner, WorkspaceBash}
 
   setup do
-    base = Path.join(System.tmp_dir!(), "workspace-bash-#{System.unique_integer([:positive])}")
+    base =
+      Path.join(physical_tmp_dir(), "workspace-bash-#{System.unique_integer([:positive])}")
+
     root = Path.join(base, "workspace")
     snapshots = Path.join(base, "snapshots")
     File.mkdir_p!(root)
@@ -353,6 +355,30 @@ defmodule OpenAgents.Tools.WorkspaceBashTest do
     case System.cmd("kill", ["-0", os_pid], stderr_to_stdout: true) do
       {_output, 0} -> true
       {_output, _nonzero} -> false
+    end
+  end
+
+  # `pwd` reports the physical path, so an expectation built from
+  # `System.tmp_dir!/0` cannot be compared to it where the temporary directory
+  # is reached through a symlink. macOS resolves `/var` to `/private/var`; on
+  # Linux this walk is a no-op.
+  defp physical_tmp_dir do
+    System.tmp_dir!()
+    |> Path.expand()
+    |> Path.split()
+    |> Enum.reduce(&resolve_segment/2)
+  end
+
+  defp resolve_segment(segment, parent) do
+    joined = Path.join(parent, segment)
+
+    case :file.read_link(joined) do
+      {:ok, target} ->
+        target = List.to_string(target)
+        if Path.type(target) == :absolute, do: target, else: Path.expand(target, parent)
+
+      _not_a_symlink ->
+        joined
     end
   end
 end

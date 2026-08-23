@@ -3,6 +3,21 @@ defmodule OpenAgents.Capacity.Broker do
 
   @behaviour OpenAgents.Capacity.Evidence
 
+  @allowed_keys [
+    "id",
+    "logical",
+    "active_reservations",
+    "reported_free",
+    "queued",
+    "observed_limit",
+    "budget_limit",
+    "drain_limit",
+    "observed_at",
+    "estimated_wait_seconds",
+    "private",
+    "incident_drained"
+  ]
+
   @impl true
   def fetch(_viewer) do
     config = Application.get_env(:openagents, OpenAgents.Capacity, [])
@@ -50,23 +65,7 @@ defmodule OpenAgents.Capacity.Broker do
     id = Map.get(class, "id")
 
     if is_binary(id) do
-      allowed = [
-        "id",
-        "logical",
-        "active_reservations",
-        "reported_free",
-        "queued",
-        "observed_limit",
-        "budget_limit",
-        "drain_limit",
-        "observed_at",
-        "estimated_wait_seconds",
-        "private",
-        "incident_drained"
-      ]
-
-      {Map.take(class, allowed), id}
-      |> then(fn {safe, _id} -> [safe] end)
+      [Map.take(class, @allowed_keys)]
     else
       []
     end

@@ -213,6 +213,7 @@ A refusal returns schema `openagents.capacity_refusal.v1`:
 | `explicit_target_required` | `422` | The requirement needs an explicit connected-computer target |
 | `computer_not_found` | `404` | The named connected computer is not the caller's |
 | `quantity_unavailable` | `409` | Every otherwise admitted class lacks the requested quantity |
+| `incident_drained` | `503` | Every otherwise admitted class is drained for an incident |
 | `evidence_stale` | `503` | The only otherwise admitted classes carry stale evidence |
 | `evidence_unavailable` | `503` | No capacity evidence exists for any admitted class |
 

@@ -177,11 +177,11 @@ defmodule OpenAgents.Capacity do
       "error" => %{"code" => Atom.to_string(code), "detail" => detail}
     }
 
-  defp class_projection(catalog, :unavailable, _config),
-    do: unavailable_class(catalog, "evidence_unavailable")
+  defp class_projection(catalog, :unavailable, config),
+    do: unavailable_class(catalog, "evidence_unavailable", config)
 
-  defp class_projection(catalog, nil, _config),
-    do: unavailable_class(catalog, "evidence_unavailable")
+  defp class_projection(catalog, nil, config),
+    do: unavailable_class(catalog, "evidence_unavailable", config)
 
   defp class_projection(catalog, raw, config) when is_map(raw) do
     quantities = Math.quantities(catalog, raw, config)
@@ -227,11 +227,30 @@ defmodule OpenAgents.Capacity do
         "freshness" => freshness
       },
       "admits" => freshness == "fresh" and not incident_drained,
-      "refusal" => if(refusal_code, do: %{"code" => refusal_code}, else: nil)
+      "refusal" =>
+        case refusal_code do
+          "evidence_unavailable" ->
+            %{
+              "code" => refusal_code,
+              "detail" => "Capacity evidence is unavailable."
+            }
+
+          "evidence_stale" ->
+            %{"code" => refusal_code, "detail" => "Capacity evidence is stale."}
+
+          "incident_drained" ->
+            %{
+              "code" => refusal_code,
+              "detail" => "Capacity is temporarily drained for an incident."
+            }
+
+          nil ->
+            nil
+        end
     }
   end
 
-  defp unavailable_class(catalog, code) do
+  defp unavailable_class(catalog, code, config) do
     %{
       "id" => catalog["id"],
       "label" => catalog["label"],
@@ -254,31 +273,21 @@ defmodule OpenAgents.Capacity do
         "source" => if(catalog["id"] == "connected", do: "local", else: "broker"),
         "observed_at" => nil,
         "age_seconds" => nil,
-        "maximum_age_seconds" => Keyword.get(config(), :maximum_evidence_age_seconds, 120),
+        "maximum_age_seconds" => Keyword.get(config, :maximum_evidence_age_seconds, 120),
         "freshness" => "unavailable"
       },
       "admits" => false,
-      "refusal" => %{"code" => code}
+      "refusal" => %{
+        "code" => code,
+        "detail" => "Capacity evidence is unavailable."
+      }
     }
   end
 
   defp fetch_broker(config, viewer) do
     source = Keyword.get(config, :evidence_source, OpenAgents.Capacity.Broker)
 
-    result =
-      try do
-        Code.ensure_loaded(source)
-
-        cond do
-          function_exported?(source, :fetch, 1) -> source.fetch(viewer)
-          function_exported?(source, :read, 1) -> source.read(viewer)
-          true -> {:error, :evidence_unavailable}
-        end
-      rescue
-        _error -> {:error, :evidence_unavailable}
-      end
-
-    case result do
+    case source.fetch(viewer) do
       {:ok, %{"classes" => classes}} when is_list(classes) ->
         Enum.reduce(classes, %{}, fn raw, acc ->
           if is_map(raw) and is_binary(raw["id"]) do
@@ -288,10 +297,7 @@ defmodule OpenAgents.Capacity do
           end
         end)
 
-      classes when is_map(classes) ->
-        classes
-
-      _error ->
+      {:error, _reason} ->
         %{}
     end
   end

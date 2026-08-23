@@ -2,6 +2,7 @@ defmodule OpenAgents.CapacityTest do
   use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Capacity
+  alias OpenAgents.Capacity.Estimate
   alias OpenAgents.Capacity.Math
 
   setup do
@@ -89,7 +90,8 @@ defmodule OpenAgents.CapacityTest do
     assert strong["admits"] == false
     assert strong["quantities"]["allocatable"] == 0
     assert strong["refusal"]["code"] == "evidence_stale"
-    refute Enum.any?(projection["classes"], &(&1["id"] == "batch"))
+    assert strong["refusal"]["detail"] == "Capacity evidence is stale."
+    assert Enum.find(projection["classes"], &(&1["id"] == "batch")) == nil
   end
 
   test "returns a typed refusal and never includes broker-only sensitive fields" do
@@ -124,9 +126,15 @@ defmodule OpenAgents.CapacityTest do
 
     projection = Capacity.projection(%{id: Ecto.UUID.generate()})
     serialized = Jason.encode!(projection)
+    unavailable = Enum.find(projection["classes"], &(&1["id"] == "strong"))
 
     refute serialized =~ secret
     refute serialized =~ "project_id"
+
+    assert unavailable["refusal"] == %{
+             "code" => "evidence_unavailable",
+             "detail" => "Capacity evidence is unavailable."
+           }
 
     assert projection["classes"] |> Enum.find(&(&1["id"] == "standard")) |> Map.get("admits") ==
              true
@@ -141,6 +149,48 @@ defmodule OpenAgents.CapacityTest do
                  "data_location" => "openagents_managed"
                }
              )
+  end
+
+  test "estimates earnings only with a named buyer and verified payout policy" do
+    class = %{"id" => "standard"}
+    requirement = %{"quantity" => 1, "duration_seconds" => 3_600}
+    base_config = [maximum_evidence_age_seconds: 120]
+
+    no_buyer = Estimate.build(class, requirement, 0, 60, base_config)
+    assert no_buyer["earnings"] == nil
+    assert no_buyer["earnings_reason"] == "no_named_buyer"
+
+    unverified_buyer =
+      Estimate.build(
+        class,
+        requirement,
+        0,
+        60,
+        Keyword.put(base_config, :buyer, %{"name" => "Acme"})
+      )
+
+    assert unverified_buyer["earnings"] == nil
+    assert unverified_buyer["earnings_reason"] == "no_verified_payout_policy"
+
+    verified_buyer =
+      Estimate.build(
+        class,
+        requirement,
+        0,
+        60,
+        Keyword.put(base_config, :buyer, %{
+          "name" => "Acme",
+          "verified_payout_policy" => true
+        })
+      )
+
+    assert verified_buyer["earnings"] == %{
+             "currency" => "usd_cents",
+             "low" => 16,
+             "high" => 32
+           }
+
+    assert verified_buyer["earnings_reason"] == nil
   end
 
   test "managed matching never falls back to connected computers" do
@@ -295,5 +345,6 @@ defmodule OpenAgents.CapacityTest do
     assert standard["admits"] == true
     assert batch["admits"] == false
     assert batch["refusal"]["code"] == "incident_drained"
+    assert batch["refusal"]["detail"] == "Capacity is temporarily drained for an incident."
   end
 end

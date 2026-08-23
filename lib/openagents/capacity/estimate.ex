@@ -7,7 +7,8 @@ defmodule OpenAgents.Capacity.Estimate do
     wait_low = if is_integer(queued), do: queued * 30, else: 0
     wait_high = if is_integer(queued), do: queued * 180, else: 180
     buyer = Keyword.get(config, :buyer)
-    earnings = earnings(buyer, base, requirement)
+    {earnings_value, earnings_reason} = earnings(buyer, base, requirement)
+    maximum_age = Keyword.get(config, :maximum_evidence_age_seconds, 120)
 
     %{
       "cost" => %{
@@ -20,14 +21,14 @@ defmodule OpenAgents.Capacity.Estimate do
         "low" => 120 + wait_low,
         "high" => 960 + wait_high
       },
-      "confidence" => if(age_seconds && age_seconds <= 120, do: "medium", else: "low"),
+      "confidence" => if(age_seconds && age_seconds <= maximum_age, do: "medium", else: "low"),
       "evidence_age_seconds" => age_seconds,
       "assumptions" => [
         "One unit of the class runs the whole job.",
         "Queue wait uses the current observed queue depth."
       ],
-      "earnings" => earnings[:value],
-      "earnings_reason" => earnings[:reason]
+      "earnings" => earnings_value,
+      "earnings_reason" => earnings_reason
     }
   end
 
@@ -47,18 +48,15 @@ defmodule OpenAgents.Capacity.Estimate do
   defp earnings(buyer, base, _requirement) when is_map(buyer) do
     if is_binary(buyer["name"]) and buyer["name"] != "" and
          buyer["verified_payout_policy"] == true do
-      %{value: %{"currency" => "usd_cents", "low" => base, "high" => base * 2}, reason: nil}
+      {%{"currency" => "usd_cents", "low" => base, "high" => base * 2}, nil}
     else
-      %{
-        value: nil,
-        reason:
-          if(is_binary(buyer["name"]) and buyer["name"] != "",
-            do: "no_verified_payout_policy",
-            else: "no_named_buyer"
-          )
-      }
+      {nil,
+       if(is_binary(buyer["name"]) and buyer["name"] != "",
+         do: "no_verified_payout_policy",
+         else: "no_named_buyer"
+       )}
     end
   end
 
-  defp earnings(_buyer, _base, _requirement), do: %{value: nil, reason: "no_named_buyer"}
+  defp earnings(_buyer, _base, _requirement), do: {nil, "no_named_buyer"}
 end

@@ -16,9 +16,15 @@ defmodule OpenAgents.Stacks do
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
   alias OpenAgents.Stacks.IdempotencyRequest
+  alias OpenAgents.Stacks.Operation
   alias OpenAgents.Stacks.Stack
   alias OpenAgents.Stacks.StackEntry
   alias OpenAgents.Stacks.StackEvent
+
+  @max_entries 100
+
+  @doc "The maximum number of active entries one stack may hold."
+  def max_entries, do: @max_entries
 
   @doc """
   Creates a stack from pull requests ordered bottom to top.
@@ -86,6 +92,57 @@ defmodule OpenAgents.Stacks do
 
       run_idempotent(repository, actor, "stack_append", idempotency_key, request_digest, fn ->
         append_stack_rows(repository, number, request, actor, idempotency_key, request_digest)
+      end)
+    end
+  end
+
+  @doc """
+  Removes the top pull request from an open stack.
+
+  Only the top layer can leave without breaking the direct-base chain, so
+  the named pull request must hold the highest active position. The pull
+  request and its branch stay untouched; only the stack membership ends.
+  An emptied stack dissolves.
+  """
+  def unstack_from_api(
+        %Repository{} = repository,
+        number,
+        params,
+        %User{} = actor,
+        idempotency_key
+      )
+      when is_integer(number) and is_binary(idempotency_key) do
+    with :ok <- authorize(repository, actor),
+         {:ok, request} <- parse_unstack_request(params) do
+      request_digest = digest({:unstack, number, request})
+
+      run_idempotent(repository, actor, "stack_unstack", idempotency_key, request_digest, fn ->
+        unstack_rows(repository, number, request, actor, idempotency_key, request_digest)
+      end)
+    end
+  end
+
+  @doc """
+  Dissolves an open stack, releasing every layer at once.
+
+  Every active entry is removed and the stack transitions to `dissolved`.
+  The pull requests and their branches stay untouched; each becomes an
+  ordinary standalone pull request against its current base.
+  """
+  def dissolve_from_api(
+        %Repository{} = repository,
+        number,
+        params,
+        %User{} = actor,
+        idempotency_key
+      )
+      when is_integer(number) and is_binary(idempotency_key) do
+    with :ok <- authorize(repository, actor),
+         {:ok, request} <- parse_dissolve_request(params) do
+      request_digest = digest({:dissolve, number, request})
+
+      run_idempotent(repository, actor, "stack_dissolve", idempotency_key, request_digest, fn ->
+        dissolve_rows(repository, number, request, actor, idempotency_key, request_digest)
       end)
     end
   end
@@ -290,6 +347,9 @@ defmodule OpenAgents.Stacks do
 
   defp validate_structure(%Repository{id: repository_id}, pull_requests) do
     cond do
+      length(pull_requests) > @max_entries ->
+        {:error, :stack_too_large}
+
       Enum.any?(pull_requests, &(&1.repository_id != repository_id)) ->
         {:error, :repository_mismatch}
 
@@ -556,6 +616,155 @@ defmodule OpenAgents.Stacks do
     end
   end
 
+  defp parse_unstack_request(params) do
+    with {:ok, number} <- pull_request_number(Map.get(params, "pull_request")),
+         {:ok, version} <- expected_version(Map.get(params, "expected_stack_version")) do
+      {:ok, %{pull_request: number, expected_stack_version: version}}
+    end
+  end
+
+  defp parse_dissolve_request(params) do
+    with {:ok, version} <- expected_version(Map.get(params, "expected_stack_version")) do
+      {:ok, %{expected_stack_version: version}}
+    end
+  end
+
+  defp unstack_rows(repository, number, request, actor, idempotency_key, request_digest) do
+    with {:ok, stack} <- get_stack_for_update(repository, number),
+         :ok <- validate_open(stack),
+         :ok <- ensure_no_active_operation(stack),
+         :ok <- validate_expected_version(request.expected_stack_version, stack),
+         {:ok, top, entries} <- top_entry(stack),
+         :ok <- validate_unstack_target(entries, top, request.pull_request),
+         {:ok, stack} <- bump_version(stack) do
+      now = DateTime.utc_now()
+      remaining = List.delete(entries, top)
+
+      {1, _rows} =
+        Repo.update_all(
+          from(entry in StackEntry, where: entry.id == ^top.id and is_nil(entry.removed_at)),
+          set: [removed_at: now, updated_at: now]
+        )
+
+      record_event!(stack, "pull_request.unstacked", actor, %{
+        "stack_number" => stack.number,
+        "trunk_ref" => stack.trunk_ref,
+        "pull_request" => top.pull_request.issue.number,
+        "reason" => "unstacked",
+        "ordering_old" => Enum.map(entries, & &1.pull_request.issue.number),
+        "ordering_new" => Enum.map(remaining, & &1.pull_request.issue.number)
+      })
+
+      stack = dissolve_when_empty!(stack, remaining, actor)
+      record_idempotency!(actor, "stack_unstack", idempotency_key, request_digest, stack.id)
+      {%{stack | entries: remaining}, :created}
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp dissolve_rows(repository, number, request, actor, idempotency_key, request_digest) do
+    with {:ok, stack} <- get_stack_for_update(repository, number),
+         :ok <- validate_open(stack),
+         :ok <- ensure_no_active_operation(stack),
+         :ok <- validate_expected_version(request.expected_stack_version, stack) do
+      entries = active_entries(stack)
+      now = DateTime.utc_now()
+      entry_ids = Enum.map(entries, & &1.id)
+
+      {_count, _rows} =
+        Repo.update_all(
+          from(entry in StackEntry,
+            where: entry.id in ^entry_ids and is_nil(entry.removed_at)
+          ),
+          set: [removed_at: now, updated_at: now]
+        )
+
+      {1, [stack_after]} =
+        Repo.update_all(
+          from(stack_row in Stack,
+            where:
+              stack_row.id == ^stack.id and stack_row.version == ^stack.version and
+                stack_row.state == "open",
+            select: stack_row
+          ),
+          set: [state: "dissolved", version: stack.version + 1, updated_at: now]
+        )
+
+      Enum.each(entries, fn entry ->
+        record_event!(stack_after, "pull_request.unstacked", actor, %{
+          "stack_number" => stack_after.number,
+          "trunk_ref" => stack_after.trunk_ref,
+          "pull_request" => entry.pull_request.issue.number,
+          "reason" => "dissolved"
+        })
+      end)
+
+      record_event!(stack_after, "pull_request_stack.dissolved", actor, %{
+        "stack_number" => stack_after.number,
+        "trunk_ref" => stack_after.trunk_ref,
+        "ordering_old" => Enum.map(entries, & &1.pull_request.issue.number),
+        "ordering_new" => []
+      })
+
+      record_idempotency!(actor, "stack_dissolve", idempotency_key, request_digest, stack.id)
+      {%{stack_after | entries: []}, :created}
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp validate_unstack_target(entries, top, number) do
+    cond do
+      Enum.all?(entries, &(&1.pull_request.issue.number != number)) ->
+        {:error, :pull_request_not_in_stack}
+
+      top.pull_request.issue.number != number ->
+        {:error, :not_stack_top}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp dissolve_when_empty!(stack, [], actor) do
+    {1, [stack_after]} =
+      Repo.update_all(
+        from(stack_row in Stack,
+          where: stack_row.id == ^stack.id and stack_row.state == "open",
+          select: stack_row
+        ),
+        set: [state: "dissolved", version: stack.version + 1, updated_at: DateTime.utc_now()]
+      )
+
+    record_event!(stack_after, "pull_request_stack.dissolved", actor, %{
+      "stack_number" => stack_after.number,
+      "trunk_ref" => stack_after.trunk_ref,
+      "ordering_old" => [],
+      "ordering_new" => []
+    })
+
+    stack_after
+  end
+
+  defp dissolve_when_empty!(stack, _remaining, _actor), do: stack
+
+  defp ensure_no_active_operation(stack) do
+    active =
+      Repo.one(
+        from operation in Operation,
+          where:
+            operation.stack_id == ^stack.id and
+              operation.state in ^Operation.active_states(),
+          limit: 1
+      )
+
+    case active do
+      nil -> :ok
+      %Operation{id: id} -> {:error, {:operation_in_progress, id}}
+    end
+  end
+
   defp ref_param(params, key) do
     case Map.get(params, key) do
       value when is_binary(value) and value != "" -> {:ok, value}
@@ -772,6 +981,9 @@ defmodule OpenAgents.Stacks do
     branches = [stack.trunk_ref | Enum.map(entries, & &1.pull_request.head_ref)]
 
     cond do
+      length(entries) >= @max_entries ->
+        {:error, :stack_too_large}
+
       pull_request.head_repository_id != repository.id ->
         {:error, :cross_repository_head}
 

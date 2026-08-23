@@ -549,6 +549,8 @@ defmodule OpenAgentsWeb.Router do
     put "/repos/:owner/:repo/pulls/:pull_number/merge-async", StackController, :merge_async
     post "/repos/:owner/:repo/stacks", StackController, :create
     post "/repos/:owner/:repo/stacks/:stack_number/append", StackController, :append
+    post "/repos/:owner/:repo/stacks/:stack_number/unstack", StackController, :unstack
+    post "/repos/:owner/:repo/stacks/:stack_number/dissolve", StackController, :dissolve
     post "/repos/:owner/:repo/stacks/:stack_number/rebase", StackController, :rebase
     post "/repos/:owner/:repo/stacks/:stack_number/merge", StackController, :merge
 

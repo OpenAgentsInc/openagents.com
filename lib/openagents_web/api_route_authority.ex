@@ -130,6 +130,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "put /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/unstack" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/dissolve" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/merge" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue" =>

@@ -86,6 +86,16 @@ defmodule OpenAgents.StacksTest do
       assert {:ok, %Stack{number: 2}} = Stacks.create(first_repository, [next], user)
     end
 
+    test "rejects a stack above the maximum size" do
+      user = repository_user_fixture("stack-author")
+      repository = repository_fixture()
+
+      refs = Enum.map(1..(Stacks.max_entries() + 1), &"layer-#{&1}")
+      pull_requests = chain(repository, refs)
+
+      assert {:error, :stack_too_large} = Stacks.create(repository, pull_requests, user)
+    end
+
     test "rejects an empty stack" do
       user = repository_user_fixture("stack-author")
       repository = repository_fixture()

@@ -58,6 +58,46 @@ defmodule OpenAgentsWeb.StackController do
     Ecto.NoResultsError -> not_found(conn)
   end
 
+  def unstack(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {stack, replay_state}} <-
+           Stacks.unstack_from_api(
+             repository,
+             ControllerHelpers.integer_param!(number),
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      render(conn, :show, stack: stack, owner: owner, repo: repo, replay_state: replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def dissolve(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {stack, replay_state}} <-
+           Stacks.dissolve_from_api(
+             repository,
+             ControllerHelpers.integer_param!(number),
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      render(conn, :show, stack: stack, owner: owner, repo: repo, replay_state: replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
   def rebase(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
     repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
 
@@ -259,6 +299,7 @@ defmodule OpenAgentsWeb.StackController do
               :already_stacked,
               :not_stack_top,
               :not_stacked,
+              :stack_too_large,
               :resolution_not_found,
               :resolution_parent_mismatch,
               :pull_request_not_in_stack
@@ -303,6 +344,9 @@ defmodule OpenAgentsWeb.StackController do
 
   defp message(:not_stacked),
     do: "The pull request does not belong to an active stack."
+
+  defp message(:stack_too_large),
+    do: "A stack holds at most #{Stacks.max_entries()} pull requests."
 
   defp message(:resolution_parent_mismatch),
     do: "The resolution commit does not build on the persisted parent."

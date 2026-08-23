@@ -396,8 +396,10 @@ defmodule OpenAgentsWeb.Layouts do
   patches rather than remounts, the element survives navigation and so does
   whatever the reader collapsed.
 
-  `open` should be true for the section holding the current page: collapsing
-  the section you are reading would hide your own location.
+  `open` should be true for the section holding the current page, so a reader
+  who has never touched this section lands with their own location visible.
+  It is a seed: once the reader collapses a section, `state` carries that
+  choice and it wins, even for the section they are reading.
   """
   attr :title, :string, required: true
 
@@ -414,7 +416,16 @@ defmodule OpenAgentsWeb.Layouts do
     painting the seed and having a hook correct it a frame later.
     """
 
-  attr :id, :string, default: nil, doc: "defaults to a slug of the title"
+  attr :id, :string,
+    default: nil,
+    doc: """
+    Defaults to a slug of the title, which is also the key the reader's choice
+    is stored under. Section ids are one namespace across every surface, so an
+    identically titled section shares its collapsed state; pass an explicit id
+    for a section that must stand alone. See
+    `OpenAgentsWeb.Plugs.SidebarSections`.
+    """
+
   slot :inner_block, required: true
 
   def sidebar_section(assigns) do
@@ -443,14 +454,12 @@ defmodule OpenAgentsWeb.Layouts do
         {render_slot(@inner_block)}
       </div>
     </details>
-    <%!-- `open` above is a seed, not the truth. Re-applying it on every
-    navigation collapses every section the reader opened but is not currently
-    inside, and re-opens every section they closed that happens to be open by
-    default. The hook makes the reader's own choices the state and keeps them
-    in sessionStorage; the seed decides first paint, and a section containing
-    the active row still opens regardless, so a page can never be hidden inside
-    a section the reader had closed. With no JavaScript the seed governs and
-    the sidebar still works. --%>
+    <%!-- `open` above is a seed, not the truth. The server already resolves
+    the reader's choice against it, so the seed decides the first paint only
+    for a section the reader has never spoken about. The hook records each
+    turn of a caret in the cookie and re-applies the reader's choice after a
+    LiveView update, whose diff would otherwise repaint the seed. With no
+    JavaScript the seed governs and the sidebar still works. --%>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".SidebarSection">
       // A cookie rather than sessionStorage, because the server has to know.
       // Several sidebar destinations live in different live sessions, so
@@ -508,18 +517,15 @@ defmodule OpenAgentsWeb.Layouts do
           if (this.summary) this.summary.removeEventListener("click", this.onClick)
         },
         restore() {
-          // A section holding the active page opens regardless of what the
-          // reader last did, so navigation can never land on a hidden row.
-          // Asked of the DOM rather than of the server: the active row already
-          // marks itself `aria-current`, and a server-side answer has to be
-          // derived from the section's `open` attribute, which is true for a
-          // section that is merely open by default -- so every navigation
-          // re-forced such a section open and undid the reader's collapse.
-          if (this.el.querySelector("[aria-current]")) {
-            this.el.open = true
-            this.onToggle()
-            return
-          }
+          // Only the reader's own choice is applied, and it is never written
+          // back from here. Forcing the section that holds the active page
+          // open instead -- and recording that as a choice -- is what made
+          // /docs and /components forget a collapse the application shell
+          // kept: every row on those surfaces marks itself `aria-current`, so
+          // every reload re-opened the section being read and overwrote the
+          // cookie with `true`. A section holding the current page still
+          // opens for a reader who has not collapsed it, through the
+          // server-rendered seed.
           const stored = read()[this.el.id]
           if (stored !== undefined) this.el.open = stored
         },

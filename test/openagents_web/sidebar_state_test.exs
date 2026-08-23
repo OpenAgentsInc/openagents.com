@@ -121,6 +121,89 @@ defmodule OpenAgentsWeb.SidebarStateTest do
     end
   end
 
+  # The docs and component-library surfaces are where this used to fail. Their
+  # rows mark themselves `aria-current`, and the hook forced any section
+  # holding such a row open and wrote that back to the cookie, so the reader's
+  # collapse survived on the application shell -- whose sections hold no
+  # current row -- and was erased on `/docs` and `/components` on every reload.
+  describe "collapsed sections survive on the docs and component surfaces" do
+    test "a cold GET of a docs page paints the reader's collapsed sections collapsed", %{
+      conn: conn
+    } do
+      html =
+        conn
+        |> put_req_cookie("sidebar_sections", ~s({"sidebar-section-transparency":false}))
+        |> get(~p"/docs/welcome")
+        |> html_response(200)
+
+      refute html =~ ~r/id="sidebar-section-transparency"[^>]*\sopen/
+    end
+
+    test "the section holding the page being read stays collapsed if the reader closed it", %{
+      conn: conn
+    } do
+      html =
+        conn
+        |> put_req_cookie("sidebar_sections", ~s({"sidebar-section-getting-started":false}))
+        |> get(~p"/docs/welcome")
+        |> html_response(200)
+
+      refute html =~ ~r/id="sidebar-section-getting-started"[^>]*\sopen/
+    end
+
+    test "with no cookie the section holding the page being read is open", %{conn: conn} do
+      html = conn |> get(~p"/docs/welcome") |> html_response(200)
+
+      assert html =~ ~r/id="sidebar-section-getting-started"[^>]*\sopen/
+    end
+
+    test "a navigation within docs keeps the collapse", %{conn: conn} do
+      conn = put_req_cookie(conn, "sidebar_sections", ~s({"sidebar-section-issues":false}))
+
+      {:ok, view, _html} = live(conn, ~p"/docs/welcome")
+      html = render_patch(view, ~p"/docs/issues")
+
+      refute html =~ ~r/id="sidebar-section-issues"[^>]*\sopen/
+    end
+
+    test "the component library honours a collapse the same way", %{conn: conn} do
+      html =
+        conn
+        |> put_req_cookie("sidebar_sections", ~s({"sidebar-section-reference":false}))
+        |> get(~p"/components/icons")
+        |> html_response(200)
+
+      refute html =~ ~r/id="sidebar-section-reference"[^>]*\sopen/
+    end
+
+    # The behavioural half of the above is not renderable from here: the force
+    # was in the colocated hook, which only runs in a browser. Pinned at the
+    # source, the same way the viewport defaults are.
+    test "the hook applies the reader's choice and never writes one for them" do
+      source = File.read!("lib/openagents_web/components/layouts.ex")
+
+      refute source =~ ~s([aria-current]),
+             "the hook forces the section holding the active row open again"
+    end
+  end
+
+  # Scoping is a decision, not an accident of naming: one namespace for every
+  # surface, keyed by the section title. A section called the same thing in two
+  # sidebars is one preference.
+  describe "section ids are one namespace across surfaces" do
+    test "the id comes from the title alone, not from the surface", %{conn: conn} do
+      html = conn |> get(~p"/docs") |> html_response(200)
+
+      assert html =~ ~s(id="sidebar-section-getting-started")
+      assert standalone_section_id("Getting started") == "sidebar-section-getting-started"
+    end
+
+    test "an explicit id is how a section stands alone" do
+      assert standalone_section_id("Getting started", id: "sidebar-section-gallery-demo") ==
+               "sidebar-section-gallery-demo"
+    end
+  end
+
   # The Issues and Projects rows used to be repository-scoped: they took the
   # `:owner`/`:repo` of whatever page you were on, and fell back to the first
   # repository in your workspace alphabetically. The same row therefore led
@@ -272,6 +355,25 @@ defmodule OpenAgentsWeb.SidebarStateTest do
       refute source =~ "openagents:sidebar-desktop"
       refute source =~ "desktopPreference()"
     end
+  end
+
+  # The section rendered on its own, so the id it derives can be read without a
+  # surface around it.
+  defp standalone_section_id(title, options \\ []) do
+    html =
+      render_component(&OpenAgentsWeb.Layouts.sidebar_section/1,
+        title: title,
+        id: options[:id],
+        inner_block: [
+          %{
+            __slot__: :inner_block,
+            inner_block: fn _changed, _arguments -> "row" end
+          }
+        ]
+      )
+
+    [_match, id] = Regex.run(~r/<details[^>]*\sid="([^"]+)"/, html)
+    id
   end
 
   defp parse(value) do

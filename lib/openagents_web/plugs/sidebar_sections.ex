@@ -17,6 +17,18 @@ defmodule OpenAgentsWeb.Plugs.SidebarSections do
   The value is a reader's own UI state, so it is treated as untrusted input and
   bounded on the way in: unparseable JSON, a non-object, oversized content, or
   keys that are not section ids are dropped rather than passed inward.
+
+  ## Scoping
+
+  There is one namespace, shared by every surface, keyed by the section id that
+  `OpenAgentsWeb.Layouts.sidebar_section/1` derives from the section title. A
+  section named the same thing on two surfaces is therefore one preference:
+  collapse it on `/docs` and it is collapsed on `/components` too. That is the
+  rule on purpose -- a reader who hides a group of links is talking about the
+  group, not about the page they happened to be on -- and
+  `test/openagents_web/sidebar_state_test.exs` pins it. A surface that needs a
+  section of its own passes an explicit `id` rather than relying on its title
+  being unique.
   """
 
   @behaviour Plug

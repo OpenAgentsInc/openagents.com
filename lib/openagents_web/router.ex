@@ -133,6 +133,13 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ForgeGitAuth
   end
 
+  # The agent front door answers one contract in two representations, Markdown
+  # and JSON, so it cannot negotiate a single format. It reads no credential:
+  # the document describes how to ask and grants nothing.
+  pipeline :front_door do
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+  end
+
   pipeline :status_probe_compat do
     plug OpenAgentsWeb.Plugs.StatusProbeCompat
   end
@@ -353,6 +360,15 @@ defmodule OpenAgentsWeb.Router do
   scope "/git" do
     pipe_through :forge_git
     forward "/", OpenAgents.Forge.GitHTTP
+  end
+
+  # Episode 230 put standing instructions for agents at `openagents.com/agents.md`.
+  # The contract behind both representations is `OpenAgentsWeb.ContributionContract`.
+  scope "/", OpenAgentsWeb do
+    pipe_through :front_door
+
+    get "/agents.md", AgentFrontDoorController, :markdown
+    get "/agents.json", AgentFrontDoorController, :json
   end
 
   scope "/", OpenAgentsWeb do

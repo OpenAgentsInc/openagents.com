@@ -2522,6 +2522,53 @@ Evidence: `OpenAgentsWeb.ApiExtensionController`, `OpenAgentsWeb.IssueJSON`,
 `test/openagents_web/controllers/issue_controller_test.exs`, and
 `test/openagents/issue_progress_test.exs`.
 
+### CONTRIBUTION-001 — The agent front door is derived from the application
+
+Status: Current
+
+Every deployment publishes one participation contract in two representations:
+`/agents.md` for a reader and `/agents.json` for a client. Both are rendered
+from `OpenAgentsWeb.ContributionContract`, so they carry the same contract
+identifier, version, revision, and digest and cannot drift apart by editing
+one of them. `GET /api/v3` points at both and republishes that digest, so an
+agent that starts at the API description finds the contract without guessing a
+path, and an agent receipt can record which instructions it followed.
+
+A consumer detects a breaking change from the identifier. The major version is
+part of `contract`, matching the other published contracts here: while it reads
+`openagents.contribution.v1` every difference is additive, and a breaking
+change publishes a new identifier. `digest` is the SHA-256 of the document with
+its own digest removed and object keys sorted, so a changed digest under an
+unchanged identifier means the wording or a derived value moved.
+
+The document is derived rather than written beside the application. Each
+published request carries the classification of the authority that owns its
+surface, and only that one: `/api/v3` requests carry the principal, family, and
+error contract from `OpenAgentsWeb.ApiRouteAuthority`, which is proven against
+what the enforcing pipeline does to an anonymous request, and every other
+request carries the class, principal, and scope from
+`OpenAgentsWeb.RouteAuthority`. Publishing both for one route would let the
+document contradict itself. Credential scopes come from
+`OpenAgents.ApiTokens.allowed_scopes/0`, and the base URL is the origin the
+request arrived on, so a staging deployment describes staging.
+
+The contract advertises nothing that does not exist. It names the capabilities
+an agent would reasonably try and that no route serves, and the proof fails the
+moment one of those routes starts resolving, so implementing a listed absence
+forces the list to be corrected. It never directs a push to GitHub: the remote
+it publishes is admitted by `ops/ci/push-remote-check.sh` and every target it
+names as refused is refused by that same guard.
+
+It carries no instance data. The bytes are identical for an anonymous and an
+authenticated reader, and private repositories and issues appear in neither
+representation; private data is reached only by an authenticated call to a
+route the contract names.
+
+Evidence: `lib/openagents_web/contribution_contract.ex`,
+`lib/openagents_web/controllers/agent_front_door_controller.ex`,
+`lib/openagents_web/controllers/api_extension_controller.ex`, and
+`test/openagents_web/contribution_contract_test.exs`.
+
 ### REPOSITORY-002 — Development pushes go to the forge, never to the mirror
 
 Status: Current
@@ -2852,6 +2899,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
 | REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
+| CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |

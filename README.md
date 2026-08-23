@@ -122,6 +122,14 @@ Read `AGENTS.md` before changing the application. Push accepted work to the
 owned Forge. `MirrorWatch` maintains GitHub as the public mirror; do not treat
 an independently pushed GitHub branch as production authority.
 
+An agent starts at the front door instead. Every deployment serves the same
+participation contract in two representations, `/agents.md` for a reader and
+`/agents.json` for a client, and `GET /api/v3` points at both with the digest
+it currently carries. The contract is derived from the application rather than
+written beside it: `OpenAgentsWeb.ContributionContract` builds it and
+`OpenAgentsWeb.ContributionContractTest` refuses any claim in it the
+application does not keep. See `INVARIANTS.md`, CONTRIBUTION-001.
+
 ## License
 
 OpenAgents is licensed under the GNU Affero General Public License v3.0. See

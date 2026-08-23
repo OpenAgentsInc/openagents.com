@@ -40,6 +40,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
 
   alias OpenAgentsWeb.ApiError
   alias OpenAgentsWeb.ApiRouteAuthority
+  alias OpenAgentsWeb.ContributionContract
 
   @document_version "2026-08-23"
 
@@ -230,8 +231,28 @@ defmodule OpenAgentsWeb.ApiExtensionController do
       "extensions" => @extensions,
       "errors" => errors_contract(),
       "routes" => ApiRouteAuthority.inventory_entries(),
-      "families" => Enum.map(ApiRouteAuthority.families(), &Atom.to_string/1)
+      "families" => Enum.map(ApiRouteAuthority.families(), &Atom.to_string/1),
+      "contribution" => contribution(conn)
     })
+  end
+
+  # The participation contract is a pointer, not a copy. This document says what
+  # the API is; that one says how to take part in the project the API serves, and
+  # duplicating either into the other would give a client two answers that can
+  # disagree.
+  defp contribution(conn) do
+    base = conn.assigns[:url_base] || OpenAgentsWeb.Endpoint.url()
+
+    %{
+      "contract" => ContributionContract.contract(),
+      "version" => ContributionContract.version(),
+      "revision" => ContributionContract.revision(),
+      "digest" => ContributionContract.digest(base),
+      "machine" => base <> "/agents.json",
+      "human" => base <> "/agents.md",
+      "description" =>
+        "How to find work, authenticate, file issues, get a change in, and prove it landed."
+    }
   end
 
   # One description of one envelope. A client reads the codes it must branch on

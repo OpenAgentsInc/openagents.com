@@ -196,6 +196,12 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/status", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:status", false)
 
+  # The agent front door. Public by construction: it describes how to ask and
+  # carries no instance data, so there is nothing in it to withhold.
+  defp policy(%{path: path, verb: verb})
+       when path in ["/agents.md", "/agents.json"] and verb in [:get, :head],
+       do: declaration(:public_read, "anonymous", "published:contribution-contract", false)
+
   defp policy(%{path: "/api/capacity", verb: verb}) when verb in [:get, :head],
     do:
       declaration(:authenticated_api, "active encrypted browser session", "capacity:self", false)

@@ -360,6 +360,38 @@ defmodule OpenAgents.ProjectsTest do
       assert Projects.get_visible_project_item!(project, hidden.id, viewer).id == hidden.id
     end
 
+    test "an item write announces itself on the repository's project topic", %{
+      project: project,
+      issue: issue
+    } do
+      :ok = OpenAgents.Repositories.subscribe_projects(repository().id)
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      assert_receive {:projects_changed, repository_id}, 500
+      assert repository_id == repository().id
+
+      {:ok, _updated} = Projects.update_project_item(item, %{"values" => %{"Status" => "Done"}})
+
+      assert_receive {:projects_changed, repository_id}, 500
+      assert repository_id == repository().id
+    end
+
+    test "a rejected item write announces nothing", %{project: project, issue: issue} do
+      {:ok, _item} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      :ok = OpenAgents.Repositories.subscribe_projects(repository().id)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      refute_receive {:projects_changed, _repository_id}, 100
+    end
+
     test "update_project_item/2 merges into existing values", %{
       project: project,
       issue: issue

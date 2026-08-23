@@ -608,6 +608,8 @@ defmodule OpenAgents.Projects do
           "has_issue" => match?(%ProjectItem{issue_id: id} when id != nil, item)
         })
 
+        Repositories.broadcast_projects(project.repository_id)
+
         {:ok, Repo.preload(item, issue: :repository)}
 
       result ->
@@ -615,6 +617,16 @@ defmodule OpenAgents.Projects do
     end
   end
 
+  @doc """
+  Records new field values on one project item.
+
+  A committed change announces itself on the repository's project topic, the
+  same way every other project write does. A card's `Status` is a stored field
+  value, so a board that did not hear about this write would keep rendering the
+  card in the column it left — the write path, not the caller, owns the
+  announcement, so a change made over `/api/v3` and a change made from the
+  board produce the same event.
+  """
   def update_project_item(%ProjectItem{} = item, attrs, actor \\ nil) do
     attrs = to_string_map(attrs)
 
@@ -636,8 +648,12 @@ defmodule OpenAgents.Projects do
           updated
         end)
         |> case do
-          {:ok, updated} -> {:ok, Repo.preload(updated, issue: :repository)}
-          result -> result
+          {:ok, updated} ->
+            Repositories.broadcast_projects(project.repository_id)
+            {:ok, Repo.preload(updated, issue: :repository)}
+
+          result ->
+            result
         end
 
       {:error, errors} ->

@@ -460,6 +460,132 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
     end
   end
 
+  describe "live board updates" do
+    test "a status change made through the context moves the card on every open board", %{
+      conn: conn
+    } do
+      project = project!()
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Moves without a reload"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, member, _html} = live(conn, path(project))
+      {:ok, visitor, _html} = live(build_conn(), path(project))
+
+      card = ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+
+      assert has_element?(member, "#project-column-todo_items " <> card)
+      assert has_element?(visitor, "#project-column-todo_items " <> card)
+
+      {:ok, _updated} = Projects.update_project_item(item, %{"values" => %{"Status" => "Done"}})
+
+      assert has_element?(member, "#project-column-done_items " <> card)
+      refute has_element?(member, "#project-column-todo_items " <> card)
+
+      assert has_element?(visitor, "#project-column-done_items " <> card)
+      refute has_element?(visitor, "#project-column-todo_items " <> card)
+    end
+
+    test "a status change made over /api/v3 moves the card on an open board", %{conn: conn} do
+      project = project!()
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Patched over the API"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      card = ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+      assert has_element?(view, "#project-column-todo_items " <> card)
+
+      api = put_forge_api_token(build_conn(), "project-show-live", repository())
+
+      assert api
+             |> patch(
+               ~p"/api/v3/repos/OpenAgentsInc/openagents.com/projectsV2/#{project.number}/items/#{item.id}",
+               %{"values" => %{"Status" => "In Progress"}}
+             )
+             |> json_response(200)
+
+      assert has_element?(view, "#project-column-in_progress_items " <> card)
+      refute has_element?(view, "#project-column-todo_items " <> card)
+    end
+
+    test "a card whose source repository is unreadable never arrives on an update" do
+      project = project!()
+
+      source =
+        repository_fixture(%{owner: "SealedOrg", name: "sealed-board", visibility: "private"})
+
+      {:ok, issue} = Issues.create_issue(source, %{"title" => "Sealed card"})
+
+      {:ok, view, _html} = live(build_conn(), path(project))
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{
+            "issue_number" => issue.number,
+            "issue_repository_id" => source.id,
+            "values" => %{"Status" => "To Do"}
+          },
+          project
+        )
+
+      html = render(view)
+      refute html =~ "Sealed card"
+      refute html =~ "sealed-board"
+
+      {:ok, _updated} = Projects.update_project_item(item, %{"values" => %{"Status" => "Done"}})
+
+      html = render(view)
+      refute html =~ "Sealed card"
+      refute html =~ "sealed-board"
+
+      refute has_element?(
+               view,
+               ~s{a[href="/SealedOrg/sealed-board/issues/#{issue.number}"]}
+             )
+    end
+
+    test "a write in another repository leaves this board alone", %{conn: conn} do
+      project = project!()
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Stays put"})
+
+      {:ok, _item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      other = repository_fixture(%{owner: "OtherOrg", name: "other-board", visibility: "public"})
+      other_project = project_fixture(other, %{title: "Elsewhere", owner: "OtherOrg"})
+      {:ok, other_issue} = Issues.create_issue(other, %{"title" => "Belongs elsewhere"})
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      {:ok, _other_item} =
+        Projects.create_project_item(
+          %{"issue_number" => other_issue.number, "values" => %{"Status" => "Done"}},
+          other_project
+        )
+
+      html = render(view)
+      refute html =~ "Belongs elsewhere"
+
+      assert has_element?(
+               view,
+               ~s{#project-column-todo_items a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+             )
+    end
+  end
+
   describe "a reader without write access" do
     setup %{conn: conn} do
       {:ok, conn: log_in_github_user(conn, "project-show-reader")}

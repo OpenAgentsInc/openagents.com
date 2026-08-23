@@ -35,6 +35,19 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
   @statuses ["To Do", "In Progress", "Done"]
 
+  # Every column a board can render, mapped to the stream that carries its
+  # cards. A stream name has to be a fixed atom, and a column heading is a
+  # field value, so the two are related through this table rather than through
+  # `String.to_atom/1` on a stored value.
+  @column_streams %{
+    "To Do" => :todo_items,
+    "In Progress" => :in_progress_items,
+    "Done" => :done_items,
+    "LIVE" => :live_items,
+    "GATED" => :gated_items,
+    "WITHDRAWN" => :withdrawn_items
+  }
+
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
     user = socket.assigns.current_user
     repository = visible_repository!(owner, repo, user)
@@ -43,8 +56,6 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
     if connected?(socket), do: Repositories.subscribe_projects(repository.id)
     promise_context = PromiseRegistry.context(project)
-    items = project_items(project, socket.assigns.current_user, promise_context)
-    promise_registry? = promise_context.registry?
     issue_options = issue_options(repository)
 
     {:ok,
@@ -55,9 +66,6 @@ defmodule OpenAgentsWeb.ProjectShowLive do
      |> assign(:repository, repository)
      |> assign(:project, project)
      |> assign(:can_write, can_write)
-     |> assign(:items, items)
-     |> assign(:promise_context, promise_context)
-     |> assign(:promise_registry?, promise_registry?)
      |> assign(:issue_options, issue_options)
      # The board columns are read as `@statuses` inside ~H, where `@` means
      # `assigns.statuses`, not the module attribute. Without this assign every
@@ -69,6 +77,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
      |> assign(:note_form, note_form())
      |> assign(:notes_page, 1)
      |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
+     |> load_board(project, promise_context)
      |> load_notes(connected?(socket))}
   end
 
@@ -88,14 +97,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
         {:ok, _item} ->
           {:noreply,
            socket
-           |> assign(
-             :items,
-             project_items(
-               project,
-               socket.assigns.current_user,
-               socket.assigns.promise_context
-             )
-           )
+           |> load_board(project, socket.assigns.promise_context)
            |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
            |> put_flash(:info, "Issue added to project")}
 
@@ -187,11 +189,10 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   # A project changed somewhere else — the API, the CLI, or another board — so
   # the page rereads through this viewer's authorization boundary rather than
   # trusting the broadcast payload. The message carries a repository id and
-  # nothing about who may see what.
+  # nothing about who may see what, so a card in a repository this viewer
+  # cannot read is filtered out on the re-read exactly as it was on mount.
   def handle_info({:projects_changed, repository_id}, socket) do
     if repository_id == socket.assigns.repository.id do
-      user = socket.assigns.current_user
-
       try do
         Projects.get_project_by_number!(socket.assigns.repository, socket.assigns.project.number)
       rescue
@@ -202,20 +203,42 @@ defmodule OpenAgentsWeb.ProjectShowLive do
           {:noreply, put_flash(socket, :error, "This project no longer exists.")}
 
         project ->
-          promise_context = PromiseRegistry.context(project)
-
           {:noreply,
            socket
            |> assign(:project, project)
-           |> assign(:promise_context, promise_context)
-           |> assign(:promise_registry?, promise_context.registry?)
-           |> assign(:items, project_items(project, user, promise_context))
+           |> load_board(project, PromiseRegistry.context(project))
            |> reload_notes()}
       end
     else
       {:noreply, socket}
     end
   end
+
+  # The board is rebuilt from the database on every change rather than patched
+  # from a payload: a status change moves a card between columns, and a card
+  # that stayed put after its status moved is worse than a redraw. Each column
+  # is its own stream and each redraw resets it, so the client applies the move
+  # as a removal and an insertion instead of replacing the page.
+  defp load_board(socket, project, promise_context) do
+    items = project_items(project, socket.assigns.current_user, promise_context)
+    columns = board_columns(promise_context)
+    grouped = Enum.group_by(items, & &1.status)
+
+    socket
+    |> assign(:promise_context, promise_context)
+    |> assign(:promise_registry?, promise_context.registry?)
+    |> assign(:columns, columns)
+    |> then(
+      &Enum.reduce(columns, &1, fn status, socket ->
+        stream(socket, column_stream(status), Map.get(grouped, status, []), reset: true)
+      end)
+    )
+  end
+
+  defp board_columns(%{registry?: true}), do: PromiseRegistry.states()
+  defp board_columns(_promise_context), do: @statuses
+
+  defp column_stream(status), do: Map.fetch!(@column_streams, status)
 
   defp load_notes(socket, false), do: assign(socket, :notes, :loading)
   defp load_notes(socket, true), do: reload_notes(socket)
@@ -413,14 +436,18 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       </.form>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-        <%= for status <- if(@promise_registry?, do: PromiseRegistry.states(), else: @statuses) do %>
+        <%= for status <- @columns do %>
           <section class="card !m-0 !p-3">
             <header class="mb-2">
               <h3 class="card-title !text-sm">{status}</h3>
             </header>
-            <div class="space-y-2 min-h-24">
-              <%= for item <- @items, item.status == status do %>
-                <article class="card !m-0 !p-3">
+            <div
+              id={"project-column-#{column_stream(status)}"}
+              class="space-y-2 min-h-24"
+              phx-update="stream"
+            >
+              <%= for {dom_id, item} <- @streams[column_stream(status)] do %>
+                <article id={dom_id} class="card !m-0 !p-3">
                   <%= if @promise_registry? do %>
                     <div class="flex items-center justify-between gap-2 mb-2">
                       <span class="badge" data-variant="secondary">{item.promise_id}</span>

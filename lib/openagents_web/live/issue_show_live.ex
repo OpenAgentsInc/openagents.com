@@ -42,6 +42,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Notifications
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RelativeTime
   alias OpenAgentsWeb.UI.Circle
@@ -64,6 +65,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
@@ -75,18 +77,9 @@ defmodule OpenAgentsWeb.IssueShowLive do
        Repositories.issue_participant?(repository, user)
      )
      |> assign(:can_edit, can_write || author?(issue, user))
-     |> assign(:pull_request_state, pull_request_state(issue))
      |> assign(:editing, false)
      |> assign(:comment_form, to_form(Comment.changeset(%Comment{}, %{})))
-     |> assign(:repo_labels, if(can_write, do: Labels.list_labels(repository), else: []))
-     |> assign(
-       :repo_milestones,
-       if(can_write, do: Milestones.list_milestones(repository), else: [])
-     )
-     |> assign(
-       :assignable,
-       if(can_write, do: Repositories.list_assignable_users(repository), else: [])
-     )
+     |> assign_repository_options()
      |> assign(
        :og,
        OG.meta(OG.issue(repository.namespace.slug, repository.name, issue))
@@ -239,14 +232,22 @@ defmodule OpenAgentsWeb.IssueShowLive do
   end
 
   # Live updates: someone else's write re-reads this issue through the same
-  # visibility check the mount used.
+  # visibility check the mount used. A burst -- an import walking a repository,
+  # or a script closing a milestone's worth of issues -- collapses into one
+  # re-read rather than one repaint per row.
   def handle_info({:issues_changed, repository_id}, socket)
-      when repository_id == socket.assigns.repository.id do
-    socket = refresh_authority(socket)
-    {:noreply, load(socket, socket.assigns.issue)}
-  end
+      when repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :issue, &refresh_panel/2)}
 
   def handle_info({:issues_changed, _other_repository}, socket), do: {:noreply, socket}
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  defp refresh_panel(socket, :issue) do
+    socket = refresh_authority(socket)
+    load(socket, socket.assigns.issue)
+  end
 
   defp author?(%Issue{author_user_id: author_id}, %OpenAgents.Accounts.User{id: user_id})
        when is_binary(author_id),
@@ -300,12 +301,36 @@ defmodule OpenAgentsWeb.IssueShowLive do
     |> assign(:can_participate, can_participate)
     |> assign(:can_edit, can_edit)
     |> assign(:editing, socket.assigns.editing and can_edit)
+    |> assign_repository_options()
+  end
+
+  # The pickers the editor offers. They were read at mount and never again, so
+  # a label or a milestone created in another tab was missing from this page
+  # until it was reloaded, and a viewer whose write access was revoked kept
+  # being offered the assignable list. They are read beside the authority that
+  # decides whether to offer them at all, so the two cannot disagree.
+  defp assign_repository_options(socket) do
+    %{repository: repository, can_write: can_write} = socket.assigns
+
+    socket
+    |> assign(:repo_labels, if(can_write, do: Labels.list_labels(repository), else: []))
+    |> assign(
+      :repo_milestones,
+      if(can_write, do: Milestones.list_milestones(repository), else: [])
+    )
+    |> assign(
+      :assignable,
+      if(can_write, do: Repositories.list_assignable_users(repository), else: [])
+    )
   end
 
   # One place rebuilds everything derived from the issue, so a write cannot
   # leave the timeline describing the previous version of the page.
   defp load(socket, issue) do
     comments = Issues.list_comments(issue)
+    # An issue can become a pull request while the page is open, and the badge
+    # that says so was read at mount only.
+
     attempts = Assignments.attempts_for_issue(issue)
     references = ClosingReferences.for_issue(issue)
     syncs = TaskReferences.for_issue(issue)
@@ -314,6 +339,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
     socket
     |> assign(:issue, issue)
     |> assign(:comments, comments)
+    |> assign(:pull_request_state, pull_request_state(issue))
     |> assign(:form, to_form(Issues.change_issue(issue)))
     |> assign(:events, timeline(issue, comments, attempts, references, syncs, base))
     |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))

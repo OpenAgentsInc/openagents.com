@@ -27,6 +27,18 @@ defmodule OpenAgents.Forge.Pushes do
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
 
+  @pushes_topic "forge:pushes"
+
+  @doc """
+  Subscribes the caller to every accepted push on this forge.
+
+  The message is `{:forge_push, %{repo: storage_key, wal_seq: seq, refs: refs}}`.
+  A subscriber matches on the storage key and re-reads what it renders; it
+  should not render the payload, which describes the push rather than the
+  repository as it now stands.
+  """
+  def subscribe, do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @pushes_topic)
+
   @doc """
   Handle one `git-receive-pack` request body. Returns `{:ok, response_body}`
   only after WAL persist; `{:error, :wal_persist_failed}` after rollback.
@@ -372,7 +384,7 @@ defmodule OpenAgents.Forge.Pushes do
   defp broadcast(repo, seq, refs) do
     Phoenix.PubSub.broadcast(
       OpenAgents.PubSub,
-      "forge:pushes",
+      @pushes_topic,
       {:forge_push, %{repo: repo, wal_seq: seq, refs: refs}}
     )
   end

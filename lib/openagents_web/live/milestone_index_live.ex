@@ -8,20 +8,42 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   alias OpenAgents.Milestones
   alias OpenAgents.Milestones.Milestone
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
     can_write = Repositories.writable?(repository, socket.assigns.current_user)
 
+    # The three numbers beside a milestone are counts of issues, so they move
+    # whenever the repository's issues do -- from the API, the CLI, or another
+    # tab -- and not only when somebody edits a milestone here.
+    if connected?(socket), do: Repositories.subscribe_issues(repository.id)
+
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
      |> assign(:can_write, can_write)
-     |> assign(:milestones, milestones_with_stats(repository))
-     |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))}
+     |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))
+     |> refresh_panel(:milestones)}
+  end
+
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :milestones, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  defp refresh_panel(socket, :milestones) do
+    socket
+    |> refresh_authority()
+    |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
   end
 
   def handle_event("save", %{"milestone" => milestone_params}, socket) do
@@ -36,7 +58,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
         {:ok, _milestone} ->
           {:noreply,
            socket
-           |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
+           |> refresh_panel(:milestones)
            |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))
            |> put_flash(:info, "Milestone created")}
 
@@ -95,20 +117,18 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
       raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
   end
 
+  # One grouped aggregate for every milestone on the page, rather than every
+  # issue in the repository loaded and counted in memory. `93c3383` removed
+  # that read from the homepage for the same reason; a page that follows the
+  # issues it counts would otherwise pay for the whole collection once per
+  # write instead of once per visit.
   defp milestones_with_stats(repository) do
-    all_issues = Issues.list_issues(repository, state: "all")
+    counts = Issues.count_issues_by_milestone(repository)
 
     Milestones.list_milestones(repository)
     |> Enum.map(fn milestone ->
-      open =
-        Enum.count(all_issues, fn i ->
-          i.milestone && i.milestone["number"] == milestone.number && i.state == "open"
-        end)
-
-      closed =
-        Enum.count(all_issues, fn i ->
-          i.milestone && i.milestone["number"] == milestone.number && i.state == "closed"
-        end)
+      %{open: open, closed: closed} =
+        Map.get(counts, milestone.number, %{open: 0, closed: 0})
 
       total = open + closed
       progress = if total > 0, do: div(closed * 100, total), else: 0
@@ -158,7 +178,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
       <% else %>
         <div class="space-y-4">
           <%= for milestone <- @milestones do %>
-            <div class="card !m-0">
+            <div id={"milestone-#{milestone.number}"} class="card !m-0">
               <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
                 <h3 class="text-lg font-semibold">{milestone.title}</h3>
                 <div class="flex gap-2">

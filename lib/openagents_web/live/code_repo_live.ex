@@ -11,8 +11,10 @@ defmodule OpenAgentsWeb.CodeRepoLive do
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.Forge.Pushes
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
 
@@ -26,13 +28,6 @@ defmodule OpenAgentsWeb.CodeRepoLive do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
-    overview = Browse.overview(repository, 20)
-    head = overview.head
-    readme = overview.readme
-    commits = overview.commits
-    entries = overview.entries
-    refs = overview.refs
-
     delete_allowed? =
       Repositories.membership_role(repository, socket.assigns.current_user) == "owner"
 
@@ -40,28 +35,29 @@ defmodule OpenAgentsWeb.CodeRepoLive do
     # render usefully, and it is also the one state that ends on its own. The
     # provisioner and the importer announce each transition, so the page hears
     # them instead of telling the reader to keep pressing refresh.
-    if connected?(socket) and repository.lifecycle_state != "ready" do
-      :ok = Repositories.subscribe_provisioning(repository.id)
+    #
+    # A ready repository used to subscribe to nothing at all, which made the
+    # common case the static one: a push landed and the commit list, the ref
+    # counts, and the README stayed as they were, and an issue opened anywhere
+    # left the tab count behind. It hears both now.
+    if connected?(socket) do
+      if repository.lifecycle_state != "ready" do
+        :ok = Repositories.subscribe_provisioning(repository.id)
+      end
+
+      :ok = Pushes.subscribe()
+      :ok = Repositories.subscribe_issues(repository.id)
     end
 
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:page_title, "#{repository.name} · code")
      |> assign(:repository, repository)
      |> assign(:repository_import, repository.repository_import)
      |> assign(:repo, repository.name)
      |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
-     |> assign(:head, head)
-     |> assign(:readme, readme)
-     |> assign(:commits, commits)
-     |> assign(:latest, List.first(commits))
-     |> assign(:refs, refs)
-     |> assign(:entries, entries)
-     |> assign(:branch_count, Enum.count(refs, &(&1.kind == :branch)))
-     |> assign(:tag_count, Enum.count(refs, &(&1.kind == :tag)))
-     |> assign(:open_issue_count, open_issue_count(repository))
-     |> assign(:open_pull_request_count, open_pull_request_count(repository))
      |> assign(:og, OG.meta(OG.repo_card_for(repository)))
      |> assign(:clone_url, RepositoryAccess.clone_url(repository))
      |> assign(:delete_allowed?, delete_allowed?)
@@ -73,7 +69,9 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(
        :delete_form,
        to_form(%{"confirmation" => ""}, as: :repository_delete)
-     )}
+     )
+     |> refresh_panel(:source)
+     |> refresh_panel(:counts)}
   rescue
     Ecto.NoResultsError -> raise OpenAgentsWeb.PublicNotFoundError
   end
@@ -95,6 +93,47 @@ defmodule OpenAgentsWeb.CodeRepoLive do
          |> assign(:repository, repository)
          |> assign(:repository_import, repository.repository_import)}
     end
+  end
+
+  # One accepted push, matched by storage key. The message describes the push;
+  # this page describes the repository, so it re-reads rather than rendering
+  # what it was handed.
+  def handle_info({:forge_push, %{repo: storage_key}}, socket) do
+    if storage_key == socket.assigns.repository.storage_key,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :source, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :counts, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  # The Git read and the database read are separate panels, so an issue opened
+  # in another tab moves the tab count without walking the object store, and a
+  # push does not re-count the issues.
+  defp refresh_panel(socket, :source) do
+    overview = Browse.overview(socket.assigns.repository, 20)
+
+    socket
+    |> assign(:head, overview.head)
+    |> assign(:readme, overview.readme)
+    |> assign(:commits, overview.commits)
+    |> assign(:latest, List.first(overview.commits))
+    |> assign(:refs, overview.refs)
+    |> assign(:entries, overview.entries)
+    |> assign(:branch_count, Enum.count(overview.refs, &(&1.kind == :branch)))
+    |> assign(:tag_count, Enum.count(overview.refs, &(&1.kind == :tag)))
+  end
+
+  defp refresh_panel(socket, :counts) do
+    socket
+    |> assign(:open_issue_count, open_issue_count(socket.assigns.repository))
+    |> assign(:open_pull_request_count, open_pull_request_count(socket.assigns.repository))
   end
 
   @impl true

@@ -8,20 +8,42 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
   alias OpenAgentsWeb.UI.Circle
   alias OpenAgents.Projects.Project
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
     can_write = Repositories.writable?(repository, socket.assigns.current_user)
 
+    if connected?(socket), do: Repositories.subscribe_projects(repository.id)
+
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
      |> assign(:can_write, can_write)
-     |> assign(:projects, Projects.list_projects(repository))
-     |> assign(:form, to_form(Projects.change_project(repository, %Project{}, %{})))}
+     |> assign(:form, to_form(Projects.change_project(repository, %Project{}, %{})))
+     |> refresh_panel(:projects)}
+  end
+
+  # A project opened from the API, the CLI, or another board belongs on this
+  # list too. The message carries a repository id and nothing else, so the
+  # list re-reads through the same authorization it mounted under.
+  def handle_info({:projects_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :projects, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  defp refresh_panel(socket, :projects) do
+    socket
+    |> refresh_authority()
+    |> assign(:projects, Projects.list_projects(socket.assigns.repository))
   end
 
   def handle_event("save", %{"project" => project_params}, socket) do
@@ -36,7 +58,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
         {:ok, _project} ->
           {:noreply,
            socket
-           |> assign(:projects, Projects.list_projects(socket.assigns.repository))
+           |> refresh_panel(:projects)
            |> assign(
              :form,
              to_form(Projects.change_project(socket.assigns.repository, %Project{}, %{}))

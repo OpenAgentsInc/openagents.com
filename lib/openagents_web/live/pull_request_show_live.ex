@@ -18,6 +18,7 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   alias OpenAgents.Repositories
   alias OpenAgents.Stacks
   alias OpenAgents.Stacks.Restack
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
   alias OpenAgentsWeb.UI.Circle
@@ -26,17 +27,22 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
     pull_request = PullRequests.get_by_number!(repository, String.to_integer(number))
 
-    stack_context =
-      case Stacks.review_context(repository, pull_request) do
-        {:ok, context} -> context
-        {:error, :not_stacked} -> nil
-      end
-
+    stack_context = review_context(repository, pull_request)
     stack_history = if stack_context, do: nil, else: merged_history(pull_request)
     stack_placement = stack_context || stack_history
 
+    # Two publishers, because two things move this page. The tab counts and
+    # the pull request's own state follow the repository's issues -- a pull
+    # request is an issue row with a `pull_requests` record pointing at it --
+    # and the stack rebuilds from the outbox events a restack emits.
+    if connected?(socket) do
+      :ok = Repositories.subscribe_issues(repository.id)
+      :ok = Stacks.EventDispatcher.subscribe(repository.id)
+    end
+
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
@@ -69,6 +75,59 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   def handle_params(params, _uri, socket) do
     view = if params["view"] == "cumulative", do: :cumulative, else: :layer
     {:noreply, socket |> assign(:stack_view, view) |> assign_stack_diff()}
+  end
+
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :pull_request, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  # The dispatcher delivers at least once and carries a payload for consumers
+  # that deduplicate by event id. This page needs neither: it re-reads the
+  # stack, so a redelivered event costs one read and says the same thing.
+  def handle_info({:stack_event, _event}, socket),
+    do: {:noreply, LiveRefresh.mark_stale(socket, :pull_request, &refresh_panel/2)}
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  # Everything the mount derived from the pull request, re-derived. The counts
+  # stay aggregates, and authority is re-read rather than remembered, so a
+  # viewer who loses write access loses the restack action with it.
+  defp refresh_panel(socket, :pull_request) do
+    repository = socket.assigns.repository
+    number = socket.assigns.pull_request.issue.number
+
+    case fetch_pull_request(repository, number) do
+      nil ->
+        socket
+
+      pull_request ->
+        stack_context = review_context(repository, pull_request)
+
+        socket
+        |> assign(:pull_request, pull_request)
+        |> assign(:open_issue_count, open_issue_count(repository))
+        |> assign(:open_pull_request_count, open_pull_request_count(repository))
+        |> assign(:stack_context, stack_context)
+        |> assign(:stack_history, if(stack_context, do: nil, else: merged_history(pull_request)))
+        |> assign(:can_write, Repositories.writable?(repository, socket.assigns.current_user))
+        |> assign_stack_diff()
+    end
+  end
+
+  defp fetch_pull_request(repository, number) do
+    PullRequests.get_by_number!(repository, number)
+  rescue
+    Ecto.NoResultsError -> nil
+  end
+
+  defp review_context(repository, pull_request) do
+    case Stacks.review_context(repository, pull_request) do
+      {:ok, context} -> context
+      {:error, :not_stacked} -> nil
+    end
   end
 
   defp assign_stack_diff(%{assigns: %{stack_context: nil}} = socket) do
@@ -181,14 +240,8 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   defp refresh_stack(socket) do
     %{assigns: assigns} = socket
 
-    stack_context =
-      case Stacks.review_context(assigns.repository, assigns.pull_request) do
-        {:ok, context} -> context
-        {:error, :not_stacked} -> nil
-      end
-
     socket
-    |> assign(:stack_context, stack_context)
+    |> assign(:stack_context, review_context(assigns.repository, assigns.pull_request))
     |> assign_stack_diff()
   end
 

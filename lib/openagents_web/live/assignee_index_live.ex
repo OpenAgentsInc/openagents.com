@@ -1,28 +1,62 @@
 defmodule OpenAgentsWeb.AssigneeIndexLive do
   @moduledoc """
   Renders assignees derived from existing issue data.
+
+  The page is a frequency aggregate over issues, so it moves whenever the
+  repository's issues do. It hears that on the issue topic and re-reads
+  through the same writable-repository check it mounted under; the message
+  carries a repository id and nothing else.
+
+  The aggregate is grouped in Postgres rather than in memory. Loading every
+  issue in a repository to count logins is the read `93c3383` removed from the
+  homepage, and a page that re-read it per write would pay it far more often
+  than a page that only ever read it once.
   """
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Issues
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
 
-    assignees =
-      Issues.list_issues(repository, state: "all")
-      |> Enum.flat_map(&(&1.assignees || []))
-      |> Enum.frequencies_by(& &1["login"])
-      |> Enum.sort_by(fn {_, count} -> -count end)
+    if connected?(socket), do: Repositories.subscribe_issues(repository.id)
 
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
-     |> assign(:assignees, assignees)}
+     |> refresh_panel(:assignees)}
+  end
+
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :assignees, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  # Re-read through the same check the mount made: a viewer whose write access
+  # was revoked while the page was open stops being handed its rows.
+  defp refresh_panel(socket, :assignees) do
+    case Repositories.get_visible_repository(
+           socket.assigns.repository.id,
+           socket.assigns.current_user
+         ) do
+      nil ->
+        assign(socket, :assignees, [])
+
+      repository ->
+        if Repositories.writable?(repository, socket.assigns.current_user),
+          do: assign(socket, :assignees, Issues.count_issues_by_assignee(repository)),
+          else: assign(socket, :assignees, [])
+    end
   end
 
   def render(assigns) do

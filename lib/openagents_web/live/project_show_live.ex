@@ -31,6 +31,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   alias OpenAgents.Projects.PromiseRegistry
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.UI.Circle
 
   # A board renders the columns its project stores, so a heading is a field
@@ -52,12 +53,19 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     project = Projects.get_project_by_number!(repository, String.to_integer(number))
     can_write = Repositories.writable?(repository, user)
 
-    if connected?(socket), do: Repositories.subscribe_projects(repository.id)
+    # Two publishers, because two things move this board. The cards follow the
+    # repository's projects; the picker that adds one follows its issues.
+    if connected?(socket) do
+      :ok = Repositories.subscribe_projects(repository.id)
+      :ok = Repositories.subscribe_issues(repository.id)
+    end
+
     promise_context = PromiseRegistry.context(project)
     issue_options = issue_options(repository)
 
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
@@ -238,25 +246,45 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   # nothing about who may see what, so a card in a repository this viewer
   # cannot read is filtered out on the re-read exactly as it was on mount.
   def handle_info({:projects_changed, repository_id}, socket) do
-    if repository_id == socket.assigns.repository.id do
-      try do
-        Projects.get_project_by_number!(socket.assigns.repository, socket.assigns.project.number)
-      rescue
-        Ecto.NoResultsError -> nil
-      end
-      |> case do
-        nil ->
-          {:noreply, put_flash(socket, :error, "This project no longer exists.")}
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :board, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
 
-        project ->
-          {:noreply,
-           socket
-           |> assign(:project, project)
-           |> load_board(project, PromiseRegistry.context(project))
-           |> reload_notes()}
-      end
-    else
-      {:noreply, socket}
+  # The picker offers the repository's issues, so an issue opened elsewhere
+  # belongs in it. The board itself does not move on this message.
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :issue_options, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  defp refresh_panel(socket, :issue_options),
+    do: assign(socket, :issue_options, issue_options(socket.assigns.repository))
+
+  defp refresh_panel(socket, :board) do
+    # Authority is re-read on the same beat as the board, not only when the
+    # viewer takes an action: a membership revoked while this page is open
+    # should take the write controls with it.
+    socket = refresh_authority(socket)
+
+    try do
+      Projects.get_project_by_number!(socket.assigns.repository, socket.assigns.project.number)
+    rescue
+      Ecto.NoResultsError -> nil
+    end
+    |> case do
+      nil ->
+        put_flash(socket, :error, "This project no longer exists.")
+
+      project ->
+        socket
+        |> assign(:project, project)
+        |> load_board(project, PromiseRegistry.context(project))
+        |> reload_notes()
     end
   end
 
@@ -427,10 +455,10 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
   defp verification_time(_value), do: "Not verified"
 
-  defp issue_options(repository) do
-    Issues.list_issues(repository, state: "all")
-    |> Enum.map(&{"##{&1.number} #{&1.title}", &1.number})
-  end
+  # Two columns rather than whole issue rows: the picker is a list of labels,
+  # and this read now happens whenever the repository's issues move rather
+  # than once per visit.
+  defp issue_options(repository), do: Issues.list_issue_options(repository)
 
   defp author(%{author: %{"login" => login}}) when is_binary(login), do: login
   defp author(_note), do: "unattributed"

@@ -87,6 +87,71 @@ defmodule OpenAgents.Issues do
   def count_issues(%Repository{} = repository, opts) when is_list(opts),
     do: repository.id |> issue_query(opts) |> Repo.aggregate(:count)
 
+  @doc """
+  How many issues each assignee login holds in `repository`, most first.
+
+  A grouped aggregate rather than every issue loaded and counted in memory.
+  The assignee index is a page of counts, and `93c3383` removed exactly this
+  read from the homepage: a page that measures a collection by loading it pays
+  for the whole repository once per visit, and once per write as soon as it
+  follows the issues it counts.
+
+  Ties break on the login, so the order is the same read twice.
+  """
+  def count_issues_by_assignee(%Repository{} = repository) do
+    repository.id
+    |> issue_query(state: "all")
+    |> join(:cross, [issue: issue], a in fragment("unnest(?)", issue.assignees), as: :assignee)
+    |> where([assignee: a], fragment("? ->> 'login'", a) != "")
+    |> group_by([assignee: a], fragment("? ->> 'login'", a))
+    |> select([assignee: a], {fragment("? ->> 'login'", a), count()})
+    |> order_by([assignee: a], desc: count(), asc: fragment("? ->> 'login'", a))
+    |> Repo.all()
+  end
+
+  @doc """
+  How many open and closed issues each milestone holds in `repository`.
+
+  Keyed by milestone number, as `%{open: integer, closed: integer}`. Same
+  reason as `count_issues_by_assignee/1`: the milestone index prints three
+  numbers per milestone, and counting them by loading every issue in the
+  repository costs the collection to measure it.
+  """
+  def count_issues_by_milestone(%Repository{} = repository) do
+    repository.id
+    |> issue_query(state: "all")
+    |> where([issue: i], not is_nil(i.milestone))
+    |> group_by([issue: i], [fragment("(? ->> 'number')::int", i.milestone), i.state])
+    |> select([issue: i], {fragment("(? ->> 'number')::int", i.milestone), i.state, count()})
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {milestone_number, state, count}, counts ->
+      key = if state == "closed", do: :closed, else: :open
+
+      Map.update(
+        counts,
+        milestone_number,
+        Map.put(%{open: 0, closed: 0}, key, count),
+        &Map.put(&1, key, count)
+      )
+    end)
+  end
+
+  @doc """
+  Every issue in `repository` as a `{label, number}` pair for a picker.
+
+  Two columns rather than whole issue rows: a select is a list of labels, and
+  a page that re-reads it whenever the repository's issues move should not
+  carry every body and every timestamp along with them.
+  """
+  def list_issue_options(%Repository{} = repository) do
+    repository.id
+    |> issue_query(state: "all")
+    |> order_by([issue: issue], desc: issue.inserted_at, desc: issue.id)
+    |> select([issue: issue], {issue.number, issue.title})
+    |> Repo.all()
+    |> Enum.map(fn {number, title} -> {"##{number} #{title}", number} end)
+  end
+
   def parse_page(page) when is_integer(page), do: page |> max(1) |> min(@maximum_page)
 
   def parse_page(page) when is_binary(page) do

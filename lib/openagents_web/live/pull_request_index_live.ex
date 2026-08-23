@@ -5,14 +5,21 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
   alias OpenAgents.Issues
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.UI.Circle
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
     pull_requests = PullRequests.list(repository)
 
+    # Both tab counts hang off issue rows -- a pull request is an issue with a
+    # `pull_requests` record pointing at it -- so the issue topic is the one
+    # that says either of them moved.
+    if connected?(socket), do: Repositories.subscribe_issues(repository.id)
+
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
@@ -21,6 +28,28 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
      |> assign(:open_pull_request_count, open_pull_request_count(repository))
      |> assign(:pull_requests_empty?, pull_requests == [])
      |> stream(:pull_requests, pull_requests)}
+  end
+
+  def handle_info({:issues_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :pull_requests, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  # The counts stay aggregates, and the list stays one read of the pull
+  # requests rather than a count of them.
+  defp refresh_panel(socket, :pull_requests) do
+    repository = socket.assigns.repository
+    pull_requests = PullRequests.list(repository)
+
+    socket
+    |> assign(:open_issue_count, open_issue_count(repository))
+    |> assign(:open_pull_request_count, open_pull_request_count(repository))
+    |> assign(:pull_requests_empty?, pull_requests == [])
+    |> stream(:pull_requests, pull_requests, reset: true)
   end
 
   def render(assigns) do

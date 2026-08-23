@@ -3,6 +3,16 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
 
   alias OpenAgents.Chat.AccountTurns
 
+  test "an operator can retry the provider failures a retry can fix" do
+    for code <- ~w(rate_limited service_unavailable stream_interrupted invalid_response
+                   provider_unavailable server_error) do
+      assert AccountTurns.retryable_error_code?(code)
+    end
+
+    refute AccountTurns.retryable_error_code?("missing_api_key")
+    refute AccountTurns.retryable_error_code?(nil)
+  end
+
   test "submit journals the provider lifecycle and projects the same ordered messages" do
     user = repository_user_fixture("account-chat-journal")
 

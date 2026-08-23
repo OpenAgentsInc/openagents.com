@@ -8,6 +8,15 @@ defmodule OpenAgents.Chat.AccountTurns do
   alias OpenAgents.Repo
 
   @max_message_bytes 8_000
+  @run_registry OpenAgents.Chat.RunRegistry
+  @retryable_error_codes ~w(
+    rate_limited
+    service_unavailable
+    stream_interrupted
+    invalid_response
+    provider_unavailable
+    server_error
+  )
 
   def submit(user, content, options \\ [])
 
@@ -33,6 +42,27 @@ defmodule OpenAgents.Chat.AccountTurns do
   end
 
   def submit(%User{}, _content, _options), do: {:error, :invalid_message}
+
+  @doc """
+  Stops the streaming run for this account.
+
+  The provider task holds the open stream, so cancellation stops that task and
+  then journals the cancellation in the same transaction that flips the run out
+  of `streaming`. A run that already reached a terminal state stays there.
+  """
+  def cancel(%User{} = user) do
+    with %{id: conversation_id} <- Conversations.get_conversation_for_user(user),
+         %AccountRun{} = run <- streaming_run(conversation_id) do
+      stop_provider_task(run.id)
+      cancel_run(run.id)
+    else
+      _no_active_turn -> {:error, :no_active_turn}
+    end
+  end
+
+  @doc "Whether an operator can retry the turn that recorded this error code."
+  def retryable_error_code?(code) when is_binary(code), do: code in @retryable_error_codes
+  def retryable_error_code?(_code), do: false
 
   def list_events(%User{} = user) do
     case Conversations.get_conversation_for_user(user) do
@@ -148,10 +178,64 @@ defmodule OpenAgents.Chat.AccountTurns do
       {:error, :turn_in_progress}
   end
 
+  defp streaming_run(conversation_id) do
+    Repo.one(
+      from r in AccountRun,
+        where: r.conversation_id == ^conversation_id and r.status == "streaming",
+        order_by: [desc: r.inserted_at],
+        limit: 1
+    )
+  end
+
+  defp stop_provider_task(run_id) do
+    case Registry.lookup(@run_registry, run_id) do
+      [{pid, _value}] -> Process.exit(pid, :kill)
+      [] -> :ok
+    end
+  end
+
+  defp cancel_run(run_id) do
+    now = DateTime.utc_now()
+
+    result =
+      Repo.transaction(fn ->
+        run = Repo.one!(from r in AccountRun, where: r.id == ^run_id, lock: "FOR UPDATE")
+
+        if run.status == "streaming" do
+          append_event_locked!(run, "response_cancelled", %{}, now)
+
+          run
+          |> AccountRun.changeset(%{
+            status: "cancelled",
+            assistant_content: streamed_text(run.id),
+            completed_at: now,
+            latency_ms: DateTime.diff(now, run.started_at, :millisecond)
+          })
+          |> Repo.update!()
+        else
+          Repo.rollback(:no_active_turn)
+        end
+      end)
+
+    case result do
+      {:ok, run} -> {:ok, run_projection(run)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp streamed_text(run_id) do
+    from(e in AccountEvent,
+      where: e.run_id == ^run_id and e.kind == "text_delta",
+      order_by: [asc: e.sequence],
+      select: e.payload
+    )
+    |> Repo.all()
+    |> Enum.map_join("", fn payload -> payload["value"] || "" end)
+  end
+
   defp start_provider(run, user, subscriber, streamer) do
     request = %{
       "model" => OpenRouter.default_model(),
-      "models" => ["openrouter/free"],
       "reasoning" => run.reasoning_effort,
       "messages" =>
         provider_history(run.conversation_id, run.id) ++
@@ -159,6 +243,8 @@ defmodule OpenAgents.Chat.AccountTurns do
     }
 
     case Task.Supervisor.start_child(OpenAgents.ProviderTaskSupervisor, fn ->
+           register_provider_task(run.id)
+
            result =
              try do
                streamer.(
@@ -188,25 +274,42 @@ defmodule OpenAgents.Chat.AccountTurns do
     end
   end
 
+  # Cancellation needs the process that holds the open stream, and the run id is
+  # the only handle the browser has.
+  defp register_provider_task(run_id) do
+    case Registry.register(@run_registry, run_id, nil) do
+      {:ok, _owner} -> :ok
+      {:error, {:already_registered, _pid}} -> :ok
+    end
+  rescue
+    ArgumentError -> :ok
+  end
+
   defp persist_provider_event(run_id, {kind, payload}),
     do: append_event(run_id, Atom.to_string(kind), normalize_payload(payload))
 
   defp finish_run(run_id, {:ok, completion}) do
+    # Token counts are read before redaction, which blanks every field whose
+    # name contains `token`, and are stored beside the redacted completion.
+    usage = usage_counts(completion["usage"])
     completion = OpenAgents.Tools.Redaction.redact(completion)
 
     terminal_update(run_id, "response_completed", completion, %{
       status: "completed",
       assistant_content: completion["assistant_content"] || "",
-      completion: completion
+      completion: completion,
+      usage: usage
     })
   end
 
   defp finish_run(run_id, {:error, reason}) do
     error = public_error(reason)
+    code = error_code(reason)
 
-    terminal_update(run_id, "response_failed", %{"reason" => error}, %{
+    terminal_update(run_id, "response_failed", %{"reason" => error, "code" => code}, %{
       status: "failed",
-      error: error
+      error: error,
+      error_code: code
     })
   end
 
@@ -215,8 +318,19 @@ defmodule OpenAgents.Chat.AccountTurns do
 
     Repo.transaction(fn ->
       run = Repo.one!(from r in AccountRun, where: r.id == ^run_id, lock: "FOR UPDATE")
-      append_event_locked!(run, kind, payload, now)
-      run |> AccountRun.changeset(Map.put(attrs, :completed_at, now)) |> Repo.update!()
+
+      if run.status == "streaming" do
+        append_event_locked!(run, kind, payload, now)
+
+        attrs =
+          attrs
+          |> Map.put(:completed_at, now)
+          |> Map.put(:latency_ms, DateTime.diff(now, run.started_at, :millisecond))
+
+        run |> AccountRun.changeset(attrs) |> Repo.update!()
+      else
+        run
+      end
     end)
   end
 
@@ -310,6 +424,51 @@ defmodule OpenAgents.Chat.AccountTurns do
     if run.status == "streaming", do: [user], else: [user, assistant_message(run)]
   end
 
+  # Provider-reported counts only. OpenRouter names them differently across its
+  # two APIs, and a field the provider left out stays `nil` instead of a guess.
+  defp usage_counts(usage) when is_map(usage) do
+    counts = %{
+      "input" => token_count(usage["input_tokens"] || usage["prompt_tokens"]),
+      "output" => token_count(usage["output_tokens"] || usage["completion_tokens"]),
+      "total" => token_count(usage["total_tokens"]),
+      "reasoning" =>
+        token_count(
+          detail(usage, "output_tokens_details", "reasoning_tokens") ||
+            detail(usage, "completion_tokens_details", "reasoning_tokens")
+        ),
+      "cached" =>
+        token_count(
+          detail(usage, "input_tokens_details", "cached_tokens") ||
+            detail(usage, "prompt_tokens_details", "cached_tokens")
+        )
+    }
+
+    if Enum.all?(Map.values(counts), &is_nil/1), do: nil, else: counts
+  end
+
+  defp usage_counts(_usage), do: nil
+
+  defp usage_view(counts) when is_map(counts),
+    do: %{
+      input: counts["input"],
+      output: counts["output"],
+      total: counts["total"],
+      reasoning: counts["reasoning"],
+      cached: counts["cached"]
+    }
+
+  defp usage_view(_counts), do: nil
+
+  defp detail(usage, key, field) do
+    case usage[key] do
+      details when is_map(details) -> details[field]
+      _missing -> nil
+    end
+  end
+
+  defp token_count(value) when is_integer(value) and value >= 0, do: value
+  defp token_count(_value), do: nil
+
   defp assistant_message(run) do
     completion = run.completion
     reasoning = completion && completion["reasoning_summary"]
@@ -321,6 +480,13 @@ defmodule OpenAgents.Chat.AccountTurns do
       content: run.assistant_content || "",
       completion: completion,
       error: run.error,
+      error_code: run.error_code,
+      retryable?: retryable_error_code?(run.error_code),
+      cancelled?: run.status == "cancelled",
+      usage: usage_view(run.usage),
+      provider_lane: completion && completion["provider"],
+      request_id: completion && completion["request_id"],
+      latency_ms: run.latency_ms,
       history?: run.status == "completed",
       provider_message_id: completion && completion["assistant_message_id"],
       provider_status: if(completion && completion["assistant_message_id"], do: "completed"),
@@ -420,10 +586,24 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   defp normalize_payload(payload), do: %{"value" => OpenAgents.Tools.Redaction.redact(payload)}
   defp public_error(:missing_api_key), do: "OpenRouter is not configured for this environment."
-  defp public_error(:rate_limited), do: "OpenRouter is rate-limited. Try again later."
+  defp public_error(:rate_limited), do: "OpenRouter is rate-limited. Try again."
+
+  defp public_error(:service_unavailable),
+    do: "OpenRouter is unavailable right now. Try again."
+
+  defp public_error(:stream_interrupted),
+    do: "The response stream stopped before it finished. Try again."
+
+  defp public_error(:invalid_response),
+    do: "OpenRouter returned a response this console could not read. Try again."
+
   defp public_error(:provider_unavailable), do: "OpenRouter could not complete that message."
   defp public_error(:turn_start_failed), do: "The chat turn could not start."
   defp public_error(_reason), do: "OpenRouter could not complete that message."
+
+  defp error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_code({:provider_error, code, _detail}) when is_binary(code), do: code
+  defp error_code(_reason), do: "provider_error"
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
   defp notify(pid, message) when is_pid(pid), do: send(pid, message)
@@ -603,6 +783,7 @@ defmodule OpenAgents.Chat.AccountTurns do
       "id" => run.id,
       "status" => run.status,
       "reasoning_effort" => run.reasoning_effort,
+      "latency_ms" => run.latency_ms,
       "started_at" => DateTime.to_iso8601(run.started_at)
     }
 end

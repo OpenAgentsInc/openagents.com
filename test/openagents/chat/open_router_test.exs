@@ -299,6 +299,130 @@ defmodule OpenAgents.Chat.OpenRouterTest do
              )
   end
 
+  test "normalizes an unavailable provider" do
+    Req.Test.expect(__MODULE__, fn conn ->
+      assert conn.request_path == "/api/v1/responses"
+      Plug.Conn.send_resp(conn, 503, "service unavailable")
+    end)
+
+    assert {:error, :service_unavailable} = stream_hello()
+  end
+
+  test "normalizes a rate-limited stream" do
+    Req.Test.expect(__MODULE__, fn conn -> Plug.Conn.send_resp(conn, 429, "rate limited") end)
+
+    assert {:error, :rate_limited} = stream_hello()
+  end
+
+  test "reports a transport failure before the stream starts" do
+    Req.Test.expect(__MODULE__, fn conn -> Req.Test.transport_error(conn, :econnrefused) end)
+
+    assert {:error, :provider_unavailable} = stream_hello()
+  end
+
+  test "reports a transport failure that interrupts a started stream" do
+    Req.Test.expect(__MODULE__, fn conn ->
+      conn =
+        conn
+        |> Plug.Conn.put_resp_content_type("text/event-stream")
+        |> Plug.Conn.send_chunked(200)
+
+      {:ok, conn} =
+        Plug.Conn.chunk(conn, sse(%{"type" => "response.content_part.delta", "delta" => "Half"}))
+
+      Req.Test.transport_error(conn, :closed)
+    end)
+
+    assert {:error, :provider_unavailable} = stream_hello()
+  end
+
+  test "reports a stream that ends before the provider finishes the response" do
+    Req.Test.expect(__MODULE__, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(
+        200,
+        sse(%{"type" => "response.content_part.delta", "delta" => "Half"})
+      )
+    end)
+
+    assert {:error, :invalid_response} = stream_hello()
+  end
+
+  test "rejects a malformed provider event" do
+    Req.Test.expect(__MODULE__, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, "data: {\"type\": \n\n")
+    end)
+
+    assert {:error, :invalid_response} = stream_hello()
+  end
+
+  test "keeps the usage, request, and provider fields a chat completions stream reports" do
+    Req.Test.expect(__MODULE__, fn conn -> Plug.Conn.send_resp(conn, 404, "not found") end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      body =
+        sse(%{
+          "id" => "gen-metadata",
+          "object" => "chat.completion.chunk",
+          "model" => "stealth/ox-alpha",
+          "provider" => "Stealth",
+          "choices" => [%{"index" => 0, "delta" => %{"content" => "Measured"}}]
+        }) <>
+          sse(%{
+            "id" => "gen-metadata",
+            "object" => "chat.completion.chunk",
+            "model" => "stealth/ox-alpha",
+            "choices" => [],
+            "usage" => %{
+              "prompt_tokens" => 12,
+              "completion_tokens" => 3,
+              "total_tokens" => 15
+            }
+          }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    assert {:ok, completion} = stream_hello()
+
+    assert completion["request_id"] == "gen-metadata"
+    assert completion["provider"] == "Stealth"
+
+    assert completion["usage"] == %{
+             "prompt_tokens" => 12,
+             "completion_tokens" => 3,
+             "total_tokens" => 15
+           }
+  end
+
+  test "omits the usage a chat completions stream never reports" do
+    Req.Test.expect(__MODULE__, fn conn -> Plug.Conn.send_resp(conn, 404, "not found") end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      body =
+        sse(%{
+          "object" => "chat.completion.chunk",
+          "model" => "stealth/ox-alpha",
+          "choices" => [%{"index" => 0, "delta" => %{"content" => "Quiet"}}]
+        }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    assert {:ok, completion} = stream_hello()
+
+    refute Map.has_key?(completion, "usage")
+    refute Map.has_key?(completion, "request_id")
+    refute Map.has_key?(completion, "provider")
+  end
+
   test "prefers the Responses API and streams structured history" do
     Req.Test.expect(__MODULE__, fn conn ->
       assert conn.request_path == "/api/v1/responses"
@@ -1058,4 +1182,13 @@ defmodule OpenAgents.Chat.OpenRouterTest do
   end
 
   defp sse(event), do: "data: " <> Jason.encode!(event) <> "\n\n"
+
+  defp stream_hello do
+    OpenRouter.stream(
+      %{"model" => "stealth/ox-alpha", "messages" => [%{"role" => "user", "content" => "Hello"}]},
+      fn _event -> :ok end,
+      api_key: "test-openrouter-key",
+      request_options: [plug: {Req.Test, __MODULE__}]
+    )
+  end
 end

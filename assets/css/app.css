@@ -723,7 +723,7 @@ body.docs-sidebar-open {
   padding: 40px 64px 96px;
 }
 
-.chat-placeholder-composer {
+.chat-console-composer {
   position: relative;
   flex: none;
   z-index: 30;
@@ -732,17 +732,17 @@ body.docs-sidebar-open {
   padding: 16px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 
-.chat-placeholder-composer__form {
+.chat-console-composer__form {
   width: 100%;
   max-width: 46rem;
   margin-inline: auto;
 }
 
-.chat-placeholder-composer__toolbar {
+.chat-console-composer__toolbar {
   padding-bottom: 8px;
 }
 
-.chat-placeholder-composer__reasoning {
+.chat-console-composer__reasoning {
   width: auto;
   min-height: 28px;
   margin: 0;
@@ -755,13 +755,13 @@ body.docs-sidebar-open {
   line-height: 1rem;
 }
 
-.chat-placeholder-composer__reasoning:hover:not(:disabled),
-.chat-placeholder-composer__reasoning:focus-visible {
+.chat-console-composer__reasoning:hover:not(:disabled),
+.chat-console-composer__reasoning:focus-visible {
   border-color: var(--line-strong);
   color: var(--text-primary);
 }
 
-.chat-placeholder-composer__submit {
+.chat-console-composer__submit {
   width: 32px;
   height: 32px;
   min-height: 32px;
@@ -773,7 +773,7 @@ body.docs-sidebar-open {
 }
 
 @media (hover: hover) {
-  .chat-placeholder-composer__submit:hover:not(:disabled) {
+  .chat-console-composer__submit:hover:not(:disabled) {
     border-color: var(--text-muted);
     background: var(--ink-hover);
     color: var(--text-primary);

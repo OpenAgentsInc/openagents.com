@@ -1,12 +1,13 @@
 defmodule OpenAgents.Chat.OpenRouter do
   @moduledoc """
-  Server-side OpenRouter Responses adapter for the `/chat` preview.
+  Server-side OpenRouter Responses adapter for the `/chat` console.
 
   The adapter keeps the OpenRouter credential and HTTP transport on the server.
-  It requests Ox Alpha first, with the Free Models Router as its configured
-  model fallback. It uses chat completions only when a provider does not support
-  Responses, and returns normalized failures without provider credentials or
-  response bodies.
+  It requests Ox Alpha and uses chat completions only when a provider does not
+  support Responses. It returns normalized failures without provider
+  credentials or response bodies, and it separates the failures an operator can
+  retry — a rate limit, an unavailable provider, an interrupted stream, and a
+  malformed stream — from the ones a retry cannot fix.
   """
 
   alias OpenAgents.Chat.OpenRouter.{ResponsesStreamDecoder, ToolRuntime}
@@ -14,6 +15,7 @@ defmodule OpenAgents.Chat.OpenRouter do
   @chat_completions_endpoint "https://openrouter.ai/api/v1/chat/completions"
   @responses_endpoint "https://openrouter.ai/api/v1/responses"
   @default_model "stealth/ox-alpha"
+  @model_label "Ox Alpha"
   @maximum_tool_rounds 6
   @tool_instructions """
   Ground every repository claim in repository tool output. Never claim that a file or directory exists unless a tool result confirms it. Use list_repository_directory before guessing a path, and use the returned paths exactly. Do not retry the same failed repository, path, and ref combination. If a read fails, list its parent directory once or tell the user that the requested content is unavailable.
@@ -25,6 +27,8 @@ defmodule OpenAgents.Chat.OpenRouter do
           :missing_api_key
           | :rate_limited
           | :provider_unavailable
+          | :service_unavailable
+          | :stream_interrupted
           | :invalid_response
           | {:provider_error, String.t(), String.t() | nil}
 
@@ -47,6 +51,9 @@ defmodule OpenAgents.Chat.OpenRouter do
 
   @doc false
   def default_model, do: Application.get_env(:openagents, :openrouter_model, @default_model)
+
+  @doc "The fixed label the console shows for the configured model."
+  def model_label, do: @model_label
 
   @doc false
   def reasoning_effort(value) when value in @reasoning_efforts, do: value
@@ -390,8 +397,7 @@ defmodule OpenAgents.Chat.OpenRouter do
 
   defp consume_stream(%Req.Response{body: %Req.Response.Async{} = body}, on_event) do
     body
-    |> Enum.reduce_while({:ok, %{buffer: "", complete?: false, model: nil}}, fn chunk,
-                                                                                {:ok, state} ->
+    |> Enum.reduce_while({:ok, empty_chat_stream_state()}, fn chunk, {:ok, state} ->
       case consume_chunk(state, chunk, on_event) do
         {:ok, state} -> {:cont, {:ok, state}}
         {:error, reason} -> {:halt, {:error, reason}}
@@ -399,7 +405,7 @@ defmodule OpenAgents.Chat.OpenRouter do
     end)
     |> finish_stream()
   rescue
-    _exception -> {:error, :provider_unavailable}
+    _exception -> {:error, :stream_interrupted}
   end
 
   defp consume_stream(%Req.Response{}, _on_event), do: {:error, :invalid_response}
@@ -423,7 +429,7 @@ defmodule OpenAgents.Chat.OpenRouter do
     end)
     |> finish_responses_stream()
   rescue
-    _exception -> {:error, :provider_unavailable}
+    _exception -> {:error, :stream_interrupted}
   end
 
   defp consume_responses_stream(%Req.Response{}, _on_event, _model),
@@ -472,7 +478,7 @@ defmodule OpenAgents.Chat.OpenRouter do
   defp consume_event(state, {:ok, %{} = event}, on_event) do
     with {:ok, state} <- capture_model(state, event["model"]),
          :ok <- emit_text_delta(event, on_event) do
-      {:ok, state}
+      {:ok, capture_provider_metadata(state, event)}
     end
   end
 
@@ -484,6 +490,23 @@ defmodule OpenAgents.Chat.OpenRouter do
     do: {:ok, %{state | model: model}}
 
   defp capture_model(_state, _model), do: {:error, :invalid_response}
+
+  # Provider-reported evidence only. A missing field stays missing rather than
+  # becoming a guess the console would present as measured.
+  defp capture_provider_metadata(state, event) do
+    state
+    |> put_metadata(:usage, event["usage"])
+    |> put_metadata(:request_id, event["id"])
+    |> put_metadata(:provider, event["provider"])
+  end
+
+  defp put_metadata(state, :usage, usage) when is_map(usage), do: %{state | usage: usage}
+
+  defp put_metadata(state, key, value)
+       when key in [:request_id, :provider] and is_binary(value) and byte_size(value) in 1..256,
+       do: Map.put(state, key, value)
+
+  defp put_metadata(state, _key, _value), do: state
 
   defp emit_text_delta(%{"choices" => choices}, on_event) when is_list(choices) do
     choices
@@ -505,8 +528,25 @@ defmodule OpenAgents.Chat.OpenRouter do
 
   defp emit_text_delta(%{}, _on_event), do: :ok
 
-  defp finish_stream({:ok, %{complete?: true, model: model}}) when is_binary(model),
-    do: {:ok, %{"object" => "chat.completion", "model" => model}}
+  defp empty_chat_stream_state,
+    do: %{
+      buffer: "",
+      complete?: false,
+      model: nil,
+      usage: nil,
+      request_id: nil,
+      provider: nil
+    }
+
+  defp finish_stream({:ok, %{complete?: true, model: model} = state}) when is_binary(model) do
+    completion =
+      %{"object" => "chat.completion", "model" => model}
+      |> maybe_put("usage", state.usage)
+      |> maybe_put("request_id", state.request_id)
+      |> maybe_put("provider", state.provider)
+
+    {:ok, completion}
+  end
 
   defp finish_stream({:ok, _state}), do: {:error, :invalid_response}
   defp finish_stream({:error, reason}), do: {:error, reason}
@@ -530,7 +570,13 @@ defmodule OpenAgents.Chat.OpenRouter do
 
   defp decode_response(%Req.Response{} = response), do: {:error, provider_failure(response)}
 
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
   defp provider_failure(%Req.Response{status: 429}), do: :rate_limited
+
+  defp provider_failure(%Req.Response{status: status}) when status in [502, 503, 504],
+    do: :service_unavailable
 
   defp provider_failure(%Req.Response{body: %Req.Response.Async{} = body}) do
     body

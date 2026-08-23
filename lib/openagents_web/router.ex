@@ -174,7 +174,7 @@ defmodule OpenAgentsWeb.Router do
         {OpenAgentsWeb.UserAuth, :ensure_authenticated},
         {OpenAgentsWeb.UserAuth, :ensure_admin}
       ] do
-      live "/chat", ChatPlaceholderLive, :index
+      live "/chat", ChatConsoleLive, :index
     end
   end
 

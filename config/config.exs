@@ -110,6 +110,12 @@ config :openagents,
     poll_interval_ms: 1_000,
     poll_attempts: 60
   ],
+  # The provider does not report a context window, so the `/chat` console shows
+  # a context meter only where a deployment states one.
+  openrouter_context_window: nil,
+  # An override for the `/chat` streaming function. Tests set it; nothing else
+  # does, so the console reaches OpenRouter everywhere else.
+  chat_console_streamer: nil,
   shadow_programs: [
     enabled: false,
     provider: OpenAgents.ShadowPrograms.OpenAI,

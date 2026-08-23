@@ -13,7 +13,10 @@ defmodule OpenAgents.Chat.AccountRun do
     field :user_content, :string
     field :assistant_content, :string
     field :completion, :map
+    field :usage, :map
     field :error, :string
+    field :error_code, :string
+    field :latency_ms, :integer
     field :started_at, :utc_datetime_usec
     field :completed_at, :utc_datetime_usec
     timestamps()
@@ -27,7 +30,10 @@ defmodule OpenAgents.Chat.AccountRun do
       :user_content,
       :assistant_content,
       :completion,
+      :usage,
       :error,
+      :error_code,
+      :latency_ms,
       :started_at,
       :completed_at
     ])
@@ -38,7 +44,7 @@ defmodule OpenAgents.Chat.AccountRun do
       :user_content,
       :started_at
     ])
-    |> validate_inclusion(:status, ["streaming", "completed", "failed"])
+    |> validate_inclusion(:status, ["streaming", "completed", "failed", "cancelled"])
     |> foreign_key_constraint(:conversation_id)
     |> unique_constraint(:conversation_id,
       name: :account_chat_runs_one_streaming_per_conversation

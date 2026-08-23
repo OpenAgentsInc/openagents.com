@@ -156,7 +156,7 @@ arguments, repository URLs, receipts, or checked-in environment files.
 | GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY_ID` | Bounded active-key identifier prefixed with `development-`, `test-`, `staging-`, or `production-` to match the runtime |
 | GitHub | `GITHUB_TOKEN_DECRYPTION_KEYS_JSON` | Optional map of at most 16 same-environment prior keys used only during rewrap; omit the active ID |
 | Providers | `OPENAI_API_KEY` | Environment-specific provider secret; required by the current text provider |
-| Providers | `OPENROUTER_API_KEY` | Environment-specific server-only credential for the `/chat` OpenRouter adapter; it requests `stealth/ox-alpha` and uses `openrouter/free` as the fallback; empty disables the adapter |
+| Providers | `OPENROUTER_API_KEY` | Environment-specific server-only credential for the `/chat` OpenRouter adapter; the `/chat` console requests `stealth/ox-alpha` only, so a turn fails rather than answering as another model; empty disables the adapter |
 | Providers | `OPENAGENTS_INFERENCE_PROXY_URL` | HTTPS URL without credentials when computers are enabled; empty disables |
 | Computers | `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS` | `300` through `2592000`; Gate 5 uses the 30-day maximum |
 | Recording | `VOICE_RECORDING_ENCRYPTION_KEY` | Base64-encoded 32-byte key when recording is enabled; empty disables recording storage |

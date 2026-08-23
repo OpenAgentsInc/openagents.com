@@ -29,6 +29,7 @@ defmodule OpenAgents.RuntimeSupervisor do
          process_redistribution: :passive,
          delta_crdt_options: [sync_interval: 150]},
         {Registry, keys: :unique, name: OpenAgents.TurnRegistry},
+        {Registry, keys: :unique, name: OpenAgents.Chat.RunRegistry},
         {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.TurnSupervisor},
         {Registry, keys: :unique, name: OpenAgents.VoiceSessionRegistry},
         {DynamicSupervisor, strategy: :one_for_one, name: OpenAgents.VoiceSessionSupervisor},

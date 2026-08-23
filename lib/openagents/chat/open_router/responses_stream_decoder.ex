@@ -171,13 +171,35 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder do
 
     case completion(response) do
       {:ok, completion} ->
-        completion = merge_streamed_reasoning(completion, state)
+        completion =
+          completion
+          |> merge_streamed_reasoning(state)
+          |> merge_provider_metadata(response)
+
         {:ok, %{state | complete?: true, completion: completion}, []}
 
       {:error, :invalid_response} ->
         {:ok, %{state | complete?: true}, []}
     end
   end
+
+  # Provider-reported evidence only, so the console never presents a guess as a
+  # measurement. A response without usage stays a response without usage.
+  defp merge_provider_metadata(completion, response) do
+    completion
+    |> put_metadata("usage", response["usage"])
+    |> put_metadata("request_id", response["id"])
+    |> put_metadata("provider", response["provider"])
+  end
+
+  defp put_metadata(completion, "usage", usage) when is_map(usage),
+    do: Map.put_new(completion, "usage", usage)
+
+  defp put_metadata(completion, key, value)
+       when key in ["request_id", "provider"] and is_binary(value) and byte_size(value) in 1..256,
+       do: Map.put_new(completion, key, value)
+
+  defp put_metadata(completion, _key, _value), do: completion
 
   defp merge_streamed_reasoning(completion, state) do
     completion =

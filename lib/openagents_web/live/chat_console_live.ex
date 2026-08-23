@@ -1,15 +1,29 @@
-defmodule OpenAgentsWeb.ChatPlaceholderLive do
+defmodule OpenAgentsWeb.ChatConsoleLive do
   @moduledoc """
-  A local chat preview, reachable at `/chat` by operators only.
+  The Ox Alpha console, reachable at `/chat` by operators only.
 
-  The preview sends requests to OpenRouter from the server. It prefers the
-  Responses API and uses Chat Completions only when a provider cannot serve
-  that API.
+  The console drives one Ox Alpha conversation per operator account. It sends
+  every request to OpenRouter from the server, so the provider credential never
+  reaches the browser, and it prefers the Responses API, using chat completions
+  only when a provider cannot serve Responses.
+
+  It shares the AI Elements components with Sarah's transcript at `/sarah` and
+  shares none of her state: no persona, no voice, no work queue, and no
+  conversation of hers. The model is fixed, so there is no model picker, and
+  reasoning, tool calls, usage, and provider lane appear only when the provider
+  reports them.
   """
 
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Chat.{AccountTurns, OpenRouter}
+
+  @suggestions [
+    "Summarize what the Ox Alpha stress fleet measures today.",
+    "Draft a checklist for a cloud-computer stress run.",
+    "Explain the difference between a push and a deploy here.",
+    "Write a short status update for the current fleet work."
+  ]
 
   @reasoning_options [
     {"Reasoning off", "none"},
@@ -35,8 +49,14 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
       conversation_content: 1,
       conversation_empty_state: 1,
       message: 1,
-      message_content: 1
+      message_content: 1,
+      message_actions: 1,
+      message_action: 1,
+      suggestions: 1,
+      suggestion: 1
     ]
+
+  import OpenAgentsWeb.AI.Evidence, only: [context: 1]
 
   import OpenAgentsWeb.AI.Reasoning,
     only: [
@@ -59,6 +79,8 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
      |> assign(:page_title, "Chat")
      |> assign(:form, composer_form())
      |> assign(:reasoning_options, @reasoning_options)
+     |> assign(:model_label, OpenRouter.model_label())
+     |> assign(:suggestions, @suggestions)
      |> assign(:messages, messages)
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
@@ -66,7 +88,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
      |> assign(:assistant_blocks, [])
      |> assign(:reasoning_started_at, nil)
      |> assign(:streaming?, false)
-     |> assign(:stream_task_ref, nil)
+     |> assign(:last_prompt, "")
      |> assign(:stream_id, nil)}
   end
 
@@ -81,6 +103,28 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     else
       submit_message(socket, message, reasoning)
     end
+  end
+
+  def handle_event("stop_response", _params, socket) do
+    case AccountTurns.cancel(socket.assigns.current_user) do
+      {:ok, _run} -> {:noreply, reset_stream(socket)}
+      {:error, :no_active_turn} -> {:noreply, reset_stream(socket)}
+    end
+  end
+
+  def handle_event("retry_message", %{"prompt" => prompt}, socket) do
+    prompt = String.trim(prompt)
+    reasoning = current_reasoning(socket)
+
+    if prompt == "" or socket.assigns.streaming? do
+      {:noreply, socket}
+    else
+      submit_message(socket, prompt, reasoning)
+    end
+  end
+
+  def handle_event("use_suggestion", %{"prompt" => prompt}, socket) do
+    {:noreply, assign(socket, :form, composer_form(current_reasoning(socket), prompt))}
   end
 
   @impl true
@@ -126,20 +170,10 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     end
   end
 
-  def handle_info({:account_chat_completed, stream_id, _result}, socket) do
+  def handle_info({:account_chat_completed, stream_id, result}, socket) do
     case socket.assigns do
       %{stream_id: ^stream_id} ->
-        {:noreply,
-         socket
-         |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
-         |> assign(:assistant_response, nil)
-         |> assign(:assistant_reasoning, nil)
-         |> assign(:assistant_tool_calls, [])
-         |> assign(:assistant_blocks, [])
-         |> assign(:reasoning_started_at, nil)
-         |> assign(:streaming?, false)
-         |> assign(:stream_task_ref, nil)
-         |> assign(:stream_id, nil)}
+        {:noreply, socket |> reset_stream() |> restore_prompt(result)}
 
       _stale_run ->
         {:noreply, socket}
@@ -164,91 +198,6 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     end)
   end
 
-  def handle_info(
-        {task_ref, {:ok, completion}},
-        %{assigns: %{stream_task_ref: task_ref}} = socket
-      ) do
-    Process.demonitor(task_ref, [:flush])
-
-    assistant_content = completion["assistant_content"] || socket.assigns.assistant_response
-    reasoning = completion["reasoning_summary"] || socket.assigns.assistant_reasoning
-
-    assistant_blocks =
-      reconcile_assistant_blocks(socket.assigns.assistant_blocks, assistant_content, reasoning)
-
-    {:noreply,
-     socket
-     |> append_assistant_message(
-       socket.assigns.stream_id,
-       assistant_content,
-       completion,
-       nil,
-       reasoning,
-       reasoning_duration(socket),
-       socket.assigns.assistant_tool_calls,
-       assistant_blocks
-     )
-     |> assign(:assistant_response, nil)
-     |> assign(:assistant_reasoning, nil)
-     |> assign(:assistant_tool_calls, [])
-     |> assign(:assistant_blocks, [])
-     |> assign(:reasoning_started_at, nil)
-     |> assign(:streaming?, false)
-     |> assign(:stream_task_ref, nil)
-     |> assign(:stream_id, nil)}
-  end
-
-  def handle_info({task_ref, {:error, reason}}, %{assigns: %{stream_task_ref: task_ref}} = socket) do
-    Process.demonitor(task_ref, [:flush])
-
-    {:noreply,
-     socket
-     |> append_assistant_message(
-       socket.assigns.stream_id,
-       socket.assigns.assistant_response,
-       nil,
-       error_message(reason),
-       socket.assigns.assistant_reasoning,
-       reasoning_duration(socket),
-       socket.assigns.assistant_tool_calls,
-       finalize_assistant_blocks(socket.assigns.assistant_blocks)
-     )
-     |> assign(:assistant_response, nil)
-     |> assign(:assistant_reasoning, nil)
-     |> assign(:assistant_tool_calls, [])
-     |> assign(:assistant_blocks, [])
-     |> assign(:reasoning_started_at, nil)
-     |> assign(:streaming?, false)
-     |> assign(:stream_task_ref, nil)
-     |> assign(:stream_id, nil)}
-  end
-
-  def handle_info(
-        {:DOWN, task_ref, :process, _pid, _reason},
-        %{assigns: %{stream_task_ref: task_ref}} = socket
-      ) do
-    {:noreply,
-     socket
-     |> append_assistant_message(
-       socket.assigns.stream_id,
-       socket.assigns.assistant_response,
-       nil,
-       error_message(:provider_unavailable),
-       socket.assigns.assistant_reasoning,
-       reasoning_duration(socket),
-       socket.assigns.assistant_tool_calls,
-       finalize_assistant_blocks(socket.assigns.assistant_blocks)
-     )
-     |> assign(:assistant_response, nil)
-     |> assign(:assistant_reasoning, nil)
-     |> assign(:assistant_tool_calls, [])
-     |> assign(:assistant_blocks, [])
-     |> assign(:reasoning_started_at, nil)
-     |> assign(:streaming?, false)
-     |> assign(:stream_task_ref, nil)
-     |> assign(:stream_id, nil)}
-  end
-
   def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
@@ -261,49 +210,103 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
       title="Chat"
       flush
     >
-      <section id="chat-placeholder" class="relative flex min-h-0 flex-1 flex-col bg-background">
+      <section id="chat-console" class="relative flex min-h-0 flex-1 flex-col bg-background">
+        <div class="flex items-center gap-3 border-border border-b px-4 py-2">
+          <span id="chat-console-model" class="font-medium text-sm">{@model_label}</span>
+          <p id="chat-console-operator-notice" class="text-muted-foreground text-xs">
+            Operator-only console. Prompts reach {@model_label} through the server.
+          </p>
+        </div>
+
         <div class="flex min-h-0 flex-1 px-4">
-          <.conversation
-            id="chat-placeholder-transcript"
-            class="w-full"
-            scroll_button={false}
-          >
+          <.conversation id="chat-console-transcript" class="w-full">
             <.conversation_content class={[
               "mx-auto min-h-full w-full max-w-3xl px-0",
               if(@messages == [], do: "justify-center", else: "justify-end")
             ]}>
-              <.conversation_empty_state
-                :if={@messages == []}
-                id="chat-placeholder-empty"
-                title="Start a conversation"
-                description="Send a message to start a conversation."
-              />
+              <.conversation_empty_state :if={@messages == []} id="chat-console-empty">
+                <div class="space-y-1">
+                  <h3 class="font-medium text-sm">Drive {@model_label}</h3>
+                  <p class="text-muted-foreground text-sm">
+                    Send a prompt to open a turn. Only operators reach this console.
+                  </p>
+                </div>
+                <.suggestions id="chat-console-suggestions" class="justify-center">
+                  <.suggestion
+                    :for={{prompt, index} <- Enum.with_index(@suggestions)}
+                    id={"chat-console-suggestion-#{index}"}
+                    suggestion={prompt}
+                    phx-click="use_suggestion"
+                    phx-value-prompt={prompt}
+                  />
+                </.suggestions>
+              </.conversation_empty_state>
 
-              <div :if={@messages != []} id="chat-placeholder-exchange" class="space-y-5">
+              <div :if={@messages != []} id="chat-console-exchange" class="space-y-5">
                 <.message
                   :for={message <- @messages}
-                  id={"chat-placeholder-message-#{message.id}-#{message.role}"}
+                  id={"chat-console-message-#{message.id}-#{message.role}"}
                   from={Atom.to_string(message.role)}
                   data-message-role={Atom.to_string(message.role)}
                 >
                   <%= if message.role == :assistant do %>
                     <.assistant_block
                       :for={{block, index} <- Enum.with_index(message.blocks)}
-                      id={"chat-placeholder-block-#{message.id}-#{index}"}
+                      id={"chat-console-block-#{message.id}-#{index}"}
                       block={block}
                     />
+                    <p
+                      :if={Map.get(message, :cancelled?)}
+                      id={"chat-console-cancelled-#{message.id}"}
+                      class="text-muted-foreground text-xs"
+                      role="status"
+                    >
+                      You stopped this response.
+                    </p>
                     <.message_content :if={message.error}>
-                      <p id={"chat-placeholder-error-#{message.id}"} role="status">
+                      <p id={"chat-console-error-#{message.id}"} role="alert">
                         {message.error}
                       </p>
                     </.message_content>
-                    <p
+                    <.message_actions :if={Map.get(message, :retryable?) and not @streaming?}>
+                      <.message_action
+                        id={"chat-console-retry-#{message.id}"}
+                        label="Retry this prompt"
+                        tooltip="Retry this prompt"
+                        phx-click="retry_message"
+                        phx-value-prompt={prompt_for(@messages, message.id)}
+                      >
+                        <.icon name="regenerate" class="size-4" />
+                      </.message_action>
+                    </.message_actions>
+                    <div
                       :if={message.completion}
-                      id={"chat-placeholder-response-metadata-#{message.id}"}
-                      class="text-muted-foreground text-xs"
+                      class="flex flex-wrap items-center gap-3"
                     >
-                      OpenRouter · {message.completion["object"]} · {message.completion["model"]}
-                    </p>
+                      <p
+                        id={"chat-console-response-metadata-#{message.id}"}
+                        class="text-muted-foreground text-xs"
+                      >
+                        {provider_metadata(@model_label, message)}
+                      </p>
+                      <.context
+                        :if={context_evidence(message)}
+                        id={"chat-console-evidence-#{message.id}"}
+                        used_tokens={context_evidence(message).used_tokens}
+                        max_tokens={context_evidence(message).max_tokens}
+                        input_tokens={message.usage.input}
+                        output_tokens={message.usage.output}
+                        reasoning_tokens={message.usage.reasoning}
+                        cached_tokens={message.usage.cached}
+                      />
+                      <p
+                        :if={Map.get(message, :usage)}
+                        id={"chat-console-usage-#{message.id}"}
+                        class="text-muted-foreground text-xs"
+                      >
+                        {usage_text(message.usage)}
+                      </p>
+                    </div>
                   <% else %>
                     <.message_content text={message.content} />
                   <% end %>
@@ -311,12 +314,12 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
                 <.message
                   :if={@streaming?}
-                  id="chat-placeholder-streaming-assistant-message"
+                  id="chat-console-streaming-assistant-message"
                   from="assistant"
                 >
                   <.assistant_block
                     :for={{block, index} <- Enum.with_index(@assistant_blocks)}
-                    id={"chat-placeholder-streaming-block-#{index}"}
+                    id={"chat-console-streaming-block-#{index}"}
                     block={block}
                     streaming
                   />
@@ -326,41 +329,41 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
           </.conversation>
         </div>
 
-        <div id="chat-placeholder-composer" class="chat-placeholder-composer">
+        <div id="chat-console-composer" class="chat-console-composer">
           <.prompt_input
-            id="chat-placeholder-form"
+            id="chat-console-form"
             for={@form}
-            class="chat-placeholder-composer__form"
+            class="chat-console-composer__form"
             phx-submit="submit_message"
-            clear_event="chat-preview:clear"
+            clear_event="chat-console:clear"
             clear_on_submit
           >
             <.prompt_input_textarea
               field={@form[:message]}
-              placeholder="Message OpenAgents"
-              aria-label="Message OpenAgents"
+              placeholder={"Message #{@model_label}"}
+              aria-label={"Message #{@model_label}"}
               rows="1"
               maxlength="8000"
               autocomplete="off"
               phx-mounted={JS.focus()}
             />
 
-            <.prompt_input_toolbar class="chat-placeholder-composer__toolbar">
+            <.prompt_input_toolbar class="chat-console-composer__toolbar">
               <.input
                 field={@form[:reasoning]}
                 type="select"
                 options={@reasoning_options}
                 aria-label="Reasoning effort"
-                class="chat-placeholder-composer__reasoning"
+                class="chat-console-composer__reasoning"
                 disabled={@streaming?}
               />
               <.prompt_input_tools class="ml-auto">
                 <.prompt_input_submit
-                  id="chat-placeholder-submit"
-                  status={if(@streaming?, do: :submitted, else: :ready)}
-                  label="Send message"
-                  class="chat-placeholder-composer__submit"
-                  disabled={@streaming?}
+                  id="chat-console-submit"
+                  status={if(@streaming?, do: :streaming, else: :ready)}
+                  label={if(@streaming?, do: "Stop response", else: "Send message")}
+                  on_stop="stop_response"
+                  class="chat-console-composer__submit"
                 />
               </.prompt_input_tools>
             </.prompt_input_toolbar>
@@ -371,19 +374,92 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     """
   end
 
-  defp composer_form(reasoning \\ "high") do
-    to_form(%{"message" => "", "reasoning" => reasoning}, as: :chat)
+  # The console streams through the OpenRouter adapter. A configured streamer
+  # replaces it, so a test can drive a turn without reaching a provider.
+  defp submit_options(reasoning) do
+    options = [reasoning: reasoning, subscriber: self()]
+
+    case Application.get_env(:openagents, :chat_console_streamer) do
+      streamer when is_function(streamer, 3) -> Keyword.put(options, :streamer, streamer)
+      _adapter -> options
+    end
+  end
+
+  defp composer_form(reasoning \\ "high", message \\ "") do
+    to_form(%{"message" => message, "reasoning" => reasoning}, as: :chat)
+  end
+
+  defp current_reasoning(socket) do
+    OpenRouter.reasoning_effort(Phoenix.HTML.Form.input_value(socket.assigns.form, :reasoning))
+  end
+
+  defp reset_stream(socket) do
+    socket
+    |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
+    |> assign(:assistant_response, nil)
+    |> assign(:assistant_reasoning, nil)
+    |> assign(:assistant_tool_calls, [])
+    |> assign(:assistant_blocks, [])
+    |> assign(:reasoning_started_at, nil)
+    |> assign(:streaming?, false)
+    |> assign(:stream_id, nil)
+  end
+
+  # A failed turn keeps its prompt in the composer, so the operator can retry it
+  # from either the composer or the failed message.
+  defp restore_prompt(socket, {:error, _reason}) do
+    assign(socket, :form, composer_form(current_reasoning(socket), socket.assigns.last_prompt))
+  end
+
+  defp restore_prompt(socket, _result), do: socket
+
+  defp prompt_for(messages, id) do
+    case Enum.find(messages, &(&1.id == id and &1.role == :user)) do
+      %{content: content} -> content
+      nil -> nil
+    end
+  end
+
+  defp provider_metadata(model_label, message) do
+    [
+      model_label,
+      message.provider_lane && "lane #{message.provider_lane}",
+      message.latency_ms && "#{message.latency_ms} ms",
+      message.request_id && "request #{message.request_id}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  # The context meter needs a window the provider does not report, so it appears
+  # only where the deployment states one.
+  defp context_evidence(%{usage: %{total: total}}) when is_integer(total) do
+    case Application.get_env(:openagents, :openrouter_context_window) do
+      window when is_integer(window) and window > 0 -> %{used_tokens: total, max_tokens: window}
+      _unset -> nil
+    end
+  end
+
+  defp context_evidence(_message), do: nil
+
+  defp usage_text(usage) do
+    [
+      usage.input && "Input #{usage.input}",
+      usage.output && "Output #{usage.output}",
+      usage.reasoning && "Reasoning #{usage.reasoning}",
+      usage.cached && "Cached #{usage.cached}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
   end
 
   defp submit_message(socket, message, reasoning) do
-    case AccountTurns.submit(socket.assigns.current_user, message,
-           reasoning: reasoning,
-           subscriber: self()
-         ) do
+    case AccountTurns.submit(socket.assigns.current_user, message, submit_options(reasoning)) do
       {:ok, run} ->
         {:noreply,
          socket
          |> assign(:form, composer_form(reasoning))
+         |> assign(:last_prompt, message)
          |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
          |> assign(:assistant_response, "")
          |> assign(:assistant_reasoning, nil)
@@ -391,36 +467,48 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
          |> assign(:assistant_blocks, [reasoning_block("")])
          |> assign(:reasoning_started_at, System.monotonic_time(:second))
          |> assign(:streaming?, true)
-         |> assign(:stream_task_ref, nil)
          |> assign(:stream_id, run["id"])
-         |> push_event("chat-preview:clear", %{})}
+         |> push_event("chat-console:clear", %{})}
 
       {:error, reason} ->
+        id = Ecto.UUID.generate()
+
         {:noreply,
          socket
+         |> assign(:form, composer_form(reasoning, message))
          |> update(:messages, fn messages ->
-           messages ++
-             [
-               user_message(Ecto.UUID.generate(), message),
-               %{
-                 id: Ecto.UUID.generate(),
-                 role: :assistant,
-                 content: "",
-                 completion: nil,
-                 error: error_message(reason),
-                 history?: false,
-                 provider_message_id: nil,
-                 provider_status: nil,
-                 provider_reasoning_items: nil,
-                 reasoning: nil,
-                 reasoning_duration: nil,
-                 tool_calls: [],
-                 blocks: []
-               }
-             ]
+           messages ++ [user_message(id, message), failed_message(id, reason)]
          end)}
     end
   end
+
+  defp failed_message(id, reason),
+    do: %{
+      id: id,
+      role: :assistant,
+      content: "",
+      completion: nil,
+      error: error_message(reason),
+      error_code: error_code(reason),
+      retryable?: AccountTurns.retryable_error_code?(error_code(reason)),
+      cancelled?: false,
+      usage: nil,
+      provider_lane: nil,
+      request_id: nil,
+      latency_ms: nil,
+      history?: false,
+      provider_message_id: nil,
+      provider_status: nil,
+      provider_reasoning_items: nil,
+      reasoning: nil,
+      reasoning_duration: nil,
+      tool_calls: [],
+      blocks: []
+    }
+
+  defp error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp error_code({:provider_error, code, _detail}) when is_binary(code), do: code
+  defp error_code(_reason), do: "provider_error"
 
   defp user_message(id, content),
     do: %{
@@ -433,36 +521,6 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
       tool_calls: [],
       blocks: []
     }
-
-  defp append_assistant_message(
-         socket,
-         id,
-         content,
-         completion,
-         error,
-         reasoning,
-         reasoning_duration,
-         tool_calls,
-         blocks
-       ) do
-    assistant = %{
-      id: id,
-      role: :assistant,
-      content: content,
-      completion: completion,
-      error: error,
-      history?: is_nil(error),
-      provider_message_id: completion && completion["assistant_message_id"],
-      provider_status: if(completion && completion["assistant_message_id"], do: "completed"),
-      provider_reasoning_items: completion && completion["reasoning_items"],
-      reasoning: reasoning,
-      reasoning_duration: reasoning_duration,
-      tool_calls: tool_calls,
-      blocks: blocks
-    }
-
-    update(socket, :messages, &(&1 ++ [assistant]))
-  end
 
   defp error_message(:missing_api_key), do: "OpenRouter is not configured for this environment."
   defp error_message(:rate_limited), do: "OpenRouter is rate-limited. Try again later."
@@ -486,13 +544,6 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
   defp provider_error_message(summary, nil), do: summary
   defp provider_error_message(summary, detail), do: "#{summary} #{detail}"
-
-  defp reasoning_duration(%{assigns: %{reasoning_started_at: started_at}})
-       when is_integer(started_at) do
-    max(System.monotonic_time(:second) - started_at, 1)
-  end
-
-  defp reasoning_duration(_socket), do: nil
 
   attr :id, :string, required: true
   attr :tool_call, :map, required: true
@@ -649,32 +700,5 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
         block
     end)
     |> Enum.reject(&(&1.type == :reasoning and &1.text == ""))
-  end
-
-  defp reconcile_assistant_blocks(blocks, content, reasoning) do
-    blocks = finalize_assistant_blocks(blocks)
-
-    blocks =
-      if Enum.any?(blocks, &(&1.type == :reasoning)) or not is_binary(reasoning) or
-           reasoning == "" do
-        blocks
-      else
-        [%{reasoning_block(reasoning) | duration: 1} | blocks]
-      end
-
-    case Enum.find_index(Enum.reverse(blocks), &(&1.type == :content)) do
-      nil when is_binary(content) and content != "" ->
-        blocks ++ [%{type: :content, text: content}]
-
-      nil ->
-        blocks
-
-      reversed_index when is_binary(content) ->
-        index = length(blocks) - reversed_index - 1
-        List.update_at(blocks, index, &%{&1 | text: content})
-
-      _index ->
-        blocks
-    end
   end
 end

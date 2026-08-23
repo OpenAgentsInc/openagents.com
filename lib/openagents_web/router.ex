@@ -314,6 +314,7 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :show
     get "/repos/:owner/:repo/projectsV2/:project_number/items", ProjectController, :items
     get "/repos/:owner/:repo/projectsV2/:project_number/fields", ProjectController, :fields
+    get "/repos/:owner/:repo/projectsV2/:project_number/notes", ProjectController, :notes
 
     # The forum reads. Posting and claiming live behind the write scope.
     get "/forum", ForumApiController, :boards
@@ -377,6 +378,20 @@ defmodule OpenAgentsWeb.Router do
     patch "/repos/:owner/:repo/projectsV2/:project_number/items/:item_id",
           ProjectController,
           :update_item
+
+    patch "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :update
+
+    post "/repos/:owner/:repo/projectsV2/:project_number/notes",
+         ProjectController,
+         :create_note
+
+    patch "/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id",
+          ProjectController,
+          :update_note
+
+    delete "/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id",
+           ProjectController,
+           :delete_note
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

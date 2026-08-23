@@ -9,6 +9,7 @@ defmodule OpenAgents.Projects do
   alias OpenAgents.ProjectFields.ProjectField
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Projects.Project
+  alias OpenAgents.Projects.ProjectNote
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
@@ -170,7 +171,19 @@ defmodule OpenAgents.Projects do
   defp actor_distinct_id(nil), do: Analytics.system_distinct_id("api")
   defp actor_distinct_id(%User{} = actor), do: Analytics.distinct_id(actor)
 
-  def update_project(%Project{} = project, attrs) do
+  def update_project(%Project{} = project, attrs), do: update_project(project, attrs, nil)
+
+  @doc """
+  Updates `project` and records what changed in its activity log.
+
+  Every accepted change to the title, description, or state appends one
+  immutable `"activity"` note, so a board carries the decision record even
+  when nobody wrote discussion around it. The note is written in the same
+  transaction as the update: an activity entry for a change that did not
+  commit would be a false record.
+  """
+  def update_project(%Project{} = project, attrs, actor)
+      when is_nil(actor) or is_struct(actor, User) do
     attrs = attrs |> to_string_map() |> Map.drop(["repository_id", "owner_user_id"])
 
     attrs =
@@ -180,9 +193,24 @@ defmodule OpenAgents.Projects do
         attrs
       end
 
-    project
-    |> Project.changeset(attrs)
-    |> Repo.update()
+    changeset = Project.changeset(project, attrs)
+
+    Repo.transaction(fn ->
+      case Repo.update(changeset) do
+        {:ok, updated} ->
+          Enum.each(activity_bodies(changeset), fn body ->
+            case insert_note(updated, %{"body" => body, "kind" => "activity"}, actor) do
+              {:ok, _note} -> :ok
+              {:error, note_changeset} -> Repo.rollback(note_changeset)
+            end
+          end)
+
+          updated
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
     |> case do
       {:ok, project} ->
         Repositories.broadcast_projects(project.repository_id)
@@ -192,6 +220,29 @@ defmodule OpenAgents.Projects do
         result
     end
   end
+
+  # One line per changed property, in a fixed order so a reader of the log sees
+  # the same shape every time. Only these three are worth a record: the rest of
+  # a project's columns are its identity, not its operating state.
+  defp activity_bodies(changeset) do
+    Enum.flat_map(
+      [
+        {:state, &"Changed the state to `#{&1}`."},
+        {:title, &"Changed the title to #{inspect(&1)}."},
+        {:description, &describe_description_change/1}
+      ],
+      fn {field, describe} ->
+        case Ecto.Changeset.fetch_change(changeset, field) do
+          {:ok, value} -> [describe.(value)]
+          :error -> []
+        end
+      end
+    )
+  end
+
+  defp describe_description_change(nil), do: "Removed the description."
+  defp describe_description_change(""), do: "Removed the description."
+  defp describe_description_change(_value), do: "Updated the description."
 
   def delete_project(%Project{} = project) do
     Repo.delete(project)
@@ -213,6 +264,171 @@ defmodule OpenAgents.Projects do
   def change_project(%Project{repository_id: repository_id} = project, attrs \\ %{})
       when not is_nil(repository_id) do
     Project.changeset(project, attrs)
+  end
+
+  @notes_per_page 20
+
+  @doc "How many project notes one page carries."
+  def notes_per_page, do: @notes_per_page
+
+  @doc """
+  One page of `project`'s notes, newest first, with the unpaginated total.
+
+  A project object never embeds its timeline: a long-lived board accumulates
+  decisions without bound, so the notes are a separate paginated read. Page 1
+  is the most recent `notes_per_page/0` entries, which is what an operator
+  opening a board wants first.
+
+  Supported options: `:page` and `:kind`. `:kind` takes `"note"` for
+  discussion, `"activity"` for the immutable change record, or `"all"`, the
+  default.
+
+  Authority is the project's repository, which the caller has already resolved
+  through `OpenAgents.Repositories.get_visible_by_path!/3` or its writable
+  counterpart. Notes carry no separate visibility of their own.
+  """
+  def list_project_notes_page(%Project{} = project, opts \\ []) when is_list(opts) do
+    query = project_notes_query(project, opts)
+    page = max(parse_page(opts[:page]), 1)
+
+    notes =
+      query
+      |> order_by([note], desc: note.inserted_at, desc: note.id)
+      |> limit(@notes_per_page)
+      |> offset(^((page - 1) * @notes_per_page))
+      |> Repo.all()
+      |> Repo.preload(:author_user)
+
+    {notes, Repo.aggregate(query, :count)}
+  end
+
+  @doc "How many notes `project` carries, with the same filters."
+  def count_project_notes(%Project{} = project, opts \\ []) when is_list(opts),
+    do: project |> project_notes_query(opts) |> Repo.aggregate(:count)
+
+  @doc "One note of `project`, by id."
+  def get_project_note!(%Project{id: project_id, repository_id: repository_id}, id) do
+    ProjectNote
+    |> Repo.get_by!(id: id, project_id: project_id, repository_id: repository_id)
+    |> Repo.preload(:author_user)
+  end
+
+  @doc """
+  Writes one discussion note on `project`, authored by `author`.
+
+  The caller establishes write authority on the project's repository first.
+  `kind` is not accepted from outside: activity entries are written only by the
+  context that made the change they record.
+  """
+  def create_project_note(%Project{} = project, attrs, author \\ nil)
+      when is_nil(author) or is_struct(author, User) do
+    attrs =
+      attrs
+      |> to_string_map()
+      |> Map.take(["body"])
+      |> Map.put("kind", "note")
+
+    case insert_note(project, attrs, author) do
+      {:ok, note} ->
+        Analytics.capture("project_note_created", actor_distinct_id(author), %{
+          "project_number" => project.number
+        })
+
+        Repositories.broadcast_projects(project.repository_id)
+
+        {:ok, Repo.preload(note, :author_user)}
+
+      result ->
+        result
+    end
+  end
+
+  @doc """
+  Edits the body of one discussion note.
+
+  An activity entry is the record of a change that happened, so it is
+  immutable: this returns `{:error, :immutable}` for one. Authority to call
+  this is the note's author, which the caller checks with
+  `authored_by?/2`.
+  """
+  def update_project_note(%ProjectNote{kind: "activity"}, _attrs), do: {:error, :immutable}
+
+  def update_project_note(%ProjectNote{} = note, attrs) do
+    attrs = attrs |> to_string_map() |> Map.take(["body"])
+
+    note
+    |> ProjectNote.changeset(attrs)
+    |> Repo.update()
+    |> case do
+      {:ok, note} ->
+        Repositories.broadcast_projects(note.repository_id)
+        {:ok, Repo.preload(note, :author_user)}
+
+      result ->
+        result
+    end
+  end
+
+  @doc "Deletes one discussion note. Activity entries never delete."
+  def delete_project_note(%ProjectNote{kind: "activity"}), do: {:error, :immutable}
+
+  def delete_project_note(%ProjectNote{} = note) do
+    case Repo.delete(note) do
+      {:ok, note} ->
+        Repositories.broadcast_projects(note.repository_id)
+        {:ok, note}
+
+      result ->
+        result
+    end
+  end
+
+  @doc """
+  Whether `user` wrote `note`.
+
+  Edit and delete authority for a discussion note is its author, and nobody
+  else: repository write access adds a note of your own rather than rewriting
+  somebody else's words. A note written without an authenticated author, by an
+  import or a token with no user behind it, has no author to match, so it is
+  not editable through this predicate.
+  """
+  def authored_by?(%ProjectNote{author_user_id: nil}, _user), do: false
+  def authored_by?(%ProjectNote{}, nil), do: false
+
+  def authored_by?(%ProjectNote{author_user_id: author_user_id}, %User{id: user_id}),
+    do: author_user_id == user_id
+
+  @doc "A blank or seeded changeset for the note form."
+  def change_project_note(%ProjectNote{} = note \\ %ProjectNote{}, attrs \\ %{}),
+    do: ProjectNote.changeset(note, to_string_map(attrs))
+
+  defp project_notes_query(%Project{id: project_id, repository_id: repository_id}, opts) do
+    from(note in ProjectNote,
+      where: note.project_id == ^project_id and note.repository_id == ^repository_id
+    )
+    |> maybe_filter_note_kind(Keyword.get(opts, :kind, "all"))
+  end
+
+  defp maybe_filter_note_kind(query, kind) when kind in ["note", "activity"],
+    do: where(query, kind: ^kind)
+
+  defp maybe_filter_note_kind(query, _all), do: query
+
+  defp insert_note(%Project{} = project, attrs, author) do
+    attrs
+    |> Map.put("project_id", project.id)
+    |> Map.put("repository_id", project.repository_id)
+    |> put_note_author(author)
+    |> then(&ProjectNote.changeset(%ProjectNote{}, &1))
+    |> Repo.insert()
+  end
+
+  defp put_note_author(attrs, nil), do: attrs
+
+  defp put_note_author(attrs, %User{} = author) do
+    attrs
+    |> Map.put("author_user_id", author.id)
+    |> Map.put("author", %{"login" => author.github_login})
   end
 
   def list_project_items(%Project{id: project_id, repository_id: repository_id}) do

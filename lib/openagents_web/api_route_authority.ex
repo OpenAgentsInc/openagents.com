@@ -68,6 +68,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes" => :optional_bearer,
       # Scoped bearer pipelines require the route-specific token authority.
       "get /api/v3/chat/events" => :required_bearer,
       "post /api/v3/chat/turns" => :required_bearer,
@@ -108,6 +109,12 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/projectsV2" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields" => :required_bearer,
+      "patch /api/v3/repos/:owner/:repo/projectsV2/:project_number" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes" => :required_bearer,
+      "patch /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id" =>
+        :required_bearer,
+      "delete /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id" =>
+        :required_bearer,
       "post /api/v3/user/repos" => :required_bearer,
       "post /api/v3/user/repos/imports" => :required_bearer,
       "put /api/v3/repos/:owner/:repo/issues/:issue_number" => :required_bearer,

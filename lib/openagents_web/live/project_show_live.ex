@@ -1,21 +1,46 @@
 defmodule OpenAgentsWeb.ProjectShowLive do
   @moduledoc """
-  Renders a simple kanban board for a Project V2.
+  One project: its description, its board, and its discussion.
+
+  The page answers three questions in that order — why the project exists, what
+  is on it, and what was decided about it — because a board alone carries no
+  context and the context is what a reader arriving mid-effort is missing.
+
+  Two structural decisions:
+
+    * **Reading is the default state.** The description renders as prose and
+      moves behind **Edit description** for members with write access, so the
+      page describes the project rather than being a form that shows one.
+
+    * **The discussion is paginated and separate.** A long-lived project
+      accumulates decisions without bound, so the notes are read one page at a
+      time through `OpenAgents.Projects.list_project_notes_page/2` rather than
+      embedded in the project. Discussion notes and the immutable activity
+      record interleave in one feed, because their order relative to each other
+      is most of the answer.
+
+  Authority is the project's repository. Anyone who can see the repository can
+  read the board and its notes; writing anything needs write access, and
+  deleting a note needs authorship.
   """
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Issues
+  alias OpenAgents.Markdown
   alias OpenAgents.Projects
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.UI.Circle
 
   @statuses ["To Do", "In Progress", "Done"]
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
-    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    user = socket.assigns.current_user
+    repository = Repositories.get_visible_by_path!(owner, repo, user)
     project = Projects.get_project_by_number!(repository, String.to_integer(number))
-    items = project_items(project, socket.assigns.current_user)
-    issue_options = issue_options(repository)
+    can_write = Repositories.writable?(repository, user)
+
+    if connected?(socket), do: Repositories.subscribe_projects(repository.id)
 
     {:ok,
      socket
@@ -24,14 +49,20 @@ defmodule OpenAgentsWeb.ProjectShowLive do
      |> assign(:repo, repo)
      |> assign(:repository, repository)
      |> assign(:project, project)
-     |> assign(:items, items)
-     |> assign(:issue_options, issue_options)
+     |> assign(:can_write, can_write)
+     |> assign(:items, project_items(project, user))
+     |> assign(:issue_options, issue_options(repository))
      # The board columns are read as `@statuses` inside ~H, where `@` means
      # `assigns.statuses`, not the module attribute. Without this assign every
      # render raised KeyError and the route was unreachable.
      |> assign(:statuses, @statuses)
      |> assign(:status_options, Enum.map(@statuses, &{&1, &1}))
-     |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))}
+     |> assign(:editing_description?, false)
+     |> assign(:description_form, description_form(project))
+     |> assign(:note_form, note_form())
+     |> assign(:notes_page, 1)
+     |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
+     |> load_notes(connected?(socket))}
   end
 
   def handle_event("add_item", %{"item" => item_params}, socket) do
@@ -56,6 +87,137 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     end
   end
 
+  def handle_event("edit_description", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:editing_description?, socket.assigns.can_write)
+     |> assign(:description_form, description_form(socket.assigns.project))}
+  end
+
+  def handle_event("cancel_description", _params, socket) do
+    {:noreply, assign(socket, :editing_description?, false)}
+  end
+
+  def handle_event("save_description", %{"project" => params}, socket) do
+    with true <- socket.assigns.can_write,
+         {:ok, project} <-
+           Projects.update_project(
+             socket.assigns.project,
+             Map.take(params, ["description"]),
+             socket.assigns.current_user
+           ) do
+      {:noreply,
+       socket
+       |> assign(:project, project)
+       |> assign(:editing_description?, false)
+       |> assign(:description_form, description_form(project))
+       |> reload_notes()
+       |> put_flash(:info, "Description saved")}
+    else
+      false ->
+        {:noreply, put_flash(socket, :error, "You cannot edit this project.")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :description_form, to_form(changeset, as: "project"))}
+    end
+  end
+
+  def handle_event("add_note", %{"note" => params}, socket) do
+    with true <- socket.assigns.can_write,
+         {:ok, _note} <-
+           Projects.create_project_note(
+             socket.assigns.project,
+             params,
+             socket.assigns.current_user
+           ) do
+      {:noreply,
+       socket
+       |> assign(:note_form, note_form())
+       |> assign(:notes_page, 1)
+       |> reload_notes()}
+    else
+      false ->
+        {:noreply, put_flash(socket, :error, "You cannot write notes on this project.")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :note_form, to_form(changeset, as: "note"))}
+    end
+  end
+
+  def handle_event("delete_note", %{"id" => id}, socket) do
+    note = Projects.get_project_note!(socket.assigns.project, id)
+
+    if Projects.authored_by?(note, socket.assigns.current_user) do
+      case Projects.delete_project_note(note) do
+        {:ok, _note} -> {:noreply, reload_notes(socket)}
+        {:error, _reason} -> {:noreply, put_flash(socket, :error, "That note cannot be deleted.")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only the author can delete a note.")}
+    end
+  end
+
+  def handle_event("show_notes_page", %{"page" => page}, socket) do
+    {:noreply,
+     socket
+     |> assign(:notes_page, max(String.to_integer(page), 1))
+     |> reload_notes()}
+  end
+
+  # A project changed somewhere else — the API, the CLI, or another board — so
+  # the page rereads through this viewer's authorization boundary rather than
+  # trusting the broadcast payload. The message carries a repository id and
+  # nothing about who may see what.
+  def handle_info({:projects_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id do
+      user = socket.assigns.current_user
+
+      try do
+        Projects.get_project_by_number!(socket.assigns.repository, socket.assigns.project.number)
+      rescue
+        Ecto.NoResultsError -> nil
+      end
+      |> case do
+        nil ->
+          {:noreply, put_flash(socket, :error, "This project no longer exists.")}
+
+        project ->
+          {:noreply,
+           socket
+           |> assign(:project, project)
+           |> assign(:items, project_items(project, user))
+           |> reload_notes()}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp load_notes(socket, false), do: assign(socket, :notes, :loading)
+  defp load_notes(socket, true), do: reload_notes(socket)
+
+  # The feed is a read against the database on a page that has already rendered
+  # its board, so a failure here degrades the section instead of the page.
+  defp reload_notes(socket) do
+    page = socket.assigns.notes_page
+
+    try do
+      {notes, total_count} = Projects.list_project_notes_page(socket.assigns.project, page: page)
+
+      socket
+      |> assign(:notes, notes)
+      |> assign(:notes_total_count, total_count)
+      |> assign(:notes_pages, max(ceil(total_count / Projects.notes_per_page()), 1))
+    rescue
+      _error -> assign(socket, :notes, :error)
+    end
+  end
+
+  defp description_form(project),
+    do: to_form(Projects.change_project(project, %{}), as: "project")
+
+  defp note_form, do: to_form(Projects.change_project_note(), as: "note")
+
   defp project_items(project, user) do
     Projects.list_visible_project_items(project, user)
     |> Enum.map(fn item ->
@@ -69,6 +231,15 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     Issues.list_issues(repository, state: "all")
     |> Enum.map(&{"##{&1.number} #{&1.title}", &1.number})
   end
+
+  defp author(%{author: %{"login" => login}}) when is_binary(login), do: login
+  defp author(_note), do: "unattributed"
+
+  defp stamp(nil), do: nil
+  defp stamp(at), do: Calendar.strftime(at, "%b %-d, %Y at %H:%M UTC")
+
+  defp viewer(%{github_login: login}) when is_binary(login), do: login
+  defp viewer(_user), do: nil
 
   def render(assigns) do
     ~H"""
@@ -89,7 +260,62 @@ defmodule OpenAgentsWeb.ProjectShowLive do
         </.link>
       </div>
 
+      <section
+        id="project-description"
+        class="card !mx-0 !mt-0 mb-6"
+        aria-labelledby="project-description-heading"
+      >
+        <header class="flex items-center justify-between mb-2">
+          <h2 id="project-description-heading" class="card-title !text-sm">Description</h2>
+          <.button
+            :if={@can_write and not @editing_description?}
+            id="edit-description"
+            type="button"
+            variant={:ghost}
+            size={:sm}
+            phx-click="edit_description"
+          >
+            Edit description
+          </.button>
+        </header>
+
+        <div :if={not @editing_description?}>
+          <div :if={@project.description} class="timeline-comment__body !p-0">
+            {Markdown.to_html(@project.description)}
+          </div>
+          <.empty
+            :if={is_nil(@project.description)}
+            id="project-description-empty"
+            title="No description yet"
+          >
+            A description records why this project exists and how it operates. Markdown is
+            supported.
+          </.empty>
+        </div>
+
+        <.form
+          :if={@editing_description?}
+          for={@description_form}
+          id="project-description-form"
+          phx-submit="save_description"
+        >
+          <.input
+            field={@description_form[:description]}
+            type="textarea"
+            label="Description"
+            placeholder="Why this project exists, and how it operates."
+          />
+          <footer class="flex justify-end gap-2 mt-2">
+            <.button type="button" variant={:ghost} size={:sm} phx-click="cancel_description">
+              Cancel
+            </.button>
+            <.button type="submit" variant={:primary} size={:sm}>Save description</.button>
+          </footer>
+        </.form>
+      </section>
+
       <.form
+        :if={@can_write}
         for={@form}
         id="new-project-item-form"
         phx-submit="add_item"
@@ -153,6 +379,127 @@ defmodule OpenAgentsWeb.ProjectShowLive do
             </div>
           </section>
         <% end %>
+      </div>
+
+      <div id="project-discussion" class="mt-8" aria-labelledby="project-discussion-heading">
+        <h2 id="project-discussion-heading" class="text-lg font-semibold mb-2">
+          Discussion and activity
+        </h2>
+
+        <p :if={@notes == :loading} id="project-notes-loading" class="text-sm text-muted-foreground">
+          Loading discussion…
+        </p>
+
+        <.alert
+          :if={@notes == :error}
+          id="project-notes-error"
+          variant={:warning}
+          appearance={:notice}
+        >
+          The discussion could not be loaded. The board above is current; reload the page to try
+          again.
+        </.alert>
+
+        <%= if is_list(@notes) do %>
+          <.empty :if={@notes == []} id="project-notes-empty" title="No notes yet">
+            Project notes carry decisions that apply across issues. Changes to the title,
+            description, or state are recorded here automatically.
+          </.empty>
+
+          <Circle.timeline :if={@notes != []}>
+            <%= for note <- @notes do %>
+              <Circle.timeline_event
+                :if={note.kind == "activity"}
+                actor={author(note)}
+                text={note.body}
+                icon="history"
+                tone={:neutral}
+                at={stamp(note.inserted_at)}
+              />
+              <Circle.timeline_comment
+                :if={note.kind == "note"}
+                id={"project-note-#{note.id}"}
+                author={author(note)}
+                at={stamp(note.inserted_at)}
+              >
+                {Markdown.to_html(note.body)}
+                <:actions>
+                  <.button
+                    :if={Projects.authored_by?(note, @current_user)}
+                    type="button"
+                    variant={:ghost}
+                    size={:sm}
+                    phx-click="delete_note"
+                    phx-value-id={note.id}
+                  >
+                    Delete
+                  </.button>
+                </:actions>
+              </Circle.timeline_comment>
+            <% end %>
+          </Circle.timeline>
+
+          <nav
+            :if={@notes_pages > 1}
+            id="project-notes-pagination"
+            class="flex items-center justify-between mt-3"
+            aria-label="Discussion pages"
+          >
+            <.button
+              type="button"
+              variant={:ghost}
+              size={:sm}
+              disabled={@notes_page <= 1}
+              phx-click="show_notes_page"
+              phx-value-page={@notes_page - 1}
+            >
+              Newer
+            </.button>
+            <span class="text-xs text-muted-foreground">
+              Page {@notes_page} of {@notes_pages}
+            </span>
+            <.button
+              type="button"
+              variant={:ghost}
+              size={:sm}
+              disabled={@notes_page >= @notes_pages}
+              phx-click="show_notes_page"
+              phx-value-page={@notes_page + 1}
+            >
+              Older
+            </.button>
+          </nav>
+        <% end %>
+
+        <.alert
+          :if={not @can_write}
+          id="project-notes-unauthorized"
+          variant={:info}
+          appearance={:notice}
+        >
+          Members with write access to {@owner}/{@repo} can add notes to this project.
+        </.alert>
+
+        <.form
+          :if={@can_write}
+          for={@note_form}
+          id="project-note-form"
+          phx-submit="add_note"
+          class="mt-4"
+        >
+          <Circle.comment_composer id="project-note-composer" author={viewer(@current_user)}>
+            <.input
+              field={@note_form[:body]}
+              type="textarea"
+              label="Note"
+              placeholder="A decision, an assumption, or context that applies across issues"
+            />
+            <:hint>Markdown is supported.</:hint>
+            <:actions>
+              <.button type="submit" variant={:primary} size={:sm}>Add note</.button>
+            </:actions>
+          </Circle.comment_composer>
+        </.form>
       </div>
     </Layouts.app>
     """

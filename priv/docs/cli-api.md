@@ -102,6 +102,14 @@ openagents api repos/OWNER/REPOSITORY/projectsV2
 openagents api repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER
 openagents api repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/items
 openagents api repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/fields
+openagents api repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/notes
+```
+
+The notes response is paginated. Read a later page, or one kind of entry:
+
+```sh
+openagents api 'repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/notes?page=2'
+openagents api 'repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/notes?kind=activity'
 ```
 
 Create a project and add an issue. `issue_number` is the repository-local issue
@@ -122,6 +130,32 @@ Update an item's values:
 printf '%s' '{"values":{"Status":"Done"}}' | \
   openagents api -X PATCH --input - \
   repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/items/ITEM_ID
+```
+
+Update a project's title, description, or state. The description is Markdown,
+and `state` is `open` or `closed`. Each accepted change appends one activity
+entry to the project's notes:
+
+```sh
+printf '%s' '{"description":"## Why\n\nProvider order is under test."}' | \
+  openagents api -X PATCH --input - \
+  repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER
+```
+
+Write a discussion note. Its author is the account behind the token, and only
+that author can edit or delete it:
+
+```sh
+printf '%s' '{"body":"Stress lane 3 is paused until the provider order lands."}' | \
+  openagents api -X POST --input - \
+  repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/notes
+
+printf '%s' '{"body":"Edited."}' | \
+  openagents api -X PATCH --input - \
+  repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/notes/NOTE_ID
+
+openagents api -X DELETE \
+  repos/OWNER/REPOSITORY/projectsV2/PROJECT_NUMBER/notes/NOTE_ID
 ```
 
 ## Use output in scripts

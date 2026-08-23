@@ -146,6 +146,11 @@ DELETE /api/v3/repos/:owner/:repo/milestones/:milestone_number
 GET    /api/v3/repos/:owner/:repo/projectsV2
 POST   /api/v3/repos/:owner/:repo/projectsV2
 GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number
+PATCH  /api/v3/repos/:owner/:repo/projectsV2/:project_number
+GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes
+POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes
+PATCH  /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id
+DELETE /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id
 GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/items
 POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/items
 PATCH  /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id
@@ -157,6 +162,16 @@ The repository in the path controls visibility and write authority. Project
 numbers are repository-local. Project creation through this REST path is an
 OpenAgents extension; GitHub Projects V2 creation is not part of the assessed
 GitHub REST surface.
+
+A project update accepts `title`, `description`, and `state`, where `description`
+is Markdown and `state` is `open` or `closed`. Each accepted change appends one
+immutable activity entry to the project's notes.
+
+The notes read is paginated and takes `page` and `kind`, where `kind` is `note`,
+`activity`, or `all`. The response carries `notes`, `page`, `per_page`, and
+`total_count`. Editing or deleting a note requires authorship: another member
+with write access receives `403 Forbidden`, and an activity entry is never
+editable. See [Projects](/docs/projects).
 
 ## Know the compatibility limits
 

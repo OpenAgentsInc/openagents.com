@@ -171,6 +171,130 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
     end
   end
 
+  describe "description" do
+    test "renders the description as Markdown, with an empty state when there is none", %{
+      conn: conn
+    } do
+      project = project!()
+
+      {:ok, view, html} = live(conn, path(project))
+      assert html =~ "No description yet"
+      assert has_element?(view, "#project-description-empty")
+
+      {:ok, _updated} =
+        Projects.update_project(project, %{"description" => "## Why\n\nProvider order."})
+
+      html = render(view)
+      assert html =~ "<h2>Why</h2>"
+      refute html =~ "No description yet"
+    end
+
+    test "a member edits the description and the change lands in the activity feed", %{
+      conn: conn
+    } do
+      project = project!()
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      view |> element("#edit-description") |> render_click()
+
+      html =
+        view
+        |> form("#project-description-form", project: %{description: "Operating notes."})
+        |> render_submit()
+
+      assert html =~ "Operating notes."
+      assert html =~ "Updated the description."
+
+      assert Projects.get_project_by_number!(repository(), project.number).description ==
+               "Operating notes."
+    end
+  end
+
+  describe "discussion" do
+    test "an empty project shows the notes empty state", %{conn: conn} do
+      project = project!()
+
+      {:ok, view, html} = live(conn, path(project))
+
+      assert html =~ "Discussion and activity"
+      assert has_element?(view, "#project-notes-empty")
+    end
+
+    test "a member adds a note and can delete their own", %{conn: conn} do
+      project = project!()
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      html =
+        view
+        |> form("#project-note-form", note: %{body: "Lane 3 is paused."})
+        |> render_submit()
+
+      assert html =~ "Lane 3 is paused."
+      assert [note] = elem(Projects.list_project_notes_page(project), 0)
+      assert has_element?(view, "#project-note-#{note.id}")
+
+      html = view |> element("#project-note-#{note.id} button", "Delete") |> render_click()
+
+      refute html =~ "Lane 3 is paused."
+      assert Projects.count_project_notes(project) == 0
+    end
+
+    test "pagination appears once the notes outrun one page", %{conn: conn} do
+      project = project!()
+      per_page = Projects.notes_per_page()
+
+      for index <- 1..(per_page + 1) do
+        {:ok, _note} = Projects.create_project_note(project, %{"body" => "note #{index}"})
+      end
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      assert has_element?(view, "#project-notes-pagination")
+      assert render(view) =~ "Page 1 of 2"
+
+      html = view |> element("#project-notes-pagination button", "Older") |> render_click()
+
+      assert html =~ "Page 2 of 2"
+      assert html =~ "note 1"
+    end
+
+    test "a note written remotely reaches an open board without a reload", %{conn: conn} do
+      project = project!()
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      {:ok, _note} =
+        Projects.create_project_note(project, %{"body" => "Decided by the CLI."})
+
+      {:ok, _updated} = Projects.update_project(project, %{"title" => "Renamed remotely"})
+
+      html = render(view)
+      assert html =~ "Decided by the CLI."
+      assert html =~ "Renamed remotely"
+    end
+  end
+
+  describe "a reader without write access" do
+    setup %{conn: conn} do
+      {:ok, conn: log_in_github_user(conn, "project-show-reader")}
+    end
+
+    test "reads the board and the notes but writes nothing", %{conn: conn} do
+      project = project!()
+      {:ok, _note} = Projects.create_project_note(project, %{"body" => "Context for readers."})
+
+      {:ok, view, html} = live(conn, path(project))
+
+      assert html =~ "Context for readers."
+      assert has_element?(view, "#project-notes-unauthorized")
+      refute has_element?(view, "#project-note-form")
+      refute has_element?(view, "#new-project-item-form")
+      refute has_element?(view, "#edit-description")
+    end
+  end
+
   defp repository do
     OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

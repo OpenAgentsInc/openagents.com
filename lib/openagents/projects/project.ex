@@ -7,6 +7,7 @@ defmodule OpenAgents.Projects.Project do
   schema "projects" do
     field :number, :integer
     field :title, :string
+    field :description, :string
     field :owner, :string
     field :state, :string, default: "open"
     belongs_to :repository, Repository, type: :binary_id
@@ -18,8 +19,17 @@ defmodule OpenAgents.Projects.Project do
   @doc false
   def changeset(project, attrs) do
     project
-    |> cast(attrs, [:number, :title, :owner, :state, :repository_id, :owner_user_id])
+    |> cast(attrs, [
+      :number,
+      :title,
+      :description,
+      :owner,
+      :state,
+      :repository_id,
+      :owner_user_id
+    ])
     |> validate_required([:number, :title, :owner, :state, :repository_id])
+    |> validate_length(:description, max: 20_000)
     |> unique_constraint([:repository_id, :number])
     |> foreign_key_constraint(:repository_id)
     |> foreign_key_constraint(:owner_user_id)

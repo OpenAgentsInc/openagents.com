@@ -33,15 +33,50 @@ locks, dependencies, sub-issues, and suggestion APIs are not implemented.
 | Method | Path |
 | --- | --- |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2` |
-| `GET` | `/repos/{owner}/{repo}/projectsV2/{project_number}` |
+| `GET, PATCH` | `/repos/{owner}/{repo}/projectsV2/{project_number}` |
+| `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/notes` |
+| `PATCH, DELETE` | `/repos/{owner}/{repo}/projectsV2/{project_number}/notes/{note_id}` |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items` |
 | `PATCH` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}` |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/fields` |
 
 The project-creation endpoint is an OpenAgents extension because the comparable
 GitHub Projects V2 creation workflow is not supplied by the assessed REST
-surface. Project update/delete, item delete/read, field mutation, views,
-ordering, draft items, and organization projects remain unimplemented.
+surface. Project delete, item delete/read, field mutation, views, ordering,
+draft items, and organization projects remain unimplemented.
+
+### Differences from GitHub Projects V2
+
+These are deliberate divergences, not gaps waiting on parity work:
+
+- A project carries one Markdown `description`. GitHub Projects V2 splits
+  project prose into a short description and a separate README, and exposes both
+  only through GraphQL. One canonical field keeps the API, the CLI, and the board
+  describing the same thing.
+- Project notes are an OpenAgents surface with no GitHub REST equivalent. They
+  hold project-wide context — operating assumptions, triage decisions,
+  provider-order changes, paused lanes — that would otherwise be filed as an
+  issue comment on whichever issue happened to be open at the time.
+- Discussion notes and activity entries share one table and one paginated read,
+  distinguished by `kind`. An activity entry is immutable and is written in the
+  same transaction as the change it records, so the log cannot describe an update
+  that did not commit. GitHub keeps its equivalent record in a separate event
+  API.
+- Edit and delete authority for a discussion note is its author, not repository
+  write access. Repository membership stays the authority boundary for the
+  project itself.
+- Notes are never embedded in the project object. A long-lived board accumulates
+  decisions without bound, so the timeline is a separate paginated read.
+
+### Toward a Linear-compatible shape
+
+The longer-term direction is a Linear-shaped tracker, as recorded in
+`docs/2026-08-20-linear-design-github-shape.md`. Project descriptions and notes
+move that way without breaking the GitHub-shaped subset: a description maps onto
+a Linear project's summary, and notes map onto project updates, which Linear
+treats as first-class project-level records rather than comments on an issue. The
+names stay GitHub-shaped where a GitHub client reads them, and the semantics stay
+compatible with where the tracker is going.
 
 ## CLI access
 
@@ -76,9 +111,16 @@ These are current measured behaviors:
   issue from another repository without weakening project write authority.
 - Issue and milestone numbers are repository-local. Project numbers are also
   repository-local for the repository-shaped LiveView surface.
-- Project list, show, item, update-item, and field actions resolve the repository
-  from the route. Public repositories allow anonymous reads. Private reads and
-  every write require membership in that repository.
+- Project list, show, update, item, update-item, field, and note actions resolve
+  the repository from the route. Public repositories allow anonymous reads.
+  Private reads and every write require membership in that repository.
+- A project update accepts only `title`, `description`, and `state`, and rejects
+  a `state` other than `open` or `closed` with `422`. Repository and owner
+  overrides in the request body are dropped.
+- A project note stores both its project and its repository, and reads carry both
+  in the query, so a note cannot be read or written across a repository
+  boundary. Editing or deleting a note requires authorship: another member with
+  write access receives `403`. An activity entry receives `403` for both.
 - Item creation accepts either the legacy repository-local `issue_number` or
   an `issue` object with `owner`, `repo`, and `number`. Cross-repository adds
   require write access to the project repository and read access to the source
@@ -121,5 +163,7 @@ those authority boundaries.
 - `test/openagents_web/controllers/issue_assignee_controller_test.exs`
 - `test/openagents_web/controllers/milestone_controller_test.exs`
 - `test/openagents_web/controllers/project_controller_test.exs`
+- `test/openagents/project_notes_test.exs`
+- `test/openagents_web/live/project_show_live_test.exs`
 - `test/openagents_web/controllers/repository_isolation_controller_test.exs`
 - `test/openagents/repositories_test.exs`

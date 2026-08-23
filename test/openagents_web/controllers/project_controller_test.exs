@@ -69,6 +69,19 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert Projects.get_project_by_number!(repository(), number).title == "New board"
     end
 
+    test "POST /api/v3/repos/:owner/:repo/projectsV2 accepts a Markdown description", %{
+      conn: conn
+    } do
+      conn =
+        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{
+          title: "Stress testing Ox Alpha",
+          description: "## Why\n\nProvider order is under test."
+        })
+
+      assert %{"description" => "## Why\n\nProvider order is under test."} =
+               json_response(conn, 201)
+    end
+
     test "POST /api/v3/repos/:owner/:repo/projectsV2 ignores repository override params", %{
       conn: conn
     } do
@@ -592,6 +605,227 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
              |> json_response(404) == %{"message" => "Not Found"}
 
       assert Projects.list_projects(other_repository) == []
+    end
+  end
+
+  describe "update" do
+    test "PATCH projectsV2/:number updates the title, description, and state", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+          title: "Stress testing Ox Alpha",
+          description: "## Why\n\nProvider order is under test.",
+          state: "closed"
+        })
+
+      assert %{
+               "title" => "Stress testing Ox Alpha",
+               "description" => "## Why\n\nProvider order is under test.",
+               "state" => "closed",
+               "created_at" => _created,
+               "updated_at" => _updated
+             } = json_response(conn, 200)
+    end
+
+    test "PATCH projectsV2/:number ignores fields it does not own", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+          title: "Renamed",
+          number: 9999,
+          owner: "mallory"
+        })
+
+      assert %{"title" => "Renamed", "number" => number, "owner" => "alice"} =
+               json_response(conn, 200)
+
+      assert number == project.number
+    end
+
+    test "PATCH projectsV2/:number rejects an unknown state", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+          state: "sideways"
+        })
+
+      assert json_response(conn, 422) == %{"errors" => %{"state" => ["is invalid"]}}
+      assert Projects.get_project_by_number!(repository(), project.number).state == "open"
+    end
+
+    test "PATCH projectsV2/:number hides a private repository from a non-member", %{conn: _conn} do
+      project = project_fixture(%{title: "Alice only", owner: "alice"})
+      mallory = put_forge_api_token(build_conn(), "project-mallory-update", "mallory")
+
+      assert patch(
+               mallory,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}",
+               %{title: "Mine now"}
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert Projects.get_project_by_number!(repository(), project.number).title == "Alice only"
+    end
+  end
+
+  describe "notes" do
+    test "GET and POST notes round-trip a Markdown note with its author", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      created =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
+          %{body: "- paused lane 3"}
+        )
+
+      assert %{
+               "id" => id,
+               "kind" => "note",
+               "body" => "- paused lane 3",
+               "author" => %{"login" => "alice"},
+               "created_at" => _created_at,
+               "updated_at" => _updated_at
+             } = json_response(created, 201)
+
+      listed =
+        get(
+          recycle(conn),
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
+        )
+
+      assert %{"notes" => [note], "page" => 1, "per_page" => per_page, "total_count" => 1} =
+               json_response(listed, 200)
+
+      assert note["id"] == id
+      assert per_page == Projects.notes_per_page()
+    end
+
+    test "GET notes paginates and filters by kind", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
+      user = github_user("api-token-projects", "alice")
+
+      for index <- 1..(Projects.notes_per_page() + 1) do
+        {:ok, _note} =
+          Projects.create_project_note(project, %{"body" => "note #{index}"}, user)
+      end
+
+      {:ok, _updated} = Projects.update_project(project, %{"state" => "closed"}, user)
+
+      page_two =
+        get(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?page=2"
+        )
+
+      assert %{"notes" => notes, "page" => 2} = json_response(page_two, 200)
+      assert length(notes) == 2
+
+      activity =
+        get(
+          recycle(conn),
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?kind=activity"
+        )
+
+      assert %{"notes" => [%{"kind" => "activity", "body" => body}], "total_count" => 1} =
+               json_response(activity, 200)
+
+      assert body =~ "closed"
+    end
+
+    test "only the author may edit or delete a note", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      author = github_user("api-token-projects", "alice")
+      {:ok, note} = Projects.create_project_note(project, %{"body" => "mine"}, author)
+
+      mallory_conn =
+        put_forge_api_token(build_conn(), "project-mallory-notes", "mallory", repository())
+
+      assert patch(
+               mallory_conn,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
+               %{body: "not mine"}
+             )
+             |> json_response(403) == %{"message" => "Forbidden"}
+
+      assert delete(
+               recycle(mallory_conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
+             )
+             |> json_response(403) == %{"message" => "Forbidden"}
+
+      assert patch(
+               conn,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
+               %{body: "mine, edited"}
+             )
+             |> json_response(200)
+             |> Map.fetch!("body") == "mine, edited"
+
+      assert delete(
+               recycle(conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
+             )
+             |> response(204)
+
+      assert Projects.count_project_notes(project) == 0
+    end
+
+    test "an activity entry cannot be edited or deleted", %{conn: conn} do
+      project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
+      user = github_user("api-token-projects", "alice")
+      {:ok, _updated} = Projects.update_project(project, %{"state" => "closed"}, user)
+
+      {[activity], 1} = Projects.list_project_notes_page(project, kind: "activity")
+
+      assert patch(
+               conn,
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}",
+               %{body: "rewritten"}
+             )
+             |> json_response(403) == %{"message" => "Forbidden"}
+
+      assert delete(
+               recycle(conn),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}"
+             )
+             |> json_response(403) == %{"message" => "Forbidden"}
+
+      assert Projects.count_project_notes(project, kind: "activity") == 1
+    end
+
+    test "notes on a private repository stay hidden from a non-member", %{conn: conn} do
+      project = project_fixture(%{title: "Alice only", owner: "alice"})
+
+      {:ok, _note} =
+        Projects.create_project_note(
+          project,
+          %{"body" => "private context"},
+          github_user("api-token-projects", "alice")
+        )
+
+      assert get(
+               build_conn(),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert post(
+               put_forge_api_token(build_conn(), "project-outsider-notes", "outsider"),
+               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
+               %{body: "mine now"}
+             )
+             |> json_response(404) == %{"message" => "Not Found"}
+
+      assert %{"notes" => [_note]} =
+               get(
+                 conn,
+                 ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
+               )
+               |> json_response(200)
     end
   end
 

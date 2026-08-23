@@ -19,6 +19,19 @@ defmodule OpenAgentsWeb.ProjectJSON do
     %{fields: Enum.map(fields, &field_json/1)}
   end
 
+  def render("notes.json", %{notes: notes, page: page, total_count: total_count}) do
+    %{
+      notes: Enum.map(notes, &note_json/1),
+      page: page,
+      per_page: OpenAgents.Projects.notes_per_page(),
+      total_count: total_count
+    }
+  end
+
+  def render("note.json", %{note: note}) do
+    note_json(note)
+  end
+
   def render("error.json", %{changeset: changeset}) do
     %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
   end
@@ -28,8 +41,25 @@ defmodule OpenAgentsWeb.ProjectJSON do
       id: project.id,
       number: project.number,
       title: project.title,
+      # `description` is the canonical project-context field, and it is
+      # Markdown. Nothing renders it server-side for the API; a client renders
+      # it the same way it renders an issue body.
+      description: project.description,
       owner: project.owner,
-      state: project.state
+      state: project.state,
+      created_at: project.inserted_at,
+      updated_at: project.updated_at
+    }
+  end
+
+  defp note_json(note) do
+    %{
+      id: note.id,
+      kind: note.kind,
+      body: note.body,
+      author: note.author,
+      created_at: note.inserted_at,
+      updated_at: note.updated_at
     }
   end
 

@@ -236,6 +236,15 @@ Requirements before pointing the backend at the HTTP check:
      --health-checks sarah-hc-tcp --global-health-checks
    ```
 
+With the HTTP check active, a structural rolling replacement depends on
+boot convergence accepting a node that runs the newest
+`needs_rolling_replace` target's image. Nodes replaced before settlement
+report `image_matches_rolling_target` and stay in rotation; settlement
+through `finish_rolling_replacement/2` flips the target live and the next
+convergence attempt reports `image_matches_live`. Images older than commit
+`a79bfce` degrade with `artifact_not_direct` instead and return `503` for
+the whole roll, which would empty the backend.
+
 ## Known failure modes
 
 | Symptom | Cause | Fix |

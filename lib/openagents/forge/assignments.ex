@@ -13,7 +13,7 @@ defmodule OpenAgents.Forge.Assignments do
   alias OpenAgents.Agents.Agent
   alias OpenAgents.Box.ConversationBox
   alias OpenAgents.BoxRuns
-  alias OpenAgents.Forge.{Assignment, AssignmentCredential}
+  alias OpenAgents.Forge.{Assignment, AssignmentCredential, AssignmentCredentialVault}
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
@@ -26,54 +26,111 @@ defmodule OpenAgents.Forge.Assignments do
   @doc "Creates an assignment, claims its issue, mints its credential, and starts its run."
   @spec create(map()) :: {:ok, Assignment.t(), String.t()} | {:error, term()}
   def create(attrs) when is_map(attrs) do
-    with {:ok, owner} <- owner(attrs),
+    with {:ok, target_kind} <- target_kind(attrs),
+         {:ok, owner} <- owner(attrs, target_kind),
          {:ok, conversation} <- owned_conversation(attrs, owner),
-         {:ok, box} <- owned_box(attrs, conversation.id),
+         {:ok, target} <- owned_target(attrs, conversation.id, target_kind, owner),
          {:ok, repository} <- repository(attrs),
          {:ok, issue} <- issue(repository, attrs),
          {:ok, branch} <- branch(repository, attrs),
-         {:ok, principal} <- principal(attrs),
+         {:ok, principal} <- principal(attrs, target_kind),
          :ok <-
-           writable?(repository, attrs[:requesting_user] || attrs["requesting_user"], principal),
+           writable?(
+             repository,
+             attrs[:requesting_user] || attrs["requesting_user"],
+             principal,
+             target_kind
+           ),
          {:ok, assignment, plaintext} <-
-           persist_assignment(box, repository, issue, branch, principal, attrs) do
+           persist_assignment(target_kind, target, repository, issue, branch, principal, attrs) do
       case report_claim(assignment) do
         {:ok, _comment} ->
-          case BoxRuns.start_run(
-                 box.conversation_id,
-                 box.box_id,
-                 %{"type" => "assignment", "id" => assignment.id},
-                 command(attrs),
-                 idempotency_key(attrs),
-                 assignment_credential: plaintext
-               ) do
-            {:ok, run} ->
-              assignment =
-                case Repo.get!(Assignment, assignment.id) do
-                  %Assignment{} = current when current.state in @terminal_states ->
-                    current
-
-                  %Assignment{} = current ->
-                    current
-                    |> Assignment.changeset(%{
-                      run_id: run.id,
-                      state: "running",
-                      started_at: DateTime.utc_now()
-                    })
-                    |> Repo.update!()
-                end
-
-              {:ok, assignment, plaintext}
-
-            {:error, reason} ->
-              _ = finish(assignment, "failed", nil, inspect(reason))
-              {:error, reason}
-          end
+          start_target(assignment, target, target_kind, plaintext, attrs, owner, conversation)
 
         {:error, reason} ->
           _ = finish(assignment, "failed", nil, "claim_event_failed")
           {:error, reason}
       end
+    end
+  end
+
+  defp start_target(assignment, box, "box", plaintext, attrs, _owner, _conversation) do
+    case BoxRuns.start_run(
+           box.conversation_id,
+           box.box_id,
+           %{"type" => "assignment", "id" => assignment.id},
+           command(attrs),
+           idempotency_key(attrs),
+           assignment_credential: plaintext
+         ) do
+      {:ok, run} ->
+        assignment =
+          case Repo.get!(Assignment, assignment.id) do
+            %Assignment{} = current when current.state in @terminal_states ->
+              current
+
+            %Assignment{} = current ->
+              current
+              |> Assignment.changeset(%{
+                run_id: run.id,
+                state: "running",
+                started_at: DateTime.utc_now()
+              })
+              |> Repo.update!()
+          end
+
+        {:ok, assignment, plaintext}
+
+      {:error, reason} ->
+        _ = finish(assignment, "failed", nil, inspect(reason))
+        {:error, reason}
+    end
+  end
+
+  defp start_target(assignment, machine, "computer", plaintext, attrs, owner, conversation) do
+    if assignment.credential_delivery_status == "enabled",
+      do: AssignmentCredentialVault.put(assignment.id, plaintext)
+
+    assignment =
+      assignment
+      |> Assignment.changeset(%{state: "running", started_at: DateTime.utc_now()})
+      |> Repo.update!()
+
+    params = %{
+      "prompt" => attrs[:prompt] || attrs["prompt"] || "",
+      "cwd" => attrs[:cwd] || attrs["cwd"] || "",
+      "agent_id" => attrs[:agent_id] || attrs["agent_id"],
+      "assignment_id" => assignment.id,
+      "assignment_branch" => assignment.branch,
+      "assignment_repository_id" => assignment.repository_id,
+      "timeout_ms" =>
+        max(DateTime.diff(assignment.deadline_at, DateTime.utc_now(), :millisecond), 1_000)
+    }
+
+    case OpenAgents.ComputerAgentJobs.start(owner, machine, conversation, params) do
+      {:ok, _job} ->
+        {:ok, assignment, plaintext}
+
+      {:error, reason} ->
+        AssignmentCredentialVault.delete(assignment.id)
+        _ = finish(assignment, "failed", nil, inspect(reason))
+        {:error, reason}
+    end
+  end
+
+  defp target_kind(attrs) do
+    case attrs[:target_kind] || attrs["target_kind"] do
+      nil ->
+        if attrs[:machine_id] || attrs["machine_id"], do: {:ok, "computer"}, else: {:ok, "box"}
+
+      "box" ->
+        {:ok, "box"}
+
+      "computer" ->
+        {:ok, "computer"}
+
+      _ ->
+        {:error, :invalid_assignment_target}
     end
   end
 
@@ -140,6 +197,8 @@ defmodule OpenAgents.Forge.Assignments do
             set: [revoked_at: now, updated_at: now]
           )
 
+          AssignmentCredentialVault.delete(current.id)
+
           {:finished, updated}
         end
       end)
@@ -158,6 +217,38 @@ defmodule OpenAgents.Forge.Assignments do
     end
   end
 
+  @doc "Finishes every active Computer assignment bound to a revoked machine."
+  def finish_for_machine(machine_id, reason \\ "machine_revoked") when is_binary(machine_id) do
+    Repo.all(
+      from assignment in Assignment,
+        where:
+          assignment.machine_id == ^machine_id and
+            assignment.state in ["admitted", "running"]
+    )
+    |> Enum.each(fn assignment ->
+      _ = finish(assignment, "failed", nil, reason)
+    end)
+
+    :ok
+  end
+
+  @doc "Revokes credentials and finishes active assignments past their deadline."
+  def expire do
+    now = DateTime.utc_now()
+
+    Repo.all(
+      from assignment in Assignment,
+        where:
+          assignment.state in ["admitted", "running"] and
+            assignment.deadline_at <= ^now
+    )
+    |> Enum.each(fn assignment ->
+      _ = finish(assignment, "failed", nil, "assignment_expired")
+    end)
+
+    :ok
+  end
+
   @doc "Returns the assignment credential metadata without exposing its secret."
   def credential(%Assignment{id: id}) do
     Repo.one(from c in AssignmentCredential, where: c.assignment_id == ^id)
@@ -169,7 +260,7 @@ defmodule OpenAgents.Forge.Assignments do
 
     body =
       [
-        "Box assignment finished.",
+        "#{target_label(assignment)} assignment finished.",
         "Branch: `#{assignment.terminal_branch || assignment.branch}`.",
         "Commit: `#{assignment.terminal_commit || "none reported"}`.",
         "Result: `#{assignment.state}`.",
@@ -187,7 +278,7 @@ defmodule OpenAgents.Forge.Assignments do
 
     body =
       [
-        "Box assignment claim released.",
+        "#{target_label(assignment)} assignment claim released.",
         "Branch: `#{assignment.branch}`.",
         "Assignment: `#{assignment.id}`."
       ]
@@ -202,7 +293,7 @@ defmodule OpenAgents.Forge.Assignments do
 
     body =
       [
-        "Box assignment claimed.",
+        "#{target_label(assignment)} assignment claimed.",
         "Branch: `#{assignment.branch}`.",
         "Assignment: `#{assignment.id}`."
       ]
@@ -211,7 +302,7 @@ defmodule OpenAgents.Forge.Assignments do
     Issues.create_comment(issue, %{body: body}, author(assignment.requesting_principal))
   end
 
-  defp persist_assignment(box, repository, issue, branch, principal, attrs) do
+  defp persist_assignment(target_kind, target, repository, issue, branch, principal, attrs) do
     Repo.transaction(fn ->
       now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
       id = Ecto.UUID.generate()
@@ -219,16 +310,24 @@ defmodule OpenAgents.Forge.Assignments do
       secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
       plaintext = @prefix <> id <> "." <> secret
 
+      {credential_delivery_status, credential_delivery_reason} =
+        credential_delivery(target_kind, target)
+
       assignment =
         %Assignment{id: id}
         |> Assignment.changeset(%{
-          conversation_box_id: box.id,
+          conversation_box_id: if(target_kind == "box", do: target.id),
+          machine_id: if(target_kind == "computer", do: target.id),
+          conversation_id: attrs[:conversation_id] || attrs["conversation_id"],
           repository_id: repository.id,
           issue_id: issue.id,
           requesting_principal: principal,
           branch: branch,
           deadline_at: deadline,
-          admitted_at: now
+          admitted_at: now,
+          target_kind: target_kind,
+          credential_delivery_status: credential_delivery_status,
+          credential_delivery_reason: credential_delivery_reason
         })
         |> Repo.insert!()
 
@@ -257,6 +356,19 @@ defmodule OpenAgents.Forge.Assignments do
     end
   end
 
+  defp credential_delivery("box", _target), do: {"not_applicable", nil}
+
+  defp credential_delivery("computer", %OpenAgents.Machines.Machine{
+         scoped_forge_credentials_enabled: true
+       }),
+       do: {"enabled", nil}
+
+  defp credential_delivery("computer", _target),
+    do: {"refused", "computer_scoped_forge_credentials_not_enabled"}
+
+  defp owned_target(attrs, conversation_id, "box", _owner), do: owned_box(attrs, conversation_id)
+  defp owned_target(attrs, _conversation_id, "computer", owner), do: owned_machine(attrs, owner)
+
   defp owned_box(%{"conversation_id" => conversation_id, "box_id" => box_id}),
     do: box_record(conversation_id, box_id)
 
@@ -271,7 +383,24 @@ defmodule OpenAgents.Forge.Assignments do
     |> owned_box()
   end
 
-  defp owner(attrs) do
+  defp owned_machine(attrs, owner) do
+    machine_id = attrs[:machine_id] || attrs["machine_id"]
+
+    case OpenAgents.Machines.get_machine(owner.id, machine_id) do
+      {:ok, %OpenAgents.Machines.Machine{status: "active"} = machine} ->
+        if OpenAgents.Computer.online?(machine.id),
+          do: {:ok, machine},
+          else: {:error, :machine_offline}
+
+      {:ok, _machine} ->
+        {:error, :machine_revoked}
+
+      error ->
+        error
+    end
+  end
+
+  defp owner(attrs, target_kind) do
     case attrs[:requesting_user] || attrs["requesting_user"] do
       %OpenAgents.Accounts.User{} = user ->
         {:ok, user}
@@ -279,7 +408,7 @@ defmodule OpenAgents.Forge.Assignments do
       _ ->
         case attrs[:requesting_principal] || attrs["requesting_principal"] do
           %Agent{} = agent ->
-            case Agents.box_control_owner(agent) do
+            case Agents.control_owner(agent, target_kind) do
               %OpenAgents.Accounts.User{} = user -> {:ok, user}
               _ -> {:error, :conversation_not_found}
             end
@@ -346,20 +475,28 @@ defmodule OpenAgents.Forge.Assignments do
     end
   end
 
-  defp writable?(%Repository{} = repository, %OpenAgents.Accounts.User{} = user, _principal) do
+  defp writable?(
+         %Repository{} = repository,
+         %OpenAgents.Accounts.User{} = user,
+         _principal,
+         _target_kind
+       ) do
     if OpenAgents.Repositories.writable?(repository, user),
       do: :ok,
       else: {:error, :repository_not_writable}
   end
 
-  defp writable?(repository, _user, %{"type" => "agent", "id" => id}) do
-    case Repo.get(Agent, id) |> Agents.box_control_owner() do
-      %OpenAgents.Accounts.User{} = user -> writable?(repository, user, %{"type" => "user"})
-      _ -> {:error, :repository_not_writable}
+  defp writable?(repository, _user, %{"type" => "agent", "id" => id}, target_kind) do
+    case Repo.get(Agent, id) |> Agents.control_owner(target_kind) do
+      %OpenAgents.Accounts.User{} = user ->
+        writable?(repository, user, %{"type" => "user"}, target_kind)
+
+      _ ->
+        {:error, :repository_not_writable}
     end
   end
 
-  defp writable?(_, _, _), do: {:error, :repository_not_writable}
+  defp writable?(_, _, _, _), do: {:error, :repository_not_writable}
 
   defp branch(%Repository{default_branch: default_branch, protected_branches: protected}, attrs) do
     branch = attrs[:branch] || attrs["branch"]
@@ -380,10 +517,10 @@ defmodule OpenAgents.Forge.Assignments do
     end
   end
 
-  defp principal(attrs) do
+  defp principal(attrs, target_kind) do
     case attrs[:requesting_principal] || attrs["requesting_principal"] do
       %Agent{} = agent ->
-        if Agents.box_control_granted?(agent),
+        if granted?(agent, target_kind),
           do:
             {:ok,
              %{
@@ -392,7 +529,7 @@ defmodule OpenAgents.Forge.Assignments do
                "actor_type" => "agent",
                "actor_id" => agent.id
              }},
-          else: {:error, :agent_box_control_forbidden}
+          else: {:error, grant_error(target_kind)}
 
       %OpenAgents.Accounts.User{id: id} ->
         {:ok, %{"type" => "user", "id" => id, "actor_type" => "user", "actor_id" => id}}
@@ -408,6 +545,19 @@ defmodule OpenAgents.Forge.Assignments do
         {:error, :invalid_principal}
     end
   end
+
+  defp granted?(agent, target_kind) do
+    case Agents.control_owner(agent, target_kind) do
+      %OpenAgents.Accounts.User{} = owner ->
+        Agents.control_granted_by?(agent, owner, target_kind)
+
+      _ ->
+        false
+    end
+  end
+
+  defp grant_error("box"), do: :agent_box_control_forbidden
+  defp grant_error("computer"), do: :agent_computer_control_forbidden
 
   defp command(attrs), do: attrs[:command] || attrs["command"] || "true"
 
@@ -437,5 +587,7 @@ defmodule OpenAgents.Forge.Assignments do
 
   defp author(%{"actor_type" => "agent", "actor_id" => id}), do: Repo.get!(Agent, id)
   defp author(_), do: nil
+  defp target_label(%Assignment{target_kind: "computer"}), do: "Computer"
+  defp target_label(_), do: "Box"
   defp digest(value), do: :crypto.hash(:sha256, value)
 end

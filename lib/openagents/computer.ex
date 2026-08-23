@@ -151,7 +151,7 @@ defmodule OpenAgents.Computer do
     case await_machine(machine_id, await_ms) do
       [{channel_pid, _value} | _rest] ->
         request_id = Ecto.UUID.generate()
-        live = ComputerActivity.begin(machine_id, kind, request_id, payload)
+        live = ComputerActivity.begin(machine_id, kind, request_id, activity_payload(payload))
         monitor = Process.monitor(channel_pid)
         send(channel_pid, {:computer_request, kind, request_id, payload, self()})
         deadline = System.monotonic_time(:millisecond) + timeout_ms
@@ -280,6 +280,12 @@ defmodule OpenAgents.Computer do
       binary |> String.chunk(:valid) |> Enum.filter(&String.valid?/1) |> Enum.join()
     end
   end
+
+  defp activity_payload(payload) when is_map(payload) do
+    Map.drop(payload, ["assignment_credential", "inference_grant"])
+  end
+
+  defp activity_payload(_payload), do: %{}
 
   defp broadcast_presence(machine_id, presence) do
     Phoenix.PubSub.broadcast(

@@ -75,6 +75,15 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.AssignmentControlAuth, scope: "box:control"
   end
 
+  pipeline :assignment_computer_control_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+
+    plug OpenAgentsWeb.Plugs.AssignmentControlAuth,
+      scope: "computer:control",
+      target_kind: "computer"
+  end
+
   pipeline :computer_control_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -82,6 +91,12 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.AssignmentControlAuth,
       scope: "computer:control",
       target_kind: "computer"
+  end
+
+  pipeline :human_computer_control_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "computer:control"
   end
 
   pipeline :delegation_api do
@@ -437,6 +452,12 @@ defmodule OpenAgentsWeb.Router do
   end
 
   scope "/api/v3", OpenAgentsWeb do
+    pipe_through :human_computer_control_api
+
+    patch "/computers/:id", ComputersController, :update
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
     pipe_through :forge_write_api
 
     get "/agents/links", AgentController, :links
@@ -483,6 +504,14 @@ defmodule OpenAgentsWeb.Router do
     get "/:box_id/runs/:run_id", BoxRunController, :show
     get "/:box_id/runs/:run_id/output", BoxRunController, :output
     post "/:box_id/runs/:run_id/cancel", BoxRunController, :cancel
+  end
+
+  scope "/api/v3/conversations/:conversation_id/computers", OpenAgentsWeb do
+    pipe_through :assignment_computer_control_api
+
+    post "/:machine_id/assignments", AssignmentController, :create
+    get "/:machine_id/assignments/:assignment_id", AssignmentController, :show
+    post "/:machine_id/assignments/:assignment_id/cancel", AssignmentController, :cancel
   end
 
   scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do

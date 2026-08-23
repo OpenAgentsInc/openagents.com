@@ -38,8 +38,17 @@ defmodule OpenAgentsWeb.ComputersLive do
      |> assign(:pairing_error, "Computer pairing is currently unavailable.")}
   end
 
-  def handle_event("approve_pairing", %{"pairing" => %{"code" => code}}, socket) do
-    case Machines.approve_pairing(socket.assigns.current_user, code) do
+  def handle_event(
+        "approve_pairing",
+        %{"pairing" => pairing_params},
+        socket
+      ) do
+    code = Map.get(pairing_params, "code", "")
+    enabled = Map.get(pairing_params, "scoped_forge_credentials_enabled", false)
+
+    case Machines.approve_pairing(socket.assigns.current_user, code,
+           scoped_forge_credentials_enabled: enabled in ["true", true, "1"]
+         ) do
       {:ok, machine} ->
         {:noreply,
          socket
@@ -58,6 +67,38 @@ defmodule OpenAgentsWeb.ComputersLive do
          socket
          |> assign(:operation_success, nil)
          |> assign(:pairing_error, pairing_error(reason))}
+    end
+  end
+
+  def handle_event(
+        "update_scoped_forge_credentials",
+        %{"id" => machine_id, "enabled" => enabled},
+        socket
+      ) do
+    enabled = enabled in ["true", true, "1"]
+
+    case Machines.update_scoped_forge_credentials(
+           socket.assigns.current_user,
+           machine_id,
+           enabled
+         ) do
+      {:ok, machine} ->
+        {:noreply,
+         socket
+         |> assign(:pairing_error, nil)
+         |> assign(:operation_success, %{
+           id: "credentials-policy-success",
+           label: "POLICY UPDATED",
+           message:
+             "Scoped forge credentials are now #{if(enabled, do: "allowed", else: "disabled")} for \"#{machine.name}\"."
+         })
+         |> load_machines()}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:operation_success, nil)
+         |> assign(:pairing_error, "Computer not found.")}
     end
   end
 
@@ -240,6 +281,15 @@ defmodule OpenAgentsWeb.ComputersLive do
                     required
                   />
                 </.field>
+                <.field class="computers-pairing__field">
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="pairing[scoped_forge_credentials_enabled]"
+                      value="true"
+                    /> Allow scoped forge credentials on this computer
+                  </label>
+                </.field>
                 <.button id="approve-pairing" type="submit" phx-disable-with="Pairing…">
                   Approve pairing
                 </.button>
@@ -366,6 +416,20 @@ defmodule OpenAgentsWeb.ComputersLive do
 
                   <footer :if={machine.status == "active"} class="computer-card__actions">
                     <p>Revoking closes its connection and can stop work currently running there.</p>
+                    <.text_button
+                      id={"credentials-policy-#{machine.id}"}
+                      phx-click="update_scoped_forge_credentials"
+                      phx-value-id={machine.id}
+                      phx-value-enabled={
+                        if(machine.scoped_forge_credentials_enabled, do: "false", else: "true")
+                      }
+                      phx-disable-with="Updating…"
+                    >
+                      {if(machine.scoped_forge_credentials_enabled,
+                        do: "Disable scoped forge credentials",
+                        else: "Allow scoped forge credentials"
+                      )}
+                    </.text_button>
                     <.text_button
                       id={"revoke-#{machine.id}"}
                       tone={:danger}

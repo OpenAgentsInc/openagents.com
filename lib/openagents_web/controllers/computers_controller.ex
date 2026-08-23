@@ -22,6 +22,27 @@ defmodule OpenAgentsWeb.ComputersController do
     })
   end
 
+  def update(conn, %{"id" => machine_id} = params) do
+    case Map.fetch(params, "scoped_forge_credentials_enabled") do
+      {:ok, value} when value in [true, "true", "1", false, "false", "0"] ->
+        enabled = value in [true, "true", "1"]
+
+        case Machines.update_scoped_forge_credentials(
+               conn.assigns.current_user,
+               machine_id,
+               enabled
+             ) do
+          {:ok, machine} -> json(conn, %{"computer" => ComputerProjection.project(machine)})
+          {:error, :machine_not_found} -> error(conn, :not_found, "computer_not_found")
+        end
+
+      _invalid ->
+        error(conn, :unprocessable_entity, "invalid_scoped_forge_credentials_policy")
+    end
+  end
+
+  def update(conn, _params), do: error(conn, :not_found, "computer_not_found")
+
   def probe(conn, %{"machine_id" => machine_id}) do
     with {:ok, machine} <- Machines.get_machine(conn.assigns.current_user.id, machine_id),
          :ok <- probe_enabled(),
@@ -51,7 +72,10 @@ defmodule OpenAgentsWeb.ComputersController do
 
   def approve_pairing(conn, %{"id" => pairing_id, "code" => code}) do
     if Computer.enabled?() do
-      case Machines.approve_pairing(conn.assigns.current_user, pairing_id, code) do
+      case Machines.approve_pairing(conn.assigns.current_user, pairing_id, code,
+             scoped_forge_credentials_enabled:
+               params_boolean(conn.params["scoped_forge_credentials_enabled"])
+           ) do
         {:ok, machine} ->
           Analytics.capture(
             "computer_paired",
@@ -97,4 +121,7 @@ defmodule OpenAgentsWeb.ComputersController do
   defp error(conn, status, code) do
     conn |> put_status(status) |> json(%{"error" => code})
   end
+
+  defp params_boolean(value) when value in [true, "true", "1"], do: true
+  defp params_boolean(_value), do: false
 end

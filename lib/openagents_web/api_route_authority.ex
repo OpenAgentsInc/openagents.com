@@ -102,6 +102,12 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
         :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id/cancel" =>
         :required_bearer,
+      "post /api/v3/conversations/:conversation_id/computers/:machine_id/assignments" =>
+        :required_bearer,
+      "get /api/v3/conversations/:conversation_id/computers/:machine_id/assignments/:assignment_id" =>
+        :required_bearer,
+      "post /api/v3/conversations/:conversation_id/computers/:machine_id/assignments/:assignment_id/cancel" =>
+        :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/runs" => :required_bearer,
       "get /api/v3/conversations/:conversation_id/boxes/:box_id/runs" => :required_bearer,
       "get /api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id" => :required_bearer,
@@ -110,6 +116,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id/cancel" =>
         :required_bearer,
       "get /api/v3/computers" => :required_bearer,
+      "patch /api/v3/computers/:id" => :required_bearer,
       "post /api/v3/computers/:machine_id/probe" => :required_bearer,
       "post /api/v3/computers/:machine_id/agent-jobs" => :required_bearer,
       "get /api/v3/computer-agent-jobs/:id" => :required_bearer,

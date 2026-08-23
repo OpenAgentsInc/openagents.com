@@ -35,6 +35,48 @@ defmodule OpenAgents.Forge.AssignmentTest do
     refute Assignment.terminal?(assignment)
   end
 
+  test "assignment changesets support a Computer target without changing Box defaults" do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    changeset =
+      Assignment.changeset(%Assignment{}, %{
+        target_kind: "computer",
+        machine_id: Ecto.UUID.generate(),
+        conversation_id: Ecto.UUID.generate(),
+        repository_id: Ecto.UUID.generate(),
+        issue_id: 1,
+        requesting_principal: %{"type" => "agent", "id" => Ecto.UUID.generate()},
+        branch: "agent/computer-issue-1",
+        deadline_at: DateTime.add(now, 60, :second),
+        admitted_at: now
+      })
+
+    assert changeset.valid?
+    assignment = Ecto.Changeset.apply_changes(changeset)
+    assert assignment.target_kind == "computer"
+    assert assignment.machine_id
+    assert is_nil(assignment.conversation_box_id)
+  end
+
+  test "Computer assignments require a machine target" do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    changeset =
+      Assignment.changeset(%Assignment{}, %{
+        target_kind: "computer",
+        conversation_id: Ecto.UUID.generate(),
+        repository_id: Ecto.UUID.generate(),
+        issue_id: 1,
+        requesting_principal: %{"type" => "agent", "id" => Ecto.UUID.generate()},
+        branch: "agent/computer-issue-1",
+        deadline_at: DateTime.add(now, 60, :second),
+        admitted_at: now
+      })
+
+    refute changeset.valid?
+    assert "can't be blank" in errors_on(changeset).machine_id
+  end
+
   test "assignment credentials keep only a digest and metadata" do
     digest = :crypto.hash(:sha256, "oa_assignment_secret")
 

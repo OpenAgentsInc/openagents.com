@@ -30,6 +30,7 @@ defmodule OpenAgents.ComputerAgentJobs do
     cwd = normalize_path(params["cwd"])
     resume_session_id = bounded_optional(params["resume_session_id"], 128)
     surface = if Keyword.get(opts, :surface) == "voice", do: "voice", else: "text"
+    timeout_ms = bounded_timeout(params["timeout_ms"])
 
     with :ok <- verify_enabled(),
          :ok <- validate_owner(user, machine, conversation),
@@ -45,10 +46,13 @@ defmodule OpenAgents.ComputerAgentJobs do
           "machine_id" => machine.id,
           "machine_name" => machine.name,
           "prompt" => prompt,
-          "timeout_ms" => @delegation_timeout_ms,
+          "timeout_ms" => timeout_ms,
           "cwd" => cwd
         }
         |> put_optional("resume_session_id", resume_session_id)
+        |> put_optional("assignment_id", bounded_optional(params["assignment_id"], 64))
+        |> put_optional("assignment_branch", bounded_optional(params["assignment_branch"], 256))
+        |> put_optional("assignment_repository_id", params["assignment_repository_id"])
 
       authority_snapshot = %{
         "machine_tier" => machine.tier,
@@ -59,7 +63,7 @@ defmodule OpenAgents.ComputerAgentJobs do
       }
 
       budget_snapshot = %{
-        "wall_clock_ms" => @delegation_timeout_ms,
+        "wall_clock_ms" => timeout_ms,
         "maximum_prompt_bytes" => 8_000,
         "maximum_report_bytes" => 8_000
       }
@@ -137,6 +141,12 @@ defmodule OpenAgents.ComputerAgentJobs do
   end
 
   defp validate_cwd(_roots, _cwd), do: {:error, :cwd_not_allowed}
+
+  defp bounded_timeout(value) when is_integer(value) do
+    max(min(value, @delegation_timeout_ms), 1_000)
+  end
+
+  defp bounded_timeout(_value), do: @delegation_timeout_ms
 
   defp inside_root?(cwd, root) when is_binary(root) do
     normalized_root = normalize_path(root)

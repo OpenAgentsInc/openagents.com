@@ -19,9 +19,10 @@ defmodule OpenAgents.Work.DelegationServer do
   # finish (:normal exit) is not restarted.
   use GenServer, restart: :transient
 
-  alias OpenAgents.{Computer, Incidents, Work}
+  alias OpenAgents.{Computer, Incidents, Repo, Work}
   alias OpenAgents.Cluster.Sessions
   alias OpenAgents.Computer.AcpTranscript
+  alias OpenAgents.Forge.{Assignment, AssignmentCredentialVault, Assignments}
 
   # A report is a chat message, not a terminal window. It carries what the
   # agent said and any tool call that failed; the tool-by-tool log stays in the
@@ -65,6 +66,7 @@ defmodule OpenAgents.Work.DelegationServer do
     _report = Work.append_report_delta(state.job, "Delegation cancelled by the owner.")
     _incident = report_incident(state.job, {:ok, %{"status" => "cancelled"}})
     _finished = Work.finish_job(state.job.id, "cancelled", error_code: "cancelled")
+    _assignment = finish_assignment(state.job, "cancelled", nil, "cancelled")
     _ra = ra_finish(state)
     {:stop, :normal, state}
   end
@@ -79,6 +81,10 @@ defmodule OpenAgents.Work.DelegationServer do
     _report = Work.append_report_delta(state.job, report)
     _incident = report_incident(state.job, result)
     _finished = Work.finish_job(state.job.id, status, [])
+
+    _assignment =
+      finish_assignment(state.job, assignment_state(status), result, assignment_reason(result))
+
     _ra = ra_finish(state)
     {:stop, :normal, state}
   end
@@ -87,6 +93,7 @@ defmodule OpenAgents.Work.DelegationServer do
   def handle_info({:DOWN, reference, :process, _pid, _reason}, %{task: %{ref: reference}} = state) do
     _report = Work.append_report_delta(state.job, "The delegation worker stopped unexpectedly.")
     _finished = Work.finish_job(state.job.id, "failed", error_code: "delegation_worker_exited")
+    _assignment = finish_assignment(state.job, "failed", nil, "delegation_worker_exited")
     _ra = ra_finish(state)
     {:stop, :normal, state}
   end
@@ -112,7 +119,11 @@ defmodule OpenAgents.Work.DelegationServer do
       }
       |> put_optional("cwd", authority["cwd"])
       |> put_optional("resume_session_id", resume_id || params["resume_session_id"])
+      |> put_optional("assignment_id", params["assignment_id"])
+      |> put_optional("assignment_branch", params["assignment_branch"])
+      |> put_optional("assignment_repository_id", params["assignment_repository_id"])
       |> attach_inference_grant(job)
+      |> attach_assignment_credential(params)
 
     # Checkpoint the ACP session id the moment the controller reports it — in
     # Ra (cluster-wide, for node-loss handoff) AND in the durable job row
@@ -181,6 +192,56 @@ defmodule OpenAgents.Work.DelegationServer do
   end
 
   defp attach_inference_grant(payload, _job), do: payload
+
+  defp attach_assignment_credential(payload, %{"assignment_id" => assignment_id})
+       when is_binary(assignment_id) do
+    case AssignmentCredentialVault.take(assignment_id) do
+      credential when is_binary(credential) ->
+        Map.put(payload, "assignment_credential", credential)
+
+      _ ->
+        payload
+    end
+  end
+
+  defp attach_assignment_credential(payload, _params), do: payload
+
+  defp assignment_state("completed"), do: "completed"
+  defp assignment_state(_status), do: "failed"
+
+  defp assignment_reason({:error, reason}) when is_atom(reason), do: Atom.to_string(reason)
+
+  defp assignment_reason({:ok, %{"status" => "timeout"}}), do: "timeout"
+
+  defp assignment_reason({:ok, %{"status" => status}}) when is_binary(status),
+    do: status
+
+  defp assignment_reason({:refused, reason, _detail}) when is_atom(reason),
+    do: Atom.to_string(reason)
+
+  defp assignment_reason(_result), do: nil
+
+  defp finish_assignment(job, state, result, reason) do
+    case get_in(job.delegation || %{}, ["assignment_id"]) do
+      assignment_id when is_binary(assignment_id) ->
+        case Repo.get(Assignment, assignment_id) do
+          %Assignment{} = assignment ->
+            commit =
+              case result do
+                {:ok, %{"commit" => commit}} when is_binary(commit) -> commit
+                _ -> nil
+              end
+
+            Assignments.finish(assignment, state, commit, reason)
+
+          nil ->
+            :ok
+        end
+
+      _absent ->
+        :ok
+    end
+  end
 
   defp summarize({:ok, %{"status" => "completed"} = payload}, job) do
     {"completed", report_line(job, "completed", payload["output"], payload["detail"], payload)}

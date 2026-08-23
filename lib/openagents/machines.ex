@@ -57,21 +57,57 @@ defmodule OpenAgents.Machines do
 
   def pending_pairing(_code), do: {:error, :pairing_not_found}
 
-  @spec approve_pairing(User.t(), String.t()) :: {:ok, Machine.t()} | {:error, atom()}
-  def approve_pairing(%User{id: user_id}, code) do
-    do_approve_pairing(user_id, nil, code)
-  end
-
+  @spec approve_pairing(User.t(), String.t(), keyword()) :: {:ok, Machine.t()} | {:error, atom()}
   @spec approve_pairing(User.t(), String.t(), String.t()) ::
           {:ok, Machine.t()} | {:error, atom()}
-  def approve_pairing(%User{id: user_id}, pairing_id, code)
-      when is_binary(pairing_id) and is_binary(code) do
-    do_approve_pairing(user_id, pairing_id, code)
+  @spec approve_pairing(User.t(), String.t(), String.t(), keyword()) ::
+          {:ok, Machine.t()} | {:error, atom()}
+  @spec approve_pairing(User.t(), String.t()) :: {:ok, Machine.t()} | {:error, atom()}
+  def approve_pairing(%User{id: user_id}, pairing_or_code, code_or_options \\ [], options \\ [])
+      when is_binary(pairing_or_code) do
+    cond do
+      is_binary(code_or_options) and is_list(options) ->
+        do_approve_pairing(user_id, pairing_or_code, code_or_options, options)
+
+      is_list(code_or_options) and options == [] ->
+        do_approve_pairing(user_id, nil, pairing_or_code, code_or_options)
+
+      true ->
+        {:error, :pairing_not_found}
+    end
   end
 
-  def approve_pairing(%User{}, _pairing_id, _code), do: {:error, :pairing_not_found}
+  @spec update_scoped_forge_credentials(User.t(), String.t(), boolean()) ::
+          {:ok, Machine.t()} | {:error, atom()}
+  def update_scoped_forge_credentials(%User{id: user_id}, machine_id, enabled)
+      when is_boolean(enabled) do
+    with {:ok, machine} <- get_machine(user_id, machine_id),
+         {:ok, updated} <-
+           machine
+           |> Ecto.Changeset.change(scoped_forge_credentials_enabled: enabled)
+           |> Repo.update() do
+      if enabled do
+        :ok
+      else
+        _ =
+          OpenAgents.Forge.Assignments.finish_for_machine(
+            machine.id,
+            "scoped_forge_credentials_disabled"
+          )
+      end
 
-  defp do_approve_pairing(user_id, pairing_id, code) do
+      broadcast_machine_updated(updated)
+      {:ok, updated}
+    else
+      {:error, _changeset} -> {:error, :machine_not_found}
+      error -> error
+    end
+  end
+
+  def update_scoped_forge_credentials(_user, _machine_id, _enabled),
+    do: {:error, :machine_not_found}
+
+  defp do_approve_pairing(user_id, pairing_id, code, options) do
     Repo.transaction(fn ->
       with {:ok, pairing} <- pending_pairing_for_update(code),
            :ok <- verify_pairing_id(pairing, pairing_id),
@@ -94,7 +130,9 @@ defmodule OpenAgents.Machines do
           })
           |> Ecto.Changeset.change(
             token_digest: digest(token),
-            token_expires_at: token_expires_at
+            token_expires_at: token_expires_at,
+            scoped_forge_credentials_enabled:
+              Keyword.get(options, :scoped_forge_credentials_enabled, false)
           )
           |> Repo.insert!()
 
@@ -263,6 +301,8 @@ defmodule OpenAgents.Machines do
       |> Repo.update()
       |> case do
         {:ok, revoked} ->
+          _ = OpenAgents.Forge.Assignments.finish_for_machine(machine.id)
+
           Phoenix.PubSub.broadcast(
             OpenAgents.PubSub,
             "machine:#{machine.id}",

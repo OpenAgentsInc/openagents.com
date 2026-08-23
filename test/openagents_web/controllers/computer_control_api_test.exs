@@ -1,9 +1,15 @@
 defmodule OpenAgentsWeb.ComputerControlApiTest do
   use OpenAgentsWeb.ConnCase, async: false
 
+  import Ecto.Query
+  import OpenAgents.AccountsFixtures
+
   alias OpenAgents.Agents
   alias OpenAgents.ApiTokens
+  alias OpenAgents.Forge.{AssignmentCredential, AssignmentCredentialVault, Assignments}
+  alias OpenAgents.Issues
   alias OpenAgents.Machines
+  alias OpenAgents.Repo
   alias OpenAgents.Support.FakeController
   alias OpenAgents.Work
 
@@ -96,6 +102,13 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
            |> json_response(200)
            |> Map.get("computers")
            |> Enum.any?(&(&1["id"] == machine.id))
+
+    assert build_conn()
+           |> bearer(credential)
+           |> patch(~p"/api/v3/computers/#{machine.id}", %{
+             "scoped_forge_credentials_enabled" => true
+           })
+           |> json_response(401) == %{"error" => "invalid_api_token"}
 
     assert {:ok, _revoked} = Agents.revoke_computer_control(user, agent)
 
@@ -212,7 +225,231 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
     assert invalid_cwd["error"] == "cwd_not_allowed"
   end
 
-  defp paired_machine(user, name, agent_ids) do
+  test "Computer assignments report opt-in refusal but continue without push authority" do
+    user = github_user("computer-assignment-no-opt-in")
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(user)
+    repository = repository_with_member_fixture(user)
+    {:ok, issue} = Issues.create_issue(repository, %{title: "Computer assignment"})
+    machine = paired_machine(user, "assignment-no-opt-in", ["codex"])
+    test_pid = self()
+
+    start_supervised!(
+      {FakeController,
+       machine_id: machine.id,
+       script: fn {:agent, request_id, payload, caller} ->
+         send(test_pid, {:assignment_request, request_id, payload, caller})
+       end}
+    )
+
+    response =
+      build_conn()
+      |> put_api_token(user, ["computer:control"])
+      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+        "repository_id" => repository.id,
+        "issue_number" => issue.number,
+        "branch" => "agent/computer-#{issue.number}",
+        "agent_id" => "codex",
+        "prompt" => "Implement the issue",
+        "cwd" => @root
+      })
+      |> json_response(202)
+
+    assert response["assignment"]["credential_delivery"] == %{
+             "status" => "refused",
+             "reason" => "computer_scoped_forge_credentials_not_enabled"
+           }
+
+    assert_receive {:assignment_request, request_id, payload, caller}, 1_000
+    refute Map.has_key?(payload, "assignment_credential")
+
+    assert {:error, :invalid_assignment_credential} =
+             Assignments.authenticate("oa_assignment_fake")
+
+    assignment_id = response["assignment"]["id"]
+
+    job =
+      Repo.one!(
+        from j in Work.Job,
+          where: fragment("?->>'assignment_id'", j.delegation) == ^assignment_id
+      )
+
+    [{job_pid, _value}] = Horde.Registry.lookup(OpenAgents.HordeRegistry, {:work_job, job.id})
+    ref = Process.monitor(job_pid)
+    FakeController.exit(caller, request_id, %{"status" => "completed", "output" => "done"})
+    assert_receive {:DOWN, ^ref, :process, ^job_pid, :normal}, 1_000
+  end
+
+  test "owners can change the scoped forge credential policy and withdraw active credentials" do
+    user = github_user("computer-assignment-policy-update")
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(user)
+    repository = repository_with_member_fixture(user)
+    {:ok, issue} = Issues.create_issue(repository, %{title: "Policy update"})
+    machine = paired_machine(user, "assignment-policy-update", ["codex"], true)
+    test_pid = self()
+
+    controller =
+      start_supervised!(
+        {FakeController,
+         machine_id: machine.id,
+         script: fn {:agent, request_id, payload, caller} ->
+           send(test_pid, {:assignment_request, request_id, payload, caller})
+         end}
+      )
+
+    response =
+      build_conn()
+      |> put_api_token(user, ["computer:control"])
+      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+        "repository_id" => repository.id,
+        "issue_number" => issue.number,
+        "branch" => "agent/policy-#{issue.number}",
+        "agent_id" => "codex",
+        "prompt" => "Implement the issue",
+        "cwd" => @root
+      })
+      |> json_response(202)
+
+    assignment_id = response["assignment"]["id"]
+    assert response["assignment"]["credential_delivery"] == %{"status" => "enabled"}
+    assert_receive {:assignment_request, _request_id, _payload, _caller}, 1_000
+
+    updated =
+      build_conn()
+      |> put_api_token(user, ["computer:control"])
+      |> patch(~p"/api/v3/computers/#{machine.id}", %{
+        "scoped_forge_credentials_enabled" => false
+      })
+      |> json_response(200)
+
+    assert updated["computer"]["scoped_forge_credentials_enabled"] == false
+    assignment = Repo.get!(OpenAgents.Forge.Assignment, assignment_id)
+    assert assignment.state == "failed"
+    assert assignment.failure_reason == "scoped_forge_credentials_disabled"
+    assert assignment.credential_delivery_status == "enabled"
+    assert Assignments.credential(assignment).revoked_at
+    assert AssignmentCredentialVault.take(assignment_id) == nil
+
+    job =
+      Repo.one!(
+        from j in Work.Job,
+          where: fragment("?->>'assignment_id'", j.delegation) == ^assignment_id
+      )
+
+    [{job_pid, _value}] = Horde.Registry.lookup(OpenAgents.HordeRegistry, {:work_job, job.id})
+    ref = Process.monitor(job_pid)
+    assert GenServer.stop(controller, :normal) == :ok
+    assert_receive {:DOWN, ^ref, :process, ^job_pid, :normal}, 1_000
+  end
+
+  test "controller disconnect finishes the assignment and revokes its credential" do
+    user = github_user("computer-assignment-disconnect")
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(user)
+    repository = repository_with_member_fixture(user)
+    {:ok, issue} = Issues.create_issue(repository, %{title: "Controller disconnect"})
+    machine = paired_machine(user, "assignment-disconnect", ["codex"], true)
+    test_pid = self()
+
+    controller =
+      start_supervised!(
+        {FakeController,
+         machine_id: machine.id,
+         script: fn {:agent, request_id, payload, caller} ->
+           send(test_pid, {:assignment_request, request_id, payload, caller})
+         end}
+      )
+
+    response =
+      build_conn()
+      |> put_api_token(user, ["computer:control"])
+      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+        "repository_id" => repository.id,
+        "issue_number" => issue.number,
+        "branch" => "agent/disconnect-#{issue.number}",
+        "agent_id" => "codex",
+        "prompt" => "Implement the issue",
+        "cwd" => @root
+      })
+      |> json_response(202)
+
+    assignment_id = response["assignment"]["id"]
+    assert_receive {:assignment_request, _request_id, _payload, _caller}, 1_000
+
+    job =
+      Repo.one!(
+        from j in Work.Job,
+          where: fragment("?->>'assignment_id'", j.delegation) == ^assignment_id
+      )
+
+    [{job_pid, _value}] = Horde.Registry.lookup(OpenAgents.HordeRegistry, {:work_job, job.id})
+    ref = Process.monitor(job_pid)
+    assert GenServer.stop(controller, :normal) == :ok
+    assert_receive {:DOWN, ^ref, :process, ^job_pid, :normal}, 1_000
+
+    assignment = Repo.get!(OpenAgents.Forge.Assignment, assignment_id)
+    assert assignment.state == "failed"
+    assert assignment.failure_reason == "machine_disconnected"
+    assert Assignments.credential(assignment).revoked_at
+    assert AssignmentCredentialVault.take(assignment_id) == nil
+  end
+
+  test "Computer assignment credentials are sent only in the agent frame and revoked on completion" do
+    user = github_user("computer-assignment-opt-in")
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(user)
+    repository = repository_with_member_fixture(user)
+    {:ok, issue} = Issues.create_issue(repository, %{title: "Computer assignment credential"})
+    machine = paired_machine(user, "assignment-opt-in", ["codex"], true)
+    test_pid = self()
+
+    start_supervised!(
+      {FakeController,
+       machine_id: machine.id,
+       script: fn {:agent, request_id, payload, caller} ->
+         send(test_pid, {:assignment_request, request_id, payload, caller})
+       end}
+    )
+
+    response =
+      build_conn()
+      |> put_api_token(user, ["computer:control"])
+      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+        "repository_id" => repository.id,
+        "issue_number" => issue.number,
+        "branch" => "agent/computer-#{issue.number}",
+        "agent_id" => "codex",
+        "prompt" => "Implement the issue",
+        "cwd" => @root
+      })
+      |> json_response(202)
+
+    assignment_id = response["assignment"]["id"]
+    assert_receive {:assignment_request, request_id, payload, caller}, 1_000
+    credential = payload["assignment_credential"]
+    assert is_binary(credential)
+    assert String.starts_with?(credential, "oa_assignment_")
+    refute response |> inspect() =~ credential
+    assignment = Repo.get!(OpenAgents.Forge.Assignment, assignment_id)
+    assert %AssignmentCredential{} = Assignments.credential(assignment)
+
+    job =
+      Repo.one!(
+        from j in Work.Job,
+          where: fragment("?->>'assignment_id'", j.delegation) == ^assignment_id
+      )
+
+    [{job_pid, _value}] = Horde.Registry.lookup(OpenAgents.HordeRegistry, {:work_job, job.id})
+
+    ref = Process.monitor(job_pid)
+    FakeController.exit(caller, request_id, %{"status" => "completed", "output" => "done"})
+    assert_receive {:DOWN, ^ref, :process, ^job_pid, :normal}, 1_000
+
+    assignment = Repo.get!(OpenAgents.Forge.Assignment, assignment_id)
+    assert assignment.state == "completed"
+    assert Assignments.credential(assignment).revoked_at
+    assert AssignmentCredentialVault.take(assignment_id) == nil
+    refute Repo.get!(Work.Job, job.id).report =~ credential
+  end
+
+  defp paired_machine(user, name, agent_ids, scoped_forge_credentials_enabled \\ false) do
     assert {:ok, pairing} =
              Machines.start_pairing(%{
                "name" => name,
@@ -222,7 +459,10 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
                "roots" => [@root]
              })
 
-    assert {:ok, machine} = Machines.approve_pairing(user, pairing.code)
+    assert {:ok, machine} =
+             Machines.approve_pairing(user, pairing.code,
+               scoped_forge_credentials_enabled: scoped_forge_credentials_enabled
+             )
 
     assert {:ok, machine} =
              Machines.store_probe(machine, %{

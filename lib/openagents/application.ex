@@ -58,7 +58,9 @@ defmodule OpenAgents.Application do
         {Registry, keys: :unique, name: OpenAgents.BoxRunRegistry},
         OpenAgents.BoxRunSupervisor,
         OpenAgents.BoxRunRecovery,
-        OpenAgents.Box.Reconciler
+        OpenAgents.Box.Reconciler,
+        OpenAgents.Forge.AssignmentExpiry,
+        OpenAgents.Forge.AssignmentCredentialVault
       ] ++ analytics_children() ++ [OpenAgentsWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

@@ -242,6 +242,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: path, verb: verb})
        when path in [
               "/api/v3/computers",
+              "/api/v3/computers/:id",
               "/api/v3/computers/:machine_id/probe",
               "/api/v3/computers/:machine_id/agent-jobs",
               "/api/v3/computer-agent-jobs/:id"
@@ -250,7 +251,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
       :authenticated_api,
       "human or delegated computer-control bearer token",
       "computer:control",
-      verb in [:post, :delete]
+      verb in [:patch, :post, :delete]
     )
   end
 
@@ -293,6 +294,81 @@ defmodule OpenAgentsWeb.RouteAuthority do
         "box:control",
         true
       )
+
+  defp policy(%{
+         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/assignments",
+         verb: :post
+       }),
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           true
+         )
+
+  defp policy(%{
+         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id",
+         verb: :get
+       }),
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           false
+         )
+
+  defp policy(%{
+         path:
+           "/api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id/cancel",
+         verb: :post
+       }),
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           true
+         )
+
+  defp policy(%{
+         path: "/api/v3/conversations/:conversation_id/computers/:machine_id/assignments",
+         verb: :post
+       }),
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated computer-control bearer token",
+           "computer:control",
+           true
+         )
+
+  defp policy(%{
+         path:
+           "/api/v3/conversations/:conversation_id/computers/:machine_id/assignments/:assignment_id",
+         verb: :get
+       }),
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated computer-control bearer token",
+           "computer:control",
+           false
+         )
+
+  defp policy(%{
+         path:
+           "/api/v3/conversations/:conversation_id/computers/:machine_id/assignments/:assignment_id/cancel",
+         verb: :post
+       }),
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated computer-control bearer token",
+           "computer:control",
+           true
+         )
 
   defp policy(%{
          path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs",

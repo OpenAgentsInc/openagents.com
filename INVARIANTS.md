@@ -337,6 +337,27 @@ Evidence: `OpenAgents.Delegations`, `OpenAgentsWeb.Plugs.DelegationAuth`,
 `OpenAgents.ComputerAgentJobs`, and
 `test/openagents_web/controllers/delegations_controller_test.exs`.
 
+### IDENTITY-010 — Computer assignment credentials are opt-in and delegation-scoped
+
+Status: Current
+
+An issue assignment has one target in the shared assignment ledger. A Computer
+target receives its repository-and-branch-scoped forge credential only when its
+owner explicitly enables scoped forge credentials for that Computer. The
+plaintext credential exists only in memory while the delegation starts and is
+delivered in the server-to-controller `agent` frame for injection into that
+delegated process environment. It is not persisted in a job, journal, prompt,
+output, shell environment, global Git configuration, or API response. The
+credential expires with the assignment and is revoked when the assignment
+completes, is cancelled, expires, or loses its machine or controller.
+Computer validation and local controller refusal remain authoritative.
+
+Evidence: `OpenAgents.Forge.Assignments`,
+`OpenAgents.Forge.AssignmentCredentialVault`,
+`OpenAgents.ComputerAgentJobs`, `OpenAgents.Work.DelegationServer`,
+`test/openagents/forge/assignment_test.exs`, and
+`test/openagents_web/controllers/computer_control_api_test.exs`.
+
 ### CAPACITY-002 — Box fan-out admission is bounded and durable
 
 Status: Current
@@ -2423,6 +2444,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
 | IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
+| IDENTITY-010 | `test/openagents/forge/assignment_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |

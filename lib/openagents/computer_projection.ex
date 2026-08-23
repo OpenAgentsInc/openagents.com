@@ -11,6 +11,7 @@ defmodule OpenAgents.ComputerProjection do
       "name" => machine.name,
       "tier" => machine.tier,
       "status" => machine.status,
+      "scoped_forge_credentials_enabled" => machine.scoped_forge_credentials_enabled,
       "online" => machine.status == "active" and Computer.online?(machine.id),
       "platform" => machine.platform,
       "agent_version" => machine.agent_version,

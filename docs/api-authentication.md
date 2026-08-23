@@ -198,6 +198,43 @@ credential is short-lived, stores only a digest, and is accepted only by Git
 for that repository and branch. It cannot write a default or protected branch,
 close an issue, use operator routes, or use Box API routes.
 
+Assignments can target a connected Computer through the same assignment
+authority. The Computer assignment routes use the Computer control surface:
+
+```sh
+openagents api -X POST --input computer-assignment.json \
+  conversations/CONVERSATION_ID/computers/COMPUTER_ID/assignments
+openagents api \
+  conversations/CONVERSATION_ID/computers/COMPUTER_ID/assignments/ASSIGNMENT_ID
+openagents api -X POST \
+  conversations/CONVERSATION_ID/computers/COMPUTER_ID/assignments/ASSIGNMENT_ID/cancel
+```
+
+The assignment still binds one issue, repository, and branch. The assigned
+branch remains subject to the same Git rules: it must be one branch, never the
+default branch, `main`, `master`, a configured protected branch, or a
+`protected/*` branch. A multi-ref push is rejected when any requested ref is
+unauthorized.
+
+Before a Computer assignment starts, the server uses the existing Computer
+validation authority. The Computer must be active and online, its latest probe
+must report the requested ACP agent, and `cwd` must be inside a declared root.
+The machine owner must explicitly enable scoped forge credentials for that
+Computer. Without that opt-in, the delegation still runs but the server does
+not deliver assignment push authority and reports the typed refusal
+`computer_scoped_forge_credentials_not_enabled`. The local controller can
+refuse delivery even when the server-side opt-in is enabled.
+
+When delivery is enabled, the server sends the plaintext assignment credential
+only in the server-to-controller `agent` frame for that delegation. The
+controller must inject it into the delegated ACP process environment and remove
+it when that process exits, when the assignment becomes terminal, or when the
+server sends cancellation. The credential is never stored in plaintext,
+argv, the prompt, durable journal data, delegation output, the user's shell,
+global Git configuration, or an API response. The local CLI controller that
+implements this environment injection is outside this repository and remains
+part of the future `openagents` issues #15–#18.
+
 ### Durable Box runs
 
 Use the same `box:control` token to start and inspect detached runs:

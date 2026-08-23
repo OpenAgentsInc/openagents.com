@@ -108,6 +108,32 @@ defmodule OpenAgentsWeb.ComputersLiveTest do
     refute has_element?(view, "#revoke-#{machine.id}")
   end
 
+  test "owners can toggle scoped forge credentials on an existing computer", %{conn: conn} do
+    user = github_user("computers-credentials-policy")
+    machine = pair!(user, "credentials-policy")
+    conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+    {:ok, view, _html} = live(conn, ~p"/computers")
+
+    assert has_element?(
+             view,
+             "#credentials-policy-#{machine.id}",
+             "Allow scoped forge credentials"
+           )
+
+    view |> element("#credentials-policy-#{machine.id}") |> render_click()
+
+    assert has_element?(view, "#credentials-policy-success", "allowed")
+
+    assert {:ok, %{scoped_forge_credentials_enabled: true}} =
+             Machines.get_machine(user.id, machine.id)
+
+    view |> element("#credentials-policy-#{machine.id}") |> render_click()
+
+    assert has_element?(view, "#credentials-policy-success", "disabled")
+    assert {:ok, updated} = Machines.get_machine(user.id, machine.id)
+    refute updated.scoped_forge_credentials_enabled
+  end
+
   test "feature-disabled environments keep management honest", %{conn: conn} do
     previous = Application.fetch_env!(:openagents, :computer_controller_enabled)
     Application.put_env(:openagents, :computer_controller_enabled, false)

@@ -1,5 +1,5 @@
 defmodule OpenAgents.Forge.Assignment do
-  @moduledoc "A repository-scoped assignment of one issue to one Box."
+  @moduledoc "A repository-scoped assignment of one issue to one target."
 
   use Ecto.Schema
   import Ecto.Changeset
@@ -12,10 +12,15 @@ defmodule OpenAgents.Forge.Assignment do
   @timestamps_opts [type: :utc_datetime_usec]
 
   schema "forge_assignments" do
+    belongs_to :conversation, OpenAgents.Conversations.Conversation
     belongs_to :conversation_box, OpenAgents.Box.ConversationBox
+    belongs_to :machine, OpenAgents.Machines.Machine
     belongs_to :repository, OpenAgents.Repositories.Repository
     belongs_to :issue, OpenAgents.Issues.Issue, type: :id
     belongs_to :run, OpenAgents.Box.Run
+    field :target_kind, :string, default: "box"
+    field :credential_delivery_status, :string, default: "not_applicable"
+    field :credential_delivery_reason, :string
     field :requesting_principal, :map
     field :branch, :string
     field :state, :string, default: "admitted"
@@ -48,13 +53,18 @@ defmodule OpenAgents.Forge.Assignment do
       :admitted_at,
       :started_at,
       :finished_at,
-      :run_id
+      :run_id,
+      :conversation_id,
+      :target_kind,
+      :credential_delivery_status,
+      :credential_delivery_reason
     ])
     |> put_programmatic(attrs, :conversation_box_id)
+    |> put_programmatic(attrs, :machine_id)
     |> put_programmatic(attrs, :repository_id)
     |> put_programmatic(attrs, :issue_id)
+    |> put_programmatic(attrs, :conversation_id)
     |> validate_required([
-      :conversation_box_id,
       :repository_id,
       :issue_id,
       :requesting_principal,
@@ -68,11 +78,32 @@ defmodule OpenAgents.Forge.Assignment do
       ~r/\A(?![.-])(?!.*(?:\.\.|@\{|[ ~^:?*\[\\]))[^\s:]+(?<!\.)(?<!\/)(?<!\.lock)\z/
     )
     |> foreign_key_constraint(:conversation_box_id)
+    |> foreign_key_constraint(:conversation_id)
+    |> foreign_key_constraint(:machine_id)
     |> foreign_key_constraint(:repository_id)
     |> foreign_key_constraint(:issue_id)
     |> foreign_key_constraint(:run_id)
     |> unique_constraint(:conversation_box_id, name: :forge_assignments_one_active_box_index)
+    |> unique_constraint(:machine_id, name: :forge_assignments_one_active_machine_index)
     |> unique_constraint(:issue_id, name: :forge_assignments_one_active_issue_index)
+    |> validate_target()
+  end
+
+  defp validate_target(changeset) do
+    case get_field(changeset, :target_kind) do
+      "box" ->
+        if get_field(changeset, :conversation_box_id),
+          do: changeset,
+          else: add_error(changeset, :conversation_box_id, "can't be blank")
+
+      "computer" ->
+        if get_field(changeset, :machine_id),
+          do: changeset,
+          else: add_error(changeset, :machine_id, "can't be blank")
+
+      _ ->
+        changeset
+    end
   end
 
   defp put_programmatic(changeset, attrs, field) do

@@ -3,7 +3,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
-required_stages='compile production_compile precommit cluster javascript direct_transaction relup version_chain interrupted_install rolling_replacement contracts staging_infra release_smoke'
+required_stages='compile production_compile precommit cluster javascript direct_transaction relup_topology relup version_chain interrupted_install rolling_replacement contracts staging_infra release_smoke'
 mode=${1:-run}
 
 if [ "$(git -C "$repo_root" rev-parse --is-inside-work-tree 2>/dev/null || true)" != "true" ]; then
@@ -121,6 +121,10 @@ run_stage direct_transaction env MIX_ENV=test mix test --warnings-as-errors \
   test/openagents/forge/deployment_cluster_test.exs \
   test/openagents/forge/hot_loader_test.exs \
   test/openagents/forge/boot_converge_test.exs
+run_stage relup_topology env MIX_ENV=test mix test --warnings-as-errors \
+  test/openagents/forge/relup_topology_test.exs \
+  test/openagents/forge/relup_deployment_test.exs \
+  test/openagents/forge/relup_node_test.exs
 run_stage relup ops/relup-proof/run.sh
 run_stage version_chain env \
   OPENAGENTS_RELUP_PROOF_DISPOSABLE=1 \
@@ -171,6 +175,7 @@ cat >"$receipt_temp" <<EOF
     "cluster": {"status": "passed", "duration_seconds": $cluster_duration_seconds},
     "javascript": {"status": "passed", "duration_seconds": $javascript_duration_seconds},
     "direct_transaction": {"status": "passed", "duration_seconds": $direct_transaction_duration_seconds},
+    "relup_topology": {"status": "passed", "duration_seconds": $relup_topology_duration_seconds},
     "relup": {"status": "passed", "duration_seconds": $relup_duration_seconds},
     "version_chain": {"status": "passed", "duration_seconds": $version_chain_duration_seconds},
     "interrupted_install": {"status": "passed", "duration_seconds": $interrupted_install_duration_seconds},

@@ -117,6 +117,41 @@ OPENAGENTS_RELUP_PROOF_DATABASE_URL='ecto://USER:PASSWORD@HOST/DATABASE' \
 ops/relup-proof/kill-during-install.sh
 ```
 
+### Topology preflight
+
+OTP release handling assumes every running application's top process is an OTP
+`supervisor`. `release_handler_1:get_master_procs/3` asks
+`:supervisor.get_callback_module/1` for it, and that function reads the process
+state as a `supervisor` record, so it raises `badrecord` for an Elixir
+`DynamicSupervisor`, a Horde supervisor, or a bare `GenServer` returned from
+`Application.start/2`. `release_handler` then logs `cannot find top supervisor
+for application NAME` and drops that supervisor from the set it suspends and
+code-changes. `check_install_release/1` never looks, so nothing refuses before
+the install begins.
+
+`libring` is the concrete case, and it is why the `0.2.1` to `0.2.2` production
+upgrade on 2026-08-22 failed. `HashRing.App.start/2` returns a
+`DynamicSupervisor` pid registered as `HashRing.Supervisor`.
+
+`OpenAgents.Forge.RelupTopology` runs this check on the target node as the
+first fleet step, before any artifact is transferred. Read the current verdict
+from a running node:
+
+```elixir
+OpenAgents.Forge.RelupTopology.report()
+#=> %{"schema" => "openagents.relup-topology.v1", "applications" => 62,
+#=>   "incompatible" => ["libring:HashRing.Supervisor"]}
+```
+
+A refusal is not a fault to work around. It means OTP release handling cannot
+express this fleet's topology, so the relup lane is unavailable and the
+candidate belongs on the rolling replacement lane below. The refused node keeps
+its previous permanent release, nothing was staged or unpacked, and there is no
+reverse installation to attempt.
+
+To make the relup lane available again, the offending application has to start
+an OTP `supervisor` as its top process. Do not weaken the preflight instead.
+
 ### Fleet sequence
 
 `OpenAgents.Forge.RelupDeployment` performs this sequence:
@@ -125,17 +160,24 @@ ops/relup-proof/kill-during-install.sh
    digest.
 2. Verify the complete local gate receipt for the candidate SHA.
 3. Snapshot the exact sorted member set and configured fleet size.
-4. Stage one node's release tar in a digest-addressed cache.
-5. Verify the cached and consumable tar digests.
-6. Restore the consumable tar from cache, then unpack it.
-7. Generate version-specific runtime configuration and run
+4. Refuse when the node's running application topology has a top supervisor OTP
+   cannot identify.
+5. Stage one node's release tar in a digest-addressed cache.
+6. Verify the cached and consumable tar digests.
+7. Restore the consumable tar from cache, then unpack it.
+8. Generate version-specific runtime configuration and run
    `release_handler.check_install_release/1`.
-8. Install the candidate without changing the permanent release.
-9. Verify current release status, exact target revision, application readiness,
+9. Install the candidate without changing the permanent release.
+10. Verify current release status, exact target revision, application readiness,
    and the expected migrated state schema.
-10. Make the release permanent, verify permanence, and recheck exact fleet
+11. Make the release permanent, verify permanence, and recheck exact fleet
    membership.
-11. Start the next node only after the previous node passes every check.
+12. Start the next node only after the previous node passes every check.
+
+Steps 4 through 8 run before `install_release/1`. A failure in any of them
+leaves the node on its previous permanent release, so the coordinator aborts
+without a reverse installation and records the refusing step and its reason,
+for example `check_topology:incompatible_topology:libring:HashRing.Supervisor`.
 
 The 2026-08-21 production drill upgraded three nodes from
 `0.2.0@81e4c25` to `0.2.1@9763bf7` in 48.838 seconds. All nodes returned

@@ -32,6 +32,7 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
     expected =
       for node <- @nodes,
           phase <- [
+            :check_topology,
             :stage,
             :verify_stage,
             :unpack,
@@ -137,7 +138,7 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
                  rpc: rpc
                )
 
-      assert length(drain_messages([])) == 24
+      assert length(drain_messages([])) == 27
     end
 
     test "refuses a degenerate transition" do
@@ -232,6 +233,10 @@ defmodule OpenAgents.Forge.RelupDeploymentTest do
       node_opts = [
         release_root: root,
         release_handler: ReleaseHandler,
+        # This case is about the reverse path, not the running topology. The
+        # real refusal lives in OpenAgents.Forge.RelupTopologyTest, which drives
+        # the running libring supervisor.
+        topology: fn _opts -> :ok end,
         generate_config: fn _version -> :ok end,
         revision: fn -> request().sha end,
         health: &unready_once/0,

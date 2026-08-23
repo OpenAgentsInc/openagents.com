@@ -19,6 +19,7 @@ defmodule OpenAgents.Forge.GateReceipt do
     cluster
     javascript
     direct_transaction
+    relup_topology
     relup
     version_chain
     interrupted_install

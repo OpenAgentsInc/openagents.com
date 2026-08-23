@@ -7,11 +7,31 @@ defmodule OpenAgents.Forge.RelupNode do
   `release_handler`, so an interrupted install can retry from the same bytes.
   """
 
+  alias OpenAgents.Forge.RelupTopology
   alias OpenAgents.ReleaseState
 
   @digest_pattern ~r/\A[0-9a-f]{64}\z/
   @version_pattern ~r/\A[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?\z/
   @maximum_artifact_bytes 536_870_912
+
+  @doc """
+  Refuse a candidate whose running topology OTP release handling cannot inspect.
+
+  This runs before any artifact is transferred and long before
+  `install_release/2`, so a refusal leaves the node exactly as it was: the
+  current release is still permanent, nothing was unpacked, and there is no
+  reverse installation to attempt. `OpenAgents.Forge.RelupTopology` explains the
+  condition; the same candidate remains eligible for rolling replacement.
+  """
+  def check_topology(_request, opts \\ []) do
+    topology = Keyword.get(opts, :topology, &RelupTopology.refuse/1)
+
+    case topology.(opts) do
+      :ok -> {:ok, %{"phase" => "topology_checked"}}
+      {:error, reason} -> {:error, reason}
+      other -> {:error, {:unexpected_topology_result, other}}
+    end
+  end
 
   @doc "Cache and stage an immutable release artifact."
   def stage(request, opts \\ []) do

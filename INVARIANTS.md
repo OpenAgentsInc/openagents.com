@@ -2308,6 +2308,47 @@ Evidence: `OpenAgents.BuildInfo`, `ops/deploy/build-image.sh`,
 `ops/staging/publish-candidate.sh`, `ops/ci/contracts.sh`, and
 `test/openagents/release/image_layer_cache_test.exs`.
 
+### RELEASE-008 — A relup refuses a topology OTP cannot inspect, before it installs
+
+Status: Current
+
+`:release_handler.install_release/1` first builds the set of processes it will
+suspend, code-change, and resume. For every running application it asks
+`:supervisor.get_callback_module/1` for the application's top supervisor, and
+that function reads the process state as a `supervisor` record. An application
+whose top process is an Elixir `DynamicSupervisor`, a Horde supervisor, or a
+bare `GenServer` returned from `Application.start/2` raises `badrecord` there.
+`release_handler` reports `cannot find top supervisor` and drops that supervisor
+from the set it upgrades, so the application's own top process is never
+suspended and never code-changed while the release installs around it.
+`:release_handler.check_install_release/1` never performs this walk, so it
+cannot refuse the transition.
+
+`OpenAgents.Forge.RelupTopology` performs the same walk first.
+`OpenAgents.Forge.RelupNode.check_topology/2` is the coordinator's first fleet
+step, ahead of staging, unpacking, and `check_install`, so a refusal transfers
+no artifact and reaches no point of no return. The node keeps its previous
+permanent release, and because the current release never changed the coordinator
+attempts no reverse installation. The refusal is bounded and explicit: it names
+each incompatible application and its registered supervisor, and the deployment
+receipt records that exact reason against the exact candidate identity, for
+example `check_topology:incompatible_topology:libring:HashRing.Supervisor`.
+
+A refusal is a classification, not a fault to route around. It means OTP release
+handling cannot express this fleet's topology, so the candidate belongs on the
+digest-addressed rolling replacement lane, which does not depend on release
+handling and remains eligible for the same bytes. The release gate proves the
+refusal in its `relup_topology` stage against the running `libring` application,
+whose `HashRing.App.start/2` returns a `DynamicSupervisor` registered as
+`HashRing.Supervisor`. Widening the preflight to admit such an application is
+not a fix; starting an OTP `supervisor` as that application's top process is.
+
+Evidence: `OpenAgents.Forge.RelupTopology`, `OpenAgents.Forge.RelupNode`,
+`OpenAgents.Forge.RelupDeployment`,
+`test/openagents/forge/relup_topology_test.exs`,
+`test/openagents/forge/relup_deployment_test.exs`, `ops/ci/gate.sh`, and
+`docs/operations/release-deployment-fallbacks.md`.
+
 ### STATUS-001 — The status page publishes one bounded, content-free projection
 
 Status: Current
@@ -2805,6 +2846,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | RELEASE-006 | `test/openagents/forge/rolling_boot_convergence_test.exs`, `test/openagents/forge/rolling_replacement_test.exs`, `test/openagents/forge/target_lifecycle_test.exs`, `test/openagents/forge/boot_converge_test.exs` |
 | RELEASE-007 | `test/openagents/release/image_layer_cache_test.exs`, `ops/ci/contracts.sh` |
+| RELEASE-008 | `test/openagents/forge/relup_topology_test.exs`, `test/openagents/forge/relup_deployment_test.exs`, `ops/ci/gate.sh` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |

@@ -18,6 +18,10 @@ defmodule OpenAgents.Forge.RelupDeployment do
   # honestly when no relup exists between the two versions.
   @version_pattern ~r/\A[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?\z/
   @supported_state_versions [1, 2]
+  # Every step that runs before `install_release` touches the node. A failure in
+  # any of them leaves the current release permanent, so the coordinator aborts
+  # without a reverse installation.
+  @preinstall_steps [:check_topology, :stage, :verify_stage, :unpack, :check_install]
   @default_timeout_ms 120_000
 
   @doc "Deploy one two-way relup across the exact expected fleet."
@@ -89,9 +93,7 @@ defmodule OpenAgents.Forge.RelupDeployment do
   end
 
   defp deploy_node(node, request, opts) do
-    preinstall_steps = [:stage, :verify_stage, :unpack, :check_install]
-
-    with :ok <- run_steps(node, preinstall_steps, request, opts),
+    with :ok <- run_steps(node, @preinstall_steps, request, opts),
          {:ok, _result} <- call(node, :install, [request], opts) do
       finish_installed_node(node, request, opts)
     end
@@ -249,5 +251,19 @@ defmodule OpenAgents.Forge.RelupDeployment do
   end
 
   defp timeout(opts), do: Keyword.get(opts, :timeout_ms, @default_timeout_ms)
+  # `run_steps/4` returns `{step, reason}`. A receipt that records only the phase
+  # cannot tell an operator which application refused, so render both. The
+  # topology refusal carries its own bounded application list.
+  defp safe_code({step, {:incompatible_topology, entries}})
+       when step in @preinstall_steps and is_list(entries) do
+    bounded("#{step}:incompatible_topology:#{Enum.join(entries, ",")}")
+  end
+
+  defp safe_code({step, reason}) when step in @preinstall_steps do
+    bounded("#{step}:#{OpenAgents.OperationalLog.code(reason)}")
+  end
+
   defp safe_code(reason), do: OpenAgents.OperationalLog.code(reason)
+
+  defp bounded(value), do: String.slice(value, 0, 160)
 end

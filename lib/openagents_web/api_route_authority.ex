@@ -69,6 +69,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/projectsV2" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/events" =>
+        :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes" => :optional_bearer,
       "get /api/v3/reputation/policy" => :optional_bearer,

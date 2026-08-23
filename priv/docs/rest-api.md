@@ -223,11 +223,30 @@ POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes
 PATCH  /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id
 DELETE /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes/:note_id
 GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/items
+GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/events
 POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/items
 PATCH  /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id
 GET    /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields
 POST   /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields
 ```
+
+Promise registry projects use a `promise_state` field with `LIVE`, `GATED`,
+and `WITHDRAWN` values. Their item responses include `openagents.promise`.
+Filter items with `promise_state=LIVE|GATED|WITHDRAWN` or
+`bounty_candidate=true`. Read an item's actor-attributed history with:
+
+```text
+GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events
+```
+
+Only an `accepted_outcome` evidence entry naming an existing accepted
+`OpenAgents.Compensation.OutcomeDecision` can certify a `LIVE` promise. Issue,
+changelog, and forge receipt entries remain visible supporting evidence, but
+they do not certify `LIVE`; links never certify it.
+
+The events endpoint is paginated with the standard `page` parameter. Evidence
+that points to a repository or issue you cannot read is omitted from the item,
+promise, and event projections.
 
 The repository in the path controls visibility and write authority. Project
 numbers are repository-local. Project creation through this REST path is an

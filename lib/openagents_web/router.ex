@@ -388,6 +388,11 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/projectsV2", ProjectController, :index
     get "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :show
     get "/repos/:owner/:repo/projectsV2/:project_number/items", ProjectController, :items
+
+    get "/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/events",
+        ProjectController,
+        :events
+
     get "/repos/:owner/:repo/projectsV2/:project_number/fields", ProjectController, :fields
     get "/repos/:owner/:repo/projectsV2/:project_number/notes", ProjectController, :notes
 

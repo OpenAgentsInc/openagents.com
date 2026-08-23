@@ -2225,6 +2225,26 @@ Evidence: `OpenAgents.Capacity`, `OpenAgents.Capacity.Math`,
 `OpenAgents.Capacity.Broker`, `OpenAgents.Capacity.Connected`, and
 `test/openagents/capacity_test.exs`.
 
+### PROMISE-001 — LIVE promises require accepted-outcome evidence
+
+Status: Current
+
+A promise can enter `LIVE` only when at least one readable
+`accepted_outcome` evidence entry names an
+`OpenAgents.Compensation.OutcomeDecision` whose `decision` is `accepted`.
+Issue, changelog, and forge receipt entries remain supporting evidence, but
+they cannot certify `LIVE`; links and issue comments do not satisfy this gate.
+Evidence is redacted separately from certification when its referenced
+repository or issue is outside the reader's visibility boundary.
+
+### PROMISE-002 — Project item history is append-only
+
+Status: Proposed
+
+Every promise item create, update, and state change records an actor-attributed
+event. PostgreSQL rejects updates and deletes of project item events, and the
+API exposes only paginated reads.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -2246,6 +2266,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs` |
 | IDENTITY-002 | `test/openagents_web/auth_gate_test.exs` |
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
+| PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
+| PROMISE-002 | `test/openagents/promise_registry_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |

@@ -11,8 +11,24 @@ defmodule OpenAgentsWeb.ProjectJSON do
     project_json(project)
   end
 
-  def render("items.json", %{items: items}) do
-    %{items: Enum.map(items, &item_json/1)}
+  def render("items.json", %{items: items} = assigns) do
+    item_projections = Map.get(assigns, :item_projections, %{})
+
+    %{
+      items: Enum.map(items, &item_json(&1, Map.get(item_projections, &1.id)))
+    }
+  end
+
+  def render("events.json", %{events: events, pagination: pagination}) do
+    %{
+      events: Enum.map(events, &event_json/1),
+      pagination: %{
+        page: pagination.page,
+        per_page: pagination.per_page,
+        total: pagination.total,
+        total_pages: total_pages(pagination.total, pagination.per_page)
+      }
+    }
   end
 
   def render("fields.json", %{fields: fields}) do
@@ -63,10 +79,12 @@ defmodule OpenAgentsWeb.ProjectJSON do
     }
   end
 
-  defp item_json(item) do
+  defp item_json(item, item_projection) do
     issue = item.issue
     repository = issue.repository
     base_url = OpenAgentsWeb.Endpoint.url()
+    values = get_in(item_projection || %{}, [:values]) || item.values
+    promise = get_in(item_projection || %{}, [:promise])
 
     %{
       id: item.id,
@@ -79,9 +97,32 @@ defmodule OpenAgentsWeb.ProjectJSON do
           "#{base_url}/api/v3/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
         html_url: "#{base_url}/#{repository.owner}/#{repository.name}/issues/#{issue.number}"
       },
-      values: item.values
+      values: values
+    }
+    |> maybe_put_promise(promise)
+  end
+
+  defp maybe_put_promise(json, nil), do: json
+  defp maybe_put_promise(json, promise), do: Map.put(json, :openagents, %{promise: promise})
+
+  defp event_json(event) do
+    %{
+      id: event.id,
+      project_item_id: event.project_item_id,
+      project_id: event.project_id,
+      actor_login: event.actor_login,
+      actor_user_id: event.actor_user_id,
+      kind: event.kind,
+      from_state: event.from_state,
+      to_state: event.to_state,
+      changes: event.changes,
+      occurred_at: event.occurred_at,
+      inserted_at: event.inserted_at
     }
   end
+
+  defp total_pages(0, _per_page), do: 1
+  defp total_pages(total, per_page), do: ceil(total / per_page)
 
   defp field_json(field) do
     %{

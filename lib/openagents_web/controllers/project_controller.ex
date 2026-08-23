@@ -201,17 +201,33 @@ defmodule OpenAgentsWeb.ProjectController do
   defp valid_state?(%{"state" => state}), do: state in ["open", "closed"]
   defp valid_state?(_attrs), do: true
 
-  def items(conn, %{
-        "owner" => owner,
-        "repo" => repo,
-        "project_number" => project_number
-      }) do
+  def items(
+        conn,
+        %{
+          "owner" => owner,
+          "repo" => repo,
+          "project_number" => project_number
+        } = params
+      ) do
     repository = visible_repository!(conn, owner, repo)
     project = Projects.get_project_by_number!(repository, parse_id!(project_number))
 
-    render(conn, :items,
-      items: Projects.list_visible_project_items(project, conn.assigns[:current_user])
-    )
+    with {:ok, opts} <- item_filters(params) do
+      {items, item_projections} =
+        Projects.list_visible_project_items_with_promises(
+          project,
+          conn.assigns[:current_user],
+          opts
+        )
+
+      render(conn, :items,
+        items: items,
+        viewer: conn.assigns[:current_user],
+        item_projections: item_projections
+      )
+    else
+      {:error, field, message} -> unprocessable(conn, %{field => [message]})
+    end
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
@@ -241,7 +257,7 @@ defmodule OpenAgentsWeb.ProjectController do
           {:ok, item} ->
             conn
             |> put_status(:created)
-            |> render(:items, items: [item])
+            |> render_items([item], project)
 
           {:error, %Ecto.Changeset{} = changeset} ->
             conn
@@ -273,9 +289,9 @@ defmodule OpenAgentsWeb.ProjectController do
       )
 
     if is_map(Map.get(params, "values", %{})) do
-      case Projects.update_project_item(item, params) do
+      case Projects.update_project_item(item, params, conn.assigns.current_user) do
         {:ok, item} ->
-          render(conn, :items, items: [item])
+          render_items(conn, [item], project)
 
         {:error, %Ecto.Changeset{} = changeset} ->
           conn
@@ -285,6 +301,37 @@ defmodule OpenAgentsWeb.ProjectController do
     else
       unprocessable(conn, %{values: ["is invalid"]})
     end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def events(
+        conn,
+        %{
+          "owner" => owner,
+          "repo" => repo,
+          "project_number" => project_number,
+          "item_id" => item_id
+        } = params
+      ) do
+    repository = visible_repository!(conn, owner, repo)
+    project = Projects.get_project_by_number!(repository, parse_id!(project_number))
+
+    item =
+      Projects.get_visible_project_item!(
+        project,
+        parse_id!(item_id),
+        conn.assigns[:current_user]
+      )
+
+    {events, total, page, per_page} =
+      Projects.list_project_item_events(item, page: params["page"])
+
+    render(conn, :events,
+      events: Projects.project_item_events(events, conn.assigns[:current_user]),
+      pagination: %{page: page, per_page: per_page, total: total},
+      viewer: conn.assigns[:current_user]
+    )
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
@@ -389,6 +436,40 @@ defmodule OpenAgentsWeb.ProjectController do
 
   defp forbidden(conn) do
     conn |> put_status(:forbidden) |> json(%{message: "Forbidden"})
+  end
+
+  defp item_filters(params) do
+    state = params["promise_state"]
+    bounty = params["bounty_candidate"]
+
+    cond do
+      state && state not in ~w(LIVE GATED WITHDRAWN) ->
+        {:error, :promise_state, "must be one of: LIVE, GATED, WITHDRAWN"}
+
+      bounty && bounty not in ~w(true false) ->
+        {:error, :bounty_candidate, "must be true or false"}
+
+      true ->
+        {:ok,
+         [
+           promise_state: state,
+           bounty_candidate: if(bounty, do: bounty == "true")
+         ]
+         |> Enum.reject(fn {_key, value} -> is_nil(value) end)}
+    end
+  end
+
+  defp render_items(conn, items, project) do
+    render(conn, :items,
+      items: items,
+      viewer: conn.assigns[:current_user],
+      item_projections:
+        Projects.project_item_projections(
+          items,
+          OpenAgents.Projects.PromiseRegistry.context(project),
+          conn.assigns[:current_user]
+        )
+    )
   end
 
   defp not_found(conn) do

@@ -19,6 +19,41 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     }
   }
 
+  @promise_record %{
+    "type" => "object",
+    "description" => "A state-gated promise record stored in a project item.",
+    "required" => [
+      "id",
+      "problem",
+      "claim",
+      "scope",
+      "acceptance_criteria",
+      "success_metrics",
+      "owner",
+      "target",
+      "evidence"
+    ],
+    "properties" => %{
+      "verified_at" => %{"type" => ["string", "null"]},
+      "gate" => %{
+        "type" => "object",
+        "properties" => %{
+          "missing" => %{"type" => "string"},
+          "owner" => %{"type" => "string"},
+          "next_review" => %{"type" => "string"}
+        }
+      },
+      "withdrawal" => %{
+        "type" => "object",
+        "properties" => %{
+          "reason" => %{"type" => "string"},
+          "replacement" => %{"type" => "string"},
+          "date" => %{"type" => "string"}
+        }
+      }
+    }
+  }
+
   @extensions %{
     "capacity.openagents" => %{
       "version" => "2026-08-23",
@@ -64,6 +99,35 @@ defmodule OpenAgentsWeb.ApiExtensionController do
         "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
         "POST /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
         "DELETE /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies/{blocked_by_number}"
+      ]
+    },
+    "project_item.openagents" => %{
+      "version" => "2026-08-23",
+      "description" => "Promise registry fields and append-only item history.",
+      "fields" => %{
+        "promise" => %{
+          "type" => "object",
+          "properties" => %{
+            "record" => @promise_record,
+            "state" => %{"type" => "string", "enum" => ["LIVE", "GATED", "WITHDRAWN"]},
+            "verified_at" => %{"type" => ["string", "null"]},
+            "bounty_candidate" => %{"type" => "boolean"}
+          }
+        }
+      },
+      "filters" => %{
+        "promise_state" => %{
+          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items",
+          "type" => "string",
+          "enum" => ["LIVE", "GATED", "WITHDRAWN"]
+        },
+        "bounty_candidate" => %{
+          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items",
+          "type" => "boolean"
+        }
+      },
+      "endpoints" => [
+        "GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events"
       ]
     }
   }

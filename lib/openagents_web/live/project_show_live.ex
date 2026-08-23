@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   alias OpenAgents.Issues
   alias OpenAgents.Markdown
   alias OpenAgents.Projects
+  alias OpenAgents.Projects.PromiseRegistry
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.UI.Circle
@@ -41,6 +42,10 @@ defmodule OpenAgentsWeb.ProjectShowLive do
     can_write = Repositories.writable?(repository, user)
 
     if connected?(socket), do: Repositories.subscribe_projects(repository.id)
+    promise_context = PromiseRegistry.context(project)
+    items = project_items(project, socket.assigns.current_user, promise_context)
+    promise_registry? = promise_context.registry?
+    issue_options = issue_options(repository)
 
     {:ok,
      socket
@@ -50,8 +55,10 @@ defmodule OpenAgentsWeb.ProjectShowLive do
      |> assign(:repository, repository)
      |> assign(:project, project)
      |> assign(:can_write, can_write)
-     |> assign(:items, project_items(project, user))
-     |> assign(:issue_options, issue_options(repository))
+     |> assign(:items, items)
+     |> assign(:promise_context, promise_context)
+     |> assign(:promise_registry?, promise_registry?)
+     |> assign(:issue_options, issue_options)
      # The board columns are read as `@statuses` inside ~H, where `@` means
      # `assigns.statuses`, not the module attribute. Without this assign every
      # render raised KeyError and the route was unreachable.
@@ -81,7 +88,14 @@ defmodule OpenAgentsWeb.ProjectShowLive do
         {:ok, _item} ->
           {:noreply,
            socket
-           |> assign(:items, project_items(project, socket.assigns.current_user))
+           |> assign(
+             :items,
+             project_items(
+               project,
+               socket.assigns.current_user,
+               socket.assigns.promise_context
+             )
+           )
            |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
            |> put_flash(:info, "Issue added to project")}
 
@@ -188,10 +202,14 @@ defmodule OpenAgentsWeb.ProjectShowLive do
           {:noreply, put_flash(socket, :error, "This project no longer exists.")}
 
         project ->
+          promise_context = PromiseRegistry.context(project)
+
           {:noreply,
            socket
            |> assign(:project, project)
-           |> assign(:items, project_items(project, user))
+           |> assign(:promise_context, promise_context)
+           |> assign(:promise_registry?, promise_context.registry?)
+           |> assign(:items, project_items(project, user, promise_context))
            |> reload_notes()}
       end
     else
@@ -239,14 +257,44 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
   end
 
-  defp project_items(project, user) do
-    Projects.list_visible_project_items(project, user)
+  defp project_items(project, user, promise_context) do
+    Projects.list_visible_project_items(project, user, promise_context: promise_context)
     |> Enum.map(fn item ->
       issue = item.issue
-      status = get_in(item.values, ["Status"]) || "To Do"
-      Map.merge(item, %{issue: issue, status: status})
+      values = PromiseRegistry.redact_values(item.values, user)
+
+      if promise_context.registry? do
+        promise = Map.get(values, "promise", %{})
+        state = PromiseRegistry.state(promise_context, values)
+
+        Map.merge(item, %{
+          issue: issue,
+          values: values,
+          status: state,
+          promise_id: promise["id"],
+          verified_at: promise["verified_at"],
+          evidence_count: length(promise["evidence"] || []),
+          gate_missing: get_in(promise, ["gate", "missing"]),
+          next_review: get_in(promise, ["gate", "next_review"])
+        })
+      else
+        status = get_in(values, ["Status"]) || "To Do"
+        Map.merge(item, %{issue: issue, values: values, status: status})
+      end
     end)
   end
+
+  defp verification_time(nil), do: "Not verified"
+  defp verification_time(%DateTime{} = value), do: Calendar.strftime(value, "%Y-%m-%d %H:%M UTC")
+
+  defp verification_time(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, value, _offset} -> verification_time(value)
+      _ -> "Not verified"
+    end
+  end
+
+  defp verification_time(_value), do: "Not verified"
 
   defp issue_options(repository) do
     Issues.list_issues(repository, state: "all")
@@ -336,7 +384,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       </section>
 
       <.form
-        :if={@can_write}
+        :if={@can_write and not @promise_registry?}
         for={@form}
         id="new-project-item-form"
         phx-submit="add_item"
@@ -365,7 +413,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       </.form>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-        <%= for status <- @statuses do %>
+        <%= for status <- if(@promise_registry?, do: PromiseRegistry.states(), else: @statuses) do %>
           <section class="card !m-0 !p-3">
             <header class="mb-2">
               <h3 class="card-title !text-sm">{status}</h3>
@@ -373,6 +421,22 @@ defmodule OpenAgentsWeb.ProjectShowLive do
             <div class="space-y-2 min-h-24">
               <%= for item <- @items, item.status == status do %>
                 <article class="card !m-0 !p-3">
+                  <%= if @promise_registry? do %>
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                      <span class="badge" data-variant="secondary">{item.promise_id}</span>
+                      <span class="text-xs text-muted-foreground">
+                        {item.evidence_count} evidence
+                      </span>
+                    </div>
+                    <div class="text-xs text-muted-foreground mb-2">
+                      Verified: {verification_time(item.verified_at)}
+                    </div>
+                    <%= if status == "GATED" do %>
+                      <div class="text-xs text-muted-foreground mb-2">
+                        Missing: {item.gate_missing} · Next review: {item.next_review}
+                      </div>
+                    <% end %>
+                  <% end %>
                   <.link
                     navigate={
                       ~p"/#{item.issue.repository.owner}/#{item.issue.repository.name}/issues/#{item.issue.number}"

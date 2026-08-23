@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.ProjectControllerTest do
   use OpenAgentsWeb.ConnCase
 
+  import OpenAgents.CompensationFixtures
+
   alias OpenAgents.Issues
   alias OpenAgents.Projects
 
@@ -190,6 +192,224 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/items")
 
       assert json_response(conn, 404) == %{"message" => "Not Found"}
+    end
+  end
+
+  describe "promise registries" do
+    test "LIVE projections require and expose an accepted outcome", %{conn: conn} do
+      project = project_fixture(%{title: "Promises", owner: "alice"})
+
+      {:ok, _field} =
+        Projects.create_project_field(%{
+          project_id: project.id,
+          name: "Promise state",
+          data_type: "promise_state",
+          options: %{"values" => ["LIVE", "GATED", "WITHDRAWN"]}
+        })
+
+      {:ok, issue} = create_issue(%{title: "Accepted outcome promise"})
+      decision = outcome_decision_fixture()
+
+      values =
+        promise_values("LIVE", "accepted")
+        |> put_in(["promise", "evidence"], [
+          %{
+            "kind" => "accepted_outcome",
+            "decision_receipt_ref" => decision.decision_receipt_ref
+          }
+        ])
+
+      {:ok, _item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => values},
+          project
+        )
+
+      conn =
+        get(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items?promise_state=LIVE"
+        )
+
+      assert %{
+               "items" => [
+                 %{
+                   "openagents" => %{
+                     "promise" => %{
+                       "record" => %{"id" => "accepted"},
+                       "state" => "LIVE",
+                       "bounty_candidate" => false
+                     }
+                   }
+                 }
+               ]
+             } = json_response(conn, 200)
+    end
+
+    test "projects expose promise projections and promise filters", %{conn: conn} do
+      project = project_fixture(%{title: "Promises", owner: "alice"})
+
+      {:ok, _field} =
+        Projects.create_project_field(%{
+          project_id: project.id,
+          name: "Promise state",
+          data_type: "promise_state",
+          options: %{"values" => ["LIVE", "GATED", "WITHDRAWN"]}
+        })
+
+      {:ok, gated_issue} = create_issue(%{title: "Gated promise"})
+      {:ok, withdrawn_issue} = create_issue(%{title: "Withdrawn promise"})
+
+      {:ok, _gated_item} =
+        Projects.create_project_item(
+          %{"issue_number" => gated_issue.number, "values" => promise_values("GATED", "gated")},
+          project
+        )
+
+      withdrawn_values =
+        promise_values("WITHDRAWN", "withdrawn")
+        |> put_in(["promise", "withdrawal"], %{
+          "reason" => "Replaced",
+          "replacement" => "A new promise",
+          "date" => "2026-08-23"
+        })
+
+      {:ok, _withdrawn_item} =
+        Projects.create_project_item(
+          %{
+            "issue_number" => withdrawn_issue.number,
+            "values" => withdrawn_values
+          },
+          project
+        )
+
+      conn =
+        get(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items?promise_state=GATED&bounty_candidate=true"
+        )
+
+      assert %{
+               "items" => [
+                 %{
+                   "openagents" => %{
+                     "promise" => %{
+                       "record" => %{"id" => "gated"},
+                       "state" => "GATED",
+                       "bounty_candidate" => true
+                     }
+                   }
+                 }
+               ]
+             } = json_response(conn, 200)
+    end
+
+    test "promise item events are paginated and actor-attributed", %{conn: conn, user: user} do
+      project = project_fixture(%{title: "Promises", owner: "alice"})
+
+      {:ok, _field} =
+        Projects.create_project_field(%{
+          project_id: project.id,
+          name: "Promise state",
+          data_type: "promise_state",
+          options: %{"values" => ["LIVE", "GATED", "WITHDRAWN"]}
+        })
+
+      {:ok, issue} = create_issue(%{title: "Gated promise"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => promise_values("GATED", "events")},
+          project,
+          user
+        )
+
+      conn =
+        get(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}/events"
+        )
+
+      assert %{
+               "events" => [
+                 %{"actor_login" => "alice", "kind" => "create", "to_state" => "GATED"}
+               ],
+               "pagination" => %{"page" => 1, "total" => 1}
+             } = json_response(conn, 200)
+    end
+
+    test "anonymous readers can read a public registry" do
+      project = project_fixture(%{title: "Public promises", owner: "alice"})
+
+      {:ok, _field} =
+        Projects.create_project_field(%{
+          project_id: project.id,
+          name: "Promise state",
+          data_type: "promise_state",
+          options: %{"values" => ["LIVE", "GATED", "WITHDRAWN"]}
+        })
+
+      {:ok, issue} = create_issue(%{title: "Public promise"})
+
+      {:ok, _item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => promise_values("GATED", "public")},
+          project
+        )
+
+      OpenAgents.Repo.update_all(
+        OpenAgents.Repositories.Repository,
+        set: [visibility: "public"]
+      )
+
+      conn =
+        build_conn()
+        |> get(~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+
+      assert %{"items" => [_item]} = json_response(conn, 200)
+    end
+
+    test "promise evidence from an unreadable repository is redacted", %{conn: conn} do
+      project = project_fixture(%{title: "Promises", owner: "alice"})
+
+      {:ok, _field} =
+        Projects.create_project_field(%{
+          project_id: project.id,
+          name: "Promise state",
+          data_type: "promise_state",
+          options: %{"values" => ["LIVE", "GATED", "WITHDRAWN"]}
+        })
+
+      source =
+        repository_fixture(%{owner: "SecretOrg", name: "secret-evidence", visibility: "private"})
+
+      {:ok, secret_issue} = Issues.create_issue(source, %{title: "Secret evidence"})
+      {:ok, visible_issue} = create_issue(%{title: "Visible promise"})
+
+      values =
+        promise_values("GATED", "redacted")
+        |> put_in(["promise", "evidence"], [
+          %{
+            "kind" => "issue",
+            "owner" => source.owner,
+            "repo" => source.name,
+            "number" => secret_issue.number
+          }
+        ])
+
+      {:ok, _item} =
+        Projects.create_project_item(
+          %{"issue_number" => visible_issue.number, "values" => values},
+          project
+        )
+
+      conn =
+        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+
+      assert %{"items" => [%{"openagents" => %{"promise" => %{"record" => record}}}]} =
+               json_response(conn, 200)
+
+      assert record["evidence"] == []
     end
   end
 
@@ -1026,4 +1246,25 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
   end
 
   defp create_issue(attrs), do: Issues.create_issue(repository(), attrs)
+
+  defp promise_values(state, id) do
+    record = %{
+      "id" => id,
+      "problem" => "A problem",
+      "claim" => "A claim",
+      "scope" => "A scope",
+      "acceptance_criteria" => ["A criterion"],
+      "success_metrics" => ["A metric"],
+      "owner" => "OpenAgents",
+      "target" => "2026-12-31",
+      "evidence" => [],
+      "gate" => %{
+        "missing" => "A receipt",
+        "owner" => "OpenAgents",
+        "next_review" => "2026-09-01"
+      }
+    }
+
+    %{"Promise state" => state, "promise" => record}
+  end
 end

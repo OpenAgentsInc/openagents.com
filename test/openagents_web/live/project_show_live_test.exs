@@ -2,11 +2,14 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
   use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Ecto.Query
+  import OpenAgents.CompensationFixtures
   import OpenAgents.LabelsFixtures
   import OpenAgents.ProjectItemsFixtures
   import OpenAgents.ProjectsFixtures
 
   alias OpenAgents.Issues
+  alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Projects
 
   setup %{conn: conn} do
@@ -254,6 +257,96 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
              view,
              ~s{a[href="/HiddenOrg/hidden-board/issues/#{issue.number}"]}
            )
+  end
+
+  test "a promise registry renders state columns and promise metadata", %{conn: conn} do
+    project = project!()
+
+    {:ok, _field} =
+      Projects.create_project_field(%{
+        project_id: project.id,
+        name: "Promise state",
+        data_type: "promise_state",
+        options: %{"values" => ["LIVE", "GATED", "WITHDRAWN"]}
+      })
+
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Close the gap"})
+    decision = outcome_decision_fixture()
+    {:ok, live_issue} = Issues.create_issue(repository(), %{"title" => "Shipped promise"})
+
+    {:ok, _item} =
+      Projects.create_project_item(
+        %{
+          "issue_number" => issue.number,
+          "values" => %{
+            "Promise state" => "GATED",
+            "promise" => %{
+              "id" => "close_the_gap",
+              "problem" => "A problem",
+              "claim" => "A claim",
+              "scope" => "A scope",
+              "acceptance_criteria" => ["A criterion"],
+              "success_metrics" => ["A metric"],
+              "owner" => "OpenAgents",
+              "target" => "2026-12-31",
+              "evidence" => [],
+              "gate" => %{
+                "missing" => "A receipt",
+                "owner" => "OpenAgents",
+                "next_review" => "2026-09-01"
+              }
+            }
+          }
+        },
+        project
+      )
+
+    {:ok, live_item} =
+      Projects.create_project_item(
+        %{
+          "issue_number" => live_issue.number,
+          "values" => %{
+            "Promise state" => "LIVE",
+            "promise" => %{
+              "id" => "shipped_promise",
+              "problem" => "A problem",
+              "claim" => "A claim",
+              "scope" => "A scope",
+              "acceptance_criteria" => ["A criterion"],
+              "success_metrics" => ["A metric"],
+              "owner" => "OpenAgents",
+              "target" => "2026-12-31",
+              "evidence" => [
+                %{
+                  "kind" => "accepted_outcome",
+                  "decision_receipt_ref" => decision.decision_receipt_ref
+                }
+              ]
+            }
+          }
+        },
+        project
+      )
+
+    live_values = put_in(live_item.values, ["promise", "verified_at"], "2026-08-23T05:00:00Z")
+
+    OpenAgents.Repo.update_all(
+      from(item in ProjectItem, where: item.id == ^live_item.id),
+      set: [values: live_values]
+    )
+
+    {:ok, view, html} = live(conn, path(project))
+
+    assert html =~ "LIVE"
+    assert html =~ "GATED"
+    assert html =~ "WITHDRAWN"
+    assert html =~ "close_the_gap"
+    assert html =~ "A receipt"
+    assert html =~ "2026-09-01"
+    assert html =~ "shipped_promise"
+    assert html =~ "Verified: 2026-08-23 05:00 UTC"
+    refute html =~ "To Do"
+    refute has_element?(view, "#new-project-item-form")
   end
 
   test "a missing project number raises rather than rendering an empty board", %{conn: conn} do

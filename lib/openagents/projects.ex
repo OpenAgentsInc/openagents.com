@@ -10,6 +10,8 @@ defmodule OpenAgents.Projects do
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Projects.Project
   alias OpenAgents.Projects.ProjectNote
+  alias OpenAgents.Projects.ProjectItemEvent
+  alias OpenAgents.Projects.PromiseRegistry
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
@@ -247,7 +249,11 @@ defmodule OpenAgents.Projects do
   defp describe_description_change(_value), do: "Updated the description."
 
   def delete_project(%Project{} = project) do
-    Repo.delete(project)
+    Repo.transaction(fn ->
+      Repo.delete_all(from field in ProjectField, where: field.project_id == ^project.id)
+      Repo.delete_all(from item in ProjectItem, where: item.project_id == ^project.id)
+      Repo.delete!(project)
+    end)
     |> case do
       {:ok, project} ->
         Repositories.broadcast_projects(project.repository_id)
@@ -441,17 +447,78 @@ defmodule OpenAgents.Projects do
   end
 
   def list_visible_project_items(
-        %Project{id: project_id, repository_id: repository_id},
-        user
+        %Project{id: project_id, repository_id: repository_id} = project,
+        user,
+        opts \\ []
       ) do
+    promise_context =
+      Keyword.get(opts, :promise_context, PromiseRegistry.context(project))
+
     readable =
       from(repository in Repositories.readable_by(Repository, user), select: repository.id)
 
-    project_items_query(project_id, repository_id)
-    |> where([item], item.issue_repository_id in subquery(readable))
-    |> order_by(asc: :id)
-    |> preload(issue: :repository)
-    |> Repo.all()
+    items =
+      project_items_query(project_id, repository_id)
+      |> where([item], item.issue_repository_id in subquery(readable))
+      |> order_by(asc: :id)
+      |> preload(issue: :repository)
+      |> Repo.all()
+
+    Enum.filter(items, fn item ->
+      state_matches? =
+        case opts[:promise_state] do
+          nil -> true
+          state -> PromiseRegistry.state(promise_context, item.values) == state
+        end
+
+      bounty_matches? =
+        case opts[:bounty_candidate] do
+          nil -> true
+          value -> PromiseRegistry.bounty_candidate?(promise_context, item.values) == value
+        end
+
+      state_matches? and bounty_matches?
+    end)
+  end
+
+  def list_visible_project_items_with_promises(%Project{} = project, user, opts \\ []) do
+    promise_context = PromiseRegistry.context(project)
+
+    items =
+      list_visible_project_items(
+        project,
+        user,
+        Keyword.put(opts, :promise_context, promise_context)
+      )
+
+    {items, project_item_projections(items, promise_context, user)}
+  end
+
+  def project_item_projections(items, promise_context, reader) do
+    Map.new(items, fn item ->
+      values = PromiseRegistry.redact_values(item.values, reader)
+
+      {item.id,
+       %{
+         values: values,
+         promise: PromiseRegistry.projection_from_redacted(promise_context, values)
+       }}
+    end)
+  end
+
+  def project_item_events(events, reader) do
+    Enum.map(events, fn event ->
+      changes =
+        case event.changes do
+          %{"values" => values} ->
+            %{"values" => PromiseRegistry.redact_values(values, reader)}
+
+          changes ->
+            changes
+        end
+
+      %{event | changes: changes}
+    end)
   end
 
   def get_project_item!(%Project{id: project_id, repository_id: repository_id}, id) do
@@ -489,14 +556,23 @@ defmodule OpenAgents.Projects do
     result =
       case Map.get(attrs, "issue_number") do
         nil ->
-          %ProjectItem{}
-          |> ProjectItem.changeset(%{
-            "project_id" => project.id,
-            "repository_id" => project.repository_id,
-            "issue_repository_id" => issue_repository_id,
-            "values" => values
-          })
-          |> Ecto.Changeset.apply_action(:insert)
+          changeset =
+            ProjectItem.changeset(%ProjectItem{}, %{
+              "project_id" => project.id,
+              "repository_id" => project.repository_id,
+              "issue_repository_id" => issue_repository_id,
+              "values" => values
+            })
+
+          if PromiseRegistry.registry?(project) do
+            Ecto.Changeset.add_error(
+              changeset,
+              :issue_id,
+              "is required for promise registry items"
+            )
+          else
+            Ecto.Changeset.apply_action(changeset, :insert)
+          end
 
         issue_number ->
           issue =
@@ -505,15 +581,24 @@ defmodule OpenAgents.Projects do
               number: issue_number
             )
 
-          %ProjectItem{}
-          |> ProjectItem.changeset(%{
+          item_attrs = %{
             "project_id" => project.id,
             "issue_id" => issue.id,
             "repository_id" => project.repository_id,
             "issue_repository_id" => issue_repository_id,
             "values" => values
-          })
-          |> Repo.insert()
+          }
+
+          case prepare_promise_values(project, values, actor) do
+            {:ok, values} ->
+              insert_project_item(Map.put(item_attrs, "values", values), project, actor)
+
+            {:error, errors} ->
+              item_attrs
+              |> then(&ProjectItem.changeset(%ProjectItem{}, &1))
+              |> add_errors(errors)
+              |> then(&{:error, &1})
+          end
       end
 
     case result do
@@ -530,13 +615,34 @@ defmodule OpenAgents.Projects do
     end
   end
 
-  def update_project_item(%ProjectItem{} = item, attrs) do
+  def update_project_item(%ProjectItem{} = item, attrs, actor \\ nil) do
     attrs = to_string_map(attrs)
-    values = Map.merge(item.values || %{}, Map.get(attrs, "values", %{}))
 
-    item
-    |> ProjectItem.changeset(%{"values" => values})
-    |> Repo.update()
+    values =
+      case Map.get(attrs, "values", %{}) do
+        incoming when is_map(incoming) -> Map.merge(item.values || %{}, incoming)
+        incoming -> incoming
+      end
+
+    project = Repo.get!(Project, item.project_id)
+
+    case prepare_promise_values(project, values, actor, item.id) do
+      {:ok, values} ->
+        changeset = ProjectItem.changeset(item, %{"values" => values})
+
+        Repo.transaction(fn ->
+          updated = Repo.update!(changeset)
+          record_promise_event(updated, project, actor, item.values || %{}, values, "update")
+          updated
+        end)
+        |> case do
+          {:ok, updated} -> {:ok, Repo.preload(updated, issue: :repository)}
+          result -> result
+        end
+
+      {:error, errors} ->
+        {:error, add_errors(ProjectItem.changeset(item, %{"values" => values}), errors)}
+    end
   end
 
   def list_project_fields(%Project{id: project_id}) do
@@ -547,9 +653,32 @@ defmodule OpenAgents.Projects do
   end
 
   def create_project_field(attrs) do
-    %ProjectField{}
-    |> ProjectField.changeset(attrs)
-    |> Repo.insert()
+    changeset =
+      %ProjectField{}
+      |> ProjectField.changeset(attrs)
+      |> PromiseRegistry.validate_field()
+
+    if changeset.valid? and promise_field_available?(changeset) do
+      Repo.insert(changeset)
+    else
+      {:error, changeset}
+    end
+  end
+
+  def list_project_item_events(%ProjectItem{id: item_id}, opts \\ []) do
+    page = max(parse_page(opts[:page]), 1)
+    per_page = 25
+    query = from event in ProjectItemEvent, where: event.project_item_id == ^item_id
+    total = Repo.aggregate(query, :count)
+
+    events =
+      query
+      |> order_by([event], desc: event.occurred_at, desc: event.id)
+      |> limit(^per_page)
+      |> offset(^((page - 1) * per_page))
+      |> Repo.all()
+
+    {events, total, page, per_page}
   end
 
   defp next_project_number(repository_id) do
@@ -567,6 +696,111 @@ defmodule OpenAgents.Projects do
     from(item in ProjectItem,
       where: item.project_id == ^project_id and item.repository_id == ^repository_id
     )
+  end
+
+  defp prepare_promise_values(project, values, actor, exclude_id \\ nil)
+
+  defp prepare_promise_values(_project, values, _actor, _exclude_id) when not is_map(values) do
+    {:error, %{values: ["must be a map"]}}
+  end
+
+  defp prepare_promise_values(project, values, actor, exclude_id) do
+    case PromiseRegistry.validate_values(project, values, actor) do
+      {:ok, values} ->
+        if PromiseRegistry.registry?(project) do
+          promise_id = get_in(values, ["promise", "id"])
+
+          if promise_id && promise_id_taken?(project.id, promise_id, exclude_id) do
+            {:error, %{values: ["promise.id must be unique within this project"]}}
+          else
+            {:ok, values}
+          end
+        else
+          {:ok, values}
+        end
+
+      {:error, errors} ->
+        {:error, errors}
+    end
+  end
+
+  defp insert_project_item(attrs, project, actor) do
+    Repo.transaction(fn ->
+      case Repo.insert(ProjectItem.changeset(%ProjectItem{}, attrs)) do
+        {:ok, item} ->
+          if PromiseRegistry.registry?(project) do
+            record_promise_event(item, project, actor, %{}, item.values || %{}, "create")
+          end
+
+          item
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
+    |> case do
+      {:ok, item} -> {:ok, Repo.preload(item, issue: :repository)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp record_promise_event(item, project, actor, previous, values, kind) do
+    from_state = PromiseRegistry.state(project, previous)
+    to_state = PromiseRegistry.state(project, values)
+    kind = if from_state && from_state != to_state, do: "state_change", else: kind
+
+    %ProjectItemEvent{}
+    |> ProjectItemEvent.changeset(%{
+      project_item_id: item.id,
+      project_id: project.id,
+      repository_id: project.repository_id,
+      actor_user_id: actor && actor.id,
+      actor_login: actor_login(actor),
+      kind: kind,
+      from_state: from_state,
+      to_state: to_state,
+      changes: %{"values" => values},
+      occurred_at: DateTime.utc_now()
+    })
+    |> Repo.insert!()
+  end
+
+  defp actor_login(nil), do: "system"
+  defp actor_login(%User{github_login: login}) when is_binary(login), do: login
+  defp actor_login(_actor), do: "system"
+
+  defp promise_field_available?(changeset) do
+    project_id = Ecto.Changeset.get_field(changeset, :project_id)
+    data_type = Ecto.Changeset.get_field(changeset, :data_type)
+
+    data_type != "promise_state" or
+      not Repo.exists?(
+        from field in ProjectField,
+          where: field.project_id == ^project_id and field.data_type == "promise_state"
+      )
+  end
+
+  defp promise_id_taken?(project_id, promise_id, exclude_id) do
+    query =
+      from item in ProjectItem,
+        where:
+          item.project_id == ^project_id and
+            fragment("?->'promise'->>'id' = ?", item.values, ^promise_id)
+
+    query =
+      if exclude_id do
+        where(query, [item], item.id != ^exclude_id)
+      else
+        query
+      end
+
+    Repo.exists?(query)
+  end
+
+  defp add_errors(changeset, errors) do
+    Enum.reduce(errors, changeset, fn {field, messages}, changeset ->
+      Enum.reduce(messages, changeset, &Ecto.Changeset.add_error(&2, field, &1))
+    end)
   end
 
   defp number_conflict?(changeset) do

@@ -63,6 +63,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/api/v3/repos/:owner/:repo/projectsV2",
     "/api/v3/repos/:owner/:repo/projectsV2/:project_number",
     "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items",
+    "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/events",
     "/api/v3/repos/:owner/:repo/projectsV2/:project_number/fields"
   ]
 

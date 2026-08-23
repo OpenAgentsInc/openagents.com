@@ -39,6 +39,7 @@ locks, dependencies, sub-issues, and suggestion APIs are not implemented.
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items` |
 | `PATCH` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}` |
 | `GET, POST` | `/repos/{owner}/{repo}/projectsV2/{project_number}/fields` |
+| `GET` | `/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events` |
 
 The project-creation endpoint is an OpenAgents extension because the comparable
 GitHub Projects V2 creation workflow is not supplied by the assessed REST
@@ -125,7 +126,10 @@ These are current measured behaviors:
   an `issue` object with `owner`, `repo`, and `number`. Cross-repository adds
   require write access to the project repository and read access to the source
   repository. Item lists omit source issues that the current viewer cannot
-  read.
+  read. Promise registry items are an OpenAgents-specific extension. They use
+  a stored `promise_state` field, state gates, resolvable evidence, and an
+  append-only event history. This deliberately differs from GitHub Projects
+  V2, which does not define these product-claim semantics.
 - Assignee reads return active repository members with writable roles, and
   issue assignment accepts only those members.
 

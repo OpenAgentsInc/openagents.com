@@ -1,0 +1,91 @@
+[
+  {
+    "id": "promises_registry_v1",
+    "state": "GATED",
+    "problem": "Product claims are difficult to compare with shipped work.",
+    "claim": "The forge exposes a machine-readable registry of product promises.",
+    "scope": "Public product promises maintained in the OpenAgents forge.",
+    "acceptance_criteria": ["A reader can list promises by state.", "Every LIVE promise has resolvable evidence."],
+    "success_metrics": ["Every published promise has one canonical issue."],
+    "owner": "OpenAgents",
+    "target": "2026-08-23",
+    "evidence": [
+      {
+        "kind": "issue",
+        "owner": "OpenAgentsInc",
+        "repo": "openagents.com",
+        "number": 92
+      }
+    ],
+    "gate": {
+      "missing": "An accepted-outcome receipt for the registry launch.",
+      "owner": "OpenAgents",
+      "next_review": "2026-09-01"
+    }
+  },
+  {
+    "id": "autopilot_historical_claude_code_me",
+    "state": "WITHDRAWN",
+    "problem": "The original Autopilot depended on a closed provider.",
+    "claim": "Autopilot can use a provider-independent coding lane.",
+    "scope": "The historical Claude Code implementation.",
+    "acceptance_criteria": ["The withdrawn path remains visible.", "A replacement path is recorded."],
+    "success_metrics": ["No active work depends on the withdrawn path."],
+    "owner": "OpenAgents",
+    "target": "2026-08-23",
+    "withdrawal": {"reason": "The provider terms changed.", "replacement": "Use the forge coding lanes.", "date": "2026-08-23"},
+    "evidence": []
+  },
+  {
+    "id": "pylon_first_real_model_training_run_v1",
+    "state": "GATED",
+    "problem": "Distributed model training needs a public, verifiable first run.",
+    "claim": "Pylon can coordinate a real model training run.",
+    "scope": "The first production-scale Pylon training run.",
+    "acceptance_criteria": ["A run completes on participating nodes."],
+    "success_metrics": ["A completed training receipt is published."],
+    "owner": "OpenAgents",
+    "target": "2026-09-30",
+    "gate": {"missing": "A completed training receipt.", "owner": "OpenAgents", "next_review": "2026-09-01"},
+    "evidence": []
+  },
+  {
+    "id": "accepted_outcomes_per_kilowatt_hour_v1",
+    "state": "GATED",
+    "problem": "Compute efficiency needs a workload-based metric.",
+    "claim": "The forge can report accepted outcomes per kilowatt hour.",
+    "scope": "Pylon and Psionic provider routing.",
+    "acceptance_criteria": ["Energy and outcome measurements share a receipt.", "The metric is queryable."],
+    "success_metrics": ["A weekly metric is published."],
+    "owner": "OpenAgents",
+    "target": "2026-10-15",
+    "gate": {"missing": "Energy telemetry linked to accepted outcomes.", "owner": "OpenAgents", "next_review": "2026-09-15"},
+    "evidence": []
+  },
+  {
+    "id": "forge_bounty_clearing_loop_v1",
+    "state": "GATED",
+    "problem": "Verified work does not yet have a complete settlement loop.",
+    "claim": "A forge issue can move from claim through verification to settlement.",
+    "scope": "One public bounty issue and its receipts.",
+    "acceptance_criteria": ["A claim, execution, verification, and settlement are linked."],
+    "success_metrics": ["One bounty completes end to end."],
+    "owner": "OpenAgents",
+    "target": "2026-10-31",
+    "gate": {"missing": "A verified settlement receipt.", "owner": "OpenAgents", "next_review": "2026-09-30"},
+    "evidence": []
+  },
+  {
+    "id": "agentic_module_registry_v1",
+    "state": "GATED",
+    "problem": "Verified work cannot yet be reused as portable modules.",
+    "claim": "Agents can discover modules backed by verified work.",
+    "scope": "Forge receipts and public module metadata.",
+    "acceptance_criteria": ["A module has a stable identifier.", "Its verification receipt is visible."],
+    "success_metrics": ["The first verified module is listed."],
+    "owner": "OpenAgents",
+    "target": "2026-11-15",
+    "gate": {"missing": "A module index backed by verification receipts.", "owner": "OpenAgents", "next_review": "2026-10-15"},
+    "evidence": []
+  }
+]

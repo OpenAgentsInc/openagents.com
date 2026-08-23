@@ -127,6 +127,20 @@ There are no named `project` commands. Construct every Projects V2 route manuall
 | List fields | `GET` | `repos/OWNER/REPO/projectsV2/PROJECT_NUMBER/fields` |
 | Create field | `POST` | `repos/OWNER/REPO/projectsV2/PROJECT_NUMBER/fields` |
 
+### Product promises
+
+Projects V2 can act as a product promises registry when the project has one
+`promise_state` field with `LIVE`, `GATED`, and `WITHDRAWN` options. Store each
+promise in the item's `values["promise"]` map and keep one canonical issue per
+promise. Use readable `accepted_outcome` evidence that names an accepted
+`OpenAgents.Compensation.OutcomeDecision` for `LIVE`. Issue, changelog, and
+forge receipt evidence remains supporting evidence; links cannot satisfy that
+gate.
+
+Use `promise_state` and `bounty_candidate` filters when listing items. Read
+actor-attributed append-only history from the item's `/events` endpoint.
+Evidence is redacted when the reader cannot read its repository or issue.
+
 List projects:
 
 ```sh

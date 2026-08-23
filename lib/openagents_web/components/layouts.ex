@@ -783,6 +783,12 @@ defmodule OpenAgentsWeb.Layouts do
         belongs. --%>
         <Layouts.sidebar_link path={~p"/issues"} label="Issues" icon="bug" patchable={false} />
         <Layouts.sidebar_link
+          path={~p"/notifications"}
+          label="Notifications"
+          icon="notification-bell"
+          patchable={false}
+        />
+        <Layouts.sidebar_link
           path={~p"/projects"}
           label="Projects"
           icon="folder"

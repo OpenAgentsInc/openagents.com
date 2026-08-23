@@ -11,6 +11,7 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Labels.Label
   alias OpenAgents.Milestones
   alias OpenAgents.Milestones.Milestone
+  alias OpenAgents.Notifications
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
@@ -187,10 +188,10 @@ defmodule OpenAgents.Issues do
       |> put_author(author)
       |> prepare_collections(repository)
 
-    create_issue_with_number(repository, normalized, 20)
+    create_issue_with_number(repository, normalized, author, 20)
   end
 
-  defp create_issue_with_number(repository, normalized, attempts_remaining) do
+  defp create_issue_with_number(repository, normalized, author, attempts_remaining) do
     Repo.transaction(fn ->
       number = next_issue_number(repository.id)
       normalized = Map.put(normalized, "number", number)
@@ -198,6 +199,10 @@ defmodule OpenAgents.Issues do
       with {:ok, issue} <- %Issue{} |> Issue.changeset(normalized) |> Repo.insert(),
            :ok <- sync_label_relationships(issue),
            :ok <- sync_assignee_relationships(issue) do
+        # Inside the transaction on purpose: the subscription and the delivery
+        # records commit with the issue or not at all, so there is no window
+        # where an issue exists that nobody was told about.
+        Notifications.issue_opened(issue, author)
         issue
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -206,7 +211,7 @@ defmodule OpenAgents.Issues do
     |> case do
       {:error, changeset} when attempts_remaining > 1 ->
         if number_conflict?(changeset, "issues_repository_id_number_index") do
-          create_issue_with_number(repository, normalized, attempts_remaining - 1)
+          create_issue_with_number(repository, normalized, author, attempts_remaining - 1)
         else
           {:error, changeset}
         end
@@ -694,6 +699,9 @@ defmodule OpenAgents.Issues do
                update: [inc: [comments: 1]]
              )
              |> Repo.update_all([]) do
+        # Same transaction as the comment, so the delivery record is as durable
+        # as the event it announces and a retry collides with itself.
+        Notifications.comment_created(issue, comment, author)
         comment
       else
         {:error, changeset} -> Repo.rollback(changeset)

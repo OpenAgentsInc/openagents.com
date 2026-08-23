@@ -32,6 +32,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Labels
   alias OpenAgents.Markdown
   alias OpenAgents.Milestones
+  alias OpenAgents.Notifications
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.UI.Circle
@@ -81,6 +82,25 @@ defmodule OpenAgentsWeb.IssueShowLive do
        OG.meta(OG.issue(repository.namespace.slug, repository.name, issue))
      )
      |> load(issue)}
+  end
+
+  def handle_event("toggle_subscription", _params, socket) do
+    with_authority(socket, :can_participate, "You can no longer follow this issue.", fn socket ->
+      issue = socket.assigns.issue
+      user = socket.assigns.current_user
+
+      result =
+        if socket.assigns.subscribed? do
+          Notifications.unsubscribe(issue, user)
+        else
+          Notifications.subscribe(issue, user, "manual")
+        end
+
+      case result do
+        {:ok, _subscription} -> {:noreply, load(socket, issue)}
+        {:error, _reason} -> {:noreply, put_flash(socket, :error, "That did not work.")}
+      end
+    end)
   end
 
   def handle_event("toggle_edit", _params, socket) do
@@ -282,7 +302,11 @@ defmodule OpenAgentsWeb.IssueShowLive do
     |> assign(:comments, comments)
     |> assign(:form, to_form(Issues.change_issue(issue)))
     |> assign(:events, timeline(issue, comments))
+    |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))
   end
+
+  defp subscribed?(_issue, nil), do: false
+  defp subscribed?(issue, user), do: Notifications.subscribed?(issue, user)
 
   def render(assigns) do
     ~H"""
@@ -466,6 +490,27 @@ defmodule OpenAgentsWeb.IssueShowLive do
               </Circle.field_menu>
             </:group>
           </Circle.properties_panel>
+
+          <%!-- Outside the properties panel on purpose. Everything in that
+          panel changes the issue and needs a writable membership; following an
+          issue changes only what reaches your own inbox, so it is offered to
+          anyone who may take part in the conversation. --%>
+          <section :if={@can_participate} class="properties-panel__group">
+            <h3 class="properties-panel__heading">Notifications</h3>
+            <p class="properties-panel__none">
+              {if @subscribed?,
+                do: "You get comments on this issue.",
+                else: "You do not get comments on this issue."}
+            </p>
+            <.button
+              id="issue-subscription-toggle"
+              variant={:ghost}
+              size={:sm}
+              phx-click="toggle_subscription"
+            >
+              {if @subscribed?, do: "Unsubscribe", else: "Subscribe"}
+            </.button>
+          </section>
         </:rail>
 
         <section class="issue-body">

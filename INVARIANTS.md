@@ -2501,6 +2501,33 @@ Every promise item create, update, and state change records an actor-attributed
 event. PostgreSQL rejects updates and deletes of project item events, and the
 API exposes only paginated reads.
 
+### NOTIFY-001 — A notification is a durable, idempotent pointer that reveals nothing
+
+Status: Current
+
+Issue delivery records are written inside the transaction that writes the
+comment or the issue they announce, so a delivery exists exactly when its event
+does and there is no queue whose loss silently drops it. Each event derives one
+`dedupe_key` per recipient and a unique index over `(user_id, dedupe_key)`
+makes a replayed fan-out a no-op, so a retried request never notifies twice and
+never returns a read record to unread.
+
+A record stores identifiers, a kind, and the actor's login — never a title, a
+body, or any repository content. Fan-out refuses a recipient who cannot read
+the repository, and every read composes `OpenAgents.Repositories.readable_by/2`
+again against the reader's current membership, so a record that outlives the
+recipient's access stops rendering rather than disclosing a private issue.
+Marking read is scoped to the addressed account, and both delivery categories
+default to on because neither can reach an account that has not already taken
+part in the issue or been named in it.
+
+Delivery is in-product only. Accounts carry no email address and no outbound
+mail adapter is configured, so no channel here leaves the application.
+
+Evidence: `OpenAgents.Notifications`, `OpenAgents.Notifications.Mentions`,
+`OpenAgentsWeb.NotificationsLive`, `test/openagents/notifications_test.exs`,
+and `test/openagents_web/live/notifications_live_test.exs`.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -2534,6 +2561,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-002 | `test/openagents/box_runs_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |
+| NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |

@@ -46,6 +46,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
     # The forum. Reading and posting happen signed in, matching the other
     # workspace-wide surfaces.
     "/forum",
+    # The inbox addresses exactly one account, so it has nothing to show a
+    # visitor who has not identified themselves.
+    "/notifications",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",
@@ -615,6 +618,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/artifact-catalog"), do: "artifact-catalog:read"
   defp browser_scope("/memory/" <> _path), do: "memory:self"
   defp browser_scope("/github/connection"), do: "github-tools:self"
+  defp browser_scope("/notifications"), do: "notification:self"
   defp browser_scope("/settings/api-tokens"), do: "api-token:self"
   defp browser_scope(_path), do: "product:self"
 

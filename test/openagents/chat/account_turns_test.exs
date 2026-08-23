@@ -51,6 +51,36 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
     assert resolved.id == user.id
   end
 
+  test "a tool the API caller can use now runs for them" do
+    # The acceptance criterion, end to end: the same context the turn hands the
+    # provider executes an owner-requiring tool and succeeds. Before the fix
+    # this returned status "failed" with code "owner_not_signed_in".
+    user = repository_user_fixture("account-chat-tool-succeeds")
+    test_process = self()
+
+    streamer = fn _request, _callback, options ->
+      send(test_process, {:tool_context, Keyword.fetch!(options, :tool_context)})
+      {:ok, %{"assistant_content" => "Done.", "assistant_message_id" => "response-1"}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "What computers do I have?",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    assert_receive {:tool_context, tool_context}
+    assert {:ok, runtime} = ToolRuntime.capture(tool_context: tool_context)
+
+    assert {:ok, outcome} =
+             ToolRuntime.run(runtime, "call-computer-list", "computer_list", "{}")
+
+    assert outcome["status"] == "succeeded"
+    assert outcome["error"] == nil
+    assert outcome["result"]["schema"] == "sarah.computer_list_result.v1"
+  end
+
   test "the API turn offers the tools the browser offers the same account" do
     user = repository_user_fixture("account-chat-tool-parity")
     {:ok, conversation} = Conversations.ensure_conversation(user)

@@ -141,6 +141,90 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
     assert Map.has_key?(errors, "model")
   end
 
+  test "the thread enums the root document publishes are the ones the context derives", %{
+    conn: conn
+  } do
+    parameters =
+      conn
+      |> get(~p"/api/v3")
+      |> json_response(200)
+      |> get_in(["extensions", "thread.openagents", "parameters"])
+
+    assert parameters["reasoning"]["enum"] == OpenAgents.Threads.Thread.reasoning_efforts()
+    assert parameters["reasoning"]["default"] == OpenAgents.Threads.default_reasoning()
+    assert parameters["reasoning"]["default"] in parameters["reasoning"]["enum"]
+
+    assert parameters["permission_profile"]["enum"] ==
+             OpenAgents.Threads.Thread.permission_profiles()
+
+    assert parameters["permission_profile"]["default"] ==
+             OpenAgents.Threads.default_permission_profile()
+
+    assert parameters["permission_profile"]["default"] in parameters["permission_profile"]["enum"]
+  end
+
+  test "the thread budget the root document publishes is the one a thread is minted with", %{
+    conn: conn
+  } do
+    limits =
+      conn
+      |> get(~p"/api/v3")
+      |> json_response(200)
+      |> get_in(["extensions", "thread.openagents", "limits"])
+
+    ceilings = OpenAgents.Threads.ceilings()
+
+    assert limits["maximum_open_threads_per_account"] ==
+             OpenAgents.Threads.maximum_open_per_account()
+
+    assert limits["grant"]["max_total_tokens"] == ceilings.max_total_tokens
+    assert limits["grant"]["max_calls"] == ceilings.max_calls
+    assert limits["grant"]["max_cost_microusd"] == ceilings.max_cost_microusd
+    assert limits["grant"]["ttl_seconds"] == ceilings.ttl_seconds
+
+    granted =
+      conn
+      |> put_chat_api_token("governance-thread-budget")
+      |> post(~p"/api/v3/threads", %{"objective" => "Measure the published budget."})
+      |> json_response(201)
+      |> get_in(["grant", "limits"])
+
+    assert granted["max_total_tokens"] == limits["grant"]["max_total_tokens"]
+    assert granted["max_calls"] == limits["grant"]["max_calls"]
+    assert granted["max_cost_microusd"] == limits["grant"]["max_cost_microusd"]
+  end
+
+  test "every published thread parameter value is one the route actually accepts", %{conn: conn} do
+    parameters =
+      conn
+      |> get(~p"/api/v3")
+      |> json_response(200)
+      |> get_in(["extensions", "thread.openagents", "parameters"])
+
+    for {name, parameter} <- Map.take(parameters, ["reasoning", "permission_profile"]),
+        value <- parameter["enum"] do
+      accepted =
+        conn
+        |> put_chat_api_token("governance-thread-#{name}-#{value}")
+        |> post(~p"/api/v3/threads", %{"objective" => "Accept #{value}.", name => value})
+
+      assert json_response(accepted, 201)["thread"]
+
+      refused =
+        conn
+        |> put_chat_api_token("governance-thread-#{name}-refused")
+        |> post(~p"/api/v3/threads", %{
+          "objective" => "Refuse anything else.",
+          name => "not-a-legal-value"
+        })
+
+      assert %{"errors" => errors} = json_response(refused, 422),
+             "#{name} is published with an enum but accepts any value"
+
+      assert Map.has_key?(errors, name)
+    end
+  end
+
   defp documented_fields(conn, extension) do
     conn
     |> get(~p"/api/v3")

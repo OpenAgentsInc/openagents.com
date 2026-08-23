@@ -27,13 +27,27 @@ defmodule OpenAgents.Threads do
      on delete, so removing a thread — or the account under DATA-004 — removes
      its authority with it.
 
-  ## What is not here
+  ## The ceiling
 
-  There is no cap on concurrent open threads or on concurrent active grants per
-  account. That ceiling belongs at admission in `open/3`, reading a limit from
-  `config/config.exs` next to the Box lane's `maximum_active_boxes_per_owner`,
-  and it is stage 2's work: the cap is an abuse control on the public route
-  that mints authority, and no such route exists yet.
+  4. **Authority is capped.** `open/3` refuses an account that already holds
+     `maximum_open_threads_per_account` open threads, reading the limit from
+     `config/config.exs` next to the Box lane's
+     `maximum_active_boxes_per_owner`. A token that can open one thread could
+     otherwise open unbounded threads and spend without a ceiling. Because a
+     thread has at most one live grant, capping open threads caps the account's
+     concurrent thread-scoped authority by the same number.
+  5. **The ceiling is self-clearing.** `reap_expired/1` runs at admission and
+     on every read: an active grant whose clock has run out becomes `expired`,
+     and the open thread it fenced becomes `failed` with `authority_expired`.
+     Expiry therefore releases both the thread's active-grant slot and the
+     account's admission slot without anyone asking, so an abandoned thread
+     cannot lock an account out of its own ceiling.
+
+  A thread's ceilings are its own: `ceilings/0` reads the `thread_grant_*`
+  settings and passes them to `OpenAgents.Inference.mint/1`, which otherwise
+  applies the delegation ceilings. A delegation is one probe run the server
+  admitted before it minted anything; a thread is authority a caller asked for,
+  so the two budgets are stated separately and neither moves the other.
   """
 
   import Ecto.Query
@@ -50,6 +64,8 @@ defmodule OpenAgents.Threads do
   alias OpenAgents.Threads.Thread
 
   @maximum_listed 50
+  @default_reasoning "high"
+  @default_permission_profile "read_only"
 
   @doc """
   Open a thread for an account.
@@ -58,23 +74,70 @@ defmodule OpenAgents.Threads do
   account's conversation. The admitted execution shape defaults to the chat
   lane's configured model, `high` reasoning, and the `read_only` permission
   profile; a caller may narrow or widen only within the admitted vocabulary.
+
+  Admission is where the ceiling lives. Elapsed authority is reaped first, so a
+  slot held by an abandoned thread is released before the count is taken, and
+  an account already at `maximum_open_per_account/0` is refused with
+  `:thread_quota_reached` rather than given a further grant.
   """
   @spec open(User.t() | Visitor.t(), String.t(), keyword()) ::
-          {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Thread.t()} | {:error, :thread_quota_reached | Ecto.Changeset.t()}
   def open(owner, objective, options \\ [])
 
   def open(%User{} = user, objective, options) do
     user |> Conversations.ensure_owner_visitor() |> open(objective, options)
   end
 
-  def open(%Visitor{id: visitor_id}, objective, options) when is_binary(objective) do
+  def open(%Visitor{id: visitor_id} = owner, objective, options) when is_binary(objective) do
+    _reaped = reap_expired(owner)
+
+    if open_count(visitor_id) >= maximum_open_per_account() do
+      {:error, :thread_quota_reached}
+    else
+      insert_thread(visitor_id, objective, options)
+    end
+  end
+
+  @doc """
+  Open a thread and mint its authority, or leave nothing behind.
+
+  This is the atom of work the public route performs. A thread that cannot hold
+  authority is not a thread anyone can work, so a failed mint cancels the
+  thread it opened rather than leaving an empty one holding an admission slot.
+  """
+  @spec open_and_mint(User.t() | Visitor.t(), String.t(), keyword()) ::
+          {:ok, Thread.t(), Grant.t(), String.t()}
+          | {:error, :thread_quota_reached | :thread_terminal | Ecto.Changeset.t()}
+  def open_and_mint(owner, objective, options \\ []) do
+    with {:ok, thread} <- open(owner, objective, options) do
+      case mint_grant(thread) do
+        {:ok, fenced, grant, token} ->
+          {:ok, fenced, grant, token}
+
+        {:error, reason} ->
+          _cancelled = cancel(thread, "The thread could not be granted model authority.")
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc "The reasoning effort a thread takes when its caller names none."
+  @spec default_reasoning() :: String.t()
+  def default_reasoning, do: @default_reasoning
+
+  @doc "The permission profile a thread takes when its caller names none."
+  @spec default_permission_profile() :: String.t()
+  def default_permission_profile, do: @default_permission_profile
+
+  defp insert_thread(visitor_id, objective, options) do
     now = DateTime.utc_now()
 
     attributes = %{
       objective: objective,
       model: Keyword.get(options, :model) || OpenRouter.default_model(),
-      reasoning_effort: OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, "high")),
-      permission_profile: Keyword.get(options, :permission_profile, "read_only")
+      reasoning_effort:
+        OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
+      permission_profile: Keyword.get(options, :permission_profile, @default_permission_profile)
     }
 
     Multi.new()
@@ -190,7 +253,8 @@ defmodule OpenAgents.Threads do
                  Inference.mint(%{
                    owner_visitor_id: fenced.owner_visitor_id,
                    thread_id: fenced.id,
-                   machine_id: nil
+                   machine_id: nil,
+                   ceilings: ceilings()
                  }) do
             {fenced, grant, token}
           else
@@ -241,6 +305,85 @@ defmodule OpenAgents.Threads do
     })
   end
 
+  @doc """
+  The ceilings a thread's grant is minted with.
+
+  Read from `config/config.exs` and stated separately from the delegation
+  ceilings in `OpenAgents.Inference`, because a thread's budget is not a
+  delegation's budget. `GET /api/v3` publishes this map, so a client reads the
+  budget it was given rather than discovering it by exhausting it.
+  """
+  @spec ceilings() :: Inference.ceilings()
+  def ceilings do
+    %{
+      max_total_tokens: setting(:thread_grant_max_total_tokens, 1_000_000),
+      max_calls: setting(:thread_grant_max_calls, 256),
+      max_cost_microusd: setting(:thread_grant_max_cost_microusd, 2_000_000),
+      ttl_seconds: setting(:thread_grant_ttl_seconds, 3_600)
+    }
+  end
+
+  @doc "How many threads one account may hold open at once."
+  @spec maximum_open_per_account() :: pos_integer()
+  def maximum_open_per_account, do: setting(:maximum_open_threads_per_account, 8)
+
+  @doc "How many threads this account currently holds open."
+  @spec open_count(User.t() | Visitor.t() | String.t()) :: non_neg_integer()
+  def open_count(%User{} = user), do: user |> Conversations.ensure_owner_visitor() |> open_count()
+  def open_count(%Visitor{id: visitor_id}), do: open_count(visitor_id)
+
+  def open_count(visitor_id) when is_binary(visitor_id) do
+    Repo.one(
+      from t in Thread,
+        where: t.owner_visitor_id == ^visitor_id and t.status == "open",
+        select: count(t.id)
+    )
+  end
+
+  @doc """
+  Retire the account's elapsed authority, and the threads it fenced.
+
+  Expiry is a fact about a clock, not a request: a grant past `expires_at` is
+  no longer authority whether or not anyone presents it. This transitions those
+  grants to `expired`, and closes every open thread that has minted authority
+  and no longer holds any, with `authority_expired`. Returns
+  `{expired_grants, closed_threads}`.
+  """
+  @spec reap_expired(User.t() | Visitor.t()) :: {non_neg_integer(), non_neg_integer()}
+  def reap_expired(%User{} = user),
+    do: user |> Conversations.ensure_owner_visitor() |> reap_expired()
+
+  def reap_expired(%Visitor{id: visitor_id}) do
+    {expired, _} = Inference.expire_elapsed_for_owner(visitor_id)
+
+    closed =
+      visitor_id
+      |> abandoned_thread_ids()
+      |> Enum.count(fn thread_id ->
+        match?({:ok, _closed}, terminate(%Thread{id: thread_id}, expired_attributes()))
+      end)
+
+    {expired, closed}
+  end
+
+  @doc """
+  The most recent grant minted for this thread, whatever its status.
+
+  A thread has at most one *active* grant (THREAD-001); a terminal thread has
+  none, and its revoked grant is still the record of what was spent. A caller
+  reading its usage needs that row, so this returns the newest grant rather
+  than only a live one.
+  """
+  @spec latest_grant(Thread.t()) :: Grant.t() | nil
+  def latest_grant(%Thread{id: thread_id}) do
+    Repo.one(
+      from g in Grant,
+        where: g.thread_id == ^thread_id,
+        order_by: [desc: g.inserted_at, desc: g.id],
+        limit: 1
+    )
+  end
+
   @doc "Every active grant naming this thread. Empty for a terminal thread."
   @spec active_grants(Thread.t()) :: [Grant.t()]
   def active_grants(%Thread{id: thread_id}) do
@@ -266,6 +409,40 @@ defmodule OpenAgents.Threads do
       end
     end)
   end
+
+  defp expired_attributes do
+    report = "The thread's model authority expired before it reported."
+
+    %{
+      status: "failed",
+      report: report,
+      report_digest: digest(report),
+      error_code: "authority_expired",
+      completed_at: DateTime.utc_now()
+    }
+  end
+
+  # An open thread that has minted authority and holds none is abandoned: the
+  # only route that mints for a caller mints once, at open, so nothing is
+  # coming to renew it.
+  defp abandoned_thread_ids(visitor_id) do
+    live =
+      from(g in Grant,
+        where: g.thread_id == parent_as(:thread).id and g.status == "active",
+        select: 1
+      )
+
+    Repo.all(
+      from t in Thread,
+        as: :thread,
+        where: t.owner_visitor_id == ^visitor_id,
+        where: t.status == "open" and t.generation > 0,
+        where: not exists(live),
+        select: t.id
+    )
+  end
+
+  defp setting(key, default), do: Application.get_env(:openagents, key, default)
 
   defp locked(thread_id) do
     Repo.one(from t in Thread, where: t.id == ^thread_id, lock: "FOR UPDATE")

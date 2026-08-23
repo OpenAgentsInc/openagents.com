@@ -526,6 +526,18 @@ defmodule OpenAgentsWeb.Router do
     post "/capacity/matches", CapacityController, :matches
   end
 
+  # Threads: the unit of agent work, and the model authority bound to one. The
+  # same account scope as the chat lane, because a thread is what that lane's
+  # single conversation could not be — plural, disposable, and fenced on its
+  # own (THREAD-001).
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :chat_account_api
+
+    post "/threads", ThreadController, :create
+    get "/threads/:thread_id", ThreadController, :show
+    delete "/threads/:thread_id", ThreadController, :delete
+  end
+
   scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do
     pipe_through :box_control_api
 

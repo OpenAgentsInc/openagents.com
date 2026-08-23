@@ -276,6 +276,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
       note: "The account's paired computers list. No export artifact."
     },
     %{
+      family: :thread,
+      api?: true,
+      status: :partial,
+      mechanism: "GET /api/v3/threads/{thread_id}",
+      proof: nil,
+      issue: @account_export_issue,
+      note:
+        "A thread reads back only to a caller that already holds its id: there " <>
+          "is no route that lists an account's threads, the transcript in " <>
+          "thread_events leaves through no route at all, and the DATA-004 " <>
+          "export names no thread. Deletion still reaches them through the " <>
+          "visitor cascade; the export ledger does not."
+    },
+    %{
       family: :reputation,
       api?: true,
       status: :partial,

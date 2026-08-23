@@ -1519,16 +1519,41 @@ conversation, and a thread is not one.
   `updated_at`; and a thread is open with no report or terminal with one,
   never both and never neither.
 
-There is no cap on concurrent open threads or on concurrent active grants per
-account. That ceiling belongs at admission, on the route that mints authority
-for a caller, and no such route exists yet.
+- **Authority is capped at admission.** `OpenAgents.Threads.open/3` refuses an
+  account already holding `maximum_open_threads_per_account` open threads with
+  `:thread_quota_reached`, and `POST /api/v3/threads` renders that as a `429`
+  naming the limit. The cap is taken before any row is written, so a refused
+  caller leaves nothing behind. Because a thread has at most one live grant,
+  capping open threads caps the account's concurrent thread-scoped authority by
+  the same number.
+- **A thread's budget is its own.** `OpenAgents.Threads.ceilings/0` reads the
+  `thread_grant_*` settings and passes them to `OpenAgents.Inference.mint/1`,
+  which otherwise applies the delegation ceilings. A delegation is one probe
+  run the server admitted before minting anything; a thread is authority a
+  caller asked for. The two budgets are stated separately, and neither moves
+  the other.
+- **Expiry revokes without being asked.** `OpenAgents.Threads.reap_expired/1`
+  runs at admission and on every read of a thread: an active grant past
+  `expires_at` becomes `expired`, and an open thread that has minted authority
+  and holds none becomes `failed` with `authority_expired`. An abandoned thread
+  therefore cannot hold an account's admission slot, and a lapsed token is not
+  merely refused on presentation — it stops being live in the ledger.
+- **Authority reaches only the account that opened the thread.**
+  `OpenAgents.Threads.get_for_user/2` joins through the owner visitor, so
+  another account's thread id resolves to `nil` and the route refuses it with
+  the same `not_found` an absent id gets. No route returns a grant token for a
+  thread the caller did not open, and the token is returned exactly once, at
+  the mint.
 
 Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `OpenAgents.Threads.Event`, `OpenAgents.Inference.mint/1`,
+`OpenAgents.Inference.expire_elapsed_for_owner/1`,
+`OpenAgentsWeb.ThreadController`,
 `priv/repo/migrations/20260823221415_create_threads_and_thread_events.exs`,
 `priv/repo/migrations/20260823221416_allow_thread_scoped_inference_grants.exs`,
-`test/openagents/threads/grant_fence_test.exs`, and
-`test/openagents/threads_test.exs`.
+`test/openagents/threads/grant_fence_test.exs`,
+`test/openagents/threads_test.exs`, and
+`test/openagents_web/controllers/thread_controller_test.exs`.
 
 ## Tenant deployment control plane
 

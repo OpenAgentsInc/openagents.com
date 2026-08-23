@@ -249,7 +249,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     json(conn, %{
       "api_version" => "v3",
       "version" => @document_version,
-      "extensions" => @extensions,
+      "extensions" => Map.put(@extensions, "thread.openagents", thread_extension()),
       "errors" => errors_contract(),
       "routes" => ApiRouteAuthority.inventory_entries(),
       "families" => Enum.map(ApiRouteAuthority.families(), &Atom.to_string/1),
@@ -273,6 +273,92 @@ defmodule OpenAgentsWeb.ApiExtensionController do
       "human" => base <> "/agents.md",
       "description" =>
         "How to find work, authenticate, file issues, get a change in, and prove it landed."
+    }
+  end
+
+  # Built per request, not frozen into a module attribute: the admission cap
+  # and the grant ceilings are runtime configuration, and a document that
+  # published the value this release was compiled with would be describing a
+  # budget no caller is given.
+  defp thread_extension do
+    %{
+      "version" => "2026-08-23",
+      "description" =>
+        "Threads: the unit of agent work. A thread carries one objective, its " <>
+          "transcript, and its own budget, and it holds the model authority a " <>
+          "client spends at the inference proxy. It is not the account's " <>
+          "conversation, and a grant names one or the other, never both " <>
+          "(THREAD-001).",
+      "endpoints" => [
+        "POST /api/v3/threads",
+        "GET /api/v3/threads/{thread_id}",
+        "DELETE /api/v3/threads/{thread_id}"
+      ],
+      "parameters" => %{
+        "objective" => %{
+          "endpoint" => "POST /api/v3/threads",
+          "type" => "string",
+          "description" =>
+            "What this body of work is for. Required, non-blank, and capped " <>
+              "at 32 KB."
+        },
+        "reasoning" => %{
+          "endpoint" => "POST /api/v3/threads",
+          "type" => "string",
+          "enum" => OpenAgents.Threads.Thread.reasoning_efforts(),
+          "default" => OpenAgents.Threads.default_reasoning(),
+          "description" =>
+            "The reasoning effort the thread is admitted with. A value " <>
+              "outside this enum is refused with a field-level 422 naming " <>
+              "`reasoning` rather than replaced by the default."
+        },
+        "permission_profile" => %{
+          "endpoint" => "POST /api/v3/threads",
+          "type" => "string",
+          "enum" => OpenAgents.Threads.Thread.permission_profiles(),
+          "default" => OpenAgents.Threads.default_permission_profile(),
+          "description" =>
+            "How much of a workspace the thread may change. A value outside " <>
+              "this enum is refused with a field-level 422 naming " <>
+              "`permission_profile`."
+        }
+      },
+      "limits" => %{
+        "maximum_open_threads_per_account" => OpenAgents.Threads.maximum_open_per_account(),
+        "grant" => thread_grant_ceilings(),
+        "description" =>
+          "Admission is capped: an account already holding " <>
+            "`maximum_open_threads_per_account` open threads is refused with " <>
+            "`thread_quota_reached` until it revokes one. The grant ceilings " <>
+            "are the thread's own and are not the delegation ceilings a probe " <>
+            "run is minted with. Authority that passes `expires_at` stops " <>
+            "being live and stops holding a slot, with or without a request."
+      },
+      "grant" => %{
+        "description" =>
+          "POST returns the plaintext token exactly once. Spend it as the " <>
+            "bearer at the `url` the response names; the proxy pins the model " <>
+            "from the grant, so the model is not a request parameter. GET " <>
+            "reports the same grant without the token, with what it has spent " <>
+            "against what it was allowed.",
+        "fields" => ["token", "url", "model", "expires_at", "limits"],
+        "statuses" => OpenAgents.Inference.Grant.statuses()
+      },
+      "schemas" => ["openagents.thread.event.v1"]
+    }
+  end
+
+  # The ceilings the context actually mints with, keyed for JSON. Restating the
+  # numbers here would let the published budget drift from the one a caller is
+  # given, which is the drift this document exists to prevent.
+  defp thread_grant_ceilings do
+    ceilings = OpenAgents.Threads.ceilings()
+
+    %{
+      "max_total_tokens" => ceilings.max_total_tokens,
+      "max_calls" => ceilings.max_calls,
+      "max_cost_microusd" => ceilings.max_cost_microusd,
+      "ttl_seconds" => ceilings.ttl_seconds
     }
   end
 

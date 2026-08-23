@@ -21,11 +21,19 @@ defmodule OpenAgents.Inference do
 
   @token_prefix "sig_"
 
+  @type ceilings :: %{
+          required(:max_total_tokens) => pos_integer(),
+          required(:max_calls) => pos_integer(),
+          required(:max_cost_microusd) => pos_integer(),
+          required(:ttl_seconds) => pos_integer()
+        }
+
   @type mint_input :: %{
           required(:owner_visitor_id) => String.t(),
           optional(:conversation_id) => String.t() | nil,
           optional(:thread_id) => String.t() | nil,
-          optional(:machine_id) => String.t() | nil
+          optional(:machine_id) => String.t() | nil,
+          optional(:ceilings) => ceilings()
         }
 
   @doc """
@@ -36,10 +44,17 @@ defmodule OpenAgents.Inference do
   The input names exactly one fence: `:thread_id` for a thread, or
   `:conversation_id` for the account conversation. Both, or neither, is refused
   by the changeset and independently by PostgreSQL (THREAD-001).
+
+  The input may also name its own `:ceilings`. Without them a grant takes the
+  delegation ceilings, which bound one probe run the server already admitted.
+  A thread's budget is a different question — the caller asked for it, and it
+  lives as long as someone is working — so `OpenAgents.Threads` passes
+  `OpenAgents.Threads.ceilings/0` rather than borrowing these numbers.
   """
   @spec mint(mint_input()) :: {:ok, Grant.t(), String.t()} | {:error, Ecto.Changeset.t()}
   def mint(%{} = input) do
     token = @token_prefix <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+    ceilings = Map.get(input, :ceilings) || delegation_ceilings()
 
     attrs = %{
       owner_visitor_id: input.owner_visitor_id,
@@ -48,10 +63,10 @@ defmodule OpenAgents.Inference do
       machine_id: Map.get(input, :machine_id),
       model_id: model_id(),
       token_digest: digest(token),
-      max_total_tokens: max_total_tokens(),
-      max_calls: max_calls(),
-      max_cost_microusd: max_cost_microusd(),
-      expires_at: DateTime.add(now(), grant_ttl_seconds(), :second)
+      max_total_tokens: ceilings.max_total_tokens,
+      max_calls: ceilings.max_calls,
+      max_cost_microusd: ceilings.max_cost_microusd,
+      expires_at: DateTime.add(now(), ceilings.ttl_seconds, :second)
     }
 
     case attrs |> Grant.mint_changeset() |> Repo.insert() do
@@ -168,6 +183,39 @@ defmodule OpenAgents.Inference do
   end
 
   def revoke_active_for_thread(_), do: {0, nil}
+
+  @doc """
+  Expire every one of an owner's active grants whose clock has run out.
+
+  `resolve/1` already expires a grant the moment somebody presents it, which is
+  enough to refuse the call and no help to anything that reads the ledger
+  instead. This is the same transition without a bearer: an elapsed grant stops
+  being reported as live, stops holding a thread's single active-grant slot,
+  and stops counting against the account's admission cap, whether or not anyone
+  ever presents the token again.
+  """
+  @spec expire_elapsed_for_owner(String.t()) :: {non_neg_integer(), nil}
+  def expire_elapsed_for_owner(owner_visitor_id) when is_binary(owner_visitor_id) do
+    stamp = now()
+
+    Grant
+    |> where([g], g.owner_visitor_id == ^owner_visitor_id)
+    |> where([g], g.status == "active" and g.expires_at <= ^stamp)
+    |> Repo.update_all(set: [status: "expired", exhausted_at: stamp, updated_at: stamp])
+  end
+
+  def expire_elapsed_for_owner(_), do: {0, nil}
+
+  @doc "The ceilings a grant takes when its caller names none."
+  @spec delegation_ceilings() :: ceilings()
+  def delegation_ceilings do
+    %{
+      max_total_tokens: max_total_tokens(),
+      max_calls: max_calls(),
+      max_cost_microusd: max_cost_microusd(),
+      ttl_seconds: grant_ttl_seconds()
+    }
+  end
 
   @doc "Revoke every active grant for a conversation (generation fence on a new turn/delegation)."
   @spec revoke_active_for_conversation(String.t()) :: {non_neg_integer(), nil}

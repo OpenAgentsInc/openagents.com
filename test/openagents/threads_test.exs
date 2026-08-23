@@ -185,4 +185,132 @@ defmodule OpenAgents.ThreadsTest do
       assert Repo.get(Grant, grant.id) == nil
     end
   end
+
+  describe "the admission cap" do
+    test "an account cannot hold more open threads than the configured maximum" do
+      cap(2)
+      user = owner("capped")
+
+      assert {:ok, _first} = Threads.open(user, "First")
+      assert {:ok, second} = Threads.open(user, "Second")
+      assert {:error, :thread_quota_reached} = Threads.open(user, "Third")
+
+      # The cap counts what is open, so ending one admits the next.
+      {:ok, _finished} = Threads.finish(second, %{report: "Done."})
+      assert {:ok, _third} = Threads.open(user, "Third")
+    end
+
+    test "the cap counts one account's threads, never another's" do
+      cap(1)
+
+      assert {:ok, _mine} = Threads.open(owner("cap-mine"), "Mine")
+      assert {:ok, _yours} = Threads.open(owner("cap-yours"), "Yours")
+    end
+
+    test "a refused open writes nothing" do
+      cap(1)
+      user = owner("cap-clean")
+
+      {:ok, _first} = Threads.open(user, "First")
+      assert {:error, :thread_quota_reached} = Threads.open(user, "Second")
+      assert Threads.open_count(user) == 1
+      assert length(Threads.list_for_user(user)) == 1
+    end
+  end
+
+  describe "reap_expired/1" do
+    test "elapsed authority is expired and the thread it fenced is closed" do
+      user = owner("reaped")
+      {:ok, live} = Threads.open(user, "Still working")
+      {:ok, live, _live_grant, _live_token} = Threads.mint_grant(live)
+
+      elapsed_ttl()
+      {:ok, lapsed} = Threads.open(user, "Abandoned")
+      {:ok, lapsed, lapsed_grant, lapsed_token} = Threads.mint_grant(lapsed)
+
+      assert {1, 1} = Threads.reap_expired(user)
+
+      assert Repo.get!(Grant, lapsed_grant.id).status == "expired"
+      assert {:error, :grant_expired} = Inference.resolve(lapsed_token)
+
+      reaped = Repo.get!(Thread, lapsed.id)
+      assert reaped.status == "failed"
+      assert reaped.error_code == "authority_expired"
+      assert reaped.report_digest =~ ~r/\Asha256:[0-9a-f]{64}\z/
+
+      # A thread whose clock has not run out is untouched.
+      assert Repo.get!(Thread, live.id).status == "open"
+    end
+
+    test "a thread that has never minted authority is not reaped" do
+      user = owner("never-minted")
+      {:ok, thread} = Threads.open(user, "No authority yet")
+
+      assert {0, 0} = Threads.reap_expired(user)
+      assert Repo.get!(Thread, thread.id).status == "open"
+    end
+
+    test "reaping is idempotent" do
+      user = owner("reap-twice")
+      elapsed_ttl()
+      {:ok, thread} = Threads.open(user, "Abandoned")
+      {:ok, _thread, _grant, _token} = Threads.mint_grant(thread)
+
+      assert {1, 1} = Threads.reap_expired(user)
+      assert {0, 0} = Threads.reap_expired(user)
+    end
+  end
+
+  describe "ceilings/0" do
+    test "a thread's grant carries the thread ceilings, not the delegation ceilings" do
+      user = owner("ceilings")
+      {:ok, thread} = Threads.open(user, "Measure me")
+      {:ok, _thread, grant, _token} = Threads.mint_grant(thread)
+
+      ceilings = Threads.ceilings()
+
+      assert grant.max_total_tokens == ceilings.max_total_tokens
+      assert grant.max_calls == ceilings.max_calls
+      assert grant.max_cost_microusd == ceilings.max_cost_microusd
+
+      delegation = Inference.delegation_ceilings()
+
+      refute {grant.max_total_tokens, grant.max_calls, grant.max_cost_microusd} ==
+               {delegation.max_total_tokens, delegation.max_calls, delegation.max_cost_microusd}
+    end
+
+    test "a delegation grant is unchanged by the thread ceilings" do
+      user = owner("delegation-untouched")
+      {:ok, conversation} = Conversations.ensure_conversation(user)
+
+      {:ok, grant, _token} =
+        Inference.mint(%{
+          owner_visitor_id: conversation.visitor_id,
+          conversation_id: conversation.id
+        })
+
+      delegation = Inference.delegation_ceilings()
+
+      assert grant.max_total_tokens == delegation.max_total_tokens
+      assert grant.max_calls == delegation.max_calls
+      assert grant.max_cost_microusd == delegation.max_cost_microusd
+    end
+  end
+
+  defp cap(limit) do
+    previous = Application.get_env(:openagents, :maximum_open_threads_per_account)
+    Application.put_env(:openagents, :maximum_open_threads_per_account, limit)
+
+    on_exit(fn ->
+      Application.put_env(:openagents, :maximum_open_threads_per_account, previous)
+    end)
+  end
+
+  # A grant's expiry is immutable once minted, so the TTL is set before the
+  # mint rather than the row edited after it.
+  defp elapsed_ttl do
+    previous = Application.get_env(:openagents, :thread_grant_ttl_seconds)
+    Application.put_env(:openagents, :thread_grant_ttl_seconds, -1)
+    on_exit(fn -> Application.put_env(:openagents, :thread_grant_ttl_seconds, previous) end)
+  end
 end

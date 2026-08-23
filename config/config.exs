@@ -257,6 +257,22 @@ config :openagents,
   inference_grant_max_calls: 64,
   inference_grant_max_cost_microusd: 5_000_000,
   inference_grant_ttl_seconds: 900,
+  # A thread's budget is not a delegation's budget, so it does not borrow one.
+  # A delegation is a single bounded probe run the server admitted before it
+  # minted anything; a thread is authority handed to a caller's own terminal on
+  # request, and it lives as long as someone is working. It therefore gets more
+  # calls and a longer life, and a lower token and cost ceiling, because
+  # nothing on the server bounded the work first.
+  #
+  # `maximum_open_threads_per_account` is the admission cap. Eight open threads
+  # is a person working several checkouts at once, and THREAD-001 admits at
+  # most one live grant per open thread, so the account's concurrent
+  # thread-scoped authority is bounded by eight of the ceilings below.
+  maximum_open_threads_per_account: 8,
+  thread_grant_max_total_tokens: 1_000_000,
+  thread_grant_max_calls: 256,
+  thread_grant_max_cost_microusd: 2_000_000,
+  thread_grant_ttl_seconds: 3_600,
   inference_input_price_microusd_per_ktoken: 1_250,
   inference_output_price_microusd_per_ktoken: 10_000,
   forge_enabled: false,

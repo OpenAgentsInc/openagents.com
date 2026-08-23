@@ -54,7 +54,11 @@ defmodule OpenAgentsWeb.ApiError do
     "not_operator" => {403, "The credential's account is not a current operator"},
     "idempotency_conflict" => {409, "That idempotency key already names different bytes"},
     "precondition_failed" => {409, "The fleet target changed before this request"},
-    "unknown_commit" => {422, "Only a commit pushed to the forge is promotable"}
+    "unknown_commit" => {422, "Only a commit pushed to the forge is promotable"},
+    # Thread admission (THREAD-001). Holding too many threads open is not a
+    # malformed request and not a forbidden one: the same call succeeds once
+    # the caller revokes one, so it is the rate-limit status and its own code.
+    "thread_quota_reached" => {429, "This account holds the maximum number of open threads"}
   }
 
   @doc """

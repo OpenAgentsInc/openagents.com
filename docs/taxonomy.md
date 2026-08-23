@@ -250,8 +250,11 @@ report, with an append-only transcript in `thread_events`. Model authority
 binds to it: an inference grant names a thread or a conversation, never both
 and never neither (THREAD-001). The context is `OpenAgents.Threads`, the record
 is `OpenAgents.Threads.Thread`, and the transcript entry is
-`OpenAgents.Threads.Event`. The route that opens a thread for a caller, and the
-CLI that stops writing to the conversation, are still to come; see the audit in
+`OpenAgents.Threads.Event`. A caller opens one with `POST /api/v3/threads`,
+reads what it has spent with `GET /api/v3/threads/{thread_id}`, and revokes it
+with `DELETE /api/v3/threads/{thread_id}`, all behind the `chat:account` scope
+and served by `OpenAgentsWeb.ThreadController`. The CLI that stops writing to
+the conversation is still to come; see the audit in
 `docs/2026-08-23-thread-primitive-audit.md`.
 
 **Thread transcript** — the prompts, responses, tool activity, code changes,

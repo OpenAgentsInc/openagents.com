@@ -16,6 +16,15 @@ defmodule OpenAgents.Tools.WorkspaceFiles do
 
   def resolve(_context, _path, _access), do: {:error, :workspace_required}
 
+  def resolve_root(%ExecutionContext{workspace: workspace}, access)
+      when is_map(workspace) and access in [:read, :write] do
+    with {:ok, root} <- workspace_root(workspace, access) do
+      {:ok, %{root: root, ref: workspace_ref(workspace, root)}}
+    end
+  end
+
+  def resolve_root(_context, _access), do: {:error, :workspace_required}
+
   def serialize(%{resolved: resolved}, operation),
     do: :global.trans({{__MODULE__, resolved}, self()}, operation)
 
@@ -225,7 +234,7 @@ defmodule OpenAgents.Tools.WorkspaceFiles do
       "workspace:" <> (digest(root) |> binary_part(0, 16))
   end
 
-  defp snapshot_root(workspace_root) do
+  def snapshot_root(workspace_root) do
     root =
       Application.get_env(
         :openagents,

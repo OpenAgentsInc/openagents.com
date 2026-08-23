@@ -16,6 +16,7 @@ defmodule OpenAgents.Tools.ConversationExecutionContext do
   alias OpenAgents.Tools.ExecutionContext
 
   @authorities MapSet.new([
+                 "command.execute",
                  "computer.control",
                  "conversation.read",
                  "github.read",

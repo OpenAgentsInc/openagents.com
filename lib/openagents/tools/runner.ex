@@ -406,6 +406,20 @@ defmodule OpenAgents.Tools.Runner do
   defp error_message(:workspace_snapshot_root_invalid),
     do: "The host snapshot store must be outside the assigned workspace."
 
+  defp error_message(:invalid_command), do: "The command is missing or invalid."
+
+  defp error_message(:invalid_command_timeout),
+    do: "The requested command timeout is invalid."
+
+  defp error_message(:command_executor_unavailable),
+    do: "This host cannot execute workspace commands."
+
+  defp error_message(:command_concurrency_limit),
+    do: "Another command is already running in this workspace."
+
+  defp error_message(:workspace_artifact_failed),
+    do: "The full command output could not be stored as a host artifact."
+
   defp error_message(:invalid_edits), do: "The edit batch is invalid."
   defp error_message(:overlapping_edits), do: "The edit batch contains overlapping matches."
 

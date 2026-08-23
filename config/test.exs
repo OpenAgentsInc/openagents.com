@@ -122,6 +122,16 @@ config :openagents, :voice_recording,
   late_chunk_grace_seconds: 120,
   retention_days: 30
 
+# The fixture catalog, deliberately broader than the shipped one in
+# `config/config.exs`. Unregistering a tool from the product must not delete
+# the evidence that it works, because build-back depends on that evidence:
+# every module kept in the tree stays exercised here. It also adds
+# `OpenAgents.Tools.TestRecall`, which exists only for tests.
+#
+# Being in this list is not admission. See
+# `docs/2026-08-23-agent-tools-zero-base.md` and
+# `test/openagents/tools/shipped_catalog_test.exs`, which asserts this list
+# stays a superset of the shipped one so nothing ships untested.
 config :openagents, :tools, [
   OpenAgents.Tools.ModuleDiscover,
   OpenAgents.Tools.GitHubRepoList,

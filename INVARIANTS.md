@@ -1143,6 +1143,25 @@ decisions/receipts, `OpenAgents.Tools.Registry.prompt_catalog/1`,
 `OpenAgents.Tools.Runner`, `test/openagents/surface_eval_test.exs`, and the surface, catalog,
 approval, receipt, voice-interruption, and degradation tests.
 
+### TOOL-005 — The shipped tool catalog is a closed, read-only set
+
+Status: Current
+
+The catalog the product installs at boot is enumerated, not accumulated. Every
+module in `config/config.exs` under `:tools` is read-only, requires an
+authority every conversation caller already holds, and is admitted by name.
+A tool that ships must work for every caller that can see it; offering a tool
+that always refuses trains the model and the person to ignore refusals.
+
+Modules that are not admitted stay in `lib/openagents/tools/` and stay under
+test through the broader fixture catalog in `config/test.exs`, which must
+remain a superset of the shipped set. Unregistering is not deleting, and being
+under test is not admission. Re-admitting a module is a policy change subject
+to the criteria in `docs/2026-08-23-agent-tools-zero-base.md`.
+
+Evidence: `OpenAgents.Tools.Registry`, `OpenAgents.Tools.ConversationExecutionContext`,
+and `test/openagents/tools/shipped_catalog_test.exs`.
+
 ### TOOL-002 — Model requests never widen host authority
 
 Status: Current
@@ -3216,6 +3235,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TOOL-002 | `test/openagents/tools/registry_and_runner_test.exs` |
 | TOOL-003 | `test/openagents/tool_step_persistence_test.exs` |
 | TOOL-004 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents_web/tool_activity_test.exs` |
+| TOOL-005 | `test/openagents/tools/shipped_catalog_test.exs` |
 | DEGRADE-002 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
 | TOOL-005 | `test/openagents/tools/reach_test.exs`, `test/openagents/chat/open_router/tool_runtime_test.exs`, `test/openagents/chat/account_turns_test.exs` |
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |

@@ -175,44 +175,36 @@ config :openagents,
     dimensions: 64,
     top_k: 12
   ],
+  # The shipped tool catalog. It is a zero base, deliberately small.
+  #
+  # A tool ships only when it meets every admission criterion in
+  # `docs/2026-08-23-agent-tools-zero-base.md`, section 6. The short form:
+  # it is read-only, it works for every caller that can see it, its refusal
+  # path has a test, its description says when not to use it, and it earns
+  # its place in the prompt budget. `test/openagents/tools/shipped_catalog_test.exs`
+  # enforces the mechanical half; the rest is review.
+  #
+  # Every other tool module stays in `lib/openagents/tools/` and stays under
+  # test through the broader fixture catalog in `config/test.exs`. Unregistered
+  # is not deleted. Adding a module back here is a policy change, not a
+  # one-line edit.
   tools: [
+    # Discovery. The escape hatch that lets the model see the catalog it was
+    # given. Needs only the captured registry snapshot, so it never refuses.
     OpenAgents.Tools.ModuleDiscover,
-    OpenAgents.Tools.GitHubRepoList,
-    OpenAgents.Tools.GitHubRepoRead,
-    OpenAgents.Tools.ConnectedRepositoryRead,
-    OpenAgents.Tools.ConnectedRepositoryList,
-    OpenAgents.Tools.WorkspaceRead,
-    OpenAgents.Tools.WorkspaceWrite,
-    OpenAgents.Tools.WorkspaceEdit,
-    OpenAgents.Tools.WorkspaceBash,
-    OpenAgents.Tools.PublishChanges,
-    OpenAgents.Tools.OpenPullRequest,
-    OpenAgents.Tools.ConversationSearch,
-    OpenAgents.Tools.ConversationRead,
-    OpenAgents.Tools.MemoryList,
-    OpenAgents.Tools.MemorySearch,
-    OpenAgents.Tools.MemoryRemember,
-    OpenAgents.Tools.MemoryCorrect,
-    OpenAgents.Tools.MemoryForget,
-    OpenAgents.Tools.ComputerList,
-    OpenAgents.Tools.ComputerProbe,
-    OpenAgents.Tools.ComputerRun,
-    OpenAgents.Tools.ComputerDevin,
-    OpenAgents.Tools.ComputerAgent,
-    OpenAgents.Tools.DeepWork,
-    OpenAgents.Tools.IncidentLookup,
+
+    # Read this application's own source. `from: "image"` resolves to the
+    # baked source root and needs no owner, workspace, or job, so these
+    # answer "what does your code do" for every caller.
     OpenAgents.Tools.RepoRead,
     OpenAgents.Tools.RepoGrep,
     OpenAgents.Tools.RepoList,
-    OpenAgents.Tools.CodeCheck,
-    OpenAgents.Tools.RepoEdit,
-    OpenAgents.Tools.RepoWrite,
-    OpenAgents.Tools.RepoCommitPush,
-    OpenAgents.Tools.ScvDeploy,
-    OpenAgents.Tools.BoxNew,
-    OpenAgents.Tools.BoxList,
-    OpenAgents.Tools.BoxExec,
-    OpenAgents.Tools.BoxStop
+
+    # Read a forge repository the signed-in person can see. These resolve
+    # through `owner_user_id`, the one owner field every conversation caller
+    # populates correctly today.
+    OpenAgents.Tools.ConnectedRepositoryRead,
+    OpenAgents.Tools.ConnectedRepositoryList
   ],
   conversation_reset_enabled: false,
   github_api: [

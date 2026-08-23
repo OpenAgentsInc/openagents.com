@@ -250,6 +250,13 @@ defmodule OpenAgentsWeb.OGTest do
     assert [%{label: "Documentation"}] = card.chips
     assert card.page_path == "/docs/stacked-pull-requests"
 
+    # The page's route is a router pattern (`/:owner/:repo/pulls/:number`);
+    # placeholder patterns stay off the card while concrete routes remain.
+    refute Enum.any?(card.stats, &String.contains?(&1, "/:"))
+
+    {:ok, tokens_page} = OpenAgentsWeb.DocsCatalog.render("api-tokens")
+    assert "/settings/api-tokens" in OG.docs(tokens_page).stats
+
     assert OG.request_path(card) =~
              ~r|^/og/v/[0-9a-f]{12}/docs/stacked-pull-requests\.png$|
   end

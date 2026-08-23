@@ -173,7 +173,7 @@ defmodule OpenAgentsWeb.OG do
       chips: [%{label: "Documentation"}],
       stats:
         clean_stats([
-          opt_stat(item.route),
+          route_stat(item.route),
           headings_stat(page[:toc])
         ]),
       title: meta_title("#{item.title} · OpenAgents docs"),
@@ -202,6 +202,14 @@ defmodule OpenAgentsWeb.OG do
     do: plural(length(toc), "section", "sections")
 
   defp headings_stat(_toc), do: nil
+
+  # A concrete route is worth a stat; a router pattern full of `:owner`-style
+  # placeholders reads as noise on a card, so it stays off.
+  defp route_stat(route) when is_binary(route) do
+    if String.contains?(route, "/:"), do: nil, else: present(route)
+  end
+
+  defp route_stat(_route), do: nil
 
   defp stack_chip(position, size) when is_integer(position) and is_integer(size),
     do: [%{label: "Stack layer #{position} of #{size}"}]

@@ -321,25 +321,46 @@ defmodule OpenAgents.Forge.BuildWorker do
     end
   end
 
-  defp read_candidate_beams(build_path) do
-    paths = Path.wildcard(Path.join(build_path, "lib/openagents/ebin/*.beam"))
+  @doc """
+  Read the compiled application BEAMs for packaging.
 
-    if paths == [] do
-      {:error, :application_beams_missing}
-    else
-      paths
-      |> Enum.reduce_while({:ok, []}, fn path, {:ok, acc} ->
-        module = Path.basename(path, ".beam")
+  Reads only the modules listed in the generated `openagents.app` resource.
+  The build cache persists across builds, so `ebin` can hold stale BEAMs for
+  modules that no longer exist at the candidate source. Packaging from the
+  application resource keeps those out of the artifact.
+  """
+  def read_candidate_beams(build_path) do
+    ebin = Path.join(build_path, "lib/openagents/ebin")
 
-        case File.read(path) do
+    with {:ok, modules} <- application_modules(Path.join(ebin, "openagents.app")) do
+      modules
+      |> Enum.reduce_while({:ok, []}, fn module, {:ok, acc} ->
+        case File.read(Path.join(ebin, module <> ".beam")) do
           {:ok, binary} -> {:cont, {:ok, [%{module: module, binary: binary} | acc]}}
           {:error, reason} -> {:halt, {:error, {:beam_read_failed, reason}}}
         end
       end)
       |> case do
+        {:ok, []} -> {:error, :application_beams_missing}
         {:ok, beams} -> {:ok, Enum.sort_by(beams, & &1.module)}
         error -> error
       end
+    end
+  end
+
+  defp application_modules(app_file) do
+    case :file.consult(String.to_charlist(app_file)) do
+      {:ok, [{:application, :openagents, properties}]} ->
+        case Keyword.get(properties, :modules) do
+          modules when is_list(modules) and modules != [] ->
+            {:ok, Enum.map(modules, &Atom.to_string/1)}
+
+          _other ->
+            {:error, :application_beams_missing}
+        end
+
+      _other ->
+        {:error, :application_resource_invalid}
     end
   end
 

@@ -242,6 +242,40 @@ defmodule OpenAgents.Forge.BuildWorkerTest do
     assert fresh_response["build_id"] != expired_response["build_id"]
   end
 
+  test "candidate packaging reads only modules in the application resource", %{builds: builds} do
+    ebin = Path.join(builds, "lib/openagents/ebin")
+    File.mkdir_p!(ebin)
+
+    File.write!(
+      Path.join(ebin, "openagents.app"),
+      "{application, openagents, [{modules, ['Elixir.OpenAgents.Current']}]}."
+    )
+
+    File.write!(Path.join(ebin, "Elixir.OpenAgents.Current.beam"), "current")
+    File.write!(Path.join(ebin, "Elixir.Mix.Tasks.Stale.Leftover.beam"), "stale")
+
+    assert {:ok, [%{module: "Elixir.OpenAgents.Current", binary: "current"}]} =
+             BuildWorker.read_candidate_beams(builds)
+  end
+
+  test "candidate packaging fails when a listed module has no BEAM", %{builds: builds} do
+    ebin = Path.join(builds, "lib/openagents/ebin")
+    File.mkdir_p!(ebin)
+
+    File.write!(
+      Path.join(ebin, "openagents.app"),
+      "{application, openagents, [{modules, ['Elixir.OpenAgents.Missing']}]}."
+    )
+
+    assert {:error, {:beam_read_failed, :enoent}} = BuildWorker.read_candidate_beams(builds)
+  end
+
+  test "candidate packaging fails without an application resource", %{builds: builds} do
+    File.mkdir_p!(Path.join(builds, "lib/openagents/ebin"))
+
+    assert {:error, :application_resource_invalid} = BuildWorker.read_candidate_beams(builds)
+  end
+
   defp request(build_id, baseline, expires_at \\ DateTime.add(DateTime.utc_now(), 300, :second)) do
     BuildProtocol.request!(%{
       build_id: build_id,

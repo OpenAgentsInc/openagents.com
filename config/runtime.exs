@@ -514,10 +514,17 @@ if config_env() == :prod and runtime_role == :web do
 
   config :openagents, OpenAgents.Repo, repo_config
 
+  # The load balancer reuses idle backend connections for up to 610 seconds.
+  # The server's keepalive timeout must exceed that window, or the server
+  # closes a connection the load balancer is about to reuse and the client
+  # receives an intermittent 502.
   config :openagents, OpenAgentsWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     check_origin: allowed_origins,
-    http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}],
+    http: [
+      ip: {0, 0, 0, 0, 0, 0, 0, 0},
+      thousand_island_options: [read_timeout: 660_000]
+    ],
     secret_key_base: required_text.("SECRET_KEY_BASE")
 end
 

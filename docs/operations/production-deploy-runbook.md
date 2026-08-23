@@ -323,6 +323,18 @@ Requirements before pointing the backend at the HTTP check:
      --health-checks sarah-hc-tcp --global-health-checks
    ```
 
+The backend also reuses idle keepalive connections to nodes for up to 610
+seconds. The server's keepalive timeout must exceed that window —
+`config/runtime.exs` sets `thousand_island_options: [read_timeout: 660_000]`
+on the production endpoint. With a shorter timeout the server closes idle
+connections the load balancer is about to reuse, and clients receive
+intermittent `502` responses logged as
+`backend_connection_closed_before_data_sent_to_client`. LiveView long-poll
+clients hit this most often because they issue many sequential requests.
+Request logging is enabled on `sarah-backend` (sample rate 1.0), so
+`gcloud logging read 'httpRequest.status=502'` shows the `statusDetails` for
+any recurrence.
+
 With the HTTP check active, a structural rolling replacement depends on boot
 convergence admitting a node that runs the authorized rolling image. Because
 `run/2` publishes that identity before the first replacement, nodes replaced

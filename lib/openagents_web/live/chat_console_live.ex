@@ -19,6 +19,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   alias OpenAgents.Box.Fleet
   alias OpenAgents.Chat.{AccountTurns, OpenRouter}
   alias OpenAgents.Conversations
+  alias OpenAgents.Delegations
 
   @suggestions [
     "Summarize what the Ox Alpha stress fleet measures today.",
@@ -86,7 +87,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
       socket
       |> assign(:page_title, "Chat")
       |> assign(:conversation, conversation)
-      |> assign(:fleet, Fleet.projection(conversation.id))
+      |> assign(:fleet, Delegations.projection(socket.assigns.current_user, conversation.id))
       |> assign(:form, composer_form())
       |> assign(:reasoning_options, @reasoning_options)
       |> assign(:model_label, OpenRouter.model_label())
@@ -282,7 +283,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
         </div>
 
         <.fleet_panel
-          :if={@fleet.boxes != [] or @fleet.queued != []}
+          :if={@fleet.boxes != [] or @fleet.queued != [] or @fleet.computers != []}
           fleet={@fleet}
           can_control={Fleet.owns_conversation?(@current_user, @conversation.id)}
         />
@@ -452,9 +453,9 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
       <div class="mx-auto w-full max-w-5xl space-y-4">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <div>
-            <h2 class="font-medium text-sm">Box fleet</h2>
+            <h2 class="font-medium text-sm">Delegation fleet</h2>
             <p class="text-muted-foreground text-xs">
-              Durable view of admitted computers and queued promises.
+              Durable view of admitted Boxes, queued promises, and connected Computers.
             </p>
           </div>
           <p id="chat-console-fleet-cap" class="text-muted-foreground text-xs">
@@ -571,6 +572,52 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
           </article>
         </div>
 
+        <div
+          :if={@fleet.computers != []}
+          id="chat-console-fleet-computers"
+          class="grid gap-3 lg:grid-cols-2"
+        >
+          <article
+            :for={computer <- @fleet.computers}
+            id={"chat-console-fleet-computer-#{computer["computer_id"]}"}
+            class="space-y-3 rounded-lg border border-border bg-background p-4"
+          >
+            <header class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="font-medium text-sm">{computer["name"]}</h3>
+                <p class="text-muted-foreground text-xs">Connected Computer</p>
+              </div>
+              <span class="badge" data-variant="dim">
+                {if(computer["online"], do: "online", else: computer["status"])}
+              </span>
+            </header>
+            <dl class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+              <div>
+                <dt class="text-muted-foreground">Tier</dt>
+                <dd class="mt-1 font-medium">{computer["tier"]}</dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Roots</dt>
+                <dd class="mt-1 font-medium">{length(computer["roots"] || [])}</dd>
+              </div>
+              <div :if={computer["delegation"]}>
+                <dt class="text-muted-foreground">Delegation</dt>
+                <dd class="mt-1 font-medium">{computer["delegation"]["state"]}</dd>
+              </div>
+            </dl>
+            <div :if={computer["delegation"]} class="space-y-2">
+              <p class="text-muted-foreground text-xs">
+                Agent:
+                <span class="font-medium text-foreground">{computer["delegation"]["agent_id"]}</span>
+              </p>
+              <pre
+                id={"chat-console-fleet-computer-output-#{computer["computer_id"]}"}
+                class="max-h-48 overflow-auto rounded-md bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap"
+              >{computer["delegation"]["output"] || "No output yet."}</pre>
+            </div>
+          </article>
+        </div>
+
         <div id="chat-console-fleet-queue" class="space-y-2">
           <div class="flex items-baseline justify-between gap-2">
             <h3 class="font-medium text-sm">Queued promises</h3>
@@ -639,7 +686,11 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   end
 
   defp refresh_fleet(socket) do
-    assign(socket, :fleet, Fleet.projection(socket.assigns.conversation.id))
+    assign(
+      socket,
+      :fleet,
+      Delegations.projection(socket.assigns.current_user, socket.assigns.conversation.id)
+    )
   end
 
   defp schedule_fleet_refresh(socket) do
@@ -647,16 +698,27 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     socket
   end
 
-  defp fleet_refresh_interval(%{boxes: boxes, queued: queued}) do
+  defp fleet_refresh_interval(%{boxes: boxes, queued: queued, computers: computers}) do
     cond do
-      queued != [] or Enum.any?(boxes, &moving_box?/1) -> @fleet_fast_refresh_interval_ms
-      boxes != [] -> @fleet_settled_refresh_interval_ms
-      true -> @fleet_idle_refresh_interval_ms
+      queued != [] or Enum.any?(boxes, &moving_box?/1) or
+          Enum.any?(computers, &moving_computer?/1) ->
+        @fleet_fast_refresh_interval_ms
+
+      boxes != [] or computers != [] ->
+        @fleet_settled_refresh_interval_ms
+
+      true ->
+        @fleet_idle_refresh_interval_ms
     end
   end
 
   defp moving_box?(%{run: %{terminal?: false}}), do: true
   defp moving_box?(_box), do: false
+
+  defp moving_computer?(%{"delegation" => %{"state" => state}}),
+    do: state not in ~w(completed failed interrupted budget_exhausted cancelled)
+
+  defp moving_computer?(_computer), do: false
 
   defp stop_box_error_message(:conversation_not_found), do: "You cannot stop this computer."
   defp stop_box_error_message(:not_found), do: "That computer is no longer available."

@@ -84,6 +84,12 @@ defmodule OpenAgentsWeb.Router do
       target_kind: "computer"
   end
 
+  pipeline :delegation_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.DelegationAuth
+  end
+
   # The deployment control plane authenticates two principals: a human holding
   # `deployments:write`, and a short-lived workflow grant. Neither carries the
   # operator-only fleet promotion authority.
@@ -406,6 +412,15 @@ defmodule OpenAgentsWeb.Router do
     delete "/agents/:handle/box-control", AgentController, :revoke_box_control
     post "/agents/:handle/computer-control", AgentController, :grant_computer_control
     delete "/agents/:handle/computer-control", AgentController, :revoke_computer_control
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :delegation_api
+
+    get "/conversations/:conversation_id/delegation-targets", DelegationsController, :targets
+    post "/conversations/:conversation_id/delegations", DelegationsController, :create
+    get "/conversations/:conversation_id/delegations/:id", DelegationsController, :show
+    delete "/conversations/:conversation_id/delegations/:id", DelegationsController, :delete
   end
 
   scope "/api/v3", OpenAgentsWeb do

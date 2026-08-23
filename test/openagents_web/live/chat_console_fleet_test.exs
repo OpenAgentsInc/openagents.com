@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.ChatConsoleFleetTest do
 
   alias OpenAgents.Box.{ConversationBox, FanoutItem, FanoutRequest, Run}
   alias OpenAgents.Conversations
+  alias OpenAgents.Machines
   alias OpenAgents.Repo
 
   test "renders the durable fleet projection and reconstructs it after reload", %{conn: conn} do
@@ -60,6 +61,43 @@ defmodule OpenAgentsWeb.ChatConsoleFleetTest do
     html = render_click(view, "stop_box", %{"box-id" => "missing-box"})
 
     assert html =~ "That computer is no longer available."
+  end
+
+  test "renders paired Computers from the durable projection", %{conn: conn} do
+    key = "fleet-console-computer"
+    user = github_user(key)
+    {:ok, _conversation} = Conversations.ensure_conversation(user)
+
+    {:ok, pairing} =
+      Machines.start_pairing(%{
+        "name" => "local-coding-computer",
+        "tier" => "curated",
+        "platform" => "linux-x64",
+        "agent_version" => "0.4.0",
+        "roots" => ["/workspace"]
+      })
+
+    {:ok, machine} = Machines.approve_pairing(user, pairing.code)
+
+    {:ok, _machine} =
+      Machines.store_probe(machine, %{
+        "acp_agents" => [%{"id" => "codex", "version" => "1.2.3"}]
+      })
+
+    conn = log_in_admin_user(conn, key)
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    assert has_element?(view, "#chat-console-fleet")
+
+    assert has_element?(
+             view,
+             "#chat-console-fleet-computer-#{machine.id}",
+             "local-coding-computer"
+           )
+
+    assert has_element?(view, "#chat-console-fleet-computer-#{machine.id}", "curated")
+    assert render(view) =~ "active"
+    refute render(view) =~ "token_digest"
   end
 
   defp insert_box(conversation_id, box_id, label) do

@@ -198,6 +198,18 @@ defmodule OpenAgents.Agents do
     )
   end
 
+  @doc "Returns the one human account with an active link to an agent."
+  @spec linked_owner(Agent.t()) :: User.t() | nil
+  def linked_owner(%Agent{id: agent_id}) do
+    Repo.one(
+      from link in AgentUserLink,
+        join: user in User,
+        on: user.id == link.user_id,
+        where: link.agent_id == ^agent_id and link.status == "linked",
+        select: user
+    )
+  end
+
   def list_pending_links(%User{id: user_id}) do
     Repo.all(
       from link in AgentUserLink,
@@ -403,6 +415,25 @@ defmodule OpenAgents.Agents do
         on:
           link.agent_id == grant.agent_id and link.user_id == grant.user_id and
             link.status == "linked"
+    )
+  end
+
+  @doc "Checks whether a linked agent has an active grant from one human."
+  @spec control_granted_by?(Agent.t(), User.t(), String.t()) :: boolean()
+  def control_granted_by?(%Agent{id: agent_id}, %User{id: user_id}, target_kind)
+      when target_kind in ["box", "computer"] do
+    scope = if target_kind == "box", do: "box:control", else: "computer:control"
+
+    Repo.exists?(
+      from grant in AgentBoxGrant,
+        join: link in AgentUserLink,
+        on:
+          link.agent_id == grant.agent_id and link.user_id == grant.user_id and
+            link.status == "linked",
+        where:
+          grant.agent_id == ^agent_id and grant.user_id == ^user_id and
+            grant.target_kind == ^target_kind and grant.scope == ^scope and
+            is_nil(grant.revoked_at)
     )
   end
 

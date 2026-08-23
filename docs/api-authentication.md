@@ -134,6 +134,56 @@ directory inside one of the Computer's declared roots. The local controller
 remains the authority for presence, advertised agents, root confinement,
 prompt bounds, and execution.
 
+### Unified delegation
+
+Use the unified delegation surface when the target can be either a provisioned
+Box or a paired Computer. These routes require a bearer credential with the
+matching `box:control` or `computer:control` scope. An agent credential
+requires an active linked-human grant for the target kind. The two control
+scopes never confer each other.
+
+List the targets available in an owned conversation:
+
+```sh
+openagents api conversations/CONVERSATION_ID/delegation-targets
+```
+
+The response lists kind-prefixed target IDs. Box entries include their labels
+and lifecycle state. Computer entries include their presence, tier, declared
+roots, and the ACP agents reported by the latest probe. The response uses the
+same safe Computer projection as the Computer API and does not include
+machine tokens, token digests, or raw probe documents.
+
+Start a delegation with one envelope:
+
+```sh
+openagents api -X POST --input delegation.json \
+  conversations/CONVERSATION_ID/delegations
+```
+
+The request names `target_id`. A Box target also requires `command`. A
+Computer target requires `agent_id`, `prompt`, and `cwd`; the agent must be
+reported by the Computer's latest probe, and `cwd` must be inside a declared
+root. The Computer remains the authority over presence and execution, so an
+offline Computer is refused rather than queued. Box admission and lifecycle
+rules remain unchanged.
+
+Read or cancel a delegation with its returned kind-prefixed delegation ID:
+
+```sh
+openagents api conversations/CONVERSATION_ID/delegations/DELEGATION_ID
+openagents api -X DELETE \
+  conversations/CONVERSATION_ID/delegations/DELEGATION_ID
+```
+
+Both substrates retain their durable status records. Box delegations read
+`OpenAgents.Box.Run` state and bounded output. Computer delegations read the
+durable `Work` delegation job and its bounded report. Unknown, malformed, and
+foreign IDs return the same missing response. Output is redacted through the
+shared Box output boundary where applicable; provider URLs, prompts, machine
+credentials, raw probe documents, and subprocess environments do not reach
+the response.
+
 ### Assignment credentials
 
 A linked human can grant and revoke Box control for an agent:

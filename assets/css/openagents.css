@@ -4811,6 +4811,56 @@
     line-height: 1.45;
     text-wrap: pretty;
   }
+
+  /* One row per topic, so the rows are a list of conversations rather than a
+     transcript of the busiest one. Same rhythm as the issue feed, at rail
+     size: a title that leads, and a line under it saying who and when. */
+  .post-rail {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-rail__row {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+    padding-block: 8px;
+  }
+
+  .post-rail__row + .post-rail__row {
+    border-top: 1px solid var(--line-faint);
+  }
+
+  .post-rail__title {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (hover: hover) {
+    .post-rail__title:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  .post-rail__meta {
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /* ── Operator ─────────────────────────────────────────────────────────────── */

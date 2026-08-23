@@ -80,6 +80,94 @@ defmodule OpenAgents.ForumTest do
     end
   end
 
+  describe "list_recent_posts/1" do
+    test "returns one row per topic, newest post first, with topic and board loaded" do
+      board = forum()
+
+      {:ok, quiet} =
+        Forum.create_topic(
+          board,
+          Map.merge(actor(), %{title: "Quiet", slug: "quiet", body_text: "a"})
+        )
+
+      {:ok, busy} =
+        Forum.create_topic(
+          board,
+          Map.merge(actor(), %{title: "Busy", slug: "busy", body_text: "b"})
+        )
+
+      {:ok, _} = Forum.create_post(busy, Map.merge(actor(), %{body_text: "b2"}))
+      {:ok, newest} = Forum.create_post(busy, Map.merge(actor(), %{body_text: "b3"}))
+
+      assert [first, second] = Forum.list_recent_posts()
+
+      # The busy thread contributes its newest post and nothing else, so one
+      # active topic cannot fill a caller's digest of the forum.
+      assert first.id == newest.id
+      assert first.topic.id == busy.id
+      assert first.topic.forum.slug == "general"
+      assert second.topic.id == quiet.id
+    end
+
+    test "leaves out a board that is kept off listings" do
+      {:ok, hidden} =
+        %OpenAgents.Forum.Forum{}
+        |> OpenAgents.Forum.Forum.changeset(%{
+          slug: "void",
+          title: "Void",
+          discoverability: "unlisted"
+        })
+        |> Repo.insert()
+
+      {:ok, _topic} =
+        Forum.create_topic(
+          hidden,
+          Map.merge(actor(), %{title: "Smoke test", slug: "smoke-test", body_text: "ping"})
+        )
+
+      assert Forum.list_recent_posts() == []
+
+      # An operator reads the board by its slug, and still does not meet it in
+      # a listing.
+      assert Forum.list_recent_posts(operator?: true) == []
+      assert {:ok, _} = Forum.fetch_readable_forum_by_slug("void")
+    end
+
+    test "leaves out a private board unless the caller is an operator" do
+      {:ok, private} =
+        %OpenAgents.Forum.Forum{}
+        |> OpenAgents.Forum.Forum.changeset(%{
+          slug: "operators",
+          title: "Operators",
+          visibility: "private"
+        })
+        |> Repo.insert()
+
+      {:ok, _topic} =
+        Forum.create_topic(
+          private,
+          Map.merge(actor(), %{title: "Internal", slug: "internal", body_text: "only us"})
+        )
+
+      assert Forum.list_recent_posts() == []
+      assert [post] = Forum.list_recent_posts(operator?: true)
+      assert post.topic.forum.slug == "operators"
+    end
+
+    test "leaves out a hidden post and caps the rows" do
+      board = forum()
+
+      {:ok, topic} =
+        Forum.create_topic(board, Map.merge(actor(), %{title: "T", slug: "t", body_text: "one"}))
+
+      {:ok, second} = Forum.create_post(topic, Map.merge(actor(), %{body_text: "two"}))
+      {:ok, _} = Forum.hide_post(second)
+
+      assert [post] = Forum.list_recent_posts(limit: 1)
+      assert post.body_text == "one"
+    end
+  end
+
   describe "identity linking" do
     test "approve links an actor to an account and resolves it" do
       user = user()

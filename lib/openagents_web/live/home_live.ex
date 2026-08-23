@@ -8,8 +8,9 @@ defmodule OpenAgentsWeb.HomeLive do
 
   Signed in, a marketing pitch is the wrong thing to show: the visitor has
   already been sold, and what they want is the state of the work. The same
-  route renders a dashboard -- repositories, open issues, projects, and what
-  shipped recently -- the way a code host's home does.
+  route renders a dashboard -- repositories, open issues, projects, what the
+  forum is discussing, and what shipped recently -- the way a code host's home
+  does.
 
   The dashboard describes the viewer's work across every repository they can
   read, not one repository chosen for them, and it says so by reading through
@@ -27,7 +28,9 @@ defmodule OpenAgentsWeb.HomeLive do
   """
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Changelog
+  alias OpenAgents.Forum
   alias OpenAgents.Issues
   alias OpenAgents.Projects
   alias OpenAgents.Repositories
@@ -36,6 +39,7 @@ defmodule OpenAgentsWeb.HomeLive do
   @repo "openagents.com"
   @feed_limit 8
   @project_limit 6
+  @post_limit 6
   @changelog_limit 5
 
   @impl true
@@ -72,6 +76,13 @@ defmodule OpenAgentsWeb.HomeLive do
     |> assign(:issues, Enum.take(issues, @feed_limit))
     |> assign(:projects, Enum.take(projects, @project_limit))
     |> assign(:any_repository?, repositories != [])
+    # The forum reads through the same viewer-authorized scope `/forum`
+    # composes, one row per topic, so the panel cannot name a board the board
+    # list would not.
+    |> assign(
+      :posts,
+      Forum.list_recent_posts(operator?: Accounts.admin?(user), limit: @post_limit)
+    )
     |> assign(:changelog, changelog_entries())
     |> stream(:repositories, repositories)
   end
@@ -256,6 +267,41 @@ defmodule OpenAgentsWeb.HomeLive do
                 </.badge>
               </.link>
             </div>
+          </section>
+
+          <%!-- The one surface here where other people speak. It reads
+          through the forum's own authorized read, shows the newest post of
+          each recently active topic rather than several from one thread, and
+          points at `/forum` -- the destination that widens the set -- rather
+          than at whichever board happens to be busiest. --%>
+          <section class="panel" aria-labelledby="dashboard-forum">
+            <header class="panel__header">
+              <h2 id="dashboard-forum" class="panel__title">Recent posts</h2>
+              <.link navigate={~p"/forum"} class="panel__more">
+                View all <.icon name="arrow-right" />
+              </.link>
+            </header>
+
+            <ul :if={@posts != []} id="dashboard-post-list" class="post-rail">
+              <li :for={post <- @posts} id={"dashboard-post-#{post.id}"} class="post-rail__row">
+                <.link navigate={~p"/forum/t/#{post.topic_id}"} class="post-rail__title">
+                  {post.topic.title}
+                </.link>
+                <%!-- The name the post was written under, which is what the
+                thread shows. A migrated post keeps its legacy name until an
+                identity claim resolves it, and the dashboard must not
+                attribute it to an account the forum would not. --%>
+                <p class="post-rail__meta">
+                  {post.actor_display_name} in {post.topic.forum.title} · {relative_time(
+                    post.created_at
+                  )}
+                </p>
+              </li>
+            </ul>
+
+            <p :if={@posts == []} class="panel__empty">
+              No posts yet on the boards you can read.
+            </p>
           </section>
 
           <section class="panel" aria-labelledby="dashboard-changelog">

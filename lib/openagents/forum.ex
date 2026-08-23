@@ -18,6 +18,7 @@ defmodule OpenAgents.Forum do
 
   @topics_per_page 25
   @posts_per_page 50
+  @recent_posts_limit 6
   @maximum_page 10_000
 
   # A board nobody has claimed as private is readable by anyone. An unlisted
@@ -35,11 +36,7 @@ defmodule OpenAgents.Forum do
   end
 
   def list_public_forums do
-    Repo.all(
-      from f in Forum,
-        where: f.visibility == "public" and f.discoverability == "listed",
-        order_by: [desc: f.topic_count]
-    )
+    Repo.all(from f in listed_forums([]), order_by: [desc: f.topic_count])
   end
 
   def get_forum!(id), do: Repo.get!(Forum, id)
@@ -75,6 +72,16 @@ defmodule OpenAgents.Forum do
       if operator?(opts), do: @public_visibilities ++ ["private"], else: @public_visibilities
 
     from f in Forum, where: f.visibility in ^visibilities
+  end
+
+  # The boards a listing may name. `readable_forums/1` says who may read a
+  # board; discoverability says whether a board belongs in a list at all. An
+  # unlisted board answers to its slug and stays out of every listing --
+  # including a digest of what was posted on it -- whoever is looking, so a
+  # board opened as a smoke test cannot arrive on a surface that lists boards.
+  defp listed_forums(opts) do
+    from f in readable_forums(opts),
+      where: f.discoverability == "listed" and f.visibility != "unlisted"
   end
 
   defp operator?(opts), do: Keyword.get(opts, :operator?, false)
@@ -262,6 +269,53 @@ defmodule OpenAgents.Forum do
         where: p.topic_id == ^topic_id and p.state == "visible"
     )
   end
+
+  @doc """
+  The newest visible post in each of the most recently active topics on the
+  boards a caller may list, newest post first.
+
+  One row per topic, so a single busy thread cannot crowd out every other
+  board in a caller's digest of the forum. The scope is the one
+  `list_readable_forums/1` answers for the same caller, so a surface that
+  shows recent posts beside a link to the board list cannot disagree with it.
+
+  Each post arrives with its topic and board preloaded, and carries the
+  identity it was written under rather than one resolved for it, so a caller
+  renders the same author a thread renders. A migrated post keeps its legacy
+  display name; an identity claim binds the reference to an account, it does
+  not rewrite the byline.
+
+  Pass `:limit` to cap the rows; the cap is bounded by the posts-per-page size
+  so the read stays a bounded page rather than a scan of every post.
+  """
+  def list_recent_posts(opts \\ []) when is_list(opts) do
+    limit = opts |> Keyword.get(:limit, @recent_posts_limit) |> bound_limit()
+
+    topics =
+      from t in Topic,
+        join: f in subquery(listed_forums(opts)),
+        on: f.id == t.forum_id,
+        where: is_nil(t.archived_at),
+        order_by: [desc: t.updated_at, desc: t.id],
+        limit: ^limit
+
+    # The topics come first and bounded, so the posts read only touches the
+    # rows of the handful of topics that can appear.
+    latest =
+      from p in Post,
+        join: t in subquery(topics),
+        on: t.id == p.topic_id,
+        where: p.state == "visible",
+        distinct: [asc: p.topic_id],
+        order_by: [desc: p.post_number]
+
+    from(p in subquery(latest), order_by: [desc: p.created_at, desc: p.id])
+    |> Repo.all()
+    |> Repo.preload(topic: :forum)
+  end
+
+  defp bound_limit(limit) when is_integer(limit), do: limit |> max(1) |> min(@posts_per_page)
+  defp bound_limit(_limit), do: @recent_posts_limit
 
   @doc "One post by id, or `nil` when the id is unknown or malformed."
   def get_post(id) when is_binary(id) do

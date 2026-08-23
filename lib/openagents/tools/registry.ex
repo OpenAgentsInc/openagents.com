@@ -4,7 +4,7 @@ defmodule OpenAgents.Tools.Registry do
   alias OpenAgents.Provenance.Canonical
   alias OpenAgents.Modules.Artifact
   alias OpenAgents.Providers.ToolDefinition
-  alias OpenAgents.Tools.{Schema, Selector, Snapshot, Tool}
+  alias OpenAgents.Tools.{Reach, Schema, Selector, Snapshot, Tool}
 
   @schema "sarah.module_registry.v1"
   @persistent_key {__MODULE__, :current}
@@ -342,6 +342,9 @@ defmodule OpenAgents.Tools.Registry do
       not is_integer(tool.maximum_output_bytes) or tool.maximum_output_bytes not in 1..1_048_576 ->
         {:error, {:invalid_output_limit, tool.name}}
 
+      not valid_reach?(tool.reach) ->
+        {:error, {:invalid_reach, tool.name}}
+
       true ->
         with :ok <- Schema.validate_schema(tool.input_schema),
              :ok <- Schema.validate_schema(tool.output_schema),
@@ -356,6 +359,15 @@ defmodule OpenAgents.Tools.Registry do
   end
 
   defp validate_tool(_tool, module), do: {:error, {:invalid_tool_specification, module}}
+
+  # A reach requirement the catalog does not understand would silently narrow
+  # nothing, so an unknown one refuses the whole registry at boot.
+  defp valid_reach?(reach) when is_list(reach) do
+    known = Reach.requirements()
+    reach == Enum.uniq(reach) and Enum.all?(reach, &(&1 in known))
+  end
+
+  defp valid_reach?(_reach), do: false
 
   defp validate_unique(tools) do
     names = Enum.map(tools, & &1.name)
@@ -437,6 +449,7 @@ defmodule OpenAgents.Tools.Registry do
     |> Map.from_struct()
     |> Map.delete(:implementation)
     |> Map.update!(:side_effect, &Atom.to_string/1)
+    |> Map.update!(:reach, fn reach -> Enum.map(reach, &Atom.to_string/1) end)
   end
 
   defp identifier?(value, maximum),

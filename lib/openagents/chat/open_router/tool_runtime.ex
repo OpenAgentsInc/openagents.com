@@ -84,7 +84,12 @@ defmodule OpenAgents.Chat.OpenRouter.ToolRuntime do
         owner_user_id = Map.get(context, :owner_user_id) || user_id(user)
 
         conversation_id = Map.get(context, :conversation_id)
-        owner_visitor_id = Map.get(context, :owner_visitor_id) || owner_user_id
+
+        # A visitor id and an account id are different identifier spaces. There
+        # is no substitution that makes one stand in for the other: a context
+        # that cannot name its owning visitor builds the unbound context below
+        # rather than a plausible id that fails a lookup inside a tool.
+        owner_visitor_id = Map.get(context, :owner_visitor_id)
 
         attributes = %{
           surface: Map.get(context, :surface, "text"),

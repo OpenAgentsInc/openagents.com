@@ -52,7 +52,8 @@ defmodule OpenAgents.Tools.ComputerProbe do
       timeout_ms: 20_000,
       maximum_input_bytes: 512,
       maximum_output_bytes: 32_768,
-      implementation: __MODULE__
+      implementation: __MODULE__,
+      reach: [:signed_in_owner, :paired_computer]
     }
   end
 

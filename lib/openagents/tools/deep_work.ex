@@ -52,7 +52,8 @@ defmodule OpenAgents.Tools.DeepWork do
       maximum_input_bytes: 8_192,
       maximum_output_bytes: 4_096,
       implementation: __MODULE__,
-      tags: ~w(delegation background job durable research coding fix)
+      tags: ~w(delegation background job durable research coding fix),
+      reach: [:signed_in_owner]
     }
   end
 

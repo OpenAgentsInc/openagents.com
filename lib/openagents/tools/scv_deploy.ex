@@ -64,7 +64,8 @@ defmodule OpenAgents.Tools.ScvDeploy do
       maximum_input_bytes: 4_096,
       maximum_output_bytes: 4_096,
       implementation: __MODULE__,
-      tags: ~w(scv deploy opencode coding agent capacity operator admin)
+      tags: ~w(scv deploy opencode coding agent capacity operator admin),
+      reach: [:signed_in_owner, :operator]
     }
   end
 

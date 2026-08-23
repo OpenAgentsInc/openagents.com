@@ -42,7 +42,8 @@ defmodule OpenAgents.Tools.ComputerList do
       timeout_ms: 10_000,
       maximum_input_bytes: 256,
       maximum_output_bytes: 16_384,
-      implementation: __MODULE__
+      implementation: __MODULE__,
+      reach: [:signed_in_owner]
     }
   end
 

@@ -2,6 +2,10 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
   use OpenAgents.DataCase
 
   alias OpenAgents.Chat.AccountTurns
+  alias OpenAgents.Chat.OpenRouter.ToolRuntime
+  alias OpenAgents.Conversations
+  alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.Tools.{AdmittedCatalog, OwnerContext, Registry}
 
   test "an operator can retry the provider failures a retry can fix" do
     for code <- ~w(rate_limited service_unavailable stream_interrupted invalid_response
@@ -11,6 +15,80 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
 
     refute AccountTurns.retryable_error_code?("missing_api_key")
     refute AccountTurns.retryable_error_code?(nil)
+  end
+
+  test "the API turn names the conversation's visitor, so its tools reach the account" do
+    # The regression this guards: the tool context carried `user.id` as
+    # `owner_visitor_id`. A User id is not a Visitor id, so `OwnerContext`
+    # read back no row and every owner-requiring tool refused a signed-in
+    # caller with `owner_not_signed_in`. The value looked plausible and failed
+    # somewhere else, which is why it survived. Assert on the resolution, not
+    # on the shape of the id.
+    user = repository_user_fixture("account-chat-owner-identity")
+    test_process = self()
+
+    streamer = fn _request, _callback, options ->
+      send(test_process, {:tool_context, Keyword.fetch!(options, :tool_context)})
+      {:ok, %{"assistant_content" => "Done.", "assistant_message_id" => "response-1"}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "What can you do?",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    assert_receive {:tool_context, tool_context}
+
+    visitor = Repo.get_by!(Visitor, user_id: user.id)
+    assert tool_context.owner_visitor_id == visitor.id
+    assert tool_context.owner_user_id == user.id
+    refute tool_context.owner_visitor_id == user.id
+
+    assert {:ok, runtime} = ToolRuntime.capture(tool_context: tool_context)
+    assert {:ok, resolved} = OwnerContext.resolve(runtime.execution_context)
+    assert resolved.id == user.id
+  end
+
+  test "the API turn offers the tools the browser offers the same account" do
+    user = repository_user_fixture("account-chat-tool-parity")
+    {:ok, conversation} = Conversations.ensure_conversation(user)
+    owner = Conversations.get_conversation_owner!(conversation)
+    intent = "look up why my last delegation failed"
+    test_process = self()
+
+    streamer = fn _request, _callback, options ->
+      send(test_process, {:tool_context, Keyword.fetch!(options, :tool_context)})
+      {:ok, %{"assistant_content" => "Done.", "assistant_message_id" => "response-1"}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, intent, subscriber: self(), streamer: streamer)
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    assert_receive {:tool_context, tool_context}
+
+    assert {:ok, runtime} = ToolRuntime.capture(tool_context: tool_context)
+    api_names = runtime |> ToolRuntime.provider_definitions(intent) |> Enum.map(& &1["name"])
+
+    browser_names =
+      runtime.snapshot
+      |> AdmittedCatalog.provider_definitions(
+        OpenAgents.Tools.ConversationExecutionContext.build(%{
+          surface: "text",
+          conversation_id: conversation.id,
+          owner_visitor_id: owner.id,
+          owner_user_id: owner.user_id,
+          module_registry_snapshot: runtime.snapshot
+        }),
+        intent
+      )
+      |> Enum.map(& &1.name)
+
+    assert Enum.sort(api_names) == Enum.sort(browser_names)
+    assert "incident_lookup" in api_names
+    assert Registry.current!().digest == runtime.snapshot.digest
   end
 
   test "submit journals the provider lifecycle and projects the same ordered messages" do

@@ -295,6 +295,8 @@ defmodule OpenAgents.Tools.Runner do
        when reason in [
               :scope_refused,
               :authority_refused,
+              :owner_not_signed_in,
+              :operator_required,
               :unsupported_side_effect,
               :surface_not_admitted,
               :surface_unknown,
@@ -351,6 +353,22 @@ defmodule OpenAgents.Tools.Runner do
 
   defp error_message(:scope_refused), do: "The tool is not authorized for this data scope."
   defp error_message(:authority_refused), do: "The required authority is not present."
+
+  # A refusal that names neither the tool's requirement nor the caller's gap
+  # sends the model looking for the answer in the wrong place, and it reports
+  # the wrong thing to the person. These say which of the two is missing.
+  defp error_message(:owner_not_signed_in),
+    do:
+      "This tool acts for a signed-in account, and this conversation resolves to no account. " <>
+        "The conversation, not the request, carries the owner."
+
+  defp error_message(:operator_required),
+    do:
+      "This tool spends OpenAgents capacity and needs operator authority, which this account does not hold."
+
+  defp error_message(:machine_not_found),
+    do: "That Computer is not paired with this account, or is no longer active."
+
   defp error_message(:surface_not_admitted), do: "That module is not admitted on this surface."
   defp error_message(:surface_unknown), do: "That execution surface is not recognized."
 
@@ -539,6 +557,11 @@ defmodule OpenAgents.Tools.Runner do
     do: "The Box API refused the request."
 
   defp error_message(:box_response_invalid), do: "The Box API returned an unexpected response."
+
+  # The typed reason is already in the payload's `code`. Carrying it into the
+  # message too means a reader of the transcript alone can act on the refusal.
+  defp error_message(reason) when is_atom(reason),
+    do: "The tool call failed validation or execution (#{reason})."
 
   defp error_message(_reason), do: "The tool call failed validation or execution."
 

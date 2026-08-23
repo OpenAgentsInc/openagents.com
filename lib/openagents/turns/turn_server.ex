@@ -21,7 +21,7 @@ defmodule OpenAgents.Turns.TurnServer do
 
   alias OpenAgents.Analytics.Chat, as: ChatAnalytics
   alias OpenAgents.Providers.{ProviderEvent, Request, ToolOutput}
-  alias OpenAgents.Tools.{ConversationExecutionContext, Registry, Runner}
+  alias OpenAgents.Tools.{ConversationExecutionContext, Reach, Registry, Runner}
 
   @maximum_tool_calls 16
   @maximum_continuations 16
@@ -113,7 +113,8 @@ defmodule OpenAgents.Turns.TurnServer do
                  Registry.prompt_definitions(
                    tool_snapshot,
                    current_user_text(messages),
-                   computer_paired?: Machines.active_machine?(owner.user_id)
+                   computer_paired?: Machines.active_machine?(owner.user_id),
+                   reach: Reach.caller_for_user_id(owner.user_id)
                  ),
                else: []
              )

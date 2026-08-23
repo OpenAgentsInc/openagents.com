@@ -24,9 +24,16 @@ defmodule OpenAgents.Tools.Tool do
   # Optional, defaulted fields follow the enforced contract. `tags` are
   # human-authored discovery hints; effective discovery tags also fold in the
   # tool's authority and name tokens (see OpenAgents.Tools.Discovery.Doc).
-  defstruct @enforce_keys ++ [tags: []]
+  #
+  # `reach` names what the *caller* must already hold for this tool to be able
+  # to succeed at all, so a catalog can leave out a tool the caller cannot
+  # reach instead of letting the model spend a turn discovering the refusal.
+  # It is advisory to the catalog and never authoritative: the tool still
+  # enforces its own gate. See `OpenAgents.Tools.Reach`.
+  defstruct @enforce_keys ++ [tags: [], reach: []]
 
   @type side_effect :: :read_only | :reversible_write | :external_effect
+  @type reach_requirement :: :signed_in_owner | :paired_computer | :operator
   @type t :: %__MODULE__{
           module_id: String.t(),
           name: String.t(),
@@ -46,7 +53,8 @@ defmodule OpenAgents.Tools.Tool do
           maximum_input_bytes: pos_integer(),
           maximum_output_bytes: pos_integer(),
           implementation: module(),
-          tags: [String.t()]
+          tags: [String.t()],
+          reach: [reach_requirement()]
         }
 
   @callback specification() :: t()

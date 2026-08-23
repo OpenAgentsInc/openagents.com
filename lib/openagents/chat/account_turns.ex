@@ -31,8 +31,9 @@ defmodule OpenAgents.Chat.AccountTurns do
          streamer = Keyword.get(options, :streamer, Backends.streamer(backend)),
          :ok <- validate_content(content),
          {:ok, conversation} <- Conversations.ensure_conversation(user),
+         owner <- Conversations.get_conversation_owner!(conversation),
          {:ok, run} <- create_run(conversation.id, content, reasoning, backend),
-         {:ok, _pid} <- start_provider(run, user, subscriber, streamer, backend) do
+         {:ok, _pid} <- start_provider(run, user, owner, subscriber, streamer, backend) do
       {:ok, run_projection(run)}
     else
       {:provider_start_failed, run, reason} ->
@@ -246,7 +247,11 @@ defmodule OpenAgents.Chat.AccountTurns do
     |> Enum.map_join("", fn payload -> payload["value"] || "" end)
   end
 
-  defp start_provider(run, user, subscriber, streamer, backend) do
+  # The tool context names the conversation's owning visitor, never the account.
+  # `owner_visitor_id` is read back as a `visitors` row, so an account id here
+  # resolves to nothing and every owner-requiring tool refuses the signed-in
+  # caller as if they were signed out.
+  defp start_provider(run, user, owner, subscriber, streamer, backend) do
     request = %{
       "model" => Backends.model(backend),
       "reasoning" => run.reasoning_effort,
@@ -270,8 +275,8 @@ defmodule OpenAgents.Chat.AccountTurns do
                  tool_context: %{
                    surface: "text",
                    conversation_id: run.conversation_id,
-                   owner_visitor_id: user.id,
-                   owner_user_id: user.id
+                   owner_visitor_id: owner.id,
+                   owner_user_id: owner.user_id
                  }
                )
              rescue

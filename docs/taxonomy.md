@@ -164,6 +164,30 @@ session is a turn, not a separate "run" object.
 tokens, cache reads, and API calls recorded on a turn or inference. Usage
 is evidence on the receipt, not a substitute for the receipt.
 
+**Visitor, not account** — two identifier spaces, and they are not
+interchangeable. An **account** is a `users` row: the signed-in identity, a
+GitHub id behind it, operator standing attached to it. A **visitor** is a
+`visitors` row: who owns a conversation, and what every conversation-scoped
+record points at. A signed-in account has exactly one visitor
+(`unique_index(:visitors, [:user_id])`); an anonymous browser has a visitor and
+no account. `OpenAgents.Tools.ExecutionContext` carries both, as
+`owner_visitor_id` and `owner_user_id`, and neither is ever substituted for the
+other. Passing an account id where a visitor id belongs produces a value that
+looks right and resolves to nothing, so the failure surfaces far from its
+cause: `OpenAgents.Tools.OwnerContext` reads back no row and reports
+`owner_not_signed_in` to someone who is signed in (`INVARIANTS.md`, TOOL-005).
+Resolve one from the other explicitly —
+`OpenAgents.Conversations.get_conversation_owner!/1` — and never with a
+fallback.
+
+**Reach** — what a caller must already hold before a tool can succeed for
+them, declared per tool as `reach:` on its specification and evaluated by
+`OpenAgents.Tools.Reach`. Reach decides what the model is *offered*; scope,
+authority, and surface admission decide what the host will *run*. A tool
+outside the caller's reach is left out of the catalog rather than refused
+after the model has already spent a turn on it. Reach is never authority: the
+tool re-checks its own gate at execution.
+
 **Sarah** — a persona and behavior package inside OpenAgents, not a separate
 service. Persona artifacts are pinned by SHA under `priv/sarah/persona/`.
 Architecture forbids treating Sarah as a service boundary.

@@ -57,6 +57,21 @@ defmodule OpenAgents.Tools.RegistryAndRunnerTest do
       do: {:ok, %ExecutionResult{result: %{"echo" => String.duplicate("x", 100)}}}
   end
 
+  defmodule InventedReachTool do
+    @behaviour OpenAgents.Tools.Tool
+
+    @impl true
+    def specification do
+      %{
+        OpenAgents.Tools.RegistryAndRunnerTest.tool_spec(__MODULE__, "invented_reach", 1)
+        | reach: [:invented]
+      }
+    end
+
+    @impl true
+    def execute(_arguments, _context), do: {:ok, %ExecutionResult{result: %{"echo" => "no"}}}
+  end
+
   defmodule WriteTool do
     @behaviour OpenAgents.Tools.Tool
 
@@ -142,6 +157,14 @@ defmodule OpenAgents.Tools.RegistryAndRunnerTest do
       "failed",
       "additional_property_not_allowed"
     )
+  end
+
+  test "a reach requirement the catalog cannot evaluate refuses the whole registry" do
+    # An unknown requirement would narrow nothing, which is the silent failure
+    # that made a User id passed as a Visitor id survive to a lookup. Refuse at
+    # boot instead.
+    assert {:error, {:invalid_reach, "invented_reach"}} = Registry.build([InventedReachTool])
+    assert {:ok, _snapshot} = Registry.build([EchoTool])
   end
 
   test "scope and side-effect policy are application refusals" do

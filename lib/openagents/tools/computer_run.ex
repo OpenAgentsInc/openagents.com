@@ -57,7 +57,8 @@ defmodule OpenAgents.Tools.ComputerRun do
       timeout_ms: 120_000,
       maximum_input_bytes: 8_192,
       maximum_output_bytes: 65_536,
-      implementation: __MODULE__
+      implementation: __MODULE__,
+      reach: [:signed_in_owner, :paired_computer]
     }
   end
 

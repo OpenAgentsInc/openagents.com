@@ -79,7 +79,8 @@ defmodule OpenAgents.Tools.ComputerAgent do
       maximum_input_bytes: 16_384,
       maximum_output_bytes: 65_536,
       implementation: __MODULE__,
-      tags: ~w(delegation delegate coding agent claude codex gemini devin machine computer)
+      tags: ~w(delegation delegate coding agent claude codex gemini devin machine computer),
+      reach: [:signed_in_owner, :paired_computer]
     }
   end
 

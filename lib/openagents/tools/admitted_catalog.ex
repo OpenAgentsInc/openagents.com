@@ -1,9 +1,18 @@
 defmodule OpenAgents.Tools.AdmittedCatalog do
-  @moduledoc "Builds a provider catalog from tools authorized for one captured execution context."
+  @moduledoc """
+  Builds a provider catalog from tools authorized for one captured execution
+  context.
+
+  Two narrowings, in order. The caller's reach comes first, resolved once from
+  the context, so a tool the caller cannot use never takes a selection slot
+  (`OpenAgents.Tools.Reach`). Scope, authority, and surface admission follow,
+  so a tool the *host* will not run for this context never reaches the model
+  either.
+  """
 
   alias OpenAgents.Modules.SurfacePolicy
   alias OpenAgents.Providers.ToolDefinition
-  alias OpenAgents.Tools.{ExecutionContext, Registry, Selector, Snapshot, Tool}
+  alias OpenAgents.Tools.{ExecutionContext, Reach, Registry, Selector, Snapshot, Tool}
 
   @spec provider_definitions(Snapshot.t(), ExecutionContext.t(), String.t() | nil, keyword()) ::
           [ToolDefinition.t()]
@@ -32,6 +41,9 @@ defmodule OpenAgents.Tools.AdmittedCatalog do
 
   @spec tools(Snapshot.t(), ExecutionContext.t(), String.t() | nil, keyword()) :: [Tool.t()]
   def tools(%Snapshot{} = snapshot, %ExecutionContext{} = context, intent, opts \\ []) do
+    # The context is the only authority on who is calling, so the caller is
+    # resolved here rather than trusted from the option list.
+    opts = Keyword.put(opts, :reach, Reach.caller(context))
     {selected, _omitted} = Selector.select(snapshot, intent, opts)
     Enum.filter(selected, &authorized?(snapshot, &1, context))
   end

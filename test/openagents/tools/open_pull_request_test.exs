@@ -16,6 +16,8 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
 
     user = repository_user_fixture("pull-request-tool-owner")
     repository = repository_with_member_fixture(user)
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(user)
+    owner = OpenAgents.Conversations.get_conversation_owner!(conversation)
     conversation_id = Ecto.UUID.generate()
     workspace_ref = "workspace:#{Ecto.UUID.generate()}"
     branch = "openagents/chat/#{conversation_id}"
@@ -35,7 +37,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
       authorities: MapSet.new(["pull_request.write"]),
       surface: "text",
       owner_user_id: user.id,
-      owner_visitor_id: user.id,
+      owner_visitor_id: owner.id,
       conversation_id: conversation_id,
       workspace: %{
         "type" => "repository_workspace",

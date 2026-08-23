@@ -71,7 +71,8 @@ defmodule OpenAgents.Tools.ComputerDevin do
       timeout_ms: 510_000,
       maximum_input_bytes: 16_384,
       maximum_output_bytes: 65_536,
-      implementation: __MODULE__
+      implementation: __MODULE__,
+      reach: [:signed_in_owner, :paired_computer]
     }
   end
 

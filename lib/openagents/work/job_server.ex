@@ -22,7 +22,7 @@ defmodule OpenAgents.Work.JobServer do
   alias OpenAgents.{Blueprint, Context.Composer, Machines, Modules.Lifecycle, ProfileMemory, Work}
   alias OpenAgents.Work.Coding
   alias OpenAgents.Providers.{ProviderEvent, Request, ToolOutput}
-  alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}
+  alias OpenAgents.Tools.{ExecutionContext, Reach, Registry, Runner}
 
   @maximum_tool_calls 32
   @maximum_continuations 32
@@ -136,7 +136,8 @@ defmodule OpenAgents.Work.JobServer do
 
     tool_snapshot
     |> Registry.prompt_definitions(intent,
-      computer_paired?: Machines.active_machine?(owner.user_id)
+      computer_paired?: Machines.active_machine?(owner.user_id),
+      reach: Reach.caller_for_user_id(owner.user_id)
     )
     |> Enum.filter(fn definition ->
       case Map.fetch(tool_snapshot.tools, definition.name) do
@@ -340,7 +341,11 @@ defmodule OpenAgents.Work.JobServer do
         surface: "text",
         job_ref: "work-job:#{state.job.id}",
         conversation_id: state.job.conversation_id,
+        # Both identifier spaces, always together. A context that names only
+        # one of them refuses the tools that read the other and reports the
+        # refusal as a sign-in problem.
         owner_visitor_id: state.owner.id,
+        owner_user_id: state.owner.user_id,
         memory_snapshot_ref: state.job.memory_snapshot_ref,
         profile_memory_snapshot_ref: state.profile_memory_snapshot_ref,
         module_registry_snapshot: state.tool_snapshot

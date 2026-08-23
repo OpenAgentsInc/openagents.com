@@ -12,9 +12,16 @@ defmodule OpenAgents.Tools.Selector do
   selection missed something. When the owner has an active paired computer,
   `computer_list`, `computer_probe`, and `computer_agent` are always included
   too so a short follow-up cannot drop the delegation chain.
+
+  Ranking runs over the tools this caller can actually reach. Pass
+  `:reach` — an `OpenAgents.Tools.Reach.Caller` — and every tool whose
+  declared reach the caller does not hold is dropped before scoring, so an
+  unreachable tool neither takes a top-K slot nor survives as an
+  always-include. Omitting `:reach` ranks the whole catalog and is only for
+  callers with no turn behind them, such as registry inspection.
   """
 
-  alias OpenAgents.Tools.{Embeddings, Snapshot}
+  alias OpenAgents.Tools.{Embeddings, Reach, Snapshot}
   alias OpenAgents.Tools.Discovery.Doc
 
   @always_included ["module_discover"]
@@ -47,14 +54,20 @@ defmodule OpenAgents.Tools.Selector do
   out. `opts`: `:top_k` (default from config), `:tags` (a MapSet/list to
   require — tag-filtered discovery), `:always_include` (extra tool names that
   must stay exposed), `:computer_paired?` (also keep the computer delegation
-  chain). Always-includes may exceed `top_k` by a small fixed number.
+  chain), `:reach` (a `Reach.Caller` narrowing the catalog to what this caller
+  can reach). Always-includes may exceed `top_k` by a small fixed number.
   """
   @spec select(Snapshot.t(), String.t() | nil, keyword()) ::
           {[OpenAgents.Tools.Tool.t()], non_neg_integer()}
   def select(%Snapshot{} = snapshot, intent, opts \\ []) do
     top_k = Keyword.get(opts, :top_k, default_top_k())
     always_include = always_include(opts)
-    candidates = tag_filtered(Map.values(snapshot.tools), opts[:tags])
+
+    candidates =
+      snapshot.tools
+      |> Map.values()
+      |> reachable(opts[:reach])
+      |> tag_filtered(opts[:tags])
 
     query_vector =
       case intent && Embeddings.embed_query(intent) do
@@ -118,6 +131,11 @@ defmodule OpenAgents.Tools.Selector do
   end
 
   # ── helpers ────────────────────────────────────────────────────────────────
+
+  defp reachable(tools, %Reach.Caller{} = caller),
+    do: Enum.filter(tools, &Reach.reachable?(&1, caller))
+
+  defp reachable(tools, nil), do: tools
 
   defp tag_filtered(tools, nil), do: tools
 

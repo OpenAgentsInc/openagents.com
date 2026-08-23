@@ -1193,6 +1193,49 @@ Evidence: `OpenAgents.Tools.Tool`, `OpenAgents.Tools.ExecutionResult`,
 `OpenAgents.Tools.Runner`, `OpenAgents.Conversations.ToolStep`, the invocation-ledger
 database constraints, normalized-outcome tests, and executor-disclosure UI tests.
 
+### TOOL-005 — The offered set names only tools this caller can reach
+
+Status: Current
+
+A tool the caller cannot use is not offered to the model. Every surface that
+builds a model-facing catalog resolves the caller once for the turn —
+`OpenAgents.Tools.Reach.caller/1` from the execution context, or
+`caller_for_user_id/1` where the surface already holds the visitor — and the
+selector drops every tool whose declared `reach:` the caller does not hold
+before ranking, so an unreachable tool takes neither a top-K slot nor an
+always-include slot.
+
+Three requirements exist, and each tool's specification declares which apply:
+
+- `:signed_in_owner` — the conversation resolves to an active account through
+  `OpenAgents.Tools.OwnerContext`. `computer_list`, `computer_probe`,
+  `computer_run`, `computer_devin`, `computer_agent`, `deep_work`, and
+  `incident_lookup` declare it.
+- `:paired_computer` — that account has an active paired Computer.
+  `computer_probe`, `computer_run`, `computer_devin`, and `computer_agent`
+  declare it. `computer_list` deliberately does not: listing zero Computers is
+  how the model learns to say "pair one first".
+- `:operator` — that account holds operator authority. `scv_deploy` declares
+  it, because SCV-001 spends OpenAgents capacity rather than the caller's.
+
+Repository tools declare no reach: their gate is per-repository membership,
+which depends on an argument the catalog has not seen. Box tools declare none
+either: their gate is deployment configuration, not who is asking.
+
+The narrowing decides what is offered and never what is allowed. Each tool
+re-resolves its own owner and re-checks its own gate at execution (TOOL-002),
+so a stale or wrong catalog cannot widen authority. An unknown requirement
+refuses the whole registry at boot rather than narrowing nothing.
+
+A caller's identity reaches the catalog as a visitor id, never an account id.
+The two are separate identifier spaces and no surface substitutes one for the
+other; a context that cannot name its owning visitor builds the unbound
+context instead.
+
+Evidence: `OpenAgents.Tools.Reach`, `OpenAgents.Tools.Selector`,
+`OpenAgents.Tools.AdmittedCatalog`, `test/openagents/tools/reach_test.exs`,
+and `test/openagents/chat/open_router/tool_runtime_test.exs`.
+
 ### DEGRADE-002 — Tool degradation is explicit and deterministic
 
 Status: Current
@@ -3174,6 +3217,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TOOL-003 | `test/openagents/tool_step_persistence_test.exs` |
 | TOOL-004 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents_web/tool_activity_test.exs` |
 | DEGRADE-002 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
+| TOOL-005 | `test/openagents/tools/reach_test.exs`, `test/openagents/chat/open_router/tool_runtime_test.exs`, `test/openagents/chat/account_turns_test.exs` |
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs` |

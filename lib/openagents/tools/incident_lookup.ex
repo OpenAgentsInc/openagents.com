@@ -63,7 +63,8 @@ defmodule OpenAgents.Tools.IncidentLookup do
       maximum_input_bytes: 256,
       maximum_output_bytes: 32_768,
       implementation: __MODULE__,
-      tags: ~w(incident error failure diagnosis debug analyze why)
+      tags: ~w(incident error failure diagnosis debug analyze why),
+      reach: [:signed_in_owner]
     }
   end
 

@@ -8,6 +8,8 @@ defmodule OpenAgents.Forge.Repos do
   ever carry request data.
   """
 
+  require Logger
+
   @name_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9])){0,63}$/
   @storage_key_pattern ~r/\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\z/
 
@@ -56,6 +58,8 @@ defmodule OpenAgents.Forge.Repos do
 
   @doc false
   def ensure_repo_at!(path, default_branch \\ "main") do
+    quarantine_invalid_cache!(path)
+
     unless File.exists?(Path.join(path, "HEAD")) do
       File.mkdir_p!(path)
       {_, 0} = git(path, ["init", "--bare", "--initial-branch=#{default_branch}", path])
@@ -65,6 +69,36 @@ defmodule OpenAgents.Forge.Repos do
     hide_internal_refs_at!(path)
 
     path
+  end
+
+  # The cache is a disposable projection of the WAL. A directory that has a
+  # HEAD file but that git refuses as a bare repository (for example one whose
+  # refs directory was lost mid-write) would otherwise crash every read of the
+  # repository forever. Move it aside so the caller reinitializes an empty
+  # repository and WAL replay re-materializes every ref.
+  defp quarantine_invalid_cache!(path) do
+    if File.exists?(Path.join(path, "HEAD")) and not bare_repository_at?(path) do
+      suffix = System.unique_integer([:positive, :monotonic])
+      quarantine_path = path <> ".corrupt-#{suffix}"
+
+      case File.rename(path, quarantine_path) do
+        :ok ->
+          Logger.warning(
+            "forge_repo_cache_quarantined path=#{path} quarantine=#{quarantine_path}"
+          )
+
+          :ok
+
+        {:error, reason} ->
+          raise "cannot quarantine invalid repository cache #{path}: #{inspect(reason)}"
+      end
+    end
+
+    :ok
+  end
+
+  defp bare_repository_at?(path) do
+    match?({"true" <> _rest, 0}, git(path, ["rev-parse", "--is-bare-repository"]))
   end
 
   def set_default_branch!(repo, default_branch) do

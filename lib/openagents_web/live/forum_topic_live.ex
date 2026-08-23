@@ -6,15 +6,24 @@ defmodule OpenAgentsWeb.ForumTopicLive do
   alias OpenAgents.Markdown
 
   def mount(%{"id" => id}, _session, socket) do
-    topic = Forum.get_topic!(id)
+    scope = [operator?: OpenAgents.Accounts.admin?(socket.assigns[:current_user])]
 
-    {:ok,
-     socket
-     |> assign(:current_scope, socket.assigns[:current_scope])
-     |> assign(:topic, topic)
-     |> assign(:posts, Forum.list_posts(topic))
-     |> stream(:posts, Forum.list_posts(topic))
-     |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
+    case Forum.fetch_readable_topic(id, scope) do
+      {:error, :not_found} ->
+        {:ok,
+         socket
+         |> put_flash(:error, "Topic not found")
+         |> push_navigate(to: ~p"/forum")}
+
+      {:ok, topic} ->
+        {:ok,
+         socket
+         |> assign(:current_scope, socket.assigns[:current_scope])
+         |> assign(:topic, topic)
+         |> assign(:posts, Forum.list_posts(topic))
+         |> stream(:posts, Forum.list_posts(topic))
+         |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
+    end
   end
 
   def handle_event("reply", %{"post" => %{"body_text" => body_text}}, socket)

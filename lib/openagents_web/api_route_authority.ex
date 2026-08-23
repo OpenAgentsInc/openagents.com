@@ -98,6 +98,12 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/forum/topics/:topic_id/posts" => :required_bearer,
       "post /api/v3/forum/claims" => :required_bearer,
       "get /api/v3/forum/claims" => :required_bearer,
+      # Moderation and claim review: a bearer the controller then checks for
+      # operator authority.
+      "patch /api/v3/forum/topics/:id" => :required_bearer,
+      "patch /api/v3/forum/posts/:id" => :required_bearer,
+      "get /api/v3/forum/claims/pending" => :required_bearer,
+      "patch /api/v3/forum/claims/:id" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :required_bearer,

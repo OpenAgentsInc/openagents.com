@@ -5,14 +5,16 @@ defmodule OpenAgentsWeb.ForumBoardLive do
   alias OpenAgents.Forum
 
   def mount(%{"slug" => slug}, _session, socket) do
-    case Forum.get_forum_by_slug(slug) do
-      nil ->
+    scope = [operator?: OpenAgents.Accounts.admin?(socket.assigns[:current_user])]
+
+    case Forum.fetch_readable_forum_by_slug(slug, scope) do
+      {:error, :not_found} ->
         {:ok,
          socket
          |> put_flash(:error, "Board not found")
          |> push_navigate(to: ~p"/forum")}
 
-      forum ->
+      {:ok, forum} ->
         {:ok,
          socket
          |> assign(:current_scope, socket.assigns[:current_scope])

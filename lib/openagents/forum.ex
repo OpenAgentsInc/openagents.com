@@ -18,6 +18,11 @@ defmodule OpenAgents.Forum do
   @posts_per_page 50
   @maximum_page 10_000
 
+  # A board nobody has claimed as private is readable by anyone. An unlisted
+  # board stays out of the board list but answers to its slug. A private board
+  # answers to operators only, because the forum has no per-board membership.
+  @public_visibilities ["public", "unlisted"]
+
   def topics_per_page, do: @topics_per_page
   def posts_per_page, do: @posts_per_page
 
@@ -38,6 +43,39 @@ defmodule OpenAgents.Forum do
   def get_forum!(id), do: Repo.get!(Forum, id)
 
   def get_forum_by_slug(slug), do: Repo.get_by(Forum, slug: slug)
+
+  @doc """
+  The board behind `slug`, when the caller may read it.
+
+  Pass `operator?: true` to include private boards. Every other caller gets
+  `{:error, :not_found}` for a private board, so a read surface cannot confirm
+  that the board exists.
+  """
+  def fetch_readable_forum_by_slug(slug, opts \\ []) when is_list(opts) do
+    with true <- is_binary(slug),
+         %Forum{} = forum <- Repo.one(from f in readable_forums(opts), where: f.slug == ^slug) do
+      {:ok, forum}
+    else
+      _unreadable -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  The boards a caller may list: every board for an operator, the public and
+  listed ones for anyone else.
+  """
+  def list_readable_forums(opts \\ []) when is_list(opts) do
+    if operator?(opts), do: list_forums(), else: list_public_forums()
+  end
+
+  defp readable_forums(opts) do
+    visibilities =
+      if operator?(opts), do: @public_visibilities ++ ["private"], else: @public_visibilities
+
+    from f in Forum, where: f.visibility in ^visibilities
+  end
+
+  defp operator?(opts), do: Keyword.get(opts, :operator?, false)
 
   ## Topics
 
@@ -66,6 +104,93 @@ defmodule OpenAgents.Forum do
   end
 
   def get_topic!(id), do: Repo.get!(Topic, id)
+
+  @doc """
+  The topic behind `id`, when the caller may read the board that holds it.
+
+  An archived topic, a malformed identifier, and a topic on a board the caller
+  cannot read all answer `{:error, :not_found}`.
+  """
+  def fetch_readable_topic(id, opts \\ []) when is_list(opts) do
+    with {:ok, uuid} <- cast_uuid(id),
+         %Topic{} = topic <-
+           Repo.one(
+             from t in Topic,
+               join: f in subquery(readable_forums(opts)),
+               on: f.id == t.forum_id,
+               where: t.id == ^uuid and is_nil(t.archived_at)
+           ) do
+      {:ok, topic}
+    else
+      _unreadable -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  One page of topics whose title or visible post bodies match `term`, newest
+  activity first.
+
+  Pass `:forum` to search one board, `:operator?` to include private boards,
+  and `:page` to page through the matches. Each topic arrives with its board
+  preloaded, because a search crosses boards.
+  """
+  def search_topics(term, opts \\ []) when is_binary(term) and is_list(opts) do
+    page = parse_page(opts[:page])
+
+    term
+    |> search_query(opts)
+    |> order_by([topic: t], desc: t.updated_at, desc: t.id)
+    |> limit(^@topics_per_page)
+    |> offset(^((page - 1) * @topics_per_page))
+    |> preload(:forum)
+    |> Repo.all()
+  end
+
+  @doc "How many topics `term` matches."
+  def count_search_topics(term, opts \\ []) when is_binary(term) and is_list(opts) do
+    term
+    |> search_query(opts)
+    |> select([topic: t], count(t.id))
+    |> Repo.one!()
+  end
+
+  defp search_query(term, opts) do
+    pattern = "%" <> escape_like(String.trim(term)) <> "%"
+
+    query =
+      from t in Topic,
+        as: :topic,
+        join: f in subquery(readable_forums(opts)),
+        on: f.id == t.forum_id,
+        where: is_nil(t.archived_at),
+        where:
+          ilike(t.title, ^pattern) or
+            exists(
+              from p in Post,
+                where:
+                  p.topic_id == parent_as(:topic).id and p.state == "visible" and
+                    ilike(p.body_text, ^pattern),
+                select: 1
+            )
+
+    case opts[:forum] do
+      %Forum{id: forum_id} -> from [topic: t] in query, where: t.forum_id == ^forum_id
+      _every_board -> query
+    end
+  end
+
+  # `%`, `_`, and `\\` are LIKE metacharacters: a search for "100%" is a search
+  # for that text, not for every title.
+  defp escape_like(term), do: String.replace(term, ~r/([\\%_])/, "\\\\\\1")
+
+  defp cast_uuid(id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> {:ok, uuid}
+      :error -> {:error, :not_found}
+    end
+  end
+
+  defp cast_uuid(_id), do: {:error, :not_found}
 
   def get_topic_by_ref(forum_id, slug_or_id) when is_binary(slug_or_id) do
     if String.match?(
@@ -180,6 +305,16 @@ defmodule OpenAgents.Forum do
     |> Repo.update_all(inc: [post_count: 1])
   end
 
+  @doc "The post behind `id`, or `{:error, :not_found}`."
+  def fetch_post(id) do
+    with {:ok, uuid} <- cast_uuid(id),
+         %Post{} = post <- Repo.get(Post, uuid) do
+      {:ok, post}
+    else
+      _missing -> {:error, :not_found}
+    end
+  end
+
   @doc "Soft-deletes a post by marking it deleted. Records an audit event."
   def delete_post(%Post{} = post, moderator \\ nil) do
     result =
@@ -288,6 +423,21 @@ defmodule OpenAgents.Forum do
 
   def list_actor_links(%OpenAgents.Accounts.User{} = user) do
     Repo.all(from l in ActorLink, where: l.user_id == ^user.id, order_by: [desc: l.inserted_at])
+  end
+
+  @doc "Every claim still waiting on an operator, oldest first."
+  def list_pending_actor_links do
+    Repo.all(from l in ActorLink, where: l.status == "pending", order_by: [asc: l.inserted_at])
+  end
+
+  @doc "The claim behind `id`, or `{:error, :not_found}`."
+  def fetch_actor_link(id) do
+    with {:ok, uuid} <- cast_uuid(id),
+         %ActorLink{} = link <- Repo.get(ActorLink, uuid) do
+      {:ok, link}
+    else
+      _missing -> {:error, :not_found}
+    end
   end
 
   ## Shared helpers

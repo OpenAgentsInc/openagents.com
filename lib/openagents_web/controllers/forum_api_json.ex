@@ -7,9 +7,12 @@ defmodule OpenAgentsWeb.ForumApiJSON do
     %{boards: Enum.map(forums, &board_json/1)}
   end
 
-  def render("topics.json", %{topics: topics, forum: forum, pagination: pagination}) do
+  def render("topics.json", %{topics: topics, forum: forum} = assigns) do
+    pagination = assigns.pagination
+
     %{
       board: board_json(forum),
+      query: assigns[:query],
       topics: Enum.map(topics, &topic_json/1),
       pagination: %{
         page: pagination.page,
@@ -49,6 +52,9 @@ defmodule OpenAgentsWeb.ForumApiJSON do
     %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
   end
 
+  # A search across every board answers with `"board": null`.
+  defp board_json(nil), do: nil
+
   defp board_json(forum) do
     %{
       id: forum.id,
@@ -79,6 +85,16 @@ defmodule OpenAgentsWeb.ForumApiJSON do
       updated_at: iso(topic.updated_at),
       url: "https://openagents.com/forum/t/#{topic.id}"
     }
+    |> put_topic_board(topic)
+  end
+
+  # Search results carry their board, because a search crosses boards.
+  defp put_topic_board(json, topic) do
+    case topic.forum do
+      %Ecto.Association.NotLoaded{} -> json
+      nil -> json
+      forum -> Map.put(json, :board, %{slug: forum.slug, title: forum.title})
+    end
   end
 
   defp post_json(nil), do: nil

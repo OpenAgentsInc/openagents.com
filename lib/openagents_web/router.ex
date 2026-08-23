@@ -296,6 +296,12 @@ defmodule OpenAgentsWeb.Router do
     post "/forum/topics/:topic_id/posts", ForumApiController, :create_post
     post "/forum/claims", ForumApiController, :create_claim
     get "/forum/claims", ForumApiController, :list_claims
+
+    # Moderation and claim review. The controller refuses a non-operator token.
+    get "/forum/claims/pending", ForumApiController, :pending_claims
+    patch "/forum/claims/:id", ForumApiController, :update_claim
+    patch "/forum/topics/:id", ForumApiController, :update_topic
+    patch "/forum/posts/:id", ForumApiController, :update_post
   end
 
   scope "/api/v3", OpenAgentsWeb do

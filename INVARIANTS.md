@@ -1948,6 +1948,40 @@ Evidence: `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`,
 `OpenAgents.Forge.Pushes`, `OpenAgents.Forge.MirrorWatch`, and
 `test/openagents/push_remote_contract_test.exs`.
 
+### STACK-001 — A pull request stack is a durable object, not inferred topology
+
+Status: Current
+
+A stack of pull requests exists as a row, not as a reading of branch bases.
+Branch topology alone is ambiguous: a branch can be based on another without
+intending a stack, a retarget can be accidental, and closed pull requests
+blur any inferred chain. `pull_request_stacks` carries the identity — a
+repository-local number, the trunk ref, an `open`/`completed`/`dissolved`
+state, and an optimistic `version` — and `pull_request_stack_entries` carries
+the order: contiguous positions from 1, the boundary object ID that marks
+where each layer's unique commits begin, and the observed head. Object IDs
+store as raw bytes so SHA-1 and SHA-256 repositories both fit; nothing
+assumes a 40-character column.
+
+Structure is validated, not trusted. Creation requires same-repository
+membership, same-repository heads, open pull requests, unique entries, unique
+branches, and an unbroken direct-base chain from the trunk upward. A partial
+unique index keeps a pull request in at most one active stack, and a second
+partial index keeps active positions unique per stack. While a pull request
+is stacked, a generic base edit fails with `stack_managed_base`; the base
+belongs to the stack service.
+
+Health is an observation and state is a lifecycle, and the two never merge.
+A stack whose graph has gone stale reads `needs_rebase`, `conflicted`,
+`missing_ref`, `head_changed`, `policy_blocked`, or `operation_in_progress`
+while its state stays `open`. A stale graph never dissolves a stack; only an
+explicit transition does, and that transition bumps the version so concurrent
+operations see the change.
+
+Evidence: `OpenAgents.Stacks`, `OpenAgents.Stacks.Stack`,
+`OpenAgents.Stacks.StackEntry`, `OpenAgents.Stacks.OID`,
+`ops/ci/stack-contracts.sh`, and `test/openagents/stacks_test.exs`.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -2033,3 +2067,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
 | REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
+| STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |

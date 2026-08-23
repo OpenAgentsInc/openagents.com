@@ -11,6 +11,7 @@ defmodule OpenAgents.PullRequests do
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
   alias OpenAgents.Repositories.RepositoryPublication
+  alias OpenAgents.Stacks
   alias OpenAgents.Tools.Redaction
 
   def list(%Repository{id: id}) do
@@ -59,7 +60,8 @@ defmodule OpenAgents.PullRequests do
 
     if pr.issue.author_user_id == actor.id or role in ~w(owner maintainer) do
       Repo.transaction(fn ->
-        with {:ok, issue} <-
+        with {:ok, base_attrs} <- base_update_attrs(pr, attrs),
+             {:ok, issue} <-
                Issues.update_issue(
                  pr.issue,
                  Map.take(attrs, ["title", "body", "state"]),
@@ -67,7 +69,9 @@ defmodule OpenAgents.PullRequests do
                ),
              {:ok, updated} <-
                pr
-               |> PullRequest.changeset(pull_request_update_attrs(attrs, issue.state))
+               |> PullRequest.changeset(
+                 Map.merge(pull_request_update_attrs(attrs, issue.state), base_attrs)
+               )
                |> Repo.update() do
           %{updated | issue: issue}
         else
@@ -76,6 +80,24 @@ defmodule OpenAgents.PullRequests do
       end)
     else
       {:error, :forbidden}
+    end
+  end
+
+  # While a pull request is an active stack member its base belongs to the
+  # stack service, so a generic base edit fails with an explanation.
+  defp base_update_attrs(pr, attrs) do
+    case Map.get(attrs, "base") do
+      nil ->
+        {:ok, %{}}
+
+      base_ref when is_binary(base_ref) and base_ref != "" ->
+        with :ok <- Stacks.ensure_base_editable(pr),
+             {:ok, base_sha} <- resolve(pr.repository, base_ref) do
+          {:ok, %{base_ref: base_ref, base_sha: base_sha}}
+        end
+
+      _other ->
+        {:error, :invalid_ref}
     end
   end
 

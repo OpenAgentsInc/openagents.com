@@ -1,0 +1,205 @@
+# Production deploy runbook
+
+This is the single end-to-end procedure for deploying `openagents.com` to the
+production fleet. Follow it top to bottom. Every other operations document is
+reference material; this one is the checklist.
+
+The pipeline is:
+
+```
+push candidate to forge main
+  → release gate (exact SHA)
+  → immutable image build and publish
+  → promote on /admin/forge
+  → migration job
+  → rolling replacement (structural) or direct deploy (BEAM-only)
+  → settle the target
+  → verify production
+```
+
+Two invariants govern everything:
+
+- **One exact Git SHA.** The gate receipt, the image, the promotion, and the
+  rolling replacement all name the same full commit SHA. If `main` advances,
+  you have a new candidate and you start over at the gate.
+- **One immutable image digest.** Deployment identity is a `sha256:` digest,
+  never a mutable tag.
+
+## 0. One-time workstation prerequisites
+
+The gate fails fast when any of these is missing. Set them up once per
+machine:
+
+1. Tools on `PATH`: `jq`, `mix`, `npm`, `docker`, and `terraform` satisfying
+   `>= 1.11, < 2.0` (the staging infrastructure gate checks
+   `ops/staging/infra/versions.tf`).
+2. JavaScript dependencies: run `npm ci --prefix assets`. The relup stage runs
+   `mix assets.deploy`, which needs `assets/node_modules` (for example
+   `posthog-js`). A missing install fails the relup stage, not the javascript
+   stage.
+3. A local PostgreSQL server with the `vector` extension available, plus a
+   disposable database the gate may trash:
+
+   ```sh
+   createdb openagents_release_smoke
+   psql -d openagents_release_smoke -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+   ```
+
+   The `OPENAGENTS_RELEASE_SMOKE_DISPOSABLE=1` flag asserts the database is
+   disposable; it does not create it. The version-chain and release-smoke
+   stages boot real releases against this database and fail during startup if
+   it does not exist.
+4. Operator gcloud auth with compute and Secret Manager access in
+   `openagentsgemini`, and Docker configured for Artifact Registry:
+
+   ```sh
+   gcloud auth login <operator>@openagents.com --no-browser
+   gcloud auth configure-docker us-central1-docker.pkg.dev
+   ```
+
+## 1. Pick the candidate
+
+1. Work from a clean worktree: `git status --porcelain` prints nothing.
+2. The candidate is the exact SHA of forge `main`. Fetch and confirm
+   `git rev-parse HEAD` equals `git rev-parse origin/main`.
+3. If you have local commits, push them first: `git push openagents HEAD:main`
+   (never GitHub; the push guard refuses non-forge pushes).
+4. Record the full SHA. It appears in every later step.
+
+## 2. Run the release gate
+
+```sh
+OPENAGENTS_RELEASE_SMOKE_DISPOSABLE=1 \
+OPENAGENTS_RELEASE_SMOKE_DATABASE_URL='ecto://USER:PASSWORD@127.0.0.1/openagents_release_smoke' \
+ops/ci/gate.sh
+```
+
+The gate runs, in order: `compile`, `production_compile`, `precommit`,
+`cluster`, `javascript`, `direct_transaction`, `relup`, `version_chain`,
+`interrupted_install`, `rolling_replacement`, `contracts`, `staging_infra`,
+and `release_smoke`. It writes a receipt keyed to the exact SHA under
+`.git/openagents/`. A receipt from a different SHA — even a docs-only parent —
+is invalid.
+
+Budget 30 to 60 minutes. If a stage fails, fix the cause, push the fix to
+forge `main`, and rerun the whole gate against the new SHA. Do not deploy a
+commit whose gate did not complete.
+
+## 3. Build and publish the immutable image
+
+```sh
+ops/deploy/build-image.sh openagents:<full-sha>
+```
+
+The script verifies the gate receipt (`ops/ci/gate.sh --verify`), builds the
+`final` Docker target for `linux/amd64`, boots the packaged release to check
+that the embedded `OpenAgents.BuildInfo.revision()` equals the SHA, and writes
+a receipt to `.git/openagents/images/<sha>.json`.
+
+Publish to Artifact Registry and capture the **registry** digest — the digest
+printed by `docker push` is the deployment identity, not the local image ID:
+
+```sh
+docker tag <local-digest> us-central1-docker.pkg.dev/openagents-staging-20260820/openagents-staging/openagents:<full-sha>
+docker push us-central1-docker.pkg.dev/openagents-staging-20260820/openagents-staging/openagents:<full-sha>
+```
+
+Record the pushed `sha256:` digest.
+
+## 4. Confirm runtime secrets and environment
+
+The fleet startup script (instance metadata key `startup-script` on
+`sarah-fleet-1/2/3`) resolves secrets from Secret Manager at boot and passes
+them to the app container through the `ENV_NAMES` array. A new runtime
+environment variable needs three things:
+
+1. A Secret Manager secret in `openagentsgemini`, with
+   `roles/secretmanager.secretAccessor` granted to
+   `oa-mvp-automation@openagentsgemini.iam.gserviceaccount.com`.
+2. An `export NAME="$(secret <secret-name>)"` line in the startup script.
+3. The name added to `ENV_NAMES`.
+
+Edit one copy of the script, `diff` it against each instance's live metadata
+(all three must be identical), then apply with:
+
+```sh
+gcloud compute instances add-metadata sarah-fleet-N --zone <zone> \
+  --project openagentsgemini \
+  --metadata-from-file startup-script=<file>
+```
+
+Metadata changes take effect at the next instance reset, which the rolling
+replacement performs. Never print secret values.
+
+## 5. Promote and classify
+
+Promote the exact SHA through `/admin/forge`. The target moves
+`promoted → building → built`, and the classifier decides the deployment
+route:
+
+- **Direct deploy**: the diff touches only allowlisted BEAM modules. The
+  forge hot loop handles it; watch the target go `deploying → live`.
+- **`needs_rolling_replace`**: anything structural — `config/*`, migrations,
+  dependencies, assets, ERTS, or release-private files. Continue below.
+
+Keep the classification receipt.
+
+## 6. Migration job
+
+Run exactly one migration job for the release; nodes must not race it.
+`bin/migrate` takes the release advisory lock. Apply any reviewed migration
+lineage bridge first, and require the lineage classification and integrity
+checks to pass before touching the fleet.
+
+## 7. Rolling replacement
+
+`OpenAgents.Forge.RollingReplacement.run/2` replaces one node at a time. Its
+request names the exact current and previous SHAs, the exact current and
+previous image digests, the expected node list, and the fleet size. For each
+node it removes readiness, drains to zero active work, verifies remaining
+capacity and quorum, resets the instance with the target digest (the GCP
+provider sets `openagents-image`, `openagents-image-digest`, and
+`openagents-sha` metadata), then waits for membership, readiness, boot
+convergence, database readiness, and the exact SHA and digest before moving
+on.
+
+Order: `sarah-fleet-1` (us-central1-a), `sarah-fleet-2` (us-central1-b),
+`sarah-fleet-3` (us-central1-c). Two healthy nodes must exist before each
+replacement. If a node fails to rejoin, the coordinator rolls back to the
+previous digest; wait for full health and stop — do not continue the roll.
+
+## 8. Settle the target
+
+```elixir
+OpenAgents.Forge.Targets.finish_rolling_replacement(target_id, rolling_result)
+```
+
+Settlement demands the newest target in `needs_rolling_replace`, a complete
+verified build receipt, and a rolling result whose SHA and image identities
+match the target. Success flips the target to `live` and inserts the immutable
+deployment receipt.
+
+## 9. Verify production
+
+Do not report success without all of the following:
+
+- `/status` and `/api/status` return the exact SHA and image digest.
+- All three nodes report the same revision and digest; `beam=3`, `raft=3`,
+  quorum holds.
+- All three backends of `sarah-backend` are healthy.
+- The migration appears in `schema_migrations`.
+- Login, a typed chat turn, and a durable reload work.
+- Issues, git clone/fetch, and a read-only computer job work.
+- New configuration is live without exposing secret values.
+
+## Known failure modes
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `cluster` stage: `report["consistent"] == true` fails | A `local_report` dependency crashes on peers where the app is loaded but not started | Health-report callees must fail closed (catch `:exit`), never raise |
+| `relup` stage: esbuild cannot resolve a package | `assets/node_modules` missing | `npm ci --prefix assets` |
+| `version_chain` / `release_smoke`: `invalid_catalog_name` | Disposable database does not exist | `createdb` + `CREATE EXTENSION vector` |
+| `staging_infra`: terraform missing or version unsupported | No terraform, or version outside `>= 1.11, < 2.0` | Install a supported terraform |
+| Push rejected (non-fast-forward) | Forge `main` advanced | Fetch, rebase your commit, push, restart the gate on the new SHA |
+| `gate.sh --verify` fails in `build-image.sh` | Receipt is for a different SHA | Rerun the gate on the exact candidate |
+| App boots without a new variable | Name missing from `ENV_NAMES` in the startup script | Add the export and the `ENV_NAMES` entry, re-apply metadata |

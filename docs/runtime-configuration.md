@@ -195,6 +195,7 @@ target release to inspect its redacted feature booleans.
 | Turn recovery | `OPENAGENTS_FEATURE_TURN_RECOVERY` | Off | Off | 8 |
 | Forge Git service | `OPENAGENTS_FEATURE_FORGE` | Off | Off | 12 |
 | Forge deployment | `OPENAGENTS_FEATURE_FORGE_DEPLOY` | Off | Off | 13 |
+| Deployment control plane | `OPENAGENTS_FEATURE_DEPLOYMENT_CONTROL_PLANE` | Off | Off | 13 |
 | Boot convergence | `OPENAGENTS_FEATURE_BOOT_CONVERGENCE` | Off | Off | 13 |
 | Ra authority | `OPENAGENTS_FEATURE_RA` | Off | Off | 12 |
 | Horde runtime | `OPENAGENTS_FEATURE_HORDE` | On | On | 5 |

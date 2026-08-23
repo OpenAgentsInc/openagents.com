@@ -63,6 +63,17 @@ defmodule OpenAgentsWeb.ControllerPairingController do
     end
   end
 
+  def status(conn, _params) do
+    machine = conn.assigns.current_machine
+
+    json(conn, %{
+      "machine_id" => machine.id,
+      "name" => machine.name,
+      "status" => machine.status,
+      "token_expires_at" => DateTime.to_iso8601(machine.token_expires_at)
+    })
+  end
+
   defp verify_enabled(conn, _options) do
     if Computer.enabled?() do
       conn

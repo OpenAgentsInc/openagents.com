@@ -430,6 +430,13 @@ computer, and tier; expire according to `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS`;
 are stored only as digests after claim; allow one active channel registration;
 and disconnect immediately on revocation or expiry.
 
+An active controller can check its own pairing with
+`GET /controller/status` using `Authorization: Bearer <machine-token>`. The
+response contains only the machine ID, name, active status, and token expiry.
+The route returns `401` with a distinct error code for a missing or malformed
+credential, an unknown token, a revoked machine, or an expired token. It never
+returns the token, token digest, roots, or owner identity.
+
 The inference proxy accepts only a server-minted `sig_…` grant. Each grant is
 scoped to a conversation and optional paired computer, expires, is
 generation-fenced and revocable, and has call, token, and cost ceilings. It is

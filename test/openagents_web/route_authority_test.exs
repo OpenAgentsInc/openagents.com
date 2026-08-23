@@ -186,6 +186,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert route!(:get, "/admin/scv/accounts").scope == "scv:account:connect"
     assert route!(:post, "/controller/pairings").class == :computer
     assert route!(:get, "/controller/pairings/:id").scope == "computer:pairing:claim"
+    assert route!(:get, "/controller/status").scope == "machine:status"
     assert route!(:post, "/api/inference/proxy").class == :internal_service
     assert Enum.find(RouteAuthority.socket_inventory(), &(&1.path == "/controller/socket"))
 

@@ -27,6 +27,11 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.RequestOrigin
   end
 
+  pipeline :machine_controller_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.MachineTokenAuth
+  end
+
   pipeline :authenticated_api do
     plug :accepts, ["json"]
     plug :fetch_session
@@ -384,6 +389,12 @@ defmodule OpenAgentsWeb.Router do
     post "/controller/pairings", ControllerPairingController, :create
     get "/controller/pairings/:id", ControllerPairingController, :show
     post "/api/inference/proxy", InferenceProxyController, :create
+  end
+
+  scope "/", OpenAgentsWeb do
+    pipe_through [:api, :machine_controller_api]
+
+    get "/controller/status", ControllerPairingController, :status
   end
 
   scope "/api/v3", OpenAgentsWeb do

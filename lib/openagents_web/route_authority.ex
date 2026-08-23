@@ -226,6 +226,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/controller/pairings/:id"}),
     do: declaration(:computer, "expiring one-time poll secret", "computer:pairing:claim", true)
 
+  defp policy(%{path: "/controller/status", verb: :get}),
+    do: declaration(:machine, "active paired-machine bearer", "machine:status", false)
+
   defp policy(%{path: "/api/inference/proxy"}),
     do: declaration(:internal_service, "scoped inference grant", "inference:invoke", true)
 

@@ -2,8 +2,8 @@
 
 Date: 2026-08-22
 
-Status: In progress. Batches of transcripts are summarized and integrated as
-they are processed.
+Status: Complete. Episodes 199-275 summarized; integration notes maintained
+as plans evolve.
 
 ## Purpose
 
@@ -1291,6 +1291,83 @@ Dispositions:
 Read across batches 199-275, eight durable threads carry the series' product
 promises. Each maps onto the current boards and delivery tracks.
 
+### The thesis: the last product is a clearing house
+
+Strip the seventy-seven episodes of their codenames and one question remains,
+asked a dozen different ways: when agents do the work instead of people, who
+checks it, who pays for it, and where does the proof live?
+
+Every major arc answers one clause of that question:
+
+- **Autopilot (199-213)** answered execution: autonomous loops that keep
+  working overnight without a human steering every turn.
+- **Pylon, the forum, and the markets (214-235)** answered settlement: pay
+  contributors in Bitcoin for compute, data, labor, and verification.
+- **Psionic and Tassadar (216-224, 236-241)** answered verification for
+  training: validators replay work before anyone gets paid.
+- **ProductSpec, AssuranceSpec, Observer, and behavior contracts (246-255)**
+  answered verification for code: green must mean what it claims.
+- **Sarah (260-272)** answered legibility: one accountable actor whose every
+  action emits a receipt.
+- **The forge (270-275)** stopped being another answer and became the
+  substrate where all five clauses live under one authority boundary.
+
+The economics behind the sequence reduce to one asymmetry, stated plainly in
+episode 259: generation is collapsing toward free while verification stays
+expensive. Frontier capability diffuses across labs within months; tokens get
+given away to seed demand; harnesses converge on the same shape. The price of
+an accepted outcome — work someone actually relies on — therefore concentrates
+in checking it. Episode 237 named the unit and the institution: the accepted
+outcome (work scoped in advance, executed wherever cheapest, graded against a
+rubric, receipted, and settled to every contributor) and the clearing layer
+(the load-bearing wall where trust, loosed from the employment bundle that
+used to carry it, gets re-housed).
+
+The failed products teach the same lesson from the negative side, and each
+failure isolates exactly one link of the loop:
+
+- GPutopia died of supply without a buyer.
+- Pay-for-online mining died of payment without verification; it was gamed
+  within days and retired in episode 224.
+- tbDEX died of protocol without runnable operator software.
+- Closed orchestrators such as Fugu risk dying of orchestration without
+  openness.
+- The Anthropic OAuth cutoff (204) taught what happens when your execution
+  runs on a rival's platform.
+
+Each survivor keeps one link and depends on the others for the rest. That is
+why the pivots never felt like reversals from inside: Autopilot, Pylon,
+Desktop, Omega, and the forge were vehicles, not products. The product was
+constant — a market where machine work is scoped before execution, checked
+against evidence rather than narration, proven with receipts anyone can
+inspect, and settled without a human vouching in the middle. Episode 269
+supplies the strategic reading: models are commodities, harnesses are
+commodities, chat surfaces are commodities; nobody has a moat because nobody
+has a network. A clearing house is that network. Every claim filed makes
+verification more practiced; every verified job makes settlement more
+trustworthy; every settled payout recruits another contributor at machine
+speed; Reed's law does the rest. The last-mover position is not the first
+agent product but the final place where agent work becomes believable enough
+to buy.
+
+The forge wins as the current vehicle for an unfashionable reason: it is where
+all five clauses can share one database, one audit trail, and one public API.
+GitHub proved a forge can be the town square for human collaboration. The bet
+under every later episode is that the same surfaces, receipted end to end,
+become the exchange for machine labor.
+
+Three properties decide whether the thesis holds, and all three stay testable
+on this very tracker:
+
+1. Greens must be falsifiable. A result that structurally could not have been
+   red is not evidence (264).
+2. Rewards must follow verified work, never presence or volume.
+3. Authority must remain inspectable at every boundary, and exit must always
+   be possible (207, 266, 272).
+
+Every item on the do-not-build register below violated at least one of the
+three. The register is the fossil record of the thesis.
+
 ### 1. Receipts are the product
 
 The single most repeated idea: claims need evidence artifacts — turn receipts,
@@ -1358,6 +1435,69 @@ Bitcoin settlement, Nostr identity, self-custody, no-lock-in export, open lanes
 versus security lanes: constant from 207 onward, surviving every product pivot.
 Integration: these are constraints, not features — every new surface inherits
 them (PAT-only writes, member-gated push, export paths, no hosted custody).
+
+### Products that flow from the thesis
+
+If the clearing loop — claim, execute, verify, receipt, settle, recruit — is
+the product, then each surface worth building occupies exactly one station of
+that loop. The list below states each product, the episodes that demand it,
+and its smallest honest version. The project skeleton that follows groups the
+same work into team-sized streams.
+
+**Claim station: issue capture everywhere.** An accepted outcome starts as a
+scoped claim, so filing a claim must cost one sentence from anywhere.
+Episode 211's record-feature-request tool prefigured this; episode 251's
+ProductSpec shows the shape of a well-scoped claim (problem, scope, acceptance
+criteria, success metrics); episode 234 shows claims about the company itself
+belonging in the same registry. Smallest version: capture-from-chat — an agent
+or CLI one-liner that files an issue with template sections filled — plus the
+promises registry reborn as forge project items.
+
+**Execution station: capacity truth.** Delegated execution needs to know what
+it can lease. Episode 244 diagnosed capacity reported as presence rather than
+quantity; episode 275 specified the quota broker: leases, budgets, checkpoints,
+recoverable commands, four active computers per chat by default. Smallest
+version: a capacity endpoint that returns numbers, and a broker that leases
+those numbers against a budget with checkpoint-resume on loss.
+
+**Verification station: proof before green.** The series' most developed
+methodology lives here: UX behavior contracts mined from complaints into
+oracle tests (246), coverage manifests so scans refuse to grade incomplete
+programs (264-265), Observer-style manifests executed into assurance receipts
+(252), and the five named false-green failure modes as review anti-patterns
+(252). Smallest version: pilot behavior contracts on one openagents.com
+surface with violations auto-filing issues, and a manifest requirement for
+agent-authored changes before CI green counts.
+
+**Receipt station: legible history.** Episode 272 shipped the two-layer
+changelog — plain words plus the receipt chain behind them — and defined
+transparency tiers (Dark, Pulse, Ledger, Glass). The unfinished half is
+linkage: an issue timeline that shows the job, commit, test run, release, and
+deployment receipts for the exact change (delivery track E). Smallest
+version: deployment events append automatically to linked issues, and every
+changelog entry links its trace under the artifact's visibility tier.
+
+**Settlement station: money on the tracker.** Every payment mechanism exists
+except the last mile: MDK wallets (235), the treasury (235), tips proven
+end to end (235), bounties priced and listed once before (225), referral
+attribution promised twice (229, 239). Smallest version: one bounty-labeled
+issue priced in sats, claimed, completed, verified, and paid from the
+treasury — end to end, once — then the loop becomes policy instead of
+stunt.
+
+**Recruitment station: the flywheel surface.** Verified outcomes recruit both
+humans and agents when they are visible and portable: public traces under the
+visibility policy, licensable later (228, 215); the leaderboard (260, 270);
+`agents.md` as the machine-readable front door (230); and, furthest out, the
+plugin or skill registry where encapsulated solutions earn royalties whenever
+paid workflows route through them (269) — the mechanism episode 269 names as
+the actual moat. Smallest version: a registry of typed skills with usage
+counters; royalties only after settlement works at the bounty scale.
+
+One negative product protects all six stations: the do-not-build register.
+Each retired item above broke a link deliberately — presence-based rewards,
+hosted custody, protocol without software, runtime owned by a rival — and the
+register keeps their lessons attached to reasons rather than vibes.
 
 ### Proposed project skeleton for the new wave
 

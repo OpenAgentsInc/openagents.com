@@ -9,7 +9,10 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
 
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Issues
+  alias OpenAgents.PullRequests.PullRequest
+  alias OpenAgents.Repo
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.DocsCatalog
 
   @marker_png <<0x89, 0x50, 0x4E, 0x47, "FAKE-CARD-RENDER">>
 
@@ -95,6 +98,30 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
     card = OpenAgentsWeb.OG.issue("OpenAgentsInc", "openagents.com", issue)
 
     assert response(get(conn, signed_url(card)), 200) == @marker_png
+  end
+
+  test "pull request cards render from the public pull request path", %{conn: conn} do
+    {_issue, pull_request} = seed_pull_request("Carded pull request")
+
+    card =
+      OpenAgentsWeb.OG.pull_request("OpenAgentsInc", "openagents.com", pull_request)
+
+    assert response(get(conn, signed_url(card)), 200) == @marker_png
+  end
+
+  test "docs cards render from the compile-time catalog and unknown slugs refuse", %{conn: conn} do
+    {:ok, page} = DocsCatalog.render("stacked-pull-requests")
+
+    assert response(get(conn, signed_url(OpenAgentsWeb.OG.docs(page))), 200) == @marker_png
+
+    unknown = %OpenAgentsWeb.OG{
+      kind: :docs,
+      heading: "Nope",
+      page_path: "/docs/never-existed",
+      path_suffix: ["never-existed"]
+    }
+
+    assert response(get(conn, signed_url(unknown)), 404) == ""
   end
 
   test "blob cards pass through the same disclosure gate as the file page", %{
@@ -238,7 +265,43 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
              ~r|/og/v/[0-9a-f]{12}/repos/OpenAgentsInc/openagents\.com/issues/#{issue.number}\.png\?sig=|
   end
 
+  test "a pull request page emits a pull-specific card URL", %{conn: conn} do
+    {issue, _pull_request} = seed_pull_request("Shared pull request")
+
+    {:ok, _view, html} = live(conn, ~p"/OpenAgentsInc/openagents.com/pulls/#{issue.number}")
+
+    assert html =~
+             ~r|/og/v/[0-9a-f]{12}/repos/OpenAgentsInc/openagents\.com/pulls/#{issue.number}\.png\?sig=|
+  end
+
+  test "a documentation page emits a docs-specific card URL", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/docs/stacked-pull-requests")
+
+    assert html =~
+             ~r|property="og:image" content="[^"]*/og/v/[0-9a-f]{12}/docs/stacked-pull-requests\.png\?sig=|
+  end
+
   ## Helpers ------------------------------------------------------------------
+
+  defp seed_pull_request(title) do
+    repository = repository()
+    {:ok, issue} = Issues.create_issue(repository, %{"title" => title})
+
+    pull_request =
+      %PullRequest{}
+      |> PullRequest.changeset(%{
+        repository_id: repository.id,
+        issue_id: issue.id,
+        head_repository_id: repository.id,
+        head_ref: "feature",
+        head_sha: String.duplicate("a", 40),
+        base_ref: "main",
+        base_sha: String.duplicate("b", 40)
+      })
+      |> Repo.insert!()
+
+    {issue, Repo.preload(pull_request, [:issue, :head_repository])}
+  end
 
   defp committed_asset_path do
     Application.app_dir(:openagents, "priv/static/images/og-card-default.png")

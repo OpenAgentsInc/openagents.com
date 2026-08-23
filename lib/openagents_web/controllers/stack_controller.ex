@@ -58,6 +58,46 @@ defmodule OpenAgentsWeb.StackController do
     Ecto.NoResultsError -> not_found(conn)
   end
 
+  def unstack(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {stack, replay_state}} <-
+           Stacks.unstack_from_api(
+             repository,
+             ControllerHelpers.integer_param!(number),
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      render(conn, :show, stack: stack, owner: owner, repo: repo, replay_state: replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def dissolve(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {stack, replay_state}} <-
+           Stacks.dissolve_from_api(
+             repository,
+             ControllerHelpers.integer_param!(number),
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      render(conn, :show, stack: stack, owner: owner, repo: repo, replay_state: replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
   def rebase(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
     repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
 
@@ -97,6 +137,56 @@ defmodule OpenAgentsWeb.StackController do
       |> render(:operation, operation: operation, replay_state: replay_state)
     else
       {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def merge_async(conn, %{"owner" => owner, "repo" => repo, "pull_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+    pull_number = ControllerHelpers.integer_param!(number)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {operation, replay_state}} <-
+           Merge.request_for_pull_request(
+             repository,
+             pull_number,
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      conn
+      |> put_status(:accepted)
+      |> render(:merge_async,
+        operation: operation,
+        replay_state: replay_state,
+        owner: owner,
+        repo: repo,
+        pull_number: pull_number
+      )
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def merge_async_status(conn, %{"owner" => owner, "repo" => repo} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+    pull_number = ControllerHelpers.integer_param!(params["pull_number"])
+
+    case Merge.get_operation_for_pull_request(repository, pull_number, params["operation_id"]) do
+      {:ok, operation} ->
+        render(conn, :merge_async,
+          operation: operation,
+          replay_state: nil,
+          owner: owner,
+          repo: repo,
+          pull_number: pull_number
+        )
+
+      {:error, reason} ->
+        render_error(conn, reason)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -172,13 +262,22 @@ defmodule OpenAgentsWeb.StackController do
        when reason in [:stack_not_found, :pull_request_not_found, :operation_not_found],
        do: not_found(conn)
 
+  defp render_error(conn, {:operation_in_progress, operation_id}) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{
+      message: message(:operation_in_progress),
+      code: "operation_in_progress",
+      operation_id: operation_id
+    })
+  end
+
   defp render_error(conn, reason)
        when reason in [
               :idempotency_conflict,
               :stale_stack_version,
               :expected_head_mismatch,
               :stack_not_open,
-              :operation_in_progress,
               :operation_not_waiting,
               :operation_not_abortable,
               :merge_queue_unavailable
@@ -199,6 +298,8 @@ defmodule OpenAgentsWeb.StackController do
               :broken_base_chain,
               :already_stacked,
               :not_stack_top,
+              :not_stacked,
+              :stack_too_large,
               :resolution_not_found,
               :resolution_parent_mismatch,
               :pull_request_not_in_stack
@@ -240,6 +341,12 @@ defmodule OpenAgentsWeb.StackController do
 
   defp message(:pull_request_not_in_stack),
     do: "The pull request is not an active entry of this stack."
+
+  defp message(:not_stacked),
+    do: "The pull request does not belong to an active stack."
+
+  defp message(:stack_too_large),
+    do: "A stack holds at most #{Stacks.max_entries()} pull requests."
 
   defp message(:resolution_parent_mismatch),
     do: "The resolution commit does not build on the persisted parent."

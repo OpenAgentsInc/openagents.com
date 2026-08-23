@@ -34,6 +34,7 @@ defmodule OpenAgents.Stacks.Merge do
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
+  alias OpenAgents.Stacks
   alias OpenAgents.Stacks.Operation
   alias OpenAgents.Stacks.Stack
   alias OpenAgents.Stacks.StackEntry
@@ -87,6 +88,94 @@ defmodule OpenAgents.Stacks.Merge do
           {:error, reason} -> Repo.rollback(reason)
         end
       end)
+    end
+  end
+
+  @doc """
+  Requests a merge selected by pull request rather than by stack.
+
+  The `merge-async` surface submits against one pull request. The request
+  resolves the pull request's active stack, defaults the merge method to
+  `merge`, and merges the contiguous prefix ending at that layer. An
+  unstacked pull request cannot merge through this surface.
+  """
+  def request_for_pull_request(
+        %Repository{} = repository,
+        pull_number,
+        params,
+        %User{} = actor,
+        key
+      )
+      when is_integer(pull_number) and is_binary(key) do
+    with {:ok, pull_request} <- find_pull_request(repository, pull_number),
+         {:ok, stack_number} <- active_stack_number(pull_request) do
+      request =
+        params
+        |> Map.put("pull_request_number", pull_number)
+        |> Map.put_new("merge_method", "merge")
+
+      request_from_api(repository, stack_number, request, actor, key)
+    end
+  end
+
+  @doc """
+  Loads one merge operation for the pull request that submitted it.
+
+  The poll surface outlives stack membership: a merged pull request's
+  entry is removed, so the lookup goes through the operation's own
+  request rather than the active entry.
+  """
+  def get_operation_for_pull_request(%Repository{} = repository, pull_number, operation_id)
+      when is_integer(pull_number) do
+    with {:ok, uuid} <- cast_operation_id(operation_id),
+         %Operation{} = operation <- find_merge_operation(repository, uuid),
+         %{"pull_request_number" => ^pull_number} <- operation.request do
+      {:ok, operation}
+    else
+      _missing -> {:error, :operation_not_found}
+    end
+  end
+
+  defp cast_operation_id(operation_id) do
+    case Ecto.UUID.cast(operation_id) do
+      {:ok, uuid} -> {:ok, uuid}
+      :error -> {:error, :operation_not_found}
+    end
+  end
+
+  defp find_merge_operation(repository, uuid) do
+    Repo.one(
+      from operation in Operation,
+        join: stack in Stack,
+        on: operation.stack_id == stack.id,
+        where:
+          operation.id == ^uuid and stack.repository_id == ^repository.id and
+            operation.kind == "merge"
+    )
+  end
+
+  defp find_pull_request(repository, number) do
+    pull_request =
+      Repo.one(
+        from pr in PullRequest,
+          join: issue in Issue,
+          on: pr.issue_id == issue.id,
+          where: pr.repository_id == ^repository.id and issue.number == ^number
+      )
+
+    case pull_request do
+      nil -> {:error, :pull_request_not_found}
+      %PullRequest{} -> {:ok, pull_request}
+    end
+  end
+
+  defp active_stack_number(pull_request) do
+    case Stacks.active_entry_for_pull_request(pull_request) do
+      nil ->
+        {:error, :not_stacked}
+
+      %StackEntry{stack_id: stack_id} ->
+        {:ok, Repo.one!(from stack in Stack, where: stack.id == ^stack_id, select: stack.number)}
     end
   end
 
@@ -942,14 +1031,18 @@ defmodule OpenAgents.Stacks.Merge do
 
   defp ensure_no_active_operation(stack, nil) do
     active =
-      Repo.exists?(
+      Repo.one(
         from operation in Operation,
           where:
             operation.stack_id == ^stack.id and
-              operation.state in ^Operation.active_states()
+              operation.state in ^Operation.active_states(),
+          limit: 1
       )
 
-    if active, do: {:error, :operation_in_progress}, else: :ok
+    case active do
+      nil -> :ok
+      %Operation{id: id} -> {:error, {:operation_in_progress, id}}
+    end
   end
 
   defp validate_expected_version(nil, _stack), do: :ok

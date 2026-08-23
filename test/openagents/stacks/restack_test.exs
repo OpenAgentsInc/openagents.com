@@ -376,10 +376,12 @@ defmodule OpenAgents.Stacks.RestackTest do
                  "restack-active-3"
                )
 
-      {:ok, {_operation, :created}} =
+      {:ok, {operation, :created}} =
         Restack.request_from_api(repository, stack.number, %{}, actor, "restack-active-1")
 
-      assert {:error, :operation_in_progress} =
+      operation_id = operation.id
+
+      assert {:error, {:operation_in_progress, ^operation_id}} =
                Restack.request_from_api(repository, stack.number, %{}, actor, "restack-active-2")
     end
 

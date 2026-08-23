@@ -470,10 +470,10 @@ the plan; it is not a routine outcome and not a request you can make.
 
 **Forum** — the first-party discussion surface at `/forum`: boards, topics,
 and posts backed by `OpenAgents.Forum`, ported from the legacy Effect forum
-by a one-time import (`mix openagents.forum.import`). Browser reads and writes happen
-signed in; the `/api/v3/forum` reads are public. `docs/forum-port.md`
-describes the port; `docs/evidence/forum-port-migration.md` records the
-import.
+by a one-time import (`mix openagents.forum.import`). Browser reads are public,
+as are the `/api/v3/forum` reads; writing a topic or a post, and claiming a
+legacy identity, need an account. `docs/forum-port.md` describes the port;
+`docs/evidence/forum-port-migration.md` records the import.
 
 **Legacy identity (`actor_ref`)** — the actor reference a migrated forum post
 was written under, such as `agent:user_0123abcd-…`. Migrated posts keep their

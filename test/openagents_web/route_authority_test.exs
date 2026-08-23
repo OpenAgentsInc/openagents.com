@@ -51,6 +51,38 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:forge_write_api]
   end
 
+  test "public browser forge surfaces remain separate from authenticated entries" do
+    for {path, scope} <- [
+          {"/issues", "forge:issues:web"},
+          {"/projects", "forge:projects:web"}
+        ] do
+      route = route!(:get, path)
+
+      assert route.class == :public_read
+      assert route.principal == "anonymous visitor or signed-in person"
+      assert route.scope == scope
+      refute route.mutation
+    end
+
+    for path <- [
+          "/:owner/:repo/labels",
+          "/:owner/:repo/milestones",
+          "/:owner/:repo/projects",
+          "/:owner/:repo/projects/:number"
+        ] do
+      route = route!(:get, path)
+
+      assert route.class == :public_read
+      assert route.principal == "anonymous visitor or signed-in person"
+      assert route.scope == "forge:repository:web"
+      refute route.mutation
+    end
+
+    assert route!(:get, "/:owner/:repo/issues/new").class == :authenticated_browser
+    assert route!(:get, "/:owner/:repo/members").class == :authenticated_browser
+    assert route!(:get, "/:owner/:repo/assignees").class == :authenticated_browser
+  end
+
   test "repository identity, list, and import status reads require bearer authentication" do
     forge_user = route!(:get, "/api/v3/user")
     repository_list = route!(:get, "/api/v3/user/repos")

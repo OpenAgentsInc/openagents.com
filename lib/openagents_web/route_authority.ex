@@ -42,11 +42,6 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/memory",
     "/device",
     "/repositories",
-    # The workspace-wide issue and project lists. Repository-scoped reading is
-    # public; reading across every repository is not, because the set being
-    # read is one person's.
-    "/issues",
-    "/projects",
     # The forum. Reading and posting happen signed in, matching the other
     # workspace-wide surfaces.
     "/forum",
@@ -122,6 +117,24 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: path, verb: verb})
        when path in @public_browser_paths and verb in [:get, :head],
        do: declaration(:public_read, "anonymous", "published:web", false)
+
+  defp policy(%{path: "/issues", verb: verb}) when verb in [:get, :head],
+    do:
+      declaration(
+        :public_read,
+        "anonymous visitor or signed-in person",
+        "forge:issues:web",
+        false
+      )
+
+  defp policy(%{path: "/projects", verb: verb}) when verb in [:get, :head],
+    do:
+      declaration(
+        :public_read,
+        "anonymous visitor or signed-in person",
+        "forge:projects:web",
+        false
+      )
 
   defp policy(%{path: "/auth/github", verb: :post}),
     do: declaration(:authenticated_browser, "explicit OAuth applicant", "identity:connect", true)
@@ -270,6 +283,17 @@ defmodule OpenAgentsWeb.RouteAuthority do
       tracker_browser_path?(path) ->
         declaration(:authenticated_browser, "active encrypted browser session", "forge:web", true)
 
+      tracker_read_browser_path?(path) and verb in [:get, :head] ->
+        # Reading tracker surfaces is public on a public repository. The GET
+        # mutates nothing: every write rides the LiveView channel and is
+        # re-checked against writability in the view's event handlers.
+        declaration(
+          :public_read,
+          "anonymous visitor or signed-in person",
+          "forge:repository:web",
+          false
+        )
+
       issue_browser_path?(path) and verb in [:get, :head] ->
         # Reading issues is public on a public repository. The GET mutates
         # nothing: every write rides the LiveView channel and is re-checked
@@ -313,8 +337,6 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/data" <> _path), do: "data:self"
   defp browser_scope("/memory/" <> _path), do: "memory:self"
   defp browser_scope("/github/connection"), do: "github-tools:self"
-  defp browser_scope("/issues"), do: "forge:issues:self"
-  defp browser_scope("/projects"), do: "forge:projects:self"
   defp browser_scope("/settings/api-tokens"), do: "api-token:self"
   defp browser_scope(_path), do: "product:self"
 
@@ -324,10 +346,16 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_mutation?(_path, _verb), do: true
 
   defp tracker_browser_path?(path) do
-    String.match?(
-      path,
-      ~r{\A/:owner/:repo/(issues/new|labels|milestones|assignees|projects|members)}
-    )
+    String.match?(path, ~r{\A/:owner/:repo/(issues/new|assignees|members)\z})
+  end
+
+  defp tracker_read_browser_path?(path) do
+    path in [
+      "/:owner/:repo/labels",
+      "/:owner/:repo/milestones",
+      "/:owner/:repo/projects",
+      "/:owner/:repo/projects/:number"
+    ]
   end
 
   # The issue index and detail pages live in their own public-read session;

@@ -16,6 +16,7 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
   alias OpenAgents.Stacks
+  alias OpenAgents.Stacks.Restack
   alias OpenAgentsWeb.RepositoryAccess
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
@@ -36,6 +37,11 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
      |> assign(:repository, repository)
      |> assign(:pull_request, pull_request)
      |> assign(:stack_context, stack_context)
+     |> assign(:stack_operation, nil)
+     |> assign(
+       :can_write,
+       Repositories.writable?(repository, socket.assigns.current_user)
+     )
      |> assign(
        :diff_readable,
        RepositoryAccess.full_source?(repository, socket.assigns.current_user)
@@ -74,6 +80,99 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
 
   defp layer_range_if_intact(%{boundary_state: :stale}), do: nil
   defp layer_range_if_intact(context), do: context.layer_range
+
+  def handle_event("restack", _params, socket) do
+    %{assigns: assigns} = socket
+
+    with true <- assigns.can_write and assigns.stack_context != nil,
+         {:ok, {operation, _replay_state}} <-
+           Restack.request_from_api(
+             assigns.repository,
+             assigns.stack_context.stack.number,
+             %{},
+             assigns.current_user,
+             Ecto.UUID.generate()
+           ) do
+      {:noreply,
+       socket
+       |> assign(:stack_operation, operation)
+       |> put_flash(:info, "Stack rebase started.")}
+    else
+      {:error, {:operation_in_progress, operation_id}} ->
+        {:noreply, socket |> load_operation(operation_id) |> refresh_stack()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "The stack rebase could not start.")}
+
+      false ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("refresh-operation", _params, socket) do
+    case socket.assigns.stack_operation do
+      nil -> {:noreply, socket}
+      operation -> {:noreply, socket |> load_operation(operation.id) |> refresh_stack()}
+    end
+  end
+
+  def handle_event("unstack", _params, socket) do
+    %{assigns: assigns} = socket
+
+    with true <- assigns.can_write and assigns.stack_context != nil,
+         {:ok, _result} <-
+           Stacks.unstack_from_api(
+             assigns.repository,
+             assigns.stack_context.stack.number,
+             %{"pull_request" => assigns.pull_request.issue.number},
+             assigns.current_user,
+             Ecto.UUID.generate()
+           ) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "The pull request left the stack.")
+       |> refresh_stack()}
+    else
+      {:error, {:operation_in_progress, operation_id}} ->
+        {:noreply, load_operation(socket, operation_id)}
+
+      {:error, :not_stack_top} ->
+        {:noreply, put_flash(socket, :error, "Only the top layer can leave the stack.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "The pull request could not leave the stack.")}
+
+      false ->
+        {:noreply, socket}
+    end
+  end
+
+  defp load_operation(socket, operation_id) do
+    %{assigns: assigns} = socket
+
+    case Restack.get_operation(
+           assigns.repository,
+           assigns.stack_context.stack.number,
+           operation_id
+         ) do
+      {:ok, operation} -> assign(socket, :stack_operation, operation)
+      {:error, _reason} -> socket
+    end
+  end
+
+  defp refresh_stack(socket) do
+    %{assigns: assigns} = socket
+
+    stack_context =
+      case Stacks.review_context(assigns.repository, assigns.pull_request) do
+        {:ok, context} -> context
+        {:error, :not_stacked} -> nil
+      end
+
+    socket
+    |> assign(:stack_context, stack_context)
+    |> assign_stack_diff()
+  end
 
   def render(assigns) do
     ~H"""
@@ -131,9 +230,51 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
                 id="stack-map"
                 number={@stack_context.stack.number}
                 trunk={@stack_context.stack.trunk_ref}
+                trunk_navigate={~p"/#{@owner}/#{@repo}/tree/#{@stack_context.stack.trunk_ref}"}
                 layers={stack_map_layers(@stack_context, @owner, @repo)}
                 class="mt-4 max-w-md"
-              />
+              >
+                <:action :if={@can_write}>
+                  <.button id="stack-rebase" variant={:outline} size={:sm} phx-click="restack">
+                    Rebase the stack
+                  </.button>
+                  <.button
+                    :if={@stack_context.position == @stack_context.size}
+                    id="stack-unstack"
+                    variant={:outline}
+                    size={:sm}
+                    phx-click="unstack"
+                  >
+                    Remove from stack
+                  </.button>
+                </:action>
+              </.stack_map>
+
+              <p id="stack-readiness" class="mt-3 text-sm text-muted-foreground">
+                {readiness(@stack_context)}
+              </p>
+
+              <.alert
+                :if={@stack_operation}
+                id="stack-operation-status"
+                variant={operation_variant(@stack_operation.state)}
+                appearance={:notice}
+                label={operation_label(@stack_operation.state)}
+                class="mt-4"
+              >
+                The rebase runs on the server and moves every branch at once when
+                it finishes.
+                <:action>
+                  <.button
+                    id="stack-operation-refresh"
+                    variant={:outline}
+                    size={:sm}
+                    phx-click="refresh-operation"
+                  >
+                    Check progress
+                  </.button>
+                </:action>
+              </.alert>
 
               <nav class="mt-4 flex gap-2" aria-label="Stack diff views">
                 <.button
@@ -185,8 +326,13 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
                 A lower branch was rewritten, so the stored review boundary no longer
                 matches the parent branch. Rebase the stack to restore the intended
                 review boundary.
-                <:action>
-                  <.button id="stack-restack-action" variant={:outline} size={:sm} disabled>
+                <:action :if={@can_write}>
+                  <.button
+                    id="stack-restack-action"
+                    variant={:outline}
+                    size={:sm}
+                    phx-click="restack"
+                  >
                     Rebase the stack
                   </.button>
                 </:action>
@@ -225,6 +371,40 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
       }
     end)
   end
+
+  defp readiness(context) do
+    states = Enum.map(context.stack.entries, &layer_state(&1.pull_request))
+    total = length(states)
+    draft = Enum.count(states, &(&1 == "draft"))
+
+    cond do
+      context.stack.health != "healthy" ->
+        "#{layer_count(total)} · the stack needs a rebase before it can merge"
+
+      draft > 0 ->
+        "#{total - draft} of #{layer_count(total)} ready · #{draft} still in draft"
+
+      true ->
+        "#{layer_count(total)} ready to merge bottom-first"
+    end
+  end
+
+  defp layer_count(1), do: "1 layer"
+  defp layer_count(count), do: "#{count} layers"
+
+  defp operation_variant(state) when state in ["succeeded"], do: :success
+  defp operation_variant(state) when state in ["failed", "cancelled"], do: :danger
+  defp operation_variant("waiting_for_conflict_resolution"), do: :warning
+  defp operation_variant(_state), do: :info
+
+  defp operation_label("pending"), do: "Stack rebase queued"
+  defp operation_label("running"), do: "Stack rebase running"
+  defp operation_label("waiting_for_conflict_resolution"), do: "Stack rebase paused on a conflict"
+  defp operation_label("waiting_for_checks"), do: "Stack rebase waiting for checks"
+  defp operation_label("succeeded"), do: "Stack rebase finished"
+  defp operation_label("failed"), do: "Stack rebase failed"
+  defp operation_label("cancelled"), do: "Stack rebase cancelled"
+  defp operation_label(other), do: other
 
   defp layer_state(pull_request) do
     cond do

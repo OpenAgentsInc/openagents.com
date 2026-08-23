@@ -1,5 +1,6 @@
 defmodule OpenAgentsWeb.PullRequestLiveTest do
   use OpenAgentsWeb.ConnCase
+  import Ecto.Query
   import Phoenix.LiveViewTest
   import OpenAgents.AccountsFixtures
   import OpenAgents.IssuesFixtures
@@ -124,10 +125,75 @@ defmodule OpenAgentsWeb.PullRequestLiveTest do
       {:ok, show, html} = live(conn, pull_path(repository, top))
 
       assert has_element?(show, "#stack-stale-boundary")
-      assert has_element?(show, "#stack-restack-action")
       assert render(show) =~ "based on an outdated parent commit"
       refute html =~ "layer-1.md"
       refute html =~ "layer-2.md"
+    end
+
+    test "a reader sees the readiness summary and trunk link but no actions", %{
+      conn: conn,
+      repository: repository,
+      pull_requests: pull_requests
+    } do
+      top = Enum.at(pull_requests, 1)
+      {:ok, show, _html} = live(conn, pull_path(repository, top))
+
+      assert element(show, "#stack-readiness") |> render() =~
+               "0 of 2 layers ready · 2 still in draft"
+
+      assert has_element?(
+               show,
+               "#stack-map a[href='/#{repository.owner}/#{repository.name}/tree/main']"
+             )
+
+      refute has_element?(show, "#stack-rebase")
+      refute has_element?(show, "#stack-unstack")
+    end
+
+    test "a writer starts a stack rebase from the page", %{
+      conn: conn,
+      repository: repository,
+      pull_requests: pull_requests
+    } do
+      conn = log_in_repository_user(conn, "stack-writer", repository)
+      top = Enum.at(pull_requests, 1)
+      {:ok, show, _html} = live(conn, pull_path(repository, top))
+
+      show |> element("#stack-rebase") |> render_click()
+
+      assert element(show, "#stack-operation-status") |> render() =~ "Stack rebase queued"
+
+      assert Repo.exists?(
+               from operation in OpenAgents.Stacks.Operation,
+                 where: operation.kind == "rebase" and operation.state == "pending"
+             )
+
+      show |> element("#stack-rebase") |> render_click()
+      assert element(show, "#stack-operation-status") |> render() =~ "Stack rebase queued"
+
+      show |> element("#stack-operation-refresh") |> render_click()
+      assert has_element?(show, "#stack-operation-status")
+    end
+
+    test "a writer removes the top layer from the stack", %{
+      conn: conn,
+      repository: repository,
+      pull_requests: pull_requests
+    } do
+      conn = log_in_repository_user(conn, "stack-writer", repository)
+      [bottom, top] = pull_requests
+
+      {:ok, bottom_show, _html} = live(conn, pull_path(repository, bottom))
+      refute has_element?(bottom_show, "#stack-unstack")
+      assert has_element?(bottom_show, "#stack-rebase")
+
+      {:ok, show, _html} = live(conn, pull_path(repository, top))
+      assert has_element?(show, "#stack-unstack")
+
+      show |> element("#stack-unstack") |> render_click()
+
+      assert render(show) =~ "The pull request left the stack."
+      refute has_element?(show, "#stack-review")
     end
   end
 

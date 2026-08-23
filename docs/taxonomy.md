@@ -148,7 +148,7 @@ surface via `openagents api`.
 
 **Forum** — the first-party discussion surface at `/forum`: boards, topics,
 and posts backed by `OpenAgents.Forum`, ported from the legacy Effect forum
-by a one-time import (`mix forum.import`). Browser reads and writes happen
+by a one-time import (`mix openagents.forum.import`). Browser reads and writes happen
 signed in; the `/api/v3/forum` reads are public. `docs/forum-port.md`
 describes the port; `docs/evidence/forum-port-migration.md` records the
 import.

@@ -24,8 +24,9 @@ defmodule OpenAgents.Forge.BuildArtifact do
   @classification ~w(direct_candidate needs_rolling_replace)
   # Keep atom creation bounded to module namespaces owned by this OTP
   # application. The release contains the two application roots, generated
-  # Inspect implementations, and Mix tasks in addition to OpenAgents.*.
-  @module_pattern ~r/^Elixir\.(?:(?:OpenAgents|OpenAgentsWeb)(?:\.[A-Za-z][A-Za-z0-9_]*)*|Inspect\.(?:OpenAgents|OpenAgentsWeb)(?:\.[A-Za-z][A-Za-z0-9_]*)+|Mix\.Tasks\.(?:OpenAgents|Openagents)(?:\.[A-Za-z][A-Za-z0-9_]*)+)$/
+  # protocol implementations (Inspect, Jason.Encoder, and String.Chars) for
+  # application structs, and Mix tasks in addition to OpenAgents.*.
+  @module_pattern ~r/^Elixir\.(?:(?:OpenAgents|OpenAgentsWeb)(?:\.[A-Za-z][A-Za-z0-9_]*)*|(?:Inspect|Jason\.Encoder|String\.Chars)\.(?:OpenAgents|OpenAgentsWeb)(?:\.[A-Za-z][A-Za-z0-9_]*)+|Mix\.Tasks\.(?:OpenAgents|Openagents)(?:\.[A-Za-z][A-Za-z0-9_]*)+)$/
 
   @type beam :: %{module: String.t(), binary: binary()}
   @type verified :: %{

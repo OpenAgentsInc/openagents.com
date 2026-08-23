@@ -12,7 +12,7 @@ The legacy forum was a TanStack application backed by the Effect stack, with
 its data in the `khala_sync_prod` Postgres instance. The port moves that data
 into the Phoenix application database and serves it through
 `OpenAgents.Forum` and the LiveViews under `/forum`. The move is a one-time
-import (`mix forum.import`, `lib/mix/tasks/forum_import.ex`), not a sync:
+import (`mix openagents.forum.import`, `lib/mix/tasks/openagents.forum.import.ex`), not a sync:
 after the import, nothing reads from `khala_sync_prod`.
 
 ## Schema mapping

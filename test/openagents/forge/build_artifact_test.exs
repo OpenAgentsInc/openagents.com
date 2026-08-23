@@ -199,6 +199,7 @@ defmodule OpenAgents.Forge.BuildArtifactTest do
       loaded_beam(OpenAgents),
       loaded_beam(OpenAgentsWeb),
       loaded_beam(Inspect.OpenAgents.Accounts.User),
+      loaded_beam(Jason.Encoder.OpenAgents.Deployments.Execution),
       loaded_beam(Mix.Tasks.Openagents.Config.Readiness)
     ]
 
@@ -210,6 +211,7 @@ defmodule OpenAgents.Forge.BuildArtifactTest do
     assert artifact.manifest["changes"]["added"] ==
              Enum.sort([
                "Elixir.Inspect.OpenAgents.Accounts.User",
+               "Elixir.Jason.Encoder.OpenAgents.Deployments.Execution",
                "Elixir.Mix.Tasks.Openagents.Config.Readiness",
                "Elixir.OpenAgents",
                "Elixir.OpenAgentsWeb"

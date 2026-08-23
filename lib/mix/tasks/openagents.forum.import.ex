@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Forum.Import do
+defmodule Mix.Tasks.Openagents.Forum.Import do
   @moduledoc """
   One-time import of the legacy Effect forum from `khala_sync_prod`.
 
@@ -13,9 +13,9 @@ defmodule Mix.Tasks.Forum.Import do
 
   ## Run
 
-      mix forum.import
+      mix openagents.forum.import
 
-      FORUM_IMPORT_DATABASE_URL=... FORUM_IMPORT_PASSWORD=... mix forum.import
+      FORUM_IMPORT_DATABASE_URL=... FORUM_IMPORT_PASSWORD=... mix openagents.forum.import
   """
 
   use Mix.Task

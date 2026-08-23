@@ -6,7 +6,7 @@ Source of truth for the one-time import of the legacy Effect forum into the
 Phoenix application database. Run with:
 
 ```sh
-FORUM_IMPORT_PASSWORD=... mix forum.import
+FORUM_IMPORT_PASSWORD=... mix openagents.forum.import
 ```
 
 ## Results

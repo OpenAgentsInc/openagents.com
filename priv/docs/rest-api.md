@@ -128,6 +128,57 @@ and an edge that would close a cycle each return `422 Unprocessable Entity`,
 and none of the batch is recorded. Reading the graph needs the same access as
 reading the issue. Recording or removing an edge needs repository write access.
 
+## The OpenAgents extension namespace
+
+Every OpenAgents-specific field on a GitHub-shaped resource lives in one
+`openagents` object beside the GitHub keys, which stay exactly as GitHub
+shapes them. A GitHub client ignores the extra object; an OpenAgents-aware
+client reads `issue.openagents.*`.
+
+Four rules govern every field in that namespace:
+
+1. It lives under `openagents` and never changes a GitHub-shaped key.
+2. `GET /api/v3` enumerates it — type, enum values, owning version, and the
+   endpoints it belongs to — before any client is expected to read it.
+3. A filter the root document lists is refused by the endpoint that names it
+   when the value falls outside the published enum.
+4. A derived field states what it derives from, including whose visibility.
+
+Rules 1 to 3 are enforced by a test that reads the root document and the live
+responses and fails on any disagreement, so a field that is served but not
+published cannot ship.
+
+```text
+GET /api/v3
+```
+
+Responses that carry an extension name the namespace in the
+`x-openagents-extensions` header, so a client can branch without hardcoding.
+
+## Issue progress
+
+`issue.openagents.progress` is one of `to_do`, `in_progress`, or `done`. It is
+derived, never stored:
+
+- A closed issue is `done`. Closing an issue is the act that finishes it.
+- An open issue is `in_progress` while a project board the reader can open
+  places it in a started column — `In Progress`, `In review`, or `Started`,
+  matched without regard to case or separators.
+- Every other open issue is `to_do`, including one whose only board column is
+  `Done`, because the issue is still open.
+
+Board visibility is the reader's own. A column on a board in a private
+repository the reader is not a member of never becomes a fact about the issue.
+
+```text
+GET /api/v3/repos/:owner/:repo/issues?progress=in_progress
+```
+
+The filter reads the same derivation as the field, so a listed issue always
+reports the value it was listed under. It composes with `state` like every
+other filter, so `progress=done` needs `state=all` or `state=closed`. Any
+value outside the enum returns `422 Unprocessable Entity` naming `progress`.
+
 ## Reputation attestations
 
 A reputation attestation is a signed claim that one subject completed,

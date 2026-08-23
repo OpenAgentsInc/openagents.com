@@ -234,6 +234,36 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     end
   end
 
+  # The arc has shipped in the component set since Circle landed and had no
+  # data behind it. It reads the same derived value the API publishes as
+  # `issue.openagents.progress`.
+  test "an issue a board has started renders the started arc", %{conn: conn} do
+    {:ok, started} = Issues.create_issue(repository(), %{"title" => "Underway"})
+    {:ok, queued} = Issues.create_issue(repository(), %{"title" => "Queued"})
+
+    {:ok, project} =
+      OpenAgents.Projects.create_project(repository(), %{title: "Board", owner: "OpenAgents"})
+
+    {:ok, _item} =
+      OpenAgents.ProjectItems.create_project_item(repository(), %{
+        project_id: project.id,
+        issue_id: started.id,
+        issue_repository_id: started.repository_id,
+        values: %{"Status" => "In Progress"}
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+
+    assert has_element?(
+             view,
+             ~s{#issues-#{started.id} .issue-status[data-category="started"] .issue-status__arc}
+           )
+
+    assert has_element?(view, ~s{[aria-label="In progress"]})
+
+    refute has_element?(view, ~s{#issues-#{queued.id} .issue-status[data-category="started"]})
+  end
+
   defp repository do
     OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

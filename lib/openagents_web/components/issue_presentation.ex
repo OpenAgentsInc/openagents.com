@@ -29,6 +29,10 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
     default: nil,
     doc: "`owner/name`; set it on a cross-repository list, leave it off within one"
 
+  attr :progress, :string,
+    default: nil,
+    doc: "the derived `issue.openagents.progress` value, when the caller has read it"
+
   slot :state, doc: "a control that changes the issue's state, for a caller who may"
   slot :people, doc: "a control that changes the issue's assignees, for a caller who may"
 
@@ -40,8 +44,8 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
       repository={@repository}
       title={@issue.title}
       navigate={@navigate}
-      status_category={category(@issue)}
-      status_label={status_label(@issue)}
+      status_category={category(@issue, @progress)}
+      status_label={status_label(@issue, @progress)}
       labels={labels(@issue)}
       assignee={assignee(@issue)}
       created={"opened #{relative(@issue.inserted_at)} ago"}
@@ -55,20 +59,35 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
   end
 
   @doc """
-  GitHub's state iconography, and nothing invented on top of it.
+  GitHub's state iconography, and one thing on top of it that the API already
+  publishes.
 
   An open issue takes the green circle-dot. `not_planned` is the one close
   reason with a distinct reading, so it keeps the cancelled glyph; every other
   close is the purple check-circle.
+
+  The exception is `in_progress`. An open issue a board says someone has
+  started takes Circle's `:started` arc, which is the shape the component set
+  has always drawn and never had data for. The value is the same derived
+  `issue.openagents.progress` the API serves, read through the same reader's
+  visibility, so the list and the API cannot show different work as underway.
+  A caller that has not read progress passes none and gets GitHub's two states.
   """
-  def category(%{state: "closed", state_reason: "not_planned"}), do: :canceled
-  def category(%{state: "closed"}), do: :completed
-  def category(_issue), do: :open
+  def category(issue, progress \\ nil)
+  def category(%{state: "closed", state_reason: "not_planned"}, _progress), do: :canceled
+  def category(%{state: "closed"}, _progress), do: :completed
+  def category(%{state: "open"}, "in_progress"), do: :started
+  def category(_issue, _progress), do: :open
 
   @doc "The word beside the glyph, for assistive technology and for a label."
-  def status_label(%{state: "closed", state_reason: "not_planned"}), do: "Closed as not planned"
-  def status_label(%{state: "closed"}), do: "Closed"
-  def status_label(_issue), do: "Open"
+  def status_label(issue, progress \\ nil)
+
+  def status_label(%{state: "closed", state_reason: "not_planned"}, _progress),
+    do: "Closed as not planned"
+
+  def status_label(%{state: "closed"}, _progress), do: "Closed"
+  def status_label(%{state: "open"}, "in_progress"), do: "In progress"
+  def status_label(_issue, _progress), do: "Open"
 
   @doc """
   The states a triaging member may choose between.

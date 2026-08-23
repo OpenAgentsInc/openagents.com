@@ -174,6 +174,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
     {issues, total} = Issues.list_issues_page(repository, opts)
 
     socket
+    |> assign(:progress, Issues.progress_map(issues, socket.assigns.current_user))
     |> assign(
       :open_count,
       Issues.count_issues(repository, Keyword.put(count_opts, :state, "open"))
@@ -306,6 +307,7 @@ defmodule OpenAgentsWeb.IssueIndexLive do
           :for={{id, issue} <- @streams.issues}
           id={id}
           issue={issue}
+          progress={@progress[issue.id]}
           navigate={~p"/#{@owner}/#{@repo}/issues/#{issue.number}"}
         >
           <:state :if={@can_write}>
@@ -313,8 +315,14 @@ defmodule OpenAgentsWeb.IssueIndexLive do
               id={"row-state-#{issue.id}"}
               label={"Change the state of issue ##{issue.number}"}
             >
+              <%!-- The trigger draws what the static row would draw, derived value
+                    included, so opening the menu is the only difference a
+                    member sees. --%>
               <:trigger>
-                <Circle.issue_state state={issue.state} reason={issue.state_reason} />
+                <Circle.issue_status
+                  category={IssuePresentation.category(issue, @progress[issue.id])}
+                  label={IssuePresentation.status_label(issue, @progress[issue.id])}
+                />
               </:trigger>
               <Circle.field_menu_item
                 :for={{label, state, reason} <- IssuePresentation.state_options()}

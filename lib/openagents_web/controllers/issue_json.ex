@@ -4,9 +4,14 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   GitHub-shaped keys keep their exact shape. OpenAgents-specific fields live
   under one `openagents` object, so a GitHub client sees an additional object
-  and nothing else. The object appears only when the caller supplies the
-  `:dependencies` graph, because an absent graph is not the same fact as an
-  issue with no prerequisites.
+  and nothing else. Each field appears only when the caller supplies it, and
+  the object appears only when at least one field does: an absent dependency
+  graph is not the same fact as an issue with no prerequisites, and an absent
+  progress derivation is not the same fact as an issue nobody has started.
+
+  Every key this module can put inside the object is enumerated at
+  `GET /api/v3`, and `OpenAgentsWeb.ApiExtensionGovernanceTest` fails if one
+  is not.
   """
 
   def render("index.json", %{issues: issues, pagination: pagination} = assigns) do
@@ -58,21 +63,30 @@ defmodule OpenAgentsWeb.IssueJSON do
   end
 
   defp put_extension(json, issue, assigns) do
-    case Map.get(assigns, :dependencies) do
-      nil -> json
-      graph -> Map.put(json, :openagents, extension_json(graph, issue))
-    end
+    extension =
+      %{}
+      |> put_dependencies(Map.get(assigns, :dependencies), issue)
+      |> put_progress(Map.get(assigns, :progress), issue)
+
+    if extension == %{}, do: json, else: Map.put(json, :openagents, extension)
   end
 
-  defp extension_json(graph, issue) do
+  defp put_dependencies(extension, nil, _issue), do: extension
+
+  defp put_dependencies(extension, graph, issue) do
     dependencies = Map.get(graph, issue.id, %{blocked: false, blocked_by: [], blocks: []})
 
-    %{
+    Map.merge(extension, %{
       blocked: dependencies.blocked,
       blocked_by: dependencies.blocked_by,
       blocks: dependencies.blocks
-    }
+    })
   end
+
+  defp put_progress(extension, nil, _issue), do: extension
+
+  defp put_progress(extension, progress, issue) when is_map(progress),
+    do: Map.put(extension, :progress, Map.get(progress, issue.id, "to_do"))
 
   defp total_pages(0, _per_page), do: 1
 

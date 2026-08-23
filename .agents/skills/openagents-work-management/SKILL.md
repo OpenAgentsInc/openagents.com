@@ -107,10 +107,28 @@ openagents api "repos/OWNER/REPO/issues?state=open&blocked=false"
 ```
 
 Every issue response also carries `openagents.blocked`, `openagents.blocked_by`,
-and `openagents.blocks`. `blocked` is derived from the prerequisites' state, so
-closing the last open prerequisite unblocks the issue with no second write. An
-unknown number, a self reference, and an edge that would close a cycle each
-return `422`, and none of the batch is recorded.
+`openagents.blocks`, and `openagents.progress`. `blocked` is derived from the
+prerequisites' state, so closing the last open prerequisite unblocks the issue
+with no second write. An unknown number, a self reference, and an edge that
+would close a cycle each return `422`, and none of the batch is recorded.
+
+`progress` is `to_do`, `in_progress`, or `done`, derived the same way: a closed
+issue is `done`, and an open issue is `in_progress` while a project board you
+can read places it in a started column. Filter on it to see what is underway:
+
+```sh
+openagents api "repos/OWNER/REPO/issues?progress=in_progress"
+```
+
+Ask the API what OpenAgents adds to the GitHub shape instead of reading prose:
+
+```sh
+openagents api "/api/v3"
+```
+
+That root document enumerates every `openagents` field with its type, enum
+values, and the endpoints that filter on it. A field that is not listed there
+is not part of the API.
 
 ## Projects
 

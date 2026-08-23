@@ -6,6 +6,20 @@ defmodule OpenAgentsWeb.ApiExtensionController do
   discover the OpenAgents-specific parts of the API mechanically instead of
   reading prose. Responses that carry an extension also name it in the
   `x-openagents-extensions` response header.
+
+  The rules every extension field follows:
+
+  1. It lives under the resource's `openagents` object and never changes a
+     GitHub-shaped key.
+  2. It is enumerated here before any client is expected to read it, with its
+     type and, where it is an enum, the exact values the context derives.
+  3. A filter listed here is refused by the endpoint that names it when the
+     value falls outside that enum.
+  4. A derived field states what it derives from, including whose visibility.
+
+  Rules 1 to 3 are enforced, not merely followed:
+  `OpenAgentsWeb.ApiExtensionGovernanceTest` reads this document and the live
+  responses and fails on any disagreement between them.
   """
 
   use OpenAgentsWeb, :controller
@@ -86,6 +100,14 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "type" => "array",
           "items" => @issue_reference,
           "description" => "Issues that wait on this issue."
+        },
+        "progress" => %{
+          "type" => "string",
+          "enum" => OpenAgents.Issues.progress_values(),
+          "description" =>
+            "How far along the issue is. Derived: a closed issue is done, and " <>
+              "an open issue is in_progress while a board the reader can open " <>
+              "places it in a started column."
         }
       },
       "filters" => %{
@@ -93,6 +115,14 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "endpoint" => "GET /api/v3/repos/{owner}/{repo}/issues",
           "type" => "boolean",
           "description" => "Lists issues that do or do not have an open prerequisite."
+        },
+        "progress" => %{
+          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/issues",
+          "type" => "string",
+          "enum" => OpenAgents.Issues.progress_values(),
+          "description" =>
+            "Lists issues at one derived progress value. It composes with " <>
+              "state, so done needs state=all or state=closed."
         }
       },
       "endpoints" => [

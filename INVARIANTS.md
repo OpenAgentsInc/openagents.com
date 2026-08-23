@@ -2345,6 +2345,44 @@ Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
 `test/openagents_web/live/project_workspace_live_test.exs`, and
 `test/openagents/forge/git_http_test.exs`.
 
+### API-001 — Every OpenAgents extension field is published before it is served
+
+Status: Current
+
+The GitHub-shaped API under `/api/v3` grows OpenAgents-specific fields in one
+namespaced object per resource. GitHub-shaped keys keep their exact shape, so a
+GitHub client sees an additional `openagents` object and nothing else, and
+every OpenAgents field lives inside it.
+
+Discovery is mechanical, not tribal. `GET /api/v3` enumerates each extension
+field with its type, its enum values, its owning version, and the endpoints it
+belongs to. A response carrying an extension names the namespace in the
+`x-openagents-extensions` header. A filter the root document lists is refused
+by the endpoint that names it when the value falls outside the published enum,
+with a stable field-level `422`.
+
+These are enforced, not merely followed. The governance test reads the root
+document and the live responses and fails on any disagreement: a field served
+inside `openagents` that the root document does not enumerate, a documented
+field no response carries, a documented filter an endpoint accepts any value
+for, or a published enum that has drifted from the value the context derives.
+A governance rule nothing enforces would be a contract with no proof.
+
+Derived fields state their sources, including whose visibility.
+`issue.openagents.progress` is derived from the reader's own readable boards
+through `OpenAgents.Repositories.readable_by/2`, the one predicate every
+repository surface composes, so a column on a board in a private repository the
+reader cannot open never becomes a fact about a public issue. The filter and
+the field read the same query, so a listed issue always reports the value it
+was listed under.
+
+Evidence: `OpenAgentsWeb.ApiExtensionController`, `OpenAgentsWeb.IssueJSON`,
+`OpenAgents.Issues`,
+`test/openagents_web/controllers/api_extension_governance_test.exs`,
+`test/openagents_web/controllers/api_extension_controller_test.exs`,
+`test/openagents_web/controllers/issue_controller_test.exs`, and
+`test/openagents/issue_progress_test.exs`.
+
 ### REPOSITORY-002 — Development pushes go to the forge, never to the mirror
 
 Status: Current
@@ -2569,5 +2607,6 @@ contract; the invariant prose above defines the assertion, not the filename.
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
 | REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
+| API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |

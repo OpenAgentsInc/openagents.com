@@ -7,11 +7,12 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Repositories
 
   def index(conn, %{"owner" => owner, "repo" => repo} = params) do
-    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+    reader = conn.assigns[:current_user]
+    repository = Repositories.get_visible_by_path!(owner, repo, reader)
 
     with :ok <- validate_index_params(params),
          {issues, total} <-
-           Issues.list_issues_page(repository, index_options(params)) do
+           Issues.list_issues_page(repository, index_options(params, reader)) do
       conn
       |> put_extensions_header()
       |> render(:index,
@@ -19,6 +20,7 @@ defmodule OpenAgentsWeb.IssueController do
         owner: owner,
         repo: repo,
         dependencies: Issues.dependency_graph(issues),
+        progress: Issues.progress_map(issues, reader),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -50,6 +52,9 @@ defmodule OpenAgentsWeb.IssueController do
       Map.has_key?(params, "blocked") and blocked_filter(params["blocked"]) == :invalid ->
         {:error, :blocked, "must be true or false"}
 
+      Map.has_key?(params, "progress") and params["progress"] not in Issues.progress_values() ->
+        {:error, :progress, "must be one of: #{Enum.join(Issues.progress_values(), ", ")}"}
+
       true ->
         :ok
     end
@@ -66,7 +71,7 @@ defmodule OpenAgentsWeb.IssueController do
 
   defp valid_page?(_value), do: false
 
-  defp index_options(params) do
+  defp index_options(params, reader) do
     [
       state: Map.get(params, "state", "open"),
       label: params["labels"] || params["label"],
@@ -74,6 +79,8 @@ defmodule OpenAgentsWeb.IssueController do
       milestone: params["milestone"],
       q: params["q"],
       blocked: blocked_filter(params["blocked"]),
+      progress: params["progress"],
+      reader: reader,
       page: params["page"]
     ]
   end
@@ -107,7 +114,8 @@ defmodule OpenAgentsWeb.IssueController do
             issue: issue,
             owner: owner,
             repo: repo,
-            dependencies: dependencies(issue)
+            dependencies: dependencies(issue),
+            progress: progress(issue, actor)
           )
 
         {:error, %Ecto.Changeset{} = changeset} ->
@@ -146,7 +154,13 @@ defmodule OpenAgentsWeb.IssueController do
 
     conn
     |> put_extensions_header()
-    |> render(:show, issue: issue, owner: owner, repo: repo, dependencies: dependencies(issue))
+    |> render(:show,
+      issue: issue,
+      owner: owner,
+      repo: repo,
+      dependencies: dependencies(issue),
+      progress: progress(issue, conn.assigns[:current_user])
+    )
   rescue
     Ecto.NoResultsError ->
       conn
@@ -178,7 +192,8 @@ defmodule OpenAgentsWeb.IssueController do
           issue: issue,
           owner: owner,
           repo: repo,
-          dependencies: dependencies(issue)
+          dependencies: dependencies(issue),
+          progress: progress(issue, conn.assigns.current_user)
         )
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -194,6 +209,13 @@ defmodule OpenAgentsWeb.IssueController do
   end
 
   defp dependencies(%Issue{} = issue), do: Issues.dependency_graph([issue])
+
+  # Progress is derived from the boards this reader can open, so an agent
+  # authenticating as itself never inherits a private board's column.
+  defp progress(%Issue{} = issue, %OpenAgents.Accounts.User{} = reader),
+    do: Issues.progress_map([issue], reader)
+
+  defp progress(%Issue{} = issue, _reader), do: Issues.progress_map([issue])
 
   # The extension namespace is discoverable from the response itself, so a
   # client never has to infer which OpenAgents fields this deployment sends.

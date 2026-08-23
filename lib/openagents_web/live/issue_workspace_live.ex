@@ -191,6 +191,7 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
       Issues.list_visible_issues_page(user, opts ++ [state: state, page: page])
 
     socket
+    |> assign(:progress, Issues.progress_map(issues, user))
     |> assign(:open_count, Issues.count_visible_issues(user, count_opts ++ [state: "open"]))
     |> assign(:closed_count, Issues.count_visible_issues(user, count_opts ++ [state: "closed"]))
     |> assign(:total_count, total)
@@ -298,6 +299,7 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
           :for={{id, issue} <- @streams.issues}
           id={id}
           issue={issue}
+          progress={@progress[issue.id]}
           repository={IssuePresentation.repository_path(issue)}
           navigate={~p"/#{issue.repository.owner}/#{issue.repository.name}/issues/#{issue.number}"}
         />

@@ -11,12 +11,28 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Labels.Label
   alias OpenAgents.Milestones
   alias OpenAgents.Milestones.Milestone
+  alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
 
   @issues_per_page 25
   @maximum_page 10_000
+
+  @progress_values ~w(to_do in_progress done)
+
+  # The board columns that mean work has started. Comparison is on the column
+  # name lowered and trimmed, so a board that writes `In Progress` and one that
+  # writes `in_progress` are the same column to a reader of the API.
+  @started_columns [
+    "in progress",
+    "in_progress",
+    "in-progress",
+    "in review",
+    "in_review",
+    "in-review",
+    "started"
+  ]
 
   @doc "How many issues one index page shows."
   def per_page, do: @issues_per_page
@@ -32,8 +48,10 @@ defmodule OpenAgents.Issues do
   One page of the filtered issue list, with the unpaginated total.
 
   Supported options: `:state`, `:label`, `:assignee`, `:milestone`, `:q`,
-  `:blocked`, and `:page`. Filters compose; counts and pages always agree
-  because they read the same query.
+  `:blocked`, `:progress`, `:reader`, and `:page`. Filters compose; counts and
+  pages always agree because they read the same query. `:reader` is the user
+  whose readable boards `:progress` derives from, and only that option reads
+  it.
   """
   def list_issues_page(%Repository{} = repository, opts) when is_list(opts) do
     page = max(parse_page(opts[:page]), 1)
@@ -135,6 +153,7 @@ defmodule OpenAgents.Issues do
     |> maybe_filter_milestone(Keyword.get(opts, :milestone))
     |> maybe_filter_search(Keyword.get(opts, :q))
     |> maybe_filter_blocked(Keyword.get(opts, :blocked))
+    |> maybe_filter_progress(Keyword.get(opts, :progress), Keyword.get(opts, :reader))
   end
 
   def get_issue!(%Repository{id: repository_id}, id) do
@@ -317,6 +336,72 @@ defmodule OpenAgents.Issues do
       end)
 
     update_issue(issue, %{"assignees" => assignees})
+  end
+
+  @doc "The progress values this API serves, in the order work moves through them."
+  def progress_values, do: @progress_values
+
+  @doc """
+  How far along each issue in `issues` is, keyed by issue id.
+
+  Progress is derived, never stored. An issue is `"done"` when it is closed,
+  because closing an issue is the act that finishes it. An open issue is
+  `"in_progress"` when a board `reader` can read places it in a started column,
+  and `"to_do"` otherwise — including when the only board saying otherwise is
+  one the reader cannot open, so a private board's column never becomes a fact
+  about a public issue.
+
+  A `Done` column on an open issue reads `"to_do"`: the board and the issue
+  disagree, and the issue's own state is the one both the UI and the API
+  already treat as authoritative.
+
+  One query serves a whole page, so rendering a list never walks the boards
+  once per row.
+  """
+  def progress_map(issues, reader \\ nil)
+      when is_list(issues) and (is_nil(reader) or is_struct(reader, User)) do
+    started =
+      issues
+      |> Enum.filter(&(&1.state == "open"))
+      |> Enum.map(& &1.id)
+      |> started_issue_ids(reader)
+
+    Map.new(issues, fn issue ->
+      {issue.id, derive_progress(issue, MapSet.member?(started, issue.id))}
+    end)
+  end
+
+  @doc "The progress of one issue, in the shape `progress_map/2` returns."
+  def progress(%Issue{} = issue, reader \\ nil),
+    do: [issue] |> progress_map(reader) |> Map.fetch!(issue.id)
+
+  defp derive_progress(%Issue{state: "closed"}, _started?), do: "done"
+  defp derive_progress(_issue, true), do: "in_progress"
+  defp derive_progress(_issue, false), do: "to_do"
+
+  defp started_issue_ids([], _reader), do: MapSet.new()
+
+  defp started_issue_ids(ids, reader) do
+    reader
+    |> started_item_query()
+    |> where([item], item.issue_id in ^ids)
+    |> select([item], item.issue_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  # A board item is only evidence for a reader who could open the board it sits
+  # on, so the board repository passes through the one readable predicate every
+  # repository surface composes.
+  defp started_item_query(reader) do
+    readable =
+      from(repository in Repositories.readable_by(Repository, reader), select: repository.id)
+
+    from(item in ProjectItem,
+      where: item.repository_id in subquery(readable),
+      where:
+        fragment("lower(btrim(coalesce(? ->> 'Status', '')))", item.values) in ^@started_columns
+    )
   end
 
   @doc """
@@ -978,6 +1063,33 @@ defmodule OpenAgents.Issues do
       on: blocker.id == dependency.blocked_by_issue_id,
       where: dependency.issue_id == parent_as(:issue).id and blocker.state == "open",
       select: 1
+  end
+
+  defp maybe_filter_progress(query, nil, _reader), do: query
+
+  # The filter reads the same closed-issue rule and the same started-column
+  # query the derived field does, so `?progress=` and `issue.openagents.progress`
+  # cannot disagree about the same issue.
+  defp maybe_filter_progress(query, "done", _reader),
+    do: where(query, [issue], issue.state == "closed")
+
+  defp maybe_filter_progress(query, "in_progress", reader) do
+    query
+    |> where([issue], issue.state == "open")
+    |> where([], exists(started_exists_query(reader)))
+  end
+
+  defp maybe_filter_progress(query, "to_do", reader) do
+    query
+    |> where([issue], issue.state == "open")
+    |> where([], not exists(started_exists_query(reader)))
+  end
+
+  defp started_exists_query(reader) do
+    reader
+    |> started_item_query()
+    |> where([item], item.issue_id == parent_as(:issue).id)
+    |> select([], 1)
   end
 
   defp maybe_filter_search(query, nil), do: query

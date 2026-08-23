@@ -486,4 +486,148 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert message =~ "true or false"
     end
   end
+
+  describe "the progress extension field" do
+    test "show reports what a board says about the issue", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Underway"})
+      place(repository(), issue, "In Progress")
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"progress" => "in_progress"}} = json_response(conn, 200)
+    end
+
+    test "an issue on no board has not started", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Queued"})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"progress" => "to_do"}} = json_response(conn, 200)
+    end
+
+    test "closing the issue finishes it", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Underway"})
+      place(repository(), issue, "In Progress")
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
+          state: "closed"
+        })
+
+      assert %{"openagents" => %{"progress" => "done"}} = json_response(conn, 200)
+    end
+
+    test "index carries progress for every issue on the page", %{conn: conn} do
+      {:ok, started} = Issues.create_issue(repository(), %{title: "Underway"})
+      {:ok, queued} = Issues.create_issue(repository(), %{title: "Queued"})
+      place(repository(), started, "In Progress")
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => issues} = json_response(conn, 200)
+      by_number = Map.new(issues, &{&1["number"], &1["openagents"]["progress"]})
+
+      assert by_number[started.number] == "in_progress"
+      assert by_number[queued.number] == "to_do"
+    end
+
+    test "a GitHub-shaped client sees its own keys unchanged", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Underway"})
+      place(repository(), issue, "In Progress")
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      body = json_response(conn, 200)
+
+      assert body["state"] == "open"
+      assert body["title"] == "Underway"
+
+      # Every extension lives inside `openagents`; nothing leaks into the
+      # GitHub-shaped key set, which is what a GitHub client reads.
+      assert Enum.sort(Map.keys(body) -- ["openagents"]) ==
+               Enum.sort(~w(
+                 assignees body closed_at comments created_at html_url id labels locked
+                 milestone node_id number state state_reason title updated_at url user
+               ))
+    end
+  end
+
+  describe "the progress filter" do
+    test "index lists the issues a board has started", %{conn: conn} do
+      {:ok, started} = Issues.create_issue(repository(), %{title: "Underway"})
+      {:ok, _queued} = Issues.create_issue(repository(), %{title: "Queued"})
+      place(repository(), started, "In Progress")
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?progress=in_progress")
+
+      assert %{"issues" => [issue], "pagination" => %{"total" => 1}} = json_response(conn, 200)
+      assert issue["title"] == "Underway"
+      assert issue["openagents"]["progress"] == "in_progress"
+    end
+
+    test "the filter and the field agree for every issue on the page", %{conn: conn} do
+      {:ok, started} = Issues.create_issue(repository(), %{title: "Underway"})
+      {:ok, _queued} = Issues.create_issue(repository(), %{title: "Queued"})
+      {:ok, _closed} = Issues.create_issue(repository(), %{title: "Finished", state: "closed"})
+      place(repository(), started, "In Progress")
+
+      for value <- ["to_do", "in_progress", "done"] do
+        conn =
+          get(
+            conn,
+            ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=all&progress=#{value}"
+          )
+
+        for issue <- json_response(conn, 200)["issues"] do
+          assert issue["openagents"]["progress"] == value
+        end
+      end
+    end
+
+    test "a private board never moves an issue into an outsider's started list" do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Tracked privately"})
+      private = repository_fixture(%{visibility: "private"})
+      place(private, issue, "In Progress")
+
+      anonymous =
+        get(
+          build_conn(),
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}"
+        )
+
+      assert %{"openagents" => %{"progress" => "to_do"}} = json_response(anonymous, 200)
+
+      listed =
+        get(
+          build_conn(),
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?progress=in_progress"
+        )
+
+      assert %{"issues" => [], "pagination" => %{"total" => 0}} = json_response(listed, 200)
+    end
+
+    test "index rejects a progress value outside the published enum", %{conn: conn} do
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?progress=doing")
+
+      assert %{"errors" => %{"progress" => [message]}} = json_response(conn, 422)
+      assert message =~ "to_do"
+    end
+  end
+
+  defp place(board_repository, issue, column) do
+    {:ok, project} =
+      OpenAgents.Projects.create_project(board_repository, %{
+        title: "Board",
+        owner: "OpenAgents"
+      })
+
+    {:ok, item} =
+      OpenAgents.ProjectItems.create_project_item(board_repository, %{
+        project_id: project.id,
+        issue_id: issue.id,
+        issue_repository_id: issue.repository_id,
+        values: %{"Status" => column}
+      })
+
+    item
+  end
 end

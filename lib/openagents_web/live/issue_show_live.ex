@@ -32,6 +32,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
+  alias OpenAgents.Issues.ClosingReferences
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Labels
@@ -305,12 +306,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
   defp load(socket, issue) do
     comments = Issues.list_comments(issue)
     attempts = Assignments.attempts_for_issue(issue)
+    references = ClosingReferences.for_issue(issue)
+    base = "/#{socket.assigns.owner}/#{socket.assigns.repo}"
 
     socket
     |> assign(:issue, issue)
     |> assign(:comments, comments)
     |> assign(:form, to_form(Issues.change_issue(issue)))
-    |> assign(:events, timeline(issue, comments, attempts))
+    |> assign(:events, timeline(issue, comments, attempts, references, base))
     |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))
   end
 
@@ -574,6 +577,19 @@ defmodule OpenAgentsWeb.IssueShowLive do
               tone={event.tone}
               at={event.at}
             />
+            <Circle.timeline_event
+              :if={event.kind == :commit}
+              id={"closing-reference-#{event.id}"}
+              actor={event.actor}
+              text={event.text}
+              icon={event.icon}
+              tone={event.tone}
+              at={event.at}
+            >
+              <.text_button navigate={event.commit_path}>
+                <code>{event.short_sha}</code>
+              </.text_button>
+            </Circle.timeline_event>
           <% end %>
         </Circle.timeline>
 
@@ -623,7 +639,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # such table, so the feed is assembled from the columns that do exist. The
   # result is honest but partial: a label added and removed leaves no trace,
   # and a close records when but not who.
-  defp timeline(issue, comments, attempts) do
+  defp timeline(issue, comments, attempts, references, base) do
     opened = %{
       kind: :event,
       actor: author(issue),
@@ -649,8 +665,30 @@ defmodule OpenAgentsWeb.IssueShowLive do
         }
       end)
 
+    # A close that arrived from a commit names the commit, the pusher, and the
+    # push. The derived close below cannot name any of those, so where a
+    # commit did the closing that entry stands in for it rather than beside
+    # it.
+    referenced =
+      Enum.map(references, fn reference ->
+        %{
+          kind: :commit,
+          id: reference.id,
+          actor: reference_actor(reference),
+          text: reference_text(reference),
+          icon: if(reference.closed, do: "octicon-issue-closed", else: "commit"),
+          tone: if(reference.closed, do: :success, else: :neutral),
+          at: stamp(reference.inserted_at),
+          sort: reference.inserted_at,
+          short_sha: String.slice(reference.commit_sha, 0, 7),
+          commit_path: "#{base}/commit/#{reference.commit_sha}"
+        }
+      end)
+
+    closed_by_commit? = Enum.any?(references, & &1.closed)
+
     closed =
-      if issue.state == "closed" and issue.closed_at do
+      if issue.state == "closed" and not closed_by_commit? and issue.closed_at do
         [
           %{
             kind: :event,
@@ -666,7 +704,11 @@ defmodule OpenAgentsWeb.IssueShowLive do
         []
       end
 
-    Enum.sort_by([opened | commented] ++ closed ++ attempt_events(attempts), & &1.sort, DateTime)
+    Enum.sort_by(
+      [opened | commented] ++ referenced ++ closed ++ attempt_events(attempts),
+      & &1.sort,
+      DateTime
+    )
   end
 
   # An attempt produces at most two events: it started, and it ended. Both
@@ -738,6 +780,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
   defp attempt_tone(%{state: "completed"}), do: :success
   defp attempt_tone(%{state: "cancelled"}), do: :neutral
   defp attempt_tone(_attempt), do: :danger
+
+  # The principal is recorded on the row; the login is what a reader
+  # recognizes. Falling back to the principal is honest rather than blank.
+  defp reference_actor(%{closed_by_user: %{github_login: login}}) when is_binary(login), do: login
+  defp reference_actor(reference), do: reference.principal
+
+  defp reference_text(%{closed: true}), do: "closed this as completed in"
+  defp reference_text(_reference), do: "referenced this in"
 
   defp close_text(%{state_reason: "not_planned"}), do: "closed this as not planned"
   defp close_text(%{state_reason: "duplicate"}), do: "closed this as a duplicate"

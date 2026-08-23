@@ -16,6 +16,7 @@ defmodule OpenAgentsWeb.CodeCommitLive do
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.Forge.CommitReferences
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
 
@@ -68,6 +69,7 @@ defmodule OpenAgentsWeb.CodeCommitLive do
      |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
      |> assign(:commit, commit)
+     |> assign(:closing_references, CommitReferences.closing(commit.message))
      |> assign(:files, files)
      |> assign(
        :og,
@@ -174,6 +176,22 @@ defmodule OpenAgentsWeb.CodeCommitLive do
                   <.text_button href={value}>{value}</.text_button>
                 </dd>
                 <dd :if={!trailer_link?({key, value})}>{value}</dd>
+              </div>
+            </dl>
+            <dl :if={@closing_references != []} id="commit-closing-references" class="code-trailers">
+              <div :for={reference <- @closing_references}>
+                <dt>{String.capitalize(reference.verb)}</dt>
+                <dd :if={CommitReferences.same_repository?(reference)}>
+                  <.text_button navigate={"#{@base}/issues/#{reference.number}"}>
+                    #{reference.number}
+                  </.text_button>
+                </dd>
+                <dd :if={!CommitReferences.same_repository?(reference)}>
+                  {reference.owner}/{reference.repository}#{reference.number}
+                  <span class="text-muted-foreground">
+                    (another repository — recorded, not closed)
+                  </span>
+                </dd>
               </div>
             </dl>
           </.card>

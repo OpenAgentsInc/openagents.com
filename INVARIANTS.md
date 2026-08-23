@@ -2687,6 +2687,52 @@ Evidence: `OpenAgents.Stacks`, `OpenAgents.Stacks.Stack`,
 `OpenAgents.Stacks.StackEntry`, `OpenAgents.Stacks.OID`,
 `ops/ci/stack-contracts.sh`, and `test/openagents/stacks_test.exs`.
 
+### ISSUE-001 — A commit closes an issue only from the default branch
+
+Status: Current
+
+A commit whose message says `Closes #N`, `Fixes #N`, or `Resolves #N` closes
+issue `N` when that commit becomes reachable from the repository's default
+branch, and at no other moment. A push to a topic branch records nothing; the
+same commit closes the issue when it arrives on the default branch. That is
+what makes the mechanism safe: an unmerged branch can never close work.
+
+Four boundaries hold around it.
+
+**A malformed reference cannot fail a push.** `OpenAgents.Forge.CommitReferences`
+is pure and total — it reads attacker-controlled commit text, returns a list
+for every input including a non-binary one, and never queries or decides. The
+acting side runs after the WAL acknowledgment barrier and after the receipt
+insert, and catches everything, because refusing at that point would ask a
+client to retry a push the forge has already accepted.
+
+**Same repository, and only with authority.** `#N` resolves against the
+repository that received the push; a `owner/repo#N` reference is read,
+reported on the commit page, and not acted on — the same boundary the
+prerequisite edges draw. The push principal must be a user who can write that
+repository, so an operator token, a machine, and an assignment credential
+record nothing. The close is attributed to that user, not to a system actor.
+
+**Once.** The `{issue_id, commit_sha}` unique index on
+`issue_closing_references` is the gate. WAL replay, receipt reconciliation,
+and a force push that re-presents the same commits all find the row already
+there and stop, so no second close and no duplicate timeline entry follows. An
+issue that is already closed records the reference and keeps its state.
+
+**No reopening on revert.** A revert is a new commit. Reopening on one is a
+separate policy decision with its own failure modes and is not admitted here.
+
+Closing through this path is an ordinary close, so the derived `blocked` value
+a dependent reads clears exactly as it does for a manual close; nothing stores
+that flag.
+
+Evidence: `OpenAgents.Forge.CommitReferences`,
+`OpenAgents.Issues.ClosingReferences`, `OpenAgents.Issues.ClosingReference`,
+`OpenAgents.Forge.Pushes`,
+`test/openagents/forge/commit_references_test.exs`,
+`test/openagents/issues/closing_references_test.exs`, and
+`test/openagents/forge/push_closes_issues_test.exs`.
+
 ### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
 
 Status: Current
@@ -2903,3 +2949,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
+| ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |

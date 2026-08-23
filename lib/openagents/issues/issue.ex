@@ -7,6 +7,8 @@ defmodule OpenAgents.Issues.Issue do
   alias OpenAgents.Milestones.Milestone
   alias OpenAgents.Repositories.Repository
 
+  @type t :: %__MODULE__{}
+
   schema "issues" do
     field :number, :integer
     field :title, :string

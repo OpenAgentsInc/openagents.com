@@ -8,6 +8,7 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
 
   alias OpenAgents.Accounts
   alias OpenAgents.Issues
+  alias OpenAgents.Issues.ClosingReferences
   alias OpenAgents.Repositories
 
   setup %{conn: conn} do
@@ -412,6 +413,33 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
       )
     )
     |> OpenAgents.Repo.insert!()
+  end
+
+  # #130: a close that arrived from a commit names the commit, and the entry
+  # links back to it. The derived close, which can name neither the actor nor
+  # the commit, steps aside where a commit did the closing.
+  test "the timeline links back to the commit that closed the issue", %{conn: conn} do
+    issue = issue!(%{"title" => "Closed by a push"})
+    sha = "9606cbc0e0f1a2b3c4d5e6f708192a3b4c5d6e7f"
+    actor = github_user("issue-show")
+
+    assert [_reference] =
+             ClosingReferences.apply_commit(
+               repository(),
+               actor,
+               sha,
+               "Ship it\n\nCloses ##{issue.number}"
+             )
+
+    {:ok, view, html} = live(conn, path(issue))
+
+    assert html =~ "closed this as completed in"
+    assert html =~ String.slice(sha, 0, 7)
+
+    assert has_element?(
+             view,
+             ~s{a[href="/OpenAgentsInc/openagents.com/commit/#{sha}"]}
+           )
   end
 
   defp repository do

@@ -21,7 +21,9 @@ defmodule OpenAgents.Forge.Pushes do
   require Logger
 
   alias OpenAgents.{Analytics, Repositories}
+  alias OpenAgents.Accounts.User
   alias OpenAgents.Forge.{GitHTTP, PushReceipt, Repos, Sync, WAL}
+  alias OpenAgents.Issues.ClosingReferences
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
 
@@ -213,19 +215,158 @@ defmodule OpenAgents.Forge.Pushes do
       |> Enum.reject(fn {name, _} -> Map.has_key?(refs_after, name) end)
       |> Map.new(fn {name, sha} -> {name, %{"old" => sha, "new" => nil}} end)
 
-    %PushReceipt{}
-    |> PushReceipt.changeset(%{
-      repo: repo,
-      wal_seq: seq,
-      principal: principal,
-      refs: Map.merge(changed, deleted),
-      duration_ms: System.monotonic_time(:millisecond) - started_at
-    })
-    |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :wal_seq])
+    result =
+      %PushReceipt{}
+      |> PushReceipt.changeset(%{
+        repo: repo,
+        wal_seq: seq,
+        principal: principal,
+        refs: Map.merge(changed, deleted),
+        duration_ms: System.monotonic_time(:millisecond) - started_at
+      })
+      |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :wal_seq])
+
+    # Both the live push and the WAL replayer reach the issue tracker through
+    # here, so one idempotency gate covers both.
+    close_referenced_issues(repo, seq, refs_before, refs_after, principal)
+
+    result
   rescue
     error ->
       Logger.error("forge_push_receipt_failed code=#{OpenAgents.OperationalLog.code(error)}")
       :error
+  end
+
+  # ── closing references (#130) ───────────────────────────────────────────
+
+  @doc """
+  Close the issues that this push's default-branch commits say they close.
+
+  Default branch only: a commit on a topic branch records nothing, and the
+  same commit closes the issue when it arrives on the default branch. That is
+  the property that stops an unmerged branch from closing work.
+
+  Nothing here can fail a push. It runs after the WAL ack barrier and after
+  the receipt insert, and every error — a malformed reference, an unreadable
+  repository, an issue tracker that will not answer — is caught and logged.
+  The push is already durable by the time this runs; refusing it now would
+  ask a client to retry a push the forge has accepted.
+  """
+  def close_referenced_issues(repo, seq, refs_before, refs_after, principal) do
+    with %Repository{} = repository <- repository_for(repo),
+         %User{} = actor <- push_actor(principal),
+         [_ | _] = commits <- default_branch_commits(repo, repository, refs_before, refs_after) do
+      receipt_id = receipt_id(repo, seq)
+
+      context = [
+        repo: repo,
+        wal_seq: seq,
+        push_receipt_id: receipt_id,
+        principal: principal
+      ]
+
+      Enum.each(commits, fn {sha, message} ->
+        ClosingReferences.apply_commit(repository, actor, sha, message, context)
+      end)
+
+      :ok
+    else
+      _nothing_to_do -> :ok
+    end
+  rescue
+    error ->
+      Logger.warning(
+        "forge_push_closing_references_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(error)}"
+      )
+
+      :ok
+  catch
+    kind, reason ->
+      Logger.warning(
+        "forge_push_closing_references_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code({kind, reason})}"
+      )
+
+      :ok
+  end
+
+  # No single push closes more than this. The cap bounds the tracker work one
+  # push can ask for, however much history a first push to the default branch
+  # carries.
+  @closing_commit_limit 200
+
+  @doc """
+  The commits this push newly made reachable from the repository's default
+  branch, as `{sha, message}` pairs, newest first.
+
+  A force push that rewinds or rewrites the branch presents whatever is
+  reachable from the new tip and not from the old one; commits it re-presents
+  are stopped by the `{issue_id, commit_sha}` gate rather than by this range.
+  """
+  def default_branch_commits(repo, %Repository{} = repository, refs_before, refs_after) do
+    ref = "refs/heads/" <> (repository.default_branch || "main")
+    old = Map.get(refs_before || %{}, ref)
+    new = Map.get(refs_after || %{}, ref)
+
+    cond do
+      is_nil(new) -> []
+      new == old -> []
+      true -> read_commits(repo, old, new)
+    end
+  end
+
+  def default_branch_commits(_repo, _repository, _refs_before, _refs_after), do: []
+
+  defp read_commits(repo, old, new) do
+    range =
+      if is_binary(old) and old != "" and old != String.duplicate("0", byte_size(old)),
+        do: [new, "--not", old],
+        else: [new]
+
+    args =
+      ["log", "--format=%H%x00%B%x01", "--max-count=#{@closing_commit_limit}"] ++
+        range ++ ["--"]
+
+    case Repos.git(Repos.bare_path(repo), args) do
+      {output, 0} -> parse_commits(output)
+      _unreadable -> []
+    end
+  end
+
+  defp parse_commits(output) do
+    output
+    |> String.split("\x01", trim: true)
+    |> Enum.flat_map(fn record ->
+      case record |> String.trim_leading("\n") |> String.split("\x00", parts: 2) do
+        [sha, message] -> [{String.trim(sha), message}]
+        _unparseable -> []
+      end
+    end)
+  end
+
+  defp repository_for(repo) when is_binary(repo) do
+    Repo.one(from repository in Repository, where: repository.storage_key == ^repo)
+  end
+
+  defp repository_for(_repo), do: nil
+
+  # Only a user principal closes an issue, and the close is attributed to
+  # them. An operator token, a machine, and an assignment credential push
+  # without an accountable person behind the close, so they record nothing.
+  defp push_actor("user:" <> id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> Repo.get(User, uuid)
+      :error -> nil
+    end
+  end
+
+  defp push_actor(_principal), do: nil
+
+  defp receipt_id(repo, seq) do
+    Repo.one(
+      from receipt in PushReceipt,
+        where: receipt.repo == ^repo and receipt.wal_seq == ^seq,
+        select: receipt.id
+    )
   end
 
   defp broadcast(repo, seq, refs) do

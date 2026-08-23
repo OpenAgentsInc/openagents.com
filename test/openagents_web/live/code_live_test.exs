@@ -22,6 +22,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   Changelog-Category: docs
   Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_test
+  Closes #4242
   """
 
   setup do
@@ -699,6 +700,24 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
         live(conn, "/OpenAgentsInc/openagents.com/commit/deadbeefdead")
       end
+    end
+
+    # #130: the page renders what the message says it closes, and links it.
+    # The reference is read from the message, so the page says the same thing
+    # whether or not the push path acted on it.
+    test "the closing references the message carries are rendered and linked", %{
+      conn: conn,
+      short: short
+    } do
+      {:ok, view, html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
+
+      assert html =~ "Closes"
+      assert has_element?(view, "#commit-closing-references")
+
+      assert has_element?(
+               view,
+               ~s{#commit-closing-references a[href="/OpenAgentsInc/openagents.com/issues/4242"]}
+             )
     end
   end
 end

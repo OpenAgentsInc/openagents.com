@@ -43,6 +43,8 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
     assert has_element?(view, "#chat-console-empty")
     assert has_element?(view, "#chat-console-model", "Ox Alpha")
     assert has_element?(view, "#chat-console-operator-notice", "Operator-only console")
+    assert has_element?(view, "#chat-console-token-list", "No tokens yet")
+    refute has_element?(view, "#chat-console-token-total")
     assert has_element?(view, "#chat-console-suggestions")
     assert has_element?(view, "#chat-console-suggestion-0")
     assert has_element?(view, ~s(a[href="/sarah"]))
@@ -130,6 +132,11 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
     assert has_element?(view, "#chat-console-usage-#{run_id}", "Output 8")
     assert has_element?(view, "#chat-console-usage-#{run_id}", "Reasoning 3")
     assert has_element?(view, "#chat-console-usage-#{run_id}", "Cached 4")
+    assert has_element?(view, "#chat-console-token-input", "24")
+    assert has_element?(view, "#chat-console-token-output", "8")
+    assert has_element?(view, "#chat-console-token-reasoning", "3")
+    assert has_element?(view, "#chat-console-token-cached", "4")
+    assert has_element?(view, "#chat-console-token-total", "32")
     refute has_element?(view, "#chat-console-evidence-#{run_id}")
   end
 

@@ -25,6 +25,8 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     "Write a short status update for the current fleet work."
   ]
 
+  @token_kinds [input: "Input", output: "Output", reasoning: "Reasoning", cached: "Cached"]
+
   @reasoning_options [
     {"Reasoning off", "none"},
     {"Minimal reasoning", "minimal"},
@@ -81,7 +83,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
      |> assign(:reasoning_options, @reasoning_options)
      |> assign(:model_label, OpenRouter.model_label())
      |> assign(:suggestions, @suggestions)
-     |> assign(:messages, messages)
+     |> assign_messages(messages)
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
      |> assign(:assistant_tool_calls, [])
@@ -216,6 +218,23 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
           <p id="chat-console-operator-notice" class="text-muted-foreground text-xs">
             Operator-only console. Prompts reach {@model_label} through the server.
           </p>
+          <dl
+            id="chat-console-token-list"
+            class="ml-auto flex shrink-0 flex-wrap items-baseline justify-end gap-x-3 gap-y-1 text-xs"
+            aria-label="Tokens this conversation used"
+          >
+            <div :if={@conversation_tokens == []} class="text-muted-foreground">
+              No tokens yet
+            </div>
+            <div
+              :for={{key, label, count} <- @conversation_tokens}
+              id={"chat-console-token-#{key}"}
+              class="flex items-baseline gap-1"
+            >
+              <dt class="text-muted-foreground">{label}</dt>
+              <dd class="font-medium tabular-nums">{format_count(count)}</dd>
+            </div>
+          </dl>
         </div>
 
         <div class="flex min-h-0 flex-1 px-4">
@@ -395,7 +414,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
 
   defp reset_stream(socket) do
     socket
-    |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
+    |> assign_messages(AccountTurns.list_messages(socket.assigns.current_user))
     |> assign(:assistant_response, nil)
     |> assign(:assistant_reasoning, nil)
     |> assign(:assistant_tool_calls, [])
@@ -442,6 +461,58 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
 
   defp context_evidence(_message), do: nil
 
+  # The top bar counts the whole conversation, so every assign of the transcript
+  # recounts it and the running list never trails the messages it describes.
+  defp assign_messages(socket, messages) do
+    socket
+    |> assign(:messages, messages)
+    |> assign(:conversation_tokens, conversation_tokens(messages))
+  end
+
+  # Provider-reported counts only, summed across the turns that reported them. A
+  # kind no turn reported stays off the list instead of reading as a zero.
+  defp conversation_tokens(messages) do
+    usages = messages |> Enum.map(&Map.get(&1, :usage)) |> Enum.filter(&is_map/1)
+
+    case usages do
+      [] ->
+        []
+
+      usages ->
+        kinds =
+          for {key, label} <- @token_kinds,
+              count = sum_tokens(usages, key),
+              do: {key, label, count}
+
+        kinds ++ [{:total, "Total", conversation_total(usages)}]
+    end
+  end
+
+  defp sum_tokens(usages, key) do
+    case usages |> Enum.map(&Map.get(&1, key)) |> Enum.reject(&is_nil/1) do
+      [] -> nil
+      counts -> Enum.sum(counts)
+    end
+  end
+
+  defp conversation_total(usages), do: Enum.sum(Enum.map(usages, &turn_total/1))
+
+  # A provider that leaves `total_tokens` out still reports the two sides of it.
+  defp turn_total(%{total: total}) when is_integer(total), do: total
+  defp turn_total(usage), do: (usage.input || 0) + (usage.output || 0)
+
+  defp format_count(count) do
+    count
+    |> Integer.to_string()
+    |> String.to_charlist()
+    |> Enum.reverse()
+    |> Enum.chunk_every(3)
+    |> Enum.intersperse(~c",")
+    |> Enum.concat()
+    |> Enum.reverse()
+    |> List.to_string()
+  end
+
   defp usage_text(usage) do
     [
       usage.input && "Input #{usage.input}",
@@ -460,7 +531,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
          socket
          |> assign(:form, composer_form(reasoning))
          |> assign(:last_prompt, message)
-         |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
+         |> assign_messages(AccountTurns.list_messages(socket.assigns.current_user))
          |> assign(:assistant_response, "")
          |> assign(:assistant_reasoning, nil)
          |> assign(:assistant_tool_calls, [])
@@ -476,9 +547,9 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
         {:noreply,
          socket
          |> assign(:form, composer_form(reasoning, message))
-         |> update(:messages, fn messages ->
-           messages ++ [user_message(id, message), failed_message(id, reason)]
-         end)}
+         |> assign_messages(
+           socket.assigns.messages ++ [user_message(id, message), failed_message(id, reason)]
+         )}
     end
   end
 

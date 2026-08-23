@@ -588,7 +588,10 @@ body.sidebar-open {
 
 .docs-layout {
   display: flex;
-  height: 100vh;
+  /* Dynamic viewport units, for the reason the application shell states: on a
+     mobile browser `100vh` measures the viewport without the chrome, so the
+     last row of an internally scrolling surface sits under the toolbar. */
+  height: 100dvh;
   overflow: hidden;
 }
 

@@ -79,9 +79,17 @@ defmodule OpenAgentsWeb.Layouts do
 
   def app(assigns) do
     ~H"""
+    <%!-- Sized in dynamic viewport units, never `100vh`. On a mobile browser
+    `100vh` is the viewport with the chrome collapsed, so a shell measured
+    against it is taller than what the reader can see: the tail of the page
+    sits under the toolbar, and because the document itself does not scroll
+    there is no gesture that would collapse the chrome to reveal it. `100dvh`
+    tracks the visible viewport as the chrome comes and goes, so `<main>`
+    scrolls to its final element with the toolbar present. On a desktop
+    viewport the two units are the same value. --%>
     <div
       id="app-shell"
-      class="h-screen flex overflow-hidden bg-background"
+      class="h-dvh flex overflow-hidden bg-background"
       phx-hook=".AppSidebar"
     >
       <.sidebar
@@ -102,7 +110,7 @@ defmodule OpenAgentsWeb.Layouts do
         tabindex="-1"
       ></button>
 
-      <div class="flex-1 min-w-0 flex flex-col h-screen">
+      <div class="flex-1 min-w-0 flex flex-col h-full">
         <.openagents_command_bar current_scope={@current_scope} title={@title} subtitle={@subtitle}>
           <:menu>{render_slot(@title_menu)}</:menu>
         </.openagents_command_bar>

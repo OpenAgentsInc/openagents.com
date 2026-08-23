@@ -4704,6 +4704,18 @@
     white-space: nowrap;
   }
 
+  /* A cross-repository list is unreadable without the repository, so the row
+     carries it between the title and the state. */
+  .project-list__repository {
+    min-width: 0;
+    flex: none;
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .project-list__state {
     flex: none;
     border: 1px solid var(--line);
@@ -4751,9 +4763,13 @@
     }
   }
 
+  /* Two, because the pair now sits inside the panel whose rows it counts --
+     open and closed of that one thing. It used to be three (open, closed,
+     projects) in the rail, where a number with no panel attached read as a
+     total over the whole account. */
   .stat-pairs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin: 0;
   }

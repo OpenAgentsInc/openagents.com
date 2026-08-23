@@ -11,6 +11,12 @@ defmodule OpenAgentsWeb.HomeLive do
   route renders a dashboard -- repositories, open issues, projects, and what
   shipped recently -- the way a code host's home does.
 
+  The dashboard describes the viewer's work across every repository they can
+  read, not one repository chosen for them, and it says so by reading through
+  the same authorized reads `/issues` and `/projects` compose. Each panel
+  carries its own counts, so no number on the page can be read as a total over
+  a scope it does not cover.
+
   Everything on the dashboard is real and clickable. Where a panel has nothing
   to show it says so plainly rather than rendering a placeholder, because a
   dashboard whose emptiness is disguised is worse than one that admits it.
@@ -29,6 +35,7 @@ defmodule OpenAgentsWeb.HomeLive do
 
   @repo "openagents.com"
   @feed_limit 8
+  @project_limit 6
   @changelog_limit 5
 
   @impl true
@@ -38,48 +45,67 @@ defmodule OpenAgentsWeb.HomeLive do
 
   # Loaded once at mount rather than per render: none of it changes within a
   # visit, and the dashboard should not re-query on every diff.
+  #
+  # Read across every repository the viewer can read, through the same
+  # authorized reads `/issues` and `/projects` compose, so the homepage cannot
+  # disagree with them. It used to pick one repository -- the first `ready`
+  # entry of the visible list -- and scope every panel and every count to it,
+  # which reported `Open 0 / Closed 0 / Projects 0` to an owner whose backlog
+  # lived in the repository that happened to sort second.
   defp assign_dashboard(socket) do
-    repositories = Repositories.list_visible_repositories(socket.assigns.current_user)
-    repository = dashboard_repository(repositories)
-    {owner, name} = repository_path(repository)
+    user = socket.assigns.current_user
+    repositories = Repositories.list_visible_repositories(user)
 
-    open_issues = list_issues(repository, "open")
-    closed_issues = list_issues(repository, "closed")
-    projects = list_projects(repository)
+    # One bounded page each, and each page carries its own unpaginated total,
+    # so the numbers beside a panel cost an aggregate rather than a whole
+    # collection loaded only to be measured.
+    {issues, open_issue_count} = Issues.list_visible_issues_page(user, state: "open", page: 1)
+
+    {projects, open_project_count} =
+      Projects.list_visible_projects_page(user, state: "open", page: 1)
 
     socket
-    |> assign(:repository, repository)
-    |> assign(:owner, owner)
-    |> assign(:name, name)
-    |> assign(:open_count, length(open_issues))
-    |> assign(:closed_count, length(closed_issues))
-    |> assign(:project_count, length(projects))
-    |> assign(:issues, Enum.take(open_issues, @feed_limit))
-    |> assign(:projects, Enum.take(projects, 6))
+    |> assign(:open_issue_count, open_issue_count)
+    |> assign(:closed_issue_count, Issues.count_visible_issues(user, state: "closed"))
+    |> assign(:open_project_count, open_project_count)
+    |> assign(:closed_project_count, Projects.count_visible_projects(user, state: "closed"))
+    |> assign(:issues, Enum.take(issues, @feed_limit))
+    |> assign(:projects, Enum.take(projects, @project_limit))
+    |> assign(:any_repository?, repositories != [])
     |> assign(:changelog, changelog_entries())
     |> stream(:repositories, repositories)
   end
 
-  defp dashboard_repository(repositories),
-    do: Enum.find(repositories, &(&1.lifecycle_state == "ready"))
-
-  defp repository_path(nil), do: {nil, nil}
-  defp repository_path(repository), do: {repository.namespace.slug, repository.name}
-
-  defp list_issues(nil, _state), do: []
-  defp list_issues(repository, state), do: Issues.list_issues(repository, state: state)
-
-  defp list_projects(nil), do: []
-  defp list_projects(repository), do: Projects.list_projects(repository)
-
   # The ledger is a bounded public projection and can legitimately refuse. An
   # empty rail is the honest answer; the home page should not crash over it.
+  #
+  # Its agent-layer rows carry no authored note, which is what left the rail
+  # rendering a column of bare relative times. A row states what it is or it
+  # does not render.
   defp changelog_entries do
     case Changelog.timeline(@repo) do
-      {:ok, rows} -> Enum.take(rows, @changelog_limit)
-      {:error, _reason} -> []
+      {:ok, rows} ->
+        rows
+        |> Enum.map(&%{entry_at: &1.entry_at, summary: changelog_summary(&1)})
+        |> Enum.reject(&is_nil(&1.summary))
+        |> Enum.take(@changelog_limit)
+
+      {:error, _reason} ->
+        []
     end
   end
+
+  defp changelog_summary(%{summary: summary}) when is_binary(summary) do
+    case String.trim(summary) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp changelog_summary(%{short_sha: short_sha}) when is_binary(short_sha),
+    do: "Receipted deploy of #{short_sha}"
+
+  defp changelog_summary(_row), do: nil
 
   @impl true
   def render(%{current_user: user} = assigns) when not is_nil(user) do
@@ -96,27 +122,46 @@ defmodule OpenAgentsWeb.HomeLive do
           <section class="panel" aria-labelledby="dashboard-issues">
             <header class="panel__header">
               <h2 id="dashboard-issues" class="panel__title">Open issues</h2>
-              <.link
-                :if={@repository}
-                navigate={~p"/#{@owner}/#{@name}/issues"}
-                class="panel__more"
-              >
+              <%!-- Points at the workspace-wide list, not at one repository.
+              A "view all" under a panel has to widen the set the panel shows,
+              and a repository-scoped link under a cross-repository feed would
+              narrow it instead. Per-repository entry points stay one row away
+              in the Repositories panel. --%>
+              <.link navigate={~p"/issues"} class="panel__more">
                 View all <.icon name="arrow-right" />
               </.link>
             </header>
+
+            <%!-- Beside the issues they count, rather than in the rail, where
+            two integers with no panel attached read as a total over
+            everything. --%>
+            <dl class="stat-pairs" id="dashboard-issue-counts">
+              <div>
+                <dt>Open</dt>
+                <dd id="dashboard-open-issue-count">{@open_issue_count}</dd>
+              </div>
+              <div>
+                <dt>Closed</dt>
+                <dd id="dashboard-closed-issue-count">{@closed_issue_count}</dd>
+              </div>
+            </dl>
 
             <ul :if={@issues != []} class="issue-feed">
               <li :for={issue <- @issues} class="issue-feed__row">
                 <.icon name="circle-dashed" class="issue-feed__state" />
                 <div class="issue-feed__body">
                   <.link
-                    navigate={~p"/#{@owner}/#{@name}/issues/#{issue.number}"}
+                    navigate={
+                      ~p"/#{issue.repository.owner}/#{issue.repository.name}/issues/#{issue.number}"
+                    }
                     class="issue-feed__title"
                   >
                     {issue.title}
                   </.link>
                   <p class="issue-feed__meta">
-                    #{issue.number} opened {relative_time(issue.inserted_at)}
+                    {issue.repository.owner}/{issue.repository.name} #{issue.number} opened {relative_time(
+                      issue.inserted_at
+                    )}
                   </p>
                 </div>
                 <span :if={issue.comments > 0} class="issue-feed__comments">
@@ -125,10 +170,10 @@ defmodule OpenAgentsWeb.HomeLive do
               </li>
             </ul>
 
-            <p :if={@issues == [] and @repository} class="panel__empty">
-              No open issues. <.link navigate={~p"/#{@owner}/#{@name}/issues/new"}>Open one</.link>.
+            <p :if={@issues == [] and @any_repository?} class="panel__empty">
+              No open issues in the repositories you can read.
             </p>
-            <p :if={is_nil(@repository)} class="panel__empty">
+            <p :if={not @any_repository?} class="panel__empty">
               Import your first repository to start tracking issues.
             </p>
           </section>
@@ -136,23 +181,35 @@ defmodule OpenAgentsWeb.HomeLive do
           <section class="panel" aria-labelledby="dashboard-projects">
             <header class="panel__header">
               <h2 id="dashboard-projects" class="panel__title">Projects</h2>
-              <.link
-                :if={@repository}
-                navigate={~p"/#{@owner}/#{@name}/projects"}
-                class="panel__more"
-              >
+              <.link navigate={~p"/projects"} class="panel__more">
                 View all <.icon name="arrow-right" />
               </.link>
             </header>
 
+            <dl class="stat-pairs" id="dashboard-project-counts">
+              <div>
+                <dt>Open</dt>
+                <dd id="dashboard-open-project-count">{@open_project_count}</dd>
+              </div>
+              <div>
+                <dt>Closed</dt>
+                <dd id="dashboard-closed-project-count">{@closed_project_count}</dd>
+              </div>
+            </dl>
+
             <ul :if={@projects != []} class="project-list">
               <li :for={project <- @projects}>
                 <.link
-                  navigate={~p"/#{@owner}/#{@name}/projects/#{project.number}"}
+                  navigate={
+                    ~p"/#{project.repository.owner}/#{project.repository.name}/projects/#{project.number}"
+                  }
                   class="project-list__row"
                 >
                   <.icon name="grid" />
                   <span class="project-list__title">{project.title}</span>
+                  <span class="project-list__repository">
+                    {project.repository.owner}/{project.repository.name}
+                  </span>
                   <span class="project-list__state" data-state={project.state}>
                     {project.state}
                   </span>
@@ -160,8 +217,10 @@ defmodule OpenAgentsWeb.HomeLive do
               </li>
             </ul>
 
-            <p :if={@projects == [] and @repository} class="panel__empty">No projects yet.</p>
-            <p :if={is_nil(@repository)} class="panel__empty">
+            <p :if={@projects == [] and @any_repository?} class="panel__empty">
+              No open projects in the repositories you can read.
+            </p>
+            <p :if={not @any_repository?} class="panel__empty">
               Projects appear after you import a repository.
             </p>
           </section>
@@ -177,7 +236,11 @@ defmodule OpenAgentsWeb.HomeLive do
             </header>
 
             <div id="dashboard-repository-list" phx-update="stream" class="space-y-2">
-              <p class="panel__empty hidden only:block">No repositories yet.</p>
+              <%!-- Carries an id because every child of a stream container
+              needs one, including the one that is not a stream item. --%>
+              <p id="dashboard-no-repositories" class="panel__empty hidden only:block">
+                No repositories yet.
+              </p>
               <.link
                 :for={{id, repository} <- @streams.repositories}
                 id={id}
@@ -193,21 +256,6 @@ defmodule OpenAgentsWeb.HomeLive do
                 </.badge>
               </.link>
             </div>
-
-            <dl class="stat-pairs">
-              <div>
-                <dt>Open</dt>
-                <dd>{@open_count}</dd>
-              </div>
-              <div>
-                <dt>Closed</dt>
-                <dd>{@closed_count}</dd>
-              </div>
-              <div>
-                <dt>Projects</dt>
-                <dd>{@project_count}</dd>
-              </div>
-            </dl>
           </section>
 
           <section class="panel" aria-labelledby="dashboard-changelog">

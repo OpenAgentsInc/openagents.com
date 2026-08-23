@@ -35,18 +35,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
       ]
     },
     %{
-      title: "Repositories and CLI",
+      title: "Repositories",
       items: [
         %{
-          slug: "openagents-cli",
-          title: "Repositories and CLI",
-          icon: "terminal",
-          route: "/repositories"
-        },
-        %{
-          slug: "install-cli",
-          title: "Install the CLI",
-          icon: "download",
+          slug: "repositories",
+          title: "Repository hosting",
+          icon: "folder",
           route: "/repositories"
         },
         %{
@@ -71,6 +65,23 @@ defmodule OpenAgentsWeb.DocsCatalog do
           slug: "delete-repository",
           title: "Delete a repository",
           icon: "trash",
+          route: "/repositories"
+        }
+      ]
+    },
+    %{
+      title: "CLI",
+      items: [
+        %{
+          slug: "openagents-cli",
+          title: "The OpenAgents CLI",
+          icon: "terminal",
+          route: "/repositories"
+        },
+        %{
+          slug: "install-cli",
+          title: "Install the CLI",
+          icon: "download",
           route: "/repositories"
         },
         %{

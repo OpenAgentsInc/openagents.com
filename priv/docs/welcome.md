@@ -5,9 +5,9 @@ documentation covers the parts you can use today.
 
 ## What is here now
 
-OpenAgents hosts Git repositories that you can create, import from GitHub once,
-clone, push, pull, and browse. Use the browser or the npm-distributed
-[OpenAgents CLI](/docs/openagents-cli).
+OpenAgents [hosts Git repositories](/docs/repositories) that you can create,
+import from GitHub once, clone, push, pull, and browse. Use the browser or the
+npm-distributed [OpenAgents CLI](/docs/openagents-cli).
 
 The issue tracker includes issues, labels, milestones, assignees, and projects,
 each with a browser view and a GitHub-compatible REST endpoint. Code browsing

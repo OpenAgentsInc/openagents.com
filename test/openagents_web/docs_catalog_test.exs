@@ -49,6 +49,62 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     end
   end
 
+  test "Repositories and CLI are separate single-subject sections" do
+    sections =
+      Map.new(DocsCatalog.sections(), &{&1.title, Enum.map(&1.items, fn i -> i.slug end)})
+
+    assert Map.fetch!(sections, "Repositories") == [
+             "repositories",
+             "create-repository",
+             "import-github",
+             "clone-push-pull",
+             "delete-repository"
+           ]
+
+    assert Map.fetch!(sections, "CLI") == [
+             "openagents-cli",
+             "install-cli",
+             "cli-command-reference",
+             "cli-api"
+           ]
+
+    refute Map.has_key?(sections, "Repositories and CLI")
+  end
+
+  test "neither split section repeats its own title as a page title" do
+    # The sidebar read `Repositories and CLI > Repositories and CLI` before the
+    # split, which told the reader nothing about where they were.
+    for section <- DocsCatalog.sections(), section.title in ["Repositories", "CLI"] do
+      titles = Enum.map(section.items, & &1.title)
+
+      refute section.title in titles,
+             "the #{section.title} section contains a page also titled #{section.title}"
+    end
+  end
+
+  test "every /docs link in the Markdown sources resolves to a catalogued page" do
+    # A broken cross-link reads as a missing feature rather than a missing
+    # page, so it is worth catching here rather than in a reader's tab.
+    slugs = MapSet.new(DocsCatalog.slugs())
+
+    broken =
+      DocsCatalog.source_dir()
+      |> Path.join("*.md")
+      |> Path.wildcard()
+      |> Enum.flat_map(fn path ->
+        source = Path.basename(path)
+
+        ~r{\(/docs/([a-z0-9-]+)}
+        |> Regex.scan(File.read!(path), capture: :all_but_first)
+        |> Enum.map(fn [slug] -> {source, slug} end)
+        |> Enum.reject(fn {_source, slug} -> MapSet.member?(slugs, slug) end)
+      end)
+
+    assert broken == [],
+           "these links point at pages the catalog does not have: " <>
+             Enum.map_join(broken, ", ", fn {source, slug} -> "#{source} -> /docs/#{slug}" end)
+  end
+
   test "headings become the table of contents, ignoring fenced code" do
     toc = DocsCatalog.headings("# Title\n\n## Real\n\n```\n## Not a heading\n```\n\n### Nested\n")
 

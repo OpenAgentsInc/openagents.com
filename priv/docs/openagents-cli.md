@@ -1,27 +1,27 @@
-# Repositories and the OpenAgents CLI
+# The OpenAgents CLI
 
-OpenAgents hosts Git repositories and serves them through Git smart HTTP. You
-can create and import repositories in the browser or manage them from a
-terminal with the OpenAgents CLI (`openagents`). The CLI can also call Issues,
-Projects, and other implemented API routes.
+`openagents` is the OpenAgents command-line interface, distributed on npm as
+`@openagentsinc/cli`. It signs you in, configures Git authentication, manages
+[repositories](/docs/repositories) from a terminal, and calls implemented API
+routes such as Issues and Projects.
 
-## What you can do
+## What the CLI does
 
 The current release lets you:
 
-- Create a private or public repository in your GitHub user namespace.
-- Create a repository in an eligible GitHub organization namespace.
-- Import a GitHub repository as a one-time copy.
-- List and inspect repositories that you can access.
-- Clone repositories and configure Git authentication.
-- Delete a repository you own with explicit confirmation.
-- Push, pull, and fetch with standard Git.
+- Sign in with the device flow and check your authentication status.
+- Store an API token in the operating-system credential store, or read one
+  from `OPENAGENTS_TOKEN`.
+- Install a Git credential helper scoped to the selected OpenAgents origin.
+- Create, import, list, view, clone, and delete repositories.
+- Wait on durable provisioning and import state machines.
 - Call Issues, Projects, and other API routes with `openagents api`.
 - Use JSON output and stable exit codes in scripts and agents.
 
-The current release does not provide named `issue` or `project` commands, pull
-requests, continuous GitHub mirroring, SSH transport, rulesets, or a
-self-update command.
+The CLI does not provide named `issue` or `project` commands, pull request
+commands, continuous GitHub mirroring, SSH transport, rulesets, or a
+self-update command. Use `openagents api` for the routes that have no named
+command yet.
 
 ## Choose how to run the CLI
 
@@ -48,46 +48,6 @@ you run `openagents auth setup-git --local` or
 
 See [Install the CLI](/docs/install-cli) for authentication, profiles,
 configuration, and the complete `npx` guidance.
-
-## Understand namespaces and access
-
-OpenAgents uses GitHub namespaces in this release. Your OpenAgents user
-namespace matches your GitHub login. Eligible organization namespaces match
-the GitHub organization login.
-
-OpenAgents keys namespaces to GitHub's immutable account IDs. If a GitHub login
-changes, OpenAgents can update the displayed login without changing the
-repository's identity.
-
-Creating or importing in an organization requires an active GitHub
-organization administrator membership. OpenAgents adds the creator as the
-repository owner. It does not automatically grant access to every member of
-the GitHub organization.
-
-## Understand visibility and credentials
-
-New repositories are private unless you explicitly make them public. Anyone
-can clone and fetch a public repository. Only authorized OpenAgents members can
-see a private repository, and an unauthorized request does not reveal whether
-the repository exists.
-
-OpenAgents stores the GitHub access token used for GitHub operations on the
-server. It never sends that token to the browser or the CLI. The CLI stores its
-OpenAgents API token in the operating-system credential store or reads it from
-`OPENAGENTS_TOKEN` for the current process.
-
-Repository access does not grant deployment or operator authority.
-
-## Manage repositories in the browser
-
-After you sign in, open [Repositories](/repositories).
-
-- Select **New repository** to create an empty repository.
-- Select **Import from GitHub** to copy one GitHub repository.
-- Open a repository to see its clone URL, lifecycle state, code, Issues,
-  Projects, and import receipt when applicable.
-- Open a repository's **Delete repository** section to permanently delete a
-  repository you own.
 
 ## Follow a common terminal workflow
 
@@ -117,12 +77,16 @@ After you sign in, open [Repositories](/repositories).
    git push
    ```
 
+4. Read an API route the CLI has no named command for:
+
+   ```sh
+   openagents api repos/OWNER/REPOSITORY/issues
+   ```
+
 ## Next steps
 
 - [Install the CLI](/docs/install-cli)
-- [Create a repository](/docs/create-repository)
-- [Import from GitHub](/docs/import-github)
-- [Clone, push, and pull](/docs/clone-push-pull)
-- [Delete a repository](/docs/delete-repository)
-- [Call the API with the CLI](/docs/cli-api)
 - [CLI command reference](/docs/cli-command-reference)
+- [Call the API with the CLI](/docs/cli-api)
+- [Repository hosting](/docs/repositories)
+- [Clone, push, and pull](/docs/clone-push-pull)

@@ -1236,6 +1236,104 @@ Evidence: `OpenAgents.AcceptedOutcome`,
 `docs/accepted-outcome-contract.md`, and
 `test/openagents/accepted_outcome_test.exs`.
 
+## Tenant deployment control plane
+
+### DEPLOYPLANE-001 — A deployment intent carries no authority
+
+Status: Current
+
+A deployment request states what a tenant wants deployed. Every authority
+decision comes from durable records instead: repository membership rechecked at
+each sensitive transition, the environment's protection policy, and published
+evidence. A request names a full 40-character commit SHA and a `sha256:`
+artifact digest; a branch or tag is provenance, never something resolved later.
+
+The plane authenticates a human holding `deployments:write` or a short-lived
+workflow grant. `forge:write` is not deployment authority, and no route in this
+plane reaches the operator fleet-promotion surface behind
+`deployments:promote`. A private repository is readable only by a member, and
+cross-repository reads, approvals, cancellations, and provider bindings are
+denied.
+
+Evidence: `OpenAgents.Deployments`, `OpenAgents.Deployments.Authority`,
+`OpenAgents.Deployments.Principal`, `OpenAgentsWeb.DeploymentController`,
+`OpenAgentsWeb.ApiRouteAuthority`, `test/openagents/deployments_test.exs`, and
+`test/openagents_web/controllers/deployment_controller_test.exs`.
+
+### DEPLOYPLANE-002 — A workflow grant binds to exactly one context
+
+Status: Current
+
+A grant issued to a workflow is single-context and short-lived: it binds one
+repository, one environment where applicable, one source ref, one source
+workflow, and one workflow run ID, with a clamped lifetime. Presenting a grant
+cannot widen repository, environment, commit, artifact, or audience authority,
+and a workflow principal can never approve a request. Revocation takes effect
+before the next sensitive transition.
+
+Evidence: `OpenAgents.Deployments.WorkflowGrant`,
+`OpenAgents.Deployments.Authority`, and `test/openagents/deployments_test.exs`.
+
+### DEPLOYPLANE-003 — Policy admits a run on exact bytes, with a durable explanation
+
+Status: Current
+
+`OpenAgents.Deployments.Policy` evaluates allowed branches, allowed tags,
+allowed source workflows, freeze, deployment window, artifact age, required
+checks, and required approvals, and persists an explanation for every rule it
+evaluated. A required check satisfies a requirement only when it names the same
+commit SHA and the same artifact digest and is younger than the environment's
+validity limit, so a green result cannot be replayed onto different bytes. A
+missing required check leaves the request pending rather than admitting it.
+Approvals honor separation of duties: a requester cannot approve its own
+request. Preview environments may supersede an in-flight request; production
+never supersedes implicitly.
+
+Evidence: `OpenAgents.Deployments.Policy`,
+`OpenAgents.Deployments.Protection`,
+`test/openagents/deployments/policy_test.exs`, and
+`test/openagents/deployments_test.exs`.
+
+### DEPLOYPLANE-004 — One lifecycle defines every legal transition
+
+Status: Current
+
+`OpenAgents.Deployments.Lifecycle` is the only definition of legal deployment
+states and transitions, and transitions are enforced transactionally against
+the durable row. Terminal states have no successors, a run cannot skip
+`deploying` on its way to `succeeded`, and a run already `deploying` cannot be
+superseded. Every transition appends a sequenced deployment event whose payload
+is bounded and redacted, so event polling, subscriptions, and receipts cannot
+disclose a secret.
+
+Evidence: `OpenAgents.Deployments.Lifecycle`, `OpenAgents.Deployments.Event`,
+`test/openagents/deployments/lifecycle_test.exs`, and
+`test/openagents/deployments_test.exs`.
+
+### DEPLOYPLANE-005 — Only an admitted, immutable execution reaches a provider, and uncertainty fails
+
+Status: Current
+
+A provider receives an immutable execution object built after admission. It
+never receives caller credentials, its idempotency is keyed by run ID, and
+secrets are resolved at execution time only for its own bound environment as
+references rather than stored values. A provider failure, exception, exit,
+timeout, or unknown result terminalizes the run as failed; only an explicit
+provider success produces a success receipt.
+
+`OpenAgents.Deployments.Worker` claims queued runs under renewable leases,
+re-evaluates policy and membership before handing work to the provider,
+observes cancellation during execution, and reconciles runs whose lease expired
+after a crash. The worker starts only when the `deployment_control_plane`
+feature is enabled, validated by `OpenAgents.RuntimeConfig`; the API surface
+records and evaluates runs regardless.
+
+Evidence: `OpenAgents.Deployments.Execution`,
+`OpenAgents.Deployments.Provider`, `OpenAgents.Deployments.Providers.Fake`,
+`OpenAgents.Deployments.SecretResolver`, `OpenAgents.Deployments.Worker`,
+`OpenAgents.RuntimeSupervisor`, `test/openagents/deployments_test.exs`, and
+`test/openagents/runtime_config_test.exs`.
+
 ## Interface and release
 
 ### VOICE-001 — Spoken identity is admitted before media
@@ -2187,6 +2285,11 @@ contract; the invariant prose above defines the assertion, not the filename.
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs` |
+| DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
+| DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |
+| DEPLOYPLANE-003 | `test/openagents/deployments/policy_test.exs`, `test/openagents/deployments_test.exs` |
+| DEPLOYPLANE-004 | `test/openagents/deployments/lifecycle_test.exs`, `test/openagents/deployments_test.exs` |
+| DEPLOYPLANE-005 | `test/openagents/deployments_test.exs`, `test/openagents/runtime_config_test.exs` |
 | VOICE-001 | `test/openagents/voice/config_test.exs` |
 | VOICE-002 | `test/openagents_web/controllers/voice_call_controller_test.exs` |
 | VOICE-003 | `test/openagents/voice_test.exs`, `test/openagents/voice_sessions_test.exs` |

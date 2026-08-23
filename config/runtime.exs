@@ -194,6 +194,7 @@ if config_env() == :prod and runtime_role == :web do
   incident_fixer_enabled = feature.("INCIDENT_FIXER")
   turn_recovery_enabled = feature.("TURN_RECOVERY")
   voice_retention_enabled = feature.("VOICE_RETENTION")
+  deployment_control_plane_enabled = feature.("DEPLOYMENT_CONTROL_PLANE")
   forge_enabled = feature.("FORGE")
   forge_deploy_enabled = feature.("FORGE_DEPLOY")
   boot_convergence_enabled = feature.("BOOT_CONVERGENCE")
@@ -427,6 +428,7 @@ if config_env() == :prod and runtime_role == :web do
     conversation_reset_enabled: conversation_reset_enabled,
     incident_fixer_enabled: incident_fixer_enabled,
     turn_recovery_enabled: turn_recovery_enabled,
+    deployment_control_plane_enabled: deployment_control_plane_enabled,
     github_oauth_scopes: github_oauth_scopes,
     openai_api_key: required_text.("OPENAI_API_KEY"),
     openrouter_api_key: optional_text.("OPENROUTER_API_KEY"),

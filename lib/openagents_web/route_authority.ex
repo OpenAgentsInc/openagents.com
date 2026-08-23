@@ -261,6 +261,29 @@ defmodule OpenAgentsWeb.RouteAuthority do
         false
       )
 
+  # The deployment control plane has no anonymous surface. Reading a deployment
+  # discloses what a repository ships and when, so every route here authenticates
+  # a tenant principal, and none of them carries the operator fleet authority
+  # behind `/admin/forge`.
+  defp policy(%{path: "/api/v3/repos/:owner/:repo/deployment" <> _path, verb: verb})
+       when verb in [:get, :head],
+       do:
+         declaration(
+           :authenticated_api,
+           "first-party bearer token or workflow grant",
+           "deployments:write",
+           false
+         )
+
+  defp policy(%{path: "/api/v3/repos/:owner/:repo/deployment" <> _path}),
+    do:
+      declaration(
+        :authenticated_api,
+        "first-party bearer token or workflow grant",
+        "deployments:write",
+        true
+      )
+
   defp policy(%{path: "/api/v3/chat/events", verb: verb}) when verb in [:get, :head],
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
 

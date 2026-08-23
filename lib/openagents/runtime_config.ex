@@ -353,6 +353,7 @@ defmodule OpenAgents.RuntimeConfig do
          {:ok, boot_convergence?} <- required_boolean(settings, :forge_boot_converge_enabled),
          {:ok, turn_recovery?} <- required_boolean(settings, :turn_recovery_enabled),
          {:ok, voice_retention?} <- required_boolean(settings, :voice_retention_enabled),
+         {:ok, deployments?} <- required_boolean(settings, :deployment_control_plane_enabled),
          {:ok, voice_recovery?} <-
            required_boolean(settings, :voice_recovery_worker_enabled),
          {:ok, work_workers?} <- required_boolean(settings, :work_workers_enabled),
@@ -379,6 +380,7 @@ defmodule OpenAgents.RuntimeConfig do
         forge_deploy: forge_deploy?,
         boot_convergence: boot_convergence?,
         turn_recovery: turn_recovery?,
+        deployment_control_plane: deployments?,
         voice_recovery: voice_recovery?,
         work_workers: work_workers?,
         conversation_reset: conversation_reset?,

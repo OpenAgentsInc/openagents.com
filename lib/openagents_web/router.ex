@@ -48,6 +48,15 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "chat:account"
   end
 
+  # The deployment control plane authenticates two principals: a human holding
+  # `deployments:write`, and a short-lived workflow grant. Neither carries the
+  # operator-only fleet promotion authority.
+  pipeline :deployments_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.DeploymentPrincipal
+  end
+
   pipeline :optional_forge_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -298,6 +307,34 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :show
     get "/repos/:owner/:repo/assignees", AssigneeController, :index
     get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :deployments_api
+
+    get "/repos/:owner/:repo/deployment-environments", DeploymentController, :environments
+
+    put "/repos/:owner/:repo/deployment-environments/:name",
+        DeploymentController,
+        :put_environment
+
+    get "/repos/:owner/:repo/deployment-environments/:name/protection",
+        DeploymentController,
+        :protection
+
+    post "/repos/:owner/:repo/deployments", DeploymentController, :create
+    get "/repos/:owner/:repo/deployments", DeploymentController, :index
+    get "/repos/:owner/:repo/deployments/:id", DeploymentController, :show
+    post "/repos/:owner/:repo/deployments/:id/cancel", DeploymentController, :cancel
+    post "/repos/:owner/:repo/deployments/:id/approvals", DeploymentController, :decide
+    get "/repos/:owner/:repo/deployments/:id/approvals", DeploymentController, :approvals
+    get "/repos/:owner/:repo/deployments/:id/events", DeploymentController, :events
+    post "/repos/:owner/:repo/deployment-checks", DeploymentController, :publish_check
+    post "/repos/:owner/:repo/deployment-workflow-grants", DeploymentController, :issue_grant
+
+    delete "/repos/:owner/:repo/deployment-workflow-grants/:id",
+           DeploymentController,
+           :revoke_grant
   end
 
   scope "/api/v3", OpenAgentsWeb do

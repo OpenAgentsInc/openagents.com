@@ -320,6 +320,25 @@ defmodule OpenAgents.RuntimeConfigTest do
     assert RuntimeConfig.feature_enabled?(config, :scv_deploy)
   end
 
+  test "the deployment control plane worker is off unless configuration enables it" do
+    # DEPLOYPLANE-005: the API records and evaluates runs on any host, but only
+    # a host whose configuration admits the feature may claim and execute one.
+    assert {:ok, disabled} = RuntimeConfig.validate(staging_settings())
+    refute RuntimeConfig.feature_enabled?(disabled, :deployment_control_plane)
+
+    assert {:ok, enabled} =
+             staging_settings()
+             |> Map.put(:deployment_control_plane_enabled, true)
+             |> RuntimeConfig.validate()
+
+    assert RuntimeConfig.feature_enabled?(enabled, :deployment_control_plane)
+
+    assert {:error, %{setting: :deployment_control_plane_enabled}} =
+             staging_settings()
+             |> Map.put(:deployment_control_plane_enabled, "yes")
+             |> RuntimeConfig.validate()
+  end
+
   defp staging_settings do
     current = Map.new(Application.get_all_env(:openagents))
 
@@ -338,6 +357,7 @@ defmodule OpenAgents.RuntimeConfigTest do
       forge_boot_converge_enabled: false,
       turn_recovery_enabled: false,
       voice_retention_enabled: false,
+      deployment_control_plane_enabled: false,
       computer_controller_enabled: false,
       ra_enabled: false,
       forge_repos: ["openagents.com"],

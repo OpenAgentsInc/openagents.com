@@ -9,7 +9,12 @@ defmodule OpenAgents.ApiTokens do
   alias OpenAgents.Repo
 
   @prefix "oa_pat_"
-  @allowed_scopes ["chat:account", "forge:write"]
+  # `deployments:write` speaks to the deployment control plane. It is deliberately
+  # not `forge:write`, and deliberately not the operator-only
+  # `deployments:promote` fleet scope: holding it lets a caller address the
+  # deployment API, while repository membership and environment policy still
+  # decide what it may deploy.
+  @allowed_scopes ["chat:account", "forge:write", "deployments:write"]
   @maximum_lifetime_days 90
 
   @spec create(User.t(), map()) ::

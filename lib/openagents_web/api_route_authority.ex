@@ -105,6 +105,23 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/pulls" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
+      # pipe_through :deployments_api — tenant deployment authority only. No
+      # route here is anonymous, and none of them reaches the operator fleet
+      # promotion surface.
+      "get /api/v3/repos/:owner/:repo/deployment-environments" => :required_bearer,
+      "put /api/v3/repos/:owner/:repo/deployment-environments/:name" => :required_bearer,
+      "get /api/v3/repos/:owner/:repo/deployment-environments/:name/protection" =>
+        :required_bearer,
+      "post /api/v3/repos/:owner/:repo/deployments" => :required_bearer,
+      "get /api/v3/repos/:owner/:repo/deployments" => :required_bearer,
+      "get /api/v3/repos/:owner/:repo/deployments/:id" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/deployments/:id/cancel" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/deployments/:id/approvals" => :required_bearer,
+      "get /api/v3/repos/:owner/:repo/deployments/:id/approvals" => :required_bearer,
+      "get /api/v3/repos/:owner/:repo/deployments/:id/events" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/deployment-checks" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/deployment-workflow-grants" => :required_bearer,
+      "delete /api/v3/repos/:owner/:repo/deployment-workflow-grants/:id" => :required_bearer,
       # pipe_through :forge_write_api — forum writes and identity claims.
       "post /api/v3/forum/topics" => :required_bearer,
       "post /api/v3/forum/topics/:topic_id/posts" => :required_bearer,

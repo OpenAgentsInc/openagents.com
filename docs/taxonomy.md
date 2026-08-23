@@ -112,6 +112,19 @@ messages and tool steps underneath them.
 policy, lifecycle, budgets, and receipts. It is not a container and not a
 model.
 
+**Deployment control plane** — the tenant-facing plane where a repository
+deploys its own commits to its own environments: environments, requests, runs,
+checks, approvals, workflow grants, and append-only deployment events, backed by
+`OpenAgents.Deployments` and served at `/api/v3` under `deployments:write`. It
+is not the forge deployment plane. Promoting the OpenAgents release itself stays
+operator-only behind `deployments:promote`, and no tenant route reaches it.
+`docs/deployment-control-plane.md` describes the contract.
+
+**Deployment request and deployment run** — a request is the recorded intent
+(exact commit SHA, exact artifact digest, provenance, creator principal); a run
+is the execution of one admitted request. A request that policy never admits has
+no run.
+
 **Work job (`work_jobs`)** — a durable, budgeted delegated job row started by
 `deep_work.v1`. Delegation, not execution.
 

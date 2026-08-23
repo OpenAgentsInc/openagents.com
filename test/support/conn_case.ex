@@ -115,6 +115,16 @@ defmodule OpenAgentsWeb.ConnCase do
     put_api_token_for_user(conn, user, ["forge:write"])
   end
 
+  @doc """
+  Authenticate an existing account for the deployment control plane.
+
+  Deployment authority is its own scope, so a test cannot borrow `forge:write`
+  to reach a deployment route.
+  """
+  def put_deployments_api_token(conn, %OpenAgents.Accounts.User{} = user) do
+    put_api_token_for_user(conn, user, ["deployments:write"])
+  end
+
   def put_chat_api_token(conn, key) when is_binary(key) do
     user = github_user("api-token-" <> key)
     put_api_token_for_user(conn, user, ["chat:account"])

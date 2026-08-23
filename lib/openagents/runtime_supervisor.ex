@@ -38,7 +38,11 @@ defmodule OpenAgents.RuntimeSupervisor do
         OpenAgents.Leaderboard.Server,
         {Task.Supervisor, name: OpenAgents.ProviderTaskSupervisor},
         {Task.Supervisor, name: OpenAgents.ToolTaskSupervisor},
-        {Task.Supervisor, name: OpenAgents.ShadowProgramTaskSupervisor}
+        {Task.Supervisor, name: OpenAgents.ShadowProgramTaskSupervisor},
+        # The fake provider's bookkeeping owns its tables from a supervised
+        # process, so a worker crash cannot lose the record of what the
+        # provider already did. It deploys nothing on its own.
+        OpenAgents.Deployments.Providers.Fake
       ] ++
         maybe_scv_execution_reaper() ++
         maybe_forge() ++
@@ -47,6 +51,7 @@ defmodule OpenAgents.RuntimeSupervisor do
         maybe_work_recovery() ++
         maybe_voice_recovery() ++
         maybe_voice_retention() ++
+        maybe_deployment_control_plane() ++
         maybe_ra_bootstrap()
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -63,6 +68,16 @@ defmodule OpenAgents.RuntimeSupervisor do
   defp maybe_forge do
     if OpenAgents.RuntimeConfig.feature_enabled?(:forge) do
       [OpenAgents.Forge.Supervisor]
+    else
+      []
+    end
+  end
+
+  # The control plane's API is always available; its executing worker is gated,
+  # because a host that should not run tenant deployments must not claim a run.
+  defp maybe_deployment_control_plane do
+    if OpenAgents.RuntimeConfig.feature_enabled?(:deployment_control_plane) do
+      [OpenAgents.Deployments.Worker]
     else
       []
     end

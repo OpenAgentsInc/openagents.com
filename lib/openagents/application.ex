@@ -46,6 +46,7 @@ defmodule OpenAgents.Application do
         OpenAgentsWeb.Telemetry,
         OpenAgents.Repo,
         OpenAgents.ReleaseState,
+        OpenAgents.Forge.CacheReadiness,
         # Deployment identity and boot convergence must settle before cluster
         # discovery or the endpoint can make this node externally reachable.
         OpenAgents.Forge.DeploymentNode,

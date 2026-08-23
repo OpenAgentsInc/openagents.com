@@ -6,9 +6,9 @@ defmodule OpenAgents.Forge.Pushes do
   back and the client sees a failed push; the cache never gets ahead of the
   authority.
 
-  Pushes serialize per repo cluster-wide via `:global.trans`; the WAL index
-  CAS remains the true serialization point (a conflict from a writer outside
-  the cluster is re-synced and retried once).
+  Pushes and local cache synchronization share one per-repository lock on each
+  node. The WAL index CAS remains the cluster-wide serialization point (a
+  conflict from another writer is re-synced and retried once).
 
   After the WAL accepts: a `forge_pushes` receipt row is derived (idempotent
   by WAL sequence — audit A7: receipts are derived from the WAL, never a
@@ -30,60 +30,63 @@ defmodule OpenAgents.Forge.Pushes do
   only after WAL persist; `{:error, :wal_persist_failed}` after rollback.
   """
   def handle_receive_pack(repo, body, principal, git_protocol) do
-    :global.trans({{:forge_push, repo}, self()}, fn ->
+    Sync.with_repo_lock(repo, fn ->
       do_handle(repo, body, principal, git_protocol, false)
     end)
   end
 
   defp do_handle(repo, body, principal, git_protocol, retried?) do
     started_at = System.monotonic_time(:millisecond)
-    Sync.ensure_fresh(repo)
-    path = Repos.ensure_repo!(repo)
-    refs_before = Repos.refs(repo)
 
-    {output, status} = GitHTTP.run_git_service("receive-pack", [path], body, git_protocol)
+    with :ok <- Sync.ensure_fresh(repo) do
+      path = Repos.ensure_repo!(repo)
+      refs_before = Repos.refs(repo)
 
-    refs_after = Repos.refs(repo)
+      {output, status} = GitHTTP.run_git_service("receive-pack", [path], body, git_protocol)
 
-    cond do
-      status != 0 ->
-        {:error, :receive_pack_failed}
+      refs_after = Repos.refs(repo)
 
-      refs_after == refs_before ->
-        # Nothing changed (up to date, or all commands rejected by git);
-        # the client's report-status in `output` says why. Nothing to persist.
-        {:ok, output}
+      cond do
+        status != 0 ->
+          {:error, :receive_pack_failed}
 
-      true ->
-        case persist(repo, body, refs_after, principal) do
-          {:ok, seq} ->
-            Repos.record_applied_seq!(repo, seq)
-            record_repository_activity(repo)
+        refs_after == refs_before ->
+          # Nothing changed (up to date, or all commands rejected by git);
+          # the client's report-status in `output` says why. Nothing to persist.
+          {:ok, output}
 
-            capture_push_received(
-              repo,
-              record_receipt(repo, seq, refs_before, refs_after, principal, started_at),
-              refs_before,
-              refs_after,
-              started_at
-            )
+        true ->
+          case persist(repo, body, refs_after, principal) do
+            {:ok, seq} ->
+              Repos.record_applied_seq!(repo, seq)
+              record_repository_activity(repo)
 
-            broadcast(repo, seq, refs_after)
-            mirror_async(repo)
-            {:ok, output}
+              capture_push_received(
+                repo,
+                record_receipt(repo, seq, refs_before, refs_after, principal, started_at),
+                refs_before,
+                refs_after,
+                started_at
+              )
 
-          {:error, :cas_conflict} when not retried? ->
-            Sync.ensure_fresh(repo)
-            do_handle(repo, body, principal, git_protocol, true)
+              broadcast(repo, seq, refs_after)
+              mirror_async(repo)
+              {:ok, output}
 
-          {:error, reason} ->
-            Logger.error(
-              "forge_push_wal_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
-            )
+            {:error, :cas_conflict} when not retried? ->
+              with :ok <- Sync.ensure_fresh(repo) do
+                do_handle(repo, body, principal, git_protocol, true)
+              end
 
-            Repos.set_refs!(repo, refs_before)
-            {:error, :wal_persist_failed}
-        end
+            {:error, reason} ->
+              Logger.error(
+                "forge_push_wal_failed repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
+              )
+
+              Repos.set_refs!(repo, refs_before)
+              {:error, :wal_persist_failed}
+          end
+      end
     end
   end
 

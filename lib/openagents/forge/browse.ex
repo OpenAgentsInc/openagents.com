@@ -11,8 +11,6 @@ defmodule OpenAgents.Forge.Browse do
   never stream an unbounded `git show` to an anonymous socket.
   """
 
-  require Logger
-
   alias OpenAgents.Forge.{Repos, Sync}
   alias OpenAgents.Repositories.Repository
 
@@ -46,26 +44,8 @@ defmodule OpenAgents.Forge.Browse do
     end
   end
 
-  # A node whose bare-repo cache is damaged (the 2026-08-19 incident, #134:
-  # a torn loose object after a VM reset) makes WAL replay raise. That is a
-  # node-local cache fault, not a reason to fail a public read: serve what
-  # this node already has, and let the operator repair path fix the cache.
   defp freshen(repo) do
-    Sync.ensure_fresh(storage_key(repo), default_branch(repo))
-  rescue
-    error ->
-      Logger.warning(
-        "forge_browse_sync_failed repo=#{storage_key(repo)} code=#{OpenAgents.OperationalLog.code(error)}"
-      )
-
-      :ok
-  catch
-    :exit, reason ->
-      Logger.warning(
-        "forge_browse_sync_exited repo=#{storage_key(repo)} code=#{OpenAgents.OperationalLog.code(reason)}"
-      )
-
-      :ok
+    Sync.ensure_fresh!(storage_key(repo), default_branch(repo))
   end
 
   @doc "The default branch head, if the repo has one."

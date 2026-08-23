@@ -57,7 +57,9 @@ itself establish that a feature is enabled for every production user.
   evidence before production promotion.
 
 Read the [Forge hot loop runbook](docs/operations/forge-hot-loop.md) for the
-current deployment contract and production evidence.
+current deployment contract and production evidence. Read the
+[Forge cache recovery runbook](docs/operations/forge-cache-recovery.md) when a
+repository read differs between fleet nodes or returns `503`.
 
 ## Architecture
 

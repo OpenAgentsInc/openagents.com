@@ -57,8 +57,8 @@ defmodule OpenAgents.Forge.GitHTTP do
     operation = if service == "git-upload-pack", do: :read, else: :write
 
     with {:ok, repository} <- resolve_repository(conn, owner, name),
-         :ok <- authorize(conn, repository, operation) do
-      Sync.ensure_fresh(repository.storage_key, repository.default_branch)
+         :ok <- authorize(conn, repository, operation),
+         :ok <- Sync.ensure_fresh(repository.storage_key, repository.default_branch) do
       command = String.trim_leading(service, "git-")
       path = Repos.ensure_repo!(repository.storage_key, repository.default_branch)
 
@@ -83,8 +83,8 @@ defmodule OpenAgents.Forge.GitHTTP do
   defp upload_pack(conn, owner, name) do
     with {:ok, repository} <- resolve_repository(conn, owner, name),
          :ok <- authorize(conn, repository, :read),
-         {:ok, body, conn} <- read_git_body(conn) do
-      Sync.ensure_fresh(repository.storage_key, repository.default_branch)
+         {:ok, body, conn} <- read_git_body(conn),
+         :ok <- Sync.ensure_fresh(repository.storage_key, repository.default_branch) do
       path = Repos.ensure_repo!(repository.storage_key, repository.default_branch)
       {output, _status} = run_git_service("upload-pack", [path], body, git_protocol(conn))
 
@@ -126,6 +126,9 @@ defmodule OpenAgents.Forge.GitHTTP do
 
         {:error, :wal_persist_failed} ->
           send_resp(conn, 503, "push not persisted; refs rolled back — retry") |> halt()
+
+        {:error, %OpenAgents.Forge.SyncError{}} ->
+          send_resp(conn, 503, "repository cache unavailable; retry") |> halt()
 
         {:error, _reason} ->
           send_resp(conn, 500, "push failed") |> halt()
@@ -303,6 +306,10 @@ defmodule OpenAgents.Forge.GitHTTP do
 
   defp send_git_error(conn, {:error, status, message}) do
     conn |> send_resp(status, message) |> halt()
+  end
+
+  defp send_git_error(conn, {:error, %OpenAgents.Forge.SyncError{}}) do
+    conn |> send_resp(503, "repository cache unavailable; retry") |> halt()
   end
 
   defp send_git_error(conn, {:error, status, message, headers}) do

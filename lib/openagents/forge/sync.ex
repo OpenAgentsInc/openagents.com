@@ -10,29 +10,32 @@ defmodule OpenAgents.Forge.Sync do
   require Logger
 
   alias OpenAgents.Cluster
-  alias OpenAgents.Forge.{GitHTTP, Repos, WAL}
+  alias OpenAgents.Forge.{CacheReadiness, GitHTTP, Repos, SyncError, WAL}
 
   @default_cluster_warm_timeout_ms 10 * 60 * 1_000
 
   @doc """
-  Bring the local bare repo up to the WAL. Returns `:ok` (fresh, replayed,
-  or nothing pushed yet) — read paths degrade to serving the local cache if
-  the WAL is unreachable, logging honestly, rather than failing reads.
+  Bring the local bare repo up to the WAL.
+
+  Returns `:ok` when the projection is current and a typed error when the WAL
+  or cache cannot produce an authoritative projection. Callers must not turn a
+  synchronization error into a repository or object `404`.
   """
   def ensure_fresh(repo, default_branch \\ "main") do
-    case WAL.read_index(repo) do
-      {:error, :not_found} ->
-        :ok
+    synchronize(repo, fn ->
+      case WAL.read_index(repo) do
+        {:error, :not_found} -> :ok
+        {:ok, _generation, index} -> do_replay_missing(repo, index, default_branch)
+        {:error, reason} -> raise_sync(repo, :read_wal, reason)
+      end
+    end)
+  end
 
-      {:ok, _generation, index} ->
-        replay_missing(repo, index, default_branch)
-
-      {:error, reason} ->
-        Logger.warning(
-          "forge_sync_wal_unreachable repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
-        )
-
-        :ok
+  @doc "Bring the local bare repo up to the WAL or raise a `503`-typed error."
+  def ensure_fresh!(repo, default_branch \\ "main") do
+    case ensure_fresh(repo, default_branch) do
+      :ok -> :ok
+      {:error, %SyncError{} = error} -> raise error
     end
   end
 
@@ -69,39 +72,97 @@ defmodule OpenAgents.Forge.Sync do
 
   @doc "Replay WAL entries the local repo has not applied. Used by reads and boot."
   def replay_missing(repo, index, default_branch \\ "main") do
-    Repos.ensure_repo!(repo, default_branch)
-    applied = Repos.applied_seq(repo)
+    synchronize(repo, fn -> do_replay_missing(repo, index, default_branch) end)
+  end
+
+  @doc false
+  def with_repo_lock(repo, function) when is_function(function, 0) do
+    lock_id = {{__MODULE__, repo}, self()}
+
+    case :global.trans(lock_id, function, [node()]) do
+      {:aborted, reason} -> raise_sync(repo, :acquire_lock, reason)
+      result -> result
+    end
+  end
+
+  defp do_replay_missing(repo, index, default_branch) do
+    path = Repos.ensure_repo!(repo, default_branch)
+    applied = Repos.applied_seq_at(path)
 
     index
     |> WAL.entries()
     |> Enum.filter(fn entry -> entry["seq"] > applied end)
-    |> Enum.each(fn entry -> apply_entry!(repo, entry) end)
+    |> Enum.each(fn entry -> apply_entry!(repo, path, entry) end)
 
     rebuild_if_objects_missing!(repo, index, default_branch)
-    converge_refs(repo, index)
-    Repos.set_default_branch!(repo, default_branch)
+    path = Repos.bare_path(repo)
+    converge_refs(path, index)
+    Repos.set_default_branch_at!(path, default_branch)
     :ok
   end
 
   defp rebuild_if_objects_missing!(repo, index, default_branch) do
     unless refs_materialized?(repo, index) do
       Logger.warning("forge_sync_cache_rebuild repo=#{repo} code=missing_ref_object")
-      :ok = Repos.delete_repo(repo)
-      Repos.ensure_repo!(repo, default_branch)
+      rebuild_at_sibling!(repo, index, default_branch)
+    end
+  end
+
+  defp rebuild_at_sibling!(repo, index, default_branch) do
+    live_path = Repos.bare_path(repo)
+    suffix = System.unique_integer([:positive, :monotonic])
+    rebuild_path = live_path <> ".rebuild-#{suffix}"
+    previous_path = live_path <> ".previous-#{suffix}"
+
+    try do
+      Repos.ensure_repo_at!(rebuild_path, default_branch)
 
       index
       |> WAL.entries()
-      |> Enum.each(fn entry -> apply_entry!(repo, entry) end)
+      |> Enum.each(fn entry -> apply_entry!(repo, rebuild_path, entry) end)
 
-      unless refs_materialized?(repo, index) do
-        raise "forge cache rebuild did not materialize every authoritative ref"
+      converge_refs(rebuild_path, index)
+      Repos.set_default_branch_at!(rebuild_path, default_branch)
+
+      unless refs_materialized_at?(rebuild_path, index) do
+        raise_sync(repo, :verify_rebuild, :missing_ref_object)
       end
+
+      swap_rebuild!(repo, live_path, rebuild_path, previous_path)
+    after
+      File.rm_rf(rebuild_path)
+
+      # Keep the previous cache if activation and restoration both fail. It is
+      # the last complete local projection an operator can recover.
+      if File.exists?(live_path), do: File.rm_rf(previous_path)
+    end
+  end
+
+  defp swap_rebuild!(repo, live_path, rebuild_path, previous_path) do
+    live_exists? = File.exists?(live_path)
+
+    if live_exists? do
+      case File.rename(live_path, previous_path) do
+        :ok -> :ok
+        {:error, reason} -> raise_sync(repo, :stage_previous_cache, reason)
+      end
+    end
+
+    case File.rename(rebuild_path, live_path) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        if live_exists?, do: File.rename(previous_path, live_path)
+        raise_sync(repo, :activate_rebuild, reason)
     end
   end
 
   defp refs_materialized?(repo, index) do
-    path = Repos.bare_path(repo)
+    refs_materialized_at?(Repos.bare_path(repo), index)
+  end
 
+  defp refs_materialized_at?(path, index) do
     index
     |> WAL.refs()
     |> Map.values()
@@ -111,9 +172,7 @@ defmodule OpenAgents.Forge.Sync do
     end)
   end
 
-  defp apply_entry!(repo, %{"seq" => seq, "object" => object} = entry) do
-    path = Repos.bare_path(repo)
-
+  defp apply_entry!(repo, path, %{"seq" => seq, "object" => object} = entry) do
     case entry["format"] || "receive_pack" do
       "receive_pack" ->
         {:ok, payload} = WAL.get_entry(repo, object)
@@ -126,17 +185,17 @@ defmodule OpenAgents.Forge.Sync do
         :ok
     end
 
-    Repos.record_applied_seq!(repo, seq)
+    Repos.record_applied_seq_at!(path, seq)
   end
 
   # Replay is exact in the common case; converge_refs makes the final state
   # authoritative even if an individual replayed request was non-idempotent
   # (e.g. a non-fast-forward the original push forced).
-  defp converge_refs(repo, index) do
+  defp converge_refs(path, index) do
     target = WAL.refs(index)
 
-    if Repos.refs(repo) != target do
-      Repos.set_refs!(repo, target)
+    if Repos.refs_at(path) != target do
+      Repos.set_refs_at!(path, target)
     end
   end
 
@@ -205,5 +264,37 @@ defmodule OpenAgents.Forge.Sync do
     _error -> {:error, :cluster_warm_exception}
   catch
     :exit, reason -> {:error, reason}
+  end
+
+  defp synchronize(repo, function) do
+    result = with_repo_lock(repo, function)
+    CacheReadiness.mark_available(repo)
+    result
+  rescue
+    error ->
+      sync_error = normalize_error(repo, error)
+      CacheReadiness.mark_unavailable(repo, sync_error.operation)
+
+      Logger.error(
+        "forge_sync_unavailable repo=#{repo} operation=#{sync_error.operation} " <>
+          "code=#{OpenAgents.OperationalLog.code(sync_error.reason)} detail=#{inspect(sync_error.reason)}"
+      )
+
+      {:error, sync_error}
+  catch
+    kind, reason ->
+      sync_error = %SyncError{repo: repo, operation: :materialize_cache, reason: {kind, reason}}
+      CacheReadiness.mark_unavailable(repo, sync_error.operation)
+      {:error, sync_error}
+  end
+
+  defp normalize_error(_repo, %SyncError{} = error), do: error
+
+  defp normalize_error(repo, error) do
+    %SyncError{repo: repo, operation: :materialize_cache, reason: error}
+  end
+
+  defp raise_sync(repo, operation, reason) do
+    raise SyncError, repo: repo, operation: operation, reason: reason
   end
 end

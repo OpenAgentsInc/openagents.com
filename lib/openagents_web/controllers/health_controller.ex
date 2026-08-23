@@ -14,7 +14,8 @@ defmodule OpenAgentsWeb.HealthController do
           reason: "runtime_not_ready",
           boot_converged: report["boot_converged"],
           deployment_ready: report["deployment_ready"],
-          admission_ready: report["admission_ready"]
+          admission_ready: report["admission_ready"],
+          forge_cache_ready: report["forge_cache_ready"]
         })
 
       {{:error, _reason}, _report} ->

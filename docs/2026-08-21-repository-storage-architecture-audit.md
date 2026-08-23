@@ -479,7 +479,7 @@ An audit that lists only faults misrepresents the design. Four decisions here ar
 
 - **Refs live in exactly one place.** The WAL is authority, PostgreSQL receipts are derived from it and reconciled by sequence number (`lib/openagents/forge/pushes.ex:143`), and the bare repositories declare themselves cache (`lib/openagents/forge/repos.ex:3`). Almost every hard bug in a distributed Git host comes from having two ref authorities. This system has one.
 - **The acknowledgement barrier is in the right place.** A push is not acknowledged until it is durable, and a WAL rejection rolls local refs back (`lib/openagents/forge/pushes.ex:57`, `:82`).
-- **Reads degrade instead of failing.** An unreachable WAL logs and serves the local cache (`lib/openagents/forge/sync.ex:30`), and a damaged cache serves what it has rather than turning a node-local fault into a public outage (`lib/openagents/forge/browse.ex:49`).
+- **Reads fail closed when the cache is not authoritative.** A repository-cache synchronization failure returns `503`, marks the node unready, and preserves the last complete local projection for recovery. It never turns missing cache objects into an authoritative `404` (`lib/openagents/forge/sync.ex`, `lib/openagents/forge/browse.ex`).
 - **Git invocations are argv-only.** No request-derived value ever enters a shell string, including in the one place `sh` is used for stdin redirection (`lib/openagents/forge/repos.ex:7`, `lib/openagents/forge/git_http.ex:381`).
 
 ---

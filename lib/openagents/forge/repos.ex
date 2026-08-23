@@ -51,28 +51,38 @@ defmodule OpenAgents.Forge.Repos do
 
   @doc "Initialize the bare repository if absent. Returns the path."
   def ensure_repo!(repo, default_branch \\ "main") do
-    path = bare_path(repo)
+    repo |> bare_path() |> ensure_repo_at!(default_branch)
+  end
 
+  @doc false
+  def ensure_repo_at!(path, default_branch \\ "main") do
     unless File.exists?(Path.join(path, "HEAD")) do
       File.mkdir_p!(path)
       {_, 0} = git(path, ["init", "--bare", "--initial-branch=#{default_branch}", path])
     end
 
-    set_default_branch!(repo, default_branch)
+    set_default_branch_at!(path, default_branch)
 
     path
   end
 
   def set_default_branch!(repo, default_branch) do
-    path = bare_path(repo)
+    repo |> bare_path() |> set_default_branch_at!(default_branch)
+  end
+
+  @doc false
+  def set_default_branch_at!(path, default_branch) do
     {_, 0} = git(path, ["symbolic-ref", "HEAD", "refs/heads/#{default_branch}"])
     :ok
   end
 
   @doc "Current refs of the bare repo as a `%{name => sha}` map."
   def refs(repo) do
-    path = bare_path(repo)
+    repo |> bare_path() |> refs_at()
+  end
 
+  @doc false
+  def refs_at(path) do
     case git(path, ["for-each-ref", "--format=%(objectname) %(refname)"]) do
       {output, 0} ->
         output
@@ -93,8 +103,12 @@ defmodule OpenAgents.Forge.Repos do
   in the target.
   """
   def set_refs!(repo, target_refs) when is_map(target_refs) do
-    path = bare_path(repo)
-    current = refs(repo)
+    repo |> bare_path() |> set_refs_at!(target_refs)
+  end
+
+  @doc false
+  def set_refs_at!(path, target_refs) when is_map(target_refs) do
+    current = refs_at(path)
 
     Enum.each(current, fn {name, _sha} ->
       unless Map.has_key?(target_refs, name) do
@@ -111,7 +125,12 @@ defmodule OpenAgents.Forge.Repos do
 
   @doc "The WAL sequence this bare repo has applied (cache freshness marker)."
   def applied_seq(repo) do
-    case File.read(Path.join(bare_path(repo), "openagents-wal-seq")) do
+    repo |> bare_path() |> applied_seq_at()
+  end
+
+  @doc false
+  def applied_seq_at(path) do
+    case File.read(Path.join(path, "openagents-wal-seq")) do
       {:ok, contents} ->
         case Integer.parse(String.trim(contents)) do
           {seq, _} -> seq
@@ -124,7 +143,12 @@ defmodule OpenAgents.Forge.Repos do
   end
 
   def record_applied_seq!(repo, seq) when is_integer(seq) do
-    File.write!(Path.join(bare_path(repo), "openagents-wal-seq"), Integer.to_string(seq))
+    repo |> bare_path() |> record_applied_seq_at!(seq)
+  end
+
+  @doc false
+  def record_applied_seq_at!(path, seq) when is_integer(seq) do
+    File.write!(Path.join(path, "openagents-wal-seq"), Integer.to_string(seq))
   end
 
   @doc "Run git with `--git-dir` pinned to the bare repo. Returns {output, status}."

@@ -11,7 +11,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
   import OpenAgents.AccountsFixtures
 
   alias OpenAgents.{AuditEvent, Forge, Machines, Repo, Repositories}
-  alias OpenAgents.Forge.{Repos, WAL}
+  alias OpenAgents.Forge.{CacheReadiness, Repos, WAL}
 
   defmodule TestPipeline do
     @moduledoc false
@@ -30,6 +30,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     previous_wal = Application.get_env(:openagents, :forge_wal_dir)
     Application.put_env(:openagents, :forge_data_dir, Path.join(base, "data"))
     Application.put_env(:openagents, :forge_wal_dir, Path.join(base, "wal"))
+    CacheReadiness.reset()
 
     user = repository_user_fixture("git-http-owner")
 
@@ -54,6 +55,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     on_exit(fn ->
       Application.put_env(:openagents, :forge_data_dir, previous_data)
       Application.put_env(:openagents, :forge_wal_dir, previous_wal)
+      CacheReadiness.reset()
       File.rm_rf(base)
     end)
 
@@ -192,6 +194,39 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     verify = seed_clone!(base, url)
     assert File.read!(Path.join(verify, "keep.txt")) == "durable\n"
     assert Repos.refs(repository.storage_key) == refs_before
+  end
+
+  test "an unavailable cache returns 503 instead of a false repository 404", %{
+    repository: repository,
+    token: token
+  } do
+    entry = %{
+      "seq" => 0,
+      "object" => "entries/missing",
+      "format" => "git_bundle",
+      "refs" => %{"refs/heads/main" => String.duplicate("a", 40)},
+      "principal" => "test",
+      "pushed_at" => DateTime.to_iso8601(DateTime.utc_now())
+    }
+
+    {:ok, _generation} =
+      WAL.cas_index(
+        repository.storage_key,
+        :none,
+        WAL.append_entry(WAL.new_index(), entry)
+      )
+
+    authorization = "Basic " <> Base.encode64("x:#{token}")
+
+    response =
+      :get
+      |> Plug.Test.conn("/git-http-owner/demo.git/info/refs?service=git-upload-pack")
+      |> Plug.Conn.put_req_header("authorization", authorization)
+      |> TestPipeline.call([])
+
+    assert response.status == 503
+    assert response.resp_body == "repository cache unavailable; retry"
+    refute CacheReadiness.ready?()
   end
 
   test "unauthenticated and wrong-token pushes are refused", %{

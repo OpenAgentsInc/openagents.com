@@ -92,6 +92,31 @@ runtime_role =
 
 config :openagents, :runtime_role, runtime_role
 
+capacity_config = Application.get_env(:openagents, OpenAgents.Capacity, [])
+
+capacity_buyer =
+  case optional_text.("OPENAGENTS_CAPACITY_BUYER_JSON") do
+    nil ->
+      nil
+
+    encoded ->
+      case Jason.decode(encoded) do
+        {:ok, buyer} when is_map(buyer) ->
+          buyer
+
+        _invalid ->
+          raise "environment variable OPENAGENTS_CAPACITY_BUYER_JSON must be a JSON object"
+      end
+  end
+
+config :openagents,
+       OpenAgents.Capacity,
+       Keyword.merge(capacity_config,
+         broker_url: optional_text.("OPENAGENTS_CAPACITY_BROKER_URL"),
+         broker_token: optional_text.("OPENAGENTS_CAPACITY_BROKER_TOKEN"),
+         buyer: capacity_buyer
+       )
+
 if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
   config :openagents, :openrouter_api_key, optional_text.("OPENROUTER_API_KEY")

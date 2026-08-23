@@ -50,6 +50,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/github/connection",
     "/api/tokens",
     "/api/computers",
+    "/api/capacity",
     "/api/computer-agent-jobs/"
   ]
 
@@ -191,6 +192,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/status", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:status", false)
 
+  defp policy(%{path: "/api/capacity", verb: verb}) when verb in [:get, :head],
+    do:
+      declaration(:authenticated_api, "active encrypted browser session", "capacity:self", false)
+
   defp policy(%{path: "/api/changelog", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:changelog", false)
 
@@ -260,6 +265,12 @@ defmodule OpenAgentsWeb.RouteAuthority do
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
 
   defp policy(%{path: "/api/v3/chat/turns", verb: :post}),
+    do: declaration(:authenticated_api, "first-party bearer token", "chat:account", true)
+
+  defp policy(%{path: "/api/v3/capacity", verb: verb}) when verb in [:get, :head],
+    do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
+
+  defp policy(%{path: "/api/v3/capacity/matches", verb: :post}),
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", true)
 
   defp policy(%{path: path, verb: verb})

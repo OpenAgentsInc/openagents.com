@@ -20,6 +20,20 @@ defmodule OpenAgentsWeb.ApiExtensionController do
   }
 
   @extensions %{
+    "capacity.openagents" => %{
+      "version" => "2026-08-23",
+      "description" => "Owner-safe quantity-based capacity and matching projections.",
+      "endpoints" => [
+        "GET /api/capacity",
+        "GET /api/v3/capacity",
+        "POST /api/v3/capacity/matches"
+      ],
+      "schemas" => [
+        "openagents.capacity.v1",
+        "openagents.capacity_match.v1",
+        "openagents.capacity_refusal.v1"
+      ]
+    },
     "issue.openagents" => %{
       "version" => "2026-08-23",
       "description" => "OpenAgents-specific issue fields, namespaced away from the GitHub shape.",

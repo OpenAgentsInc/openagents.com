@@ -205,6 +205,7 @@ defmodule OpenAgentsWeb.Router do
     delete "/tokens/:id", ApiTokenController, :delete
 
     get "/computers", ComputersController, :index
+    get "/capacity", CapacityController, :show
     post "/computers/pairings/:id/approve", ComputersController, :approve_pairing
     delete "/computers/:id", ComputersController, :delete
     post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
@@ -304,6 +305,8 @@ defmodule OpenAgentsWeb.Router do
 
     get "/chat/events", ChatTurnController, :index
     post "/chat/turns", ChatTurnController, :create
+    get "/capacity", CapacityController, :show
+    post "/capacity/matches", CapacityController, :matches
   end
 
   scope "/api/v3", OpenAgentsWeb do

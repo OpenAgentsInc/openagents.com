@@ -2105,6 +2105,28 @@ Evidence: `OpenAgents.Stacks`, `OpenAgents.Stacks.Stack`,
 `OpenAgents.Stacks.StackEntry`, `OpenAgents.Stacks.OID`,
 `ops/ci/stack-contracts.sh`, and `test/openagents/stacks_test.exs`.
 
+### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
+
+Status: Current
+
+`OpenAgents.Capacity` publishes logical inventory, active reservations, free
+capacity, queue pressure, and evidence freshness as separate quantities. It
+does not turn missing or stale evidence into a reported zero, and it refuses
+when evidence cannot support a safe decision. A connected customer computer is
+available only as an explicit target. Provider topology, credentials, and
+workspace content never leave the projection.
+
+The capacity context reads managed evidence through the configured broker
+source and reads connected evidence through owner-scoped `machines` and
+`work_jobs` queries. `OpenAgents.Capacity.Math` applies the configured ceiling,
+reserved headroom, and broker-reported free capacity without subtracting active
+reservations twice. The executable proof exercises fresh, stale, private,
+redacted, and quantity-based projections.
+
+Evidence: `OpenAgents.Capacity`, `OpenAgents.Capacity.Math`,
+`OpenAgents.Capacity.Broker`, `OpenAgents.Capacity.Connected`, and
+`test/openagents/capacity_test.exs`.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -2190,6 +2212,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
+| CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
 | REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |

@@ -366,6 +366,24 @@ config :openagents, :forum_tips,
   enabled: false,
   adapter: OpenAgents.Forum.Tips.PaymentService.Unavailable
 
+config :openagents, OpenAgents.Capacity,
+  evidence_source: OpenAgents.Capacity.Broker,
+  broker_url: nil,
+  broker_token: nil,
+  broker_timeout_ms: 2_000,
+  maximum_evidence_age_seconds: 120,
+  reserved_headroom_fraction: 0.25,
+  class_ceilings: %{"standard" => 16, "strong" => 2, "batch" => 8},
+  active_per_conversation: 4,
+  logical_per_conversation: 30,
+  unit_cost_usd_cents_per_hour: %{
+    "standard" => 16,
+    "strong" => 32,
+    "batch" => 8,
+    "connected" => 0
+  },
+  buyer: nil
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

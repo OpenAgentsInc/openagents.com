@@ -364,6 +364,17 @@ defmodule OpenAgentsWeb.Layouts do
       <.link navigate={~p"/leaderboard"} class="sidebar-footer__link">
         <UI.icon name="trophy-top" /> Leaderboard
       </.link>
+      <%!-- Signed in only, and directly under Leaderboard. `/forum` is behind
+      the authenticated scope, so a row for a visitor would be a link to a
+      login wall rather than to the forum. --%>
+      <.link
+        :if={@current_user}
+        id="open-forum"
+        navigate={~p"/forum"}
+        class="sidebar-footer__link"
+      >
+        <UI.icon name="forum" /> Forum
+      </.link>
       <.link
         :if={@admin_link?}
         id="open-admin"

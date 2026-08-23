@@ -62,6 +62,7 @@ defmodule OpenAgents.Forge.Repos do
     end
 
     set_default_branch_at!(path, default_branch)
+    hide_internal_refs_at!(path)
 
     path
   end
@@ -74,6 +75,19 @@ defmodule OpenAgents.Forge.Repos do
   def set_default_branch_at!(path, default_branch) do
     {_, 0} = git(path, ["symbolic-ref", "HEAD", "refs/heads/#{default_branch}"])
     :ok
+  end
+
+  # Hidden internal refs (`refs/internal/`) retain stack boundary commits
+  # (`OpenAgents.Forge.GitPlane`) without advertising them to git clients.
+  defp hide_internal_refs_at!(path) do
+    case git(path, ["config", "--get", "transfer.hideRefs"]) do
+      {"refs/internal/" <> _rest, 0} ->
+        :ok
+
+      _unset ->
+        {_, 0} = git(path, ["config", "transfer.hideRefs", "refs/internal/"])
+        :ok
+    end
   end
 
   @doc "Current refs of the bare repo as a `%{name => sha}` map."

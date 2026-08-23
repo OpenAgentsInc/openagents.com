@@ -75,13 +75,33 @@ defmodule OpenAgents.Forge.Sync do
     synchronize(repo, fn -> do_replay_missing(repo, index, default_branch) end)
   end
 
+  # Reentrant: `:global` locks are not reference counted, so a nested
+  # `:global.trans` on the same id releases the lock when the inner call
+  # exits (for example `ensure_fresh/2` inside a locked write). The process
+  # dictionary marks the lock as held so nested calls run inline.
   @doc false
   def with_repo_lock(repo, function) when is_function(function, 0) do
-    lock_id = {{__MODULE__, repo}, self()}
+    held_key = {__MODULE__, :repo_lock, repo}
 
-    case :global.trans(lock_id, function, [node()]) do
-      {:aborted, reason} -> raise_sync(repo, :acquire_lock, reason)
-      result -> result
+    if Process.get(held_key) do
+      function.()
+    else
+      lock_id = {{__MODULE__, repo}, self()}
+
+      locked = fn ->
+        Process.put(held_key, true)
+
+        try do
+          function.()
+        after
+          Process.delete(held_key)
+        end
+      end
+
+      case :global.trans(lock_id, locked, [node()]) do
+        {:aborted, reason} -> raise_sync(repo, :acquire_lock, reason)
+        result -> result
+      end
     end
   end
 
@@ -182,6 +202,12 @@ defmodule OpenAgents.Forge.Sync do
         :ok = unbundle_entry(repo, path, object, entry["shallow"] || [])
 
       "empty_import" ->
+        :ok
+
+      # A batch ref update that introduced no new objects
+      # (`OpenAgents.Forge.GitPlane.batch_update_refs/3`); refs converge
+      # from the index.
+      "ref_update" ->
         :ok
     end
 

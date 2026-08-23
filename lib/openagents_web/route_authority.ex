@@ -138,6 +138,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/admin/analytics"}),
     do: declaration(:operator, "configured operator GitHub ID", "analytics:read", false)
 
+  defp policy(%{path: "/admin/tokens"}),
+    do: declaration(:operator, "configured operator GitHub ID", "tokens:productivity:read", false)
+
   defp policy(%{path: "/admin/forge"}),
     do: declaration(:operator, "configured operator GitHub ID", "forge:promote", true)
 

@@ -221,6 +221,7 @@ defmodule OpenAgentsWeb.Router do
       ] do
       live "/", AdminLive, :index
       live "/analytics", AdminAnalyticsLive, :index
+      live "/tokens", AdminTokensLive, :index
       live "/forge", AdminForgeLive, :index
       live "/recordings", AdminRecordingsLive, :index
       live "/scv/accounts", AdminScvAccountsLive, :index

@@ -442,6 +442,27 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
            )
   end
 
+  # #12: an edit nobody made by hand is still an edit somebody can see, and
+  # the history says the system made it rather than naming a person who only
+  # closed a different issue.
+  test "the timeline shows the automatic task-list edit as a system entry", %{conn: conn} do
+    child = issue!(%{"title" => "Read the legacy schema"})
+
+    parent =
+      issue!(%{
+        "title" => "Port the forum",
+        "body" => "- [ ] ##{child.number} Read the legacy schema"
+      })
+
+    {:ok, _closed} =
+      Issues.update_issue(child, %{"state" => "closed", "state_reason" => "completed"}, nil)
+
+    {:ok, _view, html} = live(conn, path(parent))
+
+    assert html =~ "checked the task for ##{child.number}"
+    assert html =~ "system"
+  end
+
   defp repository do
     OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

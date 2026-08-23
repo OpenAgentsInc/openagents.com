@@ -16,7 +16,7 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Agents.Agent
   alias OpenAgents.Analytics
-  alias OpenAgents.Issues.{Comment, Issue, IssueDependency}
+  alias OpenAgents.Issues.{Comment, Issue, IssueDependency, TaskReferences}
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
   alias OpenAgents.Milestones
@@ -204,6 +204,7 @@ defmodule OpenAgents.Issues do
       |> Map.put("repository_id", repository.id)
       |> put_author(author)
       |> prepare_collections(repository)
+      |> then(&TaskReferences.render_attrs(repository, &1))
 
     create_issue_with_number(repository, normalized, author, 20)
   end
@@ -267,6 +268,7 @@ defmodule OpenAgents.Issues do
         |> to_string_map()
         |> Map.drop(["number", "repository_id", "author_user_id", "author_agent_id", "user"])
         |> prepare_collections(repository)
+        |> then(&TaskReferences.render_attrs(repository, &1))
 
       with {:ok, updated} <- issue |> Issue.changeset(normalized) |> Repo.update(),
            :ok <- sync_label_relationships(updated),
@@ -299,6 +301,11 @@ defmodule OpenAgents.Issues do
 
         Repositories.broadcast_issues(issue.repository_id)
         Notifications.broadcast_unread(notified)
+        # After the commit and after the broadcast. This is the one path every
+        # state change takes, so it is the only place that can see an issue
+        # open or close; the rewrite it triggers is bounded, idempotent, and
+        # caught, and it never fails the update that caused it.
+        TaskReferences.synchronize(issue, updated)
 
         {:ok, updated}
 
@@ -741,6 +748,7 @@ defmodule OpenAgents.Issues do
       |> put_author(author)
       |> Map.put_new("created_at", DateTime.utc_now() |> DateTime.truncate(:second))
       |> Map.put_new("updated_at", DateTime.utc_now() |> DateTime.truncate(:second))
+      |> then(&TaskReferences.render_attrs(issue.repository_id, &1))
 
     Repo.transaction(fn ->
       with {:ok, %Comment{} = comment} <-
@@ -788,6 +796,7 @@ defmodule OpenAgents.Issues do
       |> to_string_map()
       |> Map.drop(["issue_id", "repository_id", "author_user_id", "author_agent_id", "user"])
       |> Map.put("updated_at", DateTime.utc_now() |> DateTime.truncate(:second))
+      |> then(&TaskReferences.render_attrs(comment.repository_id, &1))
 
     comment
     |> Comment.changeset(normalized)

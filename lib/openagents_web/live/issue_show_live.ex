@@ -34,6 +34,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Issues
   alias OpenAgents.Issues.ClosingReferences
   alias OpenAgents.Issues.Comment
+  alias OpenAgents.Issues.TaskReferences
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Labels
   alias OpenAgents.Markdown
@@ -307,13 +308,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
     comments = Issues.list_comments(issue)
     attempts = Assignments.attempts_for_issue(issue)
     references = ClosingReferences.for_issue(issue)
+    syncs = TaskReferences.for_issue(issue)
     base = "/#{socket.assigns.owner}/#{socket.assigns.repo}"
 
     socket
     |> assign(:issue, issue)
     |> assign(:comments, comments)
     |> assign(:form, to_form(Issues.change_issue(issue)))
-    |> assign(:events, timeline(issue, comments, attempts, references, base))
+    |> assign(:events, timeline(issue, comments, attempts, references, syncs, base))
     |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))
   end
 
@@ -639,7 +641,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # such table, so the feed is assembled from the columns that do exist. The
   # result is honest but partial: a label added and removed leaves no trace,
   # and a close records when but not who.
-  defp timeline(issue, comments, attempts, references, base) do
+  defp timeline(issue, comments, attempts, references, syncs, base) do
     opened = %{
       kind: :event,
       actor: author(issue),
@@ -705,11 +707,38 @@ defmodule OpenAgentsWeb.IssueShowLive do
       end
 
     Enum.sort_by(
-      [opened | commented] ++ referenced ++ closed ++ attempt_events(attempts),
+      [opened | commented] ++
+        referenced ++
+        closed ++
+        attempt_events(attempts) ++
+        sync_events(syncs),
       & &1.sort,
       DateTime
     )
   end
+
+  # An edit the forge made on its own. It carries the system as its actor
+  # rather than the person whose close triggered it: they closed an issue,
+  # they did not touch this one.
+  defp sync_events(syncs) do
+    Enum.map(syncs, fn sync ->
+      %{
+        kind: :event,
+        id: sync.id,
+        actor: "system",
+        text: sync_text(sync),
+        icon: if(sync.checked, do: "check-circle", else: "circle"),
+        tone: :neutral,
+        at: stamp(sync.inserted_at),
+        sort: sync.inserted_at
+      }
+    end)
+  end
+
+  defp sync_text(%{checked: true, reference_number: number}),
+    do: "checked the task for ##{number}"
+
+  defp sync_text(%{reference_number: number}), do: "unchecked the task for ##{number}"
 
   # An attempt produces at most two events: it started, and it ended. Both
   # read from `forge_assignments`, so an attempt that never finished shows as

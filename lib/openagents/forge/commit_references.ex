@@ -59,8 +59,9 @@ defmodule OpenAgents.Forge.CommitReferences do
                    "i"
                  )
 
-  # Every `#N` or `owner/repo#N` occurrence, whatever precedes it. Used by the
-  # plain-mention reader that issue #12 consumes for task-list checkboxes.
+  # Every `#N` or `owner/repo#N` occurrence, whatever precedes it. This is the
+  # one place a reference is defined; `OpenAgents.Issues.TaskList` reads
+  # task-list checkboxes through it rather than carrying a second regex.
   @mention_regex ~r/(?:^|[^\w\/#-])(?:([A-Za-z0-9][\w.-]*)\/([A-Za-z0-9][\w.-]*))?#(\d{1,10})\b/
 
   @doc "The closing keywords this reader accepts, lowercase."
@@ -93,9 +94,10 @@ defmodule OpenAgents.Forge.CommitReferences do
   @doc """
   Every issue reference in `message`, closing or not.
 
-  Issue #12 reads a commit message for the `#N` mentions inside task-list
-  checkboxes, which carry no verb. `closing?` says whether a closing keyword
-  introduced the reference, so one scan serves both readers.
+  `OpenAgents.Issues.TaskList` reads issue and comment bodies for the `#N`
+  mentions inside task-list checkboxes, which carry no verb. `closing?` says
+  whether a closing keyword introduced the reference, so one scan serves both
+  readers.
   """
   @spec all(term()) :: [reference_entry()]
   def all(message) when is_binary(message) do

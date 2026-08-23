@@ -2880,6 +2880,68 @@ Evidence: `OpenAgents.Forge.CommitReferences`,
 `test/openagents/issues/closing_references_test.exs`, and
 `test/openagents/forge/push_closes_issues_test.exs`.
 
+### ISSUE-002 — A task-list checkbox is a projection of issue state
+
+Status: Current
+
+A Markdown task-list item that names an issue in the same repository is not an
+independent assertion anyone has to maintain. `- [ ] #6` reads checked exactly
+when issue 6 is closed, and the forge keeps it that way without a human edit.
+
+Two triggers hold it, and it needs both. `OpenAgents.Issues.TaskReferences.synchronize/2`
+runs after an issue opens or closes and rewrites the bodies in the same
+repository whose task-list items point at it. `OpenAgents.Issues.TaskReferences.render/2`
+runs on every issue and comment write, so a body arrives already agreeing with
+what it names. Fan-out alone loses to a person who saves a body they loaded
+before the checkbox moved; rendering on write alone only fixes a body somebody
+happens to touch.
+
+Together they make the rendered body a fixed point.
+`OpenAgents.Issues.TaskList.render/2` is a pure function of the body text and
+the current states, so two writers that cross still converge: whichever lands
+second recomputes from what is then true. A person can no longer hold a
+checkbox open against a closed issue. Reopen the issue if the work is not done.
+
+**No second extractor.** `OpenAgents.Forge.CommitReferences.all/1` reads every
+`#N` in a stretch of text, closing or not, with the cross-repository form
+separated out. This mechanism calls it once per task-list item and owns only
+the checkbox, so one regex decides what a reference is on both the push path
+and the issue path.
+
+**Same repository, so nothing leaks.** `#N` resolves against the repository
+holding the body, and an item naming `owner/repo#N` is read and left alone —
+the same boundary the prerequisite edges and the closing references draw. No
+body can therefore learn anything about a repository its reader cannot already
+read, so a private issue's state cannot reach a public one.
+
+**Idempotent, and bounded.** A body is written only when rendering returns
+something other than what is stored, which is the whole idempotency gate: a
+repeat writes nothing and records nothing, and a checkbox already in the right
+state produces no history entry. There is deliberately no unique index —
+closing, reopening, and closing an issue again are three real edits the history
+should show three times. The candidate query filters on the literal `#N` before
+any body is read, and one state change rewrites at most 200 bodies.
+
+**No concurrent edit is clobbered.** Each row is re-read under `FOR UPDATE` and
+the new body is computed from what the lock returns, never from the row the
+candidate query saw, so the rewrite cannot revert prose a person saved in
+between.
+
+**The edit is the forge's, not a person's.** Every rewrite records an
+`OpenAgents.Issues.TaskSync` row whose principal is `system`, and the issue
+history renders it beside comments and closes. The person who closed the
+referenced issue did not edit anyone's tracking issue, and the record does not
+say they did.
+
+A failure anywhere here is caught and logged rather than propagated. A tracking
+issue that stayed stale is a smaller failure than a close that did not happen.
+
+Evidence: `OpenAgents.Issues.TaskList`, `OpenAgents.Issues.TaskReferences`,
+`OpenAgents.Issues.TaskSync`, `OpenAgents.Issues`,
+`test/openagents/issues/task_list_test.exs`,
+`test/openagents/issues/task_references_test.exs`, and
+`test/openagents_web/live/issue_show_live_test.exs`.
+
 ### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
 
 Status: Current
@@ -3126,3 +3188,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
+| ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |

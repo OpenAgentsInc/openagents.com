@@ -17,7 +17,10 @@ config :openagents, OpenAgentsWeb.Endpoint,
   force_ssl: [
     rewrite_on: [:x_forwarded_proto],
     exclude: [
-      # paths: ["/health"],
+      # The load balancer health check probes these paths over plain HTTP.
+      # A redirect counts as a failed probe, which drops every node from
+      # rotation at once.
+      paths: ["/health", "/healthz"],
       hosts: ["localhost", "127.0.0.1"]
     ]
   ]

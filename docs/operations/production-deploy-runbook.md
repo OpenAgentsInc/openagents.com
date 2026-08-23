@@ -194,6 +194,48 @@ Do not report success without all of the following:
 - Issues, git clone/fetch, and a read-only computer job work.
 - New configuration is live without exposing secret values.
 
+## Load balancer health check
+
+The global backend service `sarah-backend` decides which nodes receive
+traffic. The health check it references determines whether a broken node
+leaves rotation:
+
+- A TCP check (`sarah-hc-tcp`) only verifies that port `8080` accepts
+  connections. A node that answers every request with `500` still passes,
+  so it keeps serving a third of traffic while broken. Issue #105 records
+  an incident where this happened.
+- The HTTP check `sarah-hc-healthz` probes `GET /healthz` on port `8080`
+  and requires `200`. The application returns `503` from `/healthz` when
+  the database is unreachable, boot has not converged, the deployment
+  participant is not ready, admission is not ready, or the forge cache is
+  not ready, so an unhealthy node drops out of rotation.
+
+Requirements before pointing the backend at the HTTP check:
+
+1. The running image must exclude `/health` and `/healthz` from
+   `force_ssl` in `config/prod.exs`. GCP HTTP probes are plain HTTP;
+   `Plug.SSL` answers them with a `301` redirect, which counts as a failed
+   probe. If every node redirects, the backend loses all members at once
+   and the site serves `502`. This happened on 2026-08-23.
+2. Verify the exact probe shape on every node first. `curl
+   http://localhost:8080/healthz` is not sufficient because `Plug.SSL`
+   excludes the `localhost` host. Use a non-localhost host header:
+
+   ```sh
+   curl -s -o /dev/null -w '%{http_code}' \
+     -H 'Host: <node-external-ip>' http://localhost:8080/healthz
+   ```
+
+   Require `200` on all three nodes before swapping.
+3. Swap, then watch `gcloud compute backend-services get-health
+   sarah-backend --global`. If any node goes `UNHEALTHY` unexpectedly,
+   revert immediately:
+
+   ```sh
+   gcloud compute backend-services update sarah-backend --global \
+     --health-checks sarah-hc-tcp --global-health-checks
+   ```
+
 ## Known failure modes
 
 | Symptom | Cause | Fix |

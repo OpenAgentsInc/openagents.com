@@ -146,8 +146,12 @@ defmodule OpenAgents.Forge.BootConverge do
 
   defp durable_target_ready?(repo, convergence) do
     case Targets.current(repo) do
-      %{status: "deploying"} -> false
-      _not_deploying -> current_target_matches?(repo, convergence)
+      %{status: "deploying"} ->
+        false
+
+      _not_deploying ->
+        current_target_matches?(repo, convergence) or
+          rolling_convergence_matches?(repo, convergence)
     end
   end
 
@@ -188,9 +192,40 @@ defmodule OpenAgents.Forge.BootConverge do
         image_ready("no_live_target", attempts)
 
       %{sha: sha, details: details} = target ->
-        converge_target(repo, target, sha, details || %{}, attempts)
+        if rolling_target_matches?(repo) do
+          image_ready("image_matches_rolling_target", attempts)
+        else
+          converge_target(repo, target, sha, details || %{}, attempts)
+        end
     end
   end
+
+  # A node whose booted image carries the newest target's revision is a
+  # participant in an operator rolling replacement. It must enter readiness
+  # so the load balancer keeps it in rotation while the remaining nodes are
+  # replaced; settlement later flips the target live and the periodic
+  # convergence attempt reports `image_matches_live`.
+  defp rolling_target_matches?(repo) do
+    case Targets.current(repo) do
+      %{status: "needs_rolling_replace", sha: sha} ->
+        OpenAgents.BuildInfo.revision() == sha
+
+      _other ->
+        false
+    end
+  end
+
+  defp rolling_convergence_matches?(repo, %{
+         "reason" => "image_matches_rolling_target",
+         "sha" => sha
+       }) do
+    case Targets.current(repo) do
+      %{status: "needs_rolling_replace", sha: ^sha} -> OpenAgents.BuildInfo.revision() == sha
+      _other -> false
+    end
+  end
+
+  defp rolling_convergence_matches?(_repo, _convergence), do: false
 
   defp converge_target(repo, target, sha, details, attempts) do
     if image_target_matches?(sha, details) do

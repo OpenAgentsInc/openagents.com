@@ -385,6 +385,53 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     refute Code.ensure_loaded?(module)
   end
 
+  test "a node running a pending rolling target's image stays in readiness" do
+    # An older live target whose artifact this node cannot install: without
+    # the rolling-target branch this node would degrade and leave rotation.
+    insert_target!("live", %{})
+
+    rolling =
+      %Target{}
+      |> Target.changeset(%{
+        repo: @repo,
+        sha: String.duplicate("e", 40),
+        promoted_by: "operator:t",
+        status: "promoted"
+      })
+      |> Repo.insert!()
+      |> Ecto.Changeset.change(%{
+        status: "needs_rolling_replace",
+        sha: OpenAgents.BuildInfo.revision()
+      })
+      |> Repo.update!()
+
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+
+    on_exit(fn -> restore_env(:forge_boot_converge_enabled, previous_enabled) end)
+
+    assert %{
+             "state" => "image",
+             "ready" => true,
+             "reason" => "image_matches_rolling_target"
+           } = BootConverge.converge(@repo)
+
+    assert BootConverge.ready?(@repo)
+
+    # Once the rolling target settles, readiness follows the live-target path.
+    rolling
+    |> Ecto.Changeset.change(%{
+      status: "live",
+      details: %{"image_digest" => OpenAgents.BuildInfo.image_digest()}
+    })
+    |> Repo.update!()
+
+    assert %{"state" => "image", "reason" => "image_matches_live", "ready" => true} =
+             BootConverge.converge(@repo)
+
+    assert BootConverge.ready?(@repo)
+  end
+
   test "rolling target stays degraded when its image digest does not match the runtime" do
     runtime_sha = OpenAgents.BuildInfo.revision()
     previous_digest = Application.get_env(:openagents, :image_digest)

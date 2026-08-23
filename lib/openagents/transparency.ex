@@ -84,7 +84,8 @@ defmodule OpenAgents.Transparency do
   defp tier_atom(_), do: :dark
 
   defp viewer_tier(%{tier: tier}), do: tier_atom(tier)
-  defp viewer_tier(tier) when is_atom(tier) or is_binary(tier), do: tier_atom(tier)
+  defp viewer_tier(tier) when is_binary(tier), do: tier_atom(tier)
+  defp viewer_tier(tier) when is_atom(tier) and not is_nil(tier), do: tier_atom(tier)
   defp viewer_tier(_), do: nil
 
   defp clamp(tier, viewer) do

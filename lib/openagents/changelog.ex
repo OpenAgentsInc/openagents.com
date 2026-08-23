@@ -18,6 +18,7 @@ defmodule OpenAgents.Changelog do
   alias OpenAgents.Changelog.Entry
   alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, PushReceipt, Visibility}
   alias OpenAgents.Repo
+  alias OpenAgents.Transparency
 
   @schema_version "openagents.changelog.v1"
   @cache_key {__MODULE__, :cache}
@@ -63,6 +64,23 @@ defmodule OpenAgents.Changelog do
     %Entry{}
     |> Entry.changeset(attrs)
     |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :sha, :source])
+  end
+
+  @doc """
+  Returns `entry` with `trace_ref`, `trace_digest`, and `detail` redacted
+  according to the effective transparency tier for `viewer`.
+
+  `viewer` is a tier atom/string, a map with a `:tier` field, or `nil`.
+  """
+  def redact_for_viewer(%Entry{} = entry, viewer) do
+    tier = entry.transparency_tier
+
+    %{
+      entry
+      | trace_ref: if(Transparency.allows?(tier, :metadata, viewer), do: entry.trace_ref, else: nil),
+        trace_digest: if(Transparency.allows?(tier, :metadata, viewer), do: entry.trace_digest, else: nil),
+        detail: if(Transparency.allows?(tier, :content, viewer), do: entry.detail, else: %{})
+    }
   end
 
   # ── assembly ─────────────────────────────────────────────────────────────

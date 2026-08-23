@@ -178,6 +178,82 @@ defmodule OpenAgentsWeb.OGTest do
     assert hd(wontfix.chips) == %{label: "Closed as not planned", tone: :muted}
   end
 
+  test "the pull request builder derives state tone, branches, and a stack chip" do
+    pull_request = %{
+      issue: %{
+        number: 119,
+        title: "Wire stack actions into the pull request page",
+        user: %{"login" => "chris"},
+        comments: 2,
+        inserted_at: ~U[2026-08-22 10:00:00Z]
+      },
+      head_ref: "stack-pr-actions",
+      base_ref: "stack-lifecycle",
+      state: "open",
+      draft: false,
+      merged_at: nil
+    }
+
+    card =
+      OG.pull_request("OpenAgentsInc", "openagents.com", pull_request,
+        stack_position: 3,
+        stack_size: 4
+      )
+
+    assert card.kind == :pull
+    assert card.kicker == "OpenAgentsInc/openagents.com · #119"
+    assert card.description == "stack-pr-actions → stack-lifecycle"
+    assert card.avatar == "chris"
+
+    assert [%{label: "Open", tone: :open}, %{label: "Stack layer 3 of 4"}] = card.chips
+
+    assert "2 comments" in card.stats
+    assert card.page_path == "/OpenAgentsInc/openagents.com/pulls/119"
+
+    assert OG.request_path(card) =~
+             ~r|^/og/v/[0-9a-f]{12}/repos/OpenAgentsInc/openagents\.com/pulls/119\.png$|
+  end
+
+  test "merged, closed, and draft pull requests carry their own tones" do
+    base = %{
+      issue: %{number: 1, title: "t", user: %{"login" => "a"}, comments: 0, inserted_at: nil},
+      head_ref: "h",
+      base_ref: "b",
+      state: "open",
+      draft: false,
+      merged_at: nil
+    }
+
+    merged = %{base | state: "closed", merged_at: ~U[2026-08-22 10:00:00Z]}
+    closed = %{base | state: "closed"}
+    draft = %{base | draft: true}
+
+    assert [%{label: "Merged", tone: :done}] = OG.pull_request("o", "r", merged).chips
+    assert [%{label: "Closed", tone: :muted}] = OG.pull_request("o", "r", closed).chips
+    assert [%{label: "Draft", tone: :muted}] = OG.pull_request("o", "r", draft).chips
+
+    # An unstacked pull request shows no stack chip.
+    assert [%{label: "Open", tone: :open}] = OG.pull_request("o", "r", base).chips
+  end
+
+  test "the docs builder flattens the opening paragraph and paths under /docs" do
+    {:ok, page} = OpenAgentsWeb.DocsCatalog.render("stacked-pull-requests")
+
+    card = OG.docs(page)
+
+    assert card.kind == :docs
+    assert card.kicker =~ "OpenAgents docs"
+    assert card.heading == "Stacked pull requests"
+    assert is_binary(card.description) and card.description != ""
+    refute card.description =~ "]("
+    refute card.description =~ "`"
+    assert [%{label: "Documentation"}] = card.chips
+    assert card.page_path == "/docs/stacked-pull-requests"
+
+    assert OG.request_path(card) =~
+             ~r|^/og/v/[0-9a-f]{12}/docs/stacked-pull-requests\.png$|
+  end
+
   test "the blob builder infers language and formats size honestly" do
     card =
       OG.blob("OpenAgentsInc", "openagents.com", "lib/openagents/og.ex", %{

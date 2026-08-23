@@ -640,8 +640,10 @@ defmodule OpenAgentsWeb.Router do
     get "/static/card.png", OgImageController, :static
     get "/v/:version/repos/:owner/:repo", OgImageController, :repo
     get "/v/:version/repos/:owner/:repo/issues/:number", OgImageController, :issue
+    get "/v/:version/repos/:owner/:repo/pulls/:number", OgImageController, :pull
     get "/v/:version/repos/:owner/:repo/commit/:sha", OgImageController, :commit
     get "/v/:version/repos/:owner/:repo/blob/:ref/*path", OgImageController, :blob
+    get "/v/:version/docs/:slug", OgImageController, :docs
   end
 
   # Keep repository-shaped routes last. Every fixed product, API, operator,

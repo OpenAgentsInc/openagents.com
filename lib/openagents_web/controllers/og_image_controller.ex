@@ -25,8 +25,10 @@ defmodule OpenAgentsWeb.OgImageController do
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
   alias OpenAgents.Issues
+  alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
-  alias OpenAgentsWeb.{OG, RepositoryAccess}
+  alias OpenAgents.Stacks
+  alias OpenAgentsWeb.{DocsCatalog, OG, RepositoryAccess}
 
   @cache_control "public, max-age=21600, immutable"
   @not_found_cache_control "public, max-age=60"
@@ -61,6 +63,35 @@ defmodule OpenAgentsWeb.OgImageController do
         OG.issue(owner, name, issue)
       else
         _error -> :error
+      end
+    end)
+  end
+
+  def pull(conn, params) do
+    authorize_and_run(conn, params, fn owner, name ->
+      with {number, ""} <- Integer.parse(strip_png(params["number"])),
+           {:ok, repository} <- public_repository(owner, name),
+           %PullRequests.PullRequest{} = pull_request <-
+             safe(fn -> PullRequests.get_by_number!(repository, number) end) do
+        {position, size} = stack_placement(repository, pull_request)
+
+        OG.pull_request(owner, name, pull_request,
+          stack_position: position,
+          stack_size: size
+        )
+      else
+        _error -> :error
+      end
+    end)
+  end
+
+  # Documentation is public by construction: the catalog is the compile-time
+  # allowlist, so a slug it cannot render is the same 404 as a bad signature.
+  def docs(conn, params) do
+    authorized(conn, fn ->
+      case DocsCatalog.render(strip_png(params["slug"]) || "") do
+        {:ok, page} -> OG.docs(page)
+        :error -> :error
       end
     end)
   end
@@ -118,8 +149,14 @@ defmodule OpenAgentsWeb.OgImageController do
   # One response for every refusal — bad signature, unknown repository,
   # private repository, missing resource — so none of them can be told apart.
   defp authorize_and_run(conn, params, build) do
+    authorized(conn, fn ->
+      build.(strip_png(params["owner"]), strip_png(params["repo"]))
+    end)
+  end
+
+  defp authorized(conn, build) do
     if OG.valid_signature?(conn.request_path, conn.query_params["sig"]) do
-      case build.(strip_png(params["owner"]), strip_png(params["repo"])) do
+      case build.() do
         %OG{} = card -> respond_with_card(conn, card)
         _refused -> not_found(conn)
       end
@@ -164,6 +201,13 @@ defmodule OpenAgentsWeb.OgImageController do
   end
 
   ## Helpers -------------------------------------------------------------------
+
+  defp stack_placement(repository, pull_request) do
+    case safe(fn -> Stacks.review_context(repository, pull_request) end) do
+      {:ok, context} -> {context.position, context.size}
+      _other -> {nil, nil}
+    end
+  end
 
   defp public_repository(owner, name) do
     case safe(fn -> Repositories.get_public_by_path!(owner, name) end) do

@@ -17,6 +17,7 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   alias OpenAgents.Repositories
   alias OpenAgents.Stacks
   alias OpenAgents.Stacks.Restack
+  alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
@@ -38,6 +39,15 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
      |> assign(:pull_request, pull_request)
      |> assign(:stack_context, stack_context)
      |> assign(:stack_operation, nil)
+     |> assign(
+       :og,
+       OG.meta(
+         OG.pull_request(repository.namespace.slug, repository.name, pull_request,
+           stack_position: stack_context && stack_context.position,
+           stack_size: stack_context && stack_context.size
+         )
+       )
+     )
      |> assign(
        :can_write,
        Repositories.writable?(repository, socket.assigns.current_user)

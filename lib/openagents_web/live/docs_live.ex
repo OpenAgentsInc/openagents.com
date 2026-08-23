@@ -14,6 +14,7 @@ defmodule OpenAgentsWeb.DocsLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgentsWeb.DocsCatalog
+  alias OpenAgentsWeb.OG
 
   @impl true
   def mount(_params, _session, socket) do
@@ -27,6 +28,7 @@ defmodule OpenAgentsWeb.DocsLive do
      |> assign(:page_title, "Docs")
      |> assign(:active_page, :index)
      |> assign(:section_title, nil)
+     |> assign(:og, nil)
      |> assign(:page, nil)}
   end
 
@@ -38,6 +40,7 @@ defmodule OpenAgentsWeb.DocsLive do
          |> assign(:page_title, page.item.title)
          |> assign(:active_page, page.item.slug)
          |> assign(:section_title, DocsCatalog.section_title(page.item.slug))
+         |> assign(:og, OG.meta(OG.docs(page)))
          |> assign(:page, page)}
 
       :error ->

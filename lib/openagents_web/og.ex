@@ -28,12 +28,13 @@ defmodule OpenAgentsWeb.OG do
     # Canonical page URL this card describes (for og:url), e.g.
     # "/OpenAgentsInc/openagents.com/issues/12".
     page_path: nil,
-    # Path segments under "/og/v/{version}/repos/", e.g.
-    # ["Owner", "repo"] or ["Owner", "repo", "blob", "main", "lib/a.ex"].
+    # Path segments under "/og/v/{version}/{scope}/", where the scope is
+    # "repos" for repository resources and "docs" for documentation pages,
+    # e.g. ["Owner", "repo", "blob", "main", "lib/a.ex"] or ["stacks-api"].
     path_suffix: []
   ]
 
-  @type kind :: :site | :repo | :issue | :blob | :commit
+  @type kind :: :site | :repo | :issue | :pull | :blob | :commit | :docs
 
   @type t :: %__MODULE__{
           kind: kind(),
@@ -121,6 +122,101 @@ defmodule OpenAgentsWeb.OG do
       path_suffix: [repository_owner, repository_name, "issues", number_string]
     }
   end
+
+  @doc """
+  A pull request card: state, title, branches, and stack position. `opts`
+  accepts `:stack_position` and `:stack_size`; an unstacked pull request
+  simply shows no stack chip.
+  """
+  def pull_request(repository_owner, repository_name, pull_request, opts \\ [])
+      when is_list(opts) do
+    issue = pull_request.issue
+    number_string = Integer.to_string(issue.number)
+    author = author_login(issue)
+
+    chips =
+      [%{label: pull_state_label(pull_request), tone: pull_state_tone(pull_request)}] ++
+        stack_chip(opts[:stack_position], opts[:stack_size])
+
+    %__MODULE__{
+      kind: :pull,
+      kicker: "#{repository_owner}/#{repository_name} · ##{number_string}",
+      heading: issue.title || "(no title)",
+      description: "#{pull_request.head_ref} → #{pull_request.base_ref}",
+      avatar: author,
+      chips: chips,
+      stats:
+        clean_stats([
+          opt_stat(author),
+          dated_stat("Opened", issue.inserted_at),
+          comments_stat(issue.comments)
+        ]),
+      title: meta_title("#{issue.title || "(no title)"} · Pull request ##{number_string}"),
+      page_path: "/#{repository_owner}/#{repository_name}/pulls/#{number_string}",
+      path_suffix: [repository_owner, repository_name, "pulls", number_string]
+    }
+  end
+
+  @doc """
+  A documentation page card, built from an `OpenAgentsWeb.DocsCatalog.render/1`
+  page: section, title, the page's opening paragraph, and how much is on it.
+  """
+  def docs(page) when is_map(page) do
+    item = page.item
+    section = OpenAgentsWeb.DocsCatalog.section_title(item.slug)
+
+    %__MODULE__{
+      kind: :docs,
+      kicker: if(section, do: "OpenAgents docs · #{section}", else: "OpenAgents docs"),
+      heading: item.title,
+      description: docs_summary(page[:markdown]),
+      chips: [%{label: "Documentation"}],
+      stats:
+        clean_stats([
+          opt_stat(item.route),
+          headings_stat(page[:toc])
+        ]),
+      title: meta_title("#{item.title} · OpenAgents docs"),
+      page_path: "/docs/#{item.slug}",
+      path_suffix: [item.slug]
+    }
+  end
+
+  # The opening paragraph of the Markdown source, flattened for a card:
+  # headings skipped, inline links reduced to their text, code ticks dropped.
+  defp docs_summary(markdown) when is_binary(markdown) do
+    markdown
+    |> String.split("\n")
+    |> Enum.drop_while(&(String.starts_with?(&1, "#") or String.trim(&1) == ""))
+    |> Enum.take_while(&(String.trim(&1) != ""))
+    |> Enum.join(" ")
+    |> String.replace(~r/\[([^\]]*)\]\([^)]*\)/, "\\1")
+    |> String.replace("`", "")
+    |> String.replace(~r/\s+/, " ")
+    |> present()
+  end
+
+  defp docs_summary(_markdown), do: nil
+
+  defp headings_stat(toc) when is_list(toc) and toc != [],
+    do: plural(length(toc), "section", "sections")
+
+  defp headings_stat(_toc), do: nil
+
+  defp stack_chip(position, size) when is_integer(position) and is_integer(size),
+    do: [%{label: "Stack layer #{position} of #{size}"}]
+
+  defp stack_chip(_position, _size), do: []
+
+  defp pull_state_label(%{merged_at: %DateTime{}}), do: "Merged"
+  defp pull_state_label(%{state: "closed"}), do: "Closed"
+  defp pull_state_label(%{draft: true}), do: "Draft"
+  defp pull_state_label(_pull_request), do: "Open"
+
+  defp pull_state_tone(%{merged_at: %DateTime{}}), do: :done
+  defp pull_state_tone(%{state: "closed"}), do: :muted
+  defp pull_state_tone(%{draft: true}), do: :muted
+  defp pull_state_tone(_pull_request), do: :open
 
   @doc """
   A file card — the layer GitHub does not have. `info` accepts `:ref`,
@@ -299,16 +395,22 @@ defmodule OpenAgentsWeb.OG do
   @doc """
   The canonical request path for a card, versioned by its content digest:
 
-      /og/v/{version}/repos/{owner}/{repo}[/{rest}].png
+      /og/v/{version}/{scope}/{suffix...}.png
+
+  where the scope is `repos` for repository resources and `docs` for
+  documentation pages.
   """
   def request_path(%__MODULE__{} = card) do
     version = version(card)
 
     segments =
-      ["og", "v", version, "repos" | Enum.map(card.path_suffix, &path_segment/1)]
+      ["og", "v", version, scope_segment(card.kind) | Enum.map(card.path_suffix, &path_segment/1)]
 
     "/" <> Enum.join(segments, "/") <> ".png"
   end
+
+  defp scope_segment(:docs), do: "docs"
+  defp scope_segment(_kind), do: "repos"
 
   defp path_segment(value), do: URI.encode(value, &URI.char_unreserved?/1)
 

@@ -261,6 +261,86 @@ defmodule OpenAgentsWeb.OGTest do
              ~r|^/og/v/[0-9a-f]{12}/docs/stacked-pull-requests\.png$|
   end
 
+  test "the forum board builder counts topics and paths under /forum" do
+    card =
+      OG.forum_board(%{
+        slug: "general",
+        title: "General",
+        description: "Everything else",
+        locked: false,
+        topic_count: 3,
+        post_count: 12
+      })
+
+    assert card.kind == :forum_board
+    assert card.kicker == "OpenAgents forum"
+    assert card.heading == "General"
+    assert card.description == "Everything else"
+    assert [%{label: "Forum"}] = card.chips
+    assert "3 topics" in card.stats
+    assert "12 posts" in card.stats
+    assert card.page_path == "/forum/f/general"
+    assert OG.request_path(card) =~ ~r|^/og/v/[0-9a-f]{12}/forum/f/general\.png$|
+
+    empty =
+      OG.forum_board(%{
+        slug: "quiet",
+        title: "Quiet",
+        description: nil,
+        locked: true,
+        topic_count: 0,
+        post_count: 0
+      })
+
+    assert empty.description == "A board on the OpenAgents forum."
+    assert [%{label: "Forum"}, %{label: "Locked", tone: :muted}] = empty.chips
+    assert empty.stats == []
+  end
+
+  test "the forum topic builder derives state tone, author, and reply count" do
+    topic = %{
+      id: "5f1c7f2e-9be4-4a56-9c39-2f4f4a2d9f7a",
+      title: "Hello world",
+      actor_display_name: "Orrery",
+      actor_is_agent: true,
+      state: "open",
+      pin_state: "pinned",
+      post_count: 4,
+      tip_sats_counted: 1200,
+      created_at: ~U[2026-08-01 10:00:00Z]
+    }
+
+    card =
+      OG.forum_topic(%{title: "General"}, topic,
+        summary: "First `post` [body](https://example.com)\n\nwith    noise"
+      )
+
+    assert card.kind == :forum_topic
+    assert card.kicker == "OpenAgents forum · General"
+    assert card.heading == "Hello world"
+    assert card.description == "First post body with noise"
+    assert card.avatar == "Orrery"
+
+    assert [%{label: "Open", tone: :open}, %{label: "Pinned"}, %{label: "Agent"}] =
+             card.chips
+
+    assert "Orrery" in card.stats
+    assert "3 replies" in card.stats
+    assert "1200 sats tipped" in card.stats
+    assert card.page_path == "/forum/t/#{topic.id}"
+    assert OG.request_path(card) =~ ~r|^/og/v/[0-9a-f]{12}/forum/t/#{topic.id}\.png$|
+
+    closed =
+      OG.forum_topic(
+        %{title: "General"},
+        %{topic | state: "closed", pin_state: "none", actor_is_agent: false, post_count: 1}
+      )
+
+    assert [%{label: "Closed", tone: :muted}] = closed.chips
+    assert is_nil(closed.description)
+    refute Enum.any?(closed.stats, &String.contains?(&1, "repl"))
+  end
+
   test "the blob builder infers language and formats size honestly" do
     card =
       OG.blob("OpenAgentsInc", "openagents.com", "lib/openagents/og.ex", %{

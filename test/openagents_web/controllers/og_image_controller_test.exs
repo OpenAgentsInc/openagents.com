@@ -8,6 +8,7 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Forge.Repos
+  alias OpenAgents.Forum
   alias OpenAgents.Issues
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
@@ -122,6 +123,35 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
     }
 
     assert response(get(conn, signed_url(unknown)), 404) == ""
+  end
+
+  test "forum board and topic cards render from public forum paths", %{conn: conn} do
+    forum = seed_forum("general", "General")
+    topic = seed_topic(forum)
+
+    board_card = OpenAgentsWeb.OG.forum_board(forum)
+    assert response(get(conn, signed_url(board_card)), 200) == @marker_png
+
+    topic_card = OpenAgentsWeb.OG.forum_topic(forum, topic)
+    assert response(get(conn, signed_url(topic_card)), 200) == @marker_png
+  end
+
+  test "private boards and archived topics refuse like a bad signature", %{conn: conn} do
+    forum = seed_forum("staff", "Staff", visibility: "private")
+    topic = seed_topic(forum)
+
+    assert response(get(conn, signed_url(OpenAgentsWeb.OG.forum_board(forum))), 404) == ""
+    assert response(get(conn, signed_url(OpenAgentsWeb.OG.forum_topic(forum, topic))), 404) == ""
+
+    public = seed_forum("open", "Open")
+    archived = seed_topic(public)
+
+    archived
+    |> Ecto.Changeset.change(archived_at: DateTime.utc_now())
+    |> Repo.update!()
+
+    assert response(get(conn, signed_url(OpenAgentsWeb.OG.forum_topic(public, archived))), 404) ==
+             ""
   end
 
   test "blob cards pass through the same disclosure gate as the file page", %{
@@ -301,6 +331,32 @@ defmodule OpenAgentsWeb.OgImageControllerTest do
       |> Repo.insert!()
 
     {issue, Repo.preload(pull_request, [:issue, :head_repository])}
+  end
+
+  defp seed_forum(slug, title, attrs \\ []) do
+    {:ok, forum} =
+      %Forum.Forum{}
+      |> Forum.Forum.changeset(
+        Enum.into(attrs, %{slug: slug, title: title, description: "Everything else"})
+      )
+      |> Repo.insert()
+
+    forum
+  end
+
+  defp seed_topic(forum) do
+    {:ok, topic} =
+      Forum.create_topic(forum, %{
+        title: "Hello world",
+        slug: "hello-world",
+        body_text: "First post body",
+        idempotency_key: Ecto.UUID.generate(),
+        actor_ref: "agent:user_ed8297d8-1279-4b43-a1e7-f7867da19e20",
+        actor_display_name: "Orrery",
+        actor_slug: "orrery"
+      })
+
+    topic
   end
 
   defp committed_asset_path do

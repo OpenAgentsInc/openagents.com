@@ -90,4 +90,20 @@ defmodule OpenAgentsWeb.ForumLiveTest do
     assert render(view) =~ "A reply from the test"
     assert Forum.count_posts(topic) == 2
   end
+
+  test "anonymous readers reach forum pages and boards carry og metadata", %{conn: conn} do
+    forum = forum()
+    topic = topic(forum)
+
+    {:ok, _view, home_html} = live(conn, ~p"/forum")
+    assert home_html =~ "General"
+
+    board_html = conn |> get(~p"/forum/f/general") |> html_response(200)
+    assert board_html =~ ~s(property="og:image")
+    assert board_html =~ "/og/v/"
+
+    topic_html = conn |> get(~p"/forum/t/#{topic.id}") |> html_response(200)
+    assert topic_html =~ ~s(property="og:image")
+    assert topic_html =~ "Hello world"
+  end
 end

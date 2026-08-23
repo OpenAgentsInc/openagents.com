@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.ForumBoardLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forum
+  alias OpenAgentsWeb.OG
 
   def mount(%{"slug" => slug}, _session, socket) do
     scope = [operator?: OpenAgents.Accounts.admin?(socket.assigns[:current_user])]
@@ -19,6 +20,8 @@ defmodule OpenAgentsWeb.ForumBoardLive do
          socket
          |> assign(:current_scope, socket.assigns[:current_scope])
          |> assign(:forum, forum)
+         |> assign(:page_title, forum.title)
+         |> assign(:og, OG.meta(OG.forum_board(forum)))
          |> assign(:topics, ranked_topics(forum))
          |> stream(:topics, ranked_topics(forum))
          |> assign(:form, to_form(%{"title" => "", "body_text" => ""}, as: :topic))}

@@ -24,6 +24,7 @@ defmodule OpenAgentsWeb.OgImageController do
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.Forum
   alias OpenAgents.Issues
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
@@ -94,6 +95,36 @@ defmodule OpenAgentsWeb.OgImageController do
         :error -> :error
       end
     end)
+  end
+
+  # Forum cards resolve through the same readability predicates as the forum
+  # pages, with no operator: a private board, a missing topic, and a bad
+  # signature are indistinguishable.
+  def forum_board(conn, params) do
+    authorized(conn, fn ->
+      case Forum.fetch_readable_forum_by_slug(strip_png(params["slug"]) || "") do
+        {:ok, forum} -> OG.forum_board(forum)
+        _error -> :error
+      end
+    end)
+  end
+
+  def forum_topic(conn, params) do
+    authorized(conn, fn ->
+      with {:ok, topic} <- Forum.fetch_readable_topic(strip_png(params["id"]) || ""),
+           %Forum.Forum{} = forum <- safe(fn -> Forum.get_forum!(topic.forum_id) end) do
+        OG.forum_topic(forum, topic, summary: first_visible_post_body(topic))
+      else
+        _error -> :error
+      end
+    end)
+  end
+
+  defp first_visible_post_body(topic) do
+    case safe(fn -> Forum.list_posts(topic) end) do
+      [first | _rest] -> first.body_text
+      _none -> nil
+    end
   end
 
   def commit(conn, params) do

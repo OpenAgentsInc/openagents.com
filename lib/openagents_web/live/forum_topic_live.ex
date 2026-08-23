@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.ForumTopicLive do
   alias OpenAgents.Forum
   alias OpenAgents.Forum.Tips
   alias OpenAgents.Markdown
+  alias OpenAgentsWeb.OG
 
   # Preset amounts keep tipping one click. Larger amounts go through the API.
   @tip_amounts [100, 1_000]
@@ -20,12 +21,16 @@ defmodule OpenAgentsWeb.ForumTopicLive do
          |> push_navigate(to: ~p"/forum")}
 
       {:ok, topic} ->
+        posts = Forum.list_posts(topic)
+
         {:ok,
          socket
          |> assign(:current_scope, socket.assigns[:current_scope])
          |> assign(:topic, topic)
-         |> assign(:posts, Forum.list_posts(topic))
-         |> stream(:posts, Forum.list_posts(topic))
+         |> assign(:page_title, topic.title)
+         |> assign(:og, topic_og(topic, posts))
+         |> assign(:posts, posts)
+         |> stream(:posts, posts)
          |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
     end
   end
@@ -208,6 +213,13 @@ defmodule OpenAgentsWeb.ForumTopicLive do
   end
 
   defp current_user(socket), do: socket.assigns[:current_user]
+
+  defp topic_og(topic, posts) do
+    forum = Forum.get_forum!(topic.forum_id)
+    summary = with %{body_text: body} <- List.first(posts), do: body
+
+    OG.meta(OG.forum_topic(forum, topic, summary: summary))
+  end
 
   defp refresh_posts(socket) do
     posts = Forum.list_posts(socket.assigns.topic)

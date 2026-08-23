@@ -135,6 +135,12 @@ defmodule OpenAgentsWeb.Router do
       live "/status", NetworkStatusLive, :index
       live "/changelog", ChangelogLive, :index
       live "/leaderboard", LeaderboardLive, :index
+
+      # Forum reads are public: the context's readability predicates decide
+      # what an anonymous reader sees, and posting still requires an account.
+      live "/forum", ForumHomeLive, :index
+      live "/forum/f/:slug", ForumBoardLive, :show
+      live "/forum/t/:id", ForumTopicLive, :show
     end
 
     # `/components/icons` must stay ahead of `/components/:slug` so the literal
@@ -174,9 +180,6 @@ defmodule OpenAgentsWeb.Router do
       live "/repositories/new", RepositoryNewLive, :new
       live "/repositories/import/github", RepositoryImportLive, :new
 
-      live "/forum", ForumHomeLive, :index
-      live "/forum/f/:slug", ForumBoardLive, :show
-      live "/forum/t/:id", ForumTopicLive, :show
       live "/forum/claim", ForumClaimLive, :new
       live "/forum/tips", ForumTipsLive, :show
 
@@ -685,6 +688,8 @@ defmodule OpenAgentsWeb.Router do
     get "/v/:version/repos/:owner/:repo/commit/:sha", OgImageController, :commit
     get "/v/:version/repos/:owner/:repo/blob/:ref/*path", OgImageController, :blob
     get "/v/:version/docs/:slug", OgImageController, :docs
+    get "/v/:version/forum/f/:slug", OgImageController, :forum_board
+    get "/v/:version/forum/t/:id", OgImageController, :forum_topic
   end
 
   # Keep repository-shaped routes last. Every fixed product, API, operator,

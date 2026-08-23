@@ -34,7 +34,8 @@ defmodule OpenAgentsWeb.OG do
     path_suffix: []
   ]
 
-  @type kind :: :site | :repo | :issue | :pull | :blob | :commit | :docs
+  @type kind ::
+          :site | :repo | :issue | :pull | :blob | :commit | :docs | :forum_board | :forum_topic
 
   @type t :: %__MODULE__{
           kind: kind(),
@@ -181,6 +182,89 @@ defmodule OpenAgentsWeb.OG do
       path_suffix: [item.slug]
     }
   end
+
+  @doc "A forum board card: title, description, and how much sits on it."
+  def forum_board(forum) do
+    %__MODULE__{
+      kind: :forum_board,
+      kicker: "OpenAgents forum",
+      heading: forum.title,
+      description: present(forum.description) || "A board on the OpenAgents forum.",
+      chips:
+        [%{label: "Forum"}] ++ List.wrap(if(forum.locked, do: %{label: "Locked", tone: :muted})),
+      stats:
+        clean_stats([
+          count_stat(forum.topic_count, "topic", "topics"),
+          count_stat(forum.post_count, "post", "posts")
+        ]),
+      title: meta_title("#{forum.title} · OpenAgents forum"),
+      page_path: "/forum/f/#{forum.slug}",
+      path_suffix: ["f", forum.slug]
+    }
+  end
+
+  @doc """
+  A forum topic card: state, title, author, and conversation size. `opts`
+  accepts `:summary`, the body of the topic's first visible post; a topic
+  whose first post is hidden simply shows no description.
+  """
+  def forum_topic(forum, topic, opts \\ []) when is_list(opts) do
+    author = present(topic.actor_display_name)
+
+    chips =
+      [%{label: topic_state_label(topic), tone: topic_state_tone(topic)}] ++
+        List.wrap(if(topic.pin_state == "pinned", do: %{label: "Pinned"})) ++
+        List.wrap(if(topic.actor_is_agent, do: %{label: "Agent"}))
+
+    %__MODULE__{
+      kind: :forum_topic,
+      kicker: "OpenAgents forum · #{forum.title}",
+      heading: topic.title,
+      description: forum_summary(opts[:summary]),
+      avatar: author,
+      chips: chips,
+      stats:
+        clean_stats([
+          author,
+          dated_stat("Posted", topic.created_at),
+          replies_stat(topic.post_count),
+          sats_stat(topic.tip_sats_counted)
+        ]),
+      title: meta_title("#{topic.title} · OpenAgents forum"),
+      page_path: "/forum/t/#{topic.id}",
+      path_suffix: ["t", topic.id]
+    }
+  end
+
+  # A post body flattened for a card: code ticks dropped, whitespace collapsed.
+  defp forum_summary(body) when is_binary(body) do
+    body
+    |> String.replace(~r/\[([^\]]*)\]\([^)]*\)/, "\\1")
+    |> String.replace("`", "")
+    |> String.replace(~r/\s+/, " ")
+    |> present()
+  end
+
+  defp forum_summary(_body), do: nil
+
+  defp topic_state_label(%{state: "closed"}), do: "Closed"
+  defp topic_state_label(_topic), do: "Open"
+
+  defp topic_state_tone(%{state: "closed"}), do: :muted
+  defp topic_state_tone(_topic), do: :open
+
+  defp count_stat(count, singular, plural_form) when is_integer(count) and count > 0,
+    do: plural(count, singular, plural_form)
+
+  defp count_stat(_count, _singular, _plural), do: nil
+
+  defp replies_stat(post_count) when is_integer(post_count) and post_count > 1,
+    do: plural(post_count - 1, "reply", "replies")
+
+  defp replies_stat(_post_count), do: nil
+
+  defp sats_stat(sats) when is_integer(sats) and sats > 0, do: "#{sats} sats tipped"
+  defp sats_stat(_sats), do: nil
 
   # The opening paragraph of the Markdown source, flattened for a card:
   # headings skipped, inline links reduced to their text, code ticks dropped.
@@ -418,6 +502,7 @@ defmodule OpenAgentsWeb.OG do
   end
 
   defp scope_segment(:docs), do: "docs"
+  defp scope_segment(kind) when kind in [:forum_board, :forum_topic], do: "forum"
   defp scope_segment(_kind), do: "repos"
 
   defp path_segment(value), do: URI.encode(value, &URI.char_unreserved?/1)

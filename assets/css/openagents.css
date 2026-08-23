@@ -5291,6 +5291,202 @@
     font-weight: 500;
   }
 
+  /* ── Stack map ──────────────────────────────────────────────────────────── */
+
+  /* One pull request stack as an ordered rail: layers top-first, the trunk at
+     the bottom, and a hairline connector threading through the state glyphs so
+     the chain reads as one object. The current layer is washed rather than
+     underlined -- the reader is inside it, not travelling to it. */
+  .stack-map {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--ink-surface);
+  }
+
+  .stack-map__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-block-end: 1px solid var(--line);
+    padding: 12px 16px;
+  }
+
+  .stack-map__title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.9375rem;
+  }
+
+  .stack-map__count {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stack-map__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-inline-start: auto;
+  }
+
+  .stack-map__layers {
+    position: relative;
+    margin: 0;
+    padding: 8px 0;
+    list-style: none;
+  }
+
+  /* The connector rail. It threads behind the state glyphs, which sit on the
+     surface colour so the line appears to pass through them. */
+  .stack-map__layers::before {
+    position: absolute;
+    inset-block: 14px;
+    inset-inline-start: 23px;
+    border-inline-start: 1px solid var(--line-strong);
+    content: "";
+  }
+
+  .stack-map__add,
+  .stack-map__trunk {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+  }
+
+  .stack-map__add-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    text-decoration: none;
+    transition: color var(--motion-fast) var(--ease);
+  }
+
+  @media (hover: hover) {
+    .stack-map__add-link:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  .stack-map__add-icon {
+    z-index: 1;
+    box-sizing: content-box;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    padding: 0;
+    background: var(--ink-surface);
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  .stack-map__layer {
+    position: relative;
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 8px 16px;
+  }
+
+  .stack-map__layer[aria-current="page"] {
+    background: var(--wash-selected);
+  }
+
+  .stack-map__layer[aria-current="page"]::before {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    border-inline-start: 2px solid var(--accent-bright);
+    content: "";
+  }
+
+  .stack-map__state {
+    z-index: 1;
+    grid-row: span 2;
+    align-self: start;
+    box-sizing: content-box;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    padding-block: 2px;
+    background: var(--ink-surface);
+    color: var(--icon-tertiary);
+    font-size: 16px;
+  }
+
+  .stack-map__layer[aria-current="page"] .stack-map__state {
+    background: transparent;
+  }
+
+  .stack-map__layer[data-state="open"] .stack-map__state {
+    color: var(--success);
+  }
+
+  .stack-map__layer[data-state="merged"] .stack-map__state {
+    color: var(--accent-bright);
+  }
+
+  .stack-map__layer[data-state="closed"] .stack-map__state {
+    color: var(--danger);
+  }
+
+  .stack-map__layer-link {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    a.stack-map__layer-link:hover {
+      color: var(--accent-bright);
+    }
+  }
+
+  .stack-map__layer-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  .stack-map__layer-number {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stack-map__branch {
+    overflow: hidden;
+    border-radius: 6px;
+    background: var(--wash-selected);
+    padding: 2px 8px;
+    color: var(--text-body);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (hover: hover) {
+    a.stack-map__branch:hover {
+      color: var(--accent-bright);
+    }
+  }
+
+  .stack-map__trunk .stack-map__state {
+    grid-row: auto;
+    padding-block: 0;
+  }
+
   /* ── File table ─────────────────────────────────────────────────────────── */
 
   .file-table {

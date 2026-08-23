@@ -127,6 +127,14 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
                 </.badge>
               </div>
 
+              <.stack_map
+                id="stack-map"
+                number={@stack_context.stack.number}
+                trunk={@stack_context.stack.trunk_ref}
+                layers={stack_map_layers(@stack_context, @owner, @repo)}
+                class="mt-4 max-w-md"
+              />
+
               <nav class="mt-4 flex gap-2" aria-label="Stack diff views">
                 <.button
                   id="stack-view-layer"
@@ -200,6 +208,32 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   end
 
   defp short(sha), do: String.slice(sha, 0, 12)
+
+  defp stack_map_layers(context, owner, repo) do
+    context.stack.entries
+    |> Enum.sort_by(& &1.position, :desc)
+    |> Enum.map(fn entry ->
+      pull_request = entry.pull_request
+
+      %{
+        title: pull_request.issue.title,
+        number: pull_request.issue.number,
+        branch: pull_request.head_ref,
+        state: layer_state(pull_request),
+        navigate: ~p"/#{owner}/#{repo}/pulls/#{pull_request.issue.number}",
+        current: entry.id == context.entry.id
+      }
+    end)
+  end
+
+  defp layer_state(pull_request) do
+    cond do
+      pull_request.merged_at -> "merged"
+      pull_request.state == "closed" -> "closed"
+      pull_request.draft -> "draft"
+      true -> "open"
+    end
+  end
 
   defp visible_repository!(owner, repo, user) do
     Repositories.get_visible_by_path!(owner, repo, user)

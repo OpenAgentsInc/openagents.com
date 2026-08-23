@@ -497,6 +497,109 @@ defmodule OpenAgentsWeb.UITest do
     end
   end
 
+  describe "stack_map/1" do
+    defp demo_layers do
+      [
+        %{title: "Add frontend", number: 32, branch: "frontend", state: "draft", href: "#pr-32"},
+        %{title: "Add API", number: 30, branch: "api", state: "merged", href: "#pr-30"},
+        %{title: "Add auth", number: 24, branch: "auth-layer", state: "open", current: true}
+      ]
+    end
+
+    test "renders layers top-first with the trunk anchoring the bottom" do
+      assigns = %{layers: demo_layers()}
+
+      html =
+        rendered_to_string(
+          ~H|<.stack_map id="stack-map" number={31} trunk="main" layers={@layers} />|
+        )
+
+      assert html =~ "Stack #31"
+      assert html =~ "3 layers"
+
+      frontend = :binary.match(html, "Add frontend") |> elem(0)
+      api = :binary.match(html, "Add API") |> elem(0)
+      auth = :binary.match(html, "Add auth") |> elem(0)
+      trunk = :binary.match(html, ">main<") |> elem(0)
+
+      assert frontend < api
+      assert api < auth
+      assert auth < trunk
+    end
+
+    test "marks the viewed layer aria-current and does not link it to itself" do
+      assigns = %{layers: demo_layers()}
+
+      html =
+        rendered_to_string(
+          ~H|<.stack_map id="stack-map" number={31} trunk="main" layers={@layers} />|
+        )
+
+      assert html =~ ~s(aria-current="page")
+      assert html =~ ~s(href="#pr-32")
+      refute html =~ ~r|<a[^>]*>\s*Add auth|
+    end
+
+    test "carries each layer's pull request state as a data attribute and glyph" do
+      assigns = %{layers: demo_layers()}
+
+      html =
+        rendered_to_string(
+          ~H|<.stack_map id="stack-map" number={31} trunk="main" layers={@layers} />|
+        )
+
+      assert html =~ ~s(data-state="draft")
+      assert html =~ ~s(data-state="merged")
+      assert html =~ ~s(data-state="open")
+      assert html =~ ~s(data-icon="pull-request-draft")
+      assert html =~ ~s(data-icon="pull-request-merged")
+      assert html =~ ~s(data-icon="pull-request-open")
+      assert html =~ ~s(data-icon="branch")
+    end
+
+    test "shows the add row and links the trunk only when given a destination" do
+      assigns = %{layers: demo_layers()}
+
+      bare =
+        rendered_to_string(
+          ~H|<.stack_map id="stack-map" number={31} trunk="main" layers={@layers} />|
+        )
+
+      refute bare =~ "Add to stack"
+      refute bare =~ ~r|<a[^>]*>\s*main<|
+
+      linked =
+        rendered_to_string(~H"""
+        <.stack_map
+          id="stack-map"
+          number={31}
+          trunk="main"
+          trunk_href="#main"
+          add_href="#add"
+          layers={@layers}
+        />
+        """)
+
+      assert linked =~ "Add to stack"
+      assert linked =~ ~s(href="#add")
+      assert linked =~ ~s(href="#main")
+    end
+
+    test "names the stack for assistive technology and renders the action slot" do
+      assigns = %{layers: demo_layers()}
+
+      html =
+        rendered_to_string(~H"""
+        <.stack_map id="stack-map" number={31} trunk="main" layers={@layers}>
+          <:action><button type="button">Unstack</button></:action>
+        </.stack_map>
+        """)
+
+      assert html =~ ~s(aria-label="Stack #31")
+      assert html =~ "Unstack"
+    end
+  end
+
   defp purge(module) do
     :code.purge(module)
     :code.delete(module)

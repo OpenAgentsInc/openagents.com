@@ -864,6 +864,106 @@ defmodule OpenAgentsWeb.UI do
   end
 
   @doc """
+  The map of one pull request stack: every layer in order, top of the stack
+  first, ending at the trunk the whole stack targets.
+
+  Layers arrive top-first because that is how a stack reads — the newest work
+  sits on top and the trunk anchors the bottom, the way the branches actually
+  chain. Each layer carries its pull request state as a glyph beside the
+  title, so a reader sees at a glance which layers are merged, open, draft,
+  or closed.
+
+  The layer for the page the reader is on renders as text with
+  `aria-current="page"` rather than as a link, for the same reason
+  `breadcrumb/1` does: a page linking to itself is a dead control that still
+  looks live. Every other layer is a link to its pull request.
+
+  The trunk row is a destination too when `trunk_navigate` or `trunk_href` is
+  given — the branch the stack lands on is a real place — and plain text when
+  it is not, as in the catalog where there is nowhere to send the reader.
+  """
+  attr :id, :string, required: true
+  attr :number, :integer, required: true, doc: "the stack number, scoped to the repository"
+  attr :trunk, :string, required: true, doc: "the branch the whole stack targets"
+  attr :trunk_navigate, :string, default: nil
+  attr :trunk_href, :string, default: nil
+  attr :add_navigate, :string, default: nil, doc: "where a new layer on top of the stack begins"
+  attr :add_href, :string, default: nil
+  attr :class, :any, default: nil
+
+  attr :layers, :list,
+    required: true,
+    doc:
+      "`[%{title, number, branch, state}]` from top of the stack to bottom, " <>
+        "each optionally carrying `navigate` or `href` for its destination and " <>
+        "`current: true` for the layer being viewed; `state` is `open`, " <>
+        "`merged`, `closed`, or `draft`"
+
+  attr :rest, :global
+
+  slot :action, doc: "controls at the trailing edge of the header, such as unstack"
+
+  def stack_map(assigns) do
+    ~H"""
+    <section id={@id} class={["stack-map", @class]} aria-label={"Stack ##{@number}"} {@rest}>
+      <header class="stack-map__header">
+        <span class="stack-map__title">Stack #{@number}</span>
+        <span class="stack-map__count">{layer_count_label(length(@layers))}</span>
+        <span :if={@action != []} class="stack-map__actions">{render_slot(@action)}</span>
+      </header>
+      <ol class="stack-map__layers">
+        <li :if={@add_navigate || @add_href} class="stack-map__add">
+          <.link navigate={@add_navigate} href={@add_href} class="stack-map__add-link">
+            <.icon name="plus" class="stack-map__add-icon" /> Add to stack
+          </.link>
+        </li>
+        <li
+          :for={layer <- @layers}
+          class="stack-map__layer"
+          data-state={layer.state}
+          aria-current={layer[:current] && "page"}
+        >
+          <.icon name={pull_request_state_icon(layer.state)} class="stack-map__state" />
+          <.link
+            :if={!layer[:current]}
+            navigate={layer[:navigate]}
+            href={layer[:href]}
+            class="stack-map__layer-link"
+          >
+            {layer.title}
+          </.link>
+          <span :if={layer[:current]} class="stack-map__layer-link">{layer.title}</span>
+          <span class="stack-map__layer-meta">
+            <span class="stack-map__layer-number">#{layer.number}</span>
+            <span class="stack-map__branch">{layer.branch}</span>
+          </span>
+        </li>
+        <li class="stack-map__trunk">
+          <.icon name="branch" class="stack-map__state" />
+          <.link
+            :if={@trunk_navigate || @trunk_href}
+            navigate={@trunk_navigate}
+            href={@trunk_href}
+            class="stack-map__branch"
+          >
+            {@trunk}
+          </.link>
+          <span :if={!(@trunk_navigate || @trunk_href)} class="stack-map__branch">{@trunk}</span>
+        </li>
+      </ol>
+    </section>
+    """
+  end
+
+  defp layer_count_label(1), do: "1 layer"
+  defp layer_count_label(count), do: "#{count} layers"
+
+  defp pull_request_state_icon("merged"), do: "pull-request-merged"
+  defp pull_request_state_icon("closed"), do: "pull-request-closed"
+  defp pull_request_state_icon("draft"), do: "pull-request-draft"
+  defp pull_request_state_icon(_open), do: "pull-request-open"
+
+  @doc """
   A repository's file table: the ref bar, the latest commit, and the entries.
 
   Adapted from the GitHub-shaped clones catalogued in

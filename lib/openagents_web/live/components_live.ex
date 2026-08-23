@@ -1451,6 +1451,66 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "openagents-stack-map"}} = assigns) do
+    assigns =
+      assign(assigns, :layers, [
+        %{
+          title: "Add frontend",
+          number: 32,
+          branch: "frontend",
+          state: "draft",
+          href: "#pr-32"
+        },
+        %{
+          title: "Add API endpoints",
+          number: 30,
+          branch: "api-endpoints",
+          state: "open",
+          href: "#pr-30"
+        },
+        %{
+          title: "Add authentication layer",
+          number: 24,
+          branch: "auth-layer",
+          state: "open",
+          current: true
+        }
+      ])
+
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A stacked pull request's place in its stack, at a glance. Layers arrive
+        top-first and the trunk anchors the bottom, the way the branches actually
+        chain. Each layer wears its pull request state as a coloured glyph, and the
+        one the reader is viewing is washed and marked <code>aria-current="page"</code>
+        rather than linked — a page linking to itself is a dead control that still
+        looks live.
+      </p>
+      <div class="max-w-md">
+        <UI.stack_map
+          id="demo-stack-map"
+          number={31}
+          trunk="main"
+          trunk_href="#main"
+          add_href="#add"
+          layers={@layers}
+        >
+          <:action>
+            <UI.button variant={:ghost} size={:sm}>Unstack</UI.button>
+          </:action>
+        </UI.stack_map>
+      </div>
+      <p class="text-sm text-base-content/60">
+        The connector rail threads through the state glyphs so the chain reads as one
+        object, and the <strong>Add to stack</strong>
+        row sits above the top layer because that is where the next layer would go. The
+        header's action slot holds stack-level controls — here an unstack affordance.
+      </p>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "openagents-diff-file"}} = assigns) do
     assigns =
       assign(

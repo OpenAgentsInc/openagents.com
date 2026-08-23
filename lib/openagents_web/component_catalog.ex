@@ -208,6 +208,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "The whole repository home: identity, sections, tree, and rail in one frame."
         },
         %{
+          slug: "openagents-stack-map",
+          title: "Stack map",
+          icon: "stack",
+          source: "OpenAgentsWeb.UI.stack_map/1",
+          summary: "One pull request stack, layers top-first, down to the trunk it targets."
+        },
+        %{
           slug: "openagents-status-indicator",
           title: "Status indicator",
           icon: "check-circle",

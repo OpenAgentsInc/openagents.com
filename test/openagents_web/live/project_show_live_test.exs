@@ -35,6 +35,39 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
            )
   end
 
+  test "a signed-out visitor can read a project board without the add form" do
+    project = project!()
+
+    {:ok, view, _html} = live(build_conn(), path(project))
+
+    assert has_element?(view, "#project-board-title")
+    refute has_element?(view, "#new-project-item-form")
+  end
+
+  test "a signed-out visitor cannot submit an add-item event" do
+    project = project!()
+    {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Hidden forged item"})
+
+    {:ok, view, _html} = live(build_conn(), path(project))
+
+    html =
+      render_submit(view, "add_item", %{
+        "item" => %{"issue_number" => to_string(issue.number), "status" => "Done"}
+      })
+
+    assert html =~ "Only repository members can add project items."
+    refute has_element?(view, ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]})
+  end
+
+  test "a private repository is not visible to a signed-out visitor" do
+    private =
+      repository_fixture(%{owner: "HiddenBoard", name: "projects", visibility: "private"})
+
+    assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+      live(build_conn(), ~p"/#{private.owner}/#{private.name}/projects/1")
+    end
+  end
+
   test "an empty board renders the columns with no cards", %{conn: conn} do
     project = project!()
 

@@ -182,8 +182,33 @@ defmodule OpenAgentsWeb.IssueWorkspaceLiveTest do
     refute second =~ newest
   end
 
-  test "a signed-out visitor is sent home rather than shown the list", %{} do
-    assert {:error, {:redirect, %{to: "/"}}} = live(build_conn(), ~p"/issues")
+  test "a signed-out visitor sees the public workspace and only the everyone filter" do
+    Repo.update_all(Repository, set: [visibility: "private"])
+
+    {:ok, view, _html} = live(build_conn(), ~p"/issues")
+
+    assert has_element?(view, "#workspace-issues-no-repositories")
+    assert has_element?(view, "#workspace-issue-filter-form option[value=\"all\"]")
+    refute has_element?(view, "#workspace-issue-filter-form option[value=\"assigned\"]")
+    refute has_element?(view, "#workspace-issue-filter-form option[value=\"created\"]")
+    assert has_element?(view, "#workspace-issues-signin")
+  end
+
+  test "a signed-out visitor cannot see a private issue through any filter", context do
+    for query <- [
+          "",
+          "q=Rotate+the+signing+key",
+          "involvement=assigned",
+          "involvement=created",
+          "state=all",
+          "state=closed",
+          "state=closed&involvement=assigned",
+          "state=closed&involvement=created",
+          "page=2"
+        ] do
+      {:ok, view, _html} = live(build_conn(), ~p"/issues?#{query}")
+      refute issue_linked?(view, context.private, context.secret)
+    end
   end
 
   defp bulk_title(index), do: "Bulk #{String.pad_leading(to_string(index), 3, "0")}"

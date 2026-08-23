@@ -10,7 +10,8 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
   alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
-    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    repository = visible_repository!(owner, repo, socket.assigns.current_user)
+    can_write = Repositories.writable?(repository, socket.assigns.current_user)
 
     {:ok,
      socket
@@ -18,46 +19,80 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
+     |> assign(:can_write, can_write)
      |> assign(:milestones, milestones_with_stats(repository))
      |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))}
   end
 
   def handle_event("save", %{"milestone" => milestone_params}, socket) do
-    case Milestones.create_milestone(
-           socket.assigns.repository,
-           milestone_params,
-           socket.assigns.current_user
-         ) do
-      {:ok, _milestone} ->
-        {:noreply,
-         socket
-         |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
-         |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))
-         |> put_flash(:info, "Milestone created")}
+    socket = refresh_authority(socket)
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+    if socket.assigns.can_write do
+      case Milestones.create_milestone(
+             socket.assigns.repository,
+             milestone_params,
+             socket.assigns.current_user
+           ) do
+        {:ok, _milestone} ->
+          {:noreply,
+           socket
+           |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
+           |> assign(:form, to_form(Milestones.change_milestone(%Milestone{})))
+           |> put_flash(:info, "Milestone created")}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can create milestones.")}
     end
   end
 
   def handle_event("close", %{"id" => id}, socket) do
-    milestone = Milestones.get_milestone!(socket.assigns.repository, String.to_integer(id))
-    {:ok, _} = Milestones.update_milestone(milestone, %{"state" => "closed"})
+    socket = refresh_authority(socket)
 
-    {:noreply,
-     socket
-     |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
-     |> put_flash(:info, "Milestone closed")}
+    if socket.assigns.can_write do
+      milestone = Milestones.get_milestone!(socket.assigns.repository, String.to_integer(id))
+      {:ok, _} = Milestones.update_milestone(milestone, %{"state" => "closed"})
+
+      {:noreply,
+       socket
+       |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
+       |> put_flash(:info, "Milestone closed")}
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can close milestones.")}
+    end
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    milestone = Milestones.get_milestone!(socket.assigns.repository, String.to_integer(id))
-    {:ok, _} = Milestones.delete_milestone(milestone)
+    socket = refresh_authority(socket)
 
-    {:noreply,
-     socket
-     |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
-     |> put_flash(:info, "Milestone deleted")}
+    if socket.assigns.can_write do
+      milestone = Milestones.get_milestone!(socket.assigns.repository, String.to_integer(id))
+      {:ok, _} = Milestones.delete_milestone(milestone)
+
+      {:noreply,
+       socket
+       |> assign(:milestones, milestones_with_stats(socket.assigns.repository))
+       |> put_flash(:info, "Milestone deleted")}
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can delete milestones.")}
+    end
+  end
+
+  defp refresh_authority(socket) do
+    assign(
+      socket,
+      :can_write,
+      Repositories.writable?(socket.assigns.repository, socket.assigns.current_user)
+    )
+  end
+
+  defp visible_repository!(owner, repo, user) do
+    Repositories.get_visible_by_path!(owner, repo, user)
+  rescue
+    Ecto.NoResultsError ->
+      raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
   end
 
   defp milestones_with_stats(repository) do
@@ -95,10 +130,11 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
       current_scope={@current_scope}
     >
       <div class="flex items-center justify-between mb-4">
-        <h1 class="text-2xl font-bold">Milestones</h1>
+        <h1 id="milestones-title" class="text-2xl font-bold">Milestones</h1>
       </div>
 
       <.form
+        :if={@can_write}
         for={@form}
         id="new-milestone-form"
         phx-submit="save"
@@ -115,7 +151,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
       </.form>
 
       <%= if @milestones == [] do %>
-        <div class="alert" data-variant="info" role="status">
+        <div id="milestones-empty" class="alert" data-variant="info" role="status">
           <.icon name="info-circle" class="size-5" />
           <section>No milestones yet.</section>
         </div>
@@ -171,7 +207,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
               </div>
 
               <footer class="flex justify-end gap-2">
-                <%= if milestone.state == "open" do %>
+                <%= if @can_write and milestone.state == "open" do %>
                   <button
                     class="btn"
                     data-variant="ghost"
@@ -183,6 +219,7 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
                   </button>
                 <% end %>
                 <button
+                  :if={@can_write}
                   class="btn"
                   data-variant="ghost"
                   data-size="sm"

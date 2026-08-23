@@ -38,7 +38,8 @@ defmodule OpenAgents.Projects do
   Supported options: `:state`, `:owner`, and `:page`. Rows come back with their
   repository preloaded, because a project's board lives at a repository path.
   """
-  def list_visible_projects_page(%User{} = user, opts \\ []) when is_list(opts) do
+  def list_visible_projects_page(user, opts \\ [])
+      when (is_nil(user) or is_struct(user, User)) and is_list(opts) do
     page = max(parse_page(opts[:page]), 1)
     query = visible_project_query(user, opts)
 
@@ -56,8 +57,9 @@ defmodule OpenAgents.Projects do
   end
 
   @doc "How many projects `user` can read across every repository, filtered."
-  def count_visible_projects(%User{} = user, opts \\ []) when is_list(opts),
-    do: user |> visible_project_query(opts) |> Repo.aggregate(:count)
+  def count_visible_projects(user, opts \\ [])
+      when (is_nil(user) or is_struct(user, User)) and is_list(opts),
+      do: user |> visible_project_query(opts) |> Repo.aggregate(:count)
 
   @doc "Clamps a reader-supplied page number into the bounded range."
   def parse_page(page), do: OpenAgents.Issues.parse_page(page)

@@ -19,6 +19,34 @@ defmodule OpenAgentsWeb.LabelIndexLiveTest do
     refute has_element?(view, "#labels")
   end
 
+  test "a signed-out visitor can read labels without write affordances" do
+    {:ok, view, _html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/labels")
+
+    assert has_element?(view, "#labels-title")
+    refute has_element?(view, "#new-label-form")
+    refute has_element?(view, "#labels button[phx-click=\"delete\"]")
+  end
+
+  test "a signed-out visitor cannot submit a label write event" do
+    {:ok, view, _html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/labels")
+
+    html =
+      render_submit(view, "save", %{
+        "label" => %{"name" => "forged", "color" => "ffffff", "description" => ""}
+      })
+
+    assert html =~ "Only repository members can create labels."
+    refute has_element?(view, "#labels td", "forged")
+  end
+
+  test "a private repository is not visible to a signed-out visitor" do
+    private = repository_fixture(%{owner: "HiddenLabels", name: "labels", visibility: "private"})
+
+    assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+      live(build_conn(), ~p"/#{private.owner}/#{private.name}/labels")
+    end
+  end
+
   test "lists seeded labels with their descriptions", %{conn: conn} do
     label_fixture(repository(), %{
       name: "bug",

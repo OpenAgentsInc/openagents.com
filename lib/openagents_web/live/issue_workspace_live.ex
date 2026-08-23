@@ -59,11 +59,12 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
 
   def mount(_params, _session, socket) do
     if connected?(socket), do: Repositories.subscribe_all_issues()
+    user = socket.assigns.current_user
 
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
-     |> assign(:involvements, @involvements)
+     |> assign(:involvements, involvement_options(user))
      |> assign(:refresh_timer_ref, nil)
      |> assign(
        :any_repository?,
@@ -120,7 +121,7 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
   end
 
   def handle_params(params, _url, socket) do
-    filters = read_filters(params)
+    filters = read_filters(params, socket.assigns.current_user)
 
     {:noreply,
      socket
@@ -135,7 +136,7 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
   # desired set and patching replaces it wholesale.
   def handle_event("filter", params, socket) do
     filters = %{
-      "involvement" => normalize_involvement(params["involvement"]),
+      "involvement" => normalize_involvement(params["involvement"], socket.assigns.current_user),
       "q" => blank_to_nil(params["q"])
     }
 
@@ -146,19 +147,21 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
     {:noreply, put_flash(socket, :error, "That action is not available here.")}
   end
 
-  defp read_filters(params) do
+  defp read_filters(params, user) do
     %{
-      "involvement" => normalize_involvement(params["involvement"]),
+      "involvement" => normalize_involvement(params["involvement"], user),
       "q" => blank_to_nil(params["q"])
     }
   end
 
   # A hand-edited query string cannot smuggle an option into the context call:
   # anything unrecognized becomes the default.
-  defp normalize_involvement(involvement) when involvement in ~w(assigned created),
+  defp normalize_involvement(_involvement, nil), do: "all"
+
+  defp normalize_involvement(involvement, _user) when involvement in ~w(assigned created),
     do: involvement
 
-  defp normalize_involvement(_involvement), do: "all"
+  defp normalize_involvement(_involvement, _user), do: "all"
 
   defp normalize_state("closed"), do: "closed"
   defp normalize_state("all"), do: "all"
@@ -198,9 +201,13 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
   # The view's involvement words become the context's own options. "Assigned"
   # reads the assignee snapshot by login; "opened by" matches either the
   # durable author link or an imported login.
+  defp involvement_opts(nil, _involvement), do: []
   defp involvement_opts(user, "assigned"), do: [assignee: user.github_login]
   defp involvement_opts(user, "created"), do: [author: user]
   defp involvement_opts(_user, _all), do: []
+
+  defp involvement_options(nil), do: [{"Everyone", "all"}]
+  defp involvement_options(_user), do: @involvements
 
   def render(assigns) do
     ~H"""
@@ -262,15 +269,20 @@ defmodule OpenAgentsWeb.IssueWorkspaceLive do
         id="workspace-issues-no-repositories"
         title="No repositories yet"
       >
-        Issues appear here once you can read a repository.
-        <.link navigate={~p"/repositories/new"} data-variant="link" class="btn px-0">
-          Create one
-        </.link>
-        or
-        <.link navigate={~p"/repositories/import/github"} data-variant="link" class="btn px-0">
-          import one from GitHub
-        </.link>
-        , and its issues arrive with it.
+        <%= if @current_user do %>
+          Issues appear here once you can read a repository.
+          <.link navigate={~p"/repositories/new"} data-variant="link" class="btn px-0">
+            Create one
+          </.link>
+          or
+          <.link navigate={~p"/repositories/import/github"} data-variant="link" class="btn px-0">
+            import one from GitHub
+          </.link>
+          , and its issues arrive with it.
+        <% else %>
+          Sign in with GitHub to see issues from repositories you can read.
+          <.github_login id="workspace-issues-signin" size={:sm} />
+        <% end %>
       </.empty>
 
       <.empty

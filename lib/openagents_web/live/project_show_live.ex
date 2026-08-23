@@ -36,7 +36,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
     user = socket.assigns.current_user
-    repository = Repositories.get_visible_by_path!(owner, repo, user)
+    repository = visible_repository!(owner, repo, user)
     project = Projects.get_project_by_number!(repository, String.to_integer(number))
     can_write = Repositories.writable?(repository, user)
 
@@ -66,24 +66,30 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   end
 
   def handle_event("add_item", %{"item" => item_params}, socket) do
-    project = socket.assigns.project
-    number = String.to_integer(item_params["issue_number"])
-    status = item_params["status"] || "To Do"
+    socket = refresh_authority(socket)
 
-    case Projects.create_project_item(
-           %{"issue_number" => number, "values" => %{"Status" => status}},
-           project,
-           socket.assigns.current_user
-         ) do
-      {:ok, _item} ->
-        {:noreply,
-         socket
-         |> assign(:items, project_items(project, socket.assigns.current_user))
-         |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
-         |> put_flash(:info, "Issue added to project")}
+    if socket.assigns.can_write do
+      project = socket.assigns.project
+      number = String.to_integer(item_params["issue_number"])
+      status = item_params["status"] || "To Do"
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+      case Projects.create_project_item(
+             %{"issue_number" => number, "values" => %{"Status" => status}},
+             project,
+             socket.assigns.current_user
+           ) do
+        {:ok, _item} ->
+          {:noreply,
+           socket
+           |> assign(:items, project_items(project, socket.assigns.current_user))
+           |> assign(:form, to_form(ProjectItem.changeset(%ProjectItem{}, %{}), as: "item"))
+           |> put_flash(:info, "Issue added to project")}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can add project items.")}
     end
   end
 
@@ -218,6 +224,21 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
   defp note_form, do: to_form(Projects.change_project_note(), as: "note")
 
+  defp refresh_authority(socket) do
+    assign(
+      socket,
+      :can_write,
+      Repositories.writable?(socket.assigns.repository, socket.assigns.current_user)
+    )
+  end
+
+  defp visible_repository!(owner, repo, user) do
+    Repositories.get_visible_by_path!(owner, repo, user)
+  rescue
+    Ecto.NoResultsError ->
+      raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
+  end
+
   defp project_items(project, user) do
     Projects.list_visible_project_items(project, user)
     |> Enum.map(fn item ->
@@ -249,7 +270,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       current_scope={@current_scope}
     >
       <div class="flex items-center justify-between mb-4">
-        <h1 class="text-2xl font-bold">{@project.title}</h1>
+        <h1 id="project-board-title" class="text-2xl font-bold">{@project.title}</h1>
         <.link
           navigate={~p"/#{@owner}/#{@repo}/projects"}
           class="btn"

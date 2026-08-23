@@ -19,6 +19,36 @@ defmodule OpenAgentsWeb.MilestoneIndexLiveTest do
     assert has_element?(view, ~s{[role="status"]}, "No milestones yet")
   end
 
+  test "a signed-out visitor can read milestones without write affordances" do
+    {:ok, view, _html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/milestones")
+
+    assert has_element?(view, "#milestones-title")
+    refute has_element?(view, "#new-milestone-form")
+    refute has_element?(view, "button[phx-click=\"close\"]")
+    refute has_element?(view, "button[phx-click=\"delete\"]")
+  end
+
+  test "a signed-out visitor cannot submit a milestone write event" do
+    {:ok, view, _html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/milestones")
+
+    html =
+      render_submit(view, "save", %{
+        "milestone" => %{"title" => "Forged", "due_on" => "", "description" => ""}
+      })
+
+    assert html =~ "Only repository members can create milestones."
+    refute has_element?(view, "#milestones td", "Forged")
+  end
+
+  test "a private repository is not visible to a signed-out visitor" do
+    private =
+      repository_fixture(%{owner: "HiddenMilestones", name: "milestones", visibility: "private"})
+
+    assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+      live(build_conn(), ~p"/#{private.owner}/#{private.name}/milestones")
+    end
+  end
+
   test "lists seeded milestones with their state and due date", %{conn: conn} do
     milestone_fixture(repository(), %{
       title: "v1.0",

@@ -21,6 +21,33 @@ defmodule OpenAgentsWeb.ProjectIndexLiveTest do
     assert has_element?(view, ~s{[role="status"]}, "No projects yet")
   end
 
+  test "a signed-out visitor can read projects without write affordances" do
+    {:ok, view, _html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/projects")
+
+    assert has_element?(view, "#projects-empty")
+    refute has_element?(view, "#new-project-form")
+    refute has_element?(view, "button[phx-click=\"delete\"]")
+    refute has_element?(view, "button[phx-click=\"set_state\"]")
+  end
+
+  test "a signed-out visitor cannot submit a project write event" do
+    {:ok, view, _html} = live(build_conn(), ~p"/OpenAgentsInc/openagents.com/projects")
+
+    html = render_submit(view, "save", %{"project" => %{"title" => "Forged"}})
+
+    assert html =~ "Only repository members can create projects."
+    refute has_element?(view, "#projects", "Forged")
+  end
+
+  test "a private repository is not visible to a signed-out visitor" do
+    private =
+      repository_fixture(%{owner: "HiddenProjects", name: "projects", visibility: "private"})
+
+    assert_raise OpenAgentsWeb.PublicNotFoundError, fn ->
+      live(build_conn(), ~p"/#{private.owner}/#{private.name}/projects")
+    end
+  end
+
   test "lists projects owned by the URL owner and links to each board", %{conn: conn} do
     project =
       project_fixture(repository(), %{title: "Roadmap", owner: "OpenAgentsInc", state: "open"})

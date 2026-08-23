@@ -10,7 +10,8 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
   alias OpenAgents.Repositories
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
-    repository = Repositories.get_writable_by_path!(owner, repo, socket.assigns.current_user)
+    repository = visible_repository!(owner, repo, socket.assigns.current_user)
+    can_write = Repositories.writable?(repository, socket.assigns.current_user)
 
     {:ok,
      socket
@@ -18,28 +19,35 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
+     |> assign(:can_write, can_write)
      |> assign(:projects, Projects.list_projects(repository))
      |> assign(:form, to_form(Projects.change_project(repository, %Project{}, %{})))}
   end
 
   def handle_event("save", %{"project" => project_params}, socket) do
-    case Projects.create_project(
-           socket.assigns.repository,
-           project_params,
-           socket.assigns.current_user
-         ) do
-      {:ok, _project} ->
-        {:noreply,
-         socket
-         |> assign(:projects, Projects.list_projects(socket.assigns.repository))
-         |> assign(
-           :form,
-           to_form(Projects.change_project(socket.assigns.repository, %Project{}, %{}))
-         )
-         |> put_flash(:info, "Project created")}
+    socket = refresh_authority(socket)
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+    if socket.assigns.can_write do
+      case Projects.create_project(
+             socket.assigns.repository,
+             project_params,
+             socket.assigns.current_user
+           ) do
+        {:ok, _project} ->
+          {:noreply,
+           socket
+           |> assign(:projects, Projects.list_projects(socket.assigns.repository))
+           |> assign(
+             :form,
+             to_form(Projects.change_project(socket.assigns.repository, %Project{}, %{}))
+           )
+           |> put_flash(:info, "Project created")}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can create projects.")}
     end
   end
 
@@ -47,20 +55,47 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
   # invented concept -- and it is the only property of a project this schema
   # carries that is worth changing without opening the board.
   def handle_event("set_state", %{"id" => id, "state" => state}, socket) do
-    project = Projects.get_project!(socket.assigns.repository, id)
-    {:ok, _updated} = Projects.update_project(project, %{"state" => state})
+    socket = refresh_authority(socket)
 
-    {:noreply, assign(socket, :projects, Projects.list_projects(socket.assigns.repository))}
+    if socket.assigns.can_write do
+      project = Projects.get_project!(socket.assigns.repository, id)
+      {:ok, _updated} = Projects.update_project(project, %{"state" => state})
+
+      {:noreply, assign(socket, :projects, Projects.list_projects(socket.assigns.repository))}
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can change project state.")}
+    end
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    project = Projects.get_project!(socket.assigns.repository, String.to_integer(id))
-    {:ok, _} = Projects.delete_project(project)
+    socket = refresh_authority(socket)
 
-    {:noreply,
-     socket
-     |> assign(:projects, Projects.list_projects(socket.assigns.repository))
-     |> put_flash(:info, "Project deleted")}
+    if socket.assigns.can_write do
+      project = Projects.get_project!(socket.assigns.repository, String.to_integer(id))
+      {:ok, _} = Projects.delete_project(project)
+
+      {:noreply,
+       socket
+       |> assign(:projects, Projects.list_projects(socket.assigns.repository))
+       |> put_flash(:info, "Project deleted")}
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can delete projects.")}
+    end
+  end
+
+  defp refresh_authority(socket) do
+    assign(
+      socket,
+      :can_write,
+      Repositories.writable?(socket.assigns.repository, socket.assigns.current_user)
+    )
+  end
+
+  defp visible_repository!(owner, repo, user) do
+    Repositories.get_visible_by_path!(owner, repo, user)
+  rescue
+    Ecto.NoResultsError ->
+      raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
   end
 
   def render(assigns) do
@@ -73,6 +108,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
       wide
     >
       <.form
+        :if={@can_write}
         for={@form}
         id="new-project-form"
         phx-submit="save"
@@ -84,12 +120,12 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
         </footer>
       </.form>
 
-      <div :if={@projects == []} class="alert" data-variant="info" role="status">
+      <div :if={@projects == []} id="projects-empty" class="alert" data-variant="info" role="status">
         <.icon name="info-circle" class="size-5" />
         <section>No projects yet.</section>
       </div>
 
-      <div :if={@projects != []} class="project-index">
+      <div :if={@projects != []} id="projects" class="project-index">
         <div :for={project <- @projects} class="project-index__row">
           <Circle.project_row
             name={project.title}
@@ -97,7 +133,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
             status_category={if project.state == "closed", do: :completed, else: :unstarted}
             status_label={String.capitalize(project.state)}
           >
-            <:state>
+            <:state :if={@can_write}>
               <Circle.field_menu
                 id={"project-state-#{project.id}"}
                 label={"Change the state of #{project.title}"}
@@ -121,6 +157,7 @@ defmodule OpenAgentsWeb.ProjectIndexLive do
           row grew: the row is a link to a board, and a destructive action
           inside a link target is how people delete things by accident. --%>
           <button
+            :if={@can_write}
             class="btn project-index__delete"
             data-variant="ghost"
             data-size="sm"

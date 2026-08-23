@@ -118,12 +118,6 @@ defmodule OpenAgentsWeb.Router do
       live "/repositories/new", RepositoryNewLive, :new
       live "/repositories/import/github", RepositoryImportLive, :new
 
-      # The sidebar's global surfaces. They are workspace-wide by construction:
-      # each reads through the repository visibility predicate rather than
-      # through a repository the URL names, so what they show never depends on
-      # which page you arrived from.
-      live "/issues", IssueWorkspaceLive, :index
-      live "/projects", ProjectWorkspaceLive, :index
       live "/forum", ForumHomeLive, :index
       live "/forum/f/:slug", ForumBoardLive, :show
       live "/forum/t/:id", ForumTopicLive, :show
@@ -132,12 +126,7 @@ defmodule OpenAgentsWeb.Router do
       live "/:owner/:repo/issues/new", IssueNewLive, :new
 
       live "/:owner/:repo/members", MemberIndexLive, :index
-      live "/:owner/:repo/labels", LabelIndexLive, :index
-      live "/:owner/:repo/milestones", MilestoneIndexLive, :index
       live "/:owner/:repo/assignees", AssigneeIndexLive, :index
-
-      live "/:owner/:repo/projects/:number", ProjectShowLive, :show
-      live "/:owner/:repo/projects", ProjectIndexLive, :index
     end
 
     post "/voice/calls", VoiceCallController, :create
@@ -178,17 +167,23 @@ defmodule OpenAgentsWeb.Router do
     end
   end
 
-  # Reading issues is a public activity on a public repository, the way code
+  # These GitHub-style reads are public on a public repository, the way code
   # browsing already is, so this session runs behind plain :browser and mounts
   # whoever is signed in. Each view decides what an anonymous visitor may do,
   # and every write re-checks authority at the server. The scope comes after
-  # the authenticated one so the literal `new` segment keeps winning over
-  # `:number`.
+  # the authenticated one so literal segments such as `new` keep winning over
+  # repository-shaped routes.
   scope "/", OpenAgentsWeb do
     pipe_through :browser
 
     live_session :forge_issues,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/issues", IssueWorkspaceLive, :index
+      live "/projects", ProjectWorkspaceLive, :index
+      live "/:owner/:repo/labels", LabelIndexLive, :index
+      live "/:owner/:repo/milestones", MilestoneIndexLive, :index
+      live "/:owner/:repo/projects/:number", ProjectShowLive, :show
+      live "/:owner/:repo/projects", ProjectIndexLive, :index
       live "/:owner/:repo/pulls/:number", PullRequestShowLive, :show
       live "/:owner/:repo/pulls", PullRequestIndexLive, :index
       live "/:owner/:repo/issues/:number", IssueShowLive, :show

@@ -222,7 +222,6 @@ defmodule OpenAgentsWeb.IssueIndexLive do
 
         <:actions>
           <.link
-            :if={@can_write}
             navigate={~p"/#{@owner}/#{@repo}/labels"}
             class="btn"
             data-variant="ghost"
@@ -231,7 +230,6 @@ defmodule OpenAgentsWeb.IssueIndexLive do
             <.icon name="tag" /> Labels
           </.link>
           <.link
-            :if={@can_write}
             navigate={~p"/#{@owner}/#{@repo}/milestones"}
             class="btn"
             data-variant="ghost"

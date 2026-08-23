@@ -37,11 +37,12 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
 
   def mount(_params, _session, socket) do
     if connected?(socket), do: Repositories.subscribe_all_projects()
+    user = socket.assigns.current_user
 
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
-     |> assign(:involvements, @involvements)
+     |> assign(:involvements, involvement_options(user))
      |> assign(:refresh_timer_ref, nil)
      |> assign(
        :any_repository?,
@@ -97,7 +98,9 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
   end
 
   def handle_params(params, _url, socket) do
-    filters = %{"involvement" => normalize_involvement(params["involvement"])}
+    filters = %{
+      "involvement" => normalize_involvement(params["involvement"], socket.assigns.current_user)
+    }
 
     {:noreply,
      socket
@@ -109,7 +112,9 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
   end
 
   def handle_event("filter", params, socket) do
-    filters = %{"involvement" => normalize_involvement(params["involvement"])}
+    filters = %{
+      "involvement" => normalize_involvement(params["involvement"], socket.assigns.current_user)
+    }
 
     {:noreply, push_patch(socket, to: projects_path(filters, %{"state" => socket.assigns.state}))}
   end
@@ -118,8 +123,9 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
     {:noreply, put_flash(socket, :error, "That action is not available here.")}
   end
 
-  defp normalize_involvement("created"), do: "created"
-  defp normalize_involvement(_involvement), do: "all"
+  defp normalize_involvement(_involvement, nil), do: "all"
+  defp normalize_involvement("created", _user), do: "created"
+  defp normalize_involvement(_involvement, _user), do: "all"
 
   defp normalize_state("closed"), do: "closed"
   defp normalize_state("all"), do: "all"
@@ -152,8 +158,12 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
     |> assign(:projects, projects)
   end
 
+  defp involvement_opts(nil, _involvement), do: []
   defp involvement_opts(user, "created"), do: [owner: user]
   defp involvement_opts(_user, _all), do: []
+
+  defp involvement_options(nil), do: [{"Everyone", "all"}]
+  defp involvement_options(_user), do: @involvements
 
   def render(assigns) do
     ~H"""
@@ -205,15 +215,20 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLive do
         id="workspace-projects-no-repositories"
         title="No repositories yet"
       >
-        Projects belong to a repository.
-        <.link navigate={~p"/repositories/new"} data-variant="link" class="btn px-0">
-          Create one
-        </.link>
-        or
-        <.link navigate={~p"/repositories/import/github"} data-variant="link" class="btn px-0">
-          import one from GitHub
-        </.link>
-        to start a board.
+        <%= if @current_user do %>
+          Projects belong to a repository.
+          <.link navigate={~p"/repositories/new"} data-variant="link" class="btn px-0">
+            Create one
+          </.link>
+          or
+          <.link navigate={~p"/repositories/import/github"} data-variant="link" class="btn px-0">
+            import one from GitHub
+          </.link>
+          to start a board.
+        <% else %>
+          Sign in with GitHub to see projects from repositories you can read.
+          <.github_login id="workspace-projects-signin" size={:sm} />
+        <% end %>
       </.empty>
 
       <.empty

@@ -80,7 +80,8 @@ defmodule OpenAgents.Issues do
   Rows come back with their repository preloaded, because a cross-repository
   list has to say which repository each row belongs to.
   """
-  def list_visible_issues_page(%User{} = user, opts \\ []) when is_list(opts) do
+  def list_visible_issues_page(user, opts \\ [])
+      when (is_nil(user) or is_struct(user, User)) and is_list(opts) do
     page = max(parse_page(opts[:page]), 1)
     query = visible_issue_query(user, opts)
 
@@ -98,8 +99,9 @@ defmodule OpenAgents.Issues do
   end
 
   @doc "How many issues `user` can read across every repository, filtered."
-  def count_visible_issues(%User{} = user, opts \\ []) when is_list(opts),
-    do: user |> visible_issue_query(opts) |> Repo.aggregate(:count)
+  def count_visible_issues(user, opts \\ [])
+      when (is_nil(user) or is_struct(user, User)) and is_list(opts),
+      do: user |> visible_issue_query(opts) |> Repo.aggregate(:count)
 
   # The readable-repository set arrives as a subquery rather than as extra
   # joins on this query, so the membership left join keeps its own bindings and

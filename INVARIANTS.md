@@ -269,6 +269,21 @@ Evidence: `OpenAgentsWeb.Plugs.BoxControlAuth`, `OpenAgents.Box`,
 `OpenAgentsWeb.BoxController`, and
 `test/openagents_web/controllers/box_controller_test.exs`.
 
+### WORK-002 — Detached Box runs reconcile from durable evidence
+
+Status: Current
+
+Long-running Box work is admitted before dispatch and executes from a
+run-specific directory containing its script, combined log, process ID, and
+exit sentinel. The application polls that directory, stores bounded redacted
+output, and treats a missing process without an exit sentinel as `lost`.
+Dispatch ambiguity receives one probe and never an automatic second dispatch.
+Cancellation and timeout record requested and effective timestamps separately.
+
+Evidence: `OpenAgents.BoxRuns`, `OpenAgents.BoxRunServer`,
+`OpenAgents.Box.Client`, and
+`test/openagents/box_runs_test.exs`.
+
 ## Data authority and synchronization
 
 ### DATA-001 — PostgreSQL is authoritative
@@ -2300,6 +2315,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
+| WORK-002 | `test/openagents/box_runs_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |

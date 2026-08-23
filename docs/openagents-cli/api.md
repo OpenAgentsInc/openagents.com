@@ -162,6 +162,25 @@ credentials are refused with
 `{"error":{"code":"agent_box_control_forbidden"}}` until linked-agent Box
 control is implemented.
 
+Long-running work uses durable runs instead of the synchronous command route:
+
+```sh
+openagents api -X POST \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/runs \
+  -H 'Idempotency-Key: RUN_KEY' \
+  -d '{"command":"opencode run --non-interactive ..."}'
+openagents api conversations/CONVERSATION_ID/boxes/BOX_ID/runs
+openagents api \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/runs/RUN_ID/output?offset=0
+openagents api -X POST \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/runs/RUN_ID/cancel
+```
+
+The run directory, process ID, combined log, and exit sentinel let the server
+reconcile work after the creating request ends. A missing process without an
+exit sentinel becomes `lost`; the server never reports that state as
+`completed`.
+
 ## Work with issues
 
 List open issues. The API returns an object with an `issues` array:

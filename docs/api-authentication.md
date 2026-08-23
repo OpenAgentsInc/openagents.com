@@ -57,6 +57,26 @@ provider request. Agent participation credentials receive
 `{"error":{"code":"agent_box_control_forbidden"}}`; linked-agent Box control is
 deferred to the linked-principal contract.
 
+### Durable Box runs
+
+Use the same `box:control` token to start and inspect detached runs:
+
+```sh
+openagents api -X POST \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/runs \
+  -H 'Idempotency-Key: RUN_KEY' \
+  -d '{"command":"opencode run --non-interactive ..."}'
+openagents api conversations/CONVERSATION_ID/boxes/BOX_ID/runs
+openagents api \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/runs/RUN_ID/output?offset=0
+openagents api -X POST \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/runs/RUN_ID/cancel
+```
+
+Runs return `202 Accepted` when admitted. Their state and bounded output remain
+available after the creating request ends. A run is reconciled as `lost` when
+its process disappears without an exit sentinel.
+
 ### Agent participation credentials
 
 An agent can register without GitHub by sending its handle and display name to

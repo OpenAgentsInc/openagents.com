@@ -54,7 +54,10 @@ defmodule OpenAgents.Application do
         {DNSCluster, query: Application.get_env(:openagents, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: OpenAgents.PubSub},
         OpenAgents.RuntimeSupervisor,
-        OpenAgentsWeb.BoxRateLimiter
+        OpenAgentsWeb.BoxRateLimiter,
+        {Registry, keys: :unique, name: OpenAgents.BoxRunRegistry},
+        OpenAgents.BoxRunSupervisor,
+        OpenAgents.BoxRunRecovery
       ] ++ analytics_children() ++ [OpenAgentsWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

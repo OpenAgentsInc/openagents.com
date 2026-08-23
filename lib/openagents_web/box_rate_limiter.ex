@@ -16,7 +16,8 @@ defmodule OpenAgentsWeb.BoxRateLimiter do
   end
 
   @spec allow?(term(), :create | :command) :: :ok | {:error, :rate_limited}
-  def allow?(principal, operation) when operation in [:create, :command] do
+  def allow?(principal, operation)
+      when operation in [:create, :command, :run_create, :run_command] do
     GenServer.call(__MODULE__, {:allow, principal, operation})
   end
 
@@ -76,9 +77,13 @@ defmodule OpenAgentsWeb.BoxRateLimiter do
 
   defp rate_limit_key(:create), do: :create_rate_limit
   defp rate_limit_key(:command), do: :command_rate_limit
+  defp rate_limit_key(:run_create), do: :run_create_rate_limit
+  defp rate_limit_key(:run_command), do: :run_command_rate_limit
 
   defp default_limit(:create), do: @default_create_limit
   defp default_limit(:command), do: @default_command_limit
+  defp default_limit(:run_create), do: @default_create_limit
+  defp default_limit(:run_command), do: @default_command_limit
 
   defp setting(key, default) do
     case Keyword.get(Application.get_env(:openagents, :box_api, []), key, default) do

@@ -421,6 +421,11 @@ defmodule OpenAgentsWeb.Router do
     get "/:box_id", BoxController, :show
     post "/:box_id/commands", BoxController, :command
     post "/:box_id/stop", BoxController, :stop
+    post "/:box_id/runs", BoxRunController, :create
+    get "/:box_id/runs", BoxRunController, :index
+    get "/:box_id/runs/:run_id", BoxRunController, :show
+    get "/:box_id/runs/:run_id/output", BoxRunController, :output
+    post "/:box_id/runs/:run_id/cancel", BoxRunController, :cancel
   end
 
   scope "/api/v3", OpenAgentsWeb do

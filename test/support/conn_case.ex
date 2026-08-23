@@ -112,10 +112,19 @@ defmodule OpenAgentsWeb.ConnCase do
   end
 
   defp put_forge_api_token_for_user(conn, user) do
+    put_api_token_for_user(conn, user, ["forge:write"])
+  end
+
+  def put_chat_api_token(conn, key) when is_binary(key) do
+    user = github_user("api-token-" <> key)
+    put_api_token_for_user(conn, user, ["chat:account"])
+  end
+
+  defp put_api_token_for_user(conn, user, scopes) do
     {:ok, _credential, plaintext} =
       OpenAgents.ApiTokens.create(user, %{
-        name: "test forge client",
-        scopes: ["forge:write"],
+        name: "test API client",
+        scopes: scopes,
         lifetime_days: 1
       })
 

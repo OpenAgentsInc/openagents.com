@@ -9,7 +9,7 @@ defmodule OpenAgents.ApiTokens do
   alias OpenAgents.Repo
 
   @prefix "oa_pat_"
-  @allowed_scopes ["forge:write"]
+  @allowed_scopes ["chat:account", "forge:write"]
   @maximum_lifetime_days 90
 
   @spec create(User.t(), map()) ::

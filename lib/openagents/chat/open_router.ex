@@ -9,8 +9,7 @@ defmodule OpenAgents.Chat.OpenRouter do
   response bodies.
   """
 
-  alias OpenAgents.Chat.OpenRouter.ResponsesStreamDecoder
-  alias OpenAgents.Chat.Tools.RepositoryFile
+  alias OpenAgents.Chat.OpenRouter.{ResponsesStreamDecoder, ToolRuntime}
 
   @chat_completions_endpoint "https://openrouter.ai/api/v1/chat/completions"
   @responses_endpoint "https://openrouter.ai/api/v1/responses"
@@ -84,13 +83,21 @@ defmodule OpenAgents.Chat.OpenRouter do
   end
 
   defp stream_with_responses_fallback(api_key, request, on_event, options) do
-    with {:ok, payload} <- responses_payload(request, options) do
+    with {:ok, tool_runtime} <- ToolRuntime.capture(options),
+         {:ok, payload} <- responses_payload(request, tool_runtime) do
       case responses_stream_request(api_key, payload, options) do
         {:ok, response} -> consume_responses_stream(response, on_event, payload["model"])
         {:fallback, _reason} -> stream_with_chat_completions(api_key, request, on_event, options)
         {:error, reason} -> {:error, reason}
       end
-      |> continue_responses_tool_calls(api_key, payload, on_event, options, @maximum_tool_rounds)
+      |> continue_responses_tool_calls(
+        api_key,
+        payload,
+        on_event,
+        options,
+        tool_runtime,
+        @maximum_tool_rounds
+      )
     else
       {:error, :responses_history_unavailable} ->
         stream_with_chat_completions(api_key, request, on_event, options)
@@ -134,7 +141,7 @@ defmodule OpenAgents.Chat.OpenRouter do
     end
   end
 
-  defp responses_payload(%{"model" => model, "messages" => messages} = request, options)
+  defp responses_payload(%{"model" => model, "messages" => messages} = request, tool_runtime)
        when is_binary(model) and is_list(messages) do
     with {:ok, input} <- responses_input(messages) do
       payload = %{"model" => model, "input" => input}
@@ -154,7 +161,7 @@ defmodule OpenAgents.Chat.OpenRouter do
       {:ok,
        Map.merge(payload, %{
          "instructions" => @tool_instructions,
-         "tools" => tool_module(options).definitions(),
+         "tools" => ToolRuntime.provider_definitions(tool_runtime, latest_user_intent(messages)),
          "tool_choice" => "auto",
          "reasoning" => reasoning,
          "include" => ["reasoning.encrypted_content"],
@@ -163,7 +170,16 @@ defmodule OpenAgents.Chat.OpenRouter do
     end
   end
 
-  defp responses_payload(_request, _options), do: {:error, :invalid_response}
+  defp responses_payload(_request, _tool_runtime), do: {:error, :invalid_response}
+
+  defp latest_user_intent(messages) do
+    messages
+    |> Enum.reverse()
+    |> Enum.find_value("", fn
+      %{"role" => "user", "content" => content} when is_binary(content) -> content
+      _message -> nil
+    end)
+  end
 
   defp reasoning_request("none"), do: %{"effort" => "none", "exclude" => false}
 
@@ -189,6 +205,10 @@ defmodule OpenAgents.Chat.OpenRouter do
        }
      ]}
   end
+
+  defp response_input_items(%{"role" => "assistant", "provider_output" => output})
+       when is_list(output),
+       do: {:ok, output}
 
   defp response_input_items(
          %{
@@ -244,10 +264,11 @@ defmodule OpenAgents.Chat.OpenRouter do
          payload,
          on_event,
          options,
+         tool_runtime,
          rounds_remaining
        )
        when is_list(tool_calls) and is_list(provider_output) and rounds_remaining > 0 do
-    with {:ok, tool_outputs} <- execute_tool_calls(tool_calls, on_event, options),
+    with {:ok, tool_outputs} <- execute_tool_calls(tool_calls, on_event, tool_runtime),
          payload <- Map.update!(payload, "input", &(&1 ++ provider_output ++ tool_outputs)),
          {:ok, response} <- responses_stream_request(api_key, payload, options),
          result <- consume_responses_stream(response, on_event, payload["model"]) do
@@ -257,6 +278,7 @@ defmodule OpenAgents.Chat.OpenRouter do
         payload,
         on_event,
         options,
+        tool_runtime,
         rounds_remaining - 1
       )
     end
@@ -268,6 +290,7 @@ defmodule OpenAgents.Chat.OpenRouter do
          _payload,
          _on_event,
          _options,
+         _tool_runtime,
          0
        ),
        do: {:error, :invalid_response}
@@ -278,54 +301,60 @@ defmodule OpenAgents.Chat.OpenRouter do
          _payload,
          _on_event,
          _options,
+         _tool_runtime,
          _rounds_remaining
        ),
        do: result
 
-  defp execute_tool_calls(tool_calls, on_event, options) do
-    tool_module = tool_module(options)
-    tool_context = Keyword.get(options, :tool_context, %{})
-
-    tool_outputs =
-      Enum.map(tool_calls, fn %{"call_id" => call_id, "name" => name, "arguments" => arguments} ->
+  defp execute_tool_calls(tool_calls, on_event, tool_runtime) do
+    result =
+      Enum.reduce_while(tool_calls, [], fn %{
+                                             "call_id" => call_id,
+                                             "name" => name,
+                                             "arguments" => arguments
+                                           },
+                                           outputs ->
         on_event.(
           {:tool_call_started, %{"call_id" => call_id, "name" => name, "arguments" => arguments}}
         )
 
-        case execute_tool(tool_module, name, arguments, tool_context) do
-          {:ok, output} ->
-            encoded_output = Jason.encode!(output)
+        case ToolRuntime.run(tool_runtime, call_id, name, arguments) do
+          {:ok, %{"status" => "succeeded"} = outcome} ->
+            encoded_output = Jason.encode!(outcome)
             on_event.({:tool_call_completed, %{"call_id" => call_id, "output" => encoded_output}})
 
-            %{
+            output = %{
               "type" => "function_call_output",
               "call_id" => call_id,
               "output" => encoded_output
             }
 
-          {:error, error} ->
+            {:cont, [output | outputs]}
+
+          {:ok, outcome} ->
+            error = get_in(outcome, ["error", "message"]) || "The tool call failed."
             on_event.({:tool_call_failed, %{"call_id" => call_id, "error" => error}})
 
-            %{
+            output = %{
               "type" => "function_call_output",
               "call_id" => call_id,
-              "output" => Jason.encode!(%{"error" => error})
+              "output" => Jason.encode!(outcome)
             }
+
+            {:cont, [output | outputs]}
+
+          {:error, _error} ->
+            {:halt, {:error, :invalid_response}}
         end
       end)
 
-    {:ok, tool_outputs}
+    case result do
+      {:error, reason} -> {:error, reason}
+      outputs -> {:ok, Enum.reverse(outputs)}
+    end
   rescue
     _exception -> {:error, :invalid_response}
   end
-
-  defp execute_tool(tool_module, name, arguments, context) do
-    tool_module.execute(name, arguments, context)
-  rescue
-    exception -> {:error, Exception.message(exception)}
-  end
-
-  defp tool_module(options), do: Keyword.get(options, :tool_module, RepositoryFile)
 
   defp chat_stream_request(api_key, request, options) do
     request_options = Keyword.get(options, :request_options, [])

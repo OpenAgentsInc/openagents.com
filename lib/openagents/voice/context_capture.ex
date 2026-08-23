@@ -8,7 +8,7 @@ defmodule OpenAgents.Voice.ContextCapture do
   alias OpenAgents.Conversations.{Conversation, Message, Turn}
   alias OpenAgents.Conversations.ToolStep, as: TurnToolStep
   alias OpenAgents.Memory.LexicalRecall
-  alias OpenAgents.Tools.{Registry, Snapshot}
+  alias OpenAgents.Tools.{AdmittedCatalog, ConversationExecutionContext, Registry, Snapshot}
   alias OpenAgents.Voice.{ResponseContext, Session, TranscriptItem}
   alias OpenAgents.Voice.ToolStep, as: VoiceToolStep
 
@@ -25,6 +25,15 @@ defmodule OpenAgents.Voice.ContextCapture do
     evidence = conversation_evidence(conversation, nil) ++ tool_activity_evidence(conversation)
     owner = Conversations.get_conversation_owner!(conversation)
 
+    execution_context =
+      ConversationExecutionContext.build(%{
+        surface: "voice",
+        conversation_id: conversation.id,
+        owner_visitor_id: owner.id,
+        owner_user_id: owner.user_id,
+        module_registry_snapshot: tool_snapshot
+      })
+
     with {:ok, blueprint} <- Blueprint.current_projection(),
          {:ok, context} <-
            Composer.compose(
@@ -38,8 +47,12 @@ defmodule OpenAgents.Voice.ContextCapture do
          context: context,
          blueprint: blueprint,
          program_snapshot: program_snapshot,
+         tool_execution_context: execution_context,
          tool_catalog:
-           Registry.realtime_catalog(tool_snapshot, voice_intent(conversation),
+           AdmittedCatalog.realtime_catalog(
+             tool_snapshot,
+             execution_context,
+             voice_intent(conversation),
              machine_paired?: Machines.active_machine?(owner.user_id)
            )
        }}

@@ -8,14 +8,18 @@ data: {"type":"response.reasoning_summary_text.delta","response_id":"resp_demo",
 
 data: {"type":"response.output_item.done","response_id":"resp_demo","output_index":0,"item":{"type":"reasoning","id":"rs_demo","status":"completed","summary":[{"type":"summary_text","text":"The user asked to read a repository file."}],"encrypted_content":"encrypted-demo-reasoning"}}
 
-data: {"type":"response.output_item.added","response_id":"resp_demo","output_index":1,"item":{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"","status":"in_progress"}}
+data: {"type":"response.output_item.added","response_id":"resp_demo","output_index":1,"item":{"type":"message","id":"msg_tool_preamble","role":"assistant","status":"in_progress","content":[]}}
 
-data: {"type":"response.function_call_arguments.delta","response_id":"resp_demo","item_id":"fc_demo","output_index":1,"delta":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}"}
+data: {"type":"response.output_item.done","response_id":"resp_demo","output_index":1,"item":{"type":"message","id":"msg_tool_preamble","role":"assistant","status":"completed","content":[{"type":"output_text","text":"I will inspect the connected repository.","annotations":[]}]}}
 
-data: {"type":"response.function_call_arguments.done","response_id":"resp_demo","item_id":"fc_demo","output_index":1,"arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}"}
+data: {"type":"response.output_item.added","response_id":"resp_demo","output_index":2,"item":{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"","status":"in_progress"}}
 
-data: {"type":"response.output_item.done","response_id":"resp_demo","output_index":1,"item":{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}","status":"completed"}}
+data: {"type":"response.function_call_arguments.delta","response_id":"resp_demo","item_id":"fc_demo","output_index":2,"delta":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":\"\"}"}
 
-data: {"type":"response.completed","response":{"id":"resp_demo","object":"response","status":"completed","model":"stealth/ox-alpha","output":[{"type":"reasoning","id":"rs_demo","status":"completed","summary":[{"type":"summary_text","text":"The user asked to read a repository file."}],"encrypted_content":"encrypted-demo-reasoning"},{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":null}","status":"completed"}],"usage":{"input_tokens":18,"output_tokens":11,"total_tokens":29}}}
+data: {"type":"response.function_call_arguments.done","response_id":"resp_demo","item_id":"fc_demo","output_index":2,"arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":\"\"}"}
+
+data: {"type":"response.output_item.done","response_id":"resp_demo","output_index":2,"item":{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":\"\"}","status":"completed"}}
+
+data: {"type":"response.completed","response":{"id":"resp_demo","object":"response","status":"completed","model":"stealth/ox-alpha","output":[{"type":"reasoning","id":"rs_demo","status":"completed","summary":[{"type":"summary_text","text":"The user asked to read a repository file."}],"encrypted_content":"encrypted-demo-reasoning"},{"type":"message","id":"msg_tool_preamble","role":"assistant","status":"completed","content":[{"type":"output_text","text":"I will inspect the connected repository.","annotations":[]}]},{"type":"function_call","id":"fc_demo","call_id":"call_demo","name":"read_repository_file","arguments":"{\"repository\":\"OpenAgentsInc/openagents.com\",\"path\":\"README.md\",\"ref\":\"\"}","status":"completed"}],"usage":{"input_tokens":18,"output_tokens":11,"total_tokens":29}}}
 
 data: [DONE]

@@ -88,6 +88,30 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:optional_forge_api]
   end
 
+  test "account chat uses its own scoped bearer pipeline" do
+    events = route!(:get, "/api/v3/chat/events")
+    turns = route!(:post, "/api/v3/chat/turns")
+
+    assert events.scope == "chat:account"
+    refute events.mutation
+    assert turns.scope == "chat:account"
+    assert turns.mutation
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "GET",
+             "/api/v3/chat/events",
+             "stage.openagents.com"
+           ).pipe_through == [:chat_account_api]
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "POST",
+             "/api/v3/chat/turns",
+             "stage.openagents.com"
+           ).pipe_through == [:chat_account_api]
+  end
+
   test "operator and machine surfaces cannot drift into browser or public classes" do
     assert route!(:get, "/admin").class == :operator
     assert route!(:get, "/admin/forge").scope == "forge:promote"

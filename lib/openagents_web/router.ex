@@ -42,6 +42,12 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
   end
 
+  pipeline :chat_account_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "chat:account"
+  end
+
   pipeline :optional_forge_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -267,6 +273,13 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :show
     get "/repos/:owner/:repo/assignees", AssigneeController, :index
     get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :chat_account_api
+
+    get "/chat/events", ChatTurnController, :index
+    post "/chat/turns", ChatTurnController, :create
   end
 
   scope "/api/v3", OpenAgentsWeb do

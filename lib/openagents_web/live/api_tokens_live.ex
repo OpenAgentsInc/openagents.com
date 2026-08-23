@@ -21,7 +21,7 @@ defmodule OpenAgentsWeb.ApiTokensLive do
   def handle_event("create", %{"api_token" => params}, socket) do
     case ApiTokens.create(socket.assigns.current_user, %{
            "name" => params["name"],
-           "scopes" => ["forge:write"],
+           "scopes" => ["chat:account", "forge:write"],
            "lifetime_days" => params["lifetime_days"]
          }) do
       {:ok, token, plaintext} ->
@@ -55,7 +55,9 @@ defmodule OpenAgentsWeb.ApiTokensLive do
         <header class="space-y-2">
           <h1 class="text-3xl font-semibold tracking-tight">API tokens</h1>
           <p class="text-muted-foreground">
-            Create an expiring credential for CLI forge writes. Tokens carry only <code>forge:write</code>, are stored as digests, and are shown once.
+            Create an expiring credential for account chat and Forge operations. Tokens carry
+            <code>chat:account</code>
+            and <code>forge:write</code>, are stored as digests, and are shown once.
           </p>
         </header>
 

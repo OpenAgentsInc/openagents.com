@@ -30,6 +30,9 @@ defmodule OpenAgents.Tools.ConversationExecutionContextTest do
     assert text.authorities == voice.authorities
     assert text.approval_receipts == voice.approval_receipts
     assert "scv.deploy" in text.authorities
+    assert "repository.read" in text.authorities
+    assert text.owner_user_id == user.id
+    assert voice.owner_user_id == user.id
 
     assert Enum.any?(text.approval_receipts, fn receipt ->
              receipt["module_id"] == "sarah.tool.scv_deploy.v1" and

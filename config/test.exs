@@ -110,6 +110,8 @@ config :openagents, :tools, [
   OpenAgents.Tools.ModuleDiscover,
   OpenAgents.Tools.GitHubRepoList,
   OpenAgents.Tools.GitHubRepoRead,
+  OpenAgents.Tools.ConnectedRepositoryRead,
+  OpenAgents.Tools.ConnectedRepositoryList,
   OpenAgents.Tools.ConversationSearch,
   OpenAgents.Tools.ConversationRead,
   OpenAgents.Tools.MemoryList,

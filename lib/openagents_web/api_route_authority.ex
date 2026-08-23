@@ -63,7 +63,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields" => :optional_bearer,
-      # pipe_through :forge_write_api — scoped bearer required.
+      # Scoped bearer pipelines require the route-specific token authority.
+      "get /api/v3/chat/events" => :required_bearer,
+      "post /api/v3/chat/turns" => :required_bearer,
       "delete /api/v3/repos/:owner/:repo" => :required_bearer,
       "delete /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" => :required_bearer,
       "delete /api/v3/repos/:owner/:repo/issues/:issue_number/labels/:name" => :required_bearer,

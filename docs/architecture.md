@@ -120,6 +120,57 @@ Tests replace network providers with explicit fakes. A provider outage must
 produce a bounded durable failure outcome instead of abandoning an in-flight
 turn, work item, or voice session.
 
+## Durable account chat
+
+`OpenAgents.Chat.AccountTurns` is the application entry point for account chat
+submissions from both `/chat` and `POST /api/v3/chat/turns`. It creates the run
+and first event in one transaction before it starts provider work. The browser
+and `GET /api/v3/chat/events` then project the same account-scoped journal.
+LiveView messages and PubSub notifications remain replaceable projections of
+that durable state.
+
+Each run has a monotonically increasing event sequence. The journal preserves
+the order of user input, reasoning deltas, tool-call starts and outcomes, text
+deltas, and the terminal provider response or failure. This ordering lets an
+API client observe the same reasoning, tool, and response lifecycle that the
+browser renders. Conversation ownership comes from the authenticated account;
+client-supplied resource identifiers do not establish authority.
+
+The terminal `response_completed` event and run record retain the provider's
+Responses output list. When the next turn constructs provider history, it
+replays that list in its original order instead of reducing it to assistant
+text or reconstructed function calls. This preserves provider item IDs,
+reasoning items, encrypted reasoning state, and the function-call continuity
+required by the stateless Responses API.
+
+OpenAgents applies `OpenAgents.Tools.Redaction` before it stores provider
+completions or event payloads and before a tool outcome reaches a provider or
+client. The replay boundary therefore preserves the redacted provider output,
+not an unfiltered provider payload. Never log the journal or use telemetry as a
+second copy of message, reasoning, or tool content.
+
+## Shared text and voice tool admission
+
+Text and voice are transports over one conversation authority boundary.
+`OpenAgents.Tools.ConversationExecutionContext` derives the owner, conversation
+scope, authorities, approval receipts, workspace, and registry snapshot for
+both surfaces. `OpenAgents.Tools.AdmittedCatalog` applies the shared selector,
+scope check, authority check, and module surface policy before it produces a
+provider catalog.
+
+Text captures the registry and execution context for each Responses turn.
+Voice captures the same admitted catalog when the voice session starts and
+keeps that snapshot for the session. A surface can change presentation and the
+catalog format, but it cannot select a separate tool implementation or bypass
+the shared runner and policy checks. Add a conversation tool to the registry
+and its declared surface policy rather than wiring independent text and voice
+backends.
+
+Bearer clients use the same account chat entry point through a personal API
+token with `chat:account` scope. Forge mutations continue to require
+`forge:write`; one scope does not imply the other. The authenticated account,
+not the token name or request body, determines conversation ownership.
+
 ## Untrusted Markdown boundary
 
 Assistant and repository Markdown enters HTML through

@@ -9,7 +9,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
   use OpenAgentsWeb, :live_view
 
-  alias OpenAgents.Chat.OpenRouter
+  alias OpenAgents.Chat.{AccountTurns, OpenRouter}
 
   @reasoning_options [
     {"Reasoning off", "none"},
@@ -52,12 +52,14 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    messages = AccountTurns.list_messages(socket.assigns.current_user)
+
     {:ok,
      socket
      |> assign(:page_title, "Chat")
      |> assign(:form, composer_form())
      |> assign(:reasoning_options, @reasoning_options)
-     |> assign(:messages, [])
+     |> assign(:messages, messages)
      |> assign(:assistant_response, nil)
      |> assign(:assistant_reasoning, nil)
      |> assign(:assistant_tool_calls, [])
@@ -120,6 +122,26 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
          |> append_tool_block(tool_call_view(tool_call))}
 
       _stale_stream ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info({:account_chat_completed, stream_id, _result}, socket) do
+    case socket.assigns do
+      %{stream_id: ^stream_id} ->
+        {:noreply,
+         socket
+         |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
+         |> assign(:assistant_response, nil)
+         |> assign(:assistant_reasoning, nil)
+         |> assign(:assistant_tool_calls, [])
+         |> assign(:assistant_blocks, [])
+         |> assign(:reasoning_started_at, nil)
+         |> assign(:streaming?, false)
+         |> assign(:stream_task_ref, nil)
+         |> assign(:stream_id, nil)}
+
+      _stale_run ->
         {:noreply, socket}
     end
   end
@@ -357,49 +379,51 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     to_form(%{"message" => "", "reasoning" => reasoning}, as: :chat)
   end
 
-  defp local_chat_request(messages, message, reasoning) do
-    %{
-      "model" => OpenRouter.default_model(),
-      "models" => ["openrouter/free"],
-      "reasoning" => reasoning,
-      "messages" =>
-        Enum.map(messages, &provider_message/1) ++ [%{"role" => "user", "content" => message}]
-    }
-  end
-
   defp submit_message(socket, message, reasoning) do
-    stream_id = System.unique_integer([:positive, :monotonic])
-    owner = self()
+    case AccountTurns.submit(socket.assigns.current_user, message,
+           reasoning: reasoning,
+           subscriber: self()
+         ) do
+      {:ok, run} ->
+        {:noreply,
+         socket
+         |> assign(:form, composer_form(reasoning))
+         |> assign(:messages, AccountTurns.list_messages(socket.assigns.current_user))
+         |> assign(:assistant_response, "")
+         |> assign(:assistant_reasoning, nil)
+         |> assign(:assistant_tool_calls, [])
+         |> assign(:assistant_blocks, [reasoning_block("")])
+         |> assign(:reasoning_started_at, System.monotonic_time(:second))
+         |> assign(:streaming?, true)
+         |> assign(:stream_task_ref, nil)
+         |> assign(:stream_id, run["id"])
+         |> push_event("chat-preview:clear", %{})}
 
-    request =
-      local_chat_request(
-        Enum.filter(socket.assigns.messages, fn message -> message.history? end),
-        message,
-        reasoning
-      )
-
-    task =
-      Task.Supervisor.async_nolink(OpenAgents.ProviderTaskSupervisor, fn ->
-        OpenRouter.stream(
-          request,
-          fn event -> send(owner, {:openrouter_stream_event, stream_id, event}) end,
-          tool_context: %{user: socket.assigns.current_user}
-        )
-      end)
-
-    {:noreply,
-     socket
-     |> assign(:form, composer_form(reasoning))
-     |> update(:messages, &(&1 ++ [user_message(stream_id, message)]))
-     |> assign(:assistant_response, "")
-     |> assign(:assistant_reasoning, nil)
-     |> assign(:assistant_tool_calls, [])
-     |> assign(:assistant_blocks, [reasoning_block("")])
-     |> assign(:reasoning_started_at, System.monotonic_time(:second))
-     |> assign(:streaming?, true)
-     |> assign(:stream_task_ref, task.ref)
-     |> assign(:stream_id, stream_id)
-     |> push_event("chat-preview:clear", %{})}
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> update(:messages, fn messages ->
+           messages ++
+             [
+               user_message(Ecto.UUID.generate(), message),
+               %{
+                 id: Ecto.UUID.generate(),
+                 role: :assistant,
+                 content: "",
+                 completion: nil,
+                 error: error_message(reason),
+                 history?: false,
+                 provider_message_id: nil,
+                 provider_status: nil,
+                 provider_reasoning_items: nil,
+                 reasoning: nil,
+                 reasoning_duration: nil,
+                 tool_calls: [],
+                 blocks: []
+               }
+             ]
+         end)}
+    end
   end
 
   defp user_message(id, content),
@@ -443,31 +467,6 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
 
     update(socket, :messages, &(&1 ++ [assistant]))
   end
-
-  defp provider_message(%{role: :assistant} = message) do
-    %{"role" => "assistant", "content" => message.content}
-    |> maybe_put_provider_message_id(message.provider_message_id)
-    |> maybe_put_provider_status(message.provider_status)
-    |> maybe_put_provider_reasoning_items(message.provider_reasoning_items)
-  end
-
-  defp provider_message(%{role: role, content: content}),
-    do: %{"role" => Atom.to_string(role), "content" => content}
-
-  defp maybe_put_provider_message_id(message, id) when is_binary(id),
-    do: Map.put(message, "id", id)
-
-  defp maybe_put_provider_message_id(message, _id), do: message
-
-  defp maybe_put_provider_status(message, status) when is_binary(status),
-    do: Map.put(message, "status", status)
-
-  defp maybe_put_provider_status(message, _status), do: message
-
-  defp maybe_put_provider_reasoning_items(message, items) when is_list(items) and items != [],
-    do: Map.put(message, "reasoning_items", items)
-
-  defp maybe_put_provider_reasoning_items(message, _items), do: message
 
   defp error_message(:missing_api_key), do: "OpenRouter is not configured for this environment."
   defp error_message(:rate_limited), do: "OpenRouter is rate-limited. Try again later."

@@ -23,6 +23,7 @@ defmodule OpenAgents.Tools.Runner do
 
     if valid_reference?(call[:call_id]) do
       result = execute(snapshot, call, context, options, started_at)
+      result = attach_workspace(result, context.workspace)
       {:ok, outcome} = result
       duration_ms = max(DateTime.diff(DateTime.utc_now(), started_at, :millisecond), 0)
       _telemetry_result = Observability.tool_outcome(outcome, context.surface, duration_ms)
@@ -31,6 +32,11 @@ defmodule OpenAgents.Tools.Runner do
       {:error, :invalid_call_id}
     end
   end
+
+  defp attach_workspace({:ok, outcome}, workspace) when is_map(workspace),
+    do: {:ok, Map.put(outcome, "workspace", workspace)}
+
+  defp attach_workspace(result, _workspace), do: result
 
   defp execute(snapshot, call, context, options, started_at) do
     case Registry.fetch(snapshot, call[:name], call[:version]) do
@@ -371,6 +377,31 @@ defmodule OpenAgents.Tools.Runner do
     do: "The path is outside the repository or invalid."
 
   defp error_message(:repository_file_not_found), do: "No such file in that repository tree."
+
+  defp error_message(:repository_authentication_required),
+    do: "Sign in to read a connected repository."
+
+  defp error_message(:repository_not_found),
+    do: "The repository does not exist or you cannot access it."
+
+  defp error_message(:ambiguous_repository_name),
+    do: "More than one visible repository has that name. Use owner/name."
+
+  defp error_message(:invalid_repository),
+    do: "The repository must be an owner/name path or an unambiguous repository name."
+
+  defp error_message(:invalid_repository_ref), do: "The repository ref is invalid."
+  defp error_message(:repository_readme_not_found), do: "The repository has no readable README."
+
+  defp error_message(:repository_ref_or_file_not_found),
+    do: "The requested file or ref does not exist."
+
+  defp error_message(:repository_ref_or_directory_not_found),
+    do: "The requested directory or ref does not exist."
+
+  defp error_message(:repository_binary_file),
+    do: "The requested repository file is binary and cannot be read as text."
+
   defp error_message(:invalid_search_pattern), do: "The search pattern is not a valid regex."
   defp error_message(:invalid_code_content), do: "The code content is missing or invalid."
   defp error_message(:empty_match_string), do: "old_string must not be empty."

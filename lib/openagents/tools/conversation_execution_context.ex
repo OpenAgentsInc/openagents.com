@@ -22,6 +22,7 @@ defmodule OpenAgents.Tools.ConversationExecutionContext do
                  "memory.read",
                  "memory.write",
                  "module.discover",
+                 "repository.read",
                  "scv.deploy",
                  "work.delegate"
                ])
@@ -66,7 +67,16 @@ defmodule OpenAgents.Tools.ConversationExecutionContext do
       surface: surface,
       conversation_id: conversation_id,
       current_user_message_id: Map.get(attributes, :current_user_message_id),
+      owner_user_id: owner_user_id,
       owner_visitor_id: owner_visitor_id,
+      workspace:
+        Map.get(attributes, :workspace) ||
+          %{
+            "type" => "connected_forge_repository",
+            "binding" => "user_visible_repository",
+            "owner_user_id" => owner_user_id,
+            "read_only" => true
+          },
       memory_snapshot_ref: Map.get(attributes, :memory_snapshot_ref),
       profile_memory_snapshot_ref: Map.get(attributes, :profile_memory_snapshot_ref),
       module_registry_snapshot: Map.get(attributes, :module_registry_snapshot)

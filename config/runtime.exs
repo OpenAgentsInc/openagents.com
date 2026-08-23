@@ -95,6 +95,7 @@ config :openagents, :runtime_role, runtime_role
 if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
   config :openagents, :openrouter_api_key, optional_text.("OPENROUTER_API_KEY")
+  config :openagents, :box_api_key, optional_text.("BOX_API_KEY")
 end
 
 # The changelog seed. Idempotent and off the boot path. It was gated behind a
@@ -404,6 +405,7 @@ if config_env() == :prod and runtime_role == :web do
     github_oauth_scopes: github_oauth_scopes,
     openai_api_key: required_text.("OPENAI_API_KEY"),
     openrouter_api_key: optional_text.("OPENROUTER_API_KEY"),
+    box_api_key: optional_text.("BOX_API_KEY"),
     inference_proxy_url: optional_text.("OPENAGENTS_INFERENCE_PROXY_URL"),
     forge_enabled: forge_enabled,
     forge_deploy_lane_enabled: forge_deploy_enabled,

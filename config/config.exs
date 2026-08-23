@@ -102,6 +102,14 @@ config :openagents,
   openai_api_key: nil,
   openrouter_api_key: nil,
   openrouter_model: "stealth/ox-alpha",
+  box_api_key: nil,
+  box_api: [
+    base_url: "https://ascii.dev/api/box/v1",
+    maximum_active_boxes: 10,
+    ttl_seconds: 3_600,
+    poll_interval_ms: 1_000,
+    poll_attempts: 60
+  ],
   shadow_programs: [
     enabled: false,
     provider: OpenAgents.ShadowPrograms.OpenAI,
@@ -175,7 +183,11 @@ config :openagents,
     OpenAgents.Tools.RepoEdit,
     OpenAgents.Tools.RepoWrite,
     OpenAgents.Tools.RepoCommitPush,
-    OpenAgents.Tools.ScvDeploy
+    OpenAgents.Tools.ScvDeploy,
+    OpenAgents.Tools.BoxNew,
+    OpenAgents.Tools.BoxList,
+    OpenAgents.Tools.BoxExec,
+    OpenAgents.Tools.BoxStop
   ],
   conversation_reset_enabled: false,
   github_api: [

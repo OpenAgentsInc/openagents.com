@@ -309,7 +309,10 @@ defmodule OpenAgents.Tools.Runner do
               :publication_receipt_stale,
               :publication_branch_refused,
               :pull_requests_disabled,
-              :forbidden
+              :forbidden,
+              :box_quota_reached,
+              :box_not_owned,
+              :box_stopped
             ],
        do: "refused"
 
@@ -508,6 +511,34 @@ defmodule OpenAgents.Tools.Runner do
 
   defp error_message({:workspace_clone_failed, _detail}),
     do: "Cloning the job workspace from the forge failed."
+
+  defp error_message(:box_not_configured),
+    do: "This deployment has no Box API credential configured."
+
+  defp error_message(:box_unauthorized), do: "The Box API rejected this deployment's credential."
+
+  defp error_message(:box_billing_required),
+    do: "The Box account needs billing attention before new work can run."
+
+  defp error_message(:box_rate_limited),
+    do: "The Box API is rate limiting this deployment. Try again shortly."
+
+  defp error_message(:box_unreachable), do: "The Box API could not be reached."
+  defp error_message(:box_not_found), do: "That box no longer exists on the Box service."
+
+  defp error_message(:box_quota_reached),
+    do: "This conversation already has its maximum number of active boxes. Stop one first."
+
+  defp error_message(:box_not_owned), do: "That box does not belong to this conversation."
+  defp error_message(:box_stopped), do: "That box is stopped. Provision a new one with box_new."
+
+  defp error_message(:box_not_ready),
+    do: "The box did not become ready in time. Check box_list and try again."
+
+  defp error_message({:box_request_refused, _status, _code}),
+    do: "The Box API refused the request."
+
+  defp error_message(:box_response_invalid), do: "The Box API returned an unexpected response."
 
   defp error_message(_reason), do: "The tool call failed validation or execution."
 

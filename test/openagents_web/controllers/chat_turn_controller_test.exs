@@ -106,6 +106,84 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
     refute inspect(events) =~ "/private/var/lib/openagents"
   end
 
+  test "pull request results retain browser and API lifecycle parity", %{conn: conn} do
+    key = "chat-pull-request-events"
+    user = github_user("api-token-" <> key)
+
+    result = %{
+      "repository" => "OpenAgentsInc/openagents.com",
+      "url" => "/OpenAgentsInc/openagents.com/pulls/17",
+      "head" => %{
+        "ref" => "openagents/chat/8cc3bd8d-08cc-4c94-85e1-f269421ddf14",
+        "oid" => String.duplicate("b", 40)
+      },
+      "checks" => %{"state" => "unknown"}
+    }
+
+    streamer = fn _request, callback, _options ->
+      callback.(
+        {:tool_call_started,
+         %{
+           "call_id" => "call-open-pr",
+           "name" => "open_pull_request",
+           "arguments" =>
+             ~s({"publication_receipt_ref":"repository-publication:17","title":"Review changes","draft":true})
+         }}
+      )
+
+      callback.(
+        {:tool_call_completed,
+         %{
+           "call_id" => "call-open-pr",
+           "output" => %{
+             "schema" => "sarah.tool_outcome.v1",
+             "status" => "succeeded",
+             "result" => result,
+             "target_receipt_refs" => ["repository-publication:17", "pull-request:17"],
+             "started_at" => "2026-08-22T19:43:28.000Z",
+             "completed_at" => "2026-08-22T19:43:28.010Z"
+           }
+         }}
+      )
+
+      {:ok, %{"assistant_content" => "Opened the draft pull request."}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             OpenAgents.Chat.AccountTurns.submit(user, "Open a pull request.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+
+    events =
+      conn
+      |> put_chat_api_token(key)
+      |> get(~p"/api/v3/chat/events")
+      |> json_response(200)
+      |> Map.fetch!("events")
+
+    completed =
+      Enum.find_value(events, fn
+        %{"type" => "tool_call_completed", "tool_call" => tool_call} -> tool_call
+        _event -> nil
+      end)
+
+    [browser_tool] =
+      OpenAgents.Chat.AccountTurns.list_messages(user) |> List.last() |> Map.fetch!(:tool_calls)
+
+    assert completed["name"] == "open_pull_request"
+    assert completed["status"] == browser_tool.status
+    assert completed["receipt_refs"] == browser_tool.receipt_refs
+    assert completed["output"] == browser_tool.output
+
+    decoded_output = Jason.decode!(completed["output"])
+    assert decoded_output == result
+    assert decoded_output["url"] =~ "/pulls/17"
+    assert decoded_output["head"]["oid"] == String.duplicate("b", 40)
+  end
+
   test "chat API requires a bearer token", %{conn: conn} do
     assert conn |> get(~p"/api/v3/chat/events") |> json_response(401) == %{
              "error" => "invalid_api_token"

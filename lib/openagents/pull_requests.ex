@@ -11,6 +11,7 @@ defmodule OpenAgents.PullRequests do
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
   alias OpenAgents.Repositories.RepositoryPublication
+  alias OpenAgents.Tools.Redaction
 
   def list(%Repository{id: id}) do
     Repo.all(
@@ -95,7 +96,12 @@ defmodule OpenAgents.PullRequests do
 
           %PullRequest{repository_publication_id: id} = pull_request
           when id == publication.id ->
-            Repo.preload(pull_request, [:issue, :head_repository, :repository_publication])
+            Repo.preload(pull_request, [
+              :issue,
+              :head_repository,
+              :repository_publication,
+              :repository
+            ])
 
           %PullRequest{} = pull_request ->
             refresh_from_publication(pull_request, publication, attrs, actor, head_sha, base_sha)
@@ -121,7 +127,7 @@ defmodule OpenAgents.PullRequests do
       publication.branch == publication.repository.default_branch ->
         {:error, :publication_branch_refused}
 
-      not String.starts_with?(publication.branch || "", "openagents/chat/") ->
+      publication.branch != "openagents/chat/#{publication.conversation_id}" ->
         {:error, :publication_branch_refused}
 
       true ->
@@ -173,7 +179,7 @@ defmodule OpenAgents.PullRequests do
   defp create_from_publication(publication, attrs, actor, head_sha, base_sha) do
     repository = publication.repository
 
-    with {:ok, issue} <- Issues.create_issue(repository, issue_attrs(attrs), actor),
+    with {:ok, issue} <- Issues.create_issue(repository, issue_attrs(attrs, publication), actor),
          {:ok, pull_request} <-
            %PullRequest{}
            |> PullRequest.changeset(%{
@@ -190,7 +196,7 @@ defmodule OpenAgents.PullRequests do
              draft: Map.get(attrs, "draft", true)
            })
            |> Repo.insert() do
-      Repo.preload(pull_request, [:issue, :head_repository, :repository_publication])
+      Repo.preload(pull_request, [:issue, :head_repository, :repository_publication, :repository])
     else
       {:error, reason} -> Repo.rollback(reason)
     end
@@ -198,9 +204,15 @@ defmodule OpenAgents.PullRequests do
 
   defp refresh_from_publication(pull_request, publication, attrs, actor, head_sha, base_sha) do
     pull_request = Repo.preload(pull_request, [:issue, :repository_publication])
+    previous_publication = pull_request.repository_publication
 
     with :ok <- validate_existing_publication_scope(pull_request, publication, actor),
-         {:ok, issue} <- Issues.update_issue(pull_request.issue, issue_attrs(attrs), actor),
+         {:ok, issue} <-
+           Issues.update_issue(
+             pull_request.issue,
+             issue_attrs(attrs, publication, [previous_publication.id]),
+             actor
+           ),
          {:ok, updated} <-
            pull_request
            |> PullRequest.changeset(%{
@@ -211,7 +223,10 @@ defmodule OpenAgents.PullRequests do
              conversation_id: publication.conversation_id
            })
            |> Repo.update() do
-      %{Repo.preload(updated, [:head_repository, :repository_publication]) | issue: issue}
+      %{
+        Repo.preload(updated, [:head_repository, :repository_publication, :repository])
+        | issue: issue
+      }
     else
       {:error, reason} -> Repo.rollback(reason)
     end
@@ -236,7 +251,41 @@ defmodule OpenAgents.PullRequests do
     end
   end
 
-  defp issue_attrs(attrs), do: Map.take(attrs, ["title", "body"])
+  defp issue_attrs(attrs, publication, previous_publication_ids \\ []) do
+    body =
+      attrs
+      |> Map.get("body", "")
+      |> Redaction.redact_text()
+      |> String.trim()
+
+    publication_ids = Enum.uniq(previous_publication_ids ++ [publication.id])
+    result = publication.result || %{}
+    summary = result["summary"] || %{}
+    compare_url = result["compare_url"]
+
+    receipt_lines =
+      Enum.map_join(publication_ids, "\n", fn id ->
+        "- `repository-publication:#{id}`"
+      end)
+
+    trusted = """
+    ## OpenAgents publication
+
+    - Changed files: #{summary["files_changed"] || "unknown"}
+    - Insertions: #{summary["insertions"] || "unknown"}
+    - Deletions: #{summary["deletions"] || "unknown"}
+    - Compare: #{compare_url || "unavailable"}
+
+    Publication receipts:
+
+    #{receipt_lines}
+    """
+
+    %{
+      "title" => Map.fetch!(attrs, "title"),
+      "body" => Enum.reject([body, String.trim(trusted)], &(&1 == "")) |> Enum.join("\n\n")
+    }
+  end
 
   defp pull_request_update_attrs(attrs, state) do
     %{state: state}

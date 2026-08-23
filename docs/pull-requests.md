@@ -57,7 +57,9 @@ The tool requires a separate, explicit person approval for opening the pull requ
 
 The tool creates a draft pull request by default. Repeating the tool call for the same open source and base branches returns the existing pull request. If a later accepted publication advances the same source branch, the tool updates the existing pull request with the new publication receipt and commit.
 
-The result includes the pull request number, state, draft state, source and base refs, commit IDs, and receipt references. It does not include access tokens, workspace host paths, or other secrets.
+The tool requires the distinct `pull_request.write` authority. Its result includes the repository path, pull request URL and number, state, draft state, source and base refs, commit IDs, check and mergeability states, and receipt references. If repository policy disables pull requests, the result includes the protected publication branch and a compare URL so you can continue the review manually.
+
+The pull request body preserves the redacted description and appends server-derived publication metadata. This metadata records the changed-file counts, compare URL, and every publication receipt used to create or refresh the pull request. The result and body do not include access tokens, workspace host paths, or other secrets.
 
 ## Browser views
 

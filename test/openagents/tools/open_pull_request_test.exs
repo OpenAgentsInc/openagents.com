@@ -1,6 +1,7 @@
 defmodule OpenAgents.Tools.OpenPullRequestTest do
   use OpenAgents.DataCase, async: false
 
+  alias OpenAgents.Chat.OpenRouter
   alias OpenAgents.Forge.WAL
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repositories.RepositoryPublication
@@ -31,7 +32,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     context = %ExecutionContext{
       scope: "browser_conversation",
       scope_ref: "conversation:#{conversation_id}",
-      authorities: MapSet.new(["repository.write"]),
+      authorities: MapSet.new(["pull_request.write"]),
       surface: "text",
       owner_user_id: user.id,
       owner_visitor_id: user.id,
@@ -91,7 +92,16 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     assert opened["result"]["state"] == "open"
     assert opened["result"]["draft"]
     assert opened["result"]["head"]["ref"] =~ "openagents/chat/"
+    assert opened["result"]["repository"]
+    assert opened["result"]["url"] =~ "/pulls/"
+    assert opened["result"]["checks"]["state"] == "unknown"
     assert length(Repo.all(PullRequest)) == 1
+
+    stored = Repo.one!(PullRequest) |> Repo.preload(:issue)
+    assert stored.issue.body =~ "## OpenAgents publication"
+    assert stored.issue.body =~ "Changed files: 2"
+    assert stored.issue.body =~ "repository-publication:"
+    assert stored.issue.body =~ "/compare/main...openagents/chat/"
 
     retry_call = %{call | call_id: "open-2"}
     assert {:ok, retried} = Runner.run(snapshot, retry_call, context)
@@ -150,6 +160,26 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     assert stored.head_sha == next_oid
     assert stored.repository_publication_id == later.id
     assert stored.issue.title == "Updated pull request"
+    assert stored.issue.body =~ "repository-publication:#{publication.id}"
+    assert stored.issue.body =~ "repository-publication:#{later.id}"
+  end
+
+  test "refuses a publication branch that only shares the chat prefix", %{
+    context: context,
+    publication: publication
+  } do
+    invalid_branch = "#{publication.branch}/extra"
+
+    publication
+    |> Ecto.Changeset.change(branch: invalid_branch)
+    |> Repo.update!()
+
+    {:ok, snapshot} = Registry.build([OpenPullRequest])
+    context = approve(context)
+
+    assert {:ok, refused} = Runner.run(snapshot, call("open-invalid-branch", context), context)
+    assert refused["status"] == "refused"
+    assert refused["error"]["code"] == "publication_branch_refused"
   end
 
   test "refuses another account, conversation, or workspace", %{
@@ -207,6 +237,8 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     assert {:ok, disabled} = Runner.run(snapshot, call, context)
     assert disabled["status"] == "refused"
     assert disabled["error"]["code"] == "pull_requests_disabled"
+    assert disabled["result"]["protected_branch"] == publication.branch
+    assert disabled["result"]["repository"]
 
     repository
     |> then(&Repo.get!(OpenAgents.Repositories.Repository, &1.id))
@@ -225,6 +257,231 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     assert {:ok, stale} = Runner.run(snapshot, call, context)
     assert stale["status"] == "refused"
     assert stale["error"]["code"] == "publication_receipt_stale"
+  end
+
+  test "Ox Alpha completes an approved pull request through the Responses tool loop", %{
+    context: context,
+    publication: publication
+  } do
+    arguments =
+      Jason.encode!(%{
+        "publication_receipt_ref" => "repository-publication:#{publication.id}",
+        "title" => "Open the published workspace",
+        "body" => "Review the approved workspace publication.",
+        "draft" => true
+      })
+
+    provider_output = [
+      %{
+        "type" => "reasoning",
+        "id" => "rs_open_pr",
+        "status" => "completed",
+        "summary" => [
+          %{"type" => "summary_text", "text" => "Open the approved publication for review."}
+        ],
+        "encrypted_content" => "encrypted-open-pr-reasoning"
+      },
+      %{
+        "type" => "function_call",
+        "id" => "fc_open_pr",
+        "call_id" => "call_open_pr",
+        "name" => "open_pull_request",
+        "arguments" => arguments,
+        "status" => "completed"
+      }
+    ]
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      assert conn.request_path == "/api/v1/responses"
+      assert Enum.map(conn.body_params["tools"], & &1["name"]) == ["open_pull_request"]
+
+      body =
+        sse(%{
+          "type" => "response.created",
+          "response" => %{
+            "id" => "resp_open_pr",
+            "object" => "response",
+            "status" => "in_progress",
+            "model" => "stealth/ox-alpha",
+            "output" => []
+          }
+        }) <>
+          sse(%{
+            "type" => "response.in_progress",
+            "response" => %{
+              "id" => "resp_open_pr",
+              "object" => "response",
+              "status" => "in_progress",
+              "model" => "stealth/ox-alpha",
+              "output" => []
+            }
+          }) <>
+          sse(%{
+            "type" => "response.output_item.added",
+            "response_id" => "resp_open_pr",
+            "output_index" => 0,
+            "item" => %{
+              "type" => "reasoning",
+              "id" => "rs_open_pr",
+              "status" => "in_progress",
+              "summary" => []
+            }
+          }) <>
+          sse(%{
+            "type" => "response.reasoning_summary_text.delta",
+            "response_id" => "resp_open_pr",
+            "item_id" => "rs_open_pr",
+            "output_index" => 0,
+            "summary_index" => 0,
+            "delta" => "Open the approved publication for review."
+          }) <>
+          sse(%{
+            "type" => "response.output_item.done",
+            "response_id" => "resp_open_pr",
+            "output_index" => 0,
+            "item" => Enum.at(provider_output, 0)
+          }) <>
+          sse(%{
+            "type" => "response.output_item.added",
+            "response_id" => "resp_open_pr",
+            "output_index" => 1,
+            "item" => %{
+              "type" => "function_call",
+              "id" => "fc_open_pr",
+              "call_id" => "call_open_pr",
+              "name" => "open_pull_request",
+              "arguments" => "",
+              "status" => "in_progress"
+            }
+          }) <>
+          sse(%{
+            "type" => "response.function_call_arguments.delta",
+            "response_id" => "resp_open_pr",
+            "item_id" => "fc_open_pr",
+            "output_index" => 1,
+            "delta" => arguments
+          }) <>
+          sse(%{
+            "type" => "response.function_call_arguments.done",
+            "response_id" => "resp_open_pr",
+            "item_id" => "fc_open_pr",
+            "output_index" => 1,
+            "arguments" => arguments
+          }) <>
+          sse(%{
+            "type" => "response.output_item.done",
+            "response_id" => "resp_open_pr",
+            "output_index" => 1,
+            "item" => Enum.at(provider_output, 1)
+          }) <>
+          sse(%{
+            "type" => "response.completed",
+            "response" => %{
+              "id" => "resp_open_pr",
+              "object" => "response",
+              "status" => "completed",
+              "model" => "stealth/ox-alpha",
+              "output" => provider_output
+            }
+          }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      [user_input | replayed_output] = conn.body_params["input"]
+
+      assert user_input["content"] == [
+               %{"type" => "input_text", "text" => "Open the approved publication."}
+             ]
+
+      assert Enum.take(replayed_output, 2) == provider_output
+
+      assert %{
+               "type" => "function_call_output",
+               "call_id" => "call_open_pr",
+               "output" => tool_output
+             } = List.last(replayed_output)
+
+      assert %{
+               "status" => "succeeded",
+               "result" => %{
+                 "repository" => _,
+                 "url" => url,
+                 "head" => %{"oid" => _}
+               },
+               "target_receipt_refs" => receipt_refs
+             } = Jason.decode!(tool_output)
+
+      assert url =~ "/pulls/"
+      assert "repository-publication:#{publication.id}" in receipt_refs
+
+      body =
+        sse(%{
+          "type" => "response.content_part.delta",
+          "delta" => "I opened the approved draft pull request."
+        }) <>
+          sse(%{
+            "type" => "response.completed",
+            "response" => %{
+              "object" => "response",
+              "status" => "completed",
+              "model" => "stealth/ox-alpha",
+              "output" => [
+                %{
+                  "type" => "message",
+                  "id" => "msg_open_pr_complete",
+                  "role" => "assistant",
+                  "status" => "completed",
+                  "content" => [
+                    %{
+                      "type" => "output_text",
+                      "text" => "I opened the approved draft pull request.",
+                      "annotations" => []
+                    }
+                  ]
+                }
+              ]
+            }
+          }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    parent = self()
+    assert {:ok, snapshot} = Registry.build([OpenPullRequest])
+
+    assert {:ok, %{"assistant_content" => "I opened the approved draft pull request."}} =
+             OpenRouter.stream(
+               %{
+                 "model" => "stealth/ox-alpha",
+                 "messages" => [
+                   %{"role" => "user", "content" => "Open the approved publication."}
+                 ]
+               },
+               &send(parent, {:openrouter_event, &1}),
+               api_key: "test-openrouter-key",
+               tool_registry_snapshot: snapshot,
+               tool_execution_context: approve(context),
+               request_options: [plug: {Req.Test, __MODULE__}]
+             )
+
+    assert_receive {:openrouter_event,
+                    {:tool_call_started,
+                     %{"call_id" => "call_open_pr", "name" => "open_pull_request"}}}
+
+    assert_receive {:openrouter_event,
+                    {:tool_call_completed,
+                     %{"call_id" => "call_open_pr", "output" => tool_output}}}
+
+    assert %{"status" => "succeeded", "result" => %{"url" => url}} =
+             Jason.decode!(tool_output)
+
+    assert url =~ "/pulls/"
   end
 
   defp approve(context) do
@@ -273,7 +530,12 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
       published_oid: oid,
       state: "accepted",
       wal_seq: wal_seq,
-      result: %{"receipt" => %{"wal_seq" => wal_seq, "oid" => oid}}
+      result: %{
+        "compare_url" =>
+          "/#{repository.owner}/#{repository.name}/compare/#{repository.default_branch}...#{branch}",
+        "summary" => %{"files_changed" => 2, "insertions" => 4, "deletions" => 1},
+        "receipt" => %{"wal_seq" => wal_seq, "oid" => oid}
+      }
     })
     |> Repo.insert!()
   end
@@ -296,4 +558,6 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
 
     assert {:ok, _generation} = WAL.cas_index(storage_key, :none, index)
   end
+
+  defp sse(event), do: "data: #{Jason.encode!(event)}\n\n"
 end

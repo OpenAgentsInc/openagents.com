@@ -36,7 +36,7 @@ defmodule OpenAgents.Tools.OpenPullRequest do
       output_schema: %{"type" => "object", "properties" => %{}, "additionalProperties" => true},
       side_effect: :external_effect,
       required_scope: "browser_conversation",
-      required_authority: "repository.write",
+      required_authority: "pull_request.write",
       executor: %{
         id: "openagents.forge.pull_requests",
         disclosure: "the OpenAgents pull request service, using an accepted Forge publication"
@@ -49,7 +49,7 @@ defmodule OpenAgents.Tools.OpenPullRequest do
         "consent" => "approved_publication_pull_request"
       },
       module_metadata:
-        Metadata.first_party("repository.write", "browser_conversation",
+        Metadata.first_party("pull_request.write", "browser_conversation",
           effect: :external_effect,
           privacy: "browser_conversation",
           residency: "host",
@@ -82,8 +82,16 @@ defmodule OpenAgents.Tools.OpenPullRequest do
   @impl true
   def execute(%{"publication_receipt_ref" => receipt_ref} = arguments, context) do
     with {:ok, publication_id} <- parse_receipt_ref(receipt_ref),
-         %RepositoryPublication{} = publication <- Repo.get(RepositoryPublication, publication_id),
-         :ok <- validate_context(publication, context),
+         %RepositoryPublication{} = publication <- Repo.get(RepositoryPublication, publication_id) do
+      execute_publication(publication, arguments, context, receipt_ref)
+    else
+      nil -> {:error, :publication_receipt_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp execute_publication(publication, arguments, context, receipt_ref) do
+    with :ok <- validate_context(publication, context),
          %User{} = actor <- Repo.get(User, context.owner_user_id),
          {:ok, pull_request} <- PullRequests.open_from_publication(publication, arguments, actor) do
       result = result(pull_request)
@@ -98,9 +106,14 @@ defmodule OpenAgents.Tools.OpenPullRequest do
          ]
        }}
     else
-      nil -> {:error, :publication_receipt_not_found}
-      {:error, reason} -> {:error, reason}
-      _ -> {:error, :publication_scope_mismatch}
+      {:error, :pull_requests_disabled} ->
+        disabled_result(publication)
+
+      {:error, reason} ->
+        {:error, reason}
+
+      _ ->
+        {:error, :publication_scope_mismatch}
     end
   end
 
@@ -135,6 +148,8 @@ defmodule OpenAgents.Tools.OpenPullRequest do
   end
 
   defp result(pull_request) do
+    repository = pull_request.repository
+
     %{
       "schema" => "openagents.pull_request_opened.v1",
       "id" => pull_request.id,
@@ -142,8 +157,12 @@ defmodule OpenAgents.Tools.OpenPullRequest do
       "state" => pull_request.state,
       "draft" => pull_request.draft,
       "title" => pull_request.issue.title,
+      "repository" => "#{repository.owner}/#{repository.name}",
+      "url" => "/#{repository.owner}/#{repository.name}/pulls/#{pull_request.issue.number}",
       "head" => %{"ref" => pull_request.head_ref, "oid" => pull_request.head_sha},
       "base" => %{"ref" => pull_request.base_ref, "oid" => pull_request.base_sha},
+      "checks" => %{"state" => "unknown"},
+      "mergeability" => %{"state" => "unknown"},
       "publication_receipt_ref" =>
         "repository-publication:#{pull_request.repository_publication_id}",
       "receipt" => %{
@@ -151,5 +170,29 @@ defmodule OpenAgents.Tools.OpenPullRequest do
         "receipt_ref" => "pull-request:#{pull_request.id}"
       }
     }
+  end
+
+  defp disabled_result(publication) do
+    repository = Repo.get!(OpenAgents.Repositories.Repository, publication.repository_id)
+
+    compare_url =
+      get_in(publication.result || %{}, ["compare_url"]) ||
+        "/#{repository.owner}/#{repository.name}/compare/#{repository.default_branch}...#{publication.branch}"
+
+    {:ok,
+     %ExecutionResult{
+       status: "refused",
+       error: %{
+         "code" => "pull_requests_disabled",
+         "message" => "Pull requests are disabled for this repository."
+       },
+       result: %{
+         "schema" => "openagents.pull_request_disabled.v1",
+         "repository" => "#{repository.owner}/#{repository.name}",
+         "protected_branch" => publication.branch,
+         "compare_url" => compare_url
+       },
+       target_receipt_refs: ["repository-publication:#{publication.id}"]
+     }}
   end
 end

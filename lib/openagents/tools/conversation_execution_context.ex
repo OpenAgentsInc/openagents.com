@@ -23,6 +23,7 @@ defmodule OpenAgents.Tools.ConversationExecutionContext do
                  "memory.write",
                  "module.discover",
                  "repository.read",
+                 "pull_request.write",
                  "repository.write",
                  "scv.deploy",
                  "work.delegate"

@@ -50,6 +50,7 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
              "number" => number,
              "title" => "Add pull request support",
              "state" => "open",
+             "draft" => true,
              "head" => %{"ref" => "main"},
              "base" => %{"ref" => "main"}
            } = json_response(create_conn, 201)
@@ -62,13 +63,15 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
     update_conn =
       patch(conn, "/api/v3/repos/#{target.owner}/#{target.name}/pulls/#{number}", %{
         title: "Ship pull request support",
-        state: "closed"
+        state: "closed",
+        draft: false
       })
 
     assert %{
              "number" => ^number,
              "title" => "Ship pull request support",
-             "state" => "closed"
+             "state" => "closed",
+             "draft" => false
            } = json_response(update_conn, 200)
   end
 

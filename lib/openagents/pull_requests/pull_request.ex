@@ -15,6 +15,10 @@ defmodule OpenAgents.PullRequests.PullRequest do
     field :base_ref, :string
     field :base_sha, :string
     field :state, :string, default: "open"
+    field :draft, :boolean, default: true
+    belongs_to :repository_publication, OpenAgents.Repositories.RepositoryPublication
+    belongs_to :opened_by_user, OpenAgents.Accounts.User
+    field :conversation_id, :binary_id
     field :merged_at, :utc_datetime_usec
     belongs_to :merged_by_user, OpenAgents.Accounts.User
     field :merge_commit_sha, :string
@@ -28,11 +32,15 @@ defmodule OpenAgents.PullRequests.PullRequest do
       :head_sha,
       :base_ref,
       :base_sha,
-      :state
+      :state,
+      :draft,
+      :conversation_id
     ])
     |> put_programmatic_change(attrs, :repository_id)
     |> put_programmatic_change(attrs, :issue_id)
     |> put_programmatic_change(attrs, :head_repository_id)
+    |> put_programmatic_change(attrs, :repository_publication_id)
+    |> put_programmatic_change(attrs, :opened_by_user_id)
     |> validate_required([
       :repository_id,
       :issue_id,
@@ -46,6 +54,7 @@ defmodule OpenAgents.PullRequests.PullRequest do
     |> validate_length(:base_ref, min: 1, max: 255)
     |> validate_inclusion(:state, ~w(open closed))
     |> unique_constraint(:issue_id)
+    |> unique_constraint(:repository_publication_id)
     |> unique_constraint([:repository_id, :head_repository_id, :head_ref, :base_ref],
       name: :pull_requests_one_open_head_base_index
     )

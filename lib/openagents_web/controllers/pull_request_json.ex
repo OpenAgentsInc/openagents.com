@@ -18,6 +18,7 @@ defmodule OpenAgentsWeb.PullRequestJSON do
       title: pr.issue.title,
       body: pr.issue.body,
       state: pr.issue.state,
+      draft: pr.draft,
       user: pr.issue.user,
       merged: not is_nil(pr.merged_at),
       head: %{

@@ -301,7 +301,15 @@ defmodule OpenAgents.Tools.Runner do
               :module_approval_required,
               :memory_consent_required,
               :memory_consent_mismatch,
-              :memory_policy_refused
+              :memory_policy_refused,
+              :publication_scope_mismatch,
+              :publication_workspace_mismatch,
+              :publication_not_accepted,
+              :publication_receipt_invalid,
+              :publication_receipt_stale,
+              :publication_branch_refused,
+              :pull_requests_disabled,
+              :forbidden
             ],
        do: "refused"
 
@@ -453,6 +461,36 @@ defmodule OpenAgents.Tools.Runner do
 
   defp error_message(:forge_push_unconfigured),
     do: "This deployment has no forge push endpoint configured."
+
+  defp error_message(:publication_receipt_invalid),
+    do: "The repository publication receipt is invalid."
+
+  defp error_message(:publication_receipt_not_found),
+    do: "The repository publication receipt does not exist."
+
+  defp error_message(:publication_scope_mismatch),
+    do: "The repository publication does not belong to this account and conversation."
+
+  defp error_message(:publication_workspace_mismatch),
+    do: "The repository publication does not belong to this conversation workspace."
+
+  defp error_message(:publication_not_accepted),
+    do: "The repository publication has not been accepted by Forge."
+
+  defp error_message(:publication_receipt_stale),
+    do: "The published branch no longer matches the exact Forge publication receipt."
+
+  defp error_message(:publication_branch_refused),
+    do: "A pull request must use an OpenAgents chat publication branch."
+
+  defp error_message(:forge_authority_unavailable),
+    do: "Forge could not verify the authoritative branch state."
+
+  defp error_message(:pull_requests_disabled),
+    do: "Pull requests are disabled for this repository."
+
+  defp error_message(:forbidden),
+    do: "Your account cannot open a pull request in this repository."
 
   defp error_message({:workspace_clone_failed, _detail}),
     do: "Cloning the job workspace from the forge failed."

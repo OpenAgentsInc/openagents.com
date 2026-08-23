@@ -105,6 +105,77 @@ and an edge that would close a cycle each return `422 Unprocessable Entity`,
 and none of the batch is recorded. Reading the graph needs the same access as
 reading the issue. Recording or removing an edge needs repository write access.
 
+## Reputation attestations
+
+A reputation attestation is a signed claim that one subject completed,
+verified, reviewed, was paid for, or lost credit for one accepted outcome, in
+one repository, at one revision, under one verifier policy. Reads are public
+for public repositories; issuing and revoking stay behind verifier authority.
+
+```text
+GET /api/v3/reputation/policy
+GET /api/v3/reputation/keys
+GET /api/v3/repos/:owner/:repo/issues/:issue_number/attestations
+GET /api/v3/repos/:owner/:repo/attestations/:id
+GET /api/v3/repos/:owner/:repo/attestations/:id/verification
+GET /api/v3/repos/:owner/:repo/reputation/subjects/:subject_id
+```
+
+Every attestation response carries the signed claim verbatim next to its
+signature, so you can verify it without trusting this API:
+
+```json
+{
+  "claim": {
+    "schema": "openagents.reputation.attestation.v1",
+    "event_type": "completion",
+    "issuer": { "key_id": "…", "algorithm": "ed25519", "public_key": "…" },
+    "subject": { "actor_id": "…" },
+    "outcome": { "kind": "compensation_outcome_decision", "state": "accepted" },
+    "scope": { "repository": "…", "issue_number": 88, "revision": "…" },
+    "verifier": { "policy_id": "…", "policy_version": 1, "policy_digest": "…" },
+    "confidence_ppm": 900000,
+    "evidence": [{ "kind": "outcome", "digest": "…", "disclosed": true }]
+  },
+  "claim_digest": "…",
+  "signature": "…",
+  "signature_algorithm": "ed25519"
+}
+```
+
+To check one yourself, canonicalize the `claim` with sorted object keys and no
+insignificant whitespace, confirm its
+SHA-256 digest equals `claim_digest`, verify the Ed25519 `signature` against
+the `public_key` that `/api/v3/reputation/keys` publishes for
+`issuer_key_id`, and hash the policy rules from `/api/v3/reputation/policy` to
+reproduce `policy_digest`.
+
+The verification endpoint reports the same checks, plus evidence availability,
+staleness, and revocation state. Pass what you expect — `subject_id`,
+`revision`, `event_type`, or `policy_id` — and a claim that binds to something
+else answers with `verified: false` and the mismatch:
+
+```sh
+curl "https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/attestations/$ID/verification?subject_id=actor:builder"
+```
+
+An attestation is issued only after its accepted-outcome receipt reaches an
+admitted terminal state. Presence, token volume, online time, and narration
+are not attestable. A reversed or invalidated outcome gets a linked reversal or
+revocation attestation, and the original claim stays readable so a past
+decision remains auditable.
+
+Subject evidence is scoped to one repository and reports counts per event type.
+It never returns a score or a ranking:
+
+```json
+{ "subject_id": "…", "scope": "repository", "counts": { "completion": 3 }, "score": null }
+```
+
+An attestation on a private repository is disclosed to repository members only,
+and a `private` attestation withholds the outcome reference and every evidence
+reference from the signed claim while staying verifiable.
+
 ## Labels
 
 ```text

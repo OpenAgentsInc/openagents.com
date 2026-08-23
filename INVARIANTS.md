@@ -793,6 +793,47 @@ constraints, `test/openagents/compensation_test.exs`, and duplicate, revocation,
 allocation, adjustment, reconciliation, privacy, and no-payout cases in
 `OpenAgents.CompensationTest`.
 
+### REPUTATION-001 — An attestation is scoped signed evidence, never a score
+
+Status: Current
+
+A reputation attestation is one Ed25519-signed canonical claim binding an
+issuer key, a subject, an accepted outcome, a repository, an issue, a revision,
+an artifact digest, an admitted verifier policy version and digest, a
+confidence in parts per million, evidence references, a timestamp, and a nonce.
+The six event types — completion, verification, review, payment, reversal, and
+revocation — stay distinct facts.
+
+Issuance requires an accepted-outcome receipt that already reached its admitted
+terminal state, so an invocation, a presence signal, token volume, online time,
+or unverifiable narration can never produce an attestation. The verifier policy
+rules carry `global_score: false`, no function returns a ranking, and subject
+evidence is counted inside one repository with a `score` of `nil`.
+
+Verification is independent of the interface. A client recomputes the claim
+digest, checks the signature against the admitted public key, compares the
+policy digest and version, resolves each evidence reference, and reads the
+revocation state. Because the claim covers the issue, the revision, the
+subject, the outcome, and the verifier, a valid attestation presented for
+another issue, revision, verifier, or actor fails its binding. A reversed or
+invalidated outcome produces a linked invalidating attestation, and the revoked
+claim and signature stay readable. Retiring a key never invalidates the history
+it signed, and a private key never enters the database.
+
+Disclosure follows repository authority: an attestation is `public` only where
+the repository is public or its transparency level admits ledger disclosure
+(TRANSPARENCY-001), evidence must
+stay inside the repository, and a `private` attestation withholds the outcome
+reference and every evidence reference from the signed claim while remaining
+verifiable.
+
+Evidence: `OpenAgents.Reputation`, `OpenAgents.Reputation.Claim`,
+`OpenAgents.Reputation.Attestation`, `OpenAgents.Reputation.SigningKey`,
+`OpenAgents.Reputation.PolicyReceipt`, the append-only and uniqueness
+constraints on `reputation_attestations`, `OpenAgentsWeb.ReputationController`,
+`test/openagents/reputation_test.exs`, and
+`test/openagents_web/controllers/reputation_controller_test.exs`.
+
 ### MODULE-001 — Every invocation pins one immutable admitted module
 
 Status: Current
@@ -2028,6 +2069,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | COLLECTIVE-002 | `test/openagents/collective_generalizer_test.exs` |
 | COLLECTIVE-003 | `test/openagents/collective_publication_test.exs` |
 | COMPENSATION-001 | `test/openagents/compensation_test.exs` |
+| REPUTATION-001 | `test/openagents/reputation_test.exs`, `test/openagents_web/controllers/reputation_controller_test.exs` |
 | MODULE-001 | `test/openagents/modules/registry_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
 | MODULE-002 | `test/openagents/modules/discovery_test.exs`, `test/openagents/modules/lifecycle_test.exs` |
 | MODULE-003 | `test/openagents/modules/router_test.exs`, `test/openagents/turn_tool_loop_test.exs` |

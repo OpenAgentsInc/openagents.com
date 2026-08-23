@@ -318,6 +318,23 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/projectsV2/:project_number/fields", ProjectController, :fields
     get "/repos/:owner/:repo/projectsV2/:project_number/notes", ProjectController, :notes
 
+    # Reputation attestations. Reads only: issuance and revocation stay behind
+    # verifier authority inside the application.
+    get "/reputation/policy", ReputationController, :policy
+    get "/reputation/keys", ReputationController, :keys
+
+    get "/repos/:owner/:repo/issues/:issue_number/attestations",
+        ReputationController,
+        :index
+
+    get "/repos/:owner/:repo/attestations/:id", ReputationController, :show
+
+    get "/repos/:owner/:repo/attestations/:id/verification",
+        ReputationController,
+        :verification
+
+    get "/repos/:owner/:repo/reputation/subjects/:subject_id", ReputationController, :subject
+
     # The forum reads. Posting and claiming live behind the write scope.
     get "/forum", ForumApiController, :boards
     get "/forum/topics", ForumApiController, :topics

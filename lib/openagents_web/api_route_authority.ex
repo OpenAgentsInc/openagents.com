@@ -69,6 +69,12 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/notes" => :optional_bearer,
+      "get /api/v3/reputation/policy" => :optional_bearer,
+      "get /api/v3/reputation/keys" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/issues/:issue_number/attestations" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/attestations/:id" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/attestations/:id/verification" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/reputation/subjects/:subject_id" => :optional_bearer,
       # Scoped bearer pipelines require the route-specific token authority.
       "get /api/v3/chat/events" => :required_bearer,
       "post /api/v3/chat/turns" => :required_bearer,

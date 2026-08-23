@@ -71,9 +71,76 @@ defmodule OpenAgents.Changelog do
 
   @doc "Insert one authored entry (used by backfill now; jobs/operators later)."
   def record(attrs) do
-    %Entry{}
-    |> Entry.changeset(attrs)
-    |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :sha, :source])
+    case %Entry{}
+         |> Entry.changeset(attrs)
+         |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :sha, :source]) do
+      {:ok, %Entry{repo: repo} = entry} ->
+        broadcast_entry(repo)
+        {:ok, entry}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  # ── announcement ─────────────────────────────────────────────────────────
+
+  @entries_topic "changelog:entries"
+
+  # The forge receipts that produce the ledger's agent-layer rows. A receipted
+  # deploy nobody wrote a note for is still a row, so a rail that listened only
+  # for authored entries would miss every deploy.
+  @forge_topics ["forge:pushes", "forge:target", "forge:builds", "forge:deploys"]
+
+  @ledger_events [
+    :changelog_entry,
+    :forge_push,
+    :forge_target,
+    :forge_target_status,
+    :forge_build_ready,
+    :forge_deploy
+  ]
+
+  @doc """
+  Subscribes the caller to everything that can move the ledger: authored
+  entries, and the forge receipts behind the agent-layer rows.
+
+  The messages carry no rows. A subscriber re-reads through `timeline/2`, which
+  applies the repo's own `OpenAgents.Forge.Visibility` level, so a subscriber
+  can never be handed a row the projection would have withheld.
+  """
+  def subscribe do
+    :ok = Phoenix.PubSub.subscribe(OpenAgents.PubSub, @entries_topic)
+    Enum.each(@forge_topics, &(:ok = Phoenix.PubSub.subscribe(OpenAgents.PubSub, &1)))
+  end
+
+  @doc """
+  Whether a received message means the ledger moved.
+
+  Subscribers match on this rather than on a list of forge topics of their own,
+  so the set of things that move the changelog is stated once, here, beside the
+  projection that reads them.
+  """
+  def ledger_event?(message) when is_tuple(message) and tuple_size(message) > 0,
+    do: elem(message, 0) in @ledger_events
+
+  def ledger_event?(_message), do: false
+
+  @doc """
+  Announces an appended entry, after dropping the cached projection.
+
+  The cache is what a reconnecting client reads on its next mount, so leaving
+  it in place would let a page that dropped and came back show the ledger as it
+  was for up to the TTL.
+  """
+  def broadcast_entry(repo) when is_binary(repo) do
+    :persistent_term.erase(@cache_key)
+
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      @entries_topic,
+      {:changelog_entry, repo}
+    )
   end
 
   # ── assembly ─────────────────────────────────────────────────────────────

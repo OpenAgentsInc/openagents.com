@@ -22,6 +22,15 @@ defmodule OpenAgentsWeb.HomeLive do
   to show it says so plainly rather than rendering a placeholder, because a
   dashboard whose emptiness is disguised is worse than one that admits it.
 
+  It is also current. Every panel names a publisher and re-reads when it hears
+  one, so an issue opened in another tab moves the count and the feed without a
+  refresh, and the same holds for a project, a repository, a forum post, and a
+  changelog entry. The announcements carry ids and nothing else: each panel
+  re-reads through the same authorized read that filled it at mount, so a
+  viewer can never be handed a row -- or a row counted into a number -- the
+  database would have refused them. Bursts collapse into one re-read of only
+  the panels that moved.
+
   The landing page is flush -- it owns the full main area and scrolls itself --
   because landing bands set their own vertical rhythm against the viewport and
   a wrapper's padding would fight it. The dashboard is an ordinary page.
@@ -44,11 +53,124 @@ defmodule OpenAgentsWeb.HomeLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, if(socket.assigns[:current_user], do: assign_dashboard(socket), else: socket)}
+    if socket.assigns[:current_user] do
+      if connected?(socket), do: subscribe()
+
+      {:ok,
+       socket
+       |> assign(:refresh_timer_ref, nil)
+       |> assign(:stale_panels, MapSet.new())
+       |> assign(:changed_repositories, MapSet.new())
+       |> assign_dashboard()}
+    else
+      {:ok, socket}
+    end
   end
 
-  # Loaded once at mount rather than per render: none of it changes within a
-  # visit, and the dashboard should not re-query on every diff.
+  # Every panel here already had a publisher or has one now, so the dashboard
+  # can stop being a snapshot of the moment it was opened. The messages carry
+  # ids and nothing else: each panel re-reads through the same authorized read
+  # that filled it at mount, so a viewer can never be handed a row -- or a row
+  # counted into a number -- that they could not have loaded themselves.
+  defp subscribe do
+    :ok = Repositories.subscribe_all_issues()
+    :ok = Repositories.subscribe_all_projects()
+    :ok = Repositories.subscribe_repository_changes()
+    :ok = Forum.subscribe_posts()
+    :ok = Changelog.subscribe()
+  end
+
+  @impl true
+  def handle_info({:issues_changed, _repository_id}, socket),
+    do: {:noreply, mark_stale(socket, :issues)}
+
+  def handle_info({:projects_changed, _repository_id}, socket),
+    do: {:noreply, mark_stale(socket, :projects)}
+
+  def handle_info({:forum_posts_changed, _topic_id}, socket),
+    do: {:noreply, mark_stale(socket, :posts)}
+
+  def handle_info({:repository_changed, repository_id}, socket) do
+    {:noreply,
+     socket
+     |> update(:changed_repositories, &MapSet.put(&1, repository_id))
+     |> mark_stale(:repositories)}
+  end
+
+  def handle_info(:refresh_dashboard, socket), do: {:noreply, refresh(socket)}
+
+  def handle_info(message, socket) do
+    if Changelog.ledger_event?(message),
+      do: {:noreply, mark_stale(socket, :changelog)},
+      else: {:noreply, socket}
+  end
+
+  # A quarter of a second. Long enough that a push burst, an import that walks
+  # a repository's issues, or a script closing a milestone's worth of them
+  # collapses into one re-read; short enough that a person who opened an issue
+  # in another tab sees the count move before they have finished looking back
+  # at this one. Every event re-arms the same timer, and only the last one
+  # fires, so the cost of a burst is one re-read rather than one per event.
+  #
+  # Which panels re-read is remembered alongside it, so an issue burst never
+  # reloads the forum, the projects, or the ledger.
+  @refresh_debounce_ms if Application.compile_env(:openagents, :runtime_environment) == :test,
+                         do: 0,
+                         else: 250
+
+  defp mark_stale(socket, panel) do
+    socket = update(socket, :stale_panels, &MapSet.put(&1, panel))
+
+    # Tests refresh synchronously so assertions do not depend on time.
+    if @refresh_debounce_ms == 0, do: refresh(socket), else: rearm(socket)
+  end
+
+  defp rearm(socket) do
+    case socket.assigns.refresh_timer_ref do
+      nil -> :ok
+      ref when is_reference(ref) -> Process.cancel_timer(ref)
+    end
+
+    assign(
+      socket,
+      :refresh_timer_ref,
+      Process.send_after(self(), :refresh_dashboard, @refresh_debounce_ms)
+    )
+  end
+
+  defp refresh(socket) do
+    socket.assigns.stale_panels
+    |> Enum.reduce(socket, &refresh_panel(&2, &1))
+    |> assign(:stale_panels, MapSet.new())
+    |> assign(:refresh_timer_ref, nil)
+  end
+
+  defp refresh_panel(socket, :issues), do: assign_issues(socket)
+  defp refresh_panel(socket, :projects), do: assign_projects(socket)
+  defp refresh_panel(socket, :posts), do: assign_posts(socket)
+  defp refresh_panel(socket, :changelog), do: assign_changelog(socket, refresh: true)
+
+  defp refresh_panel(socket, :repositories) do
+    socket.assigns.changed_repositories
+    |> Enum.reduce(socket, &refresh_repository_row/2)
+    |> assign(:changed_repositories, MapSet.new())
+    |> assign(:any_repository?, Repositories.any_visible_repository?(socket.assigns.current_user))
+  end
+
+  # One row, re-read through this viewer's own visibility predicate, rather
+  # than the whole collection: a repository announces itself on every accepted
+  # push, and a rail that reloaded every repository it can read per push would
+  # be the expensive half of the defect this fixes. A repository that has
+  # stopped being readable -- deleted, or a membership revoked -- reads as
+  # `nil` and leaves the rail.
+  defp refresh_repository_row(repository_id, socket) do
+    case Repositories.get_visible_repository(repository_id, socket.assigns.current_user) do
+      nil -> stream_delete_by_dom_id(socket, :repositories, "repositories-#{repository_id}")
+      repository -> stream_insert(socket, :repositories, repository)
+    end
+  end
+
+  # Read once at mount and again whenever something says the panel moved.
   #
   # Read across every repository the viewer can read, through the same
   # authorized reads `/issues` and `/projects` compose, so the homepage cannot
@@ -57,33 +179,68 @@ defmodule OpenAgentsWeb.HomeLive do
   # which reported `Open 0 / Closed 0 / Projects 0` to an owner whose backlog
   # lived in the repository that happened to sort second.
   defp assign_dashboard(socket) do
-    user = socket.assigns.current_user
-    repositories = Repositories.list_visible_repositories(user)
+    socket
+    |> assign_issues()
+    |> assign_projects()
+    |> assign_posts()
+    |> assign_changelog()
+    |> assign_repositories()
+  end
 
-    # One bounded page each, and each page carries its own unpaginated total,
-    # so the numbers beside a panel cost an aggregate rather than a whole
-    # collection loaded only to be measured.
+  # One bounded page, and the page carries its own unpaginated total, so the
+  # numbers beside a panel cost an aggregate rather than a whole collection
+  # loaded only to be measured. That is as true of a live update as of a mount:
+  # a refresh that counted by loading would reintroduce the read `93c3383`
+  # removed, once per event instead of once per visit.
+  defp assign_issues(socket) do
+    user = socket.assigns.current_user
     {issues, open_issue_count} = Issues.list_visible_issues_page(user, state: "open", page: 1)
+
+    socket
+    |> assign(:open_issue_count, open_issue_count)
+    |> assign(:closed_issue_count, Issues.count_visible_issues(user, state: "closed"))
+    |> assign(:issues, Enum.take(issues, @feed_limit))
+  end
+
+  defp assign_projects(socket) do
+    user = socket.assigns.current_user
 
     {projects, open_project_count} =
       Projects.list_visible_projects_page(user, state: "open", page: 1)
 
     socket
-    |> assign(:open_issue_count, open_issue_count)
-    |> assign(:closed_issue_count, Issues.count_visible_issues(user, state: "closed"))
     |> assign(:open_project_count, open_project_count)
     |> assign(:closed_project_count, Projects.count_visible_projects(user, state: "closed"))
-    |> assign(:issues, Enum.take(issues, @feed_limit))
     |> assign(:projects, Enum.take(projects, @project_limit))
-    |> assign(:any_repository?, repositories != [])
-    # The forum reads through the same viewer-authorized scope `/forum`
-    # composes, one row per topic, so the panel cannot name a board the board
-    # list would not.
-    |> assign(
+  end
+
+  # The forum reads through the same viewer-authorized scope `/forum` composes,
+  # one row per topic, so the panel cannot name a board the board list would
+  # not -- on a refresh no less than on a mount.
+  defp assign_posts(socket) do
+    assign(
+      socket,
       :posts,
-      Forum.list_recent_posts(operator?: Accounts.admin?(user), limit: @post_limit)
+      Forum.list_recent_posts(
+        operator?: Accounts.admin?(socket.assigns.current_user),
+        limit: @post_limit
+      )
     )
-    |> assign(:changelog, changelog_entries())
+  end
+
+  # Mount reads the shared cache, because every signed-in page load would
+  # otherwise rebuild the projection and the cache exists to stop exactly that.
+  # A live refresh bypasses it, because a rail told the ledger moved and then
+  # handed the cached answer would render the state it was told had changed.
+  defp assign_changelog(socket, opts \\ []) do
+    assign(socket, :changelog, changelog_entries(opts))
+  end
+
+  defp assign_repositories(socket) do
+    repositories = Repositories.list_visible_repositories(socket.assigns.current_user)
+
+    socket
+    |> assign(:any_repository?, repositories != [])
     |> stream(:repositories, repositories)
   end
 
@@ -93,8 +250,8 @@ defmodule OpenAgentsWeb.HomeLive do
   # Its agent-layer rows carry no authored note, which is what left the rail
   # rendering a column of bare relative times. A row states what it is or it
   # does not render.
-  defp changelog_entries do
-    case Changelog.timeline(@repo) do
+  defp changelog_entries(opts) do
+    case Changelog.timeline(@repo, opts) do
       {:ok, rows} ->
         rows
         |> Enum.map(&%{entry_at: &1.entry_at, summary: changelog_summary(&1)})

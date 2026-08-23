@@ -189,4 +189,50 @@ defmodule OpenAgents.ForumTest do
       assert Forum.actor_user("agent:user_5678") == nil
     end
   end
+
+  describe "announcements" do
+    test "a committed topic announces itself once, after the commit" do
+      board = forum()
+      :ok = Forum.subscribe_posts()
+
+      {:ok, topic} =
+        Forum.create_topic(
+          board,
+          Map.merge(actor(), %{title: "Announced", slug: "announced", body_text: "body"})
+        )
+
+      # One message, not two: the first post is written inside the topic's own
+      # transaction, and a subscriber told from in there would re-read a forum
+      # that does not have the topic yet.
+      assert_receive {:forum_posts_changed, topic_id}
+      assert topic_id == topic.id
+      refute_receive {:forum_posts_changed, _other}, 20
+
+      # The row the subscriber re-reads is already durable when it hears.
+      assert [post] = Forum.list_recent_posts(limit: 1)
+      assert post.topic_id == topic.id
+    end
+
+    test "a committed post announces itself and a refused one stays silent" do
+      board = forum()
+
+      {:ok, topic} =
+        Forum.create_topic(
+          board,
+          Map.merge(actor(), %{title: "Closing soon", slug: "closing-soon", body_text: "body"})
+        )
+
+      :ok = Forum.subscribe_posts()
+
+      {:ok, _post} = Forum.create_post(topic, Map.merge(actor(), %{body_text: "still open"}))
+      assert_receive {:forum_posts_changed, _topic_id}
+
+      {:ok, closed} = Forum.set_topic_state(topic, "closed")
+
+      assert {:error, :topic_closed} =
+               Forum.create_post(closed, Map.merge(actor(), %{body_text: "too late"}))
+
+      refute_receive {:forum_posts_changed, _topic_id}, 20
+    end
+  end
 end

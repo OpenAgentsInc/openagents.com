@@ -448,4 +448,41 @@ defmodule OpenAgents.ChangelogTest do
       assert %{summary: [_message]} = errors_on(changeset)
     end
   end
+
+  describe "announcements" do
+    test "an appended entry announces itself and drops the cached projection" do
+      # Warm the cache, so the assertion below is about invalidation rather
+      # than about a cache that was never populated.
+      assert {:ok, []} = Changelog.timeline("openagents.com")
+      assert {"openagents.com", _at, []} = :persistent_term.get({Changelog, :cache})
+
+      :ok = Changelog.subscribe()
+
+      {:ok, _entry} =
+        Changelog.record(entry_attrs(%{sha: full_sha("aced0001"), summary: "Landed just now"}))
+
+      assert_receive {:changelog_entry, "openagents.com"}
+
+      # The cache is what a reconnecting client reads on its next mount, so a
+      # subscriber is not the only thing that has to learn.
+      assert :persistent_term.get({Changelog, :cache}, :absent) == :absent
+      assert {:ok, [row]} = Changelog.timeline("openagents.com")
+      assert row.summary == "Landed just now"
+    end
+
+    test "a rejected entry announces nothing" do
+      :ok = Changelog.subscribe()
+
+      assert {:error, _changeset} = Changelog.record(entry_attrs(%{category: "nonsense"}))
+      refute_receive {:changelog_entry, _repo}, 20
+    end
+
+    test "the ledger's events are named once, for every subscriber" do
+      assert Changelog.ledger_event?({:changelog_entry, "openagents.com"})
+      assert Changelog.ledger_event?({:forge_deploy, %{sha: "abc"}})
+      assert Changelog.ledger_event?({:forge_build_ready, %{}})
+      refute Changelog.ledger_event?({:issues_changed, "some-id"})
+      refute Changelog.ledger_event?(:refresh_dashboard)
+    end
+  end
 end

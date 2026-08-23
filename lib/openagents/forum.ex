@@ -29,6 +29,34 @@ defmodule OpenAgents.Forum do
   def topics_per_page, do: @topics_per_page
   def posts_per_page, do: @posts_per_page
 
+  @posts_topic "forum:posts"
+
+  @doc """
+  Subscribes the caller to every visible post written anywhere on the forum.
+
+  DATA-001: PostgreSQL stays authoritative. The message is
+  `{:forum_posts_changed, topic_id}` and carries nothing else, so a subscriber
+  re-reads through its own scope -- `list_recent_posts/1` with its own
+  `:operator?` flag -- and can never be handed a post from a private or
+  unlisted board it could not have loaded itself.
+  """
+  def subscribe_posts, do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @posts_topic)
+
+  @doc """
+  Announces that a topic gained a post.
+
+  Called after the owning write commits, never inside it: a subscriber re-reads
+  the moment it hears, and an announcement from inside an open transaction
+  hands it the forum as it was.
+  """
+  def broadcast_posts(topic_id) when is_binary(topic_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      @posts_topic,
+      {:forum_posts_changed, topic_id}
+    )
+  end
+
   ## Forums
 
   def list_forums do
@@ -349,7 +377,7 @@ defmodule OpenAgents.Forum do
     Multi.new()
     |> Multi.insert(:topic, changeset)
     |> Multi.run(:first_post, fn _repo, %{topic: topic} ->
-      create_post(topic, Map.put(topic_attrs, :body_text, body_text), idempotency_key)
+      write_post(topic, Map.put(topic_attrs, :body_text, body_text), idempotency_key)
     end)
     |> Multi.update(:topic_counts, fn %{topic: topic, first_post: post} ->
       Ecto.Changeset.change(topic)
@@ -358,8 +386,15 @@ defmodule OpenAgents.Forum do
     end)
     |> Repo.transaction()
     |> case do
-      {:ok, %{topic: %{id: topic_id}}} -> {:ok, Repo.get!(Topic, topic_id)}
-      {:error, _step, reason, _changes} -> {:error, reason}
+      {:ok, %{topic: %{id: topic_id}}} ->
+        # After the commit, never inside it. A subscriber re-reads the moment
+        # it hears, and a message sent from inside the transaction races the
+        # commit and hands the subscriber the forum as it was.
+        broadcast_posts(topic_id)
+        {:ok, Repo.get!(Topic, topic_id)}
+
+      {:error, _step, reason, _changes} ->
+        {:error, reason}
     end
   end
 
@@ -369,6 +404,20 @@ defmodule OpenAgents.Forum do
   and forum, and refuses closed or locked surfaces.
   """
   def create_post(%Topic{} = topic, attrs, idempotency_key \\ nil) do
+    case write_post(topic, attrs, idempotency_key) do
+      {:ok, post} ->
+        broadcast_posts(post.topic_id)
+        {:ok, post}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # The write without the announcement, so `create_topic/2` can compose it
+  # inside its transaction and announce once after the commit rather than
+  # twice, the first time from inside an open transaction.
+  defp write_post(%Topic{} = topic, attrs, idempotency_key) do
     with :ok <- ensure_open(topic),
          {:ok, post} <- insert_post(topic, attrs, idempotency_key) do
       bump_topic(topic, post)

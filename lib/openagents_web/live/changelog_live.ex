@@ -15,7 +15,6 @@ defmodule OpenAgentsWeb.ChangelogLive do
   alias OpenAgents.Changelog
 
   @repo "openagents.com"
-  @forge_topics ["forge:pushes", "forge:target", "forge:builds", "forge:deploys"]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -25,9 +24,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
         {:error, :not_public} -> raise OpenAgentsWeb.PublicNotFoundError
       end
 
-    if connected?(socket) do
-      Enum.each(@forge_topics, &Phoenix.PubSub.subscribe(OpenAgents.PubSub, &1))
-    end
+    if connected?(socket), do: Changelog.subscribe()
 
     {:ok,
      socket
@@ -45,21 +42,19 @@ defmodule OpenAgentsWeb.ChangelogLive do
   end
 
   @impl true
-  def handle_info(message, socket)
-      when elem(message, 0) in [
-             :forge_push,
-             :forge_target,
-             :forge_target_status,
-             :forge_build_ready,
-             :forge_deploy
-           ] do
-    case Changelog.timeline(@repo, refresh: true, viewer: socket.assigns.current_user) do
-      {:ok, rows} -> {:noreply, assign(socket, :rows, rows)}
-      _ -> {:noreply, socket}
+  def handle_info(message, socket) do
+    # The set of events that move the ledger is stated once, in `Changelog`,
+    # beside the projection that reads them, so this page and the homepage rail
+    # cannot come to disagree about what counts as a change.
+    if Changelog.ledger_event?(message) do
+      case Changelog.timeline(@repo, refresh: true, viewer: socket.assigns.current_user) do
+        {:ok, rows} -> {:noreply, assign(socket, :rows, rows)}
+        _ -> {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
     end
   end
-
-  def handle_info(_message, socket), do: {:noreply, socket}
 
   defp visible_rows(rows, nil), do: rows
   defp visible_rows(rows, filter), do: Enum.filter(rows, &(&1.category == filter))

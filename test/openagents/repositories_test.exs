@@ -122,6 +122,29 @@ defmodule OpenAgents.RepositoriesTest do
     end
   end
 
+  test "a project item may name a source issue in another repository", %{
+    initial: initial,
+    second: second,
+    user: user
+  } do
+    {:ok, _membership} = Repositories.add_member(initial, user, "maintainer")
+    assert {:ok, project} = Projects.create_project(initial, %{title: "Initial"}, user)
+    assert {:ok, second_issue} = Issues.create_issue(second, %{title: "Second"})
+
+    assert {:ok, item} =
+             %ProjectItem{}
+             |> ProjectItem.changeset(%{
+               project_id: project.id,
+               issue_id: second_issue.id,
+               repository_id: initial.id,
+               issue_repository_id: second.id
+             })
+             |> Repo.insert()
+
+    assert item.repository_id == initial.id
+    assert item.issue_repository_id == second.id
+  end
+
   test "project-item and comment constraints reject mismatched repository identities", %{
     initial: initial,
     second: second,

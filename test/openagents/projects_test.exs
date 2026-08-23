@@ -263,6 +263,103 @@ defmodule OpenAgents.ProjectsTest do
       assert Projects.list_project_items(project) == []
     end
 
+    test "create_project_item/2 records a source issue from another repository", %{
+      project: project
+    } do
+      source = repository_fixture(%{visibility: "public"})
+      source_issue = issue_fixture(source, title: "Cross-repository work")
+
+      assert {:ok, %ProjectItem{} = item} =
+               Projects.create_project_item(
+                 %{"issue_number" => source_issue.number, "issue_repository_id" => source.id},
+                 project
+               )
+
+      assert item.issue_id == source_issue.id
+      assert item.issue_repository_id == source.id
+      assert item.repository_id == project.repository_id
+      assert item.issue.repository.id == source.id
+    end
+
+    test "create_project_item/2 reads the number in the named source repository", %{
+      project: project,
+      issue: issue
+    } do
+      source = repository_fixture(%{visibility: "public"})
+      source_issue = issue_fixture(source, title: "Same number, other repository")
+
+      assert source_issue.number == issue.number
+
+      assert {:ok, %ProjectItem{} = item} =
+               Projects.create_project_item(
+                 %{"issue_number" => source_issue.number, "issue_repository_id" => source.id},
+                 project
+               )
+
+      assert item.issue_id == source_issue.id
+      refute item.issue_id == issue.id
+    end
+
+    test "create_project_item/2 refuses the same source issue twice", %{
+      project: project,
+      issue: issue
+    } do
+      {:ok, _item} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      assert %{project_id: ["has already been taken"]} = errors_on(changeset)
+      assert length(Projects.list_project_items(project)) == 1
+    end
+
+    test "list_visible_project_items/2 omits an unreadable source issue", %{
+      project: project,
+      issue: issue
+    } do
+      {:ok, local} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
+      private = repository_fixture(%{visibility: "private"})
+      private_issue = issue_fixture(private, title: "Private work")
+
+      {:ok, hidden} =
+        Projects.create_project_item(
+          %{"issue_number" => private_issue.number, "issue_repository_id" => private.id},
+          project
+        )
+
+      viewer = repository_user_fixture("project-source-viewer")
+
+      assert Enum.map(Projects.list_visible_project_items(project, viewer), & &1.id) == [local.id]
+      assert Enum.map(Projects.list_visible_project_items(project, nil), & &1.id) == [local.id]
+
+      {:ok, _membership} = OpenAgents.Repositories.add_member(private, viewer, "viewer")
+
+      assert Projects.list_visible_project_items(project, viewer)
+             |> Enum.map(& &1.id)
+             |> Enum.sort() == Enum.sort([local.id, hidden.id])
+    end
+
+    test "get_visible_project_item!/3 hides an unreadable source issue", %{project: project} do
+      private = repository_fixture(%{visibility: "private"})
+      private_issue = issue_fixture(private, title: "Private work")
+
+      {:ok, hidden} =
+        Projects.create_project_item(
+          %{"issue_number" => private_issue.number, "issue_repository_id" => private.id},
+          project
+        )
+
+      viewer = repository_user_fixture("project-item-viewer")
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Projects.get_visible_project_item!(project, hidden.id, viewer)
+      end
+
+      {:ok, _membership} = OpenAgents.Repositories.add_member(private, viewer, "viewer")
+
+      assert Projects.get_visible_project_item!(project, hidden.id, viewer).id == hidden.id
+    end
+
     test "update_project_item/2 merges into existing values", %{
       project: project,
       issue: issue

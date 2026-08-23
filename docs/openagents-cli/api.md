@@ -173,6 +173,10 @@ Item responses include the source issue's `owner`, `repo`, `number`, `url`,
 and `html_url`. The legacy `issue_number` form continues to select an issue
 from the project repository.
 
+A source repository or issue that you cannot read returns `404`, and an item
+list omits an issue that you cannot read. Adding the same source issue to a
+project twice returns `422`.
+
 Update the stored values for an item:
 
 ```sh

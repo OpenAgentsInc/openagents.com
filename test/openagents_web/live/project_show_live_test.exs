@@ -198,6 +198,64 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
            )
   end
 
+  test "a cross-repository card names and links to its source repository", %{conn: conn} do
+    project = project!()
+
+    source =
+      repository_fixture(%{owner: "SourceOrg", name: "source-board", visibility: "public"})
+
+    {:ok, issue} = Issues.create_issue(source, %{"title" => "Cross-repository card"})
+
+    {:ok, _item} =
+      Projects.create_project_item(
+        %{
+          "issue_number" => issue.number,
+          "issue_repository_id" => source.id,
+          "values" => %{"Status" => "To Do"}
+        },
+        project
+      )
+
+    {:ok, view, html} = live(conn, path(project))
+
+    assert html =~ "SourceOrg/source-board##{issue.number}"
+
+    assert has_element?(
+             view,
+             ~s{a[href="/SourceOrg/source-board/issues/#{issue.number}"]},
+             "Cross-repository card"
+           )
+  end
+
+  test "a card whose source repository is unreadable never renders", %{conn: conn} do
+    project = project!()
+
+    source =
+      repository_fixture(%{owner: "HiddenOrg", name: "hidden-board", visibility: "private"})
+
+    {:ok, issue} = Issues.create_issue(source, %{"title" => "Confidential card"})
+
+    {:ok, _item} =
+      Projects.create_project_item(
+        %{
+          "issue_number" => issue.number,
+          "issue_repository_id" => source.id,
+          "values" => %{"Status" => "To Do"}
+        },
+        project
+      )
+
+    {:ok, view, html} = live(conn, path(project))
+
+    refute html =~ "Confidential card"
+    refute html =~ "hidden-board"
+
+    refute has_element?(
+             view,
+             ~s{a[href="/HiddenOrg/hidden-board/issues/#{issue.number}"]}
+           )
+  end
+
   test "a missing project number raises rather than rendering an empty board", %{conn: conn} do
     assert_raise Ecto.NoResultsError, fn ->
       live(conn, ~p"/OpenAgentsInc/openagents.com/projects/9999")

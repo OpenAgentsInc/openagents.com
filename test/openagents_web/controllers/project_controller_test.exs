@@ -151,6 +151,39 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert rendered["values"] == %{"Status" => "Todo"}
     end
 
+    test "GET .../projectsV2/:project_number/items omits an unreadable source issue", %{
+      conn: conn
+    } do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      {:ok, local_issue} = create_issue(%{title: "Local work"})
+
+      {:ok, _local_item} =
+        Projects.create_project_item(%{"issue_number" => local_issue.number}, project)
+
+      source =
+        repository_fixture(%{owner: "HiddenOrg", name: "hidden-api", visibility: "private"})
+
+      {:ok, hidden_issue} = Issues.create_issue(source, %{title: "Confidential work"})
+
+      {:ok, _hidden_item} =
+        Projects.create_project_item(
+          %{"issue_number" => hidden_issue.number, "issue_repository_id" => source.id},
+          project
+        )
+
+      conn =
+        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+
+      body = response(conn, 200)
+      refute body =~ "hidden-api"
+      refute body =~ "HiddenOrg"
+
+      assert %{"items" => [%{"issue" => %{"repo" => "project-api", "number" => number}}]} =
+               Jason.decode!(body)
+
+      assert number == local_issue.number
+    end
+
     test "GET .../projectsV2/:project_number/items returns 404 for a missing project", %{
       conn: conn
     } do
@@ -223,6 +256,129 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert html_url =~ "/SourceOrg/source-api/issues/#{issue.number}"
       assert [%{issue_repository_id: source_id}] = Projects.list_project_items(project)
       assert source_id == source.id
+    end
+
+    test "POST .../items adds a private source issue the member can read", %{
+      conn: conn,
+      project: project,
+      user: user
+    } do
+      source =
+        repository_with_member_fixture(
+          user,
+          %{owner: "ReadableOrg", name: "readable-api", visibility: "private"},
+          "viewer"
+        )
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Private but readable"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "ReadableOrg", repo: "readable-api", number: issue.number}}
+        )
+
+      assert %{"items" => [%{"issue_id" => issue_id}]} = json_response(conn, 201)
+      assert issue_id == issue.id
+    end
+
+    test "POST .../items refuses a project reader who can write the source repository", %{
+      project: project,
+      repository: repository
+    } do
+      reader = github_user("api-token-project-reader", "carol")
+      {:ok, _membership} = OpenAgents.Repositories.add_member(repository, reader, "viewer")
+
+      source =
+        repository_with_member_fixture(
+          reader,
+          %{owner: "WriterOrg", name: "writer-api", visibility: "private"},
+          "owner"
+        )
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Their own work"})
+
+      conn =
+        post(
+          put_forge_api_token(build_conn(), "project-reader", "carol"),
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "WriterOrg", repo: "writer-api", number: issue.number}}
+        )
+
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert Projects.list_project_items(project) == []
+    end
+
+    test "POST .../items returns 404 for an unknown source repository", %{
+      conn: conn,
+      project: project
+    } do
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "NoSuchOrg", repo: "no-such-api", number: 1}}
+        )
+
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert Projects.list_project_items(project) == []
+    end
+
+    test "POST .../items returns 404 for an unknown issue in a readable source repository", %{
+      conn: conn,
+      project: project
+    } do
+      repository_fixture(%{owner: "SourceOrg", name: "empty-api", visibility: "public"})
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "SourceOrg", repo: "empty-api", number: 999_999}}
+        )
+
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert Projects.list_project_items(project) == []
+    end
+
+    test "POST .../items reads the number in the named source repository", %{
+      conn: conn,
+      project: project,
+      issue: issue
+    } do
+      source =
+        repository_fixture(%{owner: "SourceOrg", name: "same-number-api", visibility: "public"})
+
+      {:ok, source_issue} = Issues.create_issue(source, %{title: "Same number elsewhere"})
+      assert source_issue.number == issue.number
+
+      conn =
+        post(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          %{issue: %{owner: "SourceOrg", repo: "same-number-api", number: source_issue.number}}
+        )
+
+      assert %{"items" => [%{"issue_id" => issue_id}]} = json_response(conn, 201)
+      assert issue_id == source_issue.id
+      refute issue_id == issue.id
+    end
+
+    test "POST .../items refuses the same source issue twice", %{
+      conn: conn,
+      project: project
+    } do
+      source =
+        repository_fixture(%{owner: "SourceOrg", name: "repeat-api", visibility: "public"})
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Added once"})
+      body = %{issue: %{owner: "SourceOrg", repo: "repeat-api", number: issue.number}}
+      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
+
+      assert %{"items" => [_item]} = json_response(post(conn, path, body), 201)
+      assert %{"errors" => _errors} = json_response(post(conn, path, body), 422)
+      assert length(Projects.list_project_items(project)) == 1
     end
 
     test "POST .../items hides an unreadable source repository", %{
@@ -365,6 +521,32 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert %{"items" => [%{"values" => %{"Status" => "Done"}}]} = json_response(conn, 200)
       assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Done"}
+    end
+
+    test "PATCH .../items/:item_id returns 404 for an unreadable source issue", %{
+      conn: conn,
+      project: project
+    } do
+      source =
+        repository_fixture(%{owner: "HiddenOrg", name: "hidden-patch-api", visibility: "private"})
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Confidential work"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "issue_repository_id" => source.id},
+          project
+        )
+
+      conn =
+        patch(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          %{values: %{"Status" => "Done"}}
+        )
+
+      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert Projects.get_project_item!(project, item.id).values == %{}
     end
 
     test "PATCH .../items/:item_id keeps values it was not asked to change", %{

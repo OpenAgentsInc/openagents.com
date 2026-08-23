@@ -22,6 +22,8 @@ defmodule OpenAgents.Forge.CacheReadiness do
 
   def ready? do
     GenServer.call(__MODULE__, :ready?)
+  catch
+    :exit, _reason -> false
   end
 
   def report do

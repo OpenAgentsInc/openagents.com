@@ -255,6 +255,20 @@ Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.DualPrincipalAuth`,
 `test/openagents/agents_test.exs`, and
 `test/openagents_web/controllers/agent_controller_test.exs`.
 
+### IDENTITY-005 — Box control is account-scoped and human-only
+
+Status: Current
+
+The `box:control` API scope is independent from forge, deployment, chat, and
+agent participation scopes. Only a human account token can use it in this
+slice. Every request names a conversation owned by that account, and a foreign
+conversation or Box is indistinguishable from a missing one. Agent Box control
+through an approved human link is deferred to the linked-principal contract.
+
+Evidence: `OpenAgentsWeb.Plugs.BoxControlAuth`, `OpenAgents.Box`,
+`OpenAgentsWeb.BoxController`, and
+`test/openagents_web/controllers/box_controller_test.exs`.
+
 ## Data authority and synchronization
 
 ### DATA-001 — PostgreSQL is authoritative
@@ -2285,6 +2299,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-002 | `test/openagents_web/auth_gate_test.exs` |
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |
+| IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |

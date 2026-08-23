@@ -82,6 +82,21 @@ defmodule OpenAgents.Conversations do
     |> Repo.one()
   end
 
+  @doc "Gets a conversation owned by the account, returning nil for other accounts or invalid IDs."
+  @spec get_conversation_for_user(User.t(), String.t()) :: Conversation.t() | nil
+  def get_conversation_for_user(%User{id: user_id}, conversation_id)
+      when is_binary(conversation_id) do
+    with {:ok, conversation_id} <- Ecto.UUID.cast(conversation_id) do
+      from(c in Conversation,
+        join: v in assoc(c, :visitor),
+        where: c.id == ^conversation_id and v.user_id == ^user_id
+      )
+      |> Repo.one()
+    else
+      :error -> nil
+    end
+  end
+
   @doc false
   def get_conversation_for_browser(browser_key) when is_binary(browser_key) do
     browser_key_hash = :crypto.hash(:sha256, browser_key)

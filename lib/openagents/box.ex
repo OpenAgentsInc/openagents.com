@@ -39,6 +39,15 @@ defmodule OpenAgents.Box do
     |> Enum.map(&refresh/1)
   end
 
+  @doc "Reads one conversation-owned box, refreshing its provider state."
+  @spec get_box(String.t(), String.t()) :: {:ok, ConversationBox.t()} | {:error, term()}
+  def get_box(conversation_id, box_id)
+      when is_binary(conversation_id) and is_binary(box_id) do
+    with {:ok, record} <- fetch_owned(conversation_id, box_id) do
+      {:ok, refresh(record)}
+    end
+  end
+
   @doc """
   Provisions a new box for a conversation and bootstraps OpenCode on it.
 

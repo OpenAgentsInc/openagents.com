@@ -183,7 +183,7 @@ defmodule OpenAgents.Tools.BoxToolsTest do
 
       Req.Test.json(conn, %{
         "exitCode" => 0,
-        "stdout" => "0.4.0\n",
+        "stdout" => "clone https://openagents.com/OpenAgentsInc/openagents.com\n",
         "stderr" => "",
         "timedOut" => false
       })
@@ -198,7 +198,10 @@ defmodule OpenAgents.Tools.BoxToolsTest do
 
     assert outcome["status"] == "succeeded"
     assert outcome["result"]["exit_code"] == 0
-    assert outcome["result"]["stdout"] == "0.4.0\n"
+
+    assert outcome["result"]["stdout"] ==
+             "clone https://openagents.com/OpenAgentsInc/openagents.com\n"
+
     assert outcome["target_receipt_refs"] == ["box:#{@box_id}"]
   end
 
@@ -212,7 +215,10 @@ defmodule OpenAgents.Tools.BoxToolsTest do
     Req.Test.expect(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
         "exitCode" => 0,
-        "stdout" => "key is sk-or-v1-abcdefghijklmnop1234 done\n",
+        "stdout" =>
+          "key is sk-or-v1-abcdefghijklmnop1234 done\n" <>
+            "clone https://openagents.com/OpenAgentsInc/openagents.com\n" <>
+            "https://viewer.ascii.dev/desktop?access_token=secret\n",
         "stderr" => "",
         "timedOut" => false
       })
@@ -226,7 +232,11 @@ defmodule OpenAgents.Tools.BoxToolsTest do
              )
 
     refute outcome["result"]["stdout"] =~ "sk-or-v1"
+    refute outcome["result"]["stdout"] =~ "viewer.ascii.dev"
     assert outcome["result"]["stdout"] =~ "[REDACTED]"
+
+    assert outcome["result"]["stdout"] =~
+             "clone https://openagents.com/OpenAgentsInc/openagents.com"
   end
 
   test "box_exec reports a timed-out command as failed", %{

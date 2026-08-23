@@ -108,7 +108,10 @@ config :openagents,
     maximum_active_boxes: 10,
     ttl_seconds: 3_600,
     poll_interval_ms: 1_000,
-    poll_attempts: 60
+    poll_attempts: 60,
+    rate_limit_window_seconds: 60,
+    create_rate_limit: 10,
+    command_rate_limit: 30
   ],
   # The provider does not report a context window, so the `/chat` console shows
   # a context meter only where a deployment states one.

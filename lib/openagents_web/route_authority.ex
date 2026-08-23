@@ -239,6 +239,28 @@ defmodule OpenAgentsWeb.RouteAuthority do
         true
       )
 
+  defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes", verb: verb})
+       when verb in [:get, :post],
+       do:
+         declaration(
+           :authenticated_api,
+           "human account bearer token",
+           "box:control",
+           verb == :post
+         )
+
+  defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes/:box_id", verb: :get}),
+    do: declaration(:authenticated_api, "human account bearer token", "box:control", false)
+
+  defp policy(%{
+         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/commands",
+         verb: :post
+       }),
+       do: declaration(:authenticated_api, "human account bearer token", "box:control", true)
+
+  defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes/:box_id/stop", verb: :post}),
+    do: declaration(:authenticated_api, "human account bearer token", "box:control", true)
+
   defp policy(%{path: "/api/operator/artifact-listings" <> _path, verb: verb}),
     do:
       declaration(

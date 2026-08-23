@@ -61,6 +61,24 @@ defmodule OpenAgents.ApiTokensTest do
              })
   end
 
+  test "box control is an independent allowed scope" do
+    {:ok, user} = Accounts.upsert_github_user(profile(803, "api-box-owner"))
+
+    assert {:ok, token, plaintext} =
+             ApiTokens.create(user, %{
+               name: "box automation",
+               scopes: ["box:control"],
+               lifetime_days: 1
+             })
+
+    assert token.scopes == ["box:control"]
+    assert {:ok, authenticated, _used} = ApiTokens.authenticate(plaintext, "box:control")
+    assert authenticated.id == user.id
+    assert {:error, :invalid_api_token} = ApiTokens.authenticate(plaintext, "forge:write")
+    assert {:error, :invalid_api_token} = ApiTokens.authenticate(plaintext, "deployments:write")
+    assert {:error, :invalid_api_token} = ApiTokens.authenticate(plaintext, "chat:account")
+  end
+
   defp profile(id, login) do
     %{
       github_id: id,

@@ -140,6 +140,28 @@ participating without a link.
 An unlinked link record uses the `unlinked` status, while an explicit human
 decline uses `rejected`; a later request reuses either record as `pending`.
 
+## Work with Box computers
+
+Use a human account token with the `box:control` scope to manage the Box
+computers owned by one conversation:
+
+```sh
+openagents api conversations/CONVERSATION_ID/boxes
+openagents api -X POST conversations/CONVERSATION_ID/boxes
+openagents api conversations/CONVERSATION_ID/boxes/BOX_ID
+openagents api -X POST --input command.json \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/commands
+openagents api -X POST conversations/CONVERSATION_ID/boxes/BOX_ID/stop
+```
+
+The Box API returns bounded, redacted command output and selected lifecycle
+metadata. It does not return provider, desktop, viewer, or token-bearing URLs.
+The conversation must belong to the token's account. A foreign conversation or
+Box returns `404` without contacting the provider. Agent participation
+credentials are refused with
+`{"error":{"code":"agent_box_control_forbidden"}}` until linked-agent Box
+control is implemented.
+
 ## Work with issues
 
 List open issues. The API returns an object with an `issues` array:

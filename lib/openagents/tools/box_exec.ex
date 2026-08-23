@@ -12,13 +12,12 @@ defmodule OpenAgents.Tools.BoxExec do
 
   alias OpenAgents.Box
   alias OpenAgents.Modules.Metadata
-  alias OpenAgents.Tools.{ExecutionResult, Redaction, Tool}
+  alias OpenAgents.Tools.{BoxOutput, ExecutionResult, Tool}
 
   @default_timeout_seconds 60
   # The registry caps a tool run at 600 seconds; the remote command budget
   # stays below it so the HTTP round trip fits inside the tool budget.
   @maximum_timeout_seconds 570
-  @maximum_stream_bytes 24 * 1_024
 
   @impl true
   def specification do
@@ -101,8 +100,8 @@ defmodule OpenAgents.Tools.BoxExec do
   end
 
   defp build_result(box_id, body) do
-    {stdout, stdout_truncated} = bounded(body["stdout"])
-    {stderr, stderr_truncated} = bounded(body["stderr"])
+    {stdout, stdout_truncated} = BoxOutput.bounded(body["stdout"])
+    {stderr, stderr_truncated} = BoxOutput.bounded(body["stderr"])
     exit_code = body["exitCode"]
     timed_out = body["timedOut"] == true
 
@@ -140,47 +139,5 @@ defmodule OpenAgents.Tools.BoxExec do
          ),
        target_receipt_refs: ["box:#{box_id}"]
      }}
-  end
-
-  defp bounded(nil), do: {"", false}
-
-  defp bounded(stream) when is_binary(stream) do
-    redacted = stream |> scrub() |> Redaction.redact_text()
-
-    if byte_size(redacted) <= @maximum_stream_bytes do
-      {redacted, false}
-    else
-      {tail_bytes(redacted, @maximum_stream_bytes), true}
-    end
-  end
-
-  defp bounded(_other), do: {"", false}
-
-  defp scrub(output) do
-    if String.valid?(output) do
-      output
-    else
-      output
-      |> String.chunk(:valid)
-      |> Enum.map_join(fn chunk -> if String.valid?(chunk), do: chunk, else: "\uFFFD" end)
-    end
-  end
-
-  defp tail_bytes(text, limit) do
-    text
-    |> binary_part(byte_size(text) - limit, limit)
-    |> trim_partial_prefix(3)
-  end
-
-  defp trim_partial_prefix(text, 0), do: text
-
-  defp trim_partial_prefix(text, attempts) do
-    case text do
-      <<_first, rest::binary>> ->
-        if String.valid?(text), do: text, else: trim_partial_prefix(rest, attempts - 1)
-
-      _empty ->
-        text
-    end
   end
 end

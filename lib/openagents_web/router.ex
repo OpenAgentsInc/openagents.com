@@ -60,6 +60,12 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "chat:account"
   end
 
+  pipeline :box_control_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.BoxControlAuth, scope: "box:control"
+  end
+
   # The deployment control plane authenticates two principals: a human holding
   # `deployments:write`, and a short-lived workflow grant. Neither carries the
   # operator-only fleet promotion authority.
@@ -405,6 +411,16 @@ defmodule OpenAgentsWeb.Router do
     post "/chat/turns", ChatTurnController, :create
     get "/capacity", CapacityController, :show
     post "/capacity/matches", CapacityController, :matches
+  end
+
+  scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do
+    pipe_through :box_control_api
+
+    get "/", BoxController, :index
+    post "/", BoxController, :create
+    get "/:box_id", BoxController, :show
+    post "/:box_id/commands", BoxController, :command
+    post "/:box_id/stop", BoxController, :stop
   end
 
   scope "/api/v3", OpenAgentsWeb do

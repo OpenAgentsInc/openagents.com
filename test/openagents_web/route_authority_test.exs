@@ -160,6 +160,26 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:chat_account_api]
   end
 
+  test "Box control uses its own human account bearer pipeline" do
+    route = route!(:get, "/api/v3/conversations/:conversation_id/boxes")
+    create = route!(:post, "/api/v3/conversations/:conversation_id/boxes")
+    command = route!(:post, "/api/v3/conversations/:conversation_id/boxes/:box_id/commands")
+
+    assert route.class == :authenticated_api
+    assert route.principal == "human account bearer token"
+    assert route.scope == "box:control"
+    refute route.mutation
+    assert create.mutation
+    assert command.mutation
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "GET",
+             "/api/v3/conversations/00000000-0000-4000-8000-000000000001/boxes",
+             "stage.openagents.com"
+           ).pipe_through == [:box_control_api]
+  end
+
   test "operator and machine surfaces cannot drift into browser or public classes" do
     assert route!(:get, "/admin").class == :operator
     assert route!(:get, "/admin/forge").scope == "forge:promote"

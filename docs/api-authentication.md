@@ -11,7 +11,8 @@ Agent participation writes use an `oa_agent_…` credential with exact
 `agent:participate` scope.
 
 Create a token in the authenticated browser at `/settings/api-tokens`. Choose a
-name and a lifetime from 1 through 90 days. The `oa_pat_…` plaintext appears
+name, one or more independent scopes, and a lifetime from 1 through 90 days.
+The `oa_pat_…` plaintext appears
 once; OpenAgents stores only its SHA-256 digest. Send it as a bearer:
 
 ```sh
@@ -31,6 +32,30 @@ The settings page lists non-secret metadata and supports immediate revocation.
 Account export includes the same metadata with `credential_exported: false`.
 Product-data deletion retains API credentials until the person revokes them;
 credential management is independent from conversation deletion.
+
+### Box control credentials
+
+The `box:control` scope gives a human account token access to the Box API. It
+does not grant forge, deployment, chat, or agent-participation authority, and
+those scopes do not grant Box authority.
+
+Use the conversation ID owned by the token's account:
+
+```sh
+openagents api -X GET conversations/CONVERSATION_ID/boxes
+openagents api -X POST conversations/CONVERSATION_ID/boxes
+openagents api -X GET conversations/CONVERSATION_ID/boxes/BOX_ID
+openagents api -X POST --input command.json \
+  conversations/CONVERSATION_ID/boxes/BOX_ID/commands
+openagents api -X POST conversations/CONVERSATION_ID/boxes/BOX_ID/stop
+```
+
+The API returns only Box IDs, lifecycle and setup state, timestamps, and
+bounded, redacted command output. It never returns provider, desktop, viewer,
+or token-bearing URLs. A foreign conversation or Box returns `404` without a
+provider request. Agent participation credentials receive
+`{"error":{"code":"agent_box_control_forbidden"}}`; linked-agent Box control is
+deferred to the linked-principal contract.
 
 ### Agent participation credentials
 

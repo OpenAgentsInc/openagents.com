@@ -3,6 +3,8 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   import Ecto.Query
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Analytics
+  alias OpenAgents.Analytics.Chat, as: ChatAnalytics
   alias OpenAgents.Chat.{AccountEvent, AccountRun, OpenRouter}
   alias OpenAgents.Conversations
   alias OpenAgents.Repo
@@ -34,6 +36,7 @@ defmodule OpenAgents.Chat.AccountTurns do
     else
       {:provider_start_failed, run, reason} ->
         finish_run(run.id, {:error, :turn_start_failed})
+        capture_run_outcome(run, user, {:error, :turn_start_failed})
         {:error, reason}
 
       error ->
@@ -54,6 +57,14 @@ defmodule OpenAgents.Chat.AccountTurns do
     with %{id: conversation_id} <- Conversations.get_conversation_for_user(user),
          %AccountRun{} = run <- streaming_run(conversation_id) do
       stop_provider_task(run.id)
+
+      ChatAnalytics.turn_failed(Analytics.distinct_id(user), %{
+        "reason" => "cancelled",
+        "outcome" => "cancelled",
+        "conversation_id" => conversation_id,
+        "turn_id" => run.id
+      })
+
       cancel_run(run.id)
     else
       _no_active_turn -> {:error, :no_active_turn}
@@ -251,6 +262,7 @@ defmodule OpenAgents.Chat.AccountTurns do
                  request,
                  fn event ->
                    persist_provider_event(run.id, event)
+                   capture_stream_event(run, user, event)
                    notify(subscriber, {:openrouter_stream_event, run.id, event})
                  end,
                  tool_context: %{
@@ -267,6 +279,7 @@ defmodule OpenAgents.Chat.AccountTurns do
              end
 
            finish_run(run.id, result)
+           capture_run_outcome(run, user, result)
            notify(subscriber, {:account_chat_completed, run.id, result})
          end) do
       {:ok, pid} -> {:ok, pid}
@@ -287,6 +300,75 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   defp persist_provider_event(run_id, {kind, payload}),
     do: append_event(run_id, Atom.to_string(kind), normalize_payload(payload))
+
+  # One process owns one run's stream, so the chunk throttle lives in that
+  # process rather than in a shared counter. Tool starts are already one event
+  # per call and need no throttle.
+  defp capture_stream_event(run, user, {:text_delta, _delta}) do
+    captured_at =
+      ChatAnalytics.stream_chunk(
+        Analytics.distinct_id(user),
+        Process.get(:chat_stream_chunk_captured_at),
+        %{"conversation_id" => run.conversation_id, "turn_id" => run.id, "modality" => "text"}
+      )
+
+    Process.put(:chat_stream_chunk_captured_at, captured_at)
+    :ok
+  end
+
+  defp capture_stream_event(run, user, {:tool_call_started, payload}) when is_map(payload) do
+    ChatAnalytics.tool_called(Analytics.distinct_id(user), %{
+      "tool_name" => payload["name"] || "tool",
+      "turn_id" => run.id,
+      "conversation_id" => run.conversation_id,
+      "modality" => "text"
+    })
+  end
+
+  defp capture_stream_event(_run, _user, _event), do: :ok
+
+  # The completion carries the provider's own totals for the whole run,
+  # including any Chat Completions fallback, so this is the one place a run
+  # reports tokens.
+  defp capture_run_outcome(run, user, {:ok, completion}) when is_map(completion) do
+    distinct_id = Analytics.distinct_id(user)
+
+    identity = %{
+      "conversation_id" => run.conversation_id,
+      "turn_id" => run.id,
+      "modality" => "text"
+    }
+
+    ChatAnalytics.message_received(
+      distinct_id,
+      Map.put(
+        identity,
+        "length_bucket",
+        ChatAnalytics.length_bucket(completion["assistant_content"] || "")
+      )
+    )
+
+    ChatAnalytics.tokens_used(
+      distinct_id,
+      completion["usage"],
+      Map.merge(identity, %{
+        "model" => completion["model"],
+        "provider" => completion["provider"],
+        "outcome" => "completed"
+      })
+    )
+  end
+
+  defp capture_run_outcome(run, user, {:error, reason}) do
+    ChatAnalytics.turn_failed(Analytics.distinct_id(user), %{
+      "reason" => error_code(reason),
+      "outcome" => "failed",
+      "conversation_id" => run.conversation_id,
+      "turn_id" => run.id
+    })
+  end
+
+  defp capture_run_outcome(_run, _user, _result), do: :ok
 
   defp finish_run(run_id, {:ok, completion}) do
     # Token counts are read before redaction, which blanks every field whose

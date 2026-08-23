@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.ChatLive do
     VoiceSessions
   }
 
+  alias OpenAgents.Analytics.Chat, as: ChatAnalytics
   alias OpenAgents.ComputerActivity
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Voice.Config, as: VoiceConfig
@@ -96,6 +97,7 @@ defmodule OpenAgentsWeb.ChatLive do
       |> assign(:oldest_message_id, first_id(messages))
       |> assign(:active_turn, active_turn)
       |> assign(:message_queue, [])
+      |> assign(:stream_chunk_captured_at, nil)
       |> assign(:voice_enabled?, voice_config.enabled?)
       |> assign(:recording_config, Recordings.config())
       |> assign(:voice_session, voice_session)
@@ -193,6 +195,7 @@ defmodule OpenAgentsWeb.ChatLive do
   def handle_info({:message_updated, message}, socket) do
     {:noreply,
      socket
+     |> capture_assistant_message(message)
      |> clear_live_voice_item(message.provider_item_id)
      |> refresh_job_rollup(message)
      |> stream_insert(:messages, message)}
@@ -220,6 +223,7 @@ defmodule OpenAgentsWeb.ChatLive do
   def handle_info({:turn_updated, turn}, socket) do
     if turn.status in ["completed", "failed", "cancelled"] do
       capture_turn_completed(turn, socket)
+      capture_turn_failed(turn, socket)
 
       # The active turn ended: clear it, surface any error, and immediately start
       # the next queued message so a stacked run continues without the owner
@@ -228,6 +232,7 @@ defmodule OpenAgentsWeb.ChatLive do
       |> assign(:active_turn, nil)
       |> assign(:tool_activity, [])
       |> assign(:composer_error, turn.error_message)
+      |> assign(:stream_chunk_captured_at, nil)
       |> push_event("composer:focus", %{})
       |> advance_queue()
     else
@@ -280,6 +285,8 @@ defmodule OpenAgentsWeb.ChatLive do
       if voice_session.status in ~w(ended failed),
         do: clear_all_live_voice_items(socket),
         else: socket
+
+    capture_voice_lifecycle(socket, voice_session)
 
     {:noreply,
      socket
@@ -481,6 +488,15 @@ defmodule OpenAgentsWeb.ChatLive do
       true ->
         item = %{id: System.unique_integer([:positive, :monotonic]), content: trimmed}
 
+        ChatAnalytics.message_queued(
+          Analytics.distinct_id(socket.assigns.current_user),
+          %{
+            "length_bucket" => length_bucket(trimmed),
+            "queue_depth" => length(socket.assigns.message_queue) + 1,
+            "conversation_id" => socket.assigns.conversation.id
+          }
+        )
+
         {:noreply,
          socket
          |> assign(:message_queue, socket.assigns.message_queue ++ [item])
@@ -582,14 +598,97 @@ defmodule OpenAgentsWeb.ChatLive do
     )
   end
 
-  defp length_bucket(content) when is_binary(content) do
+  # A failed or cancelled turn is reported beside the completion event so a
+  # failure rate can be read from one event instead of a property filter.
+  defp capture_turn_failed(%{status: "completed"}, _socket), do: :ok
+
+  defp capture_turn_failed(turn, socket) do
+    ChatAnalytics.turn_failed(
+      Analytics.distinct_id(socket.assigns.current_user),
+      %{
+        "reason" => turn.error_code || turn.status,
+        "outcome" => turn.status,
+        "conversation_id" => turn.conversation_id,
+        "turn_id" => turn.id
+      }
+    )
+  end
+
+  # Every assistant delta re-broadcasts the message, which makes this both the
+  # stream-chunk signal and, at the terminal status, the one place an assistant
+  # message is known to have reached the reader. Chunks are throttled inside
+  # `OpenAgents.Analytics.Chat`; the throttle rides in an assign so it resets
+  # with each turn.
+  defp capture_assistant_message(
+         socket,
+         %Message{role: "assistant", status: "streaming"} = message
+       ) do
+    captured_at =
+      ChatAnalytics.stream_chunk(
+        Analytics.distinct_id(socket.assigns.current_user),
+        socket.assigns.stream_chunk_captured_at,
+        %{
+          "conversation_id" => message.conversation_id,
+          "modality" => message.modality
+        }
+      )
+
+    assign(socket, :stream_chunk_captured_at, captured_at)
+  end
+
+  defp capture_assistant_message(
+         socket,
+         %Message{role: "assistant", status: "complete"} = message
+       ) do
+    ChatAnalytics.message_received(
+      Analytics.distinct_id(socket.assigns.current_user),
+      %{
+        "length_bucket" => length_bucket(message.content || ""),
+        "modality" => message.modality,
+        "conversation_id" => message.conversation_id
+      }
+    )
+
+    socket
+  end
+
+  defp capture_assistant_message(socket, _message), do: socket
+
+  # Status broadcasts repeat through a call's life, so the transitions are read
+  # against the session already in the assign: absent to live starts a call,
+  # live to terminal ends one.
+  defp capture_voice_lifecycle(socket, voice_session) do
+    previous = socket.assigns.voice_session
+    distinct_id = Analytics.distinct_id(socket.assigns.current_user)
+    terminal? = voice_session.status in ~w(ended failed)
+
     cond do
-      byte_size(content) < 100 -> "under_100"
-      byte_size(content) < 1_000 -> "under_1k"
-      byte_size(content) < 8_000 -> "under_8k"
-      true -> "over_8k"
+      is_nil(previous) and not terminal? ->
+        ChatAnalytics.voice_started(distinct_id, %{
+          "conversation_id" => voice_session.conversation_id
+        })
+
+      not is_nil(previous) and previous.status not in ~w(ended failed) and terminal? ->
+        ChatAnalytics.voice_ended(distinct_id, %{
+          "conversation_id" => voice_session.conversation_id,
+          "outcome" => voice_session.status,
+          "duration_ms" => voice_duration_ms(voice_session)
+        })
+
+      true ->
+        :ok
     end
   end
+
+  defp voice_duration_ms(%{
+         started_at: %DateTime{} = started_at,
+         ended_at: %DateTime{} = ended_at
+       }),
+       do: DateTime.diff(ended_at, started_at, :millisecond)
+
+  defp voice_duration_ms(_voice_session), do: nil
+
+  defp length_bucket(content), do: ChatAnalytics.length_bucket(content)
 
   defp tool_activity(nil, nil), do: []
 

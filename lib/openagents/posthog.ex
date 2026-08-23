@@ -39,7 +39,7 @@ defmodule OpenAgents.PostHog do
   @doc """
   Everything the operator analytics page shows.
 
-  Returns `{:ok, shaped}` with six bounded projections, or
+  Returns `{:ok, shaped}` with eight bounded projections, or
   `{:error, :not_configured | :unavailable}`. Each projection runs as its own
   HogQL query; a failure of any one fails the whole pull, because partial
   numbers presented next to each other read as complete.
@@ -50,6 +50,8 @@ defmodule OpenAgents.PostHog do
       with {:ok, events} <- run(event_counts_sql(), "event_counts"),
            {:ok, funnel} <- run(funnel_sql(), "funnel"),
            {:ok, chat} <- run(chat_turns_sql(), "chat_turns"),
+           {:ok, lifecycle} <- run(chat_lifecycle_sql(), "chat_lifecycle"),
+           {:ok, tokens} <- run(chat_token_usage_sql(), "chat_token_usage"),
            {:ok, pages} <- run(top_pages_sql(), "top_pages"),
            {:ok, triage} <- run(triage_health_sql(), "triage_health"),
            {:ok, issue_flow} <- run(weekly_issue_flow_sql(), "weekly_issue_flow") do
@@ -59,6 +61,8 @@ defmodule OpenAgents.PostHog do
            event_counts: shape_rows(events),
            funnel: shape_rows(funnel) |> List.first(%{}),
            chat_turns: shape_chat_turns(shape_rows(chat) |> List.first(%{})),
+           chat_lifecycle: shape_chat_lifecycle(shape_rows(lifecycle) |> List.first(%{})),
+           chat_token_usage: shape_chat_token_usage(shape_rows(tokens)),
            top_pages: shape_rows(pages),
            triage_health: shape_triage_health(shape_rows(triage) |> List.first(%{})),
            weekly_issue_flow: shape_rows(issue_flow)
@@ -108,6 +112,52 @@ defmodule OpenAgents.PostHog do
       max(properties.duration_ms) AS max_duration_ms
     FROM events
     WHERE timestamp >= now() - INTERVAL 1 DAY AND event = 'chat_turn_completed'
+    """
+    |> squash()
+  end
+
+  # Assistant deliveries and turn failures in one row, so a failure rate reads
+  # against the turns that actually ran rather than against a separate pull.
+  defp chat_lifecycle_sql do
+    """
+    SELECT
+      countIf(event = 'chat_message_received') AS messages_received,
+      countIf(event = 'chat_message_queued') AS messages_queued,
+      countIf(event = 'chat_turn_failed') AS turns_failed,
+      countIf(event = 'chat_turn_completed') AS turns_finished,
+      if(
+        turns_finished = 0,
+        0,
+        round(turns_failed * 100.0 / turns_finished, 1)
+      ) AS turn_failure_percent
+    FROM events
+    WHERE timestamp >= now() - INTERVAL 1 DAY
+      AND event IN (
+        'chat_message_received',
+        'chat_message_queued',
+        'chat_turn_failed',
+        'chat_turn_completed'
+      )
+    """
+    |> squash()
+  end
+
+  # Token totals per model and provider. `chat_tokens_used` is captured once per
+  # turn, so summing it here counts each turn's tokens once.
+  defp chat_token_usage_sql do
+    """
+    SELECT
+      properties.model AS model,
+      properties.provider AS provider,
+      count() AS turns,
+      sum(properties.input_tokens) AS input_tokens,
+      sum(properties.output_tokens) AS output_tokens,
+      sum(properties.input_tokens) + sum(properties.output_tokens) AS total_tokens
+    FROM events
+    WHERE timestamp >= now() - INTERVAL 1 DAY AND event = 'chat_tokens_used'
+    GROUP BY model, provider
+    ORDER BY total_tokens DESC
+    LIMIT 10
     """
     |> squash()
   end
@@ -228,6 +278,29 @@ defmodule OpenAgents.PostHog do
       "avg_duration_ms" => duration_value(row["avg_duration_ms"]),
       "max_duration_ms" => duration_value(row["max_duration_ms"])
     }
+  end
+
+  defp shape_chat_lifecycle(row) do
+    %{
+      "messages_received" => count_value(row["messages_received"]),
+      "messages_queued" => count_value(row["messages_queued"]),
+      "turns_failed" => count_value(row["turns_failed"]),
+      "turns_finished" => count_value(row["turns_finished"]),
+      "turn_failure_percent" => numeric_value(row["turn_failure_percent"])
+    }
+  end
+
+  defp shape_chat_token_usage(rows) do
+    Enum.map(rows, fn row ->
+      %{
+        "model" => row["model"] || "unknown",
+        "provider" => row["provider"] || "unknown",
+        "turns" => count_value(row["turns"]),
+        "input_tokens" => count_value(row["input_tokens"]),
+        "output_tokens" => count_value(row["output_tokens"]),
+        "total_tokens" => count_value(row["total_tokens"])
+      }
+    end)
   end
 
   defp shape_triage_health(row) do

@@ -55,7 +55,7 @@ defmodule OpenAgents.PostHogTest do
       assert {:error, :not_configured} = PostHog.overview()
     end
 
-    test "shapes the six projections from one pull" do
+    test "shapes the eight projections from one pull" do
       configure()
 
       Req.Test.expect(__MODULE__, fn conn ->
@@ -100,6 +100,44 @@ defmodule OpenAgents.PostHogTest do
             "max_duration_ms"
           ],
           "results" => [[6, 6, 0, 0, 4525.0, 7414]]
+        })
+      end)
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert body =~ "'chat_message_received'"
+        assert body =~ "turn_failure_percent"
+
+        Req.Test.json(conn, %{
+          "columns" => [
+            "messages_received",
+            "messages_queued",
+            "turns_failed",
+            "turns_finished",
+            "turn_failure_percent"
+          ],
+          "results" => [[24, 2, 1, 24, 4.2]]
+        })
+      end)
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert body =~ "'chat_tokens_used'"
+        assert body =~ "GROUP BY model, provider"
+
+        Req.Test.json(conn, %{
+          "columns" => [
+            "model",
+            "provider",
+            "turns",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens"
+          ],
+          "results" => [
+            ["anthropic/claude-sonnet-4.5", "anthropic", 6, 4200, 1800, 6000],
+            [nil, nil, 1, 10, 5.0, 15.0]
+          ]
         })
       end)
 
@@ -157,6 +195,33 @@ defmodule OpenAgents.PostHogTest do
                "avg_duration_ms" => 4525,
                "max_duration_ms" => 7414
              }
+
+      assert overview.chat_lifecycle == %{
+               "messages_received" => 24,
+               "messages_queued" => 2,
+               "turns_failed" => 1,
+               "turns_finished" => 24,
+               "turn_failure_percent" => 4.2
+             }
+
+      assert overview.chat_token_usage == [
+               %{
+                 "model" => "anthropic/claude-sonnet-4.5",
+                 "provider" => "anthropic",
+                 "turns" => 6,
+                 "input_tokens" => 4200,
+                 "output_tokens" => 1800,
+                 "total_tokens" => 6000
+               },
+               %{
+                 "model" => "unknown",
+                 "provider" => "unknown",
+                 "turns" => 1,
+                 "input_tokens" => 10,
+                 "output_tokens" => 5,
+                 "total_tokens" => 15
+               }
+             ]
 
       assert [%{"url" => "https://openagents.com/", "views" => 20} | _] = overview.top_pages
 

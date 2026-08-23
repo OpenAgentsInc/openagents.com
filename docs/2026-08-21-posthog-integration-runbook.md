@@ -223,6 +223,13 @@ Chat and delegated work:
 | `chat_opened` | `ChatLive.mount` on connected mount | none |
 | `chat_message_sent` | `ChatLive.launch_turn` | `length_bucket` |
 | `chat_turn_completed` | terminal `turn_updated` broadcast in `ChatLive` | `outcome`: `completed`, `failed`, `cancelled`; `duration_ms` from turn timestamps |
+| `chat_message_queued` | `ChatLive` queues a message behind an active turn | `length_bucket`, `queue_depth`, `conversation_id` |
+| `chat_message_received` | complete assistant message in `ChatLive`; completed run in `Chat.AccountTurns` | `length_bucket`, `modality`, `conversation_id` |
+| `chat_stream_chunk` | streaming assistant deltas, throttled to one event per second per stream | `conversation_id`, `modality` |
+| `chat_tool_called` | `Turns.TurnServer` tool request; `tool_call_started` in `Chat.AccountTurns` | `tool_name`, `turn_id`, `conversation_id`; never arguments |
+| `chat_tokens_used` | once per turn at terminal state in `Turns.TurnServer` and `Chat.AccountTurns` | `input_tokens`, `output_tokens`, `model`, `provider`, `conversation_id`, `turn_id`, `outcome` |
+| `chat_turn_failed` | non-completed terminal turn in `ChatLive`; failed or cancelled run in `Chat.AccountTurns` | `reason`, `outcome`, `conversation_id`, `turn_id` |
+| `chat_voice_started` / `chat_voice_ended` | voice session lifecycle broadcasts in `ChatLive` | `conversation_id`; end adds `outcome`, `duration_ms` |
 | `memory_saved` | `ProfileMemory.remember_explicit` | `disposition`: `stored`, `already_active` |
 | `memory_viewed` | `MemoryLive.mount` on connected mount | none |
 | `computer_paired` | `ComputersController.approve_pairing` success | `tier` |

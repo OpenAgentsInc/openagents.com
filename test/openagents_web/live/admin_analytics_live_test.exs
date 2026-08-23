@@ -86,8 +86,8 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
         request_options: [plug: {Req.Test, __MODULE__}]
       )
 
-      # One pull is six questions.
-      Req.Test.expect(__MODULE__, 6, fn conn -> respond_by_query(conn) end)
+      # One pull is eight questions.
+      Req.Test.expect(__MODULE__, 8, fn conn -> respond_by_query(conn) end)
 
       conn = log_in_admin_user(conn, "analytics-loaded")
 
@@ -99,14 +99,18 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
       assert has_element?(view, "#analytics-weekly-issue-flow")
       assert has_element?(view, "#analytics-funnel")
       assert has_element?(view, "#analytics-chat-turns")
+      assert has_element?(view, "#analytics-chat-lifecycle")
+      assert has_element?(view, "#analytics-chat-tokens-table")
       assert html = render(view)
+      assert html =~ "anthropic/claude-sonnet-4.5"
+      assert html =~ "4.2%"
       assert html =~ "12.5h"
       assert html =~ "15.0%"
       assert html =~ "$pageview"
       assert html =~ "https://openagents.com/"
 
       # A second full pull backs the refresh click.
-      Req.Test.expect(__MODULE__, 6, fn conn -> respond_by_query(conn) end)
+      Req.Test.expect(__MODULE__, 8, fn conn -> respond_by_query(conn) end)
 
       assert view |> element("#analytics-refresh") |> render_click() =~ "LIVE POSTHOG"
       render_async(view)
@@ -125,7 +129,7 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
     Req.Test.expect(__MODULE__, handler)
   end
 
-  # The client asks six questions in a fixed order; each stub answers by
+  # The client asks eight questions in a fixed order; each stub answers by
   # matching the HogQL in the request body rather than relying on call order.
   defp respond_by_query(conn) do
     {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -147,6 +151,31 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
             "chat_message_sent"
           ],
           "results" => [[3, 1, 2, 1, 6]]
+        })
+
+      body =~ "turn_failure_percent" ->
+        Req.Test.json(conn, %{
+          "columns" => [
+            "messages_received",
+            "messages_queued",
+            "turns_failed",
+            "turns_finished",
+            "turn_failure_percent"
+          ],
+          "results" => [[24, 2, 1, 24, 4.2]]
+        })
+
+      body =~ "'chat_tokens_used'" ->
+        Req.Test.json(conn, %{
+          "columns" => [
+            "model",
+            "provider",
+            "turns",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens"
+          ],
+          "results" => [["anthropic/claude-sonnet-4.5", "anthropic", 6, 4200, 1800, 6000]]
         })
 
       body =~ "'chat_turn_completed'" ->

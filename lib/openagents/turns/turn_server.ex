@@ -4,6 +4,7 @@ defmodule OpenAgents.Turns.TurnServer do
   use GenServer, restart: :temporary
 
   alias OpenAgents.{
+    Analytics,
     Blueprint,
     Context.Composer,
     Conversations,
@@ -18,6 +19,7 @@ defmodule OpenAgents.Turns.TurnServer do
     ShadowPrograms
   }
 
+  alias OpenAgents.Analytics.Chat, as: ChatAnalytics
   alias OpenAgents.Providers.{ProviderEvent, Request, ToolOutput}
   alias OpenAgents.Tools.{ConversationExecutionContext, Registry, Runner}
 
@@ -180,6 +182,7 @@ defmodule OpenAgents.Turns.TurnServer do
     :atomics.put(state.cancellation, 1, 1)
     cancel_task(state.task)
     _timer_result = Process.cancel_timer(state.timeout_reference)
+    capture_tokens_used(state, total_usage(state), "cancelled")
     result = Conversations.cancel_turn(state.turn, total_usage(state))
     {:stop, :normal, result, state}
   end
@@ -313,6 +316,8 @@ defmodule OpenAgents.Turns.TurnServer do
              state.receipt,
              Map.put(attributes, :routing_receipt_id, routing_receipt.id)
            ) do
+      capture_tool_called(state, call)
+
       {:noreply,
        %{
          state
@@ -329,6 +334,36 @@ defmodule OpenAgents.Turns.TurnServer do
         stop_failed(state, reason)
     end
   end
+
+  # Token totals are reported from the turn's terminal path, which every turn
+  # reaches exactly once. Tool rounds and report continuations have already been
+  # merged into the total by then, so a turn that called several tools still
+  # reports one set of counts.
+  defp capture_tokens_used(state, usage, outcome) do
+    ChatAnalytics.tokens_used(owner_distinct_id(state.owner), usage, %{
+      "model" => state.base_request.model_id,
+      "provider" => state.provider.id(),
+      "conversation_id" => state.turn.conversation_id,
+      "turn_id" => state.turn.id,
+      "outcome" => outcome,
+      "modality" => "text"
+    })
+  end
+
+  defp capture_tool_called(state, call) do
+    ChatAnalytics.tool_called(owner_distinct_id(state.owner), %{
+      "tool_name" => call.name,
+      "turn_id" => state.turn.id,
+      "conversation_id" => state.turn.conversation_id,
+      "modality" => "text"
+    })
+  end
+
+  defp owner_distinct_id(%{user_id: user_id}) when is_binary(user_id),
+    do: Analytics.distinct_id(user_id)
+
+  defp owner_distinct_id(%{id: id}) when is_binary(id),
+    do: Analytics.distinct_id("visitor_#{id}")
 
   defp route_tool_call(nil, state) do
     Router.route(state.tool_snapshot, state.routing_policy, %{
@@ -386,6 +421,7 @@ defmodule OpenAgents.Turns.TurnServer do
     do: stop_failed(state, reason)
 
   defp finalize_provider_result(:ok, %{terminal_event: :cancelled} = state) do
+    capture_tokens_used(state, total_usage(state), "cancelled")
     _cancel_result = Conversations.cancel_turn(state.turn, total_usage(state))
     {:stop, :normal, state}
   end
@@ -399,6 +435,7 @@ defmodule OpenAgents.Turns.TurnServer do
   defp finalize_text_response(response_id, state) do
     case Conversations.complete_turn(state.turn, response_id, state.usage) do
       {:ok, _turn} ->
+        capture_tokens_used(state, state.usage, "completed")
         _timer_result = Process.cancel_timer(state.timeout_reference)
         {:stop, :normal, state}
 
@@ -609,6 +646,7 @@ defmodule OpenAgents.Turns.TurnServer do
     :atomics.put(state.cancellation, 1, 1)
     cancel_task(state.task)
     _timer_result = Process.cancel_timer(state.timeout_reference)
+    capture_tokens_used(state, total_usage(state), "failed")
     _failure_result = Conversations.fail_turn(state.turn, reason, total_usage(state))
     _incident = report_incident(state, reason)
     {:stop, :normal, state}

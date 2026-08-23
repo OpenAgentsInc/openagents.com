@@ -221,6 +221,57 @@ defmodule OpenAgentsWeb.AdminAnalyticsLive do
               </.card>
             </section>
 
+            <section aria-labelledby="lifecycle-heading">
+              <.card id="analytics-chat-lifecycle">
+                <div class="space-y-1">
+                  <h2 id="lifecycle-heading" class="card-title">Chat lifecycle and tokens</h2>
+                  <p class="text-muted-foreground">
+                    Assistant deliveries, queued messages, and turn failures over the trailing
+                    twenty-four hours. Token totals are provider-reported and counted once per turn.
+                  </p>
+                </div>
+                <% lifecycle = @overview.chat_lifecycle %>
+                <div class="grid gap-4 py-5 md:grid-cols-3">
+                  <div class="rounded-md border border-border p-4">
+                    <p class="text-sm text-muted-foreground">Assistant messages received</p>
+                    <p id="lifecycle-messages-received" class="mt-2 text-2xl font-semibold">
+                      {lifecycle["messages_received"]}
+                    </p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                      {lifecycle["messages_queued"]} messages waited behind an active turn.
+                    </p>
+                  </div>
+                  <div class="rounded-md border border-border p-4">
+                    <p class="text-sm text-muted-foreground">Turn failure rate</p>
+                    <p id="lifecycle-failure-rate" class="mt-2 text-2xl font-semibold">
+                      {format_percent(lifecycle["turn_failure_percent"])}
+                    </p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                      {lifecycle["turns_failed"]} of {lifecycle["turns_finished"]} finished turns
+                      ended in failure or cancellation.
+                    </p>
+                  </div>
+                  <div class="rounded-md border border-border p-4">
+                    <p class="text-sm text-muted-foreground">Tokens used</p>
+                    <p id="lifecycle-total-tokens" class="mt-2 text-2xl font-semibold">
+                      {total_tokens(@overview.chat_token_usage)}
+                    </p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                      Input plus output across every model.
+                    </p>
+                  </div>
+                </div>
+                <.table id="analytics-chat-tokens-table" rows={@overview.chat_token_usage}>
+                  <:col :let={row} label="Model">{row["model"]}</:col>
+                  <:col :let={row} label="Provider">{row["provider"]}</:col>
+                  <:col :let={row} label="Turns">{row["turns"]}</:col>
+                  <:col :let={row} label="Input">{row["input_tokens"]}</:col>
+                  <:col :let={row} label="Output">{row["output_tokens"]}</:col>
+                  <:col :let={row} label="Total">{row["total_tokens"]}</:col>
+                </.table>
+              </.card>
+            </section>
+
             <section aria-labelledby="events-heading">
               <.card id="analytics-event-volume">
                 <h2 id="events-heading" class="card-title">Event volume</h2>
@@ -255,6 +306,9 @@ defmodule OpenAgentsWeb.AdminAnalyticsLive do
   end
 
   defp format_duration(ms) when is_integer(ms), do: "#{ms}ms"
+
+  defp total_tokens(rows) when is_list(rows),
+    do: Enum.reduce(rows, 0, fn row, total -> total + (row["total_tokens"] || 0) end)
 
   defp format_hours(nil), do: "No data"
   defp format_hours(hours) when is_integer(hours), do: "#{hours}h"

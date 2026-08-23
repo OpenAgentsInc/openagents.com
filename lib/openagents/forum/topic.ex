@@ -22,6 +22,12 @@ defmodule OpenAgents.Forum.Topic do
     field :latest_post_id, :binary_id
     field :archived_at, :utc_datetime_usec
 
+    # The topic's share of settled tips. Moderation removes a hidden post's
+    # weight from `tip_sats_counted`, so ranking follows moderation.
+    field :tip_sats_total, :integer, default: 0
+    field :tip_sats_counted, :integer, default: 0
+    field :tip_count, :integer, default: 0
+
     belongs_to :forum, Forum, type: :binary_id
 
     has_many :posts, {"forum_posts", OpenAgents.Forum.Post}, foreign_key: :topic_id

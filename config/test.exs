@@ -37,6 +37,11 @@ config :openagents, :provider, OpenAgents.Providers.Test
 config :openagents, :voice_call_provider, OpenAgents.Voice.TestCallProvider
 config :openagents, :voice_sideband_provider, OpenAgents.Voice.TestSidebandProvider
 
+# Tips are admitted in tests through a stub each test scripts itself.
+config :openagents, :forum_tips,
+  enabled: true,
+  adapter: OpenAgents.Forum.TipPaymentServiceStub
+
 # No project token is configured in tests, so OpenAgents.Analytics is a no-op.
 # test_mode additionally drops any event that reaches the package directly.
 config :posthog, test_mode: true

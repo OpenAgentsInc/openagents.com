@@ -589,3 +589,16 @@ if config_env() == :dev do
       ]
     ]
 end
+
+# Forum tips: the operator's own self-custodial wallet service moves the sats.
+# Without a URL the adapter reports the service as unavailable, and the forum
+# keeps ranking what already settled.
+forum_tips_wallet_url = System.get_env("FORUM_TIPS_WALLET_URL")
+
+if is_binary(forum_tips_wallet_url) and forum_tips_wallet_url != "" do
+  config :openagents, :forum_tips,
+    enabled: true,
+    adapter: OpenAgents.Forum.Tips.PaymentService.MoneyDevKit,
+    base_url: forum_tips_wallet_url,
+    token: System.get_env("FORUM_TIPS_WALLET_TOKEN")
+end

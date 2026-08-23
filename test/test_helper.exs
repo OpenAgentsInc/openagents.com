@@ -26,3 +26,8 @@ if cluster_stage? do
 end
 
 Ecto.Adapters.SQL.Sandbox.mode(OpenAgents.Repo, :manual)
+
+# The forum tip payment double keeps each test's scripted outcome here. The
+# suite process owns the table so a finished test cannot take it down while a
+# concurrent test is still reading its own script.
+OpenAgents.Forum.TipPaymentServiceStub.install()

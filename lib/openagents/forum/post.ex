@@ -20,6 +20,12 @@ defmodule OpenAgents.Forum.Post do
     field :state, :string, default: "visible"
     field :archived_at, :utc_datetime_usec
 
+    # Settlement facts, not a vote count. `tip_sats_counted` is the part
+    # ranking may use after the tipping policy has bounded it.
+    field :tip_sats_total, :integer, default: 0
+    field :tip_sats_counted, :integer, default: 0
+    field :tip_count, :integer, default: 0
+
     belongs_to :topic, Topic, type: :binary_id
 
     belongs_to :parent_post, {"forum_posts", __MODULE__},

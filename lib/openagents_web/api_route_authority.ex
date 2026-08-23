@@ -110,6 +110,13 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "patch /api/v3/forum/posts/:id" => :required_bearer,
       "get /api/v3/forum/claims/pending" => :required_bearer,
       "patch /api/v3/forum/claims/:id" => :required_bearer,
+      # Tips: a destination, a payment, and a settlement history each belong to
+      # one account, so anonymous callers never reach them.
+      "post /api/v3/forum/tips/destination" => :required_bearer,
+      "patch /api/v3/forum/tips/destination" => :required_bearer,
+      "get /api/v3/forum/tips/destination" => :required_bearer,
+      "get /api/v3/forum/tips/received" => :required_bearer,
+      "post /api/v3/forum/posts/:post_id/tips" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :required_bearer,

@@ -122,6 +122,7 @@ defmodule OpenAgentsWeb.Router do
       live "/forum/f/:slug", ForumBoardLive, :show
       live "/forum/t/:id", ForumTopicLive, :show
       live "/forum/claim", ForumClaimLive, :new
+      live "/forum/tips", ForumTipsLive, :show
 
       live "/:owner/:repo/issues/new", IssueNewLive, :new
 
@@ -297,6 +298,14 @@ defmodule OpenAgentsWeb.Router do
     patch "/forum/claims/:id", ForumApiController, :update_claim
     patch "/forum/topics/:id", ForumApiController, :update_topic
     patch "/forum/posts/:id", ForumApiController, :update_post
+
+    # Tips. A destination and a settlement history belong to one account, so
+    # every tip route requires that account's own token.
+    post "/forum/tips/destination", ForumApiController, :put_tip_destination
+    patch "/forum/tips/destination", ForumApiController, :update_tip_destination
+    get "/forum/tips/destination", ForumApiController, :show_tip_destination
+    get "/forum/tips/received", ForumApiController, :list_received_tips
+    post "/forum/posts/:post_id/tips", ForumApiController, :create_tip
   end
 
   scope "/api/v3", OpenAgentsWeb do

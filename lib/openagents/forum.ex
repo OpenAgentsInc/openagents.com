@@ -11,8 +11,10 @@ defmodule OpenAgents.Forum do
   import Ecto.Query, warn: false
 
   alias Ecto.Multi
-  alias OpenAgents.Forum.{ActorLink, Forum, Post, Topic}
+  alias OpenAgents.Forum.{ActorLink, Forum, Post, Tips, Topic}
   alias OpenAgents.Repo
+
+  @ranking_half_life_seconds 7 * 24 * 3600
 
   @topics_per_page 25
   @posts_per_page 50
@@ -79,21 +81,58 @@ defmodule OpenAgents.Forum do
 
   ## Topics
 
+  @doc """
+  One page of topics in a board.
+
+  Pass `order: :ranked` to weigh settled tips alongside recency. Ranking reads
+  stored settlement totals only, so it returns the same order whether or not a
+  payment service is reachable.
+  """
   def list_topics(%Forum{id: forum_id}, opts \\ []) when is_list(opts) do
     page = parse_page(opts[:page])
 
     from(t in Topic,
       where: t.forum_id == ^forum_id and is_nil(t.archived_at),
-      order_by: [
-        desc: t.pin_state,
-        desc: t.updated_at,
-        desc: t.id
-      ],
       limit: ^@topics_per_page,
       offset: ^((page - 1) * @topics_per_page)
     )
+    |> order_topics(opts[:order])
     |> Repo.all()
   end
+
+  defp order_topics(query, :ranked) do
+    order_by(
+      query,
+      ^[
+        desc: dynamic([t], t.pin_state),
+        desc: ranking_score(),
+        desc: dynamic([t], t.updated_at),
+        desc: dynamic([t], t.id)
+      ]
+    )
+  end
+
+  defp order_topics(query, _order) do
+    order_by(query, [t], desc: t.pin_state, desc: t.updated_at, desc: t.id)
+  end
+
+  # Recency plus a bounded, decaying tip term. `ln` keeps a large tip from
+  # dominating a board, and the exponential decay means sats buy attention for
+  # about a week rather than forever.
+  defp ranking_score do
+    dynamic(
+      [t],
+      fragment(
+        "ln(1 + ?::float) * exp(- EXTRACT(EPOCH FROM (now() - ?)) / ?)",
+        t.tip_sats_counted,
+        t.updated_at,
+        ^@ranking_half_life_seconds
+      )
+    )
+  end
+
+  @doc "How long a settled tip keeps most of its ranking weight, in seconds."
+  def ranking_half_life_seconds, do: @ranking_half_life_seconds
 
   def count_topics(%Forum{id: forum_id}) do
     Repo.one!(
@@ -224,6 +263,14 @@ defmodule OpenAgents.Forum do
     )
   end
 
+  @doc "One post by id, or `nil` when the id is unknown or malformed."
+  def get_post(id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> Repo.get(Post, uuid)
+      :error -> nil
+    end
+  end
+
   @doc "The next post number in a topic."
   def next_post_number(topic_id) do
     Repo.one!(
@@ -324,6 +371,7 @@ defmodule OpenAgents.Forum do
 
     case result do
       {:ok, _} ->
+        Tips.withdraw_post_weight(post)
         audit_moderation("forum.post.deleted", moderator, post)
 
       _ ->
@@ -341,6 +389,7 @@ defmodule OpenAgents.Forum do
 
     case result do
       {:ok, _} ->
+        Tips.withdraw_post_weight(post)
         audit_moderation("forum.post.hidden", moderator, post)
 
       _ ->

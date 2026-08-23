@@ -48,6 +48,68 @@ defmodule OpenAgentsWeb.ForumApiJSON do
     %{claims: Enum.map(claims, &claim_json/1)}
   end
 
+  @doc """
+  The caller's own destination, by fingerprint.
+
+  The fingerprint identifies the destination without publishing it, so an
+  offer or address never travels back over the API.
+  """
+  def render("tip_destination.json", %{destination: nil}) do
+    %{destination: nil}
+  end
+
+  def render("tip_destination.json", %{destination: destination}) do
+    %{
+      destination: %{
+        id: destination.id,
+        kind: destination.kind,
+        fingerprint: destination.fingerprint,
+        label: destination.label,
+        state: destination.state,
+        accepting_tips: destination.accepting_tips,
+        custody: "self"
+      }
+    }
+  end
+
+  def render("tip.json", %{intent: intent, receipts: receipts}) do
+    %{
+      tip: %{
+        id: intent.id,
+        post_id: intent.post_id,
+        topic_id: intent.topic_id,
+        amount_sats: intent.amount_sats,
+        counted_sats: intent.counted_sats,
+        excluded_from_ranking: intent.counted_sats == 0,
+        exclusion_reason: intent.exclusion_reason,
+        state: intent.state,
+        failure_code: intent.failure_code,
+        settled_at: iso(intent.settled_at),
+        refunded_at: iso(intent.refunded_at)
+      },
+      receipts: Enum.map(receipts, &receipt_json/1)
+    }
+  end
+
+  def render("received_tips.json", %{export: export}) do
+    %{
+      custody: export.custody,
+      destination_fingerprint: export.destination_fingerprint,
+      received_sats: export.received_sats,
+      refunded_sats: export.refunded_sats,
+      settlements:
+        Enum.map(export.settlements, fn settlement ->
+          %{
+            post_id: settlement.post_id,
+            amount_sats: settlement.amount_sats,
+            state: settlement.state,
+            payment_hash: settlement.payment_hash,
+            settled_at: iso(settlement.settled_at)
+          }
+        end)
+    }
+  end
+
   def render("error.json", %{changeset: changeset}) do
     %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
   end
@@ -81,6 +143,8 @@ defmodule OpenAgentsWeb.ForumApiJSON do
         display_name: topic.actor_display_name,
         is_agent: topic.actor_is_agent
       },
+      tip_sats: topic.tip_sats_total,
+      tip_count: topic.tip_count,
       created_at: iso(topic.created_at),
       updated_at: iso(topic.updated_at),
       url: "https://openagents.com/forum/t/#{topic.id}"
@@ -106,6 +170,8 @@ defmodule OpenAgentsWeb.ForumApiJSON do
       post_number: post.post_number,
       body_text: post.body_text,
       state: post.state,
+      tip_sats: post.tip_sats_total,
+      tip_count: post.tip_count,
       author: %{
         ref: post.actor_ref,
         display_name: post.actor_display_name,
@@ -113,6 +179,19 @@ defmodule OpenAgentsWeb.ForumApiJSON do
       },
       created_at: iso(post.created_at),
       url: "https://openagents.com/forum/t/#{post.topic_id}"
+    }
+  end
+
+  # A receipt carries the payment hash, which is what a recipient looks up in
+  # their own wallet. It never carries a destination.
+  defp receipt_json(receipt) do
+    %{
+      kind: receipt.kind,
+      amount_sats: receipt.amount_sats,
+      fee_sats: receipt.fee_sats,
+      payment_hash: receipt.payment_hash,
+      failure_code: receipt.failure_code,
+      occurred_at: iso(receipt.occurred_at)
     }
   end
 

@@ -16,6 +16,7 @@ defmodule OpenAgentsWeb.ForumApiController do
 
   alias OpenAgents.Accounts
   alias OpenAgents.Forum
+  alias OpenAgents.Forum.Tips
 
   def boards(conn, _params) do
     render(conn, :boards, forums: Forum.list_readable_forums(scope(conn)))
@@ -253,6 +254,112 @@ defmodule OpenAgentsWeb.ForumApiController do
 
   defp review_claim(_link, _status), do: {:error, :invalid_status}
 
+  ## Tips
+
+  @doc """
+  Records where the token's account wants tips to arrive.
+
+  The forum stores a destination the account controls and never a wallet
+  secret, so it routes sats without being able to hold them.
+  """
+  def put_tip_destination(conn, %{"kind" => kind, "destination" => destination} = params) do
+    attrs = %{
+      user_id: conn.assigns.current_user.id,
+      kind: kind,
+      destination: destination,
+      label: params["label"],
+      accepting_tips: params["accepting_tips"] != false
+    }
+
+    case Tips.register_destination(attrs) do
+      {:ok, tip_destination} ->
+        conn |> put_status(:created) |> render(:tip_destination, destination: tip_destination)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        conn |> put_status(:unprocessable_entity) |> render(:error, changeset: changeset)
+    end
+  end
+
+  def put_tip_destination(conn, _params), do: unprocessable(conn, :destination)
+
+  def show_tip_destination(conn, _params) do
+    render(conn, :tip_destination,
+      destination: Tips.active_destination(conn.assigns.current_user.id)
+    )
+  end
+
+  @doc "Opts the token's account in or out of receiving tips."
+  def update_tip_destination(conn, %{"accepting_tips" => accepting?})
+      when is_boolean(accepting?) do
+    case Tips.active_destination(conn.assigns.current_user.id) do
+      nil ->
+        not_found(conn)
+
+      destination ->
+        case Tips.set_accepting_tips(destination, accepting?) do
+          {:ok, updated} ->
+            render(conn, :tip_destination, destination: updated)
+
+          {:error, changeset} ->
+            conn |> put_status(:unprocessable_entity) |> render(:error, changeset: changeset)
+        end
+    end
+  end
+
+  def update_tip_destination(conn, _params), do: unprocessable(conn, :accepting_tips)
+
+  @doc """
+  Tips a post in sats.
+
+  Pass `idempotency_key` to make a retry safe: the same key returns the tip
+  that already exists rather than paying a second time.
+  """
+  def create_tip(conn, %{"post_id" => post_id, "amount_sats" => amount_sats} = params) do
+    with {:ok, amount} <- parse_amount(amount_sats),
+         post when not is_nil(post) <- Forum.get_post(post_id) do
+      request = %{
+        post: post,
+        payer_user: conn.assigns.current_user,
+        payer_actor_ref: "user:#{conn.assigns.current_user.id}",
+        amount_sats: amount,
+        idempotency_key: params["idempotency_key"] || Ecto.UUID.generate()
+      }
+
+      case Tips.tip_post(request) do
+        {:ok, intent} ->
+          conn
+          |> put_status(:created)
+          |> render(:tip, intent: intent, receipts: Tips.list_receipts(intent))
+
+        {:error, {:payment_failed, intent}} ->
+          conn
+          |> put_status(:payment_required)
+          |> render(:tip, intent: intent, receipts: Tips.list_receipts(intent))
+
+        {:error, :payment_service_unavailable} ->
+          conn
+          |> put_status(:service_unavailable)
+          |> json(%{error: "payment_service_unavailable"})
+
+        {:error, reason} when is_atom(reason) ->
+          conn |> put_status(:conflict) |> json(%{error: to_string(reason)})
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          conn |> put_status(:unprocessable_entity) |> render(:error, changeset: changeset)
+      end
+    else
+      nil -> not_found(conn)
+      :error -> unprocessable(conn, :amount_sats)
+    end
+  end
+
+  def create_tip(conn, _params), do: unprocessable(conn, :amount_sats)
+
+  @doc "What the token's account received, and where to verify it."
+  def list_received_tips(conn, _params) do
+    render(conn, :received_tips, export: Tips.withdrawal_export(conn.assigns.current_user.id))
+  end
+
   ## Helpers
 
   defp first_post(topic) do
@@ -309,6 +416,17 @@ defmodule OpenAgentsWeb.ForumApiController do
     |> String.trim("-")
     |> String.slice(0, 80)
   end
+
+  defp parse_amount(amount) when is_integer(amount) and amount > 0, do: {:ok, amount}
+
+  defp parse_amount(amount) when is_binary(amount) do
+    case Integer.parse(amount) do
+      {value, ""} when value > 0 -> {:ok, value}
+      _invalid -> :error
+    end
+  end
+
+  defp parse_amount(_amount), do: :error
 
   defp valid_text?(value) when is_binary(value) and byte_size(value) > 0, do: true
   defp valid_text?(_value), do: false

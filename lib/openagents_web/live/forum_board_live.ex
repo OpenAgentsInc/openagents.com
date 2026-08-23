@@ -19,8 +19,8 @@ defmodule OpenAgentsWeb.ForumBoardLive do
          socket
          |> assign(:current_scope, socket.assigns[:current_scope])
          |> assign(:forum, forum)
-         |> assign(:topics, Forum.list_topics(forum))
-         |> stream(:topics, Forum.list_topics(forum))
+         |> assign(:topics, ranked_topics(forum))
+         |> stream(:topics, ranked_topics(forum))
          |> assign(:form, to_form(%{"title" => "", "body_text" => ""}, as: :topic))}
     end
   end
@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.ForumBoardLive do
           {:ok, _topic} ->
             {:noreply,
              socket
-             |> stream(:topics, Forum.list_topics(socket.assigns.forum), reset: true)
+             |> stream(:topics, ranked_topics(socket.assigns.forum), reset: true)
              |> assign(:form, to_form(%{"title" => "", "body_text" => ""}, as: :topic))
              |> put_flash(:info, "Topic created")}
 
@@ -57,6 +57,10 @@ defmodule OpenAgentsWeb.ForumBoardLive do
         end
     end
   end
+
+  # Settled tips are one bounded, decaying ranking signal beside recency.
+  # Ordering reads stored totals, so it works whether or not tips are enabled.
+  defp ranked_topics(forum), do: Forum.list_topics(forum, order: :ranked)
 
   defp slugify(nil), do: nil
 
@@ -102,6 +106,9 @@ defmodule OpenAgentsWeb.ForumBoardLive do
           <div class="flex items-center gap-3 text-sm text-muted-foreground mt-1">
             <span>{topic.actor_display_name}</span>
             <span>{topic.post_count} posts</span>
+            <%= if topic.tip_count > 0 do %>
+              <span class="badge" data-variant="dim">{topic.tip_sats_total} sats</span>
+            <% end %>
             <span>{Calendar.strftime(topic.updated_at, "%b %d, %Y")}</span>
             <%= if topic.pin_state == "pinned" do %>
               <span class="badge" data-variant="dim">pinned</span>

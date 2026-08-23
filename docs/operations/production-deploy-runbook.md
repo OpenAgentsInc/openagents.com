@@ -156,14 +156,24 @@ checks to pass before touching the fleet.
 ## 7. Rolling replacement
 
 `OpenAgents.Forge.RollingReplacement.run/2` replaces one node at a time. Its
-request names the exact current and previous SHAs, the exact current and
-previous image digests, the expected node list, and the fleet size. For each
-node it removes readiness, drains to zero active work, verifies remaining
-capacity and quorum, resets the instance with the target digest (the GCP
-provider sets `openagents-image`, `openagents-image-digest`, and
-`openagents-sha` metadata), then waits for membership, readiness, boot
-convergence, database readiness, and the exact SHA and digest before moving
-on.
+request names the Forge target id, the exact current and previous SHAs, the
+exact current and previous image digests, the expected node list, and the fleet
+size.
+
+Before it touches the fleet, the coordinator publishes the authorized rolling
+identity onto that target. Boot convergence reads the published record, so a
+node that boots into the authorized image is admitted on its first convergence
+attempt and stays in the load balancer for the rest of the roll. Leave
+`OPENAGENTS_FEATURE_BOOT_CONVERGENCE` on, and do not restart
+`OpenAgents.Forge.BootConverge`.
+
+For each node the coordinator removes readiness, drains to zero active work,
+verifies remaining capacity and quorum, resets the instance with the target
+digest (the GCP provider sets `openagents-image`, `openagents-image-digest`,
+and `openagents-sha` metadata), then waits for membership, readiness, boot
+convergence, database readiness, and the exact SHA and digest before moving on.
+It records each node's observed SHA and image digest against the published
+authority as that node rejoins.
 
 Order: `sarah-fleet-1` (us-central1-a), `sarah-fleet-2` (us-central1-b),
 `sarah-fleet-3` (us-central1-c). Two healthy nodes must exist before each
@@ -177,9 +187,17 @@ OpenAgents.Forge.Targets.finish_rolling_replacement(target_id, rolling_result)
 ```
 
 Settlement demands the newest target in `needs_rolling_replace`, a complete
-verified build receipt, and a rolling result whose SHA and image identities
-match the target. Success flips the target to `live` and inserts the immutable
-deployment receipt.
+verified build receipt, a rolling result whose SHA and image identities match
+the published authority and its exact expected node set, and an exact-identity
+observation from every one of those nodes. Success flips the target to `live`
+and inserts the immutable deployment receipt.
+
+`rolling_nodes_not_converged` means a node is not on the authorized SHA and
+image digest. The target stays `needs_rolling_replace`, which is the
+recoverable state: read `details.rolling_authority.observed` on the target row
+to see exactly which node reported which identity, fix that node, and rerun
+`run/2` with the same request. Republishing the same identity resumes the roll
+and keeps every recorded observation.
 
 ## 9. Verify production
 
@@ -236,14 +254,26 @@ Requirements before pointing the backend at the HTTP check:
      --health-checks sarah-hc-tcp --global-health-checks
    ```
 
-With the HTTP check active, a structural rolling replacement depends on
-boot convergence accepting a node that runs the newest
-`needs_rolling_replace` target's image. Nodes replaced before settlement
-report `image_matches_rolling_target` and stay in rotation; settlement
-through `finish_rolling_replacement/2` flips the target live and the next
-convergence attempt reports `image_matches_live`. Images older than commit
-`a79bfce` degrade with `artifact_not_direct` instead and return `503` for
-the whole roll, which would empty the backend.
+With the HTTP check active, a structural rolling replacement depends on boot
+convergence admitting a node that runs the authorized rolling image. Because
+`run/2` publishes that identity before the first replacement, nodes replaced
+before settlement report `image_matches_rolling_target` and stay in rotation;
+settlement through `finish_rolling_replacement/2` flips the target live and the
+worker's own next convergence attempt reports `image_matches_live`. No flag
+change and no restart of `OpenAgents.Forge.BootConverge` is part of this path.
+
+Admission is bound to the published identity, not to the SHA alone: a node
+whose image digest is not the authorized one, or a `needs_rolling_replace`
+target with no published authority, admits nothing and the node correctly
+returns `503`. If every node returns `503` at the start of a roll, check that
+`run/2` actually published the authority — read `details.rolling_authority` on
+the target row — rather than disabling boot convergence.
+
+Images older than commit `a79bfce` degrade with `artifact_not_direct` instead
+and return `503` for the whole roll, which would empty the backend. The
+2026-08-22 rollout of `45f6fff3222c432f248ca831a6fbc882c0fc6206` ran on such an
+image and needed a temporary boot-convergence disable plus a manual restart of
+`OpenAgents.Forge.BootConverge`. That workaround is retired: do not use it.
 
 ## Known failure modes
 

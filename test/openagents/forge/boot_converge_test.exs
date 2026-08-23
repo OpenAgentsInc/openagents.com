@@ -385,30 +385,14 @@ defmodule OpenAgents.Forge.BootConvergeTest do
     refute Code.ensure_loaded?(module)
   end
 
-  test "a node running a pending rolling target's image stays in readiness" do
+  test "a node running the authorized rolling image stays in readiness" do
     # An older live target whose artifact this node cannot install: without
-    # the rolling-target branch this node would degrade and leave rotation.
+    # the rolling-authority branch this node would degrade and leave rotation.
     insert_target!("live", %{})
 
-    rolling =
-      %Target{}
-      |> Target.changeset(%{
-        repo: @repo,
-        sha: String.duplicate("e", 40),
-        promoted_by: "operator:t",
-        status: "promoted"
-      })
-      |> Repo.insert!()
-      |> Ecto.Changeset.change(%{
-        status: "needs_rolling_replace",
-        sha: OpenAgents.BuildInfo.revision()
-      })
-      |> Repo.update!()
-
-    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
-    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
-
-    on_exit(fn -> restore_env(:forge_boot_converge_enabled, previous_enabled) end)
+    digest = enable_convergence_with_image!("sha256:" <> String.duplicate("1", 64))
+    rolling = rolling_target!()
+    authorize_rolling!(rolling, digest)
 
     assert %{
              "state" => "image",
@@ -417,12 +401,14 @@ defmodule OpenAgents.Forge.BootConvergeTest do
            } = BootConverge.converge(@repo)
 
     assert BootConverge.ready?(@repo)
+    assert BootConverge.classify(@repo) == :rolling
 
-    # Once the rolling target settles, readiness follows the live-target path.
+    # Once the rolling target settles, readiness follows the live-target path
+    # with no flag change and no restart of the convergence worker.
     rolling
     |> Ecto.Changeset.change(%{
       status: "live",
-      details: %{"image_digest" => OpenAgents.BuildInfo.image_digest()}
+      details: Map.put(rolling.details, "image_digest", digest)
     })
     |> Repo.update!()
 
@@ -430,6 +416,97 @@ defmodule OpenAgents.Forge.BootConvergeTest do
              BootConverge.converge(@repo)
 
     assert BootConverge.ready?(@repo)
+    assert BootConverge.classify(@repo) == :live
+  end
+
+  test "an image that is not the authorized rolling identity stays out of service" do
+    insert_target!("live", %{})
+
+    authorized = "sha256:" <> String.duplicate("1", 64)
+    enable_convergence_with_image!("sha256:" <> String.duplicate("2", 64))
+    authorize_rolling!(rolling_target!(), authorized)
+
+    assert BootConverge.classify(@repo) == :divergent
+    assert %{"state" => "degraded", "ready" => false} = BootConverge.converge(@repo)
+    refute BootConverge.ready?(@repo)
+  end
+
+  test "a rolling target that published no authority admits no image" do
+    insert_target!("live", %{})
+    enable_convergence_with_image!("sha256:" <> String.duplicate("1", 64))
+    rolling_target!()
+
+    assert BootConverge.classify(@repo) == :divergent
+    assert %{"state" => "degraded", "ready" => false} = BootConverge.converge(@repo)
+    refute BootConverge.ready?(@repo)
+  end
+
+  test "classify answers for any node identity in the fleet" do
+    digest = "sha256:" <> String.duplicate("1", 64)
+    previous_digest = "sha256:" <> String.duplicate("2", 64)
+
+    insert_target!("live", %{"image_digest" => previous_digest})
+    enable_convergence_with_image!(digest)
+    authorize_rolling!(rolling_target!(), digest)
+
+    live_sha = String.duplicate("d", 40)
+    rolling_sha = OpenAgents.BuildInfo.revision()
+
+    assert BootConverge.classify(@repo, %{sha: live_sha, image_digest: previous_digest}) == :live
+
+    assert BootConverge.classify(@repo, %{sha: rolling_sha, image_digest: digest}) == :rolling
+
+    assert BootConverge.classify(@repo, %{sha: rolling_sha, image_digest: previous_digest}) ==
+             :divergent
+
+    assert BootConverge.classify(@repo, %{sha: live_sha, image_digest: digest}) == :divergent
+    assert BootConverge.classify(@repo, %{sha: rolling_sha, image_digest: nil}) == :divergent
+  end
+
+  # A `needs_rolling_replace` target for this repo, carrying this image's exact
+  # revision the way a replacement node's image does.
+  defp rolling_target! do
+    %Target{}
+    |> Target.changeset(%{
+      repo: @repo,
+      sha: String.duplicate("e", 40),
+      promoted_by: "operator:t",
+      status: "promoted"
+    })
+    |> Repo.insert!()
+    |> Ecto.Changeset.change(%{
+      status: "needs_rolling_replace",
+      sha: OpenAgents.BuildInfo.revision()
+    })
+    |> Repo.update!()
+  end
+
+  defp authorize_rolling!(target, image_digest) do
+    {:ok, authorized} =
+      OpenAgents.Forge.Targets.authorize_rolling_replacement(target.id, %{
+        sha: target.sha,
+        image_digest: image_digest,
+        previous_sha: String.duplicate("d", 40),
+        previous_image_digest: "sha256:" <> String.duplicate("9", 64),
+        expected_nodes: [to_string(Node.self())],
+        authorized_by: "operator:t"
+      })
+
+    authorized
+  end
+
+  defp enable_convergence_with_image!(digest) do
+    previous_enabled = Application.get_env(:openagents, :forge_boot_converge_enabled)
+    previous_digest = Application.get_env(:openagents, :image_digest)
+    Application.put_env(:openagents, :forge_boot_converge_enabled, true)
+    Application.put_env(:openagents, :image_digest, digest)
+
+    on_exit(fn ->
+      restore_env(:forge_boot_converge_enabled, previous_enabled)
+      restore_env(:image_digest, previous_digest)
+    end)
+
+    digest
   end
 
   test "rolling target stays degraded when its image digest does not match the runtime" do

@@ -131,7 +131,8 @@ run_stage interrupted_install env \
   OPENAGENTS_RELUP_PROOF_DATABASE_URL="$OPENAGENTS_RELEASE_SMOKE_DATABASE_URL" \
   ops/relup-proof/kill-during-install.sh
 run_stage rolling_replacement env MIX_ENV=test mix test --warnings-as-errors \
-  test/openagents/forge/rolling_replacement_test.exs
+  test/openagents/forge/rolling_replacement_test.exs \
+  test/openagents/forge/rolling_boot_convergence_test.exs
 run_stage contracts ops/ci/contracts.sh
 run_stage staging_infra ops/ci/staging-infra.sh
 run_stage release_smoke ops/ci/release-smoke.sh

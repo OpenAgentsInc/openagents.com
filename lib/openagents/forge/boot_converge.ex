@@ -8,6 +8,14 @@ defmodule OpenAgents.Forge.BootConverge do
   node participant. A divergent node stays out of readiness and retries with
   bounded exponential backoff. The public state contains only identity hashes,
   counters, and stable reason codes.
+
+  During an operator rolling replacement two identities are legal at once: the
+  live target's, and the exact SHA and image digest published on the active
+  `needs_rolling_replace` target before the first replacement node booted. A
+  node booted into the authorized rolling image therefore enters readiness on
+  its first attempt, with no feature-flag change and no restart of this worker.
+  A node carrying any other image is authorized by nothing durable and stays
+  out of service unless it can converge on the live target's artifact.
   """
 
   use GenServer
@@ -61,6 +69,35 @@ defmodule OpenAgents.Forge.BootConverge do
     _error -> false
   catch
     _kind, _reason -> false
+  end
+
+  @doc """
+  Classify a node's booted image identity against durable Forge authority.
+
+  `:live` means the identity is exactly the live target's image identity.
+  `:rolling` means it is exactly the identity the operator published on the
+  active `needs_rolling_replace` target before the first replacement node
+  booted, so the node is an authorized participant in the roll and belongs in
+  the load balancer. `:divergent` means neither, and such a node may serve only
+  by converging on the live target's artifact — never on its image alone.
+
+  The identity defaults to this node's own booted image. Passing one explicitly
+  answers the same question for another node in the fleet.
+  """
+  def classify(repo \\ "openagents.com", identity \\ runtime_identity()) do
+    cond do
+      live_image_matches?(repo, identity) -> :live
+      rolling_authority_matches?(repo, identity) -> :rolling
+      true -> :divergent
+    end
+  end
+
+  @doc "This node's booted image identity: its exact revision and image digest."
+  def runtime_identity do
+    %{
+      sha: OpenAgents.BuildInfo.revision(),
+      image_digest: OpenAgents.BuildInfo.image_digest()
+    }
   end
 
   @doc "Run one synchronous convergence attempt. Tests and repair tools use this API."
@@ -192,7 +229,7 @@ defmodule OpenAgents.Forge.BootConverge do
         image_ready("no_live_target", attempts)
 
       %{sha: sha, details: details} = target ->
-        if rolling_target_matches?(repo) do
+        if rolling_authority_matches?(repo, runtime_identity()) do
           image_ready("image_matches_rolling_target", attempts)
         else
           converge_target(repo, target, sha, details || %{}, attempts)
@@ -200,29 +237,45 @@ defmodule OpenAgents.Forge.BootConverge do
     end
   end
 
-  # A node whose booted image carries the newest target's revision is a
-  # participant in an operator rolling replacement. It must enter readiness
-  # so the load balancer keeps it in rotation while the remaining nodes are
-  # replaced; settlement later flips the target live and the periodic
-  # convergence attempt reports `image_matches_live`.
-  defp rolling_target_matches?(repo) do
-    case Targets.current(repo) do
-      %{status: "needs_rolling_replace", sha: sha} ->
-        OpenAgents.BuildInfo.revision() == sha
+  # A node whose booted image is exactly the identity the operator published
+  # on the active `needs_rolling_replace` target is an authorized participant
+  # in that roll. It enters readiness so the load balancer keeps it in rotation
+  # while the remaining nodes are replaced; settlement later flips the target
+  # live and the periodic convergence attempt reports `image_matches_live`.
+  # A node carrying any other image is not authorized by anything durable, so
+  # it stays on the live-artifact convergence path and out of service when that
+  # path cannot succeed.
+  defp rolling_authority_matches?(repo, identity) do
+    case Targets.rolling_authority(repo) do
+      %{"sha" => sha, "image_digest" => image_digest} ->
+        image_identity_matches?(identity, sha, image_digest)
 
-      _other ->
+      nil ->
         false
     end
+  end
+
+  defp live_image_matches?(repo, identity) do
+    case Targets.live(repo) do
+      %{sha: sha, details: details} ->
+        image_identity_matches?(identity, sha, (details || %{})["image_digest"])
+
+      nil ->
+        false
+    end
+  end
+
+  defp image_identity_matches?(identity, sha, image_digest) do
+    is_binary(image_digest) and identity.sha == sha and identity.image_digest == image_digest
   end
 
   defp rolling_convergence_matches?(repo, %{
          "reason" => "image_matches_rolling_target",
          "sha" => sha
        }) do
-    case Targets.current(repo) do
-      %{status: "needs_rolling_replace", sha: ^sha} -> OpenAgents.BuildInfo.revision() == sha
-      _other -> false
-    end
+    identity = runtime_identity()
+
+    identity.sha == sha and rolling_authority_matches?(repo, identity)
   end
 
   defp rolling_convergence_matches?(_repo, _convergence), do: false

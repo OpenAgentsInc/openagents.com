@@ -7,9 +7,21 @@ defmodule OpenAgents.Forge.RollingReplacement do
   replacement until the prior node has rejoined and passed all health checks.
   A failed replacement triggers a last-known-good image rollback and aborts the
   fleet sequence.
+
+  Before the first node is replaced it publishes the authorized rolling
+  identity onto the Forge target named by the request. That published record is
+  what lets boot convergence admit a replacement node's image the moment it
+  boots, so a roll needs no feature-flag change and no manual restart of
+  `OpenAgents.Forge.BootConverge`. As each node rejoins on the exact SHA and
+  image digest the coordinator records that observation against the same
+  authority, and settlement to `live` refuses until every expected node has
+  one. A rolled-back node records the previous identity instead, so an
+  interrupted roll leaves a recoverable, auditable state rather than a target
+  that can still be settled.
   """
 
   alias OpenAgents.Forge.GateReceipt
+  alias OpenAgents.Forge.Targets
 
   @sha_pattern ~r/\A[0-9a-f]{40}\z/
   @digest_pattern ~r/\Asha256:[0-9a-f]{64}\z/
@@ -23,7 +35,8 @@ defmodule OpenAgents.Forge.RollingReplacement do
     with :ok <- validate_request(request),
          {:ok, _receipt} <- gate_verify(request.sha, opts),
          {:ok, provider} <- provider(opts),
-         :ok <- initial_membership(request, provider, opts) do
+         :ok <- initial_membership(request, provider, opts),
+         :ok <- publish_authority(request, opts) do
       request.expected_nodes
       |> replace_nodes(request, provider, opts, %{})
       |> put_duration(started)
@@ -117,7 +130,7 @@ defmodule OpenAgents.Forge.RollingReplacement do
     recovery =
       with :ok <- provider.rollback(node, request.previous_image_digest, context),
            :ok <- wait_for_previous(provider, node, request, context, opts) do
-        "last_known_good_restored"
+        record_rollback(request, opts, node)
       else
         {:error, recovery_reason} -> "rollback_failed:" <> safe_code(recovery_reason)
         other -> "rollback_failed:" <> safe_code(other)
@@ -170,7 +183,7 @@ defmodule OpenAgents.Forge.RollingReplacement do
            image_digest: digest
          }}
         when sha == request.sha and digest == request.image_digest ->
-          :ok
+          record_node(request, opts, node, sha, digest)
 
         {:ok, _not_ready} ->
           :retry
@@ -210,6 +223,52 @@ defmodule OpenAgents.Forge.RollingReplacement do
       end
     end)
   end
+
+  # Published before the first replacement so a node booted into the new image
+  # is already an authorized identity when its boot convergence first runs.
+  defp publish_authority(request, opts) do
+    case authority(opts).authorize_rolling_replacement(request.target_id, %{
+           sha: request.sha,
+           image_digest: request.image_digest,
+           previous_sha: request.previous_sha,
+           previous_image_digest: request.previous_image_digest,
+           expected_nodes: Enum.sort(Enum.map(request.expected_nodes, &to_string/1)),
+           authorized_by: Map.get(request, :authorized_by, "operator")
+         }) do
+      {:ok, _target} -> :ok
+      {:error, reason} -> {:error, {:rolling_authority_refused, reason}}
+      other -> {:error, {:invalid_rolling_authority_result, other}}
+    end
+  end
+
+  defp record_node(request, opts, node, sha, image_digest) do
+    case authority(opts).record_rolling_node(request.target_id, to_string(node), %{
+           sha: sha,
+           image_digest: image_digest
+         }) do
+      {:ok, _target} -> :ok
+      {:error, reason} -> {:error, {:rolling_node_record_failed, reason}}
+      other -> {:error, {:invalid_rolling_observation_result, other}}
+    end
+  end
+
+  # The rollback itself succeeded; recording it is what keeps the interrupted
+  # roll auditable, so an unrecorded rollback is reported as its own outcome
+  # rather than silently passing as a verified one.
+  defp record_rollback(request, opts, node) do
+    case record_node(
+           request,
+           opts,
+           node,
+           request.previous_sha,
+           request.previous_image_digest
+         ) do
+      :ok -> "last_known_good_restored"
+      {:error, reason} -> "last_known_good_unrecorded:" <> safe_code(reason)
+    end
+  end
+
+  defp authority(opts), do: Keyword.get(opts, :authority, Targets)
 
   defp poll(opts, function) do
     attempts = Keyword.get(opts, :wait_attempts, @default_wait_attempts)
@@ -274,6 +333,9 @@ defmodule OpenAgents.Forge.RollingReplacement do
     nodes = Map.get(request, :expected_nodes)
 
     cond do
+      not valid_target_id?(Map.get(request, :target_id)) ->
+        {:error, :invalid_target_id}
+
       not Regex.match?(@sha_pattern, Map.get(request, :sha, "")) ->
         {:error, :invalid_git_sha}
 
@@ -314,6 +376,11 @@ defmodule OpenAgents.Forge.RollingReplacement do
 
   defp validate_request(_request), do: {:error, :invalid_request}
 
+  defp valid_target_id?(value) when is_binary(value),
+    do: match?({:ok, _uuid}, Ecto.UUID.cast(value))
+
+  defp valid_target_id?(_value), do: false
+
   defp context(request) do
     %{
       sha: request.sha,
@@ -327,6 +394,7 @@ defmodule OpenAgents.Forge.RollingReplacement do
   defp public_result(request, status, node_results, error_code, recovery) do
     %{
       schema: "openagents.rolling-replacement.v1",
+      target_id: request.target_id,
       sha: request.sha,
       previous_sha: request.previous_sha,
       image_digest: request.image_digest,

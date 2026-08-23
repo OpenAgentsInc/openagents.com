@@ -2164,6 +2164,52 @@ Evidence: `OpenAgents.Forge.Deployment`, `OpenAgents.Forge.RelupDeployment`,
 `test/openagents/forge/rolling_replacement_test.exs`, and
 `docs/operations/release-deployment-fallbacks.md`.
 
+### RELEASE-006 — A rolling replacement admits only authority-bound image identities
+
+Status: Current
+
+Before the first node is replaced, the rolling coordinator publishes the
+authorized rolling identity — the exact source SHA, the exact image digest, the
+previous pair, and the exact expected node set — onto the newest
+`needs_rolling_replace` Forge target. That published record is the only thing
+that widens what a booting node may run.
+
+While a roll is active a node may serve only when its booted image is exactly
+the live target's image identity or exactly the published rolling identity. A
+node matching neither is admitted by nothing durable: it stays out of readiness
+and out of the load balancer unless it can converge on the live target's
+artifact. Matching the SHA alone is not enough, and neither is matching a
+digest that no target authorized.
+
+Publishing the same identity again resumes an interrupted roll and preserves
+every recorded observation. A different identity is accepted only while no node
+has yet been observed under the published one, so an in-flight roll can never
+be redirected under running nodes. As each node rejoins, its exact observed SHA
+and image digest is recorded against that authority; a node the coordinator
+rolled back records the previous identity instead.
+
+Settlement to `live` is bound to the same authority. It requires the published
+record, a result carrying the authorized SHA, image digest, previous pair, and
+exact expected node set, and an exact-identity observation from every expected
+node. A roll that ended with any node on another identity refuses with
+`rolling_nodes_not_converged` and leaves the target `needs_rolling_replace`,
+which is recoverable by rerunning the roll and auditable from the target row.
+Settlement clears no evidence: the authority and its observations remain on the
+settled row.
+
+No part of this path is an operator flag change or a manual restart of
+`OpenAgents.Forge.BootConverge`. A node that boots into the authorized image
+enters readiness on its first convergence attempt, and the worker's own
+periodic attempt follows the target to `live` after settlement.
+
+Evidence: `OpenAgents.Forge.RollingReplacement`, `OpenAgents.Forge.Targets`,
+`OpenAgents.Forge.BootConverge`,
+`test/openagents/forge/rolling_boot_convergence_test.exs`,
+`test/openagents/forge/rolling_replacement_test.exs`,
+`test/openagents/forge/target_lifecycle_test.exs`,
+`test/openagents/forge/boot_converge_test.exs`, and
+`docs/operations/production-deploy-runbook.md`.
+
 ### STATUS-001 — The status page publishes one bounded, content-free projection
 
 Status: Current
@@ -2518,6 +2564,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
+| RELEASE-006 | `test/openagents/forge/rolling_boot_convergence_test.exs`, `test/openagents/forge/rolling_replacement_test.exs`, `test/openagents/forge/target_lifecycle_test.exs`, `test/openagents/forge/boot_converge_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |

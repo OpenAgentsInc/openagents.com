@@ -23,6 +23,8 @@ defmodule OpenAgents.Forge.Targets do
 
   @statuses ~w(promoted building built deploying live failed reverted needs_rolling_replace)
 
+  @rolling_authority_schema "openagents.forge.rolling-authority.v1"
+
   @doc "All target statuses, in lifecycle order."
   def statuses, do: @statuses
 
@@ -369,11 +371,117 @@ defmodule OpenAgents.Forge.Targets do
     do: {:error, :invalid_relup_result}
 
   @doc """
+  Publish the operator-authorized rolling identity on the newest
+  `needs_rolling_replace` target, before the first replacement node boots.
+
+  The published record is the durable authority boot convergence trusts: while
+  the roll runs, a node whose booted image carries exactly this source SHA and
+  image digest may serve, and a node that carries neither this identity nor the
+  live target's stays out of readiness. Publishing the same identity again
+  resumes an interrupted roll and keeps every recorded observation. A different
+  identity is accepted only while no node has been observed under the published
+  one, so an in-flight roll can never be redirected under running nodes.
+  """
+  def authorize_rolling_replacement(target_id, identity) when is_map(identity) do
+    with {:ok, authority} <- validate_rolling_authority(identity) do
+      :global.trans({{:forge_target_deploy, target_id}, self()}, fn ->
+        Repo.transaction(fn ->
+          target = rolling_authority_target(target_id, authority["sha"])
+          details = target.details || %{}
+
+          target
+          |> Target.changeset(%{
+            details:
+              Map.put(details, "rolling_authority", published_authority(details, authority))
+          })
+          |> Repo.update!()
+        end)
+      end)
+    end
+  end
+
+  def authorize_rolling_replacement(_target_id, _identity),
+    do: {:error, :invalid_rolling_authority}
+
+  @doc """
+  Record one node's exact booted identity under the active rolling authority.
+
+  The coordinator records each node as it rejoins. Settlement to `live`
+  requires an exact-identity observation for every expected node, so this is
+  the durable evidence that the whole fleet runs the authorized image. A
+  rolled-back node records the previous identity instead, which keeps
+  settlement refused and leaves the interrupted roll auditable.
+  """
+  def record_rolling_node(target_id, node, observation) when is_map(observation) do
+    node = to_string(node)
+    sha = result_value(observation, :sha)
+    image_digest = result_value(observation, :image_digest)
+
+    cond do
+      not bounded_sha?(sha) ->
+        {:error, :invalid_rolling_observation}
+
+      not valid_image_digest?(image_digest) ->
+        {:error, :invalid_rolling_observation}
+
+      true ->
+        :global.trans({{:forge_target_deploy, target_id}, self()}, fn ->
+          Repo.transaction(fn ->
+            target = rolling_authority_target(target_id, nil)
+            details = target.details || %{}
+            authority = active_authority(details) || Repo.rollback(:rolling_authority_missing)
+
+            unless node in (authority["expected_nodes"] || []) do
+              Repo.rollback(:rolling_node_not_expected)
+            end
+
+            observed =
+              Map.put(authority["observed"] || %{}, node, %{
+                "sha" => sha,
+                "image_digest" => image_digest,
+                "observed_at" => DateTime.to_iso8601(DateTime.utc_now())
+              })
+
+            target
+            |> Target.changeset(%{
+              details:
+                Map.put(details, "rolling_authority", Map.put(authority, "observed", observed))
+            })
+            |> Repo.update!()
+          end)
+        end)
+    end
+  end
+
+  def record_rolling_node(_target_id, _node, _observation),
+    do: {:error, :invalid_rolling_observation}
+
+  @doc "The active rolling authority published on `repo`'s newest target, or nil."
+  def rolling_authority(repo) do
+    case current(repo) do
+      %Target{status: "needs_rolling_replace", sha: sha, details: details} ->
+        case active_authority(details || %{}) do
+          %{"sha" => ^sha} = authority -> authority
+          _other -> nil
+        end
+
+      _other ->
+        nil
+    end
+  end
+
+  @doc """
   Settle an operator-approved rolling replacement against its verified build.
 
   The rolling coordinator returns the bounded result passed to this function.
   Settlement succeeds only for the newest target, only after Forge classified
   it as `needs_rolling_replace`, and only when a complete build receipt exists.
+  It is also bound to the published rolling authority: the result must carry
+  the authorized SHA, image digest, previous pair, and exact expected node set,
+  and a `live` settlement additionally requires that every expected node has
+  recorded an observation of exactly that SHA and image digest. A roll that
+  ended with any node on another identity refuses with
+  `:rolling_nodes_not_converged` and leaves the target `needs_rolling_replace`.
   The target update and the second immutable deployment receipt commit in one
   database transaction. The original classification receipt remains intact.
   """
@@ -403,6 +511,11 @@ defmodule OpenAgents.Forge.Targets do
               {:ok, rolling} -> rolling
               {:error, reason} -> Repo.rollback(reason)
             end
+
+          case settlement_authority(target, rolling) do
+            {:ok, _authority} -> :ok
+            {:error, reason} -> Repo.rollback(reason)
+          end
 
           build =
             BuildReceipt
@@ -479,6 +592,159 @@ defmodule OpenAgents.Forge.Targets do
 
   def finish_rolling_replacement(_target_id, _rolling_result),
     do: {:error, :invalid_rolling_result}
+
+  defp rolling_authority_target(target_id, expected_sha) do
+    target = Repo.get(Target, target_id, lock: "FOR UPDATE") || Repo.rollback(:not_found)
+
+    current_id =
+      Target
+      |> where([t], t.repo == ^target.repo)
+      |> order_by([t], desc: t.inserted_at)
+      |> limit(1)
+      |> select([t], t.id)
+      |> Repo.one()
+
+    if current_id != target.id, do: Repo.rollback(:superseded_target)
+
+    unless target.status == "needs_rolling_replace" do
+      Repo.rollback({:invalid_transition, target.status, "needs_rolling_replace"})
+    end
+
+    if is_binary(expected_sha) and target.sha != expected_sha do
+      Repo.rollback(:rolling_authority_sha_mismatch)
+    end
+
+    target
+  end
+
+  # Publishing is idempotent for the identical identity, so an operator can
+  # resume an interrupted roll without losing a single recorded observation.
+  # Redirecting the roll is legal only before any node has been observed
+  # under the published identity.
+  defp published_authority(details, authority) do
+    case active_authority(details) do
+      nil ->
+        Map.put(authority, "observed", %{})
+
+      existing ->
+        cond do
+          rolling_identity(existing) == rolling_identity(authority) ->
+            existing
+
+          map_size(existing["observed"] || %{}) == 0 ->
+            Map.put(authority, "observed", %{})
+
+          true ->
+            Repo.rollback(:rolling_authority_conflict)
+        end
+    end
+  end
+
+  defp active_authority(details) do
+    case Map.get(details || %{}, "rolling_authority") do
+      %{"schema" => @rolling_authority_schema} = authority -> authority
+      _other -> nil
+    end
+  end
+
+  defp rolling_identity(authority) do
+    Map.take(authority, ~w(schema sha image_digest previous_sha previous_image_digest
+      expected_nodes))
+  end
+
+  defp validate_rolling_authority(identity) do
+    sha = result_value(identity, :sha)
+    image_digest = result_value(identity, :image_digest)
+    previous_sha = result_value(identity, :previous_sha)
+    previous_image_digest = result_value(identity, :previous_image_digest)
+    expected_nodes = result_value(identity, :expected_nodes)
+    authorized_by = result_value(identity, :authorized_by)
+
+    cond do
+      not bounded_sha?(sha) ->
+        {:error, :invalid_rolling_authority}
+
+      not valid_sha?(previous_sha) ->
+        {:error, :invalid_rolling_authority}
+
+      not valid_image_digest?(image_digest) or not valid_image_digest?(previous_image_digest) ->
+        {:error, :invalid_rolling_authority}
+
+      image_digest == previous_image_digest ->
+        {:error, :invalid_rolling_authority}
+
+      not valid_node_list?(expected_nodes) ->
+        {:error, :invalid_rolling_authority}
+
+      not bounded_recovery?(authorized_by) ->
+        {:error, :invalid_rolling_authority}
+
+      true ->
+        {:ok,
+         %{
+           "schema" => @rolling_authority_schema,
+           "sha" => sha,
+           "image_digest" => image_digest,
+           "previous_sha" => previous_sha,
+           "previous_image_digest" => previous_image_digest,
+           "expected_nodes" => expected_nodes,
+           "authorized_by" => authorized_by,
+           "authorized_at" => DateTime.to_iso8601(DateTime.utc_now())
+         }}
+    end
+  end
+
+  # Settlement is bound to the published authority: the result must carry the
+  # authorized identity and the exact expected node set, and `live` demands an
+  # exact-identity observation from every one of those nodes.
+  defp settlement_authority(target, rolling) do
+    case active_authority(target.details || %{}) do
+      nil ->
+        {:error, :rolling_authority_missing}
+
+      authority ->
+        expected = authority["expected_nodes"] || []
+        observed = authority["observed"] || %{}
+
+        cond do
+          authority["sha"] != target.sha or
+            authority["image_digest"] != rolling.image_digest or
+            authority["previous_sha"] != rolling.previous_sha or
+              authority["previous_image_digest"] != rolling.previous_image_digest ->
+            {:error, :rolling_authority_mismatch}
+
+          expected != rolling.expected_nodes ->
+            {:error, :rolling_node_set_mismatch}
+
+          rolling.status == "live" and
+              not Enum.all?(expected, &observed_identity?(observed, &1, authority)) ->
+            {:error, :rolling_nodes_not_converged}
+
+          true ->
+            {:ok, authority}
+        end
+    end
+  end
+
+  defp observed_identity?(observed, node, authority) do
+    case Map.get(observed, node) do
+      %{"sha" => sha, "image_digest" => image_digest} ->
+        sha == authority["sha"] and image_digest == authority["image_digest"]
+
+      _missing ->
+        false
+    end
+  end
+
+  defp valid_node_list?(nodes) when is_list(nodes) and length(nodes) in 1..100 do
+    Enum.all?(nodes, &(is_binary(&1) and byte_size(&1) in 1..255)) and
+      nodes == Enum.sort(nodes) and length(nodes) == length(Enum.uniq(nodes))
+  end
+
+  defp valid_node_list?(_nodes), do: false
+
+  defp bounded_sha?(value) when is_binary(value), do: byte_size(value) in 1..64
+  defp bounded_sha?(_value), do: false
 
   defp validate_relup_result(result, target_sha) do
     schema = result_value(result, :schema)

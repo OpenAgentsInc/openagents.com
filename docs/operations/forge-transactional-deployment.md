@@ -167,7 +167,9 @@ convergence interval.
 
 Production enables `OPENAGENTS_FEATURE_FORGE_DEPLOY` and
 `OPENAGENTS_FEATURE_BOOT_CONVERGENCE` after pinning the serving and builder
-images. Staging must also configure its isolated rolling provider before it
+images. Both stay on through a rolling replacement: the rolling coordinator
+publishes the authorized image identity on the target before the first node
+boots, so boot convergence admits replacement nodes without a flag change. Staging must also configure its isolated rolling provider before it
 enables the complete automated fallback lane. `/status` reports the active
 state, current stage, timing receipts, boot convergence, and mirror freshness.
 

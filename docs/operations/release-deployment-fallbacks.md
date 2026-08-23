@@ -199,6 +199,15 @@ client in that inventory. The GCP provider intersects connected Erlang nodes
 with its configured three-node instance map, so every membership check uses
 the same bounded fleet identity.
 
+Before it touches the fleet, the coordinator publishes the authorized rolling
+identity — the exact source SHA, image digest, previous pair, and expected node
+set — onto the Forge target named by the request. Boot convergence admits a
+node whose booted image is exactly that identity, so a replacement node enters
+readiness on its first attempt and the roll needs no
+`OPENAGENTS_FEATURE_BOOT_CONVERGENCE` change and no manual restart of
+`OpenAgents.Forge.BootConverge`. A node carrying any other image is authorized
+by nothing durable and stays out of the load balancer.
+
 For each node, the coordinator performs this sequence:
 
 1. Verify the exact-SHA release receipt and exact initial member set.
@@ -209,7 +218,9 @@ For each node, the coordinator performs this sequence:
 5. Replace the node with the target image digest.
 6. Wait for exact BEAM membership, readiness, boot convergence, database
    access, source SHA, and image digest.
-7. Recheck exact fleet membership before selecting another node.
+7. Record that node's exact observed SHA and image digest against the
+   published authority.
+8. Recheck exact fleet membership before selecting another node.
 
 An Erlang distribution transport failure is an expected transient state while
 a VM reboots. The GCP provider reports that node as unavailable so the
@@ -219,8 +230,12 @@ timeout.
 
 If a node does not rejoin, the coordinator asks the provider to restore the
 last-known-good SHA and digest, waits for that node's full health, records the
-recovery result, and aborts. It never replaces a second node while the first is
-missing or unhealthy.
+previous identity as that node's observation, and aborts. It never replaces a
+second node while the first is missing or unhealthy. The target stays
+`needs_rolling_replace` with a per-node record of exactly which image each node
+came back on, so an interrupted roll is both auditable and resumable:
+republishing the same identity keeps every observation and rerunning `run/2`
+finishes the roll.
 
 After the rolling coordinator returns, settle its bounded result against the
 Forge target:
@@ -231,8 +246,12 @@ OpenAgents.Forge.Targets.finish_rolling_replacement(target_id, rolling_result)
 
 Settlement accepts only the newest target in `needs_rolling_replace`, requires
 the target's complete verified build receipt, and verifies that the result SHA
-matches the target. It changes the target to `live` or `failed` and inserts a
-second immutable deployment receipt in one transaction. Forge preserves the
+matches the target. It is also bound to the published authority: the result
+must carry the authorized image identity and the exact expected node set, and a
+`live` settlement additionally requires an exact-identity observation from every
+expected node. A roll that left any node on another identity refuses with
+`rolling_nodes_not_converged`. It changes the target to `live` or `failed` and
+inserts a second immutable deployment receipt in one transaction. Forge preserves the
 earlier `needs_rolling_replace` classification receipt. A successful settlement
 makes that build manifest the baseline for later direct-load classification.
 

@@ -4,6 +4,11 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
 
   alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, Repos, Targets}
 
+  @rolling_nodes ["openagents@10.42.0.11", "openagents@10.42.0.12"]
+  @rolling_digest "sha256:" <> String.duplicate("c", 64)
+  @rolling_previous_digest "sha256:" <> String.duplicate("d", 64)
+  @rolling_previous_sha String.duplicate("b", 40)
+
   setup do
     base = Path.join(System.tmp_dir!(), "forge-targets-#{System.unique_integer([:positive])}")
     File.mkdir_p!(base)
@@ -205,6 +210,8 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     manifest = %{"classification" => "needs_rolling_replace", "source_sha" => sha}
 
     insert_build_receipt!(target, manifest, artifact_digest)
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha)
 
     assert {:ok, %{target: live, receipt: receipt}} =
              Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
@@ -298,6 +305,9 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
       modules
     )
 
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha)
+
     assert {:ok, %{receipt: receipt}} =
              Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
 
@@ -310,6 +320,8 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     {:ok, _built} = Targets.advance(first.id, "built")
     {:ok, _rolling} = Targets.advance(first.id, "needs_rolling_replace")
     insert_build_receipt!(first, %{"source_sha" => sha}, String.duplicate("a", 64))
+    authorize_rolling!(first, sha)
+    observe_rolling!(first, sha)
 
     {:ok, second} = Targets.promote("demo", sha, "operator:second")
 
@@ -325,6 +337,19 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     {:ok, _built} = Targets.advance(target.id, "built")
     {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
     insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+    authorize_rolling!(target, sha)
+
+    assert {:ok, _observed} =
+             Targets.record_rolling_node(target.id, "openagents@10.42.0.11", %{
+               sha: sha,
+               image_digest: @rolling_digest
+             })
+
+    assert {:ok, _rolled_back} =
+             Targets.record_rolling_node(target.id, "openagents@10.42.0.12", %{
+               sha: @rolling_previous_sha,
+               image_digest: @rolling_previous_digest
+             })
 
     result =
       rolling_result(sha, "failed")
@@ -349,9 +374,154 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     {:ok, _building} = Targets.advance(target.id, "building")
     {:ok, _built} = Targets.advance(target.id, "built")
     {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha)
 
     assert {:error, :complete_build_receipt_not_found} =
              Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+  end
+
+  test "rolling settlement refuses until every node reports the authorized identity",
+       %{sha: sha} do
+    target = rolling_target!(sha)
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha, ["openagents@10.42.0.11"])
+
+    assert {:error, :rolling_nodes_not_converged} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+
+    assert Repo.get!(OpenAgents.Forge.Target, target.id).status == "needs_rolling_replace"
+
+    # A node that came back on some other image is not a converged node.
+    assert {:ok, _divergent} =
+             Targets.record_rolling_node(target.id, "openagents@10.42.0.12", %{
+               sha: sha,
+               image_digest: "sha256:" <> String.duplicate("e", 64)
+             })
+
+    assert {:error, :rolling_nodes_not_converged} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+
+    observe_rolling!(target, sha, ["openagents@10.42.0.12"])
+
+    assert {:ok, %{target: live}} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+
+    assert live.status == "live"
+    assert live.details["rolling_authority"]["authorized_by"] == "operator:test"
+  end
+
+  test "rolling settlement refuses a target that published no authority", %{sha: sha} do
+    target = rolling_target!(sha)
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+
+    assert {:error, :rolling_authority_missing} =
+             Targets.finish_rolling_replacement(target.id, rolling_result(sha, "live"))
+
+    assert Repo.get!(OpenAgents.Forge.Target, target.id).status == "needs_rolling_replace"
+  end
+
+  test "rolling settlement refuses a result for another image identity", %{sha: sha} do
+    target = rolling_target!(sha)
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha)
+
+    result =
+      rolling_result(sha, "live")
+      |> Map.put(:image_digest, "sha256:" <> String.duplicate("e", 64))
+
+    assert {:error, :rolling_authority_mismatch} =
+             Targets.finish_rolling_replacement(target.id, result)
+  end
+
+  test "rolling settlement refuses a result for another node set", %{sha: sha} do
+    target = rolling_target!(sha)
+    insert_build_receipt!(target, %{"source_sha" => sha}, String.duplicate("a", 64))
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha)
+
+    result =
+      rolling_result(sha, "live")
+      |> Map.put(:node_results, %{"openagents@10.42.0.11" => "ready"})
+
+    assert {:error, :rolling_node_set_mismatch} =
+             Targets.finish_rolling_replacement(target.id, result)
+  end
+
+  test "republishing the same rolling identity resumes without losing observations",
+       %{sha: sha} do
+    target = rolling_target!(sha)
+    authorize_rolling!(target, sha)
+    observe_rolling!(target, sha, ["openagents@10.42.0.11"])
+
+    resumed = authorize_rolling!(target, sha)
+
+    assert Map.keys(resumed.details["rolling_authority"]["observed"]) == [
+             "openagents@10.42.0.11"
+           ]
+  end
+
+  test "republishing a different rolling identity is refused once a node is observed",
+       %{sha: sha} do
+    target = rolling_target!(sha)
+    authorize_rolling!(target, sha)
+
+    redirected =
+      rolling_identity(sha)
+      |> Map.put(:image_digest, "sha256:" <> String.duplicate("e", 64))
+
+    # Before any node runs the authorized image the operator may still redirect.
+    assert {:ok, _redirected} =
+             Targets.authorize_rolling_replacement(target.id, redirected)
+
+    assert {:ok, _observed} =
+             Targets.record_rolling_node(target.id, "openagents@10.42.0.11", %{
+               sha: sha,
+               image_digest: "sha256:" <> String.duplicate("e", 64)
+             })
+
+    assert {:error, :rolling_authority_conflict} =
+             Targets.authorize_rolling_replacement(target.id, rolling_identity(sha))
+  end
+
+  test "rolling authorization requires a classified target and its exact SHA", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+
+    assert {:error, {:invalid_transition, "promoted", "needs_rolling_replace"}} =
+             Targets.authorize_rolling_replacement(target.id, rolling_identity(sha))
+
+    classified = rolling_target!(sha)
+
+    assert {:error, :rolling_authority_sha_mismatch} =
+             Targets.authorize_rolling_replacement(
+               classified.id,
+               rolling_identity(String.duplicate("e", 40))
+             )
+
+    assert {:error, :invalid_rolling_authority} =
+             Targets.authorize_rolling_replacement(
+               classified.id,
+               Map.put(rolling_identity(sha), :image_digest, "not-a-digest")
+             )
+  end
+
+  test "an unexpected node cannot record itself against a rolling authority", %{sha: sha} do
+    target = rolling_target!(sha)
+    authorize_rolling!(target, sha)
+
+    assert {:error, :rolling_node_not_expected} =
+             Targets.record_rolling_node(target.id, "openagents@10.42.0.99", %{
+               sha: sha,
+               image_digest: @rolling_digest
+             })
+
+    assert {:error, :invalid_rolling_observation} =
+             Targets.record_rolling_node(target.id, "openagents@10.42.0.11", %{
+               sha: sha,
+               image_digest: "not-a-digest"
+             })
   end
 
   test "rolling replacement settlement refuses a result for another SHA", %{sha: sha} do
@@ -423,6 +593,42 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
       completed_at: DateTime.utc_now()
     })
     |> Repo.insert!()
+  end
+
+  defp rolling_target!(sha) do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, rolling} = Targets.advance(target.id, "needs_rolling_replace")
+    rolling
+  end
+
+  defp authorize_rolling!(target, sha) do
+    assert {:ok, authorized} =
+             Targets.authorize_rolling_replacement(target.id, rolling_identity(sha))
+
+    authorized
+  end
+
+  defp rolling_identity(sha) do
+    %{
+      sha: sha,
+      image_digest: @rolling_digest,
+      previous_sha: @rolling_previous_sha,
+      previous_image_digest: @rolling_previous_digest,
+      expected_nodes: @rolling_nodes,
+      authorized_by: "operator:test"
+    }
+  end
+
+  defp observe_rolling!(target, sha, nodes \\ @rolling_nodes) do
+    for node <- nodes do
+      assert {:ok, _observed} =
+               Targets.record_rolling_node(target.id, node, %{
+                 sha: sha,
+                 image_digest: @rolling_digest
+               })
+    end
   end
 
   defp rolling_result(sha, status) do

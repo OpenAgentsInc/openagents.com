@@ -239,6 +239,15 @@ defmodule OpenAgentsWeb.RouteAuthority do
         verb not in [:get, :head]
       )
 
+  defp policy(%{path: "/api/operator/continual-learning" <> _path, verb: verb}),
+    do:
+      declaration(
+        :operator,
+        "configured operator GitHub ID",
+        "continual-learning:operate",
+        verb not in [:get, :head]
+      )
+
   defp policy(%{path: "/api/v3/device/authorizations" <> _path, verb: :post}),
     do:
       declaration(

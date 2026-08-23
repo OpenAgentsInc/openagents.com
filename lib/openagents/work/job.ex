@@ -15,7 +15,7 @@ defmodule OpenAgents.Work.Job do
   @statuses ~w(queued running completed failed interrupted budget_exhausted cancelled)
   @terminal_statuses ~w(completed failed interrupted budget_exhausted cancelled)
   @surfaces ~w(text voice)
-  @kinds ~w(deep_work delegation coding scv)
+  @kinds ~w(deep_work delegation coding scv continual_learning)
   @machine_tiers ~w(probe curated shell)
   @maximum_goal_bytes 2_000
   @maximum_context_hint_bytes 2_000

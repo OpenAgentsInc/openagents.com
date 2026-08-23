@@ -237,6 +237,14 @@ defmodule OpenAgentsWeb.Router do
     post "/artifact-listings/:id/source-authorizations",
          ArtifactListingAdminController,
          :authorize
+
+    post "/continual-learning/jobs", ContinualLearningController, :create
+    get "/continual-learning/jobs", ContinualLearningController, :index
+    get "/continual-learning/jobs/:id", ContinualLearningController, :show
+    post "/continual-learning/jobs/:id/cancellation", ContinualLearningController, :cancel
+    post "/continual-learning/jobs/:id/resumptions", ContinualLearningController, :resume
+    post "/continual-learning/jobs/:id/replays", ContinualLearningController, :replay
+    get "/continual-learning/jobs/:id/evidence", ContinualLearningController, :evidence
   end
 
   scope "/admin", OpenAgentsWeb do

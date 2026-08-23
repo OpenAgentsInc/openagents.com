@@ -117,6 +117,36 @@ config :openagents,
          buyer: capacity_buyer
        )
 
+continual_learning_config = Application.get_env(:openagents, OpenAgents.ContinualLearning, [])
+
+# The admitted base models are a JSON object of model reference to exact model
+# digest. A model that is not listed here cannot be trained from, so widening
+# the lane is an explicit operator act.
+admitted_base_models =
+  case optional_text.("OPENAGENTS_CONTINUAL_LEARNING_BASE_MODELS_JSON") do
+    nil ->
+      Keyword.get(continual_learning_config, :admitted_base_models, %{})
+
+    encoded ->
+      case Jason.decode(encoded) do
+        {:ok, models} when is_map(models) ->
+          models
+
+        _invalid ->
+          raise "environment variable OPENAGENTS_CONTINUAL_LEARNING_BASE_MODELS_JSON must be a JSON object"
+      end
+  end
+
+config :openagents,
+       OpenAgents.ContinualLearning,
+       Keyword.merge(continual_learning_config,
+         enabled: System.get_env("OPENAGENTS_CONTINUAL_LEARNING_ENABLED") == "true",
+         buyer_ref: optional_text.("OPENAGENTS_CONTINUAL_LEARNING_BUYER_REF"),
+         training_code_digest:
+           optional_text.("OPENAGENTS_CONTINUAL_LEARNING_TRAINING_CODE_DIGEST"),
+         admitted_base_models: admitted_base_models
+       )
+
 if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
   config :openagents, :openrouter_api_key, optional_text.("OPENROUTER_API_KEY")

@@ -132,6 +132,28 @@ defmodule OpenAgents.Work do
     end
   end
 
+  @doc """
+  Start a durable continual-learning run (CONTINUAL-001): the bounded round loop
+  in `OpenAgents.ContinualLearning.Runner`, driven by
+  `OpenAgents.Work.ContinualLearningServer` on the same row, statuses, fence,
+  and recovery sweep as every other kind.
+
+  Admission belongs to `OpenAgents.ContinualLearning.start/2`; this only creates
+  the row and starts the worker.
+  """
+  def start_continual_learning(attributes) when is_map(attributes) do
+    with {:ok, job} <- create_job(Map.put(attributes, :kind, "continual_learning")) do
+      case start_worker(OpenAgents.Work.ContinualLearningServer, job.id) do
+        {:ok, _pid} ->
+          {:ok, job}
+
+        {:error, reason} ->
+          _failure = finish_job(job.id, "failed", error_code: "worker_start_failed")
+          {:error, reason}
+      end
+    end
+  end
+
   # Start a job's worker as a cluster-wide singleton under Horde. Horde routes
   # the child to whichever member `choose_node` picks and relocates it to a
   # survivor if that node dies. `{:already_started, pid}` is success: the
@@ -662,6 +684,8 @@ defmodule OpenAgents.Work do
 
   defp worker_module("delegation"), do: OpenAgents.Work.DelegationServer
   defp worker_module("scv"), do: OpenAgents.Work.ScvServer
+
+  defp worker_module("continual_learning"), do: OpenAgents.Work.ContinualLearningServer
   defp worker_module(_kind), do: OpenAgents.Work.JobServer
 
   @doc """
@@ -825,6 +849,28 @@ defmodule OpenAgents.Work do
 
       _other ->
         "SCV deployment on #{path} ended #{status} before reporting a result. " <>
+          "Objective: #{locked_job.goal}"
+    end
+  end
+
+  # A continual-learning run reports rounds and checkpoints, not tool calls, and
+  # an interruption is resumable from its last committed checkpoint rather than
+  # something to start over.
+  defp fallback_report(_repo, %Job{kind: "continual_learning"} = locked_job, status) do
+    delegation = locked_job.delegation || %{}
+    reference = delegation["continual_learning_job_id"] || locked_job.id
+
+    case status do
+      "interrupted" ->
+        "Continual-learning job #{reference} was interrupted by a server restart. " <>
+          "Its committed checkpoints survive; resume it to continue from the last " <>
+          "one. Objective: #{locked_job.goal}"
+
+      "cancelled" ->
+        "Continual-learning job #{reference} was cancelled. Objective: #{locked_job.goal}"
+
+      _other ->
+        "Continual-learning job #{reference} ended #{status}. " <>
           "Objective: #{locked_job.goal}"
     end
   end

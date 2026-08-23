@@ -385,6 +385,30 @@ config :openagents, OpenAgents.Capacity,
   },
   buyer: nil
 
+# Continual learning is off until an operator admits the named buyer, the base
+# models, and the exact training code digest. The lane refuses rather than
+# training on data or a model nobody admitted.
+config :openagents, OpenAgents.ContinualLearning,
+  enabled: false,
+  buyer_ref: nil,
+  buyer_class: "openagents_training",
+  runtime_classes: ["standard", "strong"],
+  admitted_base_models: %{},
+  admitted_custody: ["openagents_managed"],
+  maximum_rounds: 8,
+  maximum_datasets: 4,
+  wall_clock_ms: 900_000,
+  maximum_state_bytes: 65_536,
+  concurrency_limit: 1,
+  training_code_digest: nil,
+  trainer: OpenAgents.ContinualLearning.Trainer.Reference,
+  evaluator: OpenAgents.ContinualLearning.Evaluator.Reference,
+  class_watts: %{"standard" => 350, "strong" => 700, "batch" => 250},
+  round_cost_usd_cents: %{"standard" => 2, "strong" => 4, "batch" => 1},
+  settlement_unit: "usd_cents",
+  outcome_repository: "OpenAgentsInc/openagents.com",
+  outcome_issue_number: 86
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

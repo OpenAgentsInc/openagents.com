@@ -195,7 +195,8 @@ defmodule OpenAgentsWeb.IssueControllerTest do
           %{state: "closed"}
         )
 
-      assert json_response(response, 401) == %{"error" => "invalid_api_token"}
+      body = assert_api_error(response, 401, "unauthenticated")
+      assert body["error"] == "invalid_api_token"
       assert Repo.get!(OpenAgents.Issues.Issue, issue.id).state == "open"
     end
   end

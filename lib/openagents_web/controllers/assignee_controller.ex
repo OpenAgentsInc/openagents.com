@@ -2,6 +2,7 @@ defmodule OpenAgentsWeb.AssigneeController do
   use OpenAgentsWeb, :controller
 
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
     assignees =
@@ -34,7 +35,5 @@ defmodule OpenAgentsWeb.AssigneeController do
     }
   end
 
-  defp not_found(conn) do
-    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
-  end
+  defp not_found(conn), do: ApiError.not_found(conn)
 end

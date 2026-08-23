@@ -108,7 +108,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
            |> patch(~p"/api/v3/computers/#{machine.id}", %{
              "scoped_forge_credentials_enabled" => true
            })
-           |> json_response(401) == %{"error" => "invalid_api_token"}
+           |> api_error_code(401) == "unauthenticated"
 
     assert {:ok, _revoked} = Agents.revoke_computer_control(user, agent)
 

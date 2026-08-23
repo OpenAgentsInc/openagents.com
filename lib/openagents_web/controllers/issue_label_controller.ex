@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.IssueLabelController do
 
   alias OpenAgents.Issues
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo, "issue_number" => issue_number}) do
     issue =
@@ -14,10 +15,7 @@ defmodule OpenAgentsWeb.IssueLabelController do
 
     json(conn, %{labels: issue.labels || []})
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def create(
@@ -43,15 +41,10 @@ defmodule OpenAgentsWeb.IssueLabelController do
         json(conn, %{labels: issue.labels})
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)})
+        ApiError.changeset(conn, changeset)
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def delete(conn, %{
@@ -75,28 +68,15 @@ defmodule OpenAgentsWeb.IssueLabelController do
         {:ok, %Issues.Issue{} = issue} ->
           json(conn, %{labels: issue.labels})
 
-        {:error, _} ->
-          conn
-          |> put_status(:unprocessable_entity)
-          |> json(%{message: "Could not remove label"})
+        {:error, _reason} ->
+          ApiError.refuse(conn, "delete_failed", message: "Could not remove label")
       end
     else
       # GitHub refuses to remove a label the issue does not wear; a silent
       # no-op hides the mismatch from the script that sent it.
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Label does not exist on this issue"})
+      ApiError.refuse(conn, "label_not_on_issue")
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
-  end
-
-  defp translate_error({message, options}) do
-    Regex.replace(~r/%{(\w+)}/, message, fn _, key ->
-      options |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-    end)
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 end

@@ -27,10 +27,12 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
   end
 
   test "chat API rejects a valid token with the wrong scope", %{conn: conn} do
-    assert conn
-           |> put_forge_api_token("chat-wrong-scope")
-           |> get(~p"/api/v3/chat/events")
-           |> json_response(401) == %{"error" => "invalid_api_token"}
+    refusal =
+      conn
+      |> put_forge_api_token("chat-wrong-scope")
+      |> get(~p"/api/v3/chat/events")
+
+    assert assert_api_error(refusal, 401, "unauthenticated")["error"] == "invalid_api_token"
   end
 
   test "events expose the same ordered tool lifecycle as the browser projection", %{conn: conn} do
@@ -185,8 +187,6 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
   end
 
   test "chat API requires a bearer token", %{conn: conn} do
-    assert conn |> get(~p"/api/v3/chat/events") |> json_response(401) == %{
-             "error" => "invalid_api_token"
-           }
+    assert conn |> get(~p"/api/v3/chat/events") |> api_error_code(401) == "unauthenticated"
   end
 end

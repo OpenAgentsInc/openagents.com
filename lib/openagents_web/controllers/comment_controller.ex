@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.CommentController do
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Agents.Agent
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
 
   def index(conn, %{
         "owner" => owner,
@@ -21,10 +22,7 @@ defmodule OpenAgentsWeb.CommentController do
     comments = Issues.list_comments(issue)
     render(conn, :index, comments: comments)
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def create(
@@ -57,28 +55,25 @@ defmodule OpenAgentsWeb.CommentController do
           |> render(:show, comment: comment)
 
         {:error, %Ecto.Changeset{} = changeset} ->
-          conn
-          |> put_status(:unprocessable_entity)
-          |> render(:error, changeset: changeset)
+          ApiError.changeset(conn, changeset)
       end
     else
       participation_forbidden(conn, actor)
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
+  # The `error` key predates the envelope and a published agent client reads
+  # it, so it rides beside the envelope rather than being replaced.
   defp participation_forbidden(conn, %Agent{}),
     do:
-      conn
-      |> put_status(:forbidden)
-      |> json(%{"error" => %{"code" => "agent_participation_forbidden"}})
+      ApiError.refuse(conn, "agent_participation_forbidden",
+        legacy: %{"error" => %{"code" => "agent_participation_forbidden"}}
+      )
 
   defp participation_forbidden(conn, _actor),
-    do: conn |> put_status(:forbidden) |> json(%{"error" => "forbidden"})
+    do: ApiError.forbidden(conn, legacy: %{"error" => "forbidden"})
 
   def show(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
     comment =
@@ -86,10 +81,7 @@ defmodule OpenAgentsWeb.CommentController do
 
     render(conn, :show, comment: comment)
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def update(conn, %{"owner" => owner, "repo" => repo, "id" => id} = params) do
@@ -101,15 +93,10 @@ defmodule OpenAgentsWeb.CommentController do
         render(conn, :show, comment: comment)
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def delete(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
@@ -120,15 +107,10 @@ defmodule OpenAgentsWeb.CommentController do
       {:ok, :ok} ->
         send_resp(conn, :no_content, "")
 
-      {:error, _} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{message: "Could not delete comment"})
+      {:error, _reason} ->
+        ApiError.refuse(conn, "delete_failed", message: "Could not delete comment")
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 end

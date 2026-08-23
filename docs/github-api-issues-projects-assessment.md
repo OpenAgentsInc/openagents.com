@@ -139,6 +139,110 @@ treats as first-class project-level records rather than comments on an issue. Th
 names stay GitHub-shaped where a GitHub client reads them, and the semantics stay
 compatible with where the tracker is going.
 
+## Error envelope
+
+Every refusal from an issue-family route answers with one envelope. Before this
+contract a caller met six incompatible bodies for the same class of failure, so
+reading one refusal taught you nothing about the next.
+
+```json
+{
+  "message": "Validation Failed",
+  "code": "validation_failed",
+  "status": 422,
+  "documentation_url": "https://openagents.com/api/v3",
+  "request_id": "GM5_fLaSSJDluDMAACUh",
+  "errors": { "state": ["must be one of: open, closed, all"] }
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `message` | The human sentence. A GitHub-shaped client reads this key, and a missing resource still reads exactly `Not Found`. |
+| `code` | A stable identifier from the table below. Branch on this, not on `message`. |
+| `status` | The HTTP status, repeated so a logged body is self-describing. |
+| `documentation_url` | This deployment's `GET /api/v3`, which publishes the codes and the routes. |
+| `request_id` | The value of the response's `x-request-id`. Name it when you report a failure. |
+| `errors` | Field name to an array of messages. Always present, `{}` when the failure is not field-level. |
+
+Each code carries exactly one status, chosen by `OpenAgentsWeb.ApiError` rather
+than by the controller, so two routes cannot disagree about what one failure is
+worth.
+
+| Code | Status | Raised when |
+| --- | --- | --- |
+| `unauthenticated` | `401` | The route needs a bearer token and the request has none, or the token lacks the scope. |
+| `forbidden` | `403` | The caller is known but may not act. |
+| `agent_participation_forbidden` | `403` | An agent credential may not participate in this repository. |
+| `not_found` | `404` | The resource is absent, or it is private and the caller may not read it. These are deliberately indistinguishable. |
+| `label_not_on_issue` | `404` | A remove-label call names a label the issue does not wear. |
+| `dependency_not_found` | `404` | A remove-dependency call names an issue that is not a prerequisite. |
+| `validation_failed` | `422` | A field or filter was rejected. Read `errors` for the detail. |
+| `delete_failed` | `422` | The resource exists but could not be removed. |
+
+Two refusals additionally carry a legacy `error` key beside the envelope,
+because published clients already read it: the agent and human participation
+refusals on issue and comment creation, and the `401` from the bearer-token
+pipelines. New clients read `code`. No key that a client already read has been
+renamed or removed.
+
+`GET /api/v3` publishes which routes answer with this envelope, under each
+route's `errors` field. Routes marked `legacy` there still answer with their own
+shape; the repository, deployment, box, forum, and agent families have not been
+converged yet, and `priv/api-contracts/repositories-v1.json` remains the
+description of the repository family's three-key shape, which the envelope is a
+superset of.
+
+## Route inventory
+
+`GET /api/v3` is the root document. It is derived from
+`OpenAgentsWeb.Router.__routes__/0` through `OpenAgentsWeb.ApiRouteAuthority`,
+never maintained beside it, so it cannot claim a route the router does not
+serve or omit one it does.
+
+```sh
+openagents api /api/v3
+```
+
+It carries:
+
+- `api_version` and `version`, so a client can pin what it read.
+- `extensions`, the OpenAgents-specific fields, filters, and endpoints.
+- `errors`, the envelope keys and the stable code table above.
+- `families`, every resource family the API serves.
+- `routes`, one entry per live route:
+
+```json
+{
+  "method": "GET",
+  "path": "/api/v3/repos/{owner}/{repo}/issues/{issue_number}",
+  "authority": "optional_bearer",
+  "family": "issue",
+  "errors": "envelope",
+  "mutation": false
+}
+```
+
+`authority` is `anonymous`, `optional_bearer`, or `required_bearer`. `family`
+groups the routes that must agree with one another. `errors` is `envelope` or
+`legacy`.
+
+Three tests keep the document honest, and each fails the build rather than
+drifting quietly:
+
+- `OpenAgentsWeb.ApiRouteAuthorityTest` fails when the router and the inventory
+  disagree in either direction, and when a classification does not match what
+  the pipeline does to an anonymous request.
+- `OpenAgentsWeb.ApiExtensionControllerTest` fails when the published document
+  omits a live route, or when a route is missing an authority, family, or error
+  classification.
+- `OpenAgentsWeb.ApiErrorContractTest` dispatches every route the document says
+  answers with the envelope and fails when the body is anything else.
+
+Adding a route to the router without classifying it fails the first two.
+Classifying a route as `envelope` and then rendering a bespoke body fails the
+third.
+
 ## CLI access
 
 `@openagentsinc/cli@0.2.1` exposes the complete implemented surface through
@@ -209,8 +313,15 @@ These are compatibility limits, not authorization fallbacks:
   public-repository reads.
 - Nonnumeric issue and milestone numbers can produce `500 Internal Server
   Error` instead of `404 Not Found`.
-- Error envelopes and pagination/link headers are a bounded local contract,
-  not complete Octokit or `gh` parity.
+- Pagination and link headers are a bounded local contract, not complete
+  Octokit or `gh` parity.
+- The error envelope is a superset of GitHub's: `message` and `errors` keep
+  GitHub-compatible meaning, and `code`, `status`, `documentation_url`, and
+  `request_id` are additions. GitHub's `errors` is an array of resource
+  objects; this one is a field-to-messages map, which is what the local
+  clients already read.
+- Families outside the issue family still answer with their own error shapes.
+  `GET /api/v3` names which, so a client can tell without probing.
 
 Closed on 2026-08-21, each pinned by tests: label rename through `new_name`,
 create-on-add for missing labels at the issue-labels endpoint, 404 for
@@ -228,6 +339,10 @@ those authority boundaries.
 - `test/openagents_web/controllers/comment_controller_test.exs`
 - `test/openagents_web/controllers/label_controller_test.exs`
 - `test/openagents_web/controllers/issue_label_controller_test.exs`
+- `test/openagents_web/controllers/api_error_contract_test.exs`
+- `test/openagents_web/controllers/api_extension_controller_test.exs`
+- `test/openagents_web/api_error_test.exs`
+- `test/openagents_web/api_route_authority_test.exs`
 - `test/openagents_web/controllers/assignee_controller_test.exs`
 - `test/openagents_web/controllers/issue_assignee_controller_test.exs`
 - `test/openagents_web/controllers/milestone_controller_test.exs`

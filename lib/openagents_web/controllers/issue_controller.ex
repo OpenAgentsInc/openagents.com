@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Agents.Agent
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo} = params) do
     reader = conn.assigns[:current_user]
@@ -29,7 +30,7 @@ defmodule OpenAgentsWeb.IssueController do
       )
     else
       {:error, field, message} ->
-        conn |> put_status(:unprocessable_entity) |> json(%{errors: %{field => [message]}})
+        ApiError.validation_failed(conn, %{field => [message]})
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -119,9 +120,7 @@ defmodule OpenAgentsWeb.IssueController do
           )
 
         {:error, %Ecto.Changeset{} = changeset} ->
-          conn
-          |> put_status(:unprocessable_entity)
-          |> render(:error, changeset: changeset)
+          ApiError.changeset(conn, changeset)
       end
     else
       participation_forbidden(conn, actor)
@@ -130,14 +129,16 @@ defmodule OpenAgentsWeb.IssueController do
     Ecto.NoResultsError -> not_found(conn)
   end
 
+  # The `error` key predates the envelope and a published agent client reads
+  # it, so it rides beside the envelope rather than being replaced.
   defp participation_forbidden(conn, %Agent{}),
     do:
-      conn
-      |> put_status(:forbidden)
-      |> json(%{"error" => %{"code" => "agent_participation_forbidden"}})
+      ApiError.refuse(conn, "agent_participation_forbidden",
+        legacy: %{"error" => %{"code" => "agent_participation_forbidden"}}
+      )
 
   defp participation_forbidden(conn, _actor),
-    do: conn |> put_status(:forbidden) |> json(%{"error" => "forbidden"})
+    do: ApiError.forbidden(conn, legacy: %{"error" => "forbidden"})
 
   def show(conn, %{
         "owner" => owner,
@@ -162,10 +163,7 @@ defmodule OpenAgentsWeb.IssueController do
       progress: progress(issue, conn.assigns[:current_user])
     )
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   def update(
@@ -197,15 +195,10 @@ defmodule OpenAgentsWeb.IssueController do
         )
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> not_found(conn)
   end
 
   defp dependencies(%Issue{} = issue), do: Issues.dependency_graph([issue])
@@ -222,7 +215,5 @@ defmodule OpenAgentsWeb.IssueController do
   defp put_extensions_header(conn),
     do: put_resp_header(conn, "x-openagents-extensions", "issue.openagents")
 
-  defp not_found(conn) do
-    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
-  end
+  defp not_found(conn), do: ApiError.not_found(conn)
 end

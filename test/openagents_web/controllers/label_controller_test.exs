@@ -101,7 +101,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
     test "GET /api/v3/repos/:owner/:repo/labels/:name returns 404 when missing", %{conn: conn} do
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/nope")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
 
     # The advertised URL is percent-encoded the way a path is, so a label
@@ -175,7 +175,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
       conn =
         patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/nope", %{color: "000000"})
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -192,7 +192,7 @@ defmodule OpenAgentsWeb.LabelControllerTest do
     test "DELETE /api/v3/repos/:owner/:repo/labels/:name returns 404 when missing", %{conn: conn} do
       conn = delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/labels/nope")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 

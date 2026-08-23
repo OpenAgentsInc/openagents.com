@@ -27,11 +27,21 @@ defmodule OpenAgentsWeb.Plugs.ApiTokenAuth do
     end
   end
 
+  # A 401 from this pipeline is the first refusal an issue-family caller can
+  # meet, so it carries the same envelope the controllers behind it use. The
+  # `error` key predates the envelope and every measured client reads it, so it
+  # rides beside the envelope rather than being replaced.
   defp refuse(conn) do
+    body =
+      OpenAgentsWeb.ApiError.envelope(conn, "unauthenticated",
+        message: "Requires an API token with the scope this route needs",
+        legacy: %{"error" => "invalid_api_token"}
+      )
+
     conn
     |> put_status(:unauthorized)
     |> put_resp_header("cache-control", "no-store")
-    |> Phoenix.Controller.json(%{"error" => "invalid_api_token"})
+    |> Phoenix.Controller.json(body)
     |> halt()
   end
 end

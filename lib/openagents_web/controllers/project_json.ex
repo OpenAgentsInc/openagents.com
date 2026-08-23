@@ -48,10 +48,6 @@ defmodule OpenAgentsWeb.ProjectJSON do
     note_json(note)
   end
 
-  def render("error.json", %{changeset: changeset}) do
-    %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
-  end
-
   defp project_json(project) do
     %{
       id: project.id,
@@ -137,11 +133,5 @@ defmodule OpenAgentsWeb.ProjectJSON do
       data_type: field.data_type,
       options: field.options
     }
-  end
-
-  defp translate_error({msg, opts}) do
-    Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-      to_string(Keyword.get(opts, String.to_existing_atom(key), key))
-    end)
   end
 end

@@ -11,10 +11,6 @@ defmodule OpenAgentsWeb.MilestoneJSON do
     milestone_json(milestone, assigns)
   end
 
-  def render("error.json", %{changeset: changeset}) do
-    %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
-  end
-
   defp milestone_json(milestone, assigns) do
     owner = Map.get(assigns, :owner, "OpenAgents")
     repo = Map.get(assigns, :repo, "openagents")
@@ -34,11 +30,5 @@ defmodule OpenAgentsWeb.MilestoneJSON do
 
   defp url_base(assigns) do
     Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
-  end
-
-  defp translate_error({msg, opts}) do
-    Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-      to_string(Keyword.get(opts, String.to_existing_atom(key), key))
-    end)
   end
 end

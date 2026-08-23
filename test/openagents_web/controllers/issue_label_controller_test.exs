@@ -41,7 +41,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
     test "GET .../issues/:issue_number/labels returns 404 for a missing issue", %{conn: conn} do
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/labels")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -168,7 +168,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
           labels: ["bug"]
         })
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -235,7 +235,7 @@ defmodule OpenAgentsWeb.IssueLabelControllerTest do
     } do
       conn = delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/labels/bug")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 

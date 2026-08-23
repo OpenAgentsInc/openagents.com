@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.LabelController do
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
     repository = Repositories.get_public_by_path!(owner, repo)
@@ -23,9 +24,7 @@ defmodule OpenAgentsWeb.LabelController do
         |> render(:show, label: label, owner: owner, repo: repo)
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -35,10 +34,7 @@ defmodule OpenAgentsWeb.LabelController do
     label = Labels.get_label_by_path!(owner, repo, name)
     render(conn, :show, label: label, owner: owner, repo: repo)
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def update(conn, %{"owner" => owner, "repo" => repo, "name" => name} = params) do
@@ -58,15 +54,10 @@ defmodule OpenAgentsWeb.LabelController do
         render(conn, :show, label: label, owner: owner, repo: repo)
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
   def delete(conn, %{"owner" => owner, "repo" => repo, "name" => name}) do
@@ -77,19 +68,12 @@ defmodule OpenAgentsWeb.LabelController do
       {:ok, %Label{}} ->
         send_resp(conn, :no_content, "")
 
-      {:error, _} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{message: "Could not delete label"})
+      {:error, _reason} ->
+        ApiError.refuse(conn, "delete_failed", message: "Could not delete label")
     end
   rescue
-    Ecto.NoResultsError ->
-      conn
-      |> put_status(:not_found)
-      |> json(%{message: "Not Found"})
+    Ecto.NoResultsError -> ApiError.not_found(conn)
   end
 
-  defp not_found(conn) do
-    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
-  end
+  defp not_found(conn), do: ApiError.not_found(conn)
 end

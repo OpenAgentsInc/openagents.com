@@ -1,10 +1,14 @@
 defmodule OpenAgentsWeb.ApiExtensionController do
   @moduledoc """
-  The index of OpenAgents extension fields this deployment serves.
+  The root API description this deployment serves.
 
-  A field is expected to be read only after it appears here, so an agent can
-  discover the OpenAgents-specific parts of the API mechanically instead of
-  reading prose. Responses that carry an extension also name it in the
+  It answers three questions an agent would otherwise answer by reading prose
+  or by probing: which OpenAgents-specific fields exist, which routes exist and
+  what authority each needs, and what a refusal looks like.
+
+  A field is expected to be read only after it appears in `extensions`, so an
+  agent discovers the OpenAgents-specific parts of the API mechanically.
+  Responses that carry an extension also name it in the
   `x-openagents-extensions` response header.
 
   The rules every extension field follows:
@@ -20,9 +24,24 @@ defmodule OpenAgentsWeb.ApiExtensionController do
   Rules 1 to 3 are enforced, not merely followed:
   `OpenAgentsWeb.ApiExtensionGovernanceTest` reads this document and the live
   responses and fails on any disagreement between them.
+
+  `routes` is derived from `OpenAgentsWeb.Router.__routes__/0` through
+  `OpenAgentsWeb.ApiRouteAuthority`, never hand-maintained beside it, so the
+  published inventory cannot drift from what the router serves.
+  `OpenAgentsWeb.ApiRouteAuthorityTest` fails when the two disagree, and
+  `OpenAgentsWeb.ApiErrorContractTest` fails when a route this document says
+  answers with the shared envelope answers with something else.
+
+  `errors` publishes that envelope: its keys, the stable codes, and the one
+  status each code carries.
   """
 
   use OpenAgentsWeb, :controller
+
+  alias OpenAgentsWeb.ApiError
+  alias OpenAgentsWeb.ApiRouteAuthority
+
+  @document_version "2026-08-23"
 
   @issue_reference %{
     "type" => "object",
@@ -163,6 +182,33 @@ defmodule OpenAgentsWeb.ApiExtensionController do
   }
 
   def show(conn, _params) do
-    json(conn, %{"api_version" => "v3", "extensions" => @extensions})
+    json(conn, %{
+      "api_version" => "v3",
+      "version" => @document_version,
+      "extensions" => @extensions,
+      "errors" => errors_contract(),
+      "routes" => ApiRouteAuthority.inventory_entries(),
+      "families" => Enum.map(ApiRouteAuthority.families(), &Atom.to_string/1)
+    })
+  end
+
+  # One description of one envelope. A client reads the codes it must branch on
+  # here rather than collecting them from whatever refusals it happened to hit.
+  defp errors_contract do
+    %{
+      "version" => @document_version,
+      "envelope" => ApiError.envelope_keys(),
+      "field_errors" =>
+        "The `errors` key maps a request field name to an array of messages. " <>
+          "It is always present, and it is `{}` when the failure is not field-level.",
+      "stable_codes" => ApiError.codes(),
+      "applies_to" => "Every route whose `errors` classification in this document is `envelope`.",
+      "legacy_keys" => %{
+        "error" =>
+          "Retained beside the envelope on the participation refusals and the " <>
+            "bearer-token refusals that published clients already read. New " <>
+            "clients read `code`."
+      }
+    }
   end
 end

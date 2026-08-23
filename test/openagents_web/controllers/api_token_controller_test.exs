@@ -35,14 +35,14 @@ defmodule OpenAgentsWeb.ApiTokenControllerTest do
     path = ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues"
 
     missing = conn |> delete_req_header("authorization") |> post(path, %{title: "denied"})
-    assert json_response(missing, 401) == %{"error" => "invalid_api_token"}
+    assert assert_api_error(missing, 401, "unauthenticated")["error"] == "invalid_api_token"
 
     malformed =
       conn
       |> put_req_header("authorization", "Bearer not-a-token")
       |> post(path, %{title: "denied"})
 
-    assert json_response(malformed, 401) == %{"error" => "invalid_api_token"}
+    assert assert_api_error(malformed, 401, "unauthenticated")["error"] == "invalid_api_token"
 
     user = github_user("api-token-denial-owner")
 
@@ -69,7 +69,7 @@ defmodule OpenAgentsWeb.ApiTokenControllerTest do
       |> put_req_header("authorization", "Bearer " <> plaintext)
       |> post(path, %{title: "denied"})
 
-    assert json_response(expired, 401) == %{"error" => "invalid_api_token"}
+    assert assert_api_error(expired, 401, "unauthenticated")["error"] == "invalid_api_token"
 
     fresh_token =
       expired_token
@@ -83,7 +83,7 @@ defmodule OpenAgentsWeb.ApiTokenControllerTest do
       |> put_req_header("authorization", "Bearer " <> plaintext)
       |> post(path, %{title: "denied"})
 
-    assert json_response(revoked, 401) == %{"error" => "invalid_api_token"}
+    assert assert_api_error(revoked, 401, "unauthenticated")["error"] == "invalid_api_token"
   end
 
   test "browser credential mutations remain CSRF protected" do

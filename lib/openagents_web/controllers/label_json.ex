@@ -11,10 +11,6 @@ defmodule OpenAgentsWeb.LabelJSON do
     label_json(label, assigns)
   end
 
-  def render("error.json", %{changeset: changeset}) do
-    %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
-  end
-
   defp label_json(label, assigns) do
     owner = Map.get(assigns, :owner, "OpenAgents")
     repo = Map.get(assigns, :repo, "openagents")
@@ -32,11 +28,5 @@ defmodule OpenAgentsWeb.LabelJSON do
 
   defp url_base(assigns) do
     Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
-  end
-
-  defp translate_error({msg, opts}) do
-    Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-      to_string(Keyword.get(opts, String.to_existing_atom(key), key))
-    end)
   end
 end

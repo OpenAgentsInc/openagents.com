@@ -54,7 +54,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
     test "GET /api/v3/repos/:owner/:repo/projectsV2 hides a private repository from a non-member" do
       conn = get(build_conn(), ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -124,7 +124,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     } do
       conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -191,7 +191,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     } do
       conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/items")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -526,7 +526,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           %{issue: %{owner: "WriterOrg", repo: "writer-api", number: issue.number}}
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
       assert Projects.list_project_items(project) == []
     end
 
@@ -541,7 +541,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           %{issue: %{owner: "NoSuchOrg", repo: "no-such-api", number: 1}}
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
       assert Projects.list_project_items(project) == []
     end
 
@@ -558,7 +558,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           %{issue: %{owner: "SourceOrg", repo: "empty-api", number: 999_999}}
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
       assert Projects.list_project_items(project) == []
     end
 
@@ -617,7 +617,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           %{issue: %{owner: "SecretOrg", repo: "secret-api", number: issue.number}}
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
       assert Projects.list_project_items(project) == []
     end
 
@@ -702,7 +702,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           }
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
 
     test "POST .../projectsV2/:project_number/items returns 404 for a missing project", %{
@@ -714,7 +714,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           issue_number: issue.number
         })
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -765,7 +765,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           %{values: %{"Status" => "Done"}}
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
       assert Projects.get_project_item!(project, item.id).values == %{}
     end
 
@@ -818,7 +818,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           }
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -866,7 +866,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     } do
       conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/fields")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
 
     test "POST .../projectsV2/:project_number/fields creates a field", %{conn: conn} do
@@ -959,40 +959,40 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                mallory_conn,
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert get(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert get(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert post(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
                %{issue_number: issue.number}
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert patch(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
                %{values: %{"Status" => "Done"}}
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert post(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
                %{name: "Priority", data_type: "text"}
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert Projects.get_project_item!(project, item.id).values == %{}
     end
@@ -1004,7 +1004,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert post(conn, ~p"/api/v3/repos/OtherOrg/other-private/projectsV2", %{
                title: "Not Alice's"
              })
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert Projects.list_projects(other_repository) == []
     end
@@ -1054,7 +1054,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           state: "sideways"
         })
 
-      assert json_response(conn, 422) == %{"errors" => %{"state" => ["is invalid"]}}
+      assert_api_error(conn, 422, "validation_failed", errors: %{"state" => ["is invalid"]})
       assert Projects.get_project_by_number!(repository(), project.number).state == "open"
     end
 
@@ -1067,7 +1067,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}",
                %{title: "Mine now"}
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert Projects.get_project_by_number!(repository(), project.number).title == "Alice only"
     end
@@ -1151,13 +1151,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
                %{body: "not mine"}
              )
-             |> json_response(403) == %{"message" => "Forbidden"}
+             |> api_error_code(403) == "forbidden"
 
       assert delete(
                recycle(mallory_conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
              )
-             |> json_response(403) == %{"message" => "Forbidden"}
+             |> api_error_code(403) == "forbidden"
 
       assert patch(
                conn,
@@ -1188,13 +1188,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}",
                %{body: "rewritten"}
              )
-             |> json_response(403) == %{"message" => "Forbidden"}
+             |> api_error_code(403) == "forbidden"
 
       assert delete(
                recycle(conn),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}"
              )
-             |> json_response(403) == %{"message" => "Forbidden"}
+             |> api_error_code(403) == "forbidden"
 
       assert Projects.count_project_notes(project, kind: "activity") == 1
     end
@@ -1213,14 +1213,14 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                build_conn(),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert post(
                put_forge_api_token(build_conn(), "project-outsider-notes", "outsider"),
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
                %{body: "mine now"}
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert %{"notes" => [_note]} =
                get(
@@ -1262,7 +1262,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           archived: "sideways"
         })
 
-      assert json_response(conn, 422) == %{"errors" => %{"archived" => ["is invalid"]}}
+      assert_api_error(conn, 422, "validation_failed", errors: %{"archived" => ["is invalid"]})
       refute Projects.get_project_by_number!(repository(), project.number).archived_at
     end
 
@@ -1329,7 +1329,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       mallory = put_forge_api_token(build_conn(), "project-mallory-delete", "mallory")
 
-      assert delete(mallory, path) |> json_response(404) == %{"message" => "Not Found"}
+      assert delete(mallory, path) |> api_error_code(404) == "not_found"
       assert Projects.get_project_by_number!(repository(), project.number)
     end
 
@@ -1597,7 +1597,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
           %{name: "Stage"}
         )
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
 
     test "PATCH fields/:field_id hides a private repository from a non-member", %{
@@ -1611,7 +1611,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
                %{name: "Mine now"}
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert Projects.get_project_field!(project, field.id).name == "Status"
     end
@@ -1676,7 +1676,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                mallory,
                ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
              )
-             |> json_response(404) == %{"message" => "Not Found"}
+             |> api_error_code(404) == "not_found"
 
       assert Projects.get_project_field!(project, field.id)
     end

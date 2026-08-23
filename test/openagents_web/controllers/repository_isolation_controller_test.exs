@@ -51,7 +51,7 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
     second_issue: second_issue
   } do
     assert patch(conn, ~p"/api/v3/repos/SecondOrg/second-repo/issues/1", %{title: "Crossed"})
-           |> json_response(404) == %{"message" => "Not Found"}
+           |> api_error_code(404) == "not_found"
 
     assert Issues.get_issue_by_path!("SecondOrg", "second-repo", 1).title == second_issue.title
   end
@@ -77,7 +77,7 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
 
   test "a resource cannot be read through an unknown repository path", %{conn: conn} do
     assert get(conn, ~p"/api/v3/repos/Unknown/nope/issues/1")
-           |> json_response(404) == %{"message" => "Not Found"}
+           |> api_error_code(404) == "not_found"
   end
 
   test "anonymous API reads do not expose a private repository", %{conn: conn} do
@@ -92,6 +92,6 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
     assert {:ok, _issue} = Issues.create_issue(private_repository, %{title: "Private"})
 
     assert get(conn, ~p"/api/v3/repos/PrivateOrg/private-repo/issues/1")
-           |> json_response(404) == %{"message" => "Not Found"}
+           |> api_error_code(404) == "not_found"
   end
 end

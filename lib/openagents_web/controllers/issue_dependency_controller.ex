@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.IssueDependencyController do
 
   alias OpenAgents.Issues
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
   alias OpenAgentsWeb.ControllerHelpers
 
   def index(conn, %{"owner" => owner, "repo" => repo, "issue_number" => issue_number}) do
@@ -60,10 +61,14 @@ defmodule OpenAgentsWeb.IssueDependencyController do
         json(conn, Issues.dependencies(issue))
 
       {:error, {:missing_dependency, number}} ->
-        message(conn, :not_found, "Issue ##{number} is not a prerequisite of this issue")
+        ApiError.refuse(conn, "dependency_not_found",
+          message: "Issue ##{number} is not a prerequisite of this issue"
+        )
 
       {:error, {:missing_issue, number}} ->
-        message(conn, :not_found, "Issue ##{number} does not exist in this repository")
+        ApiError.not_found(conn,
+          message: "Issue ##{number} does not exist in this repository"
+        )
 
       {:error, {:invalid_number, _value}} ->
         not_found(conn)
@@ -76,6 +81,9 @@ defmodule OpenAgentsWeb.IssueDependencyController do
     case Issues.add_dependencies(issue, numbers, conn.assigns.current_user) do
       :ok ->
         conn |> put_status(:created) |> json(Issues.dependencies(issue))
+
+      {:error, {:invalid_dependency, changeset}} ->
+        ApiError.changeset(conn, changeset)
 
       {:error, reason} ->
         unprocessable(conn, error_message(reason))
@@ -94,23 +102,9 @@ defmodule OpenAgentsWeb.IssueDependencyController do
   defp error_message({:cycle, numbers}),
     do: "Would create a dependency cycle: #{Enum.map_join(numbers, " -> ", &"##{&1}")}"
 
-  defp error_message({:invalid_dependency, changeset}) do
-    changeset
-    |> Ecto.Changeset.traverse_errors(fn {message, _options} -> message end)
-    |> Enum.map_join("; ", fn {field, messages} ->
-      "#{field} #{Enum.join(messages, ", ")}"
-    end)
-  end
-
   defp unprocessable(conn, message) do
-    conn
-    |> put_status(:unprocessable_entity)
-    |> json(%{errors: %{blocked_by: [message]}})
+    ApiError.validation_failed(conn, %{blocked_by: [message]})
   end
 
-  defp message(conn, status, message) do
-    conn |> put_status(status) |> json(%{message: message})
-  end
-
-  defp not_found(conn), do: message(conn, :not_found, "Not Found")
+  defp not_found(conn), do: ApiError.not_found(conn)
 end

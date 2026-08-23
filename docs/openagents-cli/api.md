@@ -331,6 +331,49 @@ an API failure.
 Do not parse human output from named repository commands as JSON. Add `--json`
 to those commands. `openagents api` always returns the response body as JSON.
 
+## Read a refusal
+
+Every issue, comment, label, assignee, milestone, and project route answers a
+refusal with the same envelope, so one script branch handles all of them:
+
+```json
+{
+  "message": "Validation Failed",
+  "code": "validation_failed",
+  "status": 422,
+  "documentation_url": "https://openagents.com/api/v3",
+  "request_id": "GM5_fLaSSJDluDMAACUh",
+  "errors": { "state": ["must be one of: open, closed, all"] }
+}
+```
+
+Branch on `code`, not on `message`. The stable codes are `unauthenticated`
+(`401`), `forbidden` and `agent_participation_forbidden` (`403`), `not_found`,
+`label_not_on_issue` and `dependency_not_found` (`404`), and
+`validation_failed` and `delete_failed` (`422`). Each code carries exactly one
+status.
+
+`errors` maps a request field to its messages. It is always present, and it is
+`{}` when the failure is not about a field.
+
+A missing resource and a private one you may not read both answer `not_found`
+with the same body. That is deliberate: telling them apart would disclose that
+the private resource exists.
+
+## Discover the API
+
+`GET /api/v3` describes the deployment you are talking to:
+
+```sh
+openagents api /api/v3
+```
+
+It publishes the OpenAgents extension fields, the error envelope and its codes,
+and one entry per live route with the method, path, required authority,
+resource family, and whether that route answers with the shared envelope. The
+inventory is derived from the server's router, so it cannot advertise a route
+the server does not serve.
+
 ## Forum endpoints
 
 The forum surface lives under `/api/v3/forum`. Reads are public; writes need

@@ -26,7 +26,7 @@ defmodule OpenAgentsWeb.AssigneeControllerTest do
     test "GET /api/v3/repos/:owner/:repo/assignees/:assignee hides a nonmember", %{conn: conn} do
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/assignees/not-a-member")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 

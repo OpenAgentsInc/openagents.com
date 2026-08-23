@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
     test "GET .../issues/:issue_number/assignees returns 404 for a missing issue", %{conn: conn} do
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -117,7 +117,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
           assignees: ["octocat"]
         })
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -169,7 +169,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
           assignees: ["octocat"]
         })
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 

@@ -2605,6 +2605,36 @@ Evidence: `OpenAgents.Notifications`, `OpenAgents.Notifications.Mentions`,
 `OpenAgentsWeb.NotificationsLive`, `test/openagents/notifications_test.exs`,
 and `test/openagents_web/live/notifications_live_test.exs`.
 
+### FORGEAPI-001 — One error envelope, and a route inventory derived from the router
+
+Status: Current
+
+Every refusal from an issue-family `/api/v3` route carries one envelope:
+`message`, `code`, `status`, `documentation_url`, `request_id`, and `errors`.
+`OpenAgentsWeb.ApiError` owns it, and a code determines its status there, so no
+controller chooses a status for a failure the API has already named. Two
+refusals additionally carry the legacy `error` key that published clients
+already read; no key a client read has been renamed or removed.
+
+Non-disclosure is preserved by construction rather than by care: a private
+resource and an absent one both refuse with `not_found`, and no code in the
+table distinguishes them.
+
+The published route inventory at `GET /api/v3` is derived from
+`OpenAgentsWeb.Router.__routes__/0` through `OpenAgentsWeb.ApiRouteAuthority`,
+never maintained beside it. Each route carries three mandatory classifications
+— principal, resource family, and error contract — so a route added to the
+router without choosing all three fails the build, and a route classified as
+answering with the envelope that answers with something else fails the build.
+
+Evidence: `lib/openagents_web/api_error.ex`,
+`lib/openagents_web/api_route_authority.ex`,
+`lib/openagents_web/controllers/api_extension_controller.ex`,
+`test/openagents_web/api_error_test.exs`,
+`test/openagents_web/api_route_authority_test.exs`,
+`test/openagents_web/controllers/api_error_contract_test.exs`, and
+`test/openagents_web/controllers/api_extension_controller_test.exs`.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -2639,6 +2669,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |
 | NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
+
+| FORGEAPI-001 | `test/openagents_web/controllers/api_error_contract_test.exs`, `test/openagents_web/controllers/api_extension_controller_test.exs`, `test/openagents_web/api_error_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |

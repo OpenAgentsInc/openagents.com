@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.ProjectController do
   alias OpenAgents.Projects
   alias OpenAgents.Projects.Project
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.ApiError
 
   @doc """
   The repository's projects.
@@ -30,9 +31,7 @@ defmodule OpenAgentsWeb.ProjectController do
         |> render(:show, project: project)
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -86,9 +85,7 @@ defmodule OpenAgentsWeb.ProjectController do
             render(conn, :show, project: project)
 
           {:error, %Ecto.Changeset{} = changeset} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> render(:error, changeset: changeset)
+            ApiError.changeset(conn, changeset)
         end
     end
   rescue
@@ -174,9 +171,7 @@ defmodule OpenAgentsWeb.ProjectController do
         |> render(:note, note: note)
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -310,9 +305,7 @@ defmodule OpenAgentsWeb.ProjectController do
             |> render_items([item], project)
 
           {:error, %Ecto.Changeset{} = changeset} ->
-            conn
-            |> put_status(:unprocessable_entity)
-            |> render(:error, changeset: changeset)
+            ApiError.changeset(conn, changeset)
         end
     end
   rescue
@@ -344,9 +337,7 @@ defmodule OpenAgentsWeb.ProjectController do
           render_items(conn, [item], project)
 
         {:error, %Ecto.Changeset{} = changeset} ->
-          conn
-          |> put_status(:unprocessable_entity)
-          |> render(:error, changeset: changeset)
+          ApiError.changeset(conn, changeset)
       end
     else
       unprocessable(conn, %{values: ["is invalid"]})
@@ -421,9 +412,7 @@ defmodule OpenAgentsWeb.ProjectController do
         |> render(:fields, fields: [field])
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+        ApiError.changeset(conn, changeset)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -537,21 +526,11 @@ defmodule OpenAgentsWeb.ProjectController do
     end
   end
 
-  defp unprocessable(conn, errors) do
-    conn
-    |> put_status(:unprocessable_entity)
-    |> json(%{errors: errors})
-  end
+  defp unprocessable(conn, errors), do: ApiError.validation_failed(conn, errors)
 
-  defp unprocessable_changeset(conn, changeset) do
-    conn
-    |> put_status(:unprocessable_entity)
-    |> render(:error, changeset: changeset)
-  end
+  defp unprocessable_changeset(conn, changeset), do: ApiError.changeset(conn, changeset)
 
-  defp forbidden(conn) do
-    conn |> put_status(:forbidden) |> json(%{message: "Forbidden"})
-  end
+  defp forbidden(conn), do: ApiError.forbidden(conn)
 
   defp item_filters(params) do
     state = params["promise_state"]
@@ -587,7 +566,5 @@ defmodule OpenAgentsWeb.ProjectController do
     )
   end
 
-  defp not_found(conn) do
-    conn |> put_status(:not_found) |> json(%{message: "Not Found"})
-  end
+  defp not_found(conn), do: ApiError.not_found(conn)
 end

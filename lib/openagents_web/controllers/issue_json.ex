@@ -30,10 +30,6 @@ defmodule OpenAgentsWeb.IssueJSON do
     issue_json(issue, assigns)
   end
 
-  def render("error.json", %{changeset: changeset}) do
-    %{errors: Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
-  end
-
   defp issue_json(issue, assigns) do
     owner = Map.get(assigns, :owner, "OpenAgents")
     repo = Map.get(assigns, :repo, "openagents")
@@ -94,11 +90,5 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   defp url_base(assigns) do
     Map.get(assigns, :url_base) || String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
-  end
-
-  defp translate_error({msg, opts}) do
-    Regex.replace(~r/%{(\w+)}/, msg, fn _, key ->
-      to_string(Keyword.get(opts, String.to_existing_atom(key), key))
-    end)
   end
 end

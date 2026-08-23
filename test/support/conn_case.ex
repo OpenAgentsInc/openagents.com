@@ -37,6 +37,59 @@ defmodule OpenAgentsWeb.ConnCase do
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 
+  @doc """
+  Asserts that a refusal carries the unified `OpenAgentsWeb.ApiError` envelope.
+
+  A controller that drifts back to a bespoke body — a bare `message`, a bare
+  `errors`, a string `error` — fails here rather than at whichever assertion
+  happened to name the old shape. Pass `errors:` to pin the field-level detail
+  and `message:` to pin the sentence.
+  """
+  def assert_api_error(conn, status, code, opts \\ []) do
+    body = Phoenix.ConnTest.json_response(conn, status)
+
+    ExUnit.Assertions.assert(
+      Enum.sort(Map.keys(body) -- ["error"]) ==
+        ~w(code documentation_url errors message request_id status),
+      """
+      The response is not an OpenAgents API error envelope.
+
+      Expected the six envelope keys (plus an optional legacy `error`), got:
+
+        #{inspect(Map.keys(body))}
+
+      Body:
+
+        #{inspect(body, pretty: true)}
+      """
+    )
+
+    if code, do: ExUnit.Assertions.assert(body["code"] == code)
+    ExUnit.Assertions.assert(body["status"] == status)
+    ExUnit.Assertions.assert(is_binary(body["message"]))
+    ExUnit.Assertions.assert(is_map(body["errors"]))
+
+    if message = Keyword.get(opts, :message) do
+      ExUnit.Assertions.assert(body["message"] == message)
+    end
+
+    if errors = Keyword.get(opts, :errors) do
+      ExUnit.Assertions.assert(body["errors"] == errors)
+    end
+
+    body
+  end
+
+  @doc """
+  The stable error code of a refusal, after checking the envelope around it.
+
+  Use it where the assertion is already a pipeline:
+  `conn |> get(path) |> api_error_code(404) == "not_found"`.
+  """
+  def api_error_code(conn, status) do
+    conn |> assert_api_error(status, nil) |> Map.fetch!("code")
+  end
+
   def github_user(key) when is_binary(key) do
     digest = :crypto.hash(:sha256, key)
     login_suffix = digest |> Base.encode16(case: :lower) |> binary_part(0, 12)

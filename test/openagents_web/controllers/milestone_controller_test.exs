@@ -103,7 +103,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
          %{conn: conn} do
       conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/999999")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -166,7 +166,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
           state: "closed"
         })
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 
@@ -190,7 +190,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
          %{conn: conn} do
       conn = delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/999999")
 
-      assert json_response(conn, 404) == %{"message" => "Not Found"}
+      assert_api_error(conn, 404, "not_found")
     end
   end
 

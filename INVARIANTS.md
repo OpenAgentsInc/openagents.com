@@ -834,6 +834,44 @@ constraints on `reputation_attestations`, `OpenAgentsWeb.ReputationController`,
 `test/openagents/reputation_test.exs`, and
 `test/openagents_web/controllers/reputation_controller_test.exs`.
 
+### SETTLEMENT-001 — A bounty pays once, against fingerprinted evidence
+
+Status: Current
+
+Bounty settlement is a separate authority from attribution accounting. A payment
+leaves the treasury only when an operator-admitted treasury policy bounds the
+amount, the daily budget, the attempt count, and the admitted self-custodial
+destination kinds; the priced specification carries a named buyer, a sats
+amount, acceptance criteria, a verification policy, an expiry, and a fingerprint
+over all of them; the claim pins that fingerprint and the claimant's own
+destination; a verification under the specification's own verifier policy digest
+accepts the exact commit the claim delivered; and the settlement request carries
+an approval reference and an idempotency key.
+
+A repriced specification, a moved fingerprint, a rejected verifier, a commit
+without its own verification, a missing approval, an expired claim, a dispute,
+an exhausted budget, or an exhausted attempt bound each stop the payment. One
+idempotency key names one payment intent, one intent per claim can reach `paid`,
+one receipt exists per intent, and a payment hash is unique, so a duplicate
+request, a retry, and a lost acknowledgement all resolve to the first receipt
+instead of a second payment. Expiry, dispute, and refund are append-only
+adjustments that never rewrite a receipt.
+
+The treasury never holds the claimant's keys and never provisions a wallet for
+them: the domain hands an authorized request to the configured gateway and
+records the returned evidence, and an unconfigured gateway fails closed. Public
+projections publish only the amount, the status, reference kinds, and the
+evidence the repository's disclosure level admits, never a destination, a
+claimant or buyer reference, an operator identity, an approval reference, or a
+gateway reference. The claimant can export the full receipt, including their own
+destination, without a hosted wallet.
+
+Evidence: `OpenAgents.Settlement`, `OpenAgents.Settlement.PaymentGateway`, its
+seven append-only schemas with their uniqueness and partial-uniqueness
+constraints, and the pricing, claim, verification, duplicate, stale-commit,
+approval, budget, retry, reconciliation, expiry, dispute, refund, privacy, and
+receipt-export cases in `test/openagents/settlement_test.exs`.
+
 ### MODULE-001 — Every invocation pins one immutable admitted module
 
 Status: Current
@@ -2114,6 +2152,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | COLLECTIVE-003 | `test/openagents/collective_publication_test.exs` |
 | COMPENSATION-001 | `test/openagents/compensation_test.exs` |
 | REPUTATION-001 | `test/openagents/reputation_test.exs`, `test/openagents_web/controllers/reputation_controller_test.exs` |
+| SETTLEMENT-001 | `test/openagents/settlement_test.exs` |
 | MODULE-001 | `test/openagents/modules/registry_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
 | MODULE-002 | `test/openagents/modules/discovery_test.exs`, `test/openagents/modules/lifecycle_test.exs` |
 | MODULE-003 | `test/openagents/modules/router_test.exs`, `test/openagents/turn_tool_loop_test.exs` |

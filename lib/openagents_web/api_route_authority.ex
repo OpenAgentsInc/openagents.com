@@ -356,6 +356,10 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/projectsV2" => {:required_bearer, :project, :envelope},
       "post /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" =>
         {:required_bearer, :project, :envelope},
+      "post /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/move" =>
+        {:required_bearer, :project, :envelope},
+      "delete /api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id" =>
+        {:required_bearer, :project, :envelope},
       "post /api/v3/repos/:owner/:repo/projectsV2/:project_number/fields" =>
         {:required_bearer, :project, :envelope},
       "patch /api/v3/repos/:owner/:repo/projectsV2/:project_number" =>

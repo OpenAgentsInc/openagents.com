@@ -33,20 +33,18 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.UI.Circle
 
-  @statuses ["To Do", "In Progress", "Done"]
+  # A board renders the columns its project stores, so a heading is a field
+  # option's label and a column key is that option's identifier -- both stored
+  # data. A stream name, meanwhile, has to be a fixed atom. The two are related
+  # by *position*: column zero of any board is carried by the first stream in
+  # this compile-time pool, column one by the second, and so on. Nothing here
+  # is derived from a stored value, so `String.to_atom/1` is never called on
+  # one. The pool covers the largest option list a field can declare, plus one
+  # column for the cards whose stored value the field no longer offers.
+  @max_board_columns 101
+  @column_streams for index <- 0..(@max_board_columns - 1), do: :"board_column_#{index}"
 
-  # Every column a board can render, mapped to the stream that carries its
-  # cards. A stream name has to be a fixed atom, and a column heading is a
-  # field value, so the two are related through this table rather than through
-  # `String.to_atom/1` on a stored value.
-  @column_streams %{
-    "To Do" => :todo_items,
-    "In Progress" => :in_progress_items,
-    "Done" => :done_items,
-    "LIVE" => :live_items,
-    "GATED" => :gated_items,
-    "WITHDRAWN" => :withdrawn_items
-  }
+  @unsorted_column_name "No status"
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
     user = socket.assigns.current_user
@@ -67,11 +65,6 @@ defmodule OpenAgentsWeb.ProjectShowLive do
      |> assign(:project, project)
      |> assign(:can_write, can_write)
      |> assign(:issue_options, issue_options)
-     # The board columns are read as `@statuses` inside ~H, where `@` means
-     # `assigns.statuses`, not the module attribute. Without this assign every
-     # render raised KeyError and the route was unreachable.
-     |> assign(:statuses, @statuses)
-     |> assign(:status_options, Enum.map(@statuses, &{&1, &1}))
      |> assign(:editing_description?, false)
      |> assign(:description_form, description_form(project))
      |> assign(:note_form, note_form())
@@ -86,11 +79,12 @@ defmodule OpenAgentsWeb.ProjectShowLive do
 
     if socket.assigns.can_write do
       project = socket.assigns.project
+      grouping = socket.assigns.grouping
       number = String.to_integer(item_params["issue_number"])
-      status = item_params["status"] || "To Do"
+      status = item_params["status"] || default_column_id(socket.assigns.columns)
 
       case Projects.create_project_item(
-             %{"issue_number" => number, "values" => %{"Status" => status}},
+             %{"issue_number" => number, "values" => %{grouping.field_name => status}},
              project,
              socket.assigns.current_user
            ) do
@@ -106,6 +100,58 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       end
     else
       {:noreply, put_flash(socket, :error, "Only repository members can add project items.")}
+    end
+  end
+
+  # A move is one write, not a drag: **Move left**, **Move right**, **Move up**,
+  # and **Move down** are ordinary buttons, so the keyboard and a screen reader
+  # reach them the same way a pointer does, and no client-side ordering state
+  # can disagree with what committed.
+  def handle_event("move_item", %{"id" => id, "direction" => direction}, socket) do
+    socket = refresh_authority(socket)
+
+    if socket.assigns.can_write do
+      project = socket.assigns.project
+      user = socket.assigns.current_user
+      item = Projects.get_visible_project_item!(project, id, user)
+
+      case move_attrs(direction, item, socket) do
+        :none ->
+          {:noreply, socket}
+
+        attrs ->
+          case Projects.move_project_item(item, attrs, user) do
+            {:ok, _item} ->
+              {:noreply, load_board(socket, project, socket.assigns.promise_context)}
+
+            {:error, _changeset} ->
+              {:noreply, put_flash(socket, :error, "That card could not be moved.")}
+          end
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can move project items.")}
+    end
+  end
+
+  def handle_event("remove_item", %{"id" => id}, socket) do
+    socket = refresh_authority(socket)
+
+    if socket.assigns.can_write do
+      project = socket.assigns.project
+      item = Projects.get_visible_project_item!(project, id, socket.assigns.current_user)
+
+      case Projects.delete_project_item(item, socket.assigns.current_user) do
+        {:ok, _item} ->
+          {:noreply,
+           socket
+           |> load_board(project, socket.assigns.promise_context)
+           |> put_flash(:info, "Item removed from project")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "That item could not be removed.")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only repository members can remove project items.")}
     end
   end
 
@@ -220,25 +266,88 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   # is its own stream and each redraw resets it, so the client applies the move
   # as a removal and an insertion instead of replacing the page.
   defp load_board(socket, project, promise_context) do
-    items = project_items(project, socket.assigns.current_user, promise_context)
-    columns = board_columns(promise_context)
-    grouped = Enum.group_by(items, & &1.status)
+    grouping = Projects.board_grouping(project)
+    items = project_items(project, socket.assigns.current_user, promise_context, grouping)
+    grouped = Enum.group_by(items, & &1.column_id)
+    columns = board_columns(grouping, grouped)
 
     socket
     |> assign(:promise_context, promise_context)
     |> assign(:promise_registry?, promise_context.registry?)
+    |> assign(:grouping, grouping)
     |> assign(:columns, columns)
+    |> assign(:status_options, Enum.map(grouping.columns, &{&1.name, &1.id}))
     |> then(
-      &Enum.reduce(columns, &1, fn status, socket ->
-        stream(socket, column_stream(status), Map.get(grouped, status, []), reset: true)
+      &Enum.reduce(columns, &1, fn column, socket ->
+        stream(socket, column.stream, Map.get(grouped, column.id, []), reset: true)
       end)
     )
   end
 
-  defp board_columns(%{registry?: true}), do: PromiseRegistry.states()
-  defp board_columns(_promise_context), do: @statuses
+  # The declared options are the board, in the order the field declares them. A
+  # card whose stored value the field no longer offers is stale rather than
+  # missing, so it gets a column of its own instead of disappearing -- and that
+  # column exists only while something is in it.
+  defp board_columns(grouping, grouped) do
+    declared = Enum.take(grouping.columns, @max_board_columns - 1)
 
-  defp column_stream(status), do: Map.fetch!(@column_streams, status)
+    unsorted =
+      case Map.get(grouped, nil, []) do
+        [] -> []
+        _stale -> [%{id: nil, name: @unsorted_column_name}]
+      end
+
+    (declared ++ unsorted)
+    |> Enum.with_index()
+    |> Enum.map(fn {column, index} ->
+      Map.merge(column, %{
+        stream: Enum.at(@column_streams, index),
+        dom_id: "project-column-#{index}"
+      })
+    end)
+  end
+
+  defp default_column_id([%{id: id} | _rest]), do: id
+  defp default_column_id(_columns), do: nil
+
+  defp move_attrs("up", item, socket), do: rank_attrs(item, socket, -1)
+  defp move_attrs("down", item, socket), do: rank_attrs(item, socket, 1)
+  defp move_attrs("left", item, socket), do: column_attrs(item, socket, -1)
+  defp move_attrs("right", item, socket), do: column_attrs(item, socket, 1)
+  defp move_attrs(_direction, _item, _socket), do: :none
+
+  defp rank_attrs(item, socket, offset) do
+    members = column_members(item, socket)
+    rank = Enum.find_index(members, &(&1.id == item.id))
+
+    case rank do
+      nil -> :none
+      rank -> %{"position" => min(max(rank + 1 + offset, 1), length(members))}
+    end
+  end
+
+  defp column_attrs(item, socket, offset) do
+    %{grouping: grouping, columns: columns} = socket.assigns
+    current = Projects.board_column_id(grouping, item.values)
+    index = Enum.find_index(columns, &(&1.id == current))
+
+    with index when is_integer(index) <- index,
+         target when target >= 0 <- index + offset,
+         %{id: id} when not is_nil(id) <- Enum.at(columns, index + offset) do
+      %{"values" => %{grouping.field_name => id}}
+    else
+      _out_of_range -> :none
+    end
+  end
+
+  defp column_members(item, socket) do
+    %{grouping: grouping, project: project} = socket.assigns
+    column = Projects.board_column_id(grouping, item.values)
+
+    project
+    |> Projects.list_visible_project_items(socket.assigns.current_user)
+    |> Enum.filter(&(Projects.board_column_id(grouping, &1.values) == column))
+  end
 
   defp load_notes(socket, false), do: assign(socket, :notes, :loading)
   defp load_notes(socket, true), do: reload_notes(socket)
@@ -280,20 +389,20 @@ defmodule OpenAgentsWeb.ProjectShowLive do
       raise OpenAgentsWeb.PublicNotFoundError, message: "repository not found"
   end
 
-  defp project_items(project, user, promise_context) do
+  defp project_items(project, user, promise_context, grouping) do
     Projects.list_visible_project_items(project, user, promise_context: promise_context)
     |> Enum.map(fn item ->
       issue = item.issue
       values = PromiseRegistry.redact_values(item.values, user)
+      column_id = Projects.board_column_id(grouping, values)
 
       if promise_context.registry? do
         promise = Map.get(values, "promise", %{})
-        state = PromiseRegistry.state(promise_context, values)
 
         Map.merge(item, %{
           issue: issue,
           values: values,
-          status: state,
+          column_id: column_id,
           promise_id: promise["id"],
           verified_at: promise["verified_at"],
           evidence_count: length(promise["evidence"] || []),
@@ -301,8 +410,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
           next_review: get_in(promise, ["gate", "next_review"])
         })
       else
-        status = get_in(values, ["Status"]) || "To Do"
-        Map.merge(item, %{issue: issue, values: values, status: status})
+        Map.merge(item, %{issue: issue, values: values, column_id: column_id})
       end
     end)
   end
@@ -435,18 +543,31 @@ defmodule OpenAgentsWeb.ProjectShowLive do
         </footer>
       </.form>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-        <%= for status <- @columns do %>
-          <section class="card !m-0 !p-3">
+      <div
+        id="project-board"
+        class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 items-start"
+        role="list"
+        aria-label={"#{@grouping.field_name} columns"}
+      >
+        <%= for {column, column_index} <- Enum.with_index(@columns) do %>
+          <section class="card !m-0 !p-3" role="listitem" aria-labelledby={"#{column.dom_id}-heading"}>
             <header class="mb-2">
-              <h3 class="card-title !text-sm">{status}</h3>
+              <h3 id={"#{column.dom_id}-heading"} class="card-title !text-sm">{column.name}</h3>
             </header>
             <div
-              id={"project-column-#{column_stream(status)}"}
+              id={column.dom_id}
+              data-column={column.id}
+              data-unsorted={is_nil(column.id) && "true"}
               class="space-y-2 min-h-24"
               phx-update="stream"
             >
-              <%= for {dom_id, item} <- @streams[column_stream(status)] do %>
+              <p
+                id={"#{column.dom_id}-empty"}
+                class="hidden only:block text-xs text-muted-foreground"
+              >
+                No cards in this column.
+              </p>
+              <%= for {dom_id, item} <- @streams[column.stream] do %>
                 <article id={dom_id} class="card !m-0 !p-3">
                   <%= if @promise_registry? do %>
                     <div class="flex items-center justify-between gap-2 mb-2">
@@ -458,7 +579,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
                     <div class="text-xs text-muted-foreground mb-2">
                       Verified: {verification_time(item.verified_at)}
                     </div>
-                    <%= if status == "GATED" do %>
+                    <%= if column.id == "GATED" do %>
                       <div class="text-xs text-muted-foreground mb-2">
                         Missing: {item.gate_missing} · Next review: {item.next_review}
                       </div>
@@ -485,6 +606,76 @@ defmodule OpenAgentsWeb.ProjectShowLive do
                         {label["name"]}
                       </span>
                     <% end %>
+                  </div>
+                  <div
+                    :if={@can_write}
+                    class="flex flex-wrap items-center gap-1 mt-3 border-t border-border pt-2"
+                    role="group"
+                    aria-label={"Move or remove #{item.issue.title}"}
+                  >
+                    <.button
+                      id={"move-left-#{item.id}"}
+                      type="button"
+                      variant={:ghost}
+                      size={:sm}
+                      disabled={column_index == 0}
+                      phx-click="move_item"
+                      phx-value-id={item.id}
+                      phx-value-direction="left"
+                      aria-label={"Move #{item.issue.title} to the previous column"}
+                    >
+                      Move left
+                    </.button>
+                    <.button
+                      id={"move-right-#{item.id}"}
+                      type="button"
+                      variant={:ghost}
+                      size={:sm}
+                      disabled={column_index >= length(@columns) - 1 or is_nil(column.id)}
+                      phx-click="move_item"
+                      phx-value-id={item.id}
+                      phx-value-direction="right"
+                      aria-label={"Move #{item.issue.title} to the next column"}
+                    >
+                      Move right
+                    </.button>
+                    <.button
+                      id={"move-up-#{item.id}"}
+                      type="button"
+                      variant={:ghost}
+                      size={:sm}
+                      phx-click="move_item"
+                      phx-value-id={item.id}
+                      phx-value-direction="up"
+                      aria-label={"Move #{item.issue.title} up in this column"}
+                    >
+                      Move up
+                    </.button>
+                    <.button
+                      id={"move-down-#{item.id}"}
+                      type="button"
+                      variant={:ghost}
+                      size={:sm}
+                      phx-click="move_item"
+                      phx-value-id={item.id}
+                      phx-value-direction="down"
+                      aria-label={"Move #{item.issue.title} down in this column"}
+                    >
+                      Move down
+                    </.button>
+                    <.button
+                      id={"remove-item-#{item.id}"}
+                      type="button"
+                      variant={:ghost}
+                      size={:sm}
+                      tone={:danger}
+                      phx-click="remove_item"
+                      phx-value-id={item.id}
+                      data-confirm={"Remove #{item.issue.title} from this project?"}
+                      aria-label={"Remove #{item.issue.title} from this project"}
+                    >
+                      Remove
+                    </.button>
                   </div>
                 </article>
               <% end %>

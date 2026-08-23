@@ -478,16 +478,16 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
       card = ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
 
-      assert has_element?(member, "#project-column-todo_items " <> card)
-      assert has_element?(visitor, "#project-column-todo_items " <> card)
+      assert has_element?(member, ~s{[data-column="To Do"] } <> card)
+      assert has_element?(visitor, ~s{[data-column="To Do"] } <> card)
 
       {:ok, _updated} = Projects.update_project_item(item, %{"values" => %{"Status" => "Done"}})
 
-      assert has_element?(member, "#project-column-done_items " <> card)
-      refute has_element?(member, "#project-column-todo_items " <> card)
+      assert has_element?(member, ~s{[data-column="Done"] } <> card)
+      refute has_element?(member, ~s{[data-column="To Do"] } <> card)
 
-      assert has_element?(visitor, "#project-column-done_items " <> card)
-      refute has_element?(visitor, "#project-column-todo_items " <> card)
+      assert has_element?(visitor, ~s{[data-column="Done"] } <> card)
+      refute has_element?(visitor, ~s{[data-column="To Do"] } <> card)
     end
 
     test "a status change made over /api/v3 moves the card on an open board", %{conn: conn} do
@@ -503,7 +503,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
       {:ok, view, _html} = live(conn, path(project))
 
       card = ~s{a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
-      assert has_element?(view, "#project-column-todo_items " <> card)
+      assert has_element?(view, ~s{[data-column="To Do"] } <> card)
 
       api = put_forge_api_token(build_conn(), "project-show-live", repository())
 
@@ -514,8 +514,8 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
              )
              |> json_response(200)
 
-      assert has_element?(view, "#project-column-in_progress_items " <> card)
-      refute has_element?(view, "#project-column-todo_items " <> card)
+      assert has_element?(view, ~s{[data-column="In Progress"] } <> card)
+      refute has_element?(view, ~s{[data-column="To Do"] } <> card)
     end
 
     test "a card whose source repository is unreadable never arrives on an update" do
@@ -581,7 +581,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
       assert has_element?(
                view,
-               ~s{#project-column-todo_items a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+               ~s{[data-column="To Do"] a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
              )
     end
   end
@@ -602,6 +602,267 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
       refute has_element?(view, "#project-note-form")
       refute has_element?(view, "#new-project-item-form")
       refute has_element?(view, "#edit-description")
+    end
+  end
+
+  describe "stored-field columns" do
+    defp status_project!(options) do
+      project = project!()
+
+      {:ok, field} =
+        Projects.create_project_field(%{
+          "project_id" => project.id,
+          "name" => "Status",
+          "data_type" => "single_select",
+          "options" => %{"values" => options}
+        })
+
+      %{project: project, field: field}
+    end
+
+    defp card(project, title, value) do
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => title})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => value}},
+          project
+        )
+
+      %{issue: issue, item: item}
+    end
+
+    test "the board heads its columns with the project's stored options", %{conn: conn} do
+      %{project: project} =
+        status_project!([
+          %{"id" => "triage", "name" => "Triage"},
+          %{"id" => "shipping", "name" => "Shipping"}
+        ])
+
+      {:ok, view, html} = live(conn, path(project))
+
+      assert html =~ "Triage"
+      assert html =~ "Shipping"
+      refute html =~ "In Progress"
+      assert has_element?(view, ~s{[data-column="triage"]})
+      assert has_element?(view, ~s{[data-column="shipping"]})
+    end
+
+    test "a card sits in the column its stored option identifies", %{conn: conn} do
+      %{project: project} =
+        status_project!([
+          %{"id" => "triage", "name" => "Triage"},
+          %{"id" => "shipping", "name" => "Shipping"}
+        ])
+
+      %{issue: issue} = card(project, "Sorted card", "shipping")
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      assert has_element?(
+               view,
+               ~s{[data-column="shipping"] a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+             )
+    end
+
+    test "relabelling an option renames the column and leaves the card in it", %{conn: conn} do
+      %{project: project, field: field} =
+        status_project!([
+          %{"id" => "triage", "name" => "Triage"},
+          %{"id" => "shipping", "name" => "Shipping"}
+        ])
+
+      %{issue: issue} = card(project, "Kept card", "shipping")
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      {:ok, _field} =
+        Projects.update_project_field(project, field, %{
+          "options" => %{
+            "values" => [
+              %{"id" => "triage", "name" => "Triage"},
+              %{"id" => "shipping", "name" => "On the way"}
+            ]
+          }
+        })
+
+      html = render(view)
+      assert html =~ "On the way"
+
+      assert has_element?(
+               view,
+               ~s{[data-column="shipping"] a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+             )
+    end
+
+    test "a card whose option was dropped moves to its own column", %{conn: conn} do
+      %{project: project} = status_project!([%{"id" => "triage", "name" => "Triage"}])
+      %{issue: issue} = card(project, "Stale card", "triage")
+
+      # Dropping an option items carry is refused, so the stale value is one an
+      # item was given before the field declared its options.
+      {:ok, _item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{}},
+          project
+        )
+
+      OpenAgents.Repo.update_all(
+        from(item in ProjectItem, where: item.project_id == ^project.id),
+        set: [values: %{"Status" => "retired"}]
+      )
+
+      {:ok, view, html} = live(conn, path(project))
+
+      assert html =~ "No status"
+
+      assert has_element?(
+               view,
+               ~s{[data-unsorted] a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+             )
+    end
+
+    test "the add form offers the stored options", %{conn: conn} do
+      %{project: project} = status_project!([%{"id" => "triage", "name" => "Triage"}])
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Newly added"})
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      view
+      |> form("#new-project-item-form",
+        item: %{issue_number: to_string(issue.number), status: "triage"}
+      )
+      |> render_submit()
+
+      assert [item] = Projects.list_project_items(project)
+      assert item.values == %{"Status" => "triage"}
+    end
+  end
+
+  describe "item operations on the board" do
+    test "a member moves a card to the next column with a button", %{conn: conn} do
+      project = project!()
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Movable"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      view |> element("#move-right-#{item.id}") |> render_click()
+
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "In Progress"}
+
+      assert has_element?(
+               view,
+               ~s{[data-column="In Progress"] a[href="/OpenAgentsInc/openagents.com/issues/#{issue.number}"]}
+             )
+    end
+
+    test "a member reorders a card within its column", %{conn: conn} do
+      project = project!()
+      {:ok, first} = Issues.create_issue(repository(), %{"title" => "First"})
+      {:ok, second} = Issues.create_issue(repository(), %{"title" => "Second"})
+
+      {:ok, _first_item} =
+        Projects.create_project_item(
+          %{"issue_number" => first.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, second_item} =
+        Projects.create_project_item(
+          %{"issue_number" => second.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      view |> element("#move-up-#{second_item.id}") |> render_click()
+
+      assert Enum.map(Projects.list_project_items(project), & &1.issue.title) == [
+               "Second",
+               "First"
+             ]
+    end
+
+    test "a member removes a card and the issue survives", %{conn: conn} do
+      project = project!()
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Removable"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, view, _html} = live(conn, path(project))
+
+      html = view |> element("#remove-item-#{item.id}") |> render_click()
+
+      assert html =~ "Item removed from project"
+      assert Projects.list_project_items(project) == []
+      assert Issues.get_issue!(repository(), issue.id)
+    end
+
+    test "a signed-out visitor sees no move or remove control and cannot forge one" do
+      project = project!()
+      {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Guarded"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => %{"Status" => "To Do"}},
+          project
+        )
+
+      {:ok, view, _html} = live(build_conn(), path(project))
+
+      refute has_element?(view, "#move-right-#{item.id}")
+      refute has_element?(view, "#remove-item-#{item.id}")
+
+      html = render_click(view, "remove_item", %{"id" => to_string(item.id)})
+      assert html =~ "Only repository members can remove project items."
+
+      html =
+        render_click(view, "move_item", %{"id" => to_string(item.id), "direction" => "right"})
+
+      assert html =~ "Only repository members can move project items."
+
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "To Do"}
+    end
+
+    test "a member cannot move a card whose source repository they cannot read", %{conn: conn} do
+      project = project!()
+
+      source =
+        repository_fixture(%{owner: "SealedOrg", name: "sealed-move", visibility: "private"})
+
+      {:ok, issue} = Issues.create_issue(source, %{"title" => "Sealed"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{
+            "issue_number" => issue.number,
+            "issue_repository_id" => source.id,
+            "values" => %{"Status" => "To Do"}
+          },
+          project
+        )
+
+      {:ok, view, _html} = live(conn, path(project))
+      Process.flag(:trap_exit, true)
+
+      assert catch_exit(
+               render_click(view, "move_item", %{
+                 "id" => to_string(item.id),
+                 "direction" => "right"
+               })
+             )
+
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "To Do"}
     end
   end
 

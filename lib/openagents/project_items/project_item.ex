@@ -6,6 +6,10 @@ defmodule OpenAgents.ProjectItems.ProjectItem do
 
   schema "project_items" do
     field :values, :map
+    # The stored rank of a card within its board. Insertion order by id can
+    # never be changed by a move, so a board that reorders needs a rank of its
+    # own.
+    field :position, :integer, default: 0
     field :project_id, :id
     belongs_to :repository, Repository, type: :binary_id
     belongs_to :issue_repository, Repository, type: :binary_id
@@ -17,7 +21,14 @@ defmodule OpenAgents.ProjectItems.ProjectItem do
   @doc false
   def changeset(project_item, attrs) do
     project_item
-    |> cast(attrs, [:values, :project_id, :issue_id, :repository_id, :issue_repository_id])
+    |> cast(attrs, [
+      :values,
+      :position,
+      :project_id,
+      :issue_id,
+      :repository_id,
+      :issue_repository_id
+    ])
     |> validate_required([:project_id, :issue_id, :repository_id, :issue_repository_id])
     |> unique_constraint([:project_id, :issue_id])
     |> foreign_key_constraint(:repository_id)

@@ -515,7 +515,7 @@ defmodule OpenAgents.Projects do
 
   def list_project_items(%Project{id: project_id, repository_id: repository_id}) do
     project_items_query(project_id, repository_id)
-    |> order_by(asc: :id)
+    |> order_by(asc: :position, asc: :id)
     |> preload(issue: :repository)
     |> Repo.all()
   end
@@ -534,7 +534,7 @@ defmodule OpenAgents.Projects do
     items =
       project_items_query(project_id, repository_id)
       |> where([item], item.issue_repository_id in subquery(readable))
-      |> order_by(asc: :id)
+      |> order_by(asc: :position, asc: :id)
       |> preload(issue: :repository)
       |> Repo.all()
 
@@ -655,27 +655,37 @@ defmodule OpenAgents.Projects do
               number: issue_number
             )
 
-          item_attrs = %{
-            "project_id" => project.id,
-            "issue_id" => issue.id,
-            "repository_id" => project.repository_id,
-            "issue_repository_id" => issue_repository_id,
-            "values" => values
-          }
+          case project_item_for_issue(project, issue.id) do
+            %ProjectItem{} = existing ->
+              {:existing, existing}
 
-          case prepare_promise_values(project, values, actor) do
-            {:ok, values} ->
-              insert_project_item(Map.put(item_attrs, "values", values), project, actor)
+            nil ->
+              item_attrs = %{
+                "project_id" => project.id,
+                "issue_id" => issue.id,
+                "repository_id" => project.repository_id,
+                "issue_repository_id" => issue_repository_id,
+                "position" => next_item_position(project.id),
+                "values" => values
+              }
 
-            {:error, errors} ->
-              item_attrs
-              |> then(&ProjectItem.changeset(%ProjectItem{}, &1))
-              |> add_errors(errors)
-              |> then(&{:error, &1})
+              case prepare_promise_values(project, values, actor) do
+                {:ok, values} ->
+                  insert_project_item(Map.put(item_attrs, "values", values), project, actor)
+
+                {:error, errors} ->
+                  item_attrs
+                  |> then(&ProjectItem.changeset(%ProjectItem{}, &1))
+                  |> add_errors(errors)
+                  |> then(&{:error, &1})
+              end
           end
       end
 
     case result do
+      {:existing, item} ->
+        {:ok, Repo.preload(item, issue: :repository)}
+
       {:ok, item} ->
         Analytics.capture("project_item_added", actor_distinct_id(actor), %{
           "project_number" => project.number,
@@ -688,6 +698,294 @@ defmodule OpenAgents.Projects do
 
       result ->
         result
+    end
+  end
+
+  @doc """
+  The item `project` already carries for `issue_id`, or `nil`.
+
+  Membership is a set, not a list: one issue is on a board once. Two boards can
+  each hold the same issue, because an item is a board's view of canonical work
+  rather than the work itself.
+  """
+  def project_item_for_issue(%Project{id: project_id}, issue_id) do
+    Repo.get_by(ProjectItem, project_id: project_id, issue_id: issue_id)
+  end
+
+  defp next_item_position(project_id) do
+    case Repo.aggregate(
+           from(item in ProjectItem, where: item.project_id == ^project_id),
+           :max,
+           :position
+         ) do
+      nil -> 1
+      position -> position + 1
+    end
+  end
+
+  @doc """
+  Removes one item from its board.
+
+  The item goes, the issue stays: an item points at canonical work rather than
+  owning it, so a board that drops a card has said nothing about the work. The
+  removal is appended to the item's event log before the row goes, and to the
+  project's activity feed as well, because the item log stops being reachable
+  through the item once the item is gone.
+  """
+  def delete_project_item(%ProjectItem{} = item, actor \\ nil)
+      when is_nil(actor) or is_struct(actor, User) do
+    project = Repo.get!(Project, item.project_id)
+    item = Repo.preload(item, issue: :repository)
+
+    Repo.transaction(fn ->
+      record_item_event(item, project, actor, item.values || %{}, %{}, "remove")
+      record_field_activity(project.id, removal_body(item), actor)
+      Repo.delete!(item)
+    end)
+    |> case do
+      {:ok, removed} ->
+        Analytics.capture("project_item_removed", actor_distinct_id(actor), %{
+          "project_number" => project.number
+        })
+
+        Repositories.broadcast_projects(project.repository_id)
+        {:ok, removed}
+
+      result ->
+        result
+    end
+  end
+
+  defp removal_body(%ProjectItem{issue: %Issue{} = issue}) when not is_nil(issue),
+    do:
+      "Removed #{issue.repository.owner}/#{issue.repository.name}##{issue.number} from the board."
+
+  defp removal_body(%ProjectItem{}), do: "Removed an item from the board."
+
+  @doc """
+  Moves one item to another column, another rank, or both.
+
+  `attrs` carries `values`, merged onto the item the same way `PATCH` merges
+  them, and `position`, a one-based rank **within the destination column**,
+  because that is what a move on a board means. A move with only `position` is
+  a reorder; a move with only `values` lands at the end of the destination
+  column; a move with neither is a no-op that still reads back the item.
+
+  Two concurrent moves settle to one defined order and lose nothing. The write
+  takes a row lock on the project, reads the whole board inside it, splices the
+  item into the order it asks for, and renumbers the result densely, so the
+  second move sees the first one's result rather than racing it.
+
+  A move that changes nothing appends no event and announces nothing, so a
+  client that retries is indistinguishable from one that did not.
+  """
+  def move_project_item(%ProjectItem{} = item, attrs, actor \\ nil)
+      when is_nil(actor) or is_struct(actor, User) do
+    attrs = to_string_map(attrs)
+    project = Repo.get!(Project, item.project_id)
+    incoming = Map.get(attrs, "values", %{})
+
+    case cast_position(Map.get(attrs, "position")) do
+      {:error, message} ->
+        {:error, Ecto.Changeset.add_error(ProjectItem.changeset(item, %{}), :position, message)}
+
+      {:ok, position} ->
+        item
+        |> move_within_project(project, incoming, position, actor)
+        |> case do
+          {:ok, {:unchanged, moved}} ->
+            {:ok, Repo.preload(moved, [issue: :repository], force: true)}
+
+          {:ok, {:moved, moved}} ->
+            Repositories.broadcast_projects(project.repository_id)
+            {:ok, Repo.preload(moved, [issue: :repository], force: true)}
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            {:error, changeset}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+    end
+  end
+
+  defp move_within_project(item, project, incoming, position, actor) do
+    Repo.transaction(fn ->
+      _lock =
+        Repo.one!(
+          from project_row in Project,
+            where: project_row.id == ^project.id,
+            lock: "FOR UPDATE",
+            select: project_row.id
+        )
+
+      current = Repo.get!(ProjectItem, item.id)
+      previous = current.values || %{}
+
+      values =
+        case incoming do
+          incoming when is_map(incoming) -> Map.merge(previous, incoming)
+          incoming -> incoming
+        end
+
+      case prepare_promise_values(project, values, actor, current.id) do
+        {:error, errors} ->
+          Repo.rollback(add_errors(ProjectItem.changeset(current, %{}), errors))
+
+        {:ok, values} ->
+          ordered =
+            ProjectItem
+            |> where(project_id: ^project.id)
+            |> order_by(asc: :position, asc: :id)
+            |> Repo.all()
+
+          grouping = board_grouping(project)
+          target = %{current | values: values}
+          arranged = splice(ordered, target, position, grouping)
+          renumbered = renumber_items(arranged)
+
+          moved =
+            if values == previous do
+              current
+            else
+              Repo.update!(ProjectItem.changeset(current, %{"values" => values}))
+            end
+
+          if values == previous and renumbered == [] do
+            {:unchanged, Repo.get!(ProjectItem, current.id)}
+          else
+            record_item_event(moved, project, actor, previous, values, "move")
+            {:moved, Repo.get!(ProjectItem, current.id)}
+          end
+      end
+    end)
+  end
+
+  # A `nil` position means "wherever the destination column puts you"; anything
+  # that is not a positive integer is a caller mistake rather than a default.
+  defp cast_position(nil), do: {:ok, nil}
+  defp cast_position(position) when is_integer(position) and position > 0, do: {:ok, position}
+
+  defp cast_position(position) when is_binary(position) do
+    case Integer.parse(position) do
+      {parsed, ""} -> cast_position(parsed)
+      _other -> {:error, "must be a positive integer"}
+    end
+  end
+
+  defp cast_position(_position), do: {:error, "must be a positive integer"}
+
+  # Splices `target` into `ordered` so that it becomes the `position`-th member
+  # of its destination column. A `nil` position leaves a card that stayed in its
+  # column where it was and appends one that changed columns.
+  defp splice(ordered, target, position, grouping) do
+    previous_index = Enum.find_index(ordered, &(&1.id == target.id))
+    before = Enum.at(ordered, previous_index)
+    rest = List.delete_at(ordered, previous_index)
+    column = board_column_id(grouping, target.values)
+
+    members =
+      for {item, index} <- Enum.with_index(rest),
+          board_column_id(grouping, item.values) == column,
+          do: index
+
+    index =
+      cond do
+        is_nil(position) and board_column_id(grouping, before.values) == column ->
+          previous_index
+
+        members == [] ->
+          length(rest)
+
+        true ->
+          rank = position || length(members) + 1
+
+          cond do
+            rank <= 1 -> hd(members)
+            rank > length(members) -> List.last(members) + 1
+            true -> Enum.at(members, rank - 1)
+          end
+      end
+
+    List.insert_at(rest, index, target)
+  end
+
+  # Positions are dense and one-based after every move, so a reader never has
+  # to interpret a gap and a later move never runs out of room between two
+  # cards.
+  defp renumber_items(arranged) do
+    arranged
+    |> Enum.with_index(1)
+    |> Enum.reduce([], fn {item, rank}, changed ->
+      if item.position == rank do
+        changed
+      else
+        {1, _} =
+          ProjectItem
+          |> where(id: ^item.id)
+          |> Repo.update_all(set: [position: rank])
+
+        [item.id | changed]
+      end
+    end)
+  end
+
+  @default_board_field "Status"
+  @default_board_columns ["To Do", "In Progress", "Done"]
+
+  @doc """
+  The field a board groups its cards by, and the columns that field offers.
+
+  A board renders the project's stored fields rather than a fixed set of
+  headings: the `promise_state` field if the project declares one, otherwise a
+  `single_select` field named **Status**, otherwise the three default columns a
+  project has before it declares any field at all.
+
+  A column carries the option's `id` and its `name` separately, because an item
+  stores the identifier. Relabelling an option moves the heading and leaves
+  every card where it is.
+  """
+  def board_grouping(%Project{} = project) do
+    fields = list_project_fields(project)
+
+    field =
+      Enum.find(fields, &(&1.data_type == "promise_state")) ||
+        Enum.find(
+          fields,
+          &(&1.data_type == "single_select" and
+              String.downcase(&1.name) == String.downcase(@default_board_field))
+        )
+
+    case field do
+      %ProjectField{} = field ->
+        %{field_name: field.name, columns: ProjectField.options(field), source: :field}
+
+      nil ->
+        %{
+          field_name: @default_board_field,
+          columns: Enum.map(@default_board_columns, &%{id: &1, name: &1}),
+          source: :default
+        }
+    end
+  end
+
+  @doc """
+  The column `values` belongs in, as an option identifier, or `nil`.
+
+  A stored value the field no longer offers is stale, and a board that dropped
+  the card would lose it silently, so a stale value sorts into no column and
+  the board renders it apart. The default grouping has no declared options to
+  be stale against, so an unrecognized value falls into the first column, which
+  is what a board did before any field existed.
+  """
+  def board_column_id(grouping, values) do
+    value = Map.get(values || %{}, grouping.field_name)
+    ids = Enum.map(grouping.columns, & &1.id)
+
+    cond do
+      value in ids -> value
+      grouping.source == :default -> List.first(ids)
+      true -> nil
     end
   end
 
@@ -718,7 +1016,7 @@ defmodule OpenAgents.Projects do
 
         Repo.transaction(fn ->
           updated = Repo.update!(changeset)
-          record_promise_event(updated, project, actor, item.values || %{}, values, "update")
+          record_item_event(updated, project, actor, item.values || %{}, values, "update")
           updated
         end)
         |> case do
@@ -1133,10 +1431,7 @@ defmodule OpenAgents.Projects do
     Repo.transaction(fn ->
       case Repo.insert(ProjectItem.changeset(%ProjectItem{}, attrs)) do
         {:ok, item} ->
-          if PromiseRegistry.registry?(project) do
-            record_promise_event(item, project, actor, %{}, item.values || %{}, "create")
-          end
-
+          record_item_event(item, project, actor, %{}, item.values || %{}, "create")
           item
 
         {:error, changeset} ->
@@ -1149,10 +1444,20 @@ defmodule OpenAgents.Projects do
     end
   end
 
-  defp record_promise_event(item, project, actor, previous, values, kind) do
-    from_state = PromiseRegistry.state(project, previous)
-    to_state = PromiseRegistry.state(project, values)
-    kind = if from_state && from_state != to_state, do: "state_change", else: kind
+  # Every item mutation appends one actor-attributed entry. The states it
+  # records are the board's own grouping values, which for a promise registry
+  # are the promise states and for any other board are its stored Status
+  # values, so one log answers "what moved, who moved it, and from where" for
+  # every kind of board.
+  defp record_item_event(item, project, actor, previous, values, kind) do
+    grouping = board_grouping(project)
+    from_state = stored_column_value(grouping, previous)
+    to_state = stored_column_value(grouping, values)
+
+    kind =
+      if (kind in ["create", "update"] and from_state) && from_state != to_state,
+        do: "state_change",
+        else: kind
 
     %ProjectItemEvent{}
     |> ProjectItemEvent.changeset(%{
@@ -1169,6 +1474,11 @@ defmodule OpenAgents.Projects do
     })
     |> Repo.insert!()
   end
+
+  defp stored_column_value(grouping, values) when is_map(values),
+    do: Map.get(values, grouping.field_name)
+
+  defp stored_column_value(_grouping, _values), do: nil
 
   defp actor_login(nil), do: "system"
   defp actor_login(%User{github_login: login}) when is_binary(login), do: login

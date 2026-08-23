@@ -691,6 +691,14 @@ defmodule OpenAgentsWeb.Router do
           ProjectController,
           :update_item
 
+    post "/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/move",
+         ProjectController,
+         :move_item
+
+    delete "/repos/:owner/:repo/projectsV2/:project_number/items/:item_id",
+           ProjectController,
+           :delete_item
+
     patch "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :update
 
     post "/repos/:owner/:repo/projectsV2/:project_number/notes",

@@ -300,16 +300,16 @@ defmodule OpenAgents.ProjectsTest do
       refute item.issue_id == issue.id
     end
 
-    test "create_project_item/2 refuses the same source issue twice", %{
+    test "create_project_item/2 returns the membership a repeated add already made", %{
       project: project,
       issue: issue
     } do
-      {:ok, _item} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
+      {:ok, item} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
 
-      assert {:error, %Ecto.Changeset{} = changeset} =
+      assert {:ok, repeated} =
                Projects.create_project_item(%{"issue_number" => issue.number}, project)
 
-      assert %{project_id: ["has already been taken"]} = errors_on(changeset)
+      assert repeated.id == item.id
       assert length(Projects.list_project_items(project)) == 1
     end
 
@@ -382,11 +382,23 @@ defmodule OpenAgents.ProjectsTest do
     end
 
     test "a rejected item write announces nothing", %{project: project, issue: issue} do
+      :ok = OpenAgents.Repositories.subscribe_projects(repository().id)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Projects.create_project_item(
+                 %{"issue_number" => issue.number, "values" => "not-a-map"},
+                 project
+               )
+
+      refute_receive {:projects_changed, _repository_id}, 100
+    end
+
+    test "a repeated add announces nothing", %{project: project, issue: issue} do
       {:ok, _item} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
 
       :ok = OpenAgents.Repositories.subscribe_projects(repository().id)
 
-      assert {:error, %Ecto.Changeset{}} =
+      assert {:ok, _repeated} =
                Projects.create_project_item(%{"issue_number" => issue.number}, project)
 
       refute_receive {:projects_changed, _repository_id}, 100
@@ -665,6 +677,219 @@ defmodule OpenAgents.ProjectsTest do
       assert {:error, changeset} = Projects.delete_project_field(project, field)
       assert %{name: [_ | _]} = errors_on(changeset)
       assert Projects.get_project_field!(project, field.id)
+    end
+  end
+
+  describe "project item operations" do
+    import OpenAgents.IssuesFixtures
+    import OpenAgents.ProjectsFixtures
+
+    alias OpenAgents.ProjectItems.ProjectItem
+
+    setup do
+      project = project_fixture(repository(), number: 1)
+
+      {:ok, field} =
+        Projects.create_project_field(%{
+          "project_id" => project.id,
+          "name" => "Status",
+          "data_type" => "single_select",
+          "options" => %{
+            "values" => [
+              %{"id" => "todo", "name" => "To Do"},
+              %{"id" => "doing", "name" => "In Progress"},
+              %{"id" => "done", "name" => "Done"}
+            ]
+          }
+        })
+
+      %{project: project, field: field}
+    end
+
+    defp add(project, title, values \\ %{}) do
+      issue = issue_fixture(repository(), title: title)
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => values},
+          project
+        )
+
+      item
+    end
+
+    defp order(project) do
+      project |> Projects.list_project_items() |> Enum.map(& &1.issue.title)
+    end
+
+    test "an added item takes the last position on the board", %{project: project} do
+      first = add(project, "First")
+      second = add(project, "Second")
+
+      assert first.position < second.position
+      assert order(project) == ["First", "Second"]
+    end
+
+    test "adding an issue already on the board returns the item it already has", %{
+      project: project
+    } do
+      issue = issue_fixture(repository(), title: "Once")
+
+      {:ok, item} = Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      assert {:ok, %ProjectItem{id: id}} =
+               Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      assert id == item.id
+      assert length(Projects.list_project_items(project)) == 1
+    end
+
+    test "the same issue sits on two boards at once", %{project: project} do
+      other = project_fixture(repository(), number: 2)
+      issue = issue_fixture(repository(), title: "Shared")
+
+      assert {:ok, mine} =
+               Projects.create_project_item(%{"issue_number" => issue.number}, project)
+
+      assert {:ok, theirs} =
+               Projects.create_project_item(%{"issue_number" => issue.number}, other)
+
+      refute mine.id == theirs.id
+    end
+
+    test "delete_project_item/2 removes the item and keeps the issue", %{project: project} do
+      item = add(project, "Removable")
+      issue_id = item.issue_id
+
+      assert {:ok, %ProjectItem{}} = Projects.delete_project_item(item)
+      assert Projects.list_project_items(project) == []
+      assert OpenAgents.Issues.get_issue!(repository(), issue_id)
+    end
+
+    test "delete_project_item/2 records a removal readable after the item is gone", %{
+      project: project
+    } do
+      item = add(project, "Removable")
+
+      {:ok, _removed} = Projects.delete_project_item(item)
+
+      {events, _total, _page, _per_page} = Projects.list_project_item_events(item)
+      assert [%{kind: "remove"}, %{kind: "create"}] = events
+    end
+
+    test "move_project_item/3 changes the column and appends to its end", %{project: project} do
+      first = add(project, "First", %{"Status" => "done"})
+      _second = add(project, "Second", %{"Status" => "todo"})
+      third = add(project, "Third", %{"Status" => "todo"})
+
+      assert {:ok, moved} =
+               Projects.move_project_item(third, %{"values" => %{"Status" => "done"}})
+
+      assert moved.values["Status"] == "done"
+      assert moved.position > first.position
+    end
+
+    test "move_project_item/3 places an item at a one-based index in its column", %{
+      project: project
+    } do
+      _first = add(project, "First", %{"Status" => "todo"})
+      _second = add(project, "Second", %{"Status" => "todo"})
+      third = add(project, "Third", %{"Status" => "todo"})
+
+      assert {:ok, _moved} = Projects.move_project_item(third, %{"position" => 1})
+      assert order(project) == ["Third", "First", "Second"]
+    end
+
+    test "move_project_item/3 clamps a position past the end of the column", %{project: project} do
+      first = add(project, "First", %{"Status" => "todo"})
+      _second = add(project, "Second", %{"Status" => "todo"})
+
+      assert {:ok, _moved} = Projects.move_project_item(first, %{"position" => 99})
+      assert order(project) == ["Second", "First"]
+    end
+
+    test "move_project_item/3 refuses an option the field does not offer", %{project: project} do
+      item = add(project, "First", %{"Status" => "todo"})
+
+      assert {:error, changeset} =
+               Projects.move_project_item(item, %{"values" => %{"Status" => "shipped"}})
+
+      assert %{values: [_ | _]} = errors_on(changeset)
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "todo"}
+    end
+
+    test "move_project_item/3 refuses a position that is not a positive integer", %{
+      project: project
+    } do
+      item = add(project, "First", %{"Status" => "todo"})
+
+      assert {:error, changeset} = Projects.move_project_item(item, %{"position" => 0})
+      assert %{position: [_ | _]} = errors_on(changeset)
+    end
+
+    test "a move that changes nothing appends no second event", %{project: project} do
+      item = add(project, "First", %{"Status" => "todo"})
+
+      assert {:ok, _first} = Projects.move_project_item(item, %{"position" => 1})
+      {before, _total, _page, _per} = Projects.list_project_item_events(item)
+
+      assert {:ok, _again} = Projects.move_project_item(item, %{"position" => 1})
+      {now, _total, _page, _per} = Projects.list_project_item_events(item)
+
+      assert length(now) == length(before)
+    end
+
+    test "two moves onto the same index settle without losing an item", %{project: project} do
+      _first = add(project, "First", %{"Status" => "todo"})
+      second = add(project, "Second", %{"Status" => "todo"})
+      third = add(project, "Third", %{"Status" => "todo"})
+
+      assert {:ok, _} = Projects.move_project_item(second, %{"position" => 1})
+      assert {:ok, _} = Projects.move_project_item(third, %{"position" => 1})
+
+      titles = order(project)
+      assert length(titles) == 3
+      assert Enum.sort(titles) == ["First", "Second", "Third"]
+      assert hd(titles) == "Third"
+      assert Enum.map(Projects.list_project_items(project), & &1.position) == [1, 2, 3]
+    end
+
+    test "board_grouping/1 reads the stored field and its option order", %{project: project} do
+      grouping = Projects.board_grouping(project)
+
+      assert grouping.field_name == "Status"
+      assert Enum.map(grouping.columns, & &1.id) == ["todo", "doing", "done"]
+      assert Enum.map(grouping.columns, & &1.name) == ["To Do", "In Progress", "Done"]
+    end
+
+    test "board_grouping/1 falls back to the default columns with no stored field" do
+      bare = project_fixture(repository(), number: 3)
+      grouping = Projects.board_grouping(bare)
+
+      assert grouping.source == :default
+      assert Enum.map(grouping.columns, & &1.name) == ["To Do", "In Progress", "Done"]
+    end
+
+    test "board_grouping/1 follows a relabelled option by identifier", %{
+      project: project,
+      field: field
+    } do
+      item = add(project, "First", %{"Status" => "doing"})
+
+      {:ok, _field} =
+        Projects.update_project_field(project, field, %{
+          "options" => %{
+            "values" => [
+              %{"id" => "todo", "name" => "To Do"},
+              %{"id" => "doing", "name" => "Under way"},
+              %{"id" => "done", "name" => "Done"}
+            ]
+          }
+        })
+
+      grouping = Projects.board_grouping(project)
+      assert Enum.map(grouping.columns, & &1.name) == ["To Do", "Under way", "Done"]
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "doing"}
     end
   end
 

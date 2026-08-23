@@ -25,9 +25,26 @@ issues.
 
 ## The board
 
-Items are grouped into columns by status. Adding an issue to a project creates
-an item that points at it — the issue itself is unchanged, so the same issue can
-sit on several boards.
+The board renders the project's stored fields. Its columns are the options of
+the project's **Status** field, in the order that field declares them, and a
+project that has declared no field falls back to **To Do**, **In Progress**, and
+**Done**.
+
+An item stores an option's identifier, not its label, so relabelling an option
+renames the column heading and leaves every card in it. A card whose stored
+option the field no longer offers is stale rather than missing, so it appears in
+a **No status** column, which the board shows only while something is in it.
+
+Adding an issue to a project creates an item that points at it — the issue
+itself is unchanged, so the same issue can sit on several boards, and each board
+keeps its own field values for it. Adding an issue a board already carries gives
+you back the item it already has rather than a second one.
+
+Members with write access move and remove cards from the card itself. **Move
+left** and **Move right** change the column, **Move up** and **Move down** change
+the rank within it, and **Remove** takes the card off the board. They are
+buttons, so the keyboard and a screen reader reach them the same way a pointer
+does. Removing a card removes the item and leaves the issue alone.
 
 ## Fields
 
@@ -61,6 +78,13 @@ Deleting a project needs the project archived first. The board pairs its delete
 control with a confirmation prompt, and an API caller has no prompt, so
 archiving is the deliberate step that stands in for one. Deleting removes the
 project's fields and items. The issues those items referenced are untouched.
+
+`DELETE` on `/items/:item_id` removes an item. `POST` on `/items/:item_id/move`
+moves one, and its body carries `values`, merged the way `PATCH` merges them,
+and `position`, a one-based rank within the destination column. A body with only
+`position` reorders within the current column. Positions stay dense after every
+move, so two moves onto the same rank settle to one order and neither loses a
+card.
 
 `PATCH` and `DELETE` on `/fields/:field_id` change and remove fields. Renaming a
 field carries its values with it, because the field name is the key each item

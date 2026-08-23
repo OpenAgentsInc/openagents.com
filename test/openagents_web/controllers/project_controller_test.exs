@@ -585,7 +585,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       refute issue_id == issue.id
     end
 
-    test "POST .../items refuses the same source issue twice", %{
+    test "POST .../items answers a repeated add with the membership it already made", %{
       conn: conn,
       project: project
     } do
@@ -596,8 +596,8 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       body = %{issue: %{owner: "SourceOrg", repo: "repeat-api", number: issue.number}}
       path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
 
-      assert %{"items" => [_item]} = json_response(post(conn, path, body), 201)
-      assert %{"errors" => _errors} = json_response(post(conn, path, body), 422)
+      assert %{"items" => [%{"id" => id}]} = json_response(post(conn, path, body), 201)
+      assert %{"items" => [%{"id" => ^id}]} = json_response(post(recycle(conn), path, body), 200)
       assert length(Projects.list_project_items(project)) == 1
     end
 
@@ -1792,6 +1792,226 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert %{"errors" => %{"values" => [_ | _]}} = json_response(conn, 422)
       assert Projects.get_project_item!(project, item.id).values == %{"Status" => "Todo"}
+    end
+  end
+
+  describe "delete_item" do
+    setup do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+      item = project_item_fixture(%{project_id: project.id, values: %{"Status" => "Todo"}})
+      %{project: project, item: item}
+    end
+
+    test "DELETE .../items/:item_id removes the item and keeps the issue", %{
+      conn: conn,
+      project: project,
+      item: item
+    } do
+      conn =
+        delete(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+        )
+
+      assert response(conn, 204) == ""
+      assert Projects.list_project_items(project) == []
+      assert Issues.get_issue!(repository(), item.issue_id)
+    end
+
+    test "DELETE .../items/:item_id returns 404 for an item already removed", %{
+      conn: conn,
+      project: project,
+      item: item
+    } do
+      path =
+        ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+
+      assert response(delete(conn, path), 204) == ""
+      assert_api_error(delete(recycle(conn), path), 404, "not_found")
+    end
+
+    test "DELETE .../items/:item_id is refused for a non-member", %{
+      project: project,
+      item: item
+    } do
+      mallory_conn = put_forge_api_token(build_conn(), "project-delete-mallory", "mallory")
+
+      conn =
+        delete(
+          mallory_conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+        )
+
+      assert_api_error(conn, 404, "not_found")
+      assert Projects.get_project_item!(project, item.id)
+    end
+
+    test "DELETE .../items/:item_id returns 404 for an unreadable source issue", %{
+      conn: conn,
+      project: project
+    } do
+      source =
+        repository_fixture(%{
+          owner: "HiddenOrg",
+          name: "hidden-delete-api",
+          visibility: "private"
+        })
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Confidential work"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "issue_repository_id" => source.id},
+          project
+        )
+
+      conn =
+        delete(
+          conn,
+          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+        )
+
+      assert_api_error(conn, 404, "not_found")
+      assert Projects.get_project_item!(project, item.id)
+    end
+  end
+
+  describe "move_item" do
+    setup do
+      project = project_fixture(%{title: "Roadmap", owner: "alice"})
+
+      {:ok, field} =
+        Projects.create_project_field(%{
+          "project_id" => project.id,
+          "name" => "Status",
+          "data_type" => "single_select",
+          "options" => %{
+            "values" => [
+              %{"id" => "todo", "name" => "To Do"},
+              %{"id" => "done", "name" => "Done"}
+            ]
+          }
+        })
+
+      %{project: project, field: field}
+    end
+
+    defp move_path(project, item),
+      do:
+        ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}/move"
+
+    defp add_item(project, title, values) do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: title})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "values" => values},
+          project
+        )
+
+      item
+    end
+
+    test "POST .../items/:item_id/move changes the column", %{conn: conn, project: project} do
+      item = add_item(project, "Movable", %{"Status" => "todo"})
+
+      conn = post(conn, move_path(project, item), %{values: %{"Status" => "done"}})
+
+      assert %{"items" => [%{"values" => %{"Status" => "done"}}]} = json_response(conn, 200)
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "done"}
+    end
+
+    test "POST .../items/:item_id/move reorders within one column", %{
+      conn: conn,
+      project: project
+    } do
+      _first = add_item(project, "First", %{"Status" => "todo"})
+      _second = add_item(project, "Second", %{"Status" => "todo"})
+      third = add_item(project, "Third", %{"Status" => "todo"})
+
+      assert %{"items" => [_moved]} =
+               json_response(post(conn, move_path(project, third), %{position: 1}), 200)
+
+      assert Enum.map(Projects.list_project_items(project), & &1.issue.title) == [
+               "Third",
+               "First",
+               "Second"
+             ]
+    end
+
+    test "POST .../items/:item_id/move refuses a stale option identifier", %{
+      conn: conn,
+      project: project
+    } do
+      item = add_item(project, "Movable", %{"Status" => "todo"})
+
+      conn = post(conn, move_path(project, item), %{values: %{"Status" => "retired"}})
+
+      assert %{"errors" => %{"values" => [_ | _]}} = json_response(conn, 422)
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "todo"}
+    end
+
+    test "POST .../items/:item_id/move refuses a position that is not positive", %{
+      conn: conn,
+      project: project
+    } do
+      item = add_item(project, "Movable", %{"Status" => "todo"})
+
+      conn = post(conn, move_path(project, item), %{position: -1})
+
+      assert %{"errors" => %{"position" => [_ | _]}} = json_response(conn, 422)
+    end
+
+    test "POST .../items/:item_id/move repeated settles to the same board", %{
+      conn: conn,
+      project: project
+    } do
+      _first = add_item(project, "First", %{"Status" => "todo"})
+      second = add_item(project, "Second", %{"Status" => "todo"})
+
+      assert %{"items" => [_]} =
+               json_response(post(conn, move_path(project, second), %{position: 1}), 200)
+
+      assert %{"items" => [_]} =
+               json_response(
+                 post(recycle(conn), move_path(project, second), %{position: 1}),
+                 200
+               )
+
+      assert Enum.map(Projects.list_project_items(project), & &1.issue.title) == [
+               "Second",
+               "First"
+             ]
+    end
+
+    test "POST .../items/:item_id/move is refused for a non-member", %{project: project} do
+      item = add_item(project, "Movable", %{"Status" => "todo"})
+      mallory_conn = put_forge_api_token(build_conn(), "project-move-mallory", "mallory")
+
+      conn = post(mallory_conn, move_path(project, item), %{values: %{"Status" => "done"}})
+
+      assert_api_error(conn, 404, "not_found")
+      assert Projects.get_project_item!(project, item.id).values == %{"Status" => "todo"}
+    end
+
+    test "POST .../items/:item_id/move returns 404 for an unreadable source issue", %{
+      conn: conn,
+      project: project
+    } do
+      source =
+        repository_fixture(%{owner: "HiddenOrg", name: "hidden-move-api", visibility: "private"})
+
+      {:ok, issue} = Issues.create_issue(source, %{title: "Confidential work"})
+
+      {:ok, item} =
+        Projects.create_project_item(
+          %{"issue_number" => issue.number, "issue_repository_id" => source.id},
+          project
+        )
+
+      conn = post(conn, move_path(project, item), %{values: %{"Status" => "done"}})
+
+      assert_api_error(conn, 404, "not_found")
     end
   end
 

@@ -1,8 +1,10 @@
 defmodule OpenAgentsWeb.ProjectController do
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Issues.Issue
   alias OpenAgents.Projects
   alias OpenAgents.Projects.Project
+  alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.ApiError
 
@@ -277,6 +279,15 @@ defmodule OpenAgentsWeb.ProjectController do
     Ecto.NoResultsError -> not_found(conn)
   end
 
+  @doc """
+  Adds one issue to a project.
+
+  Membership is a set: an issue is on a board once. A repeated add is answered
+  with `200` and the membership the board already has, rather than `422`,
+  because a client that retries a request it never saw the answer to has asked
+  for a state that already holds. The same issue can sit on several boards,
+  because an item is a board's view of canonical work rather than the work.
+  """
   def create_item(
         conn,
         %{
@@ -298,15 +309,97 @@ defmodule OpenAgentsWeb.ProjectController do
           |> Map.put("issue_number", issue_number)
           |> Map.put("issue_repository_id", source_repository.id)
 
+        existing =
+          case Repo.get_by(Issue, repository_id: source_repository.id, number: issue_number) do
+            nil -> nil
+            issue -> Projects.project_item_for_issue(project, issue.id)
+          end
+
         case Projects.create_project_item(params, project, conn.assigns.current_user) do
           {:ok, item} ->
             conn
-            |> put_status(:created)
+            |> put_status(if(existing, do: :ok, else: :created))
             |> render_items([item], project)
 
           {:error, %Ecto.Changeset{} = changeset} ->
             ApiError.changeset(conn, changeset)
         end
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  @doc """
+  Removes one item from a project.
+
+  The item goes, the issue stays. A second `DELETE` on the same item returns
+  `404`, because the item is gone and the path names nothing: the board's state
+  after both requests is the same one.
+  """
+  def delete_item(conn, %{
+        "owner" => owner,
+        "repo" => repo,
+        "project_number" => project_number,
+        "item_id" => item_id
+      }) do
+    repository = writable_repository!(conn, owner, repo)
+    project = Projects.get_project_by_number!(repository, parse_id!(project_number))
+
+    item =
+      Projects.get_visible_project_item!(
+        project,
+        parse_id!(item_id),
+        conn.assigns.current_user
+      )
+
+    case Projects.delete_project_item(item, conn.assigns.current_user) do
+      {:ok, _item} -> send_resp(conn, :no_content, "")
+      {:error, %Ecto.Changeset{} = changeset} -> unprocessable_changeset(conn, changeset)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  @doc """
+  Moves one item to another column, another rank, or both.
+
+  The body carries `values`, merged the way `PATCH` merges them, and
+  `position`, a one-based rank within the destination column. A body with only
+  `position` is a reorder. A body with only `values` lands the card at the end
+  of the column it names. A stale option identifier the field no longer offers
+  is refused with `422` and changes nothing.
+  """
+  def move_item(
+        conn,
+        %{
+          "owner" => owner,
+          "repo" => repo,
+          "project_number" => project_number,
+          "item_id" => item_id
+        } = params
+      ) do
+    repository = writable_repository!(conn, owner, repo)
+    project = Projects.get_project_by_number!(repository, parse_id!(project_number))
+
+    item =
+      Projects.get_visible_project_item!(
+        project,
+        parse_id!(item_id),
+        conn.assigns.current_user
+      )
+
+    attrs = Map.take(params, ["values", "position"])
+
+    if is_map(Map.get(attrs, "values", %{})) do
+      case Projects.move_project_item(item, attrs, conn.assigns.current_user) do
+        {:ok, item} ->
+          render_items(conn, [item], project)
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          unprocessable_changeset(conn, changeset)
+      end
+    else
+      unprocessable(conn, %{values: ["is invalid"]})
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)

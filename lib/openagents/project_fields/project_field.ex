@@ -49,6 +49,25 @@ defmodule OpenAgents.ProjectFields.ProjectField do
   def option_id(%{"id" => id}) when is_binary(id), do: id
   def option_id(_value), do: nil
 
+  @doc """
+  The label of one declared option.
+
+  A board heads its column with this and groups its cards by `option_id/1`, so
+  a relabel moves the heading and leaves the cards where they are.
+  """
+  def option_name(value) when is_binary(value), do: value
+  def option_name(%{"name" => name}) when is_binary(name), do: name
+  def option_name(_value), do: nil
+
+  @doc "The declared options, as `%{id: ..., name: ...}`, in declaration order."
+  def options(%__MODULE__{options: %{"values" => values}}) when is_list(values) do
+    values
+    |> Enum.map(&%{id: option_id(&1), name: option_name(&1)})
+    |> Enum.reject(&is_nil(&1.id))
+  end
+
+  def options(%__MODULE__{}), do: []
+
   @doc false
   def changeset(project_field, attrs) do
     project_field
@@ -138,8 +157,4 @@ defmodule OpenAgents.ProjectFields.ProjectField do
 
   defp normalize_option(%{} = value),
     do: %{"id" => String.trim(option_id(value)), "name" => String.trim(option_name(value))}
-
-  defp option_name(value) when is_binary(value), do: value
-  defp option_name(%{"name" => name}), do: name
-  defp option_name(_value), do: nil
 end

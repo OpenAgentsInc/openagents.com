@@ -4,7 +4,7 @@ defmodule OpenAgents.Repo.Migrations.CreateArtifactLinks do
   def change do
     create table(:artifact_links, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :account_id, references(:accounts, type: :binary_id, on_delete: :nothing), null: false
+      add :account_id, references(:users, type: :binary_id, on_delete: :nothing), null: false
 
       add :repository_id, references(:repositories, type: :binary_id, on_delete: :nothing),
         null: false

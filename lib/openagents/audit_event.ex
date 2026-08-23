@@ -32,7 +32,7 @@ defmodule OpenAgents.AuditEvent do
       :metadata
     ])
     |> validate_required([:event_type, :actor_type, :subject_type, :subject_id, :metadata])
-    |> validate_inclusion(:actor_type, ~w(user machine operator system))
+    |> validate_inclusion(:actor_type, ~w(user agent machine operator system))
     |> validate_length(:event_type, min: 1, max: 100)
     |> validate_length(:actor_id, max: 200)
     |> validate_length(:subject_type, min: 1, max: 80)

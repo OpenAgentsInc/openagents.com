@@ -25,9 +25,9 @@ defmodule OpenAgents.Audit do
     end
   end
 
-  defp actor_type({type, _id}) when type in ~w(user machine operator system), do: type
+  defp actor_type({type, _id}) when type in ~w(user agent machine operator system), do: type
 
-  defp actor_type({type, _id}) when type in [:user, :machine, :operator, :system],
+  defp actor_type({type, _id}) when type in [:user, :agent, :machine, :operator, :system],
     do: to_string(type)
 
   defp actor_type(:system), do: "system"

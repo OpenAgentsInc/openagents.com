@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.IssueController do
 
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Agents.Agent
   alias OpenAgents.Repositories
 
   def index(conn, %{"owner" => owner, "repo" => repo} = params) do
@@ -88,28 +89,47 @@ defmodule OpenAgentsWeb.IssueController do
   defp blocked_filter(_value), do: :invalid
 
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
-    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    actor = conn.assigns[:current_agent] || conn.assigns[:current_user]
 
-    case Issues.create_issue(repository, params, conn.assigns.current_user) do
-      {:ok, %Issue{} = issue} ->
-        conn
-        |> put_status(:created)
-        |> put_extensions_header()
-        |> render(:show,
-          issue: issue,
-          owner: owner,
-          repo: repo,
-          dependencies: dependencies(issue)
-        )
+    repository =
+      case actor do
+        %Agent{} -> Repositories.get_public_by_path!(owner, repo)
+        _ -> Repositories.get_writable_by_path!(owner, repo, actor)
+      end
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> render(:error, changeset: changeset)
+    if Repositories.issue_participant?(repository, actor) do
+      case Issues.create_issue(repository, params, actor) do
+        {:ok, %Issue{} = issue} ->
+          conn
+          |> put_status(:created)
+          |> put_extensions_header()
+          |> render(:show,
+            issue: issue,
+            owner: owner,
+            repo: repo,
+            dependencies: dependencies(issue)
+          )
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          conn
+          |> put_status(:unprocessable_entity)
+          |> render(:error, changeset: changeset)
+      end
+    else
+      participation_forbidden(conn, actor)
     end
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
+
+  defp participation_forbidden(conn, %Agent{}),
+    do:
+      conn
+      |> put_status(:forbidden)
+      |> json(%{"error" => %{"code" => "agent_participation_forbidden"}})
+
+  defp participation_forbidden(conn, _actor),
+    do: conn |> put_status(:forbidden) |> json(%{"error" => "forbidden"})
 
   def show(conn, %{
         "owner" => owner,

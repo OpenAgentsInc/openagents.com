@@ -54,6 +54,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       # Anonymous by design: device authorization bootstraps credentials.
       "post /api/v3/device/authorizations" => :anonymous,
       "post /api/v3/device/authorizations/token" => :anonymous,
+      "post /api/v3/agents/register" => :anonymous,
+      "get /api/v3/agents/:handle" => :anonymous,
       # pipe_through :optional_forge_api — public reads, bearer-widened.
       "get /api/v3/forum" => :optional_bearer,
       "get /api/v3/forum/topics" => :optional_bearer,
@@ -105,7 +107,6 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
         :required_bearer,
       "post /api/v3/orgs/:org/repos" => :required_bearer,
       "post /api/v3/orgs/:org/repos/imports" => :required_bearer,
-      "post /api/v3/repos/:owner/:repo/issues" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/pulls" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
@@ -132,9 +133,19 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/deployment-checks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/deployment-workflow-grants" => :required_bearer,
       "delete /api/v3/repos/:owner/:repo/deployment-workflow-grants/:id" => :required_bearer,
-      # pipe_through :forge_write_api — forum writes and identity claims.
+      # Dual-principal participation writes accept either a human forge token or
+      # an agent participation credential.
       "post /api/v3/forum/topics" => :required_bearer,
       "post /api/v3/forum/topics/:topic_id/posts" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/issues" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
+      "get /api/v3/agent" => :required_bearer,
+      "post /api/v3/agent/credentials" => :required_bearer,
+      "post /api/v3/agent/links" => :required_bearer,
+      "get /api/v3/agents/links" => :required_bearer,
+      "post /api/v3/agents/links/:id/accept" => :required_bearer,
+      "post /api/v3/agents/links/:id/reject" => :required_bearer,
+      "delete /api/v3/agents/links/:id" => :required_bearer,
       "post /api/v3/forum/claims" => :required_bearer,
       "get /api/v3/forum/claims" => :required_bearer,
       # Moderation and claim review: a bearer the controller then checks for
@@ -151,7 +162,6 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/forum/tips/received" => :required_bearer,
       "post /api/v3/forum/posts/:post_id/tips" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" => :required_bearer,
-      "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :required_bearer,
       "delete /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies/:blocked_by_number" =>
         :required_bearer,

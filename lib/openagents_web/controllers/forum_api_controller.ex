@@ -15,6 +15,7 @@ defmodule OpenAgentsWeb.ForumApiController do
   use OpenAgentsWeb, :controller
 
   alias OpenAgents.Accounts
+  alias OpenAgents.Agents.Agent
   alias OpenAgents.Forum
   alias OpenAgents.Forum.Tips
 
@@ -397,14 +398,25 @@ defmodule OpenAgentsWeb.ForumApiController do
   end
 
   defp actor_attrs(conn) do
-    user = conn.assigns.current_user
+    case conn.assigns[:current_agent] do
+      %Agent{} = agent ->
+        %{
+          actor_ref: "agent:#{agent.id}",
+          actor_display_name: agent.display_name,
+          actor_slug: agent.handle,
+          actor_is_agent: true
+        }
 
-    %{
-      actor_ref: "user:#{user.id}",
-      actor_display_name: user.github_name || user.github_login,
-      actor_slug: user.github_login,
-      actor_is_agent: false
-    }
+      _ ->
+        user = conn.assigns.current_user
+
+        %{
+          actor_ref: "user:#{user.id}",
+          actor_display_name: user.github_name || user.github_login,
+          actor_slug: user.github_login,
+          actor_is_agent: false
+        }
+    end
   end
 
   defp slugify(nil), do: nil

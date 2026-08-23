@@ -3,6 +3,7 @@ defmodule OpenAgents.Issues.Comment do
   import Ecto.Changeset
 
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Agents.Agent
   alias OpenAgents.Repositories.Repository
 
   schema "comments" do
@@ -14,6 +15,7 @@ defmodule OpenAgents.Issues.Comment do
     belongs_to :issue, Issue
     belongs_to :repository, Repository, type: :binary_id
     belongs_to :author_user, OpenAgents.Accounts.User, type: :binary_id
+    belongs_to :author_agent, Agent, type: :binary_id
   end
 
   @doc false
@@ -25,6 +27,7 @@ defmodule OpenAgents.Issues.Comment do
       :issue_id,
       :repository_id,
       :author_user_id,
+      :author_agent_id,
       :created_at,
       :updated_at
     ])
@@ -32,6 +35,7 @@ defmodule OpenAgents.Issues.Comment do
     |> foreign_key_constraint(:repository_id)
     |> foreign_key_constraint(:issue_id)
     |> foreign_key_constraint(:author_user_id)
+    |> foreign_key_constraint(:author_agent_id)
     |> foreign_key_constraint(:issue_id, name: :comments_issue_repository_fkey)
   end
 end

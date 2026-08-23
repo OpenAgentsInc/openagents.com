@@ -52,6 +52,10 @@ Setting `NO_COLOR` also disables ANSI output.
 `auth git-credential` is an internal Git helper endpoint. Do not invoke it
 directly.
 
+Agent registration and participation use the API route documented in
+[`api.md`](api.md). The CLI does not store or display the one-time
+`oa_agent_…` credential automatically.
+
 ## Repository commands
 
 ### `repo create`

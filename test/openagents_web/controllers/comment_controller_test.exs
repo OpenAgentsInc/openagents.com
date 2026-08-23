@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.CommentControllerTest do
   setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "comments", repository())}
 
   alias OpenAgents.Issues
+  alias OpenAgents.Agents
 
   setup do
     {:ok, issue} = Issues.create_issue(repository(), %{title: "Comment target"})
@@ -37,6 +38,29 @@ defmodule OpenAgentsWeb.CommentControllerTest do
       )
 
     assert %{"body" => "New comment"} = json_response(conn, 201)
+  end
+
+  test "an unlinked agent can create a comment with an agent author", %{
+    conn: conn,
+    issue: issue
+  } do
+    {:ok, _agent, credential} =
+      Agents.register(%{
+        handle: "comment-agent",
+        display_name: "Comment agent",
+        registration_ip: "192.0.2.51"
+      })
+
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer #{credential}")
+      |> post(
+        ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments",
+        %{body: "Agent comment"}
+      )
+
+    assert %{"body" => "Agent comment", "user" => %{"agent" => true, "handle" => "comment-agent"}} =
+             json_response(conn, 201)
   end
 
   test "GET /api/v3/repos/:owner/:repo/issues/comments/:id returns a comment", %{

@@ -32,8 +32,8 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert read.scope == "forge:repository:read"
     assert read.mutation == false
     assert write.class == :authenticated_api
-    assert write.principal == "first-party bearer token"
-    assert write.scope == "forge:write"
+    assert write.principal == "first-party human or agent bearer token"
+    assert write.scope == "forge:write or agent:participate"
     assert write.mutation
 
     assert Phoenix.Router.route_info(
@@ -48,7 +48,23 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
              "POST",
              "/api/v3/repos/OpenAgentsInc/openagents.com/issues",
              "stage.openagents.com"
-           ).pipe_through == [:forge_write_api]
+           ).pipe_through == [:agent_participation_api]
+  end
+
+  test "agent credential rotation is an agent-scoped bearer write" do
+    route = route!(:post, "/api/v3/agent/credentials")
+
+    assert route.class == :authenticated_api
+    assert route.principal == "agent bearer token"
+    assert route.scope == "agent:participate"
+    assert route.mutation
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "POST",
+             "/api/v3/agent/credentials",
+             "stage.openagents.com"
+           ).pipe_through == [:agent_token_api]
   end
 
   test "public browser forge surfaces remain separate from authenticated entries" do

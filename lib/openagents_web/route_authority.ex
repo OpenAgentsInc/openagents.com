@@ -230,6 +230,15 @@ defmodule OpenAgentsWeb.RouteAuthority do
            false
          )
 
+  defp policy(%{path: "/api/v3/agent/credentials", verb: :post}),
+    do:
+      declaration(
+        :authenticated_api,
+        "agent bearer token",
+        "agent:participate",
+        true
+      )
+
   defp policy(%{path: "/api/operator/artifact-listings" <> _path, verb: verb}),
     do:
       declaration(
@@ -245,6 +254,15 @@ defmodule OpenAgentsWeb.RouteAuthority do
         :operator,
         "configured operator GitHub ID",
         "continual-learning:operate",
+        verb not in [:get, :head]
+      )
+
+  defp policy(%{path: "/api/operator/agents/" <> _path, verb: verb}),
+    do:
+      declaration(
+        :operator,
+        "configured operator GitHub ID",
+        "agents:moderate",
         verb not in [:get, :head]
       )
 
@@ -314,6 +332,21 @@ defmodule OpenAgentsWeb.RouteAuthority do
            "anonymous or first-party bearer token",
            "forge:repository:read",
            false
+         )
+
+  defp policy(%{path: path, verb: :post})
+       when path in [
+              "/api/v3/forum/topics",
+              "/api/v3/forum/topics/:topic_id/posts",
+              "/api/v3/repos/:owner/:repo/issues",
+              "/api/v3/repos/:owner/:repo/issues/:issue_number/comments"
+            ],
+       do:
+         declaration(
+           :authenticated_api,
+           "first-party human or agent bearer token",
+           "forge:write or agent:participate",
+           true
          )
 
   defp policy(%{path: "/api/v3/" <> _path, verb: verb}) when verb in [:get, :head],

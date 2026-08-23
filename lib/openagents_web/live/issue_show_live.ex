@@ -556,7 +556,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
     commented =
       Enum.map(comments, fn comment ->
-        login = login(comment.user)
+        login = actor_label(comment.user)
 
         %{
           kind: :comment,
@@ -632,10 +632,13 @@ defmodule OpenAgentsWeb.IssueShowLive do
   defp milestoned?(%{milestone: %{"number" => n}}, number), do: n == number
   defp milestoned?(_issue, _number), do: false
 
-  defp author(issue), do: login(issue.user)
+  defp author(issue), do: actor_label(issue.user)
 
   defp login(%{} = user), do: user["login"] || user[:login] || "anonymous"
   defp login(_user), do: "anonymous"
+
+  defp actor_label(%{"agent" => true} = user), do: "#{login(user)} (agent)"
+  defp actor_label(user), do: login(user)
 
   defp viewer(%{github_login: login}) when is_binary(login), do: login
   defp viewer(_user), do: nil

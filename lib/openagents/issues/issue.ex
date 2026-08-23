@@ -3,6 +3,7 @@ defmodule OpenAgents.Issues.Issue do
   import Ecto.Changeset
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Agents.Agent
   alias OpenAgents.Milestones.Milestone
   alias OpenAgents.Repositories.Repository
 
@@ -23,6 +24,7 @@ defmodule OpenAgents.Issues.Issue do
     belongs_to :repository, Repository, type: :binary_id
     belongs_to :milestone_record, Milestone, foreign_key: :milestone_id
     belongs_to :author_user, User, type: :binary_id
+    belongs_to :author_agent, Agent, type: :binary_id
     timestamps(type: :utc_datetime)
   end
 
@@ -45,12 +47,14 @@ defmodule OpenAgents.Issues.Issue do
       :user,
       :repository_id,
       :milestone_id,
-      :author_user_id
+      :author_user_id,
+      :author_agent_id
     ])
     |> validate_required([:title, :number, :repository_id])
     |> unique_constraint([:repository_id, :number])
     |> foreign_key_constraint(:repository_id)
     |> foreign_key_constraint(:milestone_id)
     |> foreign_key_constraint(:author_user_id)
+    |> foreign_key_constraint(:author_agent_id)
   end
 end

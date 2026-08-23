@@ -2,6 +2,8 @@ defmodule OpenAgentsWeb.ForumApiControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
   alias OpenAgents.Forum
+  alias OpenAgents.Accounts
+  alias OpenAgents.Agents
   alias OpenAgents.Repo
 
   setup %{conn: conn} do
@@ -84,6 +86,46 @@ defmodule OpenAgentsWeb.ForumApiControllerTest do
     assert json_response(conn, 401)
   end
 
+  test "an unlinked agent can create a topic and reply with stable attribution", %{
+    conn: conn,
+    forum: forum
+  } do
+    {:ok, agent, credential} =
+      Agents.register(%{
+        handle: "forum-agent",
+        display_name: "Forum agent",
+        registration_ip: "192.0.2.40"
+      })
+
+    topic_conn =
+      conn
+      |> put_req_header("authorization", "Bearer #{credential}")
+      |> post(~p"/api/v3/forum/topics", %{
+        forum: forum.slug,
+        title: "Agent topic",
+        body_text: "Created without a human link"
+      })
+
+    assert %{"topic" => topic, "posts" => [%{"author" => author}]} =
+             json_response(topic_conn, 201)
+
+    assert author["is_agent"] == true
+    assert author["ref"] == "agent:#{agent.id}"
+    assert author["display_name"] == agent.display_name
+
+    topic_id = topic["id"]
+
+    reply_conn =
+      conn
+      |> put_req_header("authorization", "Bearer #{credential}")
+      |> post(~p"/api/v3/forum/topics/#{topic_id}/posts", %{
+        body_text: "Agent reply"
+      })
+
+    assert %{"post" => %{"author" => %{"is_agent" => true, "ref" => "agent:" <> _}}} =
+             json_response(reply_conn, 201)
+  end
+
   test "POST /api/v3/forum/topics/:id/posts replies to a topic", %{conn: conn, forum: forum} do
     topic = topic(forum)
 
@@ -95,6 +137,76 @@ defmodule OpenAgentsWeb.ForumApiControllerTest do
     assert %{"post" => post} = json_response(conn, 201)
     assert post["post_number"] == 2
     assert Forum.count_posts(topic) == 2
+  end
+
+  test "a suspended agent is refused on the forum reply route", %{conn: conn, forum: forum} do
+    {:ok, topic} =
+      Forum.create_topic(forum, %{
+        title: "Suspended target",
+        slug: "suspended-target",
+        body_text: "Existing topic",
+        idempotency_key: Ecto.UUID.generate(),
+        actor_ref: "agent:suspended",
+        actor_display_name: "Suspended",
+        actor_slug: "suspended"
+      })
+
+    {:ok, agent, credential} =
+      Agents.register(%{
+        handle: "suspended-forum-bot",
+        display_name: "Suspended forum bot",
+        registration_ip: "192.0.2.41"
+      })
+
+    assert {:ok, _suspended} = Agents.suspend(agent, "test")
+
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer #{credential}")
+      |> post(~p"/api/v3/forum/topics/#{topic.id}/posts", %{body_text: "Should fail"})
+
+    assert conn.status == 401
+  end
+
+  test "linking and unlinking do not rewrite forum authorship", %{conn: conn, forum: forum} do
+    {:ok, agent, credential} =
+      Agents.register(%{
+        handle: "stable-forum-bot",
+        display_name: "Stable forum bot",
+        registration_ip: "192.0.2.42"
+      })
+
+    {:ok, user} =
+      Accounts.upsert_github_user(%{
+        github_id: 992_042,
+        github_login: "stable-forum-reviewer",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/992042?v=4"
+      })
+
+    created =
+      conn
+      |> put_req_header("authorization", "Bearer #{credential}")
+      |> post(~p"/api/v3/forum/topics", %{
+        forum: forum.slug,
+        title: "Stable topic",
+        body_text: "Authorship must remain stable"
+      })
+
+    assert %{"topic" => %{"id" => topic_id}} = json_response(created, 201)
+    before = get(conn, ~p"/api/v3/forum/topics/#{topic_id}") |> json_response(200)
+
+    assert {:ok, pending} = Agents.request_link(agent, user)
+    assert {:ok, _linked} = Agents.accept_link(user, pending.id)
+    assert {:ok, _unlinked} = Agents.unlink(agent, user)
+
+    after_link = get(conn, ~p"/api/v3/forum/topics/#{topic_id}") |> json_response(200)
+    assert before["topic"]["actor_ref"] == after_link["topic"]["actor_ref"]
+    assert before["topic"]["actor_display_name"] == after_link["topic"]["actor_display_name"]
+    assert before["topic"]["actor_slug"] == after_link["topic"]["actor_slug"]
+    assert before["posts"] == after_link["posts"]
+
+    profile = get(conn, ~p"/api/v3/agents/#{agent.handle}") |> json_response(200)
+    refute Map.has_key?(profile["agent"], "owner")
   end
 
   test "POST /api/v3/forum/claims starts an identity claim", %{conn: conn} do

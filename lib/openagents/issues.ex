@@ -4,6 +4,7 @@ defmodule OpenAgents.Issues do
   import Ecto.Query, warn: false
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Agents.Agent
   alias OpenAgents.Analytics
   alias OpenAgents.Issues.{Comment, Issue, IssueDependency}
   alias OpenAgents.Labels
@@ -159,7 +160,7 @@ defmodule OpenAgents.Issues do
     do: create_issue(repository, attrs, nil)
 
   def create_issue(%Repository{} = repository, attrs, author)
-      when is_nil(author) or is_struct(author, User) do
+      when is_nil(author) or is_struct(author, User) or is_struct(author, Agent) do
     normalized =
       attrs
       |> to_string_map()
@@ -221,7 +222,7 @@ defmodule OpenAgents.Issues do
         issue
         |> maybe_closed_attrs(attrs)
         |> to_string_map()
-        |> Map.drop(["number", "repository_id", "author_user_id", "user"])
+        |> Map.drop(["number", "repository_id", "author_user_id", "author_agent_id", "user"])
         |> prepare_collections(repository)
 
       with {:ok, updated} <- issue |> Issue.changeset(normalized) |> Repo.update(),
@@ -589,7 +590,7 @@ defmodule OpenAgents.Issues do
   end
 
   def create_comment(%Issue{} = issue, attrs, author \\ nil)
-      when is_nil(author) or is_struct(author, User) do
+      when is_nil(author) or is_struct(author, User) or is_struct(author, Agent) do
     normalized =
       attrs
       |> to_string_map()
@@ -617,7 +618,7 @@ defmodule OpenAgents.Issues do
     |> case do
       {:ok, comment} ->
         repository = Repo.get(Repository, issue.repository_id)
-        author_role = repository && author && Repositories.membership_role(repository, author)
+        author_role = author_role(repository, author)
 
         Analytics.capture("issue_commented", issue_distinct_id(normalized), %{
           "owner" => repository && repository.owner,
@@ -640,7 +641,7 @@ defmodule OpenAgents.Issues do
     normalized =
       attrs
       |> to_string_map()
-      |> Map.drop(["issue_id", "repository_id", "author_user_id", "user"])
+      |> Map.drop(["issue_id", "repository_id", "author_user_id", "author_agent_id", "user"])
       |> Map.put("updated_at", DateTime.utc_now() |> DateTime.truncate(:second))
 
     comment
@@ -791,13 +792,40 @@ defmodule OpenAgents.Issues do
     |> Map.put("user", user_json(author))
   end
 
+  defp put_author(attrs, %Agent{} = author) do
+    attrs
+    |> Map.put("author_agent_id", author.id)
+    |> Map.put("user", agent_json(author))
+  end
+
+  defp issue_distinct_id(%{"author_user_id" => author_id}) when is_binary(author_id),
+    do: Analytics.distinct_id(author_id)
+
   defp issue_distinct_id(%{"author_user_id" => author_id}) when is_integer(author_id),
     do: Analytics.distinct_id(author_id)
 
+  defp issue_distinct_id(%{"author_agent_id" => agent_id}) when is_binary(agent_id),
+    do: "agent_#{agent_id}"
+
   defp issue_distinct_id(_attrs), do: Analytics.system_distinct_id("api")
+
+  defp author_role(%Repository{} = repository, %User{} = author),
+    do: Repositories.membership_role(repository, author)
+
+  defp author_role(_repository, _author), do: nil
 
   defp actor_distinct_id(nil), do: Analytics.system_distinct_id("api")
   defp actor_distinct_id(%User{} = actor), do: Analytics.distinct_id(actor)
+
+  defp agent_json(%Agent{} = agent) do
+    %{
+      "login" => agent.handle,
+      "name" => agent.display_name,
+      "type" => "Agent",
+      "agent" => true,
+      "handle" => agent.handle
+    }
+  end
 
   defp has_labels?(%{"labels" => labels}) when is_list(labels), do: labels != []
   defp has_labels?(_attrs), do: false

@@ -4,6 +4,7 @@ defmodule OpenAgents.Repositories do
   import Ecto.Query, warn: false
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Agents.Agent
   alias OpenAgents.Forge.{Repos, WAL}
   alias OpenAgents.{Analytics, Audit, Repo}
   alias OpenAgents.Machines.Machine
@@ -849,6 +850,10 @@ defmodule OpenAgents.Repositories do
     active_user?(user) and (public?(repository) or member?(repository, user))
   end
 
+  def issue_participant?(%Repository{} = repository, %Agent{} = agent) do
+    active_agent?(agent) and public?(repository)
+  end
+
   @doc "Whether the user holds the repository's `owner` role."
   def owner?(%Repository{} = repository, %User{} = user) do
     active_user?(user) and membership_role(repository, user) == "owner"
@@ -858,6 +863,10 @@ defmodule OpenAgents.Repositories do
 
   defp active_user?(%User{id: user_id}) do
     Repo.exists?(from user in User, where: user.id == ^user_id and user.status == "active")
+  end
+
+  defp active_agent?(%Agent{id: agent_id}) do
+    Repo.exists?(from agent in Agent, where: agent.id == ^agent_id and agent.status == "active")
   end
 
   @doc "Subscribes the caller to one repository's issue activity."

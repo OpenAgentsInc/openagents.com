@@ -4,6 +4,9 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   setup %{conn: conn}, do: {:ok, conn: put_forge_api_token(conn, "issues", repository())}
 
   alias OpenAgents.Issues
+  alias OpenAgents.Agents
+  alias OpenAgents.Accounts
+  alias OpenAgents.Repo
   alias OpenAgents.Repositories
 
   import OpenAgents.MilestonesFixtures
@@ -59,6 +62,113 @@ defmodule OpenAgentsWeb.IssueControllerTest do
         post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{body: "No title"})
 
       assert json_response(conn, 422)["errors"] != %{}
+    end
+
+    test "an unlinked agent can create an issue with an agent author", %{conn: conn} do
+      {:ok, agent, credential} =
+        Agents.register(%{
+          handle: "issue-agent",
+          display_name: "Issue agent",
+          registration_ip: "192.0.2.50"
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{credential}")
+        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+          title: "Agent issue",
+          body: "Filed without a human link"
+        })
+
+      assert %{"user" => %{"agent" => true, "handle" => "issue-agent"}} =
+               json_response(conn, 201)
+
+      assert Repo.get_by(OpenAgents.Issues.Issue, title: "Agent issue").author_agent_id ==
+               agent.id
+    end
+
+    test "a suspended agent is refused on issue creation", %{conn: conn} do
+      {:ok, agent, credential} =
+        Agents.register(%{
+          handle: "suspended-issue-bot",
+          display_name: "Suspended issue bot",
+          registration_ip: "192.0.2.52"
+        })
+
+      assert {:ok, _suspended} = Agents.suspend(agent, "test")
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{credential}")
+        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+          title: "Should fail",
+          body: "Suspended"
+        })
+
+      assert conn.status == 401
+    end
+
+    test "an agent credential is refused on private repository issue creation", %{conn: conn} do
+      private =
+        repository_fixture(%{
+          owner: "PrivateOwner",
+          name: "private-repository",
+          visibility: "private"
+        })
+
+      {:ok, _agent, credential} =
+        Agents.register(%{
+          handle: "private-issue-bot",
+          display_name: "Private issue bot",
+          registration_ip: "192.0.2.53"
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{credential}")
+        |> post("/api/v3/repos/#{private.owner}/#{private.name}/issues", %{
+          title: "Should fail",
+          body: "Private"
+        })
+
+      assert conn.status == 404
+    end
+
+    test "linking and unlinking do not rewrite issue authorship", %{conn: conn} do
+      {:ok, agent, credential} =
+        Agents.register(%{
+          handle: "stable-issue-bot",
+          display_name: "Stable issue bot",
+          registration_ip: "192.0.2.54"
+        })
+
+      {:ok, user} =
+        Accounts.upsert_github_user(%{
+          github_id: 992_054,
+          github_login: "stable-issue-reviewer",
+          github_avatar_url: "https://avatars.githubusercontent.com/u/992054?v=4"
+        })
+
+      created =
+        conn
+        |> put_req_header("authorization", "Bearer #{credential}")
+        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+          title: "Stable issue",
+          body: "Authorship must remain stable"
+        })
+
+      assert %{"number" => number, "user" => before_author} = json_response(created, 201)
+      assert {:ok, pending} = Agents.request_link(agent, user)
+      assert {:ok, _linked} = Agents.accept_link(user, pending.id)
+      assert {:ok, _unlinked} = Agents.unlink(agent, user)
+
+      after_link =
+        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{number}")
+        |> json_response(200)
+
+      assert after_link["user"] == before_author
+      assert before_author["agent"] == true
+      refute Map.has_key?(before_author, "owner")
     end
   end
 

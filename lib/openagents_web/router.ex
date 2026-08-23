@@ -42,6 +42,18 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "forge:write"
   end
 
+  pipeline :agent_participation_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.DualPrincipalAuth, human_scope: "forge:write"
+  end
+
+  pipeline :agent_token_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.AgentTokenAuth, scope: "agent:participate"
+  end
+
   pipeline :chat_account_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -229,6 +241,9 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/operator", OpenAgentsWeb do
     pipe_through [:authenticated_api, :operator_api]
 
+    post "/agents/:handle/suspend", AgentController, :suspend
+    post "/agents/:handle/reinstate", AgentController, :reinstate
+
     post "/artifact-listings", ArtifactListingAdminController, :create
     delete "/artifact-listings/:id", ArtifactListingAdminController, :delete
     get "/artifact-listings/:id/export", ArtifactListingAdminController, :export
@@ -346,6 +361,44 @@ defmodule OpenAgentsWeb.Router do
   end
 
   scope "/api/v3", OpenAgentsWeb do
+    pipe_through :api
+
+    post "/agents/register", AgentController, :register
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :agent_participation_api
+
+    post "/forum/topics", ForumApiController, :create_topic
+    post "/forum/topics/:topic_id/posts", ForumApiController, :create_post
+    post "/repos/:owner/:repo/issues", IssueController, :create
+    post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :forge_write_api
+
+    get "/agents/links", AgentController, :links
+    post "/agents/links/:id/accept", AgentController, :accept_link
+    post "/agents/links/:id/reject", AgentController, :reject_link
+    delete "/agents/links/:id", AgentController, :unlink
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :agent_token_api
+
+    get "/agent", AgentController, :current
+    post "/agent/credentials", AgentController, :rotate_credential
+    post "/agent/links", AgentController, :request_link
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :api
+
+    get "/agents/:handle", AgentController, :show
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
     pipe_through :chat_account_api
 
     get "/chat/events", ChatTurnController, :index
@@ -357,9 +410,6 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :forge_write_api
 
-    # Forum writes. Reads are public and live in the optional-auth scope.
-    post "/forum/topics", ForumApiController, :create_topic
-    post "/forum/topics/:topic_id/posts", ForumApiController, :create_post
     post "/forum/claims", ForumApiController, :create_claim
     get "/forum/claims", ForumApiController, :list_claims
 
@@ -445,7 +495,6 @@ defmodule OpenAgentsWeb.Router do
     post "/orgs/:org/repos/imports", RepositoryImportController, :create_organization
     get "/repository-imports/:id", RepositoryImportController, :show
 
-    post "/repos/:owner/:repo/issues", IssueController, :create
     put "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
     patch "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
     post "/repos/:owner/:repo/pulls", PullRequestController, :create
@@ -463,7 +512,6 @@ defmodule OpenAgentsWeb.Router do
          StackController,
          :abort_operation
 
-    post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
     put "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
     patch "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
     delete "/repos/:owner/:repo/issues/comments/:id", CommentController, :delete

@@ -47,6 +47,49 @@ defmodule OpenAgents.Notifications do
 
   def per_page, do: @notifications_per_page
 
+  ## Announcements
+
+  @doc """
+  Watches one account's unread count.
+
+  The same shape every other live surface here uses: a topic per subject, a
+  message carrying an identifier and nothing else, and a subscriber that
+  re-reads through its own authorization. A per-account topic rather than the
+  repository-wide `issues:all` the inbox listens to, because the count has to
+  move on two events that topic never carries — marking one record read, and
+  marking them all read — and because a count that recomputed on every issue
+  write anywhere would ask one aggregate per open session per write.
+  """
+  def subscribe_unread(%User{id: user_id}),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, unread_topic(user_id))
+
+  def subscribe_unread(nil), do: :ok
+
+  @doc """
+  Tells the named accounts their unread count moved.
+
+  Called after the owning transaction commits, never inside it. A subscriber
+  that re-read too early would count the rows as they were before the write and
+  then never hear again, so the badge would sit one event behind until the next
+  navigation.
+  """
+  def broadcast_unread(user_ids) when is_list(user_ids) do
+    user_ids
+    |> Enum.uniq()
+    |> Enum.each(fn user_id ->
+      Phoenix.PubSub.broadcast(
+        OpenAgents.PubSub,
+        unread_topic(user_id),
+        {:unread_notifications_changed, user_id}
+      )
+    end)
+  end
+
+  def broadcast_unread(%User{id: user_id}), do: broadcast_unread([user_id])
+  def broadcast_unread(user_id) when is_binary(user_id), do: broadcast_unread([user_id])
+
+  defp unread_topic(user_id), do: "notifications:" <> user_id
+
   ## Subscriptions
 
   @doc """
@@ -125,11 +168,13 @@ defmodule OpenAgents.Notifications do
 
   The author starts following their own issue, and every account named in the
   body hears about it once.
+
+  Returns the ids of the accounts that got a record, so the caller can announce
+  their new counts once the transaction has committed.
   """
   def issue_opened(%Issue{} = issue, author) do
     subscribe_author(issue, author, "author")
     deliver(issue, nil, author, "issue:#{issue.id}:opened", issue.body)
-    :ok
   end
 
   @doc """
@@ -140,11 +185,12 @@ defmodule OpenAgents.Notifications do
   activity. A recipient named in a comment they already follow gets one record,
   not two: the mention wins, because being addressed by name is the stronger
   claim on attention.
+
+  Returns the ids of the accounts that got a record.
   """
   def comment_created(%Issue{} = issue, %Comment{} = comment, author) do
     subscribe_author(issue, author, "commented")
     deliver(issue, comment, author, "comment:#{comment.id}", comment.body)
-    :ok
   end
 
   @doc """
@@ -165,16 +211,17 @@ defmodule OpenAgents.Notifications do
   Assignment addresses one person, so it reaches the assignee whether or not
   they followed the issue, and starts them following it. Everything else
   reaches the people already following.
+
+  Returns the ids of the accounts that got a record.
   """
   def issue_updated(%Issue{} = before, %Issue{} = updated, actor) do
     case derive_events(before, updated) do
       [] ->
-        :ok
+        []
 
       events ->
         repository = Repo.get(Repository, updated.repository_id)
-        Enum.each(events, &deliver_event(updated, repository, actor, &1))
-        :ok
+        Enum.flat_map(events, &deliver_event(updated, repository, actor, &1))
     end
   end
 
@@ -247,7 +294,10 @@ defmodule OpenAgents.Notifications do
     readers
     |> Enum.reject(&(&1.id == actor_id))
     |> Enum.filter(&enabled?(&1, kind))
-    |> Enum.each(&insert_notification(&1, issue, nil, kind, actor_login, dedupe_key))
+    |> Enum.map(fn user ->
+      insert_notification(user, issue, nil, kind, actor_login, dedupe_key)
+      user.id
+    end)
   end
 
   defp recipients(:subscribers, %Issue{} = issue), do: subscribers(issue)
@@ -292,8 +342,9 @@ defmodule OpenAgents.Notifications do
     |> Enum.reject(fn {user, _kind} -> user.id == author_id end)
     |> Enum.filter(fn {user, kind} -> enabled?(user, kind) end)
     |> Enum.filter(fn {user, _kind} -> readable?(repository, user) end)
-    |> Enum.each(fn {user, kind} ->
+    |> Enum.map(fn {user, kind} ->
       insert_notification(user, issue, comment, kind, actor_login, dedupe_key)
+      user.id
     end)
   end
 
@@ -428,6 +479,8 @@ defmodule OpenAgents.Notifications do
           |> where([notification], is_nil(notification.read_at))
           |> Repo.update_all(set: [read_at: now, updated_at: now])
 
+        if count > 0, do: broadcast_unread(user)
+
         {:ok, count}
 
       :error ->
@@ -443,6 +496,8 @@ defmodule OpenAgents.Notifications do
       Notification
       |> where([notification], notification.user_id == ^user.id and is_nil(notification.read_at))
       |> Repo.update_all(set: [read_at: now, updated_at: now])
+
+    if count > 0, do: broadcast_unread(user)
 
     {:ok, count}
   end

@@ -66,8 +66,62 @@ defmodule OpenAgentsWeb.UserAuth do
   # retargeted as you browsed. Those rows now address `/issues` and
   # `/projects`, which mean the same thing on every page.
   defp scope(user) do
-    %{user | agent_surfaces?: OpenAgents.Conversations.user_has_messages?(user)}
+    %{
+      user
+      | agent_surfaces?: OpenAgents.Conversations.user_has_messages?(user),
+        unread_notifications: OpenAgents.Notifications.unread_count(user)
+    }
   end
+
+  # The unread count is the one thing on the scope that goes stale while the
+  # reader sits still: a comment lands, or they mark something read, and the
+  # sidebar badge is wrong until the next navigation. So the count is refreshed
+  # in place rather than only at mount.
+  #
+  # It lives here rather than in each LiveView because the sidebar renders
+  # inside `Layouts.app/1` on every page, and threading a second assign through
+  # every call site would put the badge's correctness in the hands of whoever
+  # writes the next surface. One subscription per connected session, one
+  # aggregate per event addressed to that account, and nothing on the render
+  # path asks the database at all.
+  #
+  # The topic is keyed by the session's own user id, never by anything the
+  # browser sent, so this widens what the scope carries without widening whose
+  # data it can reach.
+  defp watch_unread_notifications(socket, user) do
+    if Phoenix.LiveView.connected?(socket) do
+      :ok = OpenAgents.Notifications.subscribe_unread(user)
+
+      Phoenix.LiveView.attach_hook(
+        socket,
+        :unread_notifications,
+        :handle_info,
+        &recount_unread/2
+      )
+    else
+      socket
+    end
+  end
+
+  defp recount_unread({:unread_notifications_changed, _user_id}, socket) do
+    case socket.assigns[:current_user] do
+      %Accounts.User{} = user ->
+        {:halt,
+         Phoenix.Component.assign(
+           socket,
+           :current_scope,
+           %{
+             socket.assigns.current_scope
+             | unread_notifications: OpenAgents.Notifications.unread_count(user)
+           }
+         )}
+
+      _signed_out ->
+        {:halt, socket}
+    end
+  end
+
+  defp recount_unread(_message, socket), do: {:cont, socket}
 
   def on_mount(:mount_current_user, _params, session, socket) do
     socket = assign_sidebar_sections(socket, session)
@@ -77,7 +131,8 @@ defmodule OpenAgentsWeb.UserAuth do
       {:cont,
        socket
        |> Phoenix.Component.assign(:current_user, user)
-       |> Phoenix.Component.assign(:current_scope, scope(user))}
+       |> Phoenix.Component.assign(:current_scope, scope(user))
+       |> watch_unread_notifications(user)}
     else
       _missing_or_inactive ->
         {:cont,
@@ -96,6 +151,7 @@ defmodule OpenAgentsWeb.UserAuth do
        socket
        |> Phoenix.Component.assign(:current_user, user)
        |> Phoenix.Component.assign(:current_scope, scope(user))
+       |> watch_unread_notifications(user)
        |> Phoenix.LiveView.attach_hook(
          :active_user_guard,
          :handle_event,

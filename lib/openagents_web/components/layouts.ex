@@ -570,6 +570,15 @@ defmodule OpenAgentsWeb.Layouts do
   attr :selected, :boolean, default: false
   attr :patchable, :boolean, default: false
 
+  attr :badge, :integer,
+    default: nil,
+    doc: """
+    A count to show at the end of the row. Omitted entirely at zero and at nil:
+    a badge reading `0` is a claim on attention that turns out to be about
+    nothing, and a row that always carries one stops meaning anything when it
+    changes.
+    """
+
   def sidebar_link(assigns) do
     ~H"""
     <div class="sidebar-row" data-selected={@selected}>
@@ -591,6 +600,15 @@ defmodule OpenAgentsWeb.Layouts do
         <span class="sidebar-row__icon"><UI.icon name={@icon} /></span>
         <span class="sidebar-row__label">{@label}</span>
       </span>
+      <UI.badge
+        :if={is_integer(@badge) and @badge > 0}
+        id={"sidebar-badge-#{section_slug(@label)}"}
+        variant={:info}
+        class="sidebar-row__badge"
+        aria-label={"#{@badge} unread"}
+      >
+        {@badge}
+      </UI.badge>
     </div>
     """
   end
@@ -782,11 +800,16 @@ defmodule OpenAgentsWeb.Layouts do
         repository's own tabs, which is where a repository-scoped nav
         belongs. --%>
         <Layouts.sidebar_link path={~p"/issues"} label="Issues" icon="bug" patchable={false} />
+        <%!-- The count comes off the scope, which `UserAuth.on_mount/4`
+        resolves once at mount and refreshes over the account's own topic when
+        something lands or is marked read. This runs on every render of every
+        page, so it must stay a field read and never become a query. --%>
         <Layouts.sidebar_link
           path={~p"/notifications"}
           label="Notifications"
           icon="notification-bell"
           patchable={false}
+          badge={unread_notifications(@current_scope)}
         />
         <Layouts.sidebar_link
           path={~p"/projects"}
@@ -844,6 +867,13 @@ defmodule OpenAgentsWeb.Layouts do
   # read and never become a query.
   defp agent_surfaces?(nil), do: false
   defp agent_surfaces?(user), do: user.agent_surfaces? or admin?(user)
+
+  # Same rule as `agent_surfaces?`: a field read, never a query. A scope built
+  # by some other path carries the schema default of zero, so an unresolved
+  # count shows no badge rather than a wrong one.
+  defp unread_notifications(nil), do: nil
+  defp unread_notifications(%{unread_notifications: count}), do: count
+  defp unread_notifications(_scope), do: nil
 
   # A nil scope is not an operator. The footer renders on public pages too.
   defp admin?(nil), do: false

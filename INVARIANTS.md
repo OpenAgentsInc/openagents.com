@@ -2812,13 +2812,20 @@ account that has not already taken part in the issue, been named in it, or been
 assigned it. Label changes default off: a label moves for a query rather than
 for a reader, and it addresses nobody.
 
+The unread count shown outside the inbox is the same authorized read, expressed
+as an aggregate. It counts rows joined through `readable_by/2` against the
+reader's membership on this request, never the length of a loaded page, so it
+stays correct past the page the inbox renders and drops repositories the reader
+can no longer read. It is keyed by the session's own account and refreshed only
+over that account's own topic.
+
 Delivery is in-product only. Accounts carry no email address and no outbound
 mail adapter is configured, so no channel here leaves the application.
 
 Evidence: `OpenAgents.Notifications`, `OpenAgents.Notifications.Mentions`,
 `OpenAgents.Issues.update_issue/3`, `OpenAgentsWeb.NotificationsLive`,
-`test/openagents/notifications_test.exs`, and
-`test/openagents_web/live/notifications_live_test.exs`.
+`OpenAgentsWeb.UserAuth.on_mount/4`, `test/openagents/notifications_test.exs`,
+and `test/openagents_web/live/notifications_live_test.exs`.
 
 ### FORGEAPI-001 — One error envelope, and a route inventory derived from the router
 

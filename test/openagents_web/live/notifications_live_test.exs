@@ -182,4 +182,66 @@ defmodule OpenAgentsWeb.NotificationsLiveTest do
       refute has_element?(view, "#issue-subscription-toggle")
     end
   end
+
+  describe "the sidebar unread badge" do
+    test "counts what is waiting and links to the inbox", %{conn: conn} do
+      %{conn: conn} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+
+      assert has_element?(view, "#sidebar-badge-notifications", "1")
+    end
+
+    test "renders nothing at zero", %{conn: conn} do
+      conn = log_in_github_user(conn, "quiet-badge-account")
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+
+      refute has_element?(view, "#sidebar-badge-notifications")
+    end
+
+    test "appears on a page that is not the inbox", %{conn: conn} do
+      %{conn: conn} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/issues")
+
+      assert has_element?(view, "#sidebar-badge-notifications", "1")
+    end
+
+    test "counts up when a notification arrives, without a reload", %{conn: conn} do
+      %{conn: conn, issue: issue, actor: actor} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/issues")
+      assert has_element?(view, "#sidebar-badge-notifications", "1")
+
+      {:ok, _second} = Issues.create_comment(issue, %{"body" => "and another"}, actor)
+
+      assert has_element?(view, "#sidebar-badge-notifications", "2")
+    end
+
+    test "clears when the inbox is marked read, without a reload", %{conn: conn} do
+      %{conn: conn, reader: reader} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+      assert has_element?(view, "#sidebar-badge-notifications", "1")
+
+      [notification] = Notifications.list_notifications(reader)
+      view |> element("#mark-read-#{notification.id}") |> render_click()
+
+      refute has_element?(view, "#sidebar-badge-notifications")
+    end
+
+    test "one account's badge never counts another account's inbox", %{conn: conn} do
+      %{issue: issue, actor: actor} = setup_thread(conn, "public")
+
+      stranger = github_user("badge-stranger", "badge-stranger")
+      stranger_conn = Plug.Test.init_test_session(build_conn(), %{"user_id" => stranger.id})
+
+      {:ok, view, _html} = live(stranger_conn, ~p"/issues")
+
+      {:ok, _second} = Issues.create_comment(issue, %{"body" => "not for you"}, actor)
+
+      refute has_element?(view, "#sidebar-badge-notifications")
+    end
+  end
 end

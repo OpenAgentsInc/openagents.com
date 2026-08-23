@@ -219,8 +219,7 @@ defmodule OpenAgents.Issues do
         # Inside the transaction on purpose: the subscription and the delivery
         # records commit with the issue or not at all, so there is no window
         # where an issue exists that nobody was told about.
-        Notifications.issue_opened(issue, author)
-        issue
+        {issue, Notifications.issue_opened(issue, author)}
       else
         {:error, changeset} -> Repo.rollback(changeset)
       end
@@ -233,7 +232,7 @@ defmodule OpenAgents.Issues do
           {:error, changeset}
         end
 
-      {:ok, issue} ->
+      {:ok, {issue, notified}} ->
         Analytics.capture("issue_created", issue_distinct_id(normalized), %{
           "owner" => repository.owner,
           "repo" => repository.name,
@@ -244,6 +243,9 @@ defmodule OpenAgents.Issues do
         })
 
         Repositories.broadcast_issues(repository.id)
+        # After the commit, never inside it: a recipient that recounted early
+        # would count the rows as they were before the write.
+        Notifications.broadcast_unread(notified)
 
         {:ok, issue}
 
@@ -276,14 +278,13 @@ defmodule OpenAgents.Issues do
         # else would mean a second write path that could disagree with this
         # one. The actor arrives as an argument because `add_assignees/3` and
         # its neighbours now carry one.
-        Notifications.issue_updated(issue, updated, actor)
-        updated
+        {updated, Notifications.issue_updated(issue, updated, actor)}
       else
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
     |> case do
-      {:ok, updated} ->
+      {:ok, {updated, notified}} ->
         repository = Repo.get(Repository, issue.repository_id)
 
         Analytics.capture("issue_updated", actor_distinct_id(actor), %{
@@ -297,6 +298,7 @@ defmodule OpenAgents.Issues do
         })
 
         Repositories.broadcast_issues(issue.repository_id)
+        Notifications.broadcast_unread(notified)
 
         {:ok, updated}
 
@@ -751,15 +753,14 @@ defmodule OpenAgents.Issues do
              |> Repo.update_all([]) do
         # Same transaction as the comment, so the delivery record is as durable
         # as the event it announces and a retry collides with itself.
-        Notifications.comment_created(issue, comment, author)
-        comment
+        {comment, Notifications.comment_created(issue, comment, author)}
       else
         {:error, changeset} -> Repo.rollback(changeset)
         {_, _} -> Repo.rollback(%Comment{})
       end
     end)
     |> case do
-      {:ok, comment} ->
+      {:ok, {comment, notified}} ->
         repository = Repo.get(Repository, issue.repository_id)
         author_role = author_role(repository, author)
 
@@ -772,6 +773,7 @@ defmodule OpenAgents.Issues do
         })
 
         Repositories.broadcast_issues(issue.repository_id)
+        Notifications.broadcast_unread(notified)
 
         {:ok, comment}
 

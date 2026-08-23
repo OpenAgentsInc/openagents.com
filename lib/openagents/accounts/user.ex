@@ -31,6 +31,14 @@ defmodule OpenAgents.Accounts.User do
     # path is treated as new rather than accidentally grandfathered.
     field :agent_surfaces?, :boolean, virtual: true, default: false
 
+    # Also not a column, and also carried by the scope for the sidebar. It is
+    # the one number on that surface that changes without navigation, so unlike
+    # `agent_surfaces?` it is refreshed in place: `UserAuth.on_mount/4`
+    # recounts it when `OpenAgents.Notifications` says this account's inbox
+    # moved. Defaults to zero, so a user loaded by any other path shows no
+    # badge rather than a stale one.
+    field :unread_notifications, :integer, virtual: true, default: 0
+
     has_one :storage_owner, OpenAgents.Conversations.Visitor
 
     timestamps()
@@ -54,6 +62,7 @@ defmodule OpenAgents.Accounts.User do
           public_leaderboard_opted_out: boolean(),
           browser_key_hash: binary() | nil,
           agent_surfaces?: boolean(),
+          unread_notifications: non_neg_integer(),
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }

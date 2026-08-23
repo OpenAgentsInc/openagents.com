@@ -287,8 +287,8 @@ defmodule OpenAgents.NotificationsTest do
 
       assert [_one] = Notifications.list_notifications(author)
 
-      :ok = Notifications.comment_created(issue, comment, watcher)
-      :ok = Notifications.comment_created(issue, comment, watcher)
+      Notifications.comment_created(issue, comment, watcher)
+      Notifications.comment_created(issue, comment, watcher)
 
       assert [_still_one] = Notifications.list_notifications(author)
       assert Notifications.unread_count(author) == 1
@@ -306,7 +306,7 @@ defmodule OpenAgents.NotificationsTest do
       {:ok, 1} = Notifications.mark_all_read(author)
       assert Notifications.unread_count(author) == 0
 
-      :ok = Notifications.comment_created(issue, comment, watcher)
+      Notifications.comment_created(issue, comment, watcher)
 
       assert Notifications.unread_count(author) == 0
     end
@@ -680,8 +680,8 @@ defmodule OpenAgents.NotificationsTest do
 
       assert Notifications.unread_count(watcher) == 1
 
-      :ok = Notifications.issue_updated(issue, closed, actor)
-      :ok = Notifications.issue_updated(issue, closed, actor)
+      Notifications.issue_updated(issue, closed, actor)
+      Notifications.issue_updated(issue, closed, actor)
 
       assert Notifications.unread_count(watcher) == 1
     end
@@ -697,7 +697,7 @@ defmodule OpenAgents.NotificationsTest do
 
       {:ok, 1} = Notifications.mark_all_read(watcher)
 
-      :ok = Notifications.issue_updated(issue, closed, actor)
+      Notifications.issue_updated(issue, closed, actor)
 
       assert Notifications.unread_count(watcher) == 0
     end
@@ -713,6 +713,109 @@ defmodule OpenAgents.NotificationsTest do
       {:ok, _again} = Issues.update_issue(closed, %{"state" => "closed"}, actor)
 
       assert Notifications.unread_count(watcher) == 1
+    end
+  end
+
+  describe "the unread count" do
+    test "counts past the page the inbox loads" do
+      author = repository_user_fixture("author-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(author)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a busy thread"}, author)
+
+      over_a_page = Notifications.per_page() + 5
+
+      Enum.each(1..over_a_page, fn n ->
+        {:ok, _comment} = Issues.create_comment(issue, %{"body" => "note #{n}"}, watcher)
+      end)
+
+      # The count is an aggregate over the same authorized query the inbox
+      # composes, not the size of what the inbox loaded. `length/1` over
+      # `list_notifications/1` would stop at one page and report 50 for ever
+      # after, which is the mistake this repository already removed from the
+      # homepage once.
+      assert length(Notifications.list_notifications(author)) == Notifications.per_page()
+      assert Notifications.unread_count(author) == over_a_page
+    end
+
+    test "an unreadable repository is not counted" do
+      author = repository_user_fixture("author-#{System.unique_integer([:positive])}")
+      reader = repository_user_fixture("reader-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(author, %{visibility: "private"})
+      {:ok, _member} = Repositories.add_member(repository, reader, "viewer")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "internal"}, reader)
+      {:ok, _comment} = Issues.create_comment(issue, %{"body" => "an update"}, author)
+
+      assert Notifications.unread_count(reader) == 1
+
+      :ok = Repositories.remove_member(repository, author, reader.id)
+
+      assert Notifications.unread_count(reader) == 0
+    end
+  end
+
+  describe "unread announcements" do
+    test "a delivered notification announces the recipient's new count" do
+      author = repository_user_fixture("author-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(author)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, author)
+
+      :ok = Notifications.subscribe_unread(author)
+
+      {:ok, _comment} = Issues.create_comment(issue, %{"body" => "hello"}, watcher)
+
+      author_id = author.id
+      assert_receive {:unread_notifications_changed, ^author_id}
+    end
+
+    test "a derived issue event announces the subscriber's new count" do
+      actor = repository_user_fixture("actor-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(actor)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, watcher)
+
+      :ok = Notifications.subscribe_unread(watcher)
+
+      {:ok, _closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+
+      watcher_id = watcher.id
+      assert_receive {:unread_notifications_changed, ^watcher_id}
+    end
+
+    test "marking read announces the reader's new count" do
+      author = repository_user_fixture("author-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(author)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, author)
+      {:ok, _comment} = Issues.create_comment(issue, %{"body" => "hello"}, watcher)
+
+      :ok = Notifications.subscribe_unread(author)
+
+      [notification] = Notifications.list_notifications(author)
+      {:ok, 1} = Notifications.mark_read(author, notification.id)
+
+      author_id = author.id
+      assert_receive {:unread_notifications_changed, ^author_id}
+    end
+
+    test "marking nothing read announces nothing" do
+      author = repository_user_fixture("author-#{System.unique_integer([:positive])}")
+
+      :ok = Notifications.subscribe_unread(author)
+
+      {:ok, 0} = Notifications.mark_all_read(author)
+
+      refute_receive {:unread_notifications_changed, _user_id}, 50
     end
   end
 

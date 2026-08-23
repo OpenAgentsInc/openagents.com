@@ -506,6 +506,19 @@ body.sidebar-open {
   font-size: 16px;
 }
 
+/* Held at the far end of the row, past the label. Positioned rather than laid
+   out with a gap, because the label is what shrinks when the row runs out of
+   width and the count is the part that must stay legible. Pointer events go to
+   the row's hit area underneath, so the count is never a second click target
+   for the same destination. */
+.sidebar-row__badge {
+  position: relative;
+  margin-left: auto;
+  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
 .sidebar-row__label {
   /* `overflow: hidden` is what makes the ellipsis work, and it also makes this
      span a block whose height is exactly its line box. At the row's 20px line

@@ -25,9 +25,11 @@ ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}@sha256:3a39a0592364683e6bab
 
 FROM ${BUILDER_IMAGE} AS builder
 
-ARG OPENAGENTS_BUILD_REVISION="image"
-ARG OPENAGENTS_RELEASE_VSN
-ARG SOURCE_DATE_EPOCH=0
+# Only pinned toolchain inputs are declared here. Every `ARG`/`ENV` value
+# changes the cache key of the instructions below it, so a value that moves
+# with the source — the candidate SHA, the commit timestamp, the release
+# version — is declared as late as the build allows. See the blocks further
+# down, and RELEASE-007 in INVARIANTS.md.
 ARG DEBIAN_SNAPSHOT
 ARG HEX_VERSION
 ARG REBAR3_VERSION
@@ -38,10 +40,6 @@ ARG ESBUILD_VERSION
 ARG ESBUILD_SHA256
 ARG NODE_VERSION
 ARG TARGETARCH
-ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
-ENV OPENAGENTS_RELEASE_VSN=${OPENAGENTS_RELEASE_VSN}
-ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
-RUN test -n "${OPENAGENTS_RELEASE_VSN}"
 
 # install build dependencies
 RUN sed -i \
@@ -83,6 +81,14 @@ RUN mix local.hex "${HEX_VERSION}" --force \
 # set build ENV
 ENV MIX_ENV="prod"
 
+# The release version enters here. `COPY VERSION` on the next line already
+# rebuilds everything below it whenever the version changes, so declaring the
+# matching build argument at this point costs no cache while keeping the
+# operating system, Node.js, Hex, and rebar3 layers above it untouched.
+ARG OPENAGENTS_RELEASE_VSN
+ENV OPENAGENTS_RELEASE_VSN=${OPENAGENTS_RELEASE_VSN}
+RUN test -n "${OPENAGENTS_RELEASE_VSN}"
+
 # install mix dependencies
 COPY VERSION mix.exs mix.lock ./
 RUN mix deps.get --only $MIX_ENV
@@ -105,6 +111,16 @@ RUN mix assets.setup \
       "${TAILWIND_SHA256}" "/app/_build/tailwind-linux-x64-${TAILWIND_VERSION}" \
       "${ESBUILD_SHA256}" "/app/_build/esbuild-linux-x64" \
     | sha256sum --check --strict
+
+# The exact candidate SHA and its commit timestamp enter last, immediately
+# above the first application source layer. `OpenAgents.BuildInfo` reads
+# OPENAGENTS_BUILD_REVISION at compile time, so it has to be set before
+# `mix compile`; nothing above this point may depend on it, or every candidate
+# would reinstall the toolchain.
+ARG OPENAGENTS_BUILD_REVISION="image"
+ARG SOURCE_DATE_EPOCH=0
+ENV OPENAGENTS_BUILD_REVISION=${OPENAGENTS_BUILD_REVISION}
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 COPY priv priv
 
@@ -146,7 +162,6 @@ ARG TARGETARCH
 ARG CODEX_VERSION
 ARG OPENCODE_VERSION
 ARG DEBIAN_SNAPSHOT
-ARG SOURCE_DATE_EPOCH=0
 
 # Geist TTFs for server-side image rendering (Open Graph cards). The web
 # ships the same faces as woff2; librsvg reads system fonts through
@@ -156,7 +171,6 @@ ARG GEIST_FONT_SHA256=7fc800d2ac6b92844895196e5041aca55d814c15db70c44f79b3b83ab8
 ARG GEIST_REGULAR_SHA256=5c8968eafb98a4c4f47033daf29e38e284a6f2a82eb017d171ab040fe7c4b615
 ARG GEIST_MEDIUM_SHA256=0090e004725f6f64b841715b4167920580f883fcf9b67fc6d744089103fec101
 ARG GEIST_SEMIBOLD_SHA256=612ec98df33935354f39e81e54101656961ab6e5549f64b63eb57868ba7bab8d
-ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 RUN sed -i \
       "s|URIs: http://deb.debian.org/debian$|URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}|" \
@@ -259,6 +273,12 @@ RUN chown nobody /app
 
 # set runner ENV
 ENV MIX_ENV="prod"
+
+# The commit timestamp reaches the runtime image here rather than above the
+# apt, Geist, Codex, and OpenCode installs: it moves with every candidate, and
+# declaring it earlier reinstalled all four toolchains on every release SHA.
+ARG SOURCE_DATE_EPOCH=0
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/openagents ./

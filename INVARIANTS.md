@@ -2210,6 +2210,41 @@ Evidence: `OpenAgents.Forge.RollingReplacement`, `OpenAgents.Forge.Targets`,
 `test/openagents/forge/boot_converge_test.exs`, and
 `docs/operations/production-deploy-runbook.md`.
 
+### RELEASE-007 — The release image keys toolchain layers on pinned inputs only
+
+Status: Current
+
+A container layer's cache key includes every `ARG` and `ENV` declared above it
+in the same stage, whether or not the instruction reads them. A value that
+moves with the source — the candidate SHA, its commit timestamp, the release
+version — therefore rebuilds everything below it. Declaring
+`OPENAGENTS_BUILD_REVISION` at the top of a stage reinstalls the operating
+system, Node.js, Codex, and OpenCode for every candidate, so two adjacent
+revisions share nothing.
+
+Every per-candidate value is declared as late as the build allows. In the
+builder stage the Debian snapshot, the pinned Node.js toolchain, Hex, rebar3,
+`mix deps.get`, `mix deps.compile`, the npm install, and the Tailwind and
+esbuild install sit above `OPENAGENTS_BUILD_REVISION` and `SOURCE_DATE_EPOCH`,
+which enter immediately above the first application source layer.
+`OPENAGENTS_RELEASE_VSN` enters immediately above the `COPY VERSION` that
+already keys those layers. In the runtime stage the Debian snapshot, the pinned
+Geist faces, the pinned Codex package, the pinned OpenCode binary, and the
+generated locale sit above `SOURCE_DATE_EPOCH`. Those layers key on their own
+checksum-pinned inputs, so two adjacent source revisions reuse all of them.
+
+Lateness never costs identity. `OpenAgents.BuildInfo` reads
+`OPENAGENTS_BUILD_REVISION` at compile time, so the revision is still declared
+before `mix compile` and the packaged release still carries the exact candidate
+SHA. `SOURCE_DATE_EPOCH` still reaches the runtime image as an `ENV`. Both
+publishing paths refuse an image whose embedded revision or whose
+`org.opencontainers.image.revision` label is not that exact SHA, and the
+release gate runs the ordering proof in its `contracts` stage.
+
+Evidence: `OpenAgents.BuildInfo`, `ops/deploy/build-image.sh`,
+`ops/staging/publish-candidate.sh`, `ops/ci/contracts.sh`, and
+`test/openagents/release/image_layer_cache_test.exs`.
+
 ### STATUS-001 — The status page publishes one bounded, content-free projection
 
 Status: Current
@@ -2631,6 +2666,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | RELEASE-006 | `test/openagents/forge/rolling_boot_convergence_test.exs`, `test/openagents/forge/rolling_replacement_test.exs`, `test/openagents/forge/target_lifecycle_test.exs`, `test/openagents/forge/boot_converge_test.exs` |
+| RELEASE-007 | `test/openagents/release/image_layer_cache_test.exs`, `ops/ci/contracts.sh` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |

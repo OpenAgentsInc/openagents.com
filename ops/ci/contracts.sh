@@ -25,6 +25,7 @@ elixir ops/ci/docs-check.exs
 MIX_ENV=test mix test --warnings-as-errors \
   test/openagents/log_safety_test.exs \
   test/openagents/migration_lineage_test.exs \
+  test/openagents/release/image_layer_cache_test.exs \
   test/openagents/runtime_config_test.exs \
   test/openagents/staging_cleanup_test.exs \
   test/openagents/staging_candidate_contract_test.exs \

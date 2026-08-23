@@ -32,6 +32,23 @@ Update base, snapshot, Hex, or Rebar3 pins in a dedicated dependency change.
 Run the complete exact-SHA release gate and inspect the resulting SBOM before
 you publish a candidate with new pins.
 
+## Layer order
+
+Each of those pinned inputs is installed above every per-candidate value in its
+stage. A layer's cache key includes each `ARG` and `ENV` declared above it, so
+`OPENAGENTS_BUILD_REVISION`, `SOURCE_DATE_EPOCH`, and `OPENAGENTS_RELEASE_VSN`
+are declared as late as the build allows: the release version immediately above
+`COPY VERSION`, and the revision and commit timestamp immediately above the
+first application source layer. Two adjacent candidates therefore reuse the
+operating system, Node.js, Hex, rebar3, Geist, Codex, and OpenCode layers.
+
+Do not move a per-candidate value higher to make an instruction read it. Add
+the value where it is already needed instead, or pass it into the instruction
+that consumes it. `OpenAgents.BuildInfo` reads the revision at compile time, so
+the revision still enters before `mix compile` and the packaged release still
+carries the exact candidate SHA. See RELEASE-007 in `INVARIANTS.md` and
+`test/openagents/release/image_layer_cache_test.exs`.
+
 ## Check publication prerequisites
 
 Use a clean `main` worktree whose `HEAD` equals the locally fetched

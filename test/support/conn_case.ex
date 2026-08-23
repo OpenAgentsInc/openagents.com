@@ -150,19 +150,32 @@ defmodule OpenAgentsWeb.ConnCase do
     Plug.Test.init_test_session(conn, %{"user_id" => user.id})
   end
 
+  # The admin list is one application-wide value shared by every concurrently
+  # running test, so each grant adds only its own id and its cleanup removes
+  # only that id — restoring a snapshot would erase whatever another test
+  # granted in between. The read-modify-write is serialized for the same
+  # reason.
   def grant_operator(%OpenAgents.Accounts.User{github_id: github_id}) do
-    original = Application.get_env(:openagents, :admin_github_ids, [])
-    Application.put_env(:openagents, :admin_github_ids, [github_id | original])
+    update_admin_github_ids(&[github_id | &1])
 
     ExUnit.Callbacks.on_exit(fn ->
-      Application.put_env(:openagents, :admin_github_ids, original)
+      update_admin_github_ids(&List.delete(&1, github_id))
     end)
 
     :ok
   end
 
   def revoke_operator do
-    Application.put_env(:openagents, :admin_github_ids, [])
+    update_admin_github_ids(fn _ids -> [] end)
+    :ok
+  end
+
+  defp update_admin_github_ids(fun) do
+    :global.trans({{:openagents, :admin_github_ids}, self()}, fn ->
+      ids = Application.get_env(:openagents, :admin_github_ids, [])
+      Application.put_env(:openagents, :admin_github_ids, fun.(ids))
+    end)
+
     :ok
   end
 end

@@ -2653,6 +2653,153 @@ Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Repos`,
 `OpenAgents.Forge.CacheReadiness`, `test/openagents/forge/wal_replay_test.exs`,
 and `test/openagents/forge/sync_test.exs`.
 
+### EXIT-001 — The export ledger matches the surface in both directions
+
+Status: Current
+
+One operator runs this forge, so "you can leave with your work" is a claim a
+user cannot check by inspection. `OpenAgents.DataRights.ExportInventory` turns
+it into a ledger with four statuses — `portable`, `partial`, `blocked`, and
+`not_user_data` — and the ledger is enforced against the surface rather than
+maintained beside it.
+
+Coverage is derived, not curated. Every resource family
+`OpenAgentsWeb.ApiRouteAuthority.families/0` publishes must appear, in both
+directions, so a family reaching `/api/v3` without someone deciding whether a
+user can export it fails the build, and a family the API drops leaves no stale
+claim behind. Families that leave through routes outside `/api/v3` — Git
+transport for repository content, the `DATA-004` exports for conversations and
+memory — are listed alongside them.
+
+The ledger is deliberately pessimistic, because an unproven portability claim
+is the kind of claim this repository does not make. `portable` requires a named
+mechanism and a named proof, and owes no issue. `partial` means the records are
+reachable and nothing here shows an account getting its own records back; it
+owes an open issue. `blocked` means the account cannot read its own records at
+all, and it is probed rather than asserted, so a fix that lands without
+updating the ledger turns the proof red. `not_user_data` claims nothing and
+states why.
+
+The probes run against a private repository the account owns, and they check
+both directions: an `issue`, `project`, or `repository` read that stopped
+returning the owner's records fails, and a `comment`, `label`, `milestone`,
+`assignee`, `issue_label`, or `issue_assignee` read that started working fails
+until the ledger says so. Those six are blocked today because they resolve the
+repository through a public-only query and a bearer token does not widen them,
+which is issue #142. `push_receipt` is blocked because no published route
+serves receipts, and it is probed against the route inventory rather than by
+calling a route that does not exist.
+
+Evidence: `OpenAgents.DataRights.ExportInventory`,
+`OpenAgentsWeb.ApiRouteAuthority`,
+`test/openagents/data_rights/export_inventory_test.exs`, and
+`docs/forge-operator-independence.md`.
+
+### EXIT-002 — Served state is checkable against the WAL with no database
+
+Status: Current
+
+`OpenAgents.Forge.Pushes` acknowledges a push only after the WAL accepts it, so
+the WAL is the record of what was pushed and each node's bare repository is a
+projection of that record. Whether the projection still matches is therefore a
+question with an answer, and `OpenAgents.Forge.Verification` computes it from
+the WAL and the repository alone.
+
+Independence here is structural, not a promise: a verifier that queried
+PostgreSQL would be asking the operator to confirm the operator. The proof reads
+the module's compiled import table and fails on a call into `OpenAgents.Repo`,
+Ecto, or Postgrex, so the property cannot decay through an added convenience.
+
+Five disagreements are distinct findings, and each is exercised by breaking it.
+An entry the store cannot produce is `entry_object_missing`. An entry whose
+bytes no longer hash to the key the index recorded is `entry_digest_mismatch`,
+because WAL entry keys are content-addressed. Entries that are not the
+contiguous run from zero are `entry_sequence_broken`, which is how a removed or
+renumbered entry surfaces. A ref the repository serves that the WAL never
+recorded, or records differently, is `served_refs_diverged` — checked in both
+directions, so a smuggled ref is caught as well as a moved one. An object the
+WAL says a push introduced that the repository cannot produce is
+`object_missing`.
+
+What this does not do is stated as plainly as what it does. Entries are not
+signed and the index is anchored nowhere outside the operator's own storage, so
+an operator who rewrites an entry, its key, and the index together produces a
+self-consistent log. Content addressing makes tampering evident, not
+impossible. Issue #151 carries the anchor or signature that would close it.
+
+`REPOSITORY-003` proves that an accepted entry re-materializes onto an empty
+cache. This proves that divergence between the WAL and what is served is
+detectable. The first is about replay; the second is about detection, and
+neither substitutes for the other.
+
+Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.WAL`,
+`OpenAgents.Forge.Repos`, and `test/openagents/forge/independence_test.exs`.
+
+### EXIT-003 — Recovery comes from the WAL, and the mirror is strictly lossy
+
+Status: Current
+
+GitHub is a mirror and never authority. That direction is load-bearing, and it
+holds only while nothing on the recovery path can consult the mirror. The proof
+reads the compiled import tables of `OpenAgents.Forge.Sync` and
+`OpenAgents.Forge.Repos` and fails on a call into
+`OpenAgents.Forge.MirrorWatch` or into the mirror functions of
+`OpenAgents.Forge.Pushes`, so a lost forge cannot quietly promote GitHub to
+source of truth through a fallback someone added in an incident.
+
+What survives a lost forge splits cleanly. From the WAL: every ref, every
+object, and the push record — `OpenAgents.Forge.Pushes.reconcile_receipts/1`
+re-derives every `forge_pushes` row after the table is emptied, at the WAL's
+own sequence numbers and principals, because receipts are derived from the WAL
+and never a second authority. From the mirror: every commit, tree, blob, tag,
+and advertised ref, and nothing else. `mirror_now/1` is a `git push --mirror`,
+which carries a ref map and a pack. No sequence, no principal, and no push time
+travels with it, so a forge restored from its mirror serves the same source
+with no evidence of who produced it. The proof asserts both halves by losing
+the WAL and the receipts and then checking what the mirror can and cannot
+give back.
+
+Two operational facts bound the claim. `:forge_mirror_urls` is empty in
+`config/config.exs` and set by no environment, so no mirror runs today and
+GitHub holds whatever was last pushed to it directly, which is the trade
+`REPOSITORY-002` records. And `mirror_now/1` is a force push of every ref, so
+configuring a mirror overwrites what direct pushes left there rather than
+merging with it.
+
+Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Pushes`,
+`OpenAgents.Forge.Verification`, and
+`test/openagents/forge/independence_test.exs`.
+
+### EXIT-004 — A clone is complete and self-hosting
+
+Status: Current
+
+Exit for source is a property, not a policy. A clone taken through the
+published Git transport with an `oa_pat_` token carries every advertised ref
+the WAL records, every object those refs name, and passes `git fsck`. Cloned
+from that copy with the forge's cache and WAL deleted, the history re-serves
+from somewhere else with no forge dependency and no forge-specific ref
+namespace required.
+
+One namespace is withheld and it is named rather than implied. `refs/internal/`
+retains stack boundary commits without advertising them, through the
+`transfer.hideRefs` setting `OpenAgents.Forge.Repos` applies to every bare
+repository, so a clone is complete with respect to the advertised set and not
+with respect to the raw WAL ref map. `OpenAgents.Forge.Verification.exportable_refs/1`
+is that set, and the proof asserts the withheld namespace is the *only*
+omission: hiding a branch, or widening the exported set to include internal
+bookkeeping, turns it red.
+
+This is exit for the Git plane. It is not exit for the metadata plane —
+comments and labels in private repositories, forum posts, and receipts are
+covered by `EXIT-001`'s recorded gaps rather than by a claim here, and issues
+#142 and #143 carry them. A single complete invariant plus a recorded gap is
+worth more than four that assert less than they appear to.
+
+Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.Repos`,
+`OpenAgents.Forge.GitHTTP`, and
+`test/openagents/forge/independence_test.exs`.
+
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
 
 Status: Current
@@ -2973,5 +3120,9 @@ contract; the invariant prose above defines the assertion, not the filename.
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs` |
+| EXIT-001 | `test/openagents/data_rights/export_inventory_test.exs` |
+| EXIT-002 | `test/openagents/forge/independence_test.exs` |
+| EXIT-003 | `test/openagents/forge/independence_test.exs` |
+| EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |

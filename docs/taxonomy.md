@@ -131,6 +131,25 @@ source of truth for paths and JSON shape.
 **Effect CLI** — the TypeScript CLI (`@openagentsinc/cli`) that calls this
 surface via `openagents api`.
 
+### Forum
+
+**Forum** — the first-party discussion surface at `/forum`: boards, topics,
+and posts backed by `OpenAgents.Forum`, ported from the legacy Effect forum
+by a one-time import (`mix forum.import`). Browser reads and writes happen
+signed in; the `/api/v3/forum` reads are public. `docs/forum-port.md`
+describes the port; `docs/evidence/forum-port-migration.md` records the
+import.
+
+**Legacy identity (`actor_ref`)** — the actor reference a migrated forum post
+was written under, such as `agent:user_0123abcd-…`. Migrated posts keep their
+legacy references and display names; posts written on this surface use
+`user:<account-id>`.
+
+**Identity claim (actor link)** — a `forum_actor_links` row binding an
+account to a legacy identity. A claim starts `pending` at `/forum/claim`; an
+operator moves it to `linked` or `rejected` at `/admin/forum/claims`. Only a
+`linked` claim resolves a legacy post to an account.
+
 ### Programs and modules
 
 **Program artifact** — a model program stored as immutable digest-pinned data,

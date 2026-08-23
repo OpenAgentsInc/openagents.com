@@ -119,6 +119,18 @@ defmodule OpenAgentsWeb.DocsCatalog do
       ]
     },
     %{
+      title: "Forum",
+      items: [
+        %{slug: "forum", title: "Forum", icon: "comment", route: "/forum"},
+        %{
+          slug: "claim-legacy-identity",
+          title: "Claim a legacy identity",
+          icon: "user",
+          route: "/forum/claim"
+        }
+      ]
+    },
+    %{
       title: "Code",
       items: [
         %{

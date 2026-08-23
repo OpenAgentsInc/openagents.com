@@ -338,6 +338,53 @@ defmodule OpenAgents.Stacks.MergeTest do
       assert Repo.one!(from p in PullRequest, where: p.id == ^pr_2.id).state == "open"
     end
 
+    test "a boundary the branch does not contain fails instead of reverting the trunk",
+         context do
+      %{repository: repository, actor: actor} = context
+
+      %{path: path, oids: oids, stack: stack, pull_requests: [pr_1, pr_2]} =
+        seed_stack(repository, actor)
+
+      # The trunk gains a commit the stack branches never built on, and the
+      # bottom entry records that tip as its boundary — the shape a stack
+      # takes when its boundary was snapshotted from a moved trunk rather
+      # than the branch's real fork point. The chain check alone passes, so
+      # only boundary ancestry stands between this merge and a trunk whose
+      # tree silently loses trunk.md.
+      trunk_tip = commit(path, oids["main"], "Trunk advance", %{"trunk.md" => "trunk\n"})
+      {_, 0} = Repos.git(path, ["update-ref", "refs/heads/main", trunk_tip])
+
+      {1, _rows} =
+        Repo.update_all(
+          from(entry in StackEntry, where: entry.stack_id == ^stack.id and entry.position == 1),
+          set: [boundary_oid: trunk_tip]
+        )
+
+      {:ok, {operation, :created}} =
+        Merge.request_from_api(
+          repository,
+          stack.number,
+          %{"pull_request_number" => pr_2.issue.number, "merge_method" => "merge"},
+          actor,
+          "bad-boundary-1"
+        )
+
+      assert :processed = OperationWorker.run_once()
+
+      operation = reload(Operation, operation.id)
+      assert operation.state == "failed"
+      assert operation.error["code"] == "needs_rebase"
+      assert reload(Stack, stack.id).health == "needs_rebase"
+
+      # The trunk did not move and still carries the advance commit.
+      assert show(path, ["rev-parse", "refs/heads/main"]) == trunk_tip
+      assert show(path, ["rev-parse", "refs/heads/main:trunk.md"]) != ""
+
+      for pr <- [pr_1, pr_2] do
+        assert Repo.one!(from p in PullRequest, where: p.id == ^pr.id).state == "open"
+      end
+    end
+
     test "a concurrent branch push fails the merge and preserves the branch", context do
       %{repository: repository, actor: actor} = context
 

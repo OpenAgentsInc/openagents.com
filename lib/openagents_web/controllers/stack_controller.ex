@@ -296,6 +296,7 @@ defmodule OpenAgentsWeb.StackController do
               :duplicate_pull_request,
               :duplicate_branch,
               :broken_base_chain,
+              :unrelated_history,
               :already_stacked,
               :not_stack_top,
               :not_stacked,
@@ -329,6 +330,7 @@ defmodule OpenAgentsWeb.StackController do
   defp message(:duplicate_pull_request), do: "A pull request appears more than once."
   defp message(:duplicate_branch), do: "A branch appears more than once."
   defp message(:broken_base_chain), do: "The direct-base chain is broken."
+  defp message(:unrelated_history), do: "A branch shares no history with its parent."
   defp message(:already_stacked), do: "A pull request already belongs to an active stack."
   defp message(:not_stack_top), do: "The pull request does not target the current top head."
   defp message(:operation_in_progress), do: "Another operation is active on this stack."

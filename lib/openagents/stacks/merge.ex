@@ -318,6 +318,7 @@ defmodule OpenAgents.Stacks.Merge do
 
     with :ok <- validate_selected_open(selected),
          :ok <- validate_chain(trunk_tip, entries),
+         :ok <- validate_boundary_ancestry(repository, entries),
          :ok <- verify_live_heads(repository, entries) do
       validate_expected_heads(request["expected_heads"], entries)
     end
@@ -346,6 +347,25 @@ defmodule OpenAgents.Stacks.Merge do
       {:error, reason} -> {:error, reason}
       _head -> :ok
     end
+  end
+
+  # A branch must contain its stored boundary. A boundary recorded from a
+  # trunk commit the branch never built on passes the chain check while the
+  # branch's tree lacks that commit's changes, and the merge and squash
+  # methods land the branch tree wholesale — silently reverting everything
+  # the trunk gained since the branch forked.
+  defp validate_boundary_ancestry(repository, entries) do
+    Enum.find_value(entries, :ok, fn entry ->
+      case GitPlane.ancestor?(
+             repository.storage_key,
+             entry.boundary_oid,
+             entry.observed_head_oid
+           ) do
+        {:ok, true} -> nil
+        {:ok, false} -> {:error, :needs_rebase}
+        {:error, _reason} -> {:error, :needs_rebase}
+      end
+    end)
   end
 
   defp verify_live_heads(repository, entries) do

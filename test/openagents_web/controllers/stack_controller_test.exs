@@ -192,6 +192,30 @@ defmodule OpenAgentsWeb.StackControllerTest do
       assert %{"code" => "already_stacked"} = json_response(response, 422)
     end
 
+    test "records the fork point as the boundary when the trunk moved past the branch", %{
+      conn: conn
+    } do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-fork-point", repository)
+
+      # The trunk advances after the branch forked, so the boundary must be
+      # the fork point — recording the moved tip would make a later merge
+      # land a tree that reverts the advance commit.
+      git_dir = Repos.ensure_repo!(repository.storage_key, repository.default_branch)
+      {trunk_tip, _tree} = commit(git_dir, oids["main"], "Trunk advance", "trunk.md")
+      {_, 0} = Repos.git(git_dir, ["update-ref", "refs/heads/main", trunk_tip])
+
+      create_conn =
+        conn
+        |> put_req_header("idempotency-key", "stack-fork-point-1")
+        |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1]})
+
+      assert %{"entries" => [entry]} = json_response(create_conn, 201)
+      assert entry["boundary_oid"] == oids["main"]
+    end
+
     test "rejects a head ref the git service cannot resolve", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, [])

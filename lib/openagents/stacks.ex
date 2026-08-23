@@ -590,9 +590,10 @@ defmodule OpenAgents.Stacks do
          :ok <- validate_trunk(request.trunk_ref, pull_requests),
          {:ok, trunk_oid} <- resolve_oid(repository, request.trunk_ref),
          {:ok, heads} <- snapshot_heads(repository, pull_requests),
-         :ok <- validate_expected_heads(request.expected_heads, pull_requests, heads) do
+         :ok <- validate_expected_heads(request.expected_heads, pull_requests, heads),
+         {:ok, specs} <- entry_specs(repository, pull_requests, heads, trunk_oid) do
       stack = insert_stack!(repository, actor, request.trunk_ref)
-      entries = insert_entry_rows!(stack, entry_specs(pull_requests, heads, trunk_oid))
+      entries = insert_entry_rows!(stack, specs)
 
       record_event!(stack, "pull_request_stack.created", actor, %{
         "stack_number" => stack.number,
@@ -629,9 +630,9 @@ defmodule OpenAgents.Stacks do
          :ok <- validate_append(repository, stack, entries, top, pull_request),
          {:ok, head_oid} <- resolve_oid(repository, pull_request.head_ref),
          :ok <- validate_expected_head(request.expected_head, head_oid),
+         {:ok, boundary} <- fork_point(repository, top.observed_head_oid, head_oid),
          {:ok, stack} <- bump_version(stack) do
-      entry =
-        insert_entry_row!(stack, pull_request, top.position + 1, top.observed_head_oid, head_oid)
+      entry = insert_entry_row!(stack, pull_request, top.position + 1, boundary, head_oid)
 
       record_event!(stack, "pull_request_stack.appended", actor, %{
         "stack_number" => stack.number,
@@ -943,16 +944,37 @@ defmodule OpenAgents.Stacks do
     |> Repo.insert!()
   end
 
-  defp entry_specs(pull_requests, heads, trunk_oid) do
-    {specs, _previous_head} =
-      pull_requests
-      |> Enum.with_index(1)
-      |> Enum.map_reduce(trunk_oid, fn {pull_request, position}, boundary ->
-        head = Map.fetch!(heads, pull_request.id)
-        {{pull_request, position, boundary, head}, head}
-      end)
+  # Each entry's boundary is the fork point of its head and its parent's
+  # tip — not the parent tip itself. A branch built on an older parent
+  # commit records that older commit, so the layer diff holds only the
+  # layer's commits and a merge preflight fails with `:needs_rebase`
+  # instead of landing a tree that reverts newer trunk commits.
+  defp entry_specs(repository, pull_requests, heads, trunk_oid) do
+    pull_requests
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, [], trunk_oid}, fn {pull_request, position},
+                                                  {:ok, specs, parent_tip} ->
+      head = Map.fetch!(heads, pull_request.id)
 
-    specs
+      case fork_point(repository, parent_tip, head) do
+        {:ok, boundary} ->
+          {:cont, {:ok, [{pull_request, position, boundary, head} | specs], head}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, specs, _parent_tip} -> {:ok, Enum.reverse(specs)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fork_point(repository, parent_tip, head) do
+    case GitPlane.merge_base(repository.storage_key, parent_tip, head) do
+      {:ok, boundary} -> {:ok, boundary}
+      {:error, _reason} -> {:error, :unrelated_history}
+    end
   end
 
   defp insert_entry_rows!(stack, specs) do

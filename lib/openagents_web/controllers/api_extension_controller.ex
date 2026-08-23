@@ -52,6 +52,27 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     }
   }
 
+  @work_attempt %{
+    "type" => "object",
+    "description" =>
+      "One recorded execution attempt against the issue, projected from the " <>
+        "durable assignment that bound it. The issue stays the requested " <>
+        "outcome; the attempt is never a second work record.",
+    "properties" => %{
+      "id" => %{"type" => "string"},
+      "target" => %{"type" => "string", "enum" => ["box", "computer"]},
+      "state" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Forge.Assignment.states()
+      },
+      "branch" => %{"type" => "string"},
+      "commit" => %{"type" => ["string", "null"]},
+      "failure_reason" => %{"type" => ["string", "null"]},
+      "started_at" => %{"type" => ["string", "null"]},
+      "finished_at" => %{"type" => ["string", "null"]}
+    }
+  }
+
   @promise_record %{
     "type" => "object",
     "description" => "A state-gated promise record stored in a project item.",
@@ -127,6 +148,16 @@ defmodule OpenAgentsWeb.ApiExtensionController do
             "How far along the issue is. Derived: a closed issue is done, and " <>
               "an open issue is in_progress while a board the reader can open " <>
               "places it in a started column."
+        },
+        "work" => %{
+          "type" => "array",
+          "items" => @work_attempt,
+          "description" =>
+            "Every recorded execution attempt against this issue, oldest " <>
+              "first, empty when no agent has worked it. Each entry carries " <>
+              "only what the attempt already publishes on the issue: target, " <>
+              "state, branch, exact commit, and timestamps. Prompts, " <>
+              "conversations, reports, and credentials stay out."
         }
       },
       "filters" => %{

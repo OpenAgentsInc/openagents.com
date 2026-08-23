@@ -23,9 +23,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
   fields it does store: opened from `inserted_at` and `user`, closed from
   `closed_at` and `state_reason`. That is why a close has no actor — nothing
   records who did it, and naming somebody would be a guess.
+
+  Agent work is derived the same way, from the durable assignments that bound
+  an attempt to this issue. The issue remains the requested outcome; the page
+  reads the attempt records rather than storing a second copy of them.
   """
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
@@ -299,12 +304,13 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # leave the timeline describing the previous version of the page.
   defp load(socket, issue) do
     comments = Issues.list_comments(issue)
+    attempts = Assignments.attempts_for_issue(issue)
 
     socket
     |> assign(:issue, issue)
     |> assign(:comments, comments)
     |> assign(:form, to_form(Issues.change_issue(issue)))
-    |> assign(:events, timeline(issue, comments))
+    |> assign(:events, timeline(issue, comments, attempts))
     |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))
   end
 
@@ -617,7 +623,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # such table, so the feed is assembled from the columns that do exist. The
   # result is honest but partial: a label added and removed leaves no trace,
   # and a close records when but not who.
-  defp timeline(issue, comments) do
+  defp timeline(issue, comments, attempts) do
     opened = %{
       kind: :event,
       actor: author(issue),
@@ -660,8 +666,78 @@ defmodule OpenAgentsWeb.IssueShowLive do
         []
       end
 
-    Enum.sort_by([opened | commented] ++ closed, & &1.sort, DateTime)
+    Enum.sort_by([opened | commented] ++ closed ++ attempt_events(attempts), & &1.sort, DateTime)
   end
+
+  # An attempt produces at most two events: it started, and it ended. Both
+  # read from `forge_assignments`, so an attempt that never finished shows as
+  # started and nothing more rather than as a silent gap.
+  defp attempt_events(attempts) do
+    Enum.flat_map(attempts, fn attempt ->
+      started_at = attempt.started_at || attempt.admitted_at
+
+      start =
+        if started_at do
+          [
+            %{
+              kind: :event,
+              actor: nil,
+              text: attempt_start_text(attempt),
+              icon: "play",
+              tone: :neutral,
+              at: stamp(started_at),
+              sort: started_at
+            }
+          ]
+        else
+          []
+        end
+
+      finish =
+        if attempt.finished_at do
+          [
+            %{
+              kind: :event,
+              actor: nil,
+              text: attempt_finish_text(attempt),
+              icon: attempt_icon(attempt),
+              tone: attempt_tone(attempt),
+              at: stamp(attempt.finished_at),
+              sort: attempt.finished_at
+            }
+          ]
+        else
+          []
+        end
+
+      start ++ finish
+    end)
+  end
+
+  defp attempt_start_text(%{target_kind: "computer", branch: branch}),
+    do: "started work on a computer, on branch #{branch}"
+
+  defp attempt_start_text(%{branch: branch}), do: "started work on a box, on branch #{branch}"
+
+  defp attempt_finish_text(%{state: "completed", terminal_commit: commit})
+       when is_binary(commit),
+       do: "finished this work at #{String.slice(commit, 0, 7)}"
+
+  defp attempt_finish_text(%{state: "completed"}), do: "finished this work"
+
+  defp attempt_finish_text(%{state: "cancelled"}), do: "cancelled this work"
+
+  defp attempt_finish_text(%{failure_reason: reason}) when is_binary(reason),
+    do: "stopped this work: #{reason}"
+
+  defp attempt_finish_text(_attempt), do: "stopped this work"
+
+  defp attempt_icon(%{state: "completed"}), do: "check-circle"
+  defp attempt_icon(_attempt), do: "x-circle-filled"
+
+  defp attempt_tone(%{state: "completed"}), do: :success
+  defp attempt_tone(%{state: "cancelled"}), do: :neutral
+  defp attempt_tone(_attempt), do: :danger
 
   defp close_text(%{state_reason: "not_planned"}), do: "closed this as not planned"
   defp close_text(%{state_reason: "duplicate"}), do: "closed this as a duplicate"

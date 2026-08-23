@@ -18,6 +18,7 @@ defmodule OpenAgents.Forge.Assignment do
     belongs_to :repository, OpenAgents.Repositories.Repository
     belongs_to :issue, OpenAgents.Issues.Issue, type: :id
     belongs_to :run, OpenAgents.Box.Run
+    belongs_to :work_job, OpenAgents.Work.Job
     field :target_kind, :string, default: "box"
     field :credential_delivery_status, :string, default: "not_applicable"
     field :credential_delivery_reason, :string
@@ -54,6 +55,7 @@ defmodule OpenAgents.Forge.Assignment do
       :started_at,
       :finished_at,
       :run_id,
+      :work_job_id,
       :conversation_id,
       :target_kind,
       :credential_delivery_status,
@@ -83,6 +85,7 @@ defmodule OpenAgents.Forge.Assignment do
     |> foreign_key_constraint(:repository_id)
     |> foreign_key_constraint(:issue_id)
     |> foreign_key_constraint(:run_id)
+    |> foreign_key_constraint(:work_job_id)
     |> unique_constraint(:conversation_box_id, name: :forge_assignments_one_active_box_index)
     |> unique_constraint(:machine_id, name: :forge_assignments_one_active_machine_index)
     |> unique_constraint(:issue_id, name: :forge_assignments_one_active_issue_index)

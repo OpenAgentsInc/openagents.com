@@ -108,14 +108,94 @@ defmodule OpenAgents.Forge.Assignments do
     }
 
     case OpenAgents.ComputerAgentJobs.start(owner, machine, conversation, params) do
-      {:ok, _job} ->
-        {:ok, assignment, plaintext}
+      {:ok, job} ->
+        {:ok, record_work_job(assignment, job.id), plaintext}
 
       {:error, reason} ->
         AssignmentCredentialVault.delete(assignment.id)
         _ = finish(assignment, "failed", nil, inspect(reason))
         {:error, reason}
     end
+  end
+
+  # The work job carries execution: its steps, its report, its budget. The
+  # assignment carries the attempt: which issue, which repository, which
+  # branch, under whose authority. Recording the job id here makes the join
+  # typed and queryable in both directions without moving either record.
+  defp record_work_job(%Assignment{} = assignment, job_id) do
+    assignment
+    |> Assignment.changeset(%{work_job_id: job_id})
+    |> Repo.update()
+    |> case do
+      {:ok, updated} -> updated
+      {:error, _changeset} -> assignment
+    end
+  end
+
+  @doc """
+  Every recorded execution attempt for `issue`, oldest first.
+
+  The issue is the requested outcome and never becomes a work record. This
+  reads the attempts that already exist in `forge_assignments`, so an issue
+  with no agent work returns an empty list rather than an absent fact.
+  """
+  @spec attempts_for_issue(Issue.t() | integer()) :: [map()]
+  def attempts_for_issue(%Issue{id: id}), do: attempts_for_issue(id)
+
+  def attempts_for_issue(issue_id) when is_integer(issue_id) do
+    Assignment
+    |> where([assignment], assignment.issue_id == ^issue_id)
+    |> order_by([assignment], asc: assignment.admitted_at, asc: assignment.id)
+    |> Repo.all()
+    |> Enum.map(&attempt_summary/1)
+  end
+
+  @doc """
+  Attempts for a whole page of issues, keyed by issue id.
+
+  One query for the page, the way `Issues.dependency_graph/1` reads
+  prerequisites, so listing issues does not cost one query per row. Every
+  issue in `issues` appears in the result, with `[]` when it has no attempt.
+  """
+  @spec attempts_for_issues([Issue.t()]) :: %{integer() => [map()]}
+  def attempts_for_issues(issues) when is_list(issues) do
+    ids = Enum.map(issues, & &1.id)
+    base = Map.new(ids, &{&1, []})
+
+    Assignment
+    |> where([assignment], assignment.issue_id in ^ids)
+    |> order_by([assignment], asc: assignment.admitted_at, asc: assignment.id)
+    |> Repo.all()
+    |> Enum.reduce(base, fn assignment, acc ->
+      Map.update(acc, assignment.issue_id, [attempt_summary(assignment)], fn existing ->
+        existing ++ [attempt_summary(assignment)]
+      end)
+    end)
+  end
+
+  @doc """
+  The bounded projection of one attempt.
+
+  It carries only what the claim and result comments already publish on the
+  issue: the target kind, the branch, the exact commit, the terminal state,
+  and the timestamps. The conversation, the prompt, the credential, and the
+  work job's report stay out, because they belong to the requesting account
+  rather than to everyone who can read the issue.
+  """
+  @spec attempt_summary(Assignment.t()) :: map()
+  def attempt_summary(%Assignment{} = assignment) do
+    %{
+      id: assignment.id,
+      target_kind: assignment.target_kind,
+      state: assignment.state,
+      branch: assignment.branch,
+      terminal_branch: assignment.terminal_branch,
+      terminal_commit: assignment.terminal_commit,
+      failure_reason: assignment.failure_reason,
+      admitted_at: assignment.admitted_at,
+      started_at: assignment.started_at,
+      finished_at: assignment.finished_at
+    }
   end
 
   defp target_kind(attrs) do

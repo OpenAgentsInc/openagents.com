@@ -308,6 +308,56 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
   end
 
+  # The attempt record is `forge_assignments`. Writing one directly keeps this
+  # test about the projection rather than about the admission path that
+  # creates it, which `OpenAgents.Forge.AssignmentTest` already covers.
+  defp record_attempt(issue, branch, offset_seconds, overrides) do
+    user =
+      Accounts.upsert_github_user(%{
+        github_id: System.unique_integer([:positive]),
+        github_login: "attempt-#{System.unique_integer([:positive])}",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/1?v=4"
+      })
+      |> elem(1)
+
+    {:ok, %{code: code}} =
+      OpenAgents.Machines.start_pairing(%{
+        "name" => branch,
+        "tier" => "curated",
+        "platform" => "linux-x64",
+        "agent_version" => "0.1.0",
+        "roots" => []
+      })
+
+    {:ok, machine} = OpenAgents.Machines.approve_pairing(user, code)
+
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    admitted_at = DateTime.add(now, offset_seconds, :second)
+    state = Map.get(overrides, :state, "running")
+
+    %OpenAgents.Forge.Assignment{}
+    |> OpenAgents.Forge.Assignment.changeset(
+      Map.merge(
+        %{
+          target_kind: "computer",
+          machine_id: machine.id,
+          repository_id: repository().id,
+          issue_id: issue.id,
+          requesting_principal: %{"type" => "user", "id" => user.id},
+          branch: branch,
+          state: state,
+          admitted_at: admitted_at,
+          started_at: admitted_at,
+          finished_at:
+            if(state in OpenAgents.Forge.Assignment.terminal_states(), do: admitted_at),
+          deadline_at: DateTime.add(admitted_at, 3600, :second)
+        },
+        overrides
+      )
+    )
+    |> Repo.insert!()
+  end
+
   defp repository do
     Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end
@@ -432,6 +482,70 @@ defmodule OpenAgentsWeb.IssueControllerTest do
 
       assert %{"openagents" => %{"blocked" => false, "blocked_by" => [], "blocks" => []}} =
                json_response(conn, 200)
+    end
+
+    test "an issue nobody has worked reports no attempts, not a missing field", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Unworked"})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"work" => []}} = json_response(conn, 200)
+    end
+
+    test "show carries every recorded execution attempt, oldest first", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Worked twice"})
+      sha = String.duplicate("cd", 20)
+
+      record_attempt(issue, "agent/first", -600, %{state: "failed", failure_reason: "timeout"})
+      record_attempt(issue, "agent/second", -60, %{state: "completed", terminal_commit: sha})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"work" => [first, second]}} = json_response(conn, 200)
+
+      assert first["branch"] == "agent/first"
+      assert first["state"] == "failed"
+      assert first["failure_reason"] == "timeout"
+      assert is_nil(first["commit"])
+
+      assert second["branch"] == "agent/second"
+      assert second["state"] == "completed"
+      assert second["commit"] == sha
+      assert second["target"] == "computer"
+    end
+
+    test "an attempt never carries the prompt, conversation, or credential", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Bounded"})
+      record_attempt(issue, "agent/bounded", -30, %{})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"work" => [attempt]}} = json_response(conn, 200)
+
+      assert Enum.sort(Map.keys(attempt)) == [
+               "branch",
+               "commit",
+               "failure_reason",
+               "finished_at",
+               "id",
+               "started_at",
+               "state",
+               "target"
+             ]
+    end
+
+    test "index carries the attempts for every issue on the page", %{conn: conn} do
+      {:ok, worked} = Issues.create_issue(repository(), %{title: "Worked"})
+      {:ok, _idle} = Issues.create_issue(repository(), %{title: "Idle"})
+      record_attempt(worked, "agent/page", -45, %{})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => issues} = json_response(conn, 200)
+      by_title = Map.new(issues, &{&1["title"], &1["openagents"]["work"]})
+
+      assert [%{"branch" => "agent/page"}] = by_title["Worked"]
+      assert by_title["Idle"] == []
     end
   end
 

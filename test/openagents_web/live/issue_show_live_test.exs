@@ -347,6 +347,73 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     refute has_element?(view, ~s{button[phx-click="toggle_edit"]})
   end
 
+  test "the timeline shows every agent attempt, started and finished", %{conn: conn} do
+    issue = issue!(%{"title" => "Worked by an agent"})
+    sha = String.duplicate("ef", 20)
+
+    record_attempt(issue, "agent/one", -600, %{state: "failed", failure_reason: "timeout"})
+    record_attempt(issue, "agent/two", -60, %{state: "completed", terminal_commit: sha})
+
+    {:ok, _view, html} = live(conn, path(issue))
+
+    assert html =~ "started work on a computer, on branch agent/one"
+    assert html =~ "stopped this work: timeout"
+    assert html =~ "started work on a computer, on branch agent/two"
+    assert html =~ "finished this work at #{String.slice(sha, 0, 7)}"
+  end
+
+  test "an issue nobody has worked renders its timeline unchanged", %{conn: conn} do
+    issue = issue!(%{"title" => "Never worked"})
+
+    {:ok, _view, html} = live(conn, path(issue))
+
+    assert html =~ "opened this issue"
+    refute html =~ "started work on"
+  end
+
+  # The attempt record is `forge_assignments`. Writing one directly keeps this
+  # test about what the page renders rather than about the admission path.
+  defp record_attempt(issue, branch, offset_seconds, overrides) do
+    user = repository_user_fixture("attempt-#{System.unique_integer([:positive])}")
+
+    {:ok, %{code: code}} =
+      OpenAgents.Machines.start_pairing(%{
+        "name" => branch,
+        "tier" => "curated",
+        "platform" => "linux-x64",
+        "agent_version" => "0.1.0",
+        "roots" => []
+      })
+
+    {:ok, machine} = OpenAgents.Machines.approve_pairing(user, code)
+
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    admitted_at = DateTime.add(now, offset_seconds, :second)
+    state = Map.get(overrides, :state, "running")
+
+    %OpenAgents.Forge.Assignment{}
+    |> OpenAgents.Forge.Assignment.changeset(
+      Map.merge(
+        %{
+          target_kind: "computer",
+          machine_id: machine.id,
+          repository_id: repository().id,
+          issue_id: issue.id,
+          requesting_principal: %{"type" => "user", "id" => user.id},
+          branch: branch,
+          state: state,
+          admitted_at: admitted_at,
+          started_at: admitted_at,
+          finished_at:
+            if(state in OpenAgents.Forge.Assignment.terminal_states(), do: admitted_at),
+          deadline_at: DateTime.add(admitted_at, 3600, :second)
+        },
+        overrides
+      )
+    )
+    |> OpenAgents.Repo.insert!()
+  end
+
   defp repository do
     OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

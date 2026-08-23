@@ -17,6 +17,10 @@ defmodule OpenAgentsWeb.IssueJSON do
   graph is not the same fact as an issue with no prerequisites, and an absent
   progress derivation is not the same fact as an issue nobody has started.
 
+  The `work` array is the read-only issue-to-job linkage: one entry per
+  recorded execution attempt, projected from `forge_assignments`. The issue
+  stays the requested outcome and never becomes a second work record.
+
   Every key this module can put inside the object is enumerated at
   `GET /api/v3`, and `OpenAgentsWeb.ApiExtensionGovernanceTest` fails if one
   is not.
@@ -97,6 +101,7 @@ defmodule OpenAgentsWeb.IssueJSON do
       %{}
       |> put_dependencies(Map.get(assigns, :dependencies), issue)
       |> put_progress(Map.get(assigns, :progress), issue)
+      |> put_work(Map.get(assigns, :work), issue)
 
     if extension == %{}, do: json, else: Map.put(json, :openagents, extension)
   end
@@ -117,6 +122,25 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   defp put_progress(extension, progress, issue) when is_map(progress),
     do: Map.put(extension, :progress, Map.get(progress, issue.id, "to_do"))
+
+  defp put_work(extension, nil, _issue), do: extension
+
+  defp put_work(extension, attempts, issue) when is_map(attempts) do
+    Map.put(extension, :work, attempts |> Map.get(issue.id, []) |> Enum.map(&attempt_json/1))
+  end
+
+  defp attempt_json(attempt) do
+    %{
+      id: attempt.id,
+      target: attempt.target_kind,
+      state: attempt.state,
+      branch: attempt.branch,
+      commit: attempt.terminal_commit,
+      failure_reason: attempt.failure_reason,
+      started_at: attempt.started_at || attempt.admitted_at,
+      finished_at: attempt.finished_at
+    }
+  end
 
   defp total_pages(0, _per_page), do: 1
 

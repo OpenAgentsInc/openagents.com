@@ -1,6 +1,7 @@
 defmodule OpenAgentsWeb.IssueController do
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Agents.Agent
@@ -24,6 +25,7 @@ defmodule OpenAgentsWeb.IssueController do
         dependencies: Issues.dependency_graph(issues),
         progress: Issues.progress_map(issues, reader),
         pull_requests: PullRequests.markers_by_issue_id(issues),
+        work: Assignments.attempts_for_issues(issues),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -128,7 +130,8 @@ defmodule OpenAgentsWeb.IssueController do
             owner: owner,
             repo: repo,
             dependencies: dependencies(issue),
-            progress: progress(issue, actor)
+            progress: progress(issue, actor),
+            work: work(issue)
           )
 
         {:error, %Ecto.Changeset{} = changeset} ->
@@ -173,7 +176,8 @@ defmodule OpenAgentsWeb.IssueController do
       repo: repo,
       dependencies: dependencies(issue),
       progress: progress(issue, conn.assigns[:current_user]),
-      pull_requests: PullRequests.markers_by_issue_id([issue])
+      pull_requests: PullRequests.markers_by_issue_id([issue]),
+      work: work(issue)
     )
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -204,7 +208,8 @@ defmodule OpenAgentsWeb.IssueController do
           owner: owner,
           repo: repo,
           dependencies: dependencies(issue),
-          progress: progress(issue, conn.assigns.current_user)
+          progress: progress(issue, conn.assigns.current_user),
+          work: work(issue)
         )
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -215,6 +220,10 @@ defmodule OpenAgentsWeb.IssueController do
   end
 
   defp dependencies(%Issue{} = issue), do: Issues.dependency_graph([issue])
+
+  # One issue reads through the same page-shaped function the index uses, so
+  # the detail response and a row in the list can never disagree.
+  defp work(%Issue{} = issue), do: Assignments.attempts_for_issues([issue])
 
   # Progress is derived from the boards this reader can open, so an agent
   # authenticating as itself never inherits a private board's column.

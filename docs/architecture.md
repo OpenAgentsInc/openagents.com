@@ -177,6 +177,22 @@ symbolic links, canonical Forge repositories, and application checkouts. The
 model and API request can select a relative file path, but they cannot supply
 the workspace root or mint mutation authority.
 
+`publish_changes` is the only chat tool that turns those workspace mutations
+into a Forge ref. The host derives the repository, remote, and opaque
+`openagents/chat/<run-id>` branch from the authenticated workspace. The caller
+supplies only a commit message and, optionally, the workspace digest it
+observed. Publication requires `repository.write`, current repository
+membership, and an exact approval receipt. It never writes the default branch.
+
+Each admitted tool call creates one `repository_publications` ledger row before
+Git or network effects begin. The row records the argument and workspace
+digests, expected previous branch object ID, published object ID, state, WAL
+sequence, and exact result. A retry with the same tool call ID returns the
+stored result. A retry with different arguments fails, and a branch that no
+longer matches the recorded lease fails without overwriting the new tip. Forge
+acceptance is complete only after the publication resolves the matching push
+receipt from the durable WAL.
+
 Bearer clients use the same account chat entry point through a personal API
 token with `chat:account` scope. Forge mutations continue to require
 `forge:write`; one scope does not imply the other. The authenticated account,

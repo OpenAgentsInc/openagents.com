@@ -60,6 +60,8 @@ defmodule OpenAgents.Tools.Runner do
   end
 
   defp execute_admitted(tool, artifact, call_id, arguments, context, options, started_at) do
+    context = %{context | current_tool_call_id: call_id}
+
     task =
       Task.Supervisor.async_nolink(OpenAgents.ToolTaskSupervisor, fn ->
         tool.implementation.execute(arguments, context)

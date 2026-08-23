@@ -115,6 +115,7 @@ config :openagents, :tools, [
   OpenAgents.Tools.WorkspaceRead,
   OpenAgents.Tools.WorkspaceWrite,
   OpenAgents.Tools.WorkspaceEdit,
+  OpenAgents.Tools.PublishChanges,
   OpenAgents.Tools.ConversationSearch,
   OpenAgents.Tools.ConversationRead,
   OpenAgents.Tools.MemoryList,

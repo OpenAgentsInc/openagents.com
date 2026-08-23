@@ -212,6 +212,18 @@ defmodule OpenAgents.Forge.Browse do
     end
   end
 
+  @doc "The unified diff between two commits, byte-capped with a truncation flag."
+  def diff_range(repo, base, head) do
+    with :ok <- check(repo, head),
+         {:ok, base_full} <- resolve_commit(repo, base),
+         {:ok, head_full} <- resolve_commit_from_cache(repo, head) do
+      case git(repo, ["diff", "-M", "--no-color", "--end-of-options", base_full, head_full]) do
+        {output, 0} -> {:ok, truncate(output, @diff_cap), byte_size(output) > @diff_cap}
+        _ -> {:error, :not_found}
+      end
+    end
+  end
+
   @doc "Directory listing at `ref`/`path` as `[%{name, kind, size}]`, bounded."
   def tree(repo, ref, path \\ "") do
     with :ok <- check(repo, ref),

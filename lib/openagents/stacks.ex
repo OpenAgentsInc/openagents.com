@@ -10,6 +10,7 @@ defmodule OpenAgents.Stacks do
 
   alias OpenAgents.Accounts.User
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.Forge.GitPlane
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
@@ -86,6 +87,68 @@ defmodule OpenAgents.Stacks do
       run_idempotent(repository, actor, "stack_append", idempotency_key, request_digest, fn ->
         append_stack_rows(repository, number, request, actor, idempotency_key, request_digest)
       end)
+    end
+  end
+
+  @doc """
+  The review ranges for a stacked pull request.
+
+  The layer diff runs from the entry's stored boundary OID to its observed
+  head OID, so it holds only this layer's commits. The cumulative preview
+  runs from the current trunk tip to the head and answers what the
+  repository looks like once everything through this position lands. The
+  boundary is `:stale` when the parent branch was rewritten so the stored
+  boundary is no longer reachable from the parent's current tip; a stale
+  layer diff would silently pull lower layers into view.
+  """
+  def review_context(%Repository{} = repository, %PullRequest{} = pull_request) do
+    case active_entry_for_pull_request(pull_request) do
+      nil ->
+        {:error, :not_stacked}
+
+      %StackEntry{} = entry ->
+        stack =
+          Stack
+          |> Repo.get!(entry.stack_id)
+          |> Repo.preload(entries: active_entries_query())
+
+        entry = Enum.find(stack.entries, &(&1.id == entry.id))
+        parent_ref = parent_ref(stack, entry)
+
+        {:ok,
+         %{
+           stack: stack,
+           entry: entry,
+           position: entry.position,
+           size: length(stack.entries),
+           layer_range: {entry.boundary_oid, entry.observed_head_oid},
+           cumulative_range: cumulative_range(repository, stack, entry),
+           boundary_state: boundary_state(repository, entry, parent_ref)
+         }}
+    end
+  end
+
+  defp parent_ref(stack, %StackEntry{position: 1}), do: stack.trunk_ref
+
+  defp parent_ref(stack, entry) do
+    parent = Enum.find(stack.entries, &(&1.position == entry.position - 1))
+    parent.pull_request.head_ref
+  end
+
+  defp cumulative_range(repository, stack, entry) do
+    case Browse.resolve_commit(repository, stack.trunk_ref) do
+      {:ok, trunk_tip} -> {trunk_tip, entry.observed_head_oid}
+      _other -> nil
+    end
+  end
+
+  defp boundary_state(repository, entry, parent_ref) do
+    with {:ok, parent_tip} <- GitPlane.resolve_commit(repository.storage_key, parent_ref),
+         {:ok, reachable} <-
+           GitPlane.ancestor?(repository.storage_key, entry.boundary_oid, parent_tip) do
+      if reachable, do: :intact, else: :stale
+    else
+      _other -> :unknown
     end
   end
 

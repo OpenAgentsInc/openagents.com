@@ -12,6 +12,7 @@ defmodule OpenAgents.ChangelogTest do
   alias OpenAgents.Changelog
   alias OpenAgents.Changelog.{Backfill, Entry}
   alias OpenAgents.Forge.{DeployReceipt, PushReceipt}
+  alias OpenAgents.Transparency.ArtifactLink
 
   setup do
     :persistent_term.erase({OpenAgents.Changelog, :cache})
@@ -65,6 +66,29 @@ defmodule OpenAgents.ChangelogTest do
       |> Repo.insert()
 
     deploy
+  end
+
+  defp insert_artifact_link!(attrs) do
+    user = repository_user_fixture("test-user")
+    repository = repository_fixture(%{})
+
+    {:ok, link} =
+      %ArtifactLink{}
+      |> ArtifactLink.changeset(
+        Map.merge(
+          %{
+            account_id: user.id,
+            repository_id: repository.id,
+            artifact_type: "changelog",
+            artifact_ref: "sha",
+            tier: "dark"
+          },
+          attrs
+        )
+      )
+      |> Repo.insert()
+
+    link
   end
 
   describe "record/1" do
@@ -221,6 +245,147 @@ defmodule OpenAgents.ChangelogTest do
 
       # The principal's id never leaves the projection — role prefix only.
       refute Jason.encode!(payload) =~ "abc123"
+    end
+  end
+
+  describe "timeline/2 redaction" do
+    test "a ledger tier exposes trace_ref, trace_digest, and detail" do
+      override_visibility(%{"openagents.com" => :l2})
+
+      {:ok, _} =
+        Changelog.record(
+          entry_attrs(%{
+            sha: full_sha("feed0101"),
+            summary: "Ledger trace",
+            transparency_tier: "ledger",
+            trace_ref: "trace:v1:ledger",
+            trace_digest: "sha256:ledger",
+            detail: %{"note" => "visible"}
+          })
+        )
+
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
+      assert row.trace_ref == "trace:v1:ledger"
+      assert row.trace_digest == "sha256:ledger"
+      assert row.detail == %{"note" => "visible"}
+    end
+
+    test "a pulse tier exposes metadata but hides detail" do
+      override_visibility(%{"openagents.com" => :l2})
+
+      {:ok, _} =
+        Changelog.record(
+          entry_attrs(%{
+            sha: full_sha("feed0102"),
+            summary: "Pulse trace",
+            transparency_tier: "pulse",
+            trace_ref: "trace:v1:pulse",
+            trace_digest: "sha256:pulse",
+            detail: %{"note" => "hidden"}
+          })
+        )
+
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
+      assert row.trace_ref == "trace:v1:pulse"
+      assert row.trace_digest == "sha256:pulse"
+      assert row.detail == %{}
+    end
+
+    test "a dark tier hides trace_ref, trace_digest, and detail" do
+      override_visibility(%{"openagents.com" => :l2})
+
+      {:ok, _} =
+        Changelog.record(
+          entry_attrs(%{
+            sha: full_sha("feed0103"),
+            summary: "Dark trace",
+            transparency_tier: "dark",
+            trace_ref: "trace:v1:dark",
+            trace_digest: "sha256:dark",
+            detail: %{"note" => "hidden"}
+          })
+        )
+
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
+      assert row.trace_ref == nil
+      assert row.trace_digest == nil
+      assert row.detail == %{}
+    end
+
+    test "an artifact_link overrides the entry transparency_tier" do
+      override_visibility(%{"openagents.com" => :l2})
+
+      link = insert_artifact_link!(%{tier: "pulse"})
+
+      {:ok, _} =
+        Changelog.record(
+          entry_attrs(%{
+            sha: full_sha("feed0104"),
+            summary: "Link-tier trace",
+            transparency_tier: "ledger",
+            artifact_link_id: link.id,
+            trace_ref: "trace:v1:link",
+            trace_digest: "sha256:link",
+            detail: %{"note" => "hidden"}
+          })
+        )
+
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
+      assert row.trace_ref == "trace:v1:link"
+      assert row.trace_digest == "sha256:link"
+      assert row.detail == %{}
+    end
+
+    test "a revoked artifact_link hides all trace and detail" do
+      override_visibility(%{"openagents.com" => :l2})
+
+      link = insert_artifact_link!(%{tier: "glass"})
+
+      link
+      |> OpenAgents.Transparency.revoke("test", Ecto.UUID.generate())
+      |> Repo.update!()
+
+      {:ok, _} =
+        Changelog.record(
+          entry_attrs(%{
+            sha: full_sha("feed0105"),
+            summary: "Revoked trace",
+            artifact_link_id: link.id,
+            trace_ref: "trace:v1:revoked",
+            trace_digest: "sha256:revoked",
+            detail: %{"note" => "hidden"}
+          })
+        )
+
+      assert {:ok, [row]} = Changelog.timeline("openagents.com", refresh: true)
+      assert row.trace_ref == nil
+      assert row.trace_digest == nil
+      assert row.detail == %{}
+    end
+  end
+
+  describe "projection/2 redaction" do
+    test "the API payload reflects redacted trace and detail" do
+      override_visibility(%{"openagents.com" => :l2})
+
+      {:ok, _} =
+        Changelog.record(
+          entry_attrs(%{
+            sha: full_sha("feed0106"),
+            summary: "Projected redaction",
+            transparency_tier: "pulse",
+            trace_ref: "trace:v1:projected",
+            trace_digest: "sha256:projected",
+            detail: %{"note" => "hidden"}
+          })
+        )
+
+      assert {:ok, payload} = Changelog.projection("openagents.com", refresh: true)
+
+      assert [entry] = payload["entries"]
+      assert entry["trace_ref"] == "trace:v1:projected"
+      assert entry["trace_digest"] == "sha256:projected"
+      assert entry["detail"] == %{}
     end
   end
 

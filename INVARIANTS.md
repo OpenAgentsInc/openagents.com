@@ -255,17 +255,18 @@ Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.DualPrincipalAuth`,
 `test/openagents/agents_test.exs`, and
 `test/openagents_web/controllers/agent_controller_test.exs`.
 
-### IDENTITY-005 — Box control is account-scoped and human-only
+### IDENTITY-005 — Box control is account-scoped and target-specific
 
 Status: Current
 
-The `box:control` API scope is independent from forge, deployment, chat, and
-agent participation scopes. Only a human account token can use it in this
-slice. Every request names a conversation owned by that account, and a foreign
-conversation or Box is indistinguishable from a missing one. Agent Box control
-through an approved human link is deferred to the linked-principal contract.
+The `box:control` API scope is independent from forge, deployment, chat,
+agent participation, and `computer:control` scopes. A request can use it only
+with a human account token or an agent whose linked human granted exactly the
+Box target kind. Every request names a conversation owned by the effective
+human account, and a foreign conversation or Box is indistinguishable from a
+missing one.
 
-Evidence: `OpenAgentsWeb.Plugs.BoxControlAuth`, `OpenAgents.Box`,
+Evidence: `OpenAgentsWeb.Plugs.AssignmentControlAuth`, `OpenAgents.Box`,
 `OpenAgentsWeb.BoxController`, and
 `test/openagents_web/controllers/box_controller_test.exs`.
 
@@ -296,6 +297,24 @@ historical agent authorship remains unchanged.
 
 Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 and `test/openagents/agents_test.exs`.
+
+### IDENTITY-008 — Computer control is independent and machine-bound
+
+Status: Current
+
+The `computer:control` API scope is independent from `box:control` in both
+directions. A human account token requires the Computer scope, and a delegated
+agent requires an active `target_kind: computer` grant from a linked human.
+Computer routes do not accept a Box grant, and Box routes do not accept a
+Computer grant. The local computer controller remains authoritative over
+declared roots, presence, probe-reported ACP agents, prompt bounds, and
+execution; the API cannot widen a tier, add a root, or request an unadvertised
+capability. Computer projections never expose a machine token, token digest, or
+raw probe document.
+
+Evidence: `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
+`OpenAgents.ComputerAgentJobs`, `OpenAgentsWeb.ComputersController`,
+and `test/openagents_web/controllers/computer_control_api_test.exs`.
 
 ### CAPACITY-002 — Box fan-out admission is bounded and durable
 
@@ -2381,6 +2400,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
+| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |

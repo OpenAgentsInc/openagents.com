@@ -21,6 +21,33 @@ defmodule OpenAgentsWeb.ComputersController do
     })
   end
 
+  def probe(conn, %{"machine_id" => machine_id}) do
+    with {:ok, machine} <- Machines.get_machine(conn.assigns.current_user.id, machine_id),
+         :ok <- probe_enabled(),
+         :ok <- probe_active(machine),
+         {:ok, report} <- Computer.request_probe(machine.id),
+         {:ok, machine} <- Machines.store_probe(machine, report) do
+      json(conn, %{"computer" => computer_projection(machine)})
+    else
+      {:error, :machine_not_found} ->
+        error(conn, :not_found, "computer_not_found")
+
+      {:error, :computer_controller_disabled} ->
+        error(conn, :not_found, "computer_controller_disabled")
+
+      {:error, :machine_revoked} ->
+        error(conn, :conflict, "computer_revoked")
+
+      {:error, :machine_offline} ->
+        error(conn, :conflict, "computer_offline")
+
+      {:error, _reason} ->
+        error(conn, :bad_gateway, "computer_probe_failed")
+    end
+  end
+
+  def probe(conn, _params), do: error(conn, :not_found, "computer_not_found")
+
   def approve_pairing(conn, %{"id" => pairing_id, "code" => code}) do
     if Computer.enabled?() do
       case Machines.approve_pairing(conn.assigns.current_user, pairing_id, code) do
@@ -58,6 +85,13 @@ defmodule OpenAgentsWeb.ComputersController do
     do: error(conn, :conflict, "computer_capacity_reached")
 
   defp pairing_error(conn, _reason), do: error(conn, :unprocessable_entity, "pairing_failed")
+
+  defp probe_enabled do
+    if Computer.enabled?(), do: :ok, else: {:error, :computer_controller_disabled}
+  end
+
+  defp probe_active(%Machine{status: "active"}), do: :ok
+  defp probe_active(%Machine{}), do: {:error, :machine_revoked}
 
   defp error(conn, status, code) do
     conn |> put_status(status) |> json(%{"error" => code})

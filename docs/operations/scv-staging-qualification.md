@@ -8,6 +8,15 @@ Use this procedure to prove the first complete SCV image in staging. This lane
 qualifies one OpenCode-driven SCV run. It does not admit repository writes,
 candidate pushes, Forge promotion, autonomous deployment, or production use.
 
+## Handle the local SCV test artifact
+
+The full local precommit suite can report a failure in
+`test/openagents/scv/run_test.exs` that does not reproduce on the clean
+revision before issue #109 or on a fresh isolated build of the current tree.
+Treat that result as a stale-build or full-suite artifact only after both
+baseline checks pass. The artifact does not qualify or disqualify an SCV
+staging run.
+
 ## Safety boundary
 
 The current `staging.openagents.com` service and production resources share the

@@ -1,5 +1,5 @@
 defmodule OpenAgents.Agents.AgentBoxGrant do
-  @moduledoc "A revocable human grant of Box control to an agent."
+  @moduledoc "A revocable human grant of scoped computer control to an agent."
 
   use Ecto.Schema
   import Ecto.Changeset
@@ -12,6 +12,7 @@ defmodule OpenAgents.Agents.AgentBoxGrant do
     belongs_to :agent, OpenAgents.Agents.Agent
     belongs_to :user, OpenAgents.Accounts.User
     belongs_to :granted_by, OpenAgents.Accounts.User
+    field :target_kind, :string, default: "box"
     field :scope, :string, default: "box:control"
     field :granted_at, :utc_datetime_usec
     field :revoked_at, :utc_datetime_usec
@@ -20,15 +21,35 @@ defmodule OpenAgents.Agents.AgentBoxGrant do
 
   def changeset(grant, attrs) do
     grant
-    |> cast(attrs, [:scope, :granted_at, :revoked_at])
+    |> cast(attrs, [:target_kind, :scope, :granted_at, :revoked_at])
     |> put_programmatic(attrs, :agent_id)
     |> put_programmatic(attrs, :user_id)
     |> put_programmatic(attrs, :granted_by_id)
-    |> validate_required([:agent_id, :user_id, :granted_by_id, :scope, :granted_at])
-    |> validate_inclusion(:scope, ["box:control"])
+    |> validate_required([
+      :agent_id,
+      :user_id,
+      :granted_by_id,
+      :target_kind,
+      :scope,
+      :granted_at
+    ])
+    |> validate_inclusion(:target_kind, ["box", "computer"])
+    |> validate_control_scope()
     |> foreign_key_constraint(:agent_id)
     |> foreign_key_constraint(:user_id)
     |> foreign_key_constraint(:granted_by_id)
+  end
+
+  defp validate_control_scope(changeset) do
+    target_kind = get_field(changeset, :target_kind)
+    scope = get_field(changeset, :scope)
+
+    if (target_kind == "box" and scope == "box:control") or
+         (target_kind == "computer" and scope == "computer:control") do
+      changeset
+    else
+      add_error(changeset, :scope, "does not match target kind")
+    end
   end
 
   defp put_programmatic(changeset, attrs, field) do

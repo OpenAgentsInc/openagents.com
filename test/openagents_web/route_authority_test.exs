@@ -160,13 +160,13 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:chat_account_api]
   end
 
-  test "Box control uses its own human account bearer pipeline" do
+  test "Box control uses its human or delegated bearer pipeline" do
     route = route!(:get, "/api/v3/conversations/:conversation_id/boxes")
     create = route!(:post, "/api/v3/conversations/:conversation_id/boxes")
     command = route!(:post, "/api/v3/conversations/:conversation_id/boxes/:box_id/commands")
 
     assert route.class == :authenticated_api
-    assert route.principal == "human account bearer token"
+    assert route.principal == "human or delegated box-control bearer token"
     assert route.scope == "box:control"
     refute route.mutation
     assert create.mutation

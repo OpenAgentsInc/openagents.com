@@ -239,27 +239,60 @@ defmodule OpenAgentsWeb.RouteAuthority do
         true
       )
 
+  defp policy(%{path: path, verb: verb})
+       when path in [
+              "/api/v3/computers",
+              "/api/v3/computers/:machine_id/probe",
+              "/api/v3/computers/:machine_id/agent-jobs",
+              "/api/v3/computer-agent-jobs/:id"
+            ] do
+    declaration(
+      :authenticated_api,
+      "human or delegated computer-control bearer token",
+      "computer:control",
+      verb in [:post, :delete]
+    )
+  end
+
   defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes", verb: verb})
        when verb in [:get, :post],
        do:
          declaration(
            :authenticated_api,
-           "human account bearer token",
+           "human or delegated box-control bearer token",
            "box:control",
            verb == :post
          )
 
   defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes/:box_id", verb: :get}),
-    do: declaration(:authenticated_api, "human account bearer token", "box:control", false)
+    do:
+      declaration(
+        :authenticated_api,
+        "human or delegated box-control bearer token",
+        "box:control",
+        false
+      )
 
   defp policy(%{
          path: "/api/v3/conversations/:conversation_id/boxes/:box_id/commands",
          verb: :post
        }),
-       do: declaration(:authenticated_api, "human account bearer token", "box:control", true)
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           true
+         )
 
   defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes/:box_id/stop", verb: :post}),
-    do: declaration(:authenticated_api, "human account bearer token", "box:control", true)
+    do:
+      declaration(
+        :authenticated_api,
+        "human or delegated box-control bearer token",
+        "box:control",
+        true
+      )
 
   defp policy(%{
          path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs",
@@ -269,7 +302,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
        do:
          declaration(
            :authenticated_api,
-           "human account bearer token",
+           "human or delegated box-control bearer token",
            "box:control",
            verb == :post
          )
@@ -278,19 +311,37 @@ defmodule OpenAgentsWeb.RouteAuthority do
          path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id",
          verb: :get
        }),
-       do: declaration(:authenticated_api, "human account bearer token", "box:control", false)
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           false
+         )
 
   defp policy(%{
          path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id/output",
          verb: :get
        }),
-       do: declaration(:authenticated_api, "human account bearer token", "box:control", false)
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           false
+         )
 
   defp policy(%{
          path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id/cancel",
          verb: :post
        }),
-       do: declaration(:authenticated_api, "human account bearer token", "box:control", true)
+       do:
+         declaration(
+           :authenticated_api,
+           "human or delegated box-control bearer token",
+           "box:control",
+           true
+         )
 
   defp policy(%{path: "/api/operator/artifact-listings" <> _path, verb: verb}),
     do:

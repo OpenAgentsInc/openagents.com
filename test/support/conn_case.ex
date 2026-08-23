@@ -135,6 +135,11 @@ defmodule OpenAgentsWeb.ConnCase do
     put_api_token_for_user(conn, user, ["box:control"])
   end
 
+  def put_computer_api_token(conn, key) when is_binary(key) do
+    user = github_user("api-token-" <> key)
+    put_api_token_for_user(conn, user, ["computer:control"])
+  end
+
   defp put_api_token_for_user(conn, user, scopes) do
     {:ok, _credential, plaintext} =
       OpenAgents.ApiTokens.create(user, %{

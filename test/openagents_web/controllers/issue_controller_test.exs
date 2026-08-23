@@ -170,6 +170,34 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert before_author["agent"] == true
       refute Map.has_key?(before_author, "owner")
     end
+
+    test "a linked agent cannot close an issue through the human-only update route", %{conn: conn} do
+      owner = repository_user_fixture("issue-close-agent-owner")
+      repository = repository_with_member_fixture(owner)
+      {:ok, issue} = Issues.create_issue(repository, %{title: "Must remain open"})
+
+      {:ok, agent, credential} =
+        Agents.register(%{
+          handle: "issue-close-agent",
+          display_name: "Issue close agent",
+          registration_ip: "192.0.2.54"
+        })
+
+      {:ok, link} = Agents.request_link(agent, owner)
+      {:ok, _linked} = Agents.accept_link(owner, link.id)
+      assert {:ok, _grant} = Agents.grant_box_control(owner, agent)
+
+      response =
+        conn
+        |> put_req_header("authorization", "Bearer #{credential}")
+        |> patch(
+          "/api/v3/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
+          %{state: "closed"}
+        )
+
+      assert json_response(response, 401) == %{"error" => "invalid_api_token"}
+      assert Repo.get!(OpenAgents.Issues.Issue, issue.id).state == "open"
+    end
   end
 
   describe "show" do

@@ -63,13 +63,25 @@ defmodule OpenAgentsWeb.Router do
   pipeline :box_control_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
-    plug OpenAgentsWeb.Plugs.BoxControlAuth, scope: "box:control"
+
+    plug OpenAgentsWeb.Plugs.AssignmentControlAuth,
+      scope: "box:control",
+      target_kind: "box"
   end
 
   pipeline :assignment_control_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
     plug OpenAgentsWeb.Plugs.AssignmentControlAuth, scope: "box:control"
+  end
+
+  pipeline :computer_control_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+
+    plug OpenAgentsWeb.Plugs.AssignmentControlAuth,
+      scope: "computer:control",
+      target_kind: "computer"
   end
 
   # The deployment control plane authenticates two principals: a human holding
@@ -392,6 +404,18 @@ defmodule OpenAgentsWeb.Router do
 
     post "/agents/:handle/box-control", AgentController, :grant_box_control
     delete "/agents/:handle/box-control", AgentController, :revoke_box_control
+    post "/agents/:handle/computer-control", AgentController, :grant_computer_control
+    delete "/agents/:handle/computer-control", AgentController, :revoke_computer_control
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :computer_control_api
+
+    get "/computers", ComputersController, :index
+    post "/computers/:machine_id/probe", ComputersController, :probe
+    post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
+    get "/computer-agent-jobs/:id", ComputerAgentJobsController, :show
+    delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
   end
 
   scope "/api/v3", OpenAgentsWeb do

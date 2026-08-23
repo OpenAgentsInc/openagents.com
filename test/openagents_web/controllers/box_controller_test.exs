@@ -1,12 +1,15 @@
 defmodule OpenAgentsWeb.BoxControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
-  alias OpenAgents.{Conversations, Repo}
+  alias OpenAgents.{Agents, Conversations, Issues, Repo}
   alias OpenAgents.Box.ConversationBox
+  alias OpenAgents.Issues.Comment
 
   setup {Req.Test, :verify_on_exit!}
 
   setup do
+    Req.Test.set_req_test_to_shared()
+
     original_api = Application.get_env(:openagents, :box_api)
     original_key = Application.get_env(:openagents, :box_api_key)
 
@@ -152,6 +155,108 @@ defmodule OpenAgentsWeb.BoxControllerTest do
                "error" => %{"code" => "agent_box_control_forbidden"}
              }
     end
+  end
+
+  test "a linked agent can list and stop a Box, then loses access when revoked", %{conn: conn} do
+    owner = github_user("box-agent-control-owner")
+    {:ok, conversation} = Conversations.ensure_conversation(owner)
+    box = insert_box(conversation.id, "bx_8bhkse3n")
+
+    {:ok, agent, credential} =
+      Agents.register(%{
+        "handle" => "box-agent-control",
+        "display_name" => "Box control agent",
+        "registration_ip" => "198.51.100.61"
+      })
+
+    {:ok, link} = Agents.request_link(agent, owner)
+    {:ok, _linked} = Agents.accept_link(owner, link.id)
+    assert {:ok, _grant} = Agents.grant_box_control(owner, agent)
+    authorization = "Bearer " <> credential
+
+    assert %{"boxes" => [%{"box_id" => "bx_8bhkse3n"}]} =
+             conn
+             |> put_req_header("authorization", authorization)
+             |> get(box_path(conversation.id))
+             |> json_response(200)
+
+    Req.Test.expect(__MODULE__, fn request ->
+      assert request.method == "POST"
+      assert request.request_path == "/boxes/#{box.box_id}/stop"
+      Req.Test.json(request, box_body(%{"state" => "archiving"}))
+    end)
+
+    assert %{"box" => %{"box_id" => "bx_8bhkse3n", "state" => "archiving"}} =
+             conn
+             |> put_req_header("authorization", authorization)
+             |> post("#{box_path(conversation.id)}/#{box.box_id}/stop", %{})
+             |> json_response(200)
+
+    assert {:ok, _revoked} = Agents.revoke_box_control(owner, agent)
+
+    assert conn
+           |> put_req_header("authorization", authorization)
+           |> get(box_path(conversation.id))
+           |> json_response(403) == %{
+             "error" => %{"code" => "agent_box_control_forbidden"}
+           }
+  end
+
+  test "a linked agent assignment uses the granting human's conversation owner", %{conn: conn} do
+    owner = repository_user_fixture("box-assignment-agent-owner")
+    {:ok, conversation} = Conversations.ensure_conversation(owner)
+    box = insert_box(conversation.id, "bx_8bhkse3n")
+    repository = repository_with_member_fixture(owner)
+    {:ok, issue} = Issues.create_issue(repository, %{title: "Agent assignment target"})
+
+    {:ok, agent, credential} =
+      Agents.register(%{
+        "handle" => "box-assignment-agent",
+        "display_name" => "Box assignment agent",
+        "registration_ip" => "198.51.100.62"
+      })
+
+    {:ok, link} = Agents.request_link(agent, owner)
+    {:ok, _linked} = Agents.accept_link(owner, link.id)
+    assert {:ok, _grant} = Agents.grant_box_control(owner, agent)
+
+    Req.Test.expect(__MODULE__, fn request ->
+      assert request.method == "GET"
+      assert request.request_path == "/boxes/#{box.box_id}"
+      Req.Test.json(request, box_body())
+    end)
+
+    Req.Test.expect(__MODULE__, fn request ->
+      assert request.method == "POST"
+      assert request.request_path == "/boxes/#{box.box_id}/commands"
+      Req.Test.json(request, %{"stdout" => "123\n"})
+    end)
+
+    Req.Test.stub(__MODULE__, fn request ->
+      Req.Test.json(request, %{"stdout" => "OA_PRESENT=0\n"})
+    end)
+
+    response =
+      conn
+      |> put_req_header("authorization", "Bearer " <> credential)
+      |> post(
+        "/api/v3/conversations/#{conversation.id}/boxes/#{box.box_id}/assignments",
+        %{
+          "repository_id" => repository.id,
+          "issue_number" => issue.number,
+          "branch" => "agent/issue-#{issue.number}",
+          "command" => "echo assigned"
+        }
+      )
+      |> json_response(202)
+
+    assignment_id = response["assignment"]["id"]
+    assignment = Repo.get!(OpenAgents.Forge.Assignment, assignment_id)
+    assert assignment.requesting_principal["type"] == "agent"
+    assert assignment.requesting_principal["id"] == agent.id
+    assert Agents.box_control_owner(agent).id == owner.id
+    assert %Comment{author_agent_id: agent_id} = Repo.get_by(Comment, issue_id: issue.id)
+    assert agent_id == agent.id
   end
 
   test "a foreign box returns 404 without an outbound provider request", %{conn: conn} do

@@ -56,6 +56,11 @@ defmodule OpenAgents.Support.FakeController do
     {:noreply, state}
   end
 
+  def handle_info({:computer_request, kind, request_id, caller}, state) do
+    state.script.({kind, request_id, %{}, caller})
+    {:noreply, state}
+  end
+
   def handle_info({:computer_cancel, _request_id} = message, state) do
     if is_pid(state.observer), do: send(state.observer, message)
     {:noreply, state}

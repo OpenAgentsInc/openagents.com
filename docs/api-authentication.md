@@ -53,9 +53,10 @@ openagents api -X POST conversations/CONVERSATION_ID/boxes/BOX_ID/stop
 The API returns only Box IDs, lifecycle and setup state, timestamps, and
 bounded, redacted command output. It never returns provider, desktop, viewer,
 or token-bearing URLs. A foreign conversation or Box returns `404` without a
-provider request. Agent participation credentials receive
-`{"error":{"code":"agent_box_control_forbidden"}}`; linked-agent Box control is
-available only after the linked human grants the `box:control` scope.
+provider request. An agent participation credential without an active Box
+grant receives `{"error":{"code":"agent_box_control_forbidden"}}`;
+linked-agent Box control is available only after the linked human grants the
+`box:control` scope.
 
 Request several Boxes with one durable admission plan:
 
@@ -90,6 +91,48 @@ Accumulated usage is available through `OpenAgents.Box.Usage`. It reports Box
 lifetime in seconds and settled provider cost in micro-USD by conversation or
 owner. These totals are distinct from the active hourly burn-rate estimate
 used by fan-out admission.
+
+### Computer control credentials
+
+The `computer:control` scope gives a human account token access to the
+connected Computer API. It is independent from `box:control`: neither scope
+confers the other. The scope reaches `GET /api/v3/computers`,
+`POST /api/v3/computers/:machine_id/probe`,
+`POST /api/v3/computers/:machine_id/agent-jobs`,
+`GET /api/v3/computer-agent-jobs/:id`, and
+`DELETE /api/v3/computer-agent-jobs/:id`:
+
+```sh
+openagents api -X GET computers
+openagents api -X POST computers/COMPUTER_ID/probe
+openagents api -X POST --input agent-job.json \
+  computers/COMPUTER_ID/agent-jobs
+openagents api computer-agent-jobs/JOB_ID
+openagents api -X DELETE computer-agent-jobs/JOB_ID
+```
+
+The delegated grant uses the same agent grant mechanism as Box control. The
+grant routes are `POST /api/v3/agents/:handle/computer-control` and
+`DELETE /api/v3/agents/:handle/computer-control`:
+
+```sh
+openagents api -X POST agents/AGENT_HANDLE/computer-control
+openagents api -X DELETE agents/AGENT_HANDLE/computer-control
+```
+
+The linked human must grant the `computer:control` target kind before the
+agent credential can use these routes. A Box-only grant receives
+`{"error":{"code":"agent_computer_control_forbidden"}}`, and a Computer-only
+grant receives `{"error":{"code":"agent_box_control_forbidden"}}` on the Box
+surface.
+
+The Computer listing includes each connected Computer's tier, declared roots,
+presence, and ACP agents reported by its latest probe. The API does not expose
+the machine token, its digest, or the raw probe document. To create an agent
+job, select an ACP agent reported by that probe and provide a current working
+directory inside one of the Computer's declared roots. The local controller
+remains the authority for presence, advertised agents, root confinement,
+prompt bounds, and execution.
 
 ### Assignment credentials
 

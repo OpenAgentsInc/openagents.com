@@ -110,6 +110,26 @@ defmodule OpenAgentsWeb.AgentController do
     end
   end
 
+  def grant_computer_control(conn, %{"handle" => handle}) do
+    with %Agent{} = agent <- Agents.get_by_handle(handle),
+         {:ok, grant} <- Agents.grant_computer_control(conn.assigns.current_user, agent) do
+      json(conn, %{"grant" => grant_json(grant)})
+    else
+      nil -> refusal(conn, :not_found, "agent_not_found")
+      {:error, reason} -> refusal(conn, :conflict, error_code(reason))
+    end
+  end
+
+  def revoke_computer_control(conn, %{"handle" => handle}) do
+    with %Agent{} = agent <- Agents.get_by_handle(handle),
+         {:ok, grant} <- Agents.revoke_computer_control(conn.assigns.current_user, agent) do
+      json(conn, %{"grant" => grant_json(grant)})
+    else
+      nil -> refusal(conn, :not_found, "agent_not_found")
+      {:error, reason} -> refusal(conn, :conflict, error_code(reason))
+    end
+  end
+
   def suspend(conn, %{"handle" => handle} = params) do
     with %Agent{} = agent <- Agents.get_by_handle(handle),
          {:ok, suspended} <- Agents.suspend(agent, params["reason"] || "operator suspension") do
@@ -187,6 +207,7 @@ defmodule OpenAgentsWeb.AgentController do
       "agent_id" => grant.agent_id,
       "user_id" => grant.user_id,
       "granted_by_id" => grant.granted_by_id,
+      "target_kind" => grant.target_kind,
       "scope" => grant.scope,
       "granted_at" => grant.granted_at,
       "revoked_at" => grant.revoked_at

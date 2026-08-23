@@ -14,7 +14,13 @@ defmodule OpenAgents.ApiTokens do
   # `deployments:promote` fleet scope: holding it lets a caller address the
   # deployment API, while repository membership and environment policy still
   # decide what it may deploy.
-  @allowed_scopes ["chat:account", "forge:write", "deployments:write", "box:control"]
+  @allowed_scopes [
+    "chat:account",
+    "forge:write",
+    "deployments:write",
+    "box:control",
+    "computer:control"
+  ]
   @maximum_lifetime_days 90
 
   @spec create(User.t(), map()) ::

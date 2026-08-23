@@ -311,14 +311,30 @@ defmodule OpenAgents.Agents do
   @doc "Grants a linked agent revocable Box control."
   @spec grant_box_control(User.t(), Agent.t()) ::
           {:ok, AgentBoxGrant.t()} | {:error, atom()}
-  def grant_box_control(%User{id: user_id}, %Agent{id: agent_id}) do
+  def grant_box_control(%User{} = user, %Agent{} = agent),
+    do: grant_control(user, agent, "box")
+
+  @doc "Grants a linked agent revocable Computer control."
+  @spec grant_computer_control(User.t(), Agent.t()) ::
+          {:ok, AgentBoxGrant.t()} | {:error, atom()}
+  def grant_computer_control(%User{} = user, %Agent{} = agent),
+    do: grant_control(user, agent, "computer")
+
+  @doc "Grants a linked agent one explicit control target."
+  @spec grant_control(User.t(), Agent.t(), String.t()) ::
+          {:ok, AgentBoxGrant.t()} | {:error, atom()}
+  def grant_control(%User{id: user_id}, %Agent{id: agent_id}, target_kind)
+      when target_kind in ["box", "computer"] do
     with true <- linked?(agent_id, user_id) do
+      scope = if target_kind == "box", do: "box:control", else: "computer:control"
+
       %AgentBoxGrant{}
       |> AgentBoxGrant.changeset(%{
         agent_id: agent_id,
         user_id: user_id,
         granted_by_id: user_id,
-        scope: "box:control",
+        target_kind: target_kind,
+        scope: scope,
         granted_at: DateTime.utc_now()
       })
       |> Repo.insert()
@@ -329,12 +345,28 @@ defmodule OpenAgents.Agents do
 
   @doc "Revokes an agent's active Box-control grant."
   @spec revoke_box_control(User.t(), Agent.t()) :: {:ok, AgentBoxGrant.t()} | {:error, atom()}
-  def revoke_box_control(%User{id: user_id}, %Agent{id: agent_id}) do
+  def revoke_box_control(%User{} = user, %Agent{} = agent),
+    do: revoke_control(user, agent, "box")
+
+  @doc "Revokes an agent's active Computer-control grant."
+  @spec revoke_computer_control(User.t(), Agent.t()) ::
+          {:ok, AgentBoxGrant.t()} | {:error, atom()}
+  def revoke_computer_control(%User{} = user, %Agent{} = agent),
+    do: revoke_control(user, agent, "computer")
+
+  @doc "Revokes an agent's active grant for one explicit control target."
+  @spec revoke_control(User.t(), Agent.t(), String.t()) ::
+          {:ok, AgentBoxGrant.t()} | {:error, atom()}
+  def revoke_control(%User{id: user_id}, %Agent{id: agent_id}, target_kind)
+      when target_kind in ["box", "computer"] do
+    scope = if target_kind == "box", do: "box:control", else: "computer:control"
+
     case Repo.one(
            from grant in AgentBoxGrant,
              where:
                grant.agent_id == ^agent_id and grant.user_id == ^user_id and
-                 grant.scope == "box:control" and is_nil(grant.revoked_at)
+                 grant.target_kind == ^target_kind and grant.scope == ^scope and
+                 is_nil(grant.revoked_at)
          ) do
       %AgentBoxGrant{} = grant ->
         grant |> AgentBoxGrant.changeset(%{revoked_at: DateTime.utc_now()}) |> Repo.update()
@@ -347,11 +379,26 @@ defmodule OpenAgents.Agents do
   @doc "Checks whether a linked agent has an active Box-control grant."
   @spec box_control_granted?(Agent.t()) :: boolean()
   def box_control_granted?(%Agent{id: agent_id}) do
+    control_granted?(%Agent{id: agent_id}, "box")
+  end
+
+  @doc "Checks whether a linked agent has an active Computer-control grant."
+  @spec computer_control_granted?(Agent.t()) :: boolean()
+  def computer_control_granted?(%Agent{id: agent_id}) do
+    control_granted?(%Agent{id: agent_id}, "computer")
+  end
+
+  @doc "Checks whether a linked agent has an active grant for a target kind."
+  @spec control_granted?(Agent.t(), String.t()) :: boolean()
+  def control_granted?(%Agent{id: agent_id}, target_kind)
+      when target_kind in ["box", "computer"] do
+    scope = if target_kind == "box", do: "box:control", else: "computer:control"
+
     Repo.exists?(
       from grant in AgentBoxGrant,
         where:
-          grant.agent_id == ^agent_id and grant.scope == "box:control" and
-            is_nil(grant.revoked_at),
+          grant.agent_id == ^agent_id and grant.target_kind == ^target_kind and
+            grant.scope == ^scope and is_nil(grant.revoked_at),
         join: link in AgentUserLink,
         on:
           link.agent_id == grant.agent_id and link.user_id == grant.user_id and
@@ -362,6 +409,21 @@ defmodule OpenAgents.Agents do
   @doc "Returns the human account that currently grants an agent Box control."
   @spec box_control_owner(Agent.t()) :: User.t() | nil
   def box_control_owner(%Agent{id: agent_id}) do
+    control_owner(%Agent{id: agent_id}, "box")
+  end
+
+  @doc "Returns the human account that currently grants an agent Computer control."
+  @spec computer_control_owner(Agent.t()) :: User.t() | nil
+  def computer_control_owner(%Agent{id: agent_id}) do
+    control_owner(%Agent{id: agent_id}, "computer")
+  end
+
+  @doc "Returns the linked human account granting an agent a target kind."
+  @spec control_owner(Agent.t(), String.t()) :: User.t() | nil
+  def control_owner(%Agent{id: agent_id}, target_kind)
+      when target_kind in ["box", "computer"] do
+    scope = if target_kind == "box", do: "box:control", else: "computer:control"
+
     Repo.one(
       from grant in AgentBoxGrant,
         join: link in AgentUserLink,
@@ -371,8 +433,9 @@ defmodule OpenAgents.Agents do
         join: user in User,
         on: user.id == grant.user_id,
         where:
-          grant.agent_id == ^agent_id and grant.scope == "box:control" and
-            is_nil(grant.revoked_at)
+          grant.agent_id == ^agent_id and grant.target_kind == ^target_kind and
+            grant.scope == ^scope and is_nil(grant.revoked_at),
+        select: user
     )
   end
 

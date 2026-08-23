@@ -26,6 +26,11 @@
 ^docs/operations/production-deploy-runbook\.md:
 ^ops/production/preflight\.sh:
 
+# The forum import record names the destination database of every run. Naming
+# it is the point of the record: an unnamed destination is how a development
+# import passed for a production one.
+^docs/evidence/forum-port-migration\.md:
+
 # Current architecture and decisions discuss the Sarah persona boundary.
 ^README\.md:[0-9]+:.*[Ss][Aa][Rr][Aa][Hh]
 ^docs/architecture\.md:

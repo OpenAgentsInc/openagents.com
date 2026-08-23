@@ -266,7 +266,7 @@ defmodule OpenAgents.Chat.OpenRouter do
   defp chat_request(request), do: request
 
   defp continue_responses_tool_calls(
-         {:ok, %{"tool_calls" => tool_calls, "output" => provider_output}},
+         {:ok, %{"tool_calls" => tool_calls, "output" => provider_output} = completion},
          api_key,
          payload,
          on_event,
@@ -279,8 +279,9 @@ defmodule OpenAgents.Chat.OpenRouter do
          payload <- Map.update!(payload, "input", &(&1 ++ provider_output ++ tool_outputs)),
          {:ok, response} <- responses_stream_request(api_key, payload, options),
          result <- consume_responses_stream(response, on_event, payload["model"]) do
-      continue_responses_tool_calls(
-        result,
+      result
+      |> carry_usage(Map.get(completion, "usage"))
+      |> continue_responses_tool_calls(
         api_key,
         payload,
         on_event,
@@ -312,6 +313,32 @@ defmodule OpenAgents.Chat.OpenRouter do
          _rounds_remaining
        ),
        do: result
+
+  # A turn spends one provider request per tool round, and each response reports
+  # only what that round consumed. Carrying the earlier counts forward keeps the
+  # whole turn in the usage the completion reports.
+  defp carry_usage({:ok, completion}, earlier) when is_map(earlier),
+    do: {:ok, Map.put(completion, "usage", add_usage(Map.get(completion, "usage"), earlier))}
+
+  defp carry_usage(result, _earlier), do: result
+
+  # A count no round reported stays absent instead of becoming a zero.
+  defp add_usage(usage, earlier) when is_map(usage) and is_map(earlier),
+    do:
+      Map.merge(usage, earlier, fn _key, value, earlier_value ->
+        add_count(value, earlier_value)
+      end)
+
+  defp add_usage(nil, earlier), do: earlier
+  defp add_usage(usage, _earlier), do: usage
+
+  defp add_count(value, earlier) when is_number(value) and is_number(earlier),
+    do: value + earlier
+
+  defp add_count(value, earlier) when is_map(value) and is_map(earlier),
+    do: add_usage(value, earlier)
+
+  defp add_count(value, _earlier), do: value
 
   defp execute_tool_calls(tool_calls, on_event, tool_runtime) do
     result =

@@ -140,6 +140,45 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
     refute has_element?(view, "#chat-console-evidence-#{run_id}")
   end
 
+  test "a turn that reasoned without a reasoning count omits the category", %{conn: conn} do
+    key = "console-unmetered-reasoning-operator"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    streamer = fn _request, callback, _options ->
+      callback.({:reasoning_delta, "Weighing the fleet."})
+      callback.({:text_delta, "The fleet is idle."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "The fleet is idle.",
+         "reasoning_summary" => "Weighing the fleet.",
+         "usage" => %{
+           "input_tokens" => 24,
+           "output_tokens" => 8,
+           "total_tokens" => 32,
+           "output_tokens_details" => %{"reasoning_tokens" => 0}
+         }
+       }}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Report the fleet.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    assert has_element?(view, "#chat-console-usage-#{run_id}", "Input 24")
+    refute has_element?(view, "#chat-console-usage-#{run_id}", "Reasoning")
+    assert has_element?(view, "#chat-console-token-input", "24")
+    refute has_element?(view, "#chat-console-token-reasoning")
+  end
+
   test "a completed turn shows a context meter where a window is configured", %{conn: conn} do
     key = "console-context-operator"
     user = github_user(key)

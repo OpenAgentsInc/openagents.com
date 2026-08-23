@@ -373,7 +373,7 @@ defmodule OpenAgents.Chat.AccountTurns do
   defp finish_run(run_id, {:ok, completion}) do
     # Token counts are read before redaction, which blanks every field whose
     # name contains `token`, and are stored beside the redacted completion.
-    usage = usage_counts(completion["usage"])
+    usage = usage_counts(completion)
     completion = OpenAgents.Tools.Redaction.redact(completion)
 
     terminal_update(run_id, "response_completed", completion, %{
@@ -508,16 +508,12 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   # Provider-reported counts only. OpenRouter names them differently across its
   # two APIs, and a field the provider left out stays `nil` instead of a guess.
-  defp usage_counts(usage) when is_map(usage) do
+  defp usage_counts(%{"usage" => usage} = completion) when is_map(usage) do
     counts = %{
       "input" => token_count(usage["input_tokens"] || usage["prompt_tokens"]),
       "output" => token_count(usage["output_tokens"] || usage["completion_tokens"]),
       "total" => token_count(usage["total_tokens"]),
-      "reasoning" =>
-        token_count(
-          detail(usage, "output_tokens_details", "reasoning_tokens") ||
-            detail(usage, "completion_tokens_details", "reasoning_tokens")
-        ),
+      "reasoning" => reasoning_count(usage, completion),
       "cached" =>
         token_count(
           detail(usage, "input_tokens_details", "cached_tokens") ||
@@ -528,7 +524,30 @@ defmodule OpenAgents.Chat.AccountTurns do
     if Enum.all?(Map.values(counts), &is_nil/1), do: nil, else: counts
   end
 
-  defp usage_counts(_usage), do: nil
+  defp usage_counts(_completion), do: nil
+
+  # Some models report a reasoning count of zero for a turn that carries
+  # reasoning output. That zero measures nothing, so the turn reports no
+  # reasoning count rather than a count of none.
+  defp reasoning_count(usage, completion) do
+    count =
+      token_count(
+        detail(usage, "output_tokens_details", "reasoning_tokens") ||
+          detail(usage, "completion_tokens_details", "reasoning_tokens")
+      )
+
+    if count == 0 and reasoned?(completion), do: nil, else: count
+  end
+
+  defp reasoned?(%{"reasoning_summary" => summary}) when is_binary(summary) and summary != "",
+    do: true
+
+  defp reasoned?(%{"reasoning_items" => [_item | _rest]}), do: true
+
+  defp reasoned?(%{"output" => output}) when is_list(output),
+    do: Enum.any?(output, &match?(%{"type" => "reasoning"}, &1))
+
+  defp reasoned?(_completion), do: false
 
   defp usage_view(counts) when is_map(counts),
     do: %{

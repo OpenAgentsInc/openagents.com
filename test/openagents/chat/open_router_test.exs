@@ -965,6 +965,81 @@ defmodule OpenAgents.Chat.OpenRouterTest do
            } = Jason.decode!(tool_output)
   end
 
+  test "sums the usage every tool round reported" do
+    Req.Test.expect(__MODULE__, fn conn ->
+      body =
+        Path.expand("../../fixtures/openrouter/responses_tool_call.sse", __DIR__)
+        |> File.read!()
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      body =
+        sse(%{
+          "type" => "response.content_part.delta",
+          "delta" => "OpenAgents is an agent platform."
+        }) <>
+          sse(%{
+            "type" => "response.completed",
+            "response" => %{
+              "object" => "response",
+              "model" => "stealth/ox-alpha",
+              "output" => [
+                %{
+                  "type" => "message",
+                  "id" => "msg_after_tool",
+                  "role" => "assistant",
+                  "status" => "completed",
+                  "content" => [
+                    %{
+                      "type" => "output_text",
+                      "text" => "OpenAgents is an agent platform.",
+                      "annotations" => []
+                    }
+                  ]
+                }
+              ],
+              "usage" => %{
+                "input_tokens" => 30,
+                "output_tokens" => 5,
+                "total_tokens" => 35,
+                "output_tokens_details" => %{"reasoning_tokens" => 0}
+              }
+            }
+          }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    parent = self()
+    assert {:ok, tool_registry_snapshot} = Registry.build([RepositoryFileToolStub])
+
+    assert {:ok, %{"usage" => usage}} =
+             OpenRouter.stream(
+               %{
+                 "model" => "stealth/ox-alpha",
+                 "messages" => [%{"role" => "user", "content" => "Summarize the README."}]
+               },
+               &send(parent, {:openrouter_event, &1}),
+               api_key: "test-openrouter-key",
+               tool_registry_snapshot: tool_registry_snapshot,
+               tool_execution_context: tool_execution_context(),
+               request_options: [plug: {Req.Test, __MODULE__}]
+             )
+
+    assert usage == %{
+             "input_tokens" => 48,
+             "output_tokens" => 16,
+             "total_tokens" => 64,
+             "output_tokens_details" => %{"reasoning_tokens" => 7}
+           }
+  end
+
   test "replays provider output around ordered read, write, edit, and reread calls" do
     repository_state = start_supervised!({Agent, fn -> "initial" end})
 

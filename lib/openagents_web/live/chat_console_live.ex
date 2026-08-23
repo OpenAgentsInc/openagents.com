@@ -16,7 +16,9 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
 
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Box.Fleet
   alias OpenAgents.Chat.{AccountTurns, OpenRouter}
+  alias OpenAgents.Conversations
 
   @suggestions [
     "Summarize what the Ox Alpha stress fleet measures today.",
@@ -26,6 +28,9 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   ]
 
   @token_kinds [input: "Input", output: "Output", reasoning: "Reasoning", cached: "Cached"]
+  @fleet_fast_refresh_interval_ms 1_000
+  @fleet_settled_refresh_interval_ms 5_000
+  @fleet_idle_refresh_interval_ms 10_000
 
   @reasoning_options [
     {"Reasoning off", "none"},
@@ -74,24 +79,31 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    {:ok, conversation} = Conversations.ensure_conversation(socket.assigns.current_user)
     messages = AccountTurns.list_messages(socket.assigns.current_user)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Chat")
-     |> assign(:form, composer_form())
-     |> assign(:reasoning_options, @reasoning_options)
-     |> assign(:model_label, OpenRouter.model_label())
-     |> assign(:suggestions, @suggestions)
-     |> assign_messages(messages)
-     |> assign(:assistant_response, nil)
-     |> assign(:assistant_reasoning, nil)
-     |> assign(:assistant_tool_calls, [])
-     |> assign(:assistant_blocks, [])
-     |> assign(:reasoning_started_at, nil)
-     |> assign(:streaming?, false)
-     |> assign(:last_prompt, "")
-     |> assign(:stream_id, nil)}
+    socket =
+      socket
+      |> assign(:page_title, "Chat")
+      |> assign(:conversation, conversation)
+      |> assign(:fleet, Fleet.projection(conversation.id))
+      |> assign(:form, composer_form())
+      |> assign(:reasoning_options, @reasoning_options)
+      |> assign(:model_label, OpenRouter.model_label())
+      |> assign(:suggestions, @suggestions)
+      |> assign_messages(messages)
+      |> assign(:assistant_response, nil)
+      |> assign(:assistant_reasoning, nil)
+      |> assign(:assistant_tool_calls, [])
+      |> assign(:assistant_blocks, [])
+      |> assign(:reasoning_started_at, nil)
+      |> assign(:streaming?, false)
+      |> assign(:last_prompt, "")
+      |> assign(:stream_id, nil)
+
+    if connected?(socket), do: schedule_fleet_refresh(socket)
+
+    {:ok, socket}
   end
 
   @impl true
@@ -111,6 +123,32 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     case AccountTurns.cancel(socket.assigns.current_user) do
       {:ok, _run} -> {:noreply, reset_stream(socket)}
       {:error, :no_active_turn} -> {:noreply, reset_stream(socket)}
+    end
+  end
+
+  def handle_event("stop_box", %{"box-id" => box_id}, socket) do
+    case Fleet.stop(socket.assigns.current_user, box_id) do
+      {:ok, _projection} ->
+        {:noreply, refresh_fleet(socket)}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> refresh_fleet()
+         |> put_flash(:error, stop_box_error_message(reason))}
+    end
+  end
+
+  def handle_event("cancel_box_run", %{"box-id" => box_id, "run-id" => run_id}, socket) do
+    case Fleet.cancel_run(socket.assigns.current_user, box_id, run_id) do
+      {:ok, _run} ->
+        {:noreply, refresh_fleet(socket)}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> refresh_fleet()
+         |> put_flash(:error, cancel_box_run_error_message(reason))}
     end
   end
 
@@ -182,6 +220,12 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     end
   end
 
+  def handle_info(:fleet_refresh, socket) do
+    socket = refresh_fleet(socket)
+    schedule_fleet_refresh(socket)
+    {:noreply, socket}
+  end
+
   def handle_info(
         {:openrouter_stream_event, stream_id, {:tool_call_completed, tool_result}},
         socket
@@ -236,6 +280,12 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
             </div>
           </dl>
         </div>
+
+        <.fleet_panel
+          :if={@fleet.boxes != [] or @fleet.queued != []}
+          fleet={@fleet}
+          can_control={Fleet.owns_conversation?(@current_user, @conversation.id)}
+        />
 
         <div class="flex min-h-0 flex-1 px-4">
           <.conversation id="chat-console-transcript" class="w-full">
@@ -393,6 +443,169 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     """
   end
 
+  attr :fleet, :map, required: true
+  attr :can_control, :boolean, required: true
+
+  defp fleet_panel(assigns) do
+    ~H"""
+    <section id="chat-console-fleet" class="border-border border-b bg-card/50 px-4 py-4">
+      <div class="mx-auto w-full max-w-5xl space-y-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 class="font-medium text-sm">Box fleet</h2>
+            <p class="text-muted-foreground text-xs">
+              Durable view of admitted computers and queued promises.
+            </p>
+          </div>
+          <p id="chat-console-fleet-cap" class="text-muted-foreground text-xs">
+            Admitted {@fleet.admitted_count} of {@fleet.effective_cap}
+          </p>
+        </div>
+
+        <div id="chat-console-fleet-boxes" class="grid gap-3 lg:grid-cols-2">
+          <div
+            :if={@fleet.boxes == []}
+            id="chat-console-fleet-empty"
+            class="rounded-lg border border-dashed border-border px-4 py-5 text-muted-foreground text-sm"
+          >
+            No admitted computers.
+          </div>
+
+          <article
+            :for={box <- @fleet.boxes}
+            id={"chat-console-fleet-box-#{box.id}"}
+            class="space-y-3 rounded-lg border border-border bg-background p-4"
+          >
+            <header class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="font-medium text-sm">{box.label}</h3>
+                <p class="truncate font-mono text-muted-foreground text-xs" title={box.box_id}>
+                  {box.box_id}
+                </p>
+              </div>
+              <span class="badge" data-variant="dim">{box.state}</span>
+            </header>
+
+            <dl class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              <div>
+                <dt class="text-muted-foreground">Kind</dt>
+                <dd class="mt-1 font-medium">Admitted</dd>
+              </div>
+              <div>
+                <dt class="text-muted-foreground">Age</dt>
+                <dd class="mt-1 font-medium">{box.age_seconds}s</dd>
+              </div>
+              <div :if={box.run}>
+                <dt class="text-muted-foreground">Run</dt>
+                <dd id={"chat-console-fleet-run-state-#{box.id}"} class="mt-1 font-medium">
+                  {box.run.state}
+                </dd>
+              </div>
+              <div :if={box.assignment}>
+                <dt class="text-muted-foreground">Assignment</dt>
+                <dd class="mt-1 font-medium">{box.assignment.state}</dd>
+              </div>
+            </dl>
+
+            <div :if={box.run} id={"chat-console-fleet-run-#{box.id}"} class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="font-medium text-xs">Run result</h4>
+                <span :if={box.run.output_truncated?} class="text-muted-foreground text-xs">
+                  Output truncated
+                </span>
+              </div>
+              <pre
+                id={"chat-console-fleet-output-#{box.id}"}
+                class="max-h-48 overflow-auto rounded-md bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap"
+              >{if(box.run.output == "", do: "No output yet.", else: box.run.output)}</pre>
+              <p :if={box.run.failure_reason} class="text-destructive text-xs">
+                {box.run.failure_reason}
+              </p>
+            </div>
+
+            <dl
+              :if={box.assignment}
+              id={"chat-console-fleet-assignment-#{box.id}"}
+              class="space-y-1 text-xs"
+            >
+              <div :if={box.assignment.branch} class="flex gap-2">
+                <dt class="text-muted-foreground">Branch</dt>
+                <dd class="font-mono">{box.assignment.branch}</dd>
+              </div>
+              <div :if={box.assignment.commit} class="flex gap-2">
+                <dt class="text-muted-foreground">Commit</dt>
+                <dd class="font-mono">{box.assignment.commit}</dd>
+              </div>
+              <div :if={box.assignment.failure_reason} class="flex gap-2">
+                <dt class="text-muted-foreground">Failure</dt>
+                <dd class="text-destructive">{box.assignment.failure_reason}</dd>
+              </div>
+            </dl>
+
+            <div :if={@can_control and is_nil(box.stopped_at)} class="flex flex-wrap gap-2">
+              <.button
+                id={"chat-console-fleet-stop-#{box.id}"}
+                type="button"
+                variant={:ghost}
+                tone={:danger}
+                size={:sm}
+                phx-click="stop_box"
+                phx-value-box-id={box.label}
+              >
+                Stop computer
+              </.button>
+              <.button
+                :if={box.run && not box.run.terminal?}
+                id={"chat-console-fleet-cancel-#{box.id}"}
+                type="button"
+                variant={:ghost}
+                tone={:danger}
+                size={:sm}
+                phx-click="cancel_box_run"
+                phx-value-box-id={box.label}
+                phx-value-run-id={box.run.id}
+              >
+                Cancel run
+              </.button>
+            </div>
+          </article>
+        </div>
+
+        <div id="chat-console-fleet-queue" class="space-y-2">
+          <div class="flex items-baseline justify-between gap-2">
+            <h3 class="font-medium text-sm">Queued promises</h3>
+            <span class="text-muted-foreground text-xs">{length(@fleet.queued)} queued</span>
+          </div>
+          <div
+            :if={@fleet.queued == []}
+            id="chat-console-fleet-queue-empty"
+            class="text-muted-foreground text-xs"
+          >
+            No queued computers.
+          </div>
+          <article
+            :for={item <- @fleet.queued}
+            id={"chat-console-fleet-queued-#{item.id}"}
+            class="flex flex-wrap items-baseline justify-between gap-2 rounded-md border border-dashed border-border px-3 py-2 text-xs"
+          >
+            <div class="flex min-w-0 items-baseline gap-2">
+              <span class="font-medium">{item.label}</span>
+              <span class="text-muted-foreground">Queued promise</span>
+            </div>
+            <div class="flex items-baseline gap-3">
+              <span class="text-muted-foreground">{item.queue_reason}</span>
+              <span class="text-muted-foreground">{item.age_seconds}s old</span>
+            </div>
+          </article>
+          <p :if={@fleet.queued_truncated?} class="text-muted-foreground text-xs">
+            Additional queued promises are not shown.
+          </p>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
   # The console streams through the OpenRouter adapter. A configured streamer
   # replaces it, so a test can drive a turn without reaching a provider.
   defp submit_options(reasoning) do
@@ -415,6 +628,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   defp reset_stream(socket) do
     socket
     |> assign_messages(AccountTurns.list_messages(socket.assigns.current_user))
+    |> refresh_fleet()
     |> assign(:assistant_response, nil)
     |> assign(:assistant_reasoning, nil)
     |> assign(:assistant_tool_calls, [])
@@ -423,6 +637,36 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     |> assign(:streaming?, false)
     |> assign(:stream_id, nil)
   end
+
+  defp refresh_fleet(socket) do
+    assign(socket, :fleet, Fleet.projection(socket.assigns.conversation.id))
+  end
+
+  defp schedule_fleet_refresh(socket) do
+    Process.send_after(self(), :fleet_refresh, fleet_refresh_interval(socket.assigns.fleet))
+    socket
+  end
+
+  defp fleet_refresh_interval(%{boxes: boxes, queued: queued}) do
+    cond do
+      queued != [] or Enum.any?(boxes, &moving_box?/1) -> @fleet_fast_refresh_interval_ms
+      boxes != [] -> @fleet_settled_refresh_interval_ms
+      true -> @fleet_idle_refresh_interval_ms
+    end
+  end
+
+  defp moving_box?(%{run: %{terminal?: false}}), do: true
+  defp moving_box?(_box), do: false
+
+  defp stop_box_error_message(:conversation_not_found), do: "You cannot stop this computer."
+  defp stop_box_error_message(:not_found), do: "That computer is no longer available."
+  defp stop_box_error_message(_reason), do: "The computer could not be stopped."
+
+  defp cancel_box_run_error_message(:conversation_not_found),
+    do: "You cannot cancel this run."
+
+  defp cancel_box_run_error_message(:not_found), do: "That run is no longer available."
+  defp cancel_box_run_error_message(_reason), do: "The run could not be canceled."
 
   # A failed turn keeps its prompt in the composer, so the operator can retry it
   # from either the composer or the failed message.

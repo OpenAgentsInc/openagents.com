@@ -57,6 +57,29 @@ defmodule OpenAgents.Transparency do
   end
 
   @doc """
+  Returns `data` with `trace_ref`, `trace_digest`, and `detail` redacted
+  according to the effective transparency tier.
+
+  `data` must be a map with `trace_ref`, `trace_digest`, and `detail`.
+  `artifact_tier_or_link` is an `ArtifactLink`, a tier atom/string, or `nil`.
+  `viewer` is a tier atom/string, a map with a `:tier` field, or `nil`.
+  """
+  def redact_for_viewer(
+        %{trace_ref: _, trace_digest: _, detail: _} = data,
+        artifact_tier_or_link,
+        viewer \\ nil
+      ) do
+    tier = artifact_tier_or_link || Map.get(data, :transparency_tier)
+
+    %{
+      data
+      | trace_ref: if(allows?(tier, :metadata, viewer), do: data.trace_ref, else: nil),
+        trace_digest: if(allows?(tier, :metadata, viewer), do: data.trace_digest, else: nil),
+        detail: if(allows?(tier, :content, viewer), do: data.detail, else: %{})
+    }
+  end
+
+  @doc """
   Marks `artifact_link` as revoked by `revoked_by_id` for `reason`.
 
   Returns a changeset with `revoked_at` and `revocation_tombstone` set.

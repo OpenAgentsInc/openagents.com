@@ -19,6 +19,7 @@ defmodule OpenAgents.Changelog do
   alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, PushReceipt, Visibility}
   alias OpenAgents.Repo
   alias OpenAgents.Transparency
+  alias OpenAgents.Transparency.ArtifactLink
 
   @schema_version "openagents.changelog.v1"
   @cache_key {__MODULE__, :cache}
@@ -66,23 +67,6 @@ defmodule OpenAgents.Changelog do
     |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :sha, :source])
   end
 
-  @doc """
-  Returns `entry` with `trace_ref`, `trace_digest`, and `detail` redacted
-  according to the effective transparency tier for `viewer`.
-
-  `viewer` is a tier atom/string, a map with a `:tier` field, or `nil`.
-  """
-  def redact_for_viewer(%Entry{} = entry, viewer) do
-    tier = entry.transparency_tier
-
-    %{
-      entry
-      | trace_ref: if(Transparency.allows?(tier, :metadata, viewer), do: entry.trace_ref, else: nil),
-        trace_digest: if(Transparency.allows?(tier, :metadata, viewer), do: entry.trace_digest, else: nil),
-        detail: if(Transparency.allows?(tier, :content, viewer), do: entry.detail, else: %{})
-    }
-  end
-
   # ── assembly ─────────────────────────────────────────────────────────────
 
   defp cached(repo) do
@@ -114,6 +98,30 @@ defmodule OpenAgents.Changelog do
     (authored ++ uncovered)
     |> Enum.sort_by(& &1.entry_at, {:desc, DateTime})
     |> Enum.take(@entry_limit)
+    |> redact_rows()
+  end
+
+  defp redact_rows(rows) do
+    link_ids =
+      rows
+      |> Enum.map(& &1[:artifact_link_id])
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    by_id =
+      if link_ids == [] do
+        %{}
+      else
+        ArtifactLink
+        |> where([l], l.id in ^link_ids)
+        |> Repo.all()
+        |> Map.new(&{&1.id, &1})
+      end
+
+    Enum.map(rows, fn row ->
+      link = row[:artifact_link_id] && Map.get(by_id, row[:artifact_link_id])
+      Transparency.redact_for_viewer(row, link)
+    end)
   end
 
   defp authored_entries(repo) do
@@ -163,6 +171,8 @@ defmodule OpenAgents.Changelog do
       source: entry.source,
       visibility: entry.visibility,
       entry_at: entry.entry_at,
+      artifact_link_id: entry.artifact_link_id,
+      transparency_tier: entry.transparency_tier,
       detail: if(embargoed, do: %{}, else: entry.detail || %{}),
       trace_ref: entry.trace_ref,
       trace_digest: entry.trace_digest,
@@ -191,6 +201,8 @@ defmodule OpenAgents.Changelog do
       source: "receipt",
       visibility: "l2",
       entry_at: deploy.inserted_at,
+      artifact_link_id: nil,
+      transparency_tier: nil,
       detail: %{},
       trace_ref: nil,
       trace_digest: nil,

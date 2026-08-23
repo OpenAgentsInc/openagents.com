@@ -47,6 +47,29 @@ defmodule OpenAgentsWeb.MemoryLiveTest do
     refute has_element?(view, "#message-form")
   end
 
+  test "the way back is a link, and the board preference is the account's to set", %{conn: conn} do
+    token = "memory-preference-browser-credential-0000000000000"
+    conn = log_in_github_user(conn, token)
+    user = github_user(token)
+    assert {:ok, view, _html} = live(conn, ~p"/memory")
+
+    # A page is left by navigating, not by toggling a panel that is not there.
+    assert has_element?(view, "#toggle-memory[href='/sarah']")
+
+    assert render(view) =~ "Your account appears on the board"
+
+    view |> element("#toggle-leaderboard-preference") |> render_click()
+
+    assert render(view) =~ "no longer appears on the public leaderboard"
+    assert render(view) =~ "Your account is withheld from the board."
+    assert OpenAgents.Repo.get!(OpenAgents.Accounts.User, user.id).public_leaderboard_opted_out
+
+    view |> element("#toggle-leaderboard-preference") |> render_click()
+
+    assert render(view) =~ "Your account appears on the board"
+    refute OpenAgents.Repo.get!(OpenAgents.Accounts.User, user.id).public_leaderboard_opted_out
+  end
+
   test "correction preserves supersession and reconciles another open tab", %{conn: conn} do
     token = "memory-correction-browser-credential-0000000000000"
     %{record: record} = create_profile_memory(token, "I prefer concise answers")

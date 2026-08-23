@@ -543,12 +543,22 @@ defmodule OpenAgentsWeb.ChatLive do
 
   defp composer_form, do: to_form(%{"message" => ""}, as: :chat)
   # Keyed by assistant message so the transcript can show what Sarah did next to
-  # what she said, and so a reload rebuilds it from PostgreSQL.
+  # what she said, and so a reload rebuilds it from PostgreSQL. Voice steps are
+  # merged in from their response receipts: a spoken tool call carries the same
+  # authority as a typed one, so it stays in the ordered stream after the call
+  # ends instead of vanishing with the live panel.
   defp message_activity(messages) do
-    messages
-    |> Enum.filter(&(&1.role == "assistant"))
-    |> Enum.map(& &1.id)
-    |> Conversations.list_tool_step_activity_by_message()
+    assistant_message_ids =
+      messages
+      |> Enum.filter(&(&1.role == "assistant"))
+      |> Enum.map(& &1.id)
+
+    text = Conversations.list_tool_step_activity_by_message(assistant_message_ids)
+    voice = Voice.list_tool_step_activity_by_message(assistant_message_ids)
+
+    Map.merge(text, voice, fn _message_id, text_steps, voice_steps ->
+      Enum.sort_by(text_steps ++ voice_steps, & &1.sequence)
+    end)
   end
 
   defp first_id([message | _messages]), do: message.id

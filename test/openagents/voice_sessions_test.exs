@@ -1085,6 +1085,14 @@ defmodule OpenAgents.VoiceSessionsTest do
                     %{"type" => "response.create", "response" => %{"tool_choice" => "none"}}},
                    1_000
 
+    # The refusal the provider hears is also evidence the person can read: a
+    # truncated run must not read back as a complete one.
+    assert refused =
+             Enum.find(Voice.list_tool_step_activity(session), &(&1.status == "refused"))
+
+    assert refused.error["code"] == "tool_call_limit_reached"
+    assert refused.error["message"] =~ "host limit of 8 tool calls"
+
     alive = Voice.get_session!(session.id)
     assert alive.status in ~w(listening responding)
     assert is_pid(VoiceSessions.whereis(session.id))

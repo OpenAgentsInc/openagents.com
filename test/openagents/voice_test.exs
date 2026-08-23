@@ -474,6 +474,97 @@ defmodule OpenAgents.VoiceTest do
            ]
   end
 
+  test "a refused host limit is durable and keyed to the assistant message it belongs to" do
+    {:ok, conversation} = Conversations.ensure_conversation("voice-durable-activity-browser")
+    snapshot = Registry.current!()
+    {:ok, session} = Voice.admit_session(conversation, enabled_config())
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        event(:user_transcript_final, "evt-user-activity", %{
+          "item_id" => "item-user-activity",
+          "response_id" => nil,
+          "content" => "Keep looking things up."
+        })
+      )
+
+    assert {:ok, context} =
+             Voice.capture_response_context(session, "item-user-activity", snapshot)
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        event(:response_started, "evt-start-activity", %{"response_id" => "response-activity"}),
+        response_context: context
+      )
+
+    request =
+      event(:tool_call_requested, "evt-tool-activity", %{
+        "response_id" => "response-activity",
+        "item_id" => "item-call-activity",
+        "call_id" => "call-activity",
+        "tool_name" => "memory_list",
+        "raw_arguments" => ~s({"category":"","first":1})
+      })
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(session, session.generation, request)
+
+    assert {:ok, requested, :created} = Voice.request_tool_step(session, request, snapshot)
+
+    assert {:ok, refused} =
+             Voice.refuse_tool_step(
+               session,
+               requested,
+               "tool_call_limit_reached",
+               "This turn reached the host limit of 8 tool calls."
+             )
+
+    assert refused.status == "refused"
+    assert refused.error["code"] == "tool_call_limit_reached"
+    assert refused.executor_id == "sarah.host"
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        event(:assistant_transcript_final, "evt-assistant-activity", %{
+          "item_id" => "item-assistant-activity",
+          "response_id" => "response-activity",
+          "content" => "I stopped short of finishing."
+        })
+      )
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        event(:response_completed, "evt-done-activity", %{
+          "response_id" => "response-activity",
+          "status" => "completed",
+          "usage" => %{}
+        })
+      )
+
+    assert [receipt] = Voice.list_response_receipts(session)
+    assistant_message_id = receipt.assistant_message_id
+    assert is_binary(assistant_message_id)
+
+    assert %{^assistant_message_id => [activity]} =
+             Voice.list_tool_step_activity_by_message([assistant_message_id])
+
+    assert activity.tool_name == "memory_list"
+    assert activity.status == "refused"
+    assert activity.error["code"] == "tool_call_limit_reached"
+    refute Map.has_key?(activity, :provider_call_id)
+
+    assert Voice.list_tool_step_activity_by_message([]) == %{}
+    assert Voice.list_tool_step_activity_by_message([Ecto.UUID.generate()]) == %{}
+  end
+
   defp event(kind, event_id, payload) do
     %ProviderEvent{kind: kind, provider_event_id: event_id, payload: payload}
   end

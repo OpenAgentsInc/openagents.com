@@ -19,6 +19,7 @@ defmodule OpenAgentsWeb.MemoryLive do
 
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Analytics
   alias OpenAgents.Conversations
   alias OpenAgents.DataRights
@@ -44,6 +45,7 @@ defmodule OpenAgentsWeb.MemoryLive do
      |> assign(:memory_status, nil)
      |> assign(:pending_memory_action, nil)
      |> assign(:reset_enabled?, DataRights.reset_enabled?())
+     |> assign(:leaderboard_opted_out?, current_user.public_leaderboard_opted_out)
      |> assign(:recording_config, Recordings.config())
      |> assign(:privacy_delete_form, to_form(%{"confirmation" => ""}, as: :privacy))
      |> reload_memory()}
@@ -65,6 +67,7 @@ defmodule OpenAgentsWeb.MemoryLive do
         pending_memory_action={@pending_memory_action}
         privacy_delete_form={@privacy_delete_form}
         recording_config={@recording_config}
+        leaderboard_opted_out?={@leaderboard_opted_out?}
       />
     </Layouts.app>
     """
@@ -108,6 +111,37 @@ defmodule OpenAgentsWeb.MemoryLive do
 
       {:error, _reason} ->
         {:noreply, assign(socket, :memory_status, {:error, "That memory is no longer active."})}
+    end
+  end
+
+  # The public board is the one projection that leaves the account boundary, so
+  # the account it is about decides whether it appears there. The control states
+  # the current publication state rather than a bare toggle, since "leaderboard"
+  # on its own does not say which way it is set.
+  def handle_event("set_leaderboard_visibility", %{"opted_out" => opted_out}, socket)
+      when opted_out in ["true", "false"] do
+    opted_out? = opted_out == "true"
+
+    case Accounts.set_public_leaderboard_opt_out(socket.assigns.current_user, opted_out?) do
+      {:ok, user} ->
+        message =
+          if opted_out?,
+            do: "Your account no longer appears on the public leaderboard.",
+            else: "Your account appears on the public leaderboard again."
+
+        {:noreply,
+         socket
+         |> assign(:current_user, user)
+         |> assign(:leaderboard_opted_out?, user.public_leaderboard_opted_out)
+         |> assign(:memory_status, {:ok, message})}
+
+      {:error, _changeset} ->
+        {:noreply,
+         assign(
+           socket,
+           :memory_status,
+           {:error, "Sarah could not change your leaderboard preference. Try again."}
+         )}
     end
   end
 
@@ -236,6 +270,7 @@ defmodule OpenAgentsWeb.MemoryLive do
   attr :pending_memory_action, :any, default: nil
   attr :privacy_delete_form, :any, required: true
   attr :recording_config, :map, required: true
+  attr :leaderboard_opted_out?, :boolean, required: true
 
   defp memory_manager(assigns) do
     ~H"""
@@ -252,10 +287,11 @@ defmodule OpenAgentsWeb.MemoryLive do
         <div class="memory-header__actions">
           <%!-- The way out of a panel belongs in the panel. This used to be a
           sidebar row, which meant leaving depended on chrome outside the thing
-          you were leaving. --%>
+          you were leaving. Memory is a place with its own URL, so the way back
+          navigates to the conversation rather than toggling a panel. --%>
           <.text_button
             id="toggle-memory"
-            phx-click="toggle_memory"
+            navigate={~p"/sarah"}
             aria-label="Return to conversation"
           >
             <.icon name="arrow-left" /> Return to conversation
@@ -326,6 +362,38 @@ defmodule OpenAgentsWeb.MemoryLive do
       <div :if={@memory_records != []} id="memory-records" class="memory-records">
         <.memory_record :for={record <- @memory_records} record={record} />
       </div>
+
+      <.card id="leaderboard-preference" aria-labelledby="leaderboard-preference-heading">
+        <header>
+          <h2 id="leaderboard-preference-heading">Public leaderboard</h2>
+          <p>
+            The public leaderboard publishes a rank, your GitHub login, name, avatar, and one
+            token total. It publishes nothing else about your account.
+          </p>
+          <p id="leaderboard-preference-state">
+            <%= if @leaderboard_opted_out? do %>
+              Your account is withheld from the board.
+            <% else %>
+              Your account appears on the board when its token total is above zero.
+            <% end %>
+          </p>
+        </header>
+        <footer>
+          <.button
+            id="toggle-leaderboard-preference"
+            size={:sm}
+            variant={:secondary}
+            phx-click="set_leaderboard_visibility"
+            phx-value-opted_out={to_string(not @leaderboard_opted_out?)}
+          >
+            <%= if @leaderboard_opted_out? do %>
+              SHOW ME ON THE LEADERBOARD
+            <% else %>
+              HIDE ME FROM THE LEADERBOARD
+            <% end %>
+          </.button>
+        </footer>
+      </.card>
 
       <.card
         id="privacy-controls"

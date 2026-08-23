@@ -157,6 +157,28 @@ defmodule OpenAgents.LeaderboardTest do
     assert Leaderboard.compute_entries() == []
   end
 
+  test "an account can withhold itself from the board and publish itself again" do
+    user = account("self-withheld")
+
+    complete_typed_turn(user, "Publish me first.", %{
+      "input_tokens" => 60,
+      "output_tokens" => 40,
+      "total_tokens" => 100
+    })
+
+    assert [_entry] = Leaderboard.compute_entries()
+    assert Enum.map(Leaderboard.refresh(), & &1.github_login) == [user.github_login]
+
+    assert {:ok, withheld} = Accounts.set_public_leaderboard_opt_out(user, true)
+    assert withheld.public_leaderboard_opted_out
+    assert Leaderboard.compute_entries() == []
+    assert Leaderboard.refresh() == []
+
+    assert {:ok, published} = Accounts.set_public_leaderboard_opt_out(withheld, false)
+    refute published.public_leaderboard_opted_out
+    assert Enum.map(Leaderboard.refresh(), & &1.github_login) == [user.github_login]
+  end
+
   test "drops an account from the board when it deletes its data" do
     user = account("erased")
 

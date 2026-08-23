@@ -394,6 +394,103 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     refute has_element?(view, "#messages-voice-live-item-live-1")
   end
 
+  test "voice tool activity stays in the ordered transcript after the call ends", %{conn: conn} do
+    key = "voice-durable-activity-credential-0000000000000"
+    user = github_user(key)
+    conn = log_in_github_user(conn, key)
+    assert {:ok, opening, _html} = live(conn, ~p"/sarah")
+    GenServer.stop(opening.pid)
+    conversation = Conversations.get_conversation_for_user(user)
+    snapshot = OpenAgents.Tools.Registry.current!()
+    config = OpenAgents.Voice.Config.build!(enabled_voice())
+    assert {:ok, session} = Voice.admit_session(conversation, config)
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        voice_event(:user_transcript_final, "evt-chat-user", %{
+          "item_id" => "item-chat-user",
+          "response_id" => nil,
+          "content" => "Look through what you remember."
+        })
+      )
+
+    assert {:ok, context} = Voice.capture_response_context(session, "item-chat-user", snapshot)
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        voice_event(:response_started, "evt-chat-start", %{"response_id" => "response-chat"}),
+        response_context: context
+      )
+
+    request =
+      voice_event(:tool_call_requested, "evt-chat-tool", %{
+        "response_id" => "response-chat",
+        "item_id" => "item-chat-call",
+        "call_id" => "call-chat",
+        "tool_name" => "memory_list",
+        "raw_arguments" => ~s({"category":"","first":1})
+      })
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(session, session.generation, request)
+
+    assert {:ok, requested, :created} = Voice.request_tool_step(session, request, snapshot)
+
+    assert {:ok, _refused} =
+             Voice.refuse_tool_step(
+               session,
+               requested,
+               "tool_call_limit_reached",
+               "This turn reached the host limit of 8 tool calls."
+             )
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        voice_event(:assistant_transcript_final, "evt-chat-assistant", %{
+          "item_id" => "item-chat-assistant",
+          "response_id" => "response-chat",
+          "content" => "I stopped short of finishing that."
+        })
+      )
+
+    {:ok, session, _event, :created} =
+      Voice.record_provider_event(
+        session,
+        session.generation,
+        voice_event(:response_completed, "evt-chat-done", %{
+          "response_id" => "response-chat",
+          "status" => "completed",
+          "usage" => %{}
+        })
+      )
+
+    assert {:ok, _ended} = Voice.end_session(session, session.generation, "test_end")
+
+    assert [receipt] = Voice.list_response_receipts(session)
+    assistant_message_id = receipt.assistant_message_id
+
+    assert {:ok, view, html} = live(conn, ~p"/sarah")
+
+    assert html =~ "I stopped short of finishing that."
+
+    # The spoken tool call sits in the assistant row it belongs to, not in the
+    # live panel, which a reload empties.
+    assert has_element?(view, "#tool-activity-messages-#{assistant_message_id}")
+    refute has_element?(view, "#live-tool-activity")
+
+    row = view |> element("#tool-activity-messages-#{assistant_message_id}") |> render()
+
+    assert row =~ "wasn&#39;t permitted"
+    assert row =~ "Denied"
+    assert row =~ "tool_call_limit_reached"
+  end
+
   test "reload preserves one canonical greeting without fake recognition", %{conn: conn} do
     key = "reload-browser-credential-0000000000000000"
     user = github_user(key)
@@ -1122,6 +1219,14 @@ defmodule OpenAgentsWeb.ChatLiveTest do
   defp eventually(assertion, timeout \\ 1_000) do
     deadline = System.monotonic_time(:millisecond) + timeout
     do_eventually(assertion, deadline)
+  end
+
+  defp voice_event(kind, event_id, payload) do
+    %OpenAgents.Voice.ProviderEvent{
+      kind: kind,
+      provider_event_id: event_id,
+      payload: payload
+    }
   end
 
   defp enabled_voice do

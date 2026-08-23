@@ -977,17 +977,27 @@ defmodule OpenAgents.VoiceSessions.SessionServer do
   # Hitting the per-turn tool budget refuses the call instead of failing the
   # session; once the active response finishes, one tool-free response is
   # driven so the model reports what it already has instead of going silent.
-  defp refuse_tool_call_limit(%ProviderEvent{payload: payload}, state) do
-    _ =
-      send_tool_refusal(
-        state,
-        payload["call_id"],
-        "tool_call_limit_reached",
-        "This turn reached the host limit of #{@maximum_tool_calls} tool calls. " <>
-          "Do not call tools again this turn; report what you already have."
-      )
+  #
+  # The refusal is also written as a terminal step, so the budget is visible in
+  # the transcript with its typed reason. A limit that only answers the provider
+  # lets a truncated run look like a complete one.
+  defp refuse_tool_call_limit(%ProviderEvent{payload: payload} = event, state) do
+    message =
+      "This turn reached the host limit of #{@maximum_tool_calls} tool calls. " <>
+        "Do not call tools again this turn; report what you already have."
+
+    _ = record_refused_tool_step(event, state, "tool_call_limit_reached", message)
+    _ = send_tool_refusal(state, payload["call_id"], "tool_call_limit_reached", message)
 
     {:noreply, %{state | limit_refused?: true}}
+  end
+
+  defp record_refused_tool_step(event, state, code, message) do
+    with {:ok, step, _disposition} <-
+           Voice.request_tool_step(state.session, event, state.tool_snapshot),
+         {:ok, refused_step} <- Voice.refuse_tool_step(state.session, step, code, message) do
+      {:ok, refused_step}
+    end
   end
 
   defp send_tool_refusal(state, call_id, code, message) do

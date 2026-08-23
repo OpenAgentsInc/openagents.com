@@ -288,6 +288,77 @@ defmodule OpenAgents.ProfileMemoryTest do
              )
   end
 
+  test "deletion, correction, and purge refuse another owner's record and leak no existence" do
+    {first_owner, first_conversation} = owner("profile-delete-first-browser")
+    {second_owner, second_conversation} = owner("profile-delete-second-browser")
+    first_source = source_message(first_conversation, "Remember my private project is Atlas.")
+    second_source = source_message(second_conversation, "Remember my private project is Beacon.")
+
+    {:ok, candidate} =
+      ProfileMemory.create_candidate(
+        first_owner,
+        attributes(first_source, category: "project", claim: "My project is Atlas.")
+      )
+
+    {:ok, active} =
+      ProfileMemory.transition(first_owner, candidate.id, candidate.generation, "active")
+
+    foreign_selector = %{
+      "mode" => "record",
+      "record_id" => active.id,
+      "expected_generation" => active.generation
+    }
+
+    absent_selector = %{
+      "mode" => "record",
+      "record_id" => Ecto.UUID.generate(),
+      "expected_generation" => active.generation
+    }
+
+    # Identical answers: the second owner cannot tell a record it may not touch
+    # from one that was never stored.
+    assert {:ok, %{disposition: "already_absent", records: []}} =
+             ProfileMemory.forget_active(second_owner, foreign_selector)
+
+    assert {:ok, %{disposition: "already_absent", records: []}} =
+             ProfileMemory.forget_active(second_owner, absent_selector)
+
+    assert {:error, :not_found} =
+             ProfileMemory.correct(
+               second_owner,
+               active.id,
+               active.generation,
+               attributes(second_source, category: "project", claim: "My project is Beacon.")
+             )
+
+    assert {:error, :not_found} =
+             ProfileMemory.purge(second_owner, active.id, active.generation)
+
+    # A stale generation is no shortcut around ownership, and forgetting in one
+    # scope leaves the other scope's record active.
+    assert {:error, :not_found} =
+             ProfileMemory.transition(second_owner, active.id, active.generation + 1, "forgotten")
+
+    assert {:ok, [listed]} = ProfileMemory.list_current(first_owner)
+    assert listed.id == active.id
+    assert listed.status == "active"
+
+    assert {:ok, %{disposition: "forgotten", records: [forgotten]}} =
+             ProfileMemory.forget_active(first_owner, foreign_selector)
+
+    assert forgotten.id == active.id
+    assert {:ok, []} = ProfileMemory.list_current(first_owner)
+
+    # Purge is the only irreversible path, so it stays owner-scoped and terminal.
+    assert {:error, :not_found} =
+             ProfileMemory.purge(second_owner, forgotten.id, forgotten.generation)
+
+    assert {:ok, :purged} =
+             ProfileMemory.purge(first_owner, forgotten.id, forgotten.generation)
+
+    assert {:error, :not_found} = ProfileMemory.get(first_owner, forgotten.id)
+  end
+
   test "database backstops reject orphan activation, source deletion, and in-place claim edits" do
     {owner, conversation} = owner("profile-database-constraints")
     {_foreign_owner, foreign_conversation} = owner("profile-database-foreign-source")

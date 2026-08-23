@@ -81,6 +81,12 @@ defmodule OpenAgents.Accounts.User do
     |> unique_constraint(:github_id)
   end
 
+  def leaderboard_changeset(user, opted_out?) when is_boolean(opted_out?) do
+    user
+    |> cast(%{public_leaderboard_opted_out: opted_out?}, [:public_leaderboard_opted_out])
+    |> validate_required([:public_leaderboard_opted_out])
+  end
+
   def ban_changeset(user, reason_code) do
     user
     |> cast(

@@ -619,6 +619,50 @@ defmodule OpenAgents.Voice do
     )
   end
 
+  @doc """
+  Voice tool-step activity keyed by the assistant message each step belongs to.
+
+  A voice tool call is durable evidence of the same authority a text tool call
+  has, so it belongs beside the assistant message it produced rather than only
+  in the live session panel, which empties when the call ends or the page
+  reloads. The response receipt carries the assistant message, so the join is
+  the receipt.
+
+  Selects the same bounded projection as `list_tool_step_activity/1`, so
+  INVARIANTS.md UI-002 holds: already-scrubbed durable values and never a
+  provider identifier.
+  """
+  @spec list_tool_step_activity_by_message([String.t()]) :: %{String.t() => [map()]}
+  def list_tool_step_activity_by_message([]), do: %{}
+
+  def list_tool_step_activity_by_message(assistant_message_ids)
+      when is_list(assistant_message_ids) do
+    from(step in ToolStep,
+      join: receipt in ResponseReceipt,
+      on: receipt.id == step.voice_response_receipt_id,
+      where: receipt.assistant_message_id in ^assistant_message_ids,
+      order_by: [asc: step.sequence],
+      select:
+        {receipt.assistant_message_id,
+         %{
+           id: step.id,
+           sequence: step.sequence,
+           tool_name: step.tool_name,
+           status: step.status,
+           raw_arguments: step.raw_arguments,
+           result: step.result,
+           error: step.error,
+           executor_id: step.executor_id,
+           executor_disclosure: step.executor_disclosure,
+           requested_at: step.requested_at,
+           started_at: step.started_at,
+           completed_at: step.completed_at
+         }}
+    )
+    |> Repo.all()
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
   @spec record_client_event(Session.t(), String.t(), {String.t(), integer() | nil}) ::
           {:ok, ClientEvent.t()} | {:error, term()}
   def record_client_event(%Session{} = session, kind, {browser_family, browser_major}) do
@@ -851,6 +895,35 @@ defmodule OpenAgents.Voice do
 
   def complete_tool_step(%Session{}, %ToolStep{}, _outcome),
     do: {:error, :invalid_tool_outcome}
+
+  @doc """
+  Refuses a requested tool step with a typed host reason.
+
+  A host limit that only answers the provider is invisible: the caller hears a
+  turn that stops using tools and no one can tell whether the tool ran, failed,
+  or was never allowed. Writing the refusal as a terminal step puts the reason
+  in the same ordered activity stream a text refusal appears in.
+  """
+  @spec refuse_tool_step(Session.t(), ToolStep.t(), String.t(), String.t()) ::
+          {:ok, ToolStep.t()} | {:error, term()}
+  def refuse_tool_step(%Session{} = session, %ToolStep{} = step, code, message)
+      when is_binary(code) and is_binary(message) do
+    complete_tool_step(session, step, %{
+      "schema" => "sarah.tool_outcome.v1",
+      "call_id" => step.provider_call_id,
+      "module_ref" => %{
+        "module_id" => step.module_id,
+        "tool_name" => step.tool_name,
+        "version" => step.tool_version
+      },
+      "executor_ref" => %{"id" => "sarah.host", "disclosure" => "Sarah host execution limits"},
+      "status" => "refused",
+      "result" => nil,
+      "error" => %{"code" => code, "message" => message},
+      "target_receipt_refs" => [],
+      "attribution_refs" => []
+    })
+  end
 
   @spec tool_continuation_output(ToolStep.t()) :: {:ok, map()} | {:error, term()}
   def tool_continuation_output(%ToolStep{id: step_id}) do

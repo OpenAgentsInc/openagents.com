@@ -112,6 +112,28 @@ defmodule OpenAgents.Accounts do
     }
   end
 
+  @doc """
+  Sets whether this account is withheld from the public leaderboard.
+
+  The board is the one projection that crosses the account boundary
+  (`INVARIANTS.md` LEADERBOARD-001), so the account it is about decides whether
+  it appears. The cached projection is invalidated on every change, including a
+  change that removes the account, so opting out takes effect on the next push
+  to connected viewers rather than at the next unrelated recompute.
+  """
+  @spec set_public_leaderboard_opt_out(User.t(), boolean()) ::
+          {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  def set_public_leaderboard_opt_out(%User{} = user, opted_out?) when is_boolean(opted_out?) do
+    case user |> User.leaderboard_changeset(opted_out?) |> Repo.update() do
+      {:ok, updated} ->
+        :ok = OpenAgents.Leaderboard.invalidate()
+        {:ok, updated}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
   @doc "Rewraps every retained GitHub token atomically; returns only the rotated count."
   @spec rotate_github_tokens!() :: non_neg_integer()
   def rotate_github_tokens! do

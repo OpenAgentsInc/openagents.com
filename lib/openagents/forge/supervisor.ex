@@ -22,7 +22,8 @@ defmodule OpenAgents.Forge.Supervisor do
     if Application.get_env(:openagents, :repository_provisioner_enabled, true) do
       [
         {OpenAgents.Repositories.Provisioner, []},
-        {OpenAgents.Repositories.ImportWorkspaceJanitor, []}
+        {OpenAgents.Repositories.ImportWorkspaceJanitor, []},
+        {OpenAgents.Stacks.OperationWorker, []}
       ]
     else
       []

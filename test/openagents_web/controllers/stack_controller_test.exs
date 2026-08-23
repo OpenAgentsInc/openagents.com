@@ -314,6 +314,106 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
+  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase" do
+    test "accepts a rebase, exposes the operation, and replays retries", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-rebase", repository)
+
+      assert %{"number" => 1} =
+               conn
+               |> put_req_header("idempotency-key", "rebase-create-1")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1]})
+               |> json_response(201)
+
+      rebase_conn =
+        conn
+        |> put_req_header("idempotency-key", "rebase-1")
+        |> post("#{path(repository)}/1/rebase", %{})
+
+      assert %{
+               "id" => operation_id,
+               "kind" => "rebase",
+               "state" => "pending",
+               "replayed" => false
+             } = json_response(rebase_conn, 202)
+
+      assert %{"health" => "operation_in_progress"} =
+               json_response(get(conn, "#{path(repository)}/1"), 200)
+
+      replay_conn =
+        conn
+        |> put_req_header("idempotency-key", "rebase-1")
+        |> post("#{path(repository)}/1/rebase", %{})
+
+      assert %{"id" => ^operation_id, "replayed" => true} = json_response(replay_conn, 202)
+
+      second_conn =
+        conn
+        |> put_req_header("idempotency-key", "rebase-2")
+        |> post("#{path(repository)}/1/rebase", %{})
+
+      assert %{"code" => "operation_in_progress"} = json_response(second_conn, 409)
+
+      show_conn = get(conn, "#{path(repository)}/1/operations/#{operation_id}")
+      assert %{"id" => ^operation_id, "state" => "pending"} = json_response(show_conn, 200)
+
+      missing_conn =
+        get(conn, "#{path(repository)}/1/operations/00000000-0000-0000-0000-000000000000")
+
+      assert json_response(missing_conn, 404)
+    end
+
+    test "continue requires a paused operation, and abort cancels", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-rebase-ops", repository)
+
+      assert %{"number" => 1} =
+               conn
+               |> put_req_header("idempotency-key", "rebase-ops-create")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1]})
+               |> json_response(201)
+
+      assert %{"id" => operation_id} =
+               conn
+               |> put_req_header("idempotency-key", "rebase-ops-1")
+               |> post("#{path(repository)}/1/rebase", %{})
+               |> json_response(202)
+
+      continue_conn =
+        post(conn, "#{path(repository)}/1/operations/#{operation_id}/continue", %{
+          resolution_oid: oids["layer-1"]
+        })
+
+      assert %{"code" => "operation_not_waiting"} = json_response(continue_conn, 409)
+
+      abort_conn = post(conn, "#{path(repository)}/1/operations/#{operation_id}/abort", %{})
+      assert %{"id" => ^operation_id, "state" => "cancelled"} = json_response(abort_conn, 200)
+
+      assert %{"health" => "healthy"} = json_response(get(conn, "#{path(repository)}/1"), 200)
+
+      again_conn = post(conn, "#{path(repository)}/1/operations/#{operation_id}/abort", %{})
+      assert %{"code" => "operation_not_abortable"} = json_response(again_conn, 409)
+    end
+
+    test "refuses a caller without write access", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [_pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "stack-rebase-outsider")
+
+      conn =
+        conn
+        |> put_req_header("idempotency-key", "rebase-forbidden-1")
+        |> post("#{path(repository)}/1/rebase", %{})
+
+      assert json_response(conn, 403)
+    end
+  end
+
   describe "GET /api/v3/repos/:owner/:repo/stacks" do
     test "reads are public for a public repository", %{conn: conn} do
       repository = repository_fixture()

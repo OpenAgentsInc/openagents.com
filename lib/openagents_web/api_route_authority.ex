@@ -66,6 +66,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/pulls/:pull_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/stacks" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/stacks/:stack_number" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id" =>
+        :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :optional_bearer,
@@ -107,6 +109,11 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/pulls" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue" =>
+        :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/abort" =>
+        :required_bearer,
       # pipe_through :deployments_api — tenant deployment authority only. No
       # route here is anonymous, and none of them reaches the operator fleet
       # promotion surface.

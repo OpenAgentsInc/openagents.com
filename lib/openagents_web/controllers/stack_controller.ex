@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.StackController do
 
   alias OpenAgents.Repositories
   alias OpenAgents.Stacks
+  alias OpenAgents.Stacks.Restack
   alias OpenAgentsWeb.ControllerHelpers
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
@@ -56,6 +57,76 @@ defmodule OpenAgentsWeb.StackController do
     Ecto.NoResultsError -> not_found(conn)
   end
 
+  def rebase(conn, %{"owner" => owner, "repo" => repo, "stack_number" => number} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, {operation, replay_state}} <-
+           Restack.request_from_api(
+             repository,
+             ControllerHelpers.integer_param!(number),
+             params,
+             conn.assigns.current_user,
+             idempotency_key
+           ) do
+      conn
+      |> put_status(:accepted)
+      |> render(:operation, operation: operation, replay_state: replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def show_operation(conn, %{"owner" => owner, "repo" => repo} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+
+    case Restack.get_operation(
+           repository,
+           ControllerHelpers.integer_param!(params["stack_number"]),
+           params["operation_id"]
+         ) do
+      {:ok, operation} -> render(conn, :operation, operation: operation, replay_state: nil)
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def continue_operation(conn, %{"owner" => owner, "repo" => repo} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    case Restack.continue_from_api(
+           repository,
+           ControllerHelpers.integer_param!(params["stack_number"]),
+           params["operation_id"],
+           params,
+           conn.assigns.current_user
+         ) do
+      {:ok, operation} -> render(conn, :operation, operation: operation, replay_state: nil)
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
+  def abort_operation(conn, %{"owner" => owner, "repo" => repo} = params) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns.current_user)
+
+    case Restack.abort_from_api(
+           repository,
+           ControllerHelpers.integer_param!(params["stack_number"]),
+           params["operation_id"],
+           conn.assigns.current_user
+         ) do
+      {:ok, operation} -> render(conn, :operation, operation: operation, replay_state: nil)
+      {:error, reason} -> render_error(conn, reason)
+    end
+  rescue
+    Ecto.NoResultsError -> not_found(conn)
+  end
+
   defp idempotency_key(conn) do
     case get_req_header(conn, "idempotency-key") do
       [key] when byte_size(key) in 1..200 ->
@@ -74,15 +145,19 @@ defmodule OpenAgentsWeb.StackController do
   defp render_error(conn, :forbidden),
     do: error(conn, :forbidden, "You cannot modify stacks in this repository.")
 
-  defp render_error(conn, reason) when reason in [:stack_not_found, :pull_request_not_found],
-    do: not_found(conn)
+  defp render_error(conn, reason)
+       when reason in [:stack_not_found, :pull_request_not_found, :operation_not_found],
+       do: not_found(conn)
 
   defp render_error(conn, reason)
        when reason in [
               :idempotency_conflict,
               :stale_stack_version,
               :expected_head_mismatch,
-              :stack_not_open
+              :stack_not_open,
+              :operation_in_progress,
+              :operation_not_waiting,
+              :operation_not_abortable
             ],
        do: conflict(conn, reason)
 
@@ -99,7 +174,9 @@ defmodule OpenAgentsWeb.StackController do
               :duplicate_branch,
               :broken_base_chain,
               :already_stacked,
-              :not_stack_top
+              :not_stack_top,
+              :resolution_not_found,
+              :resolution_parent_mismatch
             ] do
     conn
     |> put_status(:unprocessable_entity)
@@ -128,6 +205,13 @@ defmodule OpenAgentsWeb.StackController do
   defp message(:broken_base_chain), do: "The direct-base chain is broken."
   defp message(:already_stacked), do: "A pull request already belongs to an active stack."
   defp message(:not_stack_top), do: "The pull request does not target the current top head."
+  defp message(:operation_in_progress), do: "Another operation is active on this stack."
+  defp message(:operation_not_waiting), do: "The operation is not waiting for a resolution."
+  defp message(:operation_not_abortable), do: "The operation can no longer be aborted."
+  defp message(:resolution_not_found), do: "The resolution commit does not exist."
+
+  defp message(:resolution_parent_mismatch),
+    do: "The resolution commit does not build on the persisted parent."
 
   defp not_found(conn), do: error(conn, :not_found, "Not Found")
   defp error(conn, status, message), do: conn |> put_status(status) |> json(%{message: message})

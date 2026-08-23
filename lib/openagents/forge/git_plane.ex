@@ -56,6 +56,17 @@ defmodule OpenAgents.Forge.GitPlane do
     end
   end
 
+  @doc "The parent commit OIDs of a commit, in order (empty for a root commit)."
+  def parents(repo, rev) do
+    with :ok <- check_rev(rev),
+         :ok <- Sync.ensure_fresh(repo) do
+      case git(repo, ["show", "-s", "--format=%P", "--end-of-options", rev]) do
+        {output, 0} -> {:ok, output |> String.split() |> Enum.filter(&(&1 != ""))}
+        _other -> {:error, :not_found}
+      end
+    end
+  end
+
   @doc "Whether `ancestor` is an ancestor of (or equal to) `descendant`."
   def ancestor?(repo, ancestor, descendant) do
     with :ok <- check_rev(ancestor),

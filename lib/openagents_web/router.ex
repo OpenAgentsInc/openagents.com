@@ -385,6 +385,11 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :show
     get "/repos/:owner/:repo/stacks", StackController, :index
     get "/repos/:owner/:repo/stacks/:stack_number", StackController, :show
+
+    get "/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id",
+        StackController,
+        :show_operation
+
     get "/repos/:owner/:repo/projectsV2", ProjectController, :index
     get "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :show
     get "/repos/:owner/:repo/projectsV2/:project_number/items", ProjectController, :items
@@ -439,6 +444,16 @@ defmodule OpenAgentsWeb.Router do
     patch "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :update
     post "/repos/:owner/:repo/stacks", StackController, :create
     post "/repos/:owner/:repo/stacks/:stack_number/append", StackController, :append
+    post "/repos/:owner/:repo/stacks/:stack_number/rebase", StackController, :rebase
+
+    post "/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue",
+         StackController,
+         :continue_operation
+
+    post "/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/abort",
+         StackController,
+         :abort_operation
+
     post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
     put "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
     patch "/repos/:owner/:repo/issues/comments/:id", CommentController, :update

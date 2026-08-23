@@ -13,6 +13,27 @@ defmodule OpenAgentsWeb.StackJSON do
     end
   end
 
+  def render("operation.json", %{operation: operation} = assigns) do
+    json = %{
+      id: operation.id,
+      kind: operation.kind,
+      state: operation.state,
+      expected_stack_version: operation.expected_stack_version,
+      target_position: operation.target_position,
+      conflict: operation.conflict,
+      planned_result: operation.planned_result,
+      error: operation.error,
+      created_at: operation.inserted_at,
+      started_at: operation.started_at,
+      completed_at: operation.completed_at
+    }
+
+    case Map.get(assigns, :replay_state) do
+      nil -> json
+      replay_state -> Map.put(json, :replayed, replay_state == :replayed)
+    end
+  end
+
   defp stack(stack, assigns) do
     base_url = String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
     owner = assigns.owner

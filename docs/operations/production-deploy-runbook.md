@@ -30,9 +30,11 @@ Two invariants govern everything:
 The gate fails fast when any of these is missing. Set them up once per
 machine:
 
-1. Tools on `PATH`: `jq`, `mix`, `npm`, `docker`, and `terraform` satisfying
-   `>= 1.11, < 2.0` (the staging infrastructure gate checks
-   `ops/staging/infra/versions.tf`).
+1. Tools on `PATH`: `jq`, `mix`, `npm`, `docker`, `git` version 2.38 or
+   later (the stack merge and git-plane tests run
+   `git merge-tree --write-tree`, which older git does not support), and
+   `terraform` satisfying `>= 1.11, < 2.0` (the staging infrastructure gate
+   checks `ops/staging/infra/versions.tf`).
 2. JavaScript dependencies: run `npm ci --prefix assets`. The relup stage runs
    `mix assets.deploy`, which needs `assets/node_modules` (for example
    `posthog-js`). A missing install fails the relup stage, not the javascript

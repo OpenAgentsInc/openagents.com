@@ -372,6 +372,8 @@ defmodule OpenAgents.RuntimeConfigTest do
     |> put_nested(:graph_memory, :enabled, false)
     |> put_nested(:memory_portability, :enabled, false)
     |> put_nested(:shadow_programs, :enabled, false)
+    |> put_nested(:scv_codex, :enabled, false)
+    |> put_nested(:scv_codex, :temporary_root, "/var/lib/openagents/workspace/scv")
   end
 
   defp rolling_gcp_config do

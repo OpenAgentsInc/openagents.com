@@ -162,21 +162,6 @@ credentials are refused with
 `{"error":{"code":"agent_box_control_forbidden"}}` until linked-agent Box
 control is implemented.
 
-Admit several Boxes with one plan:
-
-```sh
-openagents api -X POST --input fanout.json \
-  conversations/CONVERSATION_ID/boxes/fanout
-openagents api conversations/CONVERSATION_ID/boxes/fanout/PLAN_ID
-```
-
-The plan records labels, admitted and queued entries, queue reasons, estimated
-hourly burn rates, and the effective capacity limits. The burn-rate limits
-bound the current hourly provider estimate, while accumulated usage remains a
-separate quantity for later settlement. A queued entry does not provision a
-provider Box. Omitted labels are assigned sequentially per conversation and
-remain stable for the Box lifetime.
-
 Long-running work uses durable runs instead of the synchronous command route:
 
 ```sh

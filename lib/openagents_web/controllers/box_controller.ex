@@ -20,10 +20,10 @@ defmodule OpenAgentsWeb.BoxController do
     end
   end
 
-  def create(conn, %{"conversation_id" => conversation_id} = params) do
+  def create(conn, %{"conversation_id" => conversation_id}) do
     with {:ok, _conversation} <- owned_conversation(conn, conversation_id),
          :ok <- BoxRateLimiter.allow?(conn.assigns.current_user.id, :create),
-         {:ok, record} <- Box.create_box(conversation_id, label: params["label"]) do
+         {:ok, record} <- Box.create_box(conversation_id) do
       conn
       |> put_status(:created)
       |> json(%{"box" => box_projection(record)})
@@ -95,7 +95,6 @@ defmodule OpenAgentsWeb.BoxController do
   defp box_projection(record) do
     %{
       "box_id" => record.box_id,
-      "label" => record.label,
       "state" => record.state,
       "setup_status" => record.setup_status,
       "created_at" => iso8601(record.inserted_at),
@@ -145,15 +144,6 @@ defmodule OpenAgentsWeb.BoxController do
 
   defp box_error(conn, :box_quota_reached),
     do: refusal(conn, :conflict, "box_quota_reached")
-
-  defp box_error(conn, :box_owner_quota_reached),
-    do: refusal(conn, :conflict, "box_owner_quota_reached")
-
-  defp box_error(conn, :box_global_quota_reached),
-    do: refusal(conn, :conflict, "box_global_quota_reached")
-
-  defp box_error(conn, :box_label_taken),
-    do: refusal(conn, :conflict, "box_label_taken")
 
   defp box_error(conn, reason) when reason in [:box_not_owned, :box_not_found],
     do: refusal(conn, :not_found, "box_not_found")

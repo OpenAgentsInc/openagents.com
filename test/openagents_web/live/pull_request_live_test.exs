@@ -9,6 +9,8 @@ defmodule OpenAgentsWeb.PullRequestLiveTest do
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
   alias OpenAgents.Stacks
+  alias OpenAgents.Stacks.Stack
+  alias OpenAgents.Stacks.StackEntry
 
   test "the pull request list links to a valid browser detail page", %{conn: conn} do
     target = repository_fixture()
@@ -195,6 +197,96 @@ defmodule OpenAgentsWeb.PullRequestLiveTest do
       assert render(show) =~ "The pull request left the stack."
       refute has_element?(show, "#stack-review")
     end
+
+    test "a merged stack member keeps its stack map and shows the merged state", %{
+      conn: conn,
+      repository: repository,
+      pull_requests: pull_requests
+    } do
+      merge_stack!(pull_requests)
+      [bottom, top] = pull_requests
+
+      {:ok, show, _html} = live(conn, pull_path(repository, bottom))
+
+      assert element(show, "#pull-request-state") |> render() =~ "merged"
+      refute has_element?(show, "#stack-review")
+      assert element(show, "#stack-history") |> render() =~ "layer 1 of 2"
+      assert element(show, "#stack-history-note") |> render() =~ "merged into main"
+
+      layers = element(show, "#stack-history-map") |> render()
+      assert layers =~ ~s(data-state="merged")
+      refute layers =~ ~s(data-state="open")
+
+      assert has_element?(
+               show,
+               "#stack-history-map a[href='#{pull_path(repository, top)}']"
+             )
+
+      refute has_element?(show, "#stack-rebase")
+      refute has_element?(show, "#stack-unstack")
+    end
+
+    test "a pull request closed without merging shows closed and no stack history", %{
+      conn: conn,
+      repository: repository,
+      pull_requests: pull_requests
+    } do
+      top = Enum.at(pull_requests, 1)
+
+      {1, _rows} =
+        Repo.update_all(
+          from(entry in StackEntry, where: entry.pull_request_id == ^top.id),
+          set: [removed_at: DateTime.utc_now()]
+        )
+
+      {1, _rows} =
+        Repo.update_all(
+          from(pr in PullRequest, where: pr.id == ^top.id),
+          set: [state: "closed"]
+        )
+
+      {:ok, show, _html} = live(conn, pull_path(repository, top))
+
+      assert element(show, "#pull-request-state") |> render() =~ "closed"
+      refute has_element?(show, "#stack-review")
+      refute has_element?(show, "#stack-history")
+    end
+
+    test "the pull request list shows the merged state", %{
+      conn: conn,
+      repository: repository,
+      pull_requests: pull_requests
+    } do
+      merge_stack!(pull_requests)
+
+      {:ok, index, _html} = live(conn, "/#{repository.owner}/#{repository.name}/pulls")
+
+      assert has_element?(index, "span[data-variant='done']", "merged")
+    end
+  end
+
+  # Marks every layer merged the way `Merge.execute/2` records it: the entry
+  # removal and the pull request merge share one timestamp, and the stack
+  # completes.
+  defp merge_stack!(pull_requests) do
+    now = DateTime.utc_now()
+    ids = Enum.map(pull_requests, & &1.id)
+
+    {_count, _rows} =
+      Repo.update_all(
+        from(entry in StackEntry, where: entry.pull_request_id in ^ids),
+        set: [removed_at: now]
+      )
+
+    {_count, _rows} =
+      Repo.update_all(
+        from(pr in PullRequest, where: pr.id in ^ids),
+        set: [state: "closed", merged_at: now]
+      )
+
+    {_count, _rows} = Repo.update_all(Stack, set: [state: "completed"])
+
+    :ok
   end
 
   defp pull_path(repository, pull_request) do

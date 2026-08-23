@@ -297,24 +297,6 @@ historical agent authorship remains unchanged.
 Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 and `test/openagents/agents_test.exs`.
 
-### CAPACITY-002 — Box fan-out admission is bounded and durable
-
-Status: Current
-
-Fan-out admission records one durable plan and one logical item per requested
-Box. PostgreSQL-backed admission locks enforce conversation, owner, and global
-active limits before provider creation. Queued items retain their labels and
-request order, hold no provider resource, and promote when a Box stops.
-Generated labels are sequential within a conversation and remain stable for
-the Box lifetime.
-Admission records an estimated hourly burn rate, and conversation and owner
-burn-rate ceilings are separate from accumulated usage. Later settlement must
-use its own durable usage quantity rather than treating the current active
-burn rate as historical spend.
-
-Evidence: `OpenAgents.Box`, `OpenAgents.Box.Fanout`, and
-`test/openagents/box_fanout_test.exs`.
-
 ### WORK-002 — Detached Box runs reconcile from durable evidence
 
 Status: Current
@@ -2363,7 +2345,6 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
-| CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |

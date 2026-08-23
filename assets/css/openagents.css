@@ -1064,6 +1064,11 @@
     color: var(--danger);
   }
 
+  /* Merged pull requests and issues closed as completed. */
+  .badge[data-variant="done"] {
+    color: var(--done);
+  }
+
   /* Technical metadata keeps the monospace accent. */
   .badge[data-variant="dim"] {
     color: var(--text-dim);

@@ -431,8 +431,6 @@ defmodule OpenAgentsWeb.Router do
 
     get "/", BoxController, :index
     post "/", BoxController, :create
-    post "/fanout", BoxFanoutController, :create
-    get "/fanout/:request_id", BoxFanoutController, :show
     get "/:box_id", BoxController, :show
     post "/:box_id/commands", BoxController, :command
     post "/:box_id/stop", BoxController, :stop

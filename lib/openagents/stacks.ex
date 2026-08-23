@@ -185,6 +185,63 @@ defmodule OpenAgents.Stacks do
     end
   end
 
+  @doc """
+  The historical stack placement for a pull request that merged as part
+  of a stack.
+
+  Merging removes the entry from the active stack, so `review_context/2`
+  stops covering the pull request the moment it lands. This returns the
+  stack with every layer it held — removed entries included — so the page
+  keeps showing where the pull request sat and where each sibling went. It
+  matches only entries whose removal coincided with the merge, so a pull
+  request that left a stack and merged on its own stays `:not_stacked`.
+  """
+  def merged_context(%PullRequest{} = pull_request) do
+    with %DateTime{} = merged_at <- pull_request.merged_at,
+         %StackEntry{} = entry <- merged_entry_for_pull_request(pull_request, merged_at) do
+      stack =
+        Stack
+        |> Repo.get!(entry.stack_id)
+        |> Repo.preload(entries: all_entries_query())
+
+      entries = latest_entry_per_pull_request(stack.entries)
+      stack = %{stack | entries: entries}
+      entry = Enum.find(entries, &(&1.id == entry.id))
+
+      {:ok,
+       %{
+         stack: stack,
+         entry: entry,
+         position: entry.position,
+         size: length(entries)
+       }}
+    else
+      _other -> {:error, :not_stacked}
+    end
+  end
+
+  defp merged_entry_for_pull_request(%PullRequest{id: pull_request_id}, merged_at) do
+    Repo.one(
+      from entry in StackEntry,
+        where: entry.pull_request_id == ^pull_request_id and entry.removed_at == ^merged_at
+    )
+  end
+
+  defp latest_entry_per_pull_request(entries) do
+    entries
+    |> Enum.group_by(& &1.pull_request_id)
+    |> Enum.map(fn {_pull_request_id, group} ->
+      Enum.max_by(group, & &1.inserted_at, DateTime)
+    end)
+    |> Enum.sort_by(& &1.position)
+  end
+
+  defp all_entries_query do
+    from entry in StackEntry,
+      order_by: [asc: entry.position],
+      preload: [pull_request: :issue]
+  end
+
   defp parent_ref(stack, %StackEntry{position: 1}), do: stack.trunk_ref
 
   defp parent_ref(stack, entry) do

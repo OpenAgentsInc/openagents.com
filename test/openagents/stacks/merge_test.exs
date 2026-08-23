@@ -596,6 +596,46 @@ defmodule OpenAgents.Stacks.MergeTest do
     end
   end
 
+  describe "the merged review context" do
+    test "a merged pull request resolves its historical stack placement", context do
+      %{repository: repository, actor: actor} = context
+
+      %{stack: stack, pull_requests: [pr_1, pr_2]} = seed_stack(repository, actor)
+
+      {:ok, {_operation, :created}} =
+        Merge.request_from_api(
+          repository,
+          stack.number,
+          %{"pull_request_number" => pr_2.issue.number, "merge_method" => "merge"},
+          actor,
+          "merged-context-1"
+        )
+
+      assert :processed = OperationWorker.run_once()
+
+      for pr <- [pr_1, pr_2] do
+        merged = Repo.one!(from p in PullRequest, where: p.id == ^pr.id)
+        assert {:ok, merged_context} = Stacks.merged_context(merged)
+        assert merged_context.stack.id == stack.id
+        assert merged_context.size == 2
+        assert merged_context.entry.pull_request_id == pr.id
+
+        assert Enum.map(merged_context.stack.entries, & &1.position) == [1, 2]
+
+        assert Enum.map(merged_context.stack.entries, & &1.pull_request.issue.number) ==
+                 [pr_1.issue.number, pr_2.issue.number]
+      end
+    end
+
+    test "an unmerged stacked pull request has no merged context", context do
+      %{repository: repository, actor: actor} = context
+
+      %{pull_requests: [pr_1, _pr_2]} = seed_stack(repository, actor)
+
+      assert {:error, :not_stacked} = Stacks.merged_context(pr_1)
+    end
+  end
+
   ## Fixtures
 
   # main ── layer-1 ── layer-2 ── …, each layer adding one file.

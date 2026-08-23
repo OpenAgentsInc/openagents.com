@@ -57,23 +57,6 @@ provider request. Agent participation credentials receive
 `{"error":{"code":"agent_box_control_forbidden"}}`; linked-agent Box control is
 available only after the linked human grants the `box:control` scope.
 
-Request several Boxes with one durable admission plan:
-
-```sh
-openagents api -X POST --input fanout.json \
-  conversations/CONVERSATION_ID/boxes/fanout
-openagents api conversations/CONVERSATION_ID/boxes/fanout/PLAN_ID
-```
-
-The request body contains a positive `count`, optional `labels`, and an
-optional `budgeted` flag. The response identifies admitted and queued logical
-Boxes, their labels, queue reasons, estimated hourly burn rates, and the
-effective conversation, owner, global, and burn-rate limits. The burn-rate
-limits bound the current hourly provider estimate; they are not accumulated
-usage totals. Queued entries do not create a provider Box until capacity
-becomes available. Omitted labels are assigned sequentially per conversation
-and remain stable for the Box lifetime.
-
 ### Assignment credentials
 
 A linked human can grant and revoke Box control for an agent:

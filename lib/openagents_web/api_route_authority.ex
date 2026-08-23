@@ -92,8 +92,6 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/capacity/matches" => :required_bearer,
       "get /api/v3/conversations/:conversation_id/boxes" => :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes" => :required_bearer,
-      "post /api/v3/conversations/:conversation_id/boxes/fanout" => :required_bearer,
-      "get /api/v3/conversations/:conversation_id/boxes/fanout/:request_id" => :required_bearer,
       "get /api/v3/conversations/:conversation_id/boxes/:box_id" => :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/commands" => :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/stop" => :required_bearer,

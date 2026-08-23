@@ -67,8 +67,8 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
                       #{pull_request.issue.number} from {pull_request.head_repository.owner}/{pull_request.head_repository.name}:{pull_request.head_ref} into {pull_request.base_ref}
                     </p>
                   </div>
-                  <.badge variant={if(pull_request.state == "open", do: :success, else: :secondary)}>
-                    {pull_request.state}
+                  <.badge variant={state_variant(state_label(pull_request))}>
+                    {state_label(pull_request)}
                   </.badge>
                 </div>
               </.link>
@@ -79,6 +79,20 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
     </Layouts.app>
     """
   end
+
+  defp state_label(pull_request) do
+    cond do
+      pull_request.merged_at -> "merged"
+      pull_request.state == "closed" -> "closed"
+      pull_request.draft -> "draft"
+      true -> "open"
+    end
+  end
+
+  defp state_variant("merged"), do: :done
+  defp state_variant("open"), do: :success
+  defp state_variant("draft"), do: :dim
+  defp state_variant(_closed), do: :danger
 
   defp visible_repository!(owner, repo, user) do
     Repositories.get_visible_by_path!(owner, repo, user)

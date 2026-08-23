@@ -13,7 +13,6 @@
 ^docs/2026-08-21-sarah-computers-and-scv-architecture-audit\.md:
 ^docs/2026-08-23-openagents-coder-cli-spec\.md:
 ^docs/2026-08-23-sarah-memory-voice-session-control-audit\.md:
-^docs/2026-08-23-openagents-coder-cli-spec\.md:
 ^docs/chat-inference-plan\.md:
 ^docs/component-library\.md:
 ^docs/episode-triage\.md:

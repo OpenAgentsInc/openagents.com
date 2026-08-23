@@ -2,8 +2,10 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
   @moduledoc "Lists pull requests for a repository."
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Issues
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.UI.Circle
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
@@ -15,6 +17,8 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
+     |> assign(:open_issue_count, open_issue_count(repository))
+     |> assign(:open_pull_request_count, open_pull_request_count(repository))
      |> assign(:pull_requests_empty?, pull_requests == [])
      |> stream(:pull_requests, pull_requests)}
   end
@@ -37,8 +41,19 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
           <:tabs>
             <.repo_tabs>
               <:tab icon="code" navigate={~p"/#{@owner}/#{@repo}"}>Code</:tab>
-              <:tab icon="empty-circle" navigate={~p"/#{@owner}/#{@repo}/issues"}>Issues</:tab>
-              <:tab icon="pull-request-open" navigate={~p"/#{@owner}/#{@repo}/pulls"} current>
+              <:tab
+                icon="octicon-issue-opened"
+                navigate={~p"/#{@owner}/#{@repo}/issues"}
+                count={@open_issue_count}
+              >
+                Issues
+              </:tab>
+              <:tab
+                icon="pull-request-open"
+                navigate={~p"/#{@owner}/#{@repo}/pulls"}
+                count={@open_pull_request_count}
+                current
+              >
                 Pull requests
               </:tab>
               <:tab icon="cube" navigate={~p"/#{@owner}/#{@repo}/projects"}>Projects</:tab>
@@ -61,11 +76,14 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
                 class="block rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/50"
               >
                 <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 class="font-semibold text-foreground">{pull_request.issue.title}</h2>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                      #{pull_request.issue.number} from {pull_request.head_repository.owner}/{pull_request.head_repository.name}:{pull_request.head_ref} into {pull_request.base_ref}
-                    </p>
+                  <div class="flex items-start gap-2">
+                    <Circle.pull_request_state state={state_label(pull_request)} class="mt-1" />
+                    <div>
+                      <h2 class="font-semibold text-foreground">{pull_request.issue.title}</h2>
+                      <p class="mt-1 text-sm text-muted-foreground">
+                        #{pull_request.issue.number} from {pull_request.head_repository.owner}/{pull_request.head_repository.name}:{pull_request.head_ref} into {pull_request.base_ref}
+                      </p>
+                    </div>
                   </div>
                   <.badge variant={state_variant(state_label(pull_request))}>
                     {state_label(pull_request)}
@@ -80,12 +98,21 @@ defmodule OpenAgentsWeb.PullRequestIndexLive do
     """
   end
 
-  defp state_label(pull_request) do
-    cond do
-      pull_request.merged_at -> "merged"
-      pull_request.state == "closed" -> "closed"
-      pull_request.draft -> "draft"
-      true -> "open"
+  defp state_label(pull_request), do: PullRequests.state(pull_request)
+
+  # The two numbers the repository nav has to keep apart. Both were the same
+  # number while pull requests were counted as issues (#120).
+  defp open_issue_count(repository) do
+    case Issues.count_issues(repository, state: "open") do
+      0 -> nil
+      count -> count
+    end
+  end
+
+  defp open_pull_request_count(repository) do
+    case PullRequests.count_open(repository) do
+      0 -> nil
+      count -> count
     end
   end
 

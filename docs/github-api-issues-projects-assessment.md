@@ -28,6 +28,25 @@ infer authorization that the server does not enforce.
 Cross-repository issue lists, organization issue lists, event/timeline APIs,
 locks, dependencies, sub-issues, and suggestion APIs are not implemented.
 
+### Pull requests in the issue list
+
+A pull request is an issue row with a `pull_requests` record pointing at it, so
+the two share one number space, exactly as they do on GitHub.
+`GET /repos/{owner}/{repo}/issues` therefore returns both kinds and marks each
+pull request the way GitHub does:
+
+- A top-level `pull_request` object with `url`, `html_url`, and `merged_at`.
+  Its presence is the fact a client tests for; a plain issue omits the key.
+- A top-level `draft` boolean, present only on a pull-request-backed entry.
+
+`diff_url` and `patch_url` are omitted because this forge serves no route for
+them, and an advertised URL that answers `404` is worse than an absent one.
+
+GitHub has no parameter that lists one kind without the other, so the
+OpenAgents `type` filter (`issue`, `pull_request`, or `all`, defaulting to
+`all`) is published under `issue.openagents` at `GET /api/v3` rather than
+presented as a GitHub parameter.
+
 ## Implemented Projects V2 subset
 
 | Method | Path |

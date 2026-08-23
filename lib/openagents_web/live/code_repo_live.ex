@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
 
   alias OpenAgents.Forge
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
@@ -60,6 +61,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:branch_count, Enum.count(refs, &(&1.kind == :branch)))
      |> assign(:tag_count, Enum.count(refs, &(&1.kind == :tag)))
      |> assign(:open_issue_count, open_issue_count(repository))
+     |> assign(:open_pull_request_count, open_pull_request_count(repository))
      |> assign(:og, OG.meta(OG.repo_card_for(repository)))
      |> assign(:clone_url, RepositoryAccess.clone_url(repository))
      |> assign(:delete_allowed?, delete_allowed?)
@@ -166,14 +168,27 @@ defmodule OpenAgentsWeb.CodeRepoLive do
 
   # The tab carries a count only when there is something to count, the way the
   # component's own `count` attribute is defined: nil renders no badge.
+  #
+  # Issues and pull requests are counted apart because they are apart. Both tabs
+  # read the same number while a pull request was an uncounted-out issue row,
+  # which is the ambiguity #120 removed.
   defp open_issue_count(repository) do
-    case OpenAgents.Issues.list_issues(repository, state: "open") do
-      [] -> nil
-      issues -> length(issues)
+    case OpenAgents.Issues.count_issues(repository, state: "open") do
+      0 -> nil
+      count -> count
     end
   rescue
     # The tab is decoration over another context's data. A repository whose
     # issues cannot be read is still a repository whose code should render.
+    _error -> nil
+  end
+
+  defp open_pull_request_count(repository) do
+    case PullRequests.count_open(repository) do
+      0 -> nil
+      count -> count
+    end
+  rescue
     _error -> nil
   end
 
@@ -206,8 +221,19 @@ defmodule OpenAgentsWeb.CodeRepoLive do
           <:tabs>
             <.repo_tabs>
               <:tab icon="code" navigate={@base} current>Code</:tab>
-              <:tab icon="empty-circle" navigate={"#{@base}/issues"} count={@open_issue_count}>
+              <:tab
+                icon="octicon-issue-opened"
+                navigate={"#{@base}/issues"}
+                count={@open_issue_count}
+              >
                 Issues
+              </:tab>
+              <:tab
+                icon="pull-request-open"
+                navigate={"#{@base}/pulls"}
+                count={@open_pull_request_count}
+              >
+                Pull requests
               </:tab>
               <:tab icon="cube" navigate={"#{@base}/projects"}>Projects</:tab>
             </.repo_tabs>

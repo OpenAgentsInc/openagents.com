@@ -995,10 +995,18 @@ defmodule OpenAgentsWeb.UI do
   defp layer_count_label(1), do: "1 layer"
   defp layer_count_label(count), do: "#{count} layers"
 
-  defp pull_request_state_icon("merged"), do: "pull-request-merged"
-  defp pull_request_state_icon("closed"), do: "pull-request-closed"
-  defp pull_request_state_icon("draft"), do: "pull-request-draft"
-  defp pull_request_state_icon(_open), do: "pull-request-open"
+  @doc """
+  The vendored glyph for one pull-request state.
+
+  Public because the stack map is not the only surface that draws it: a pull
+  request is an issue row on this forge, so anywhere a number is rendered has
+  to be able to say which of the two kinds it is (#120). One mapping, so two
+  surfaces cannot disagree about what merged looks like.
+  """
+  def pull_request_state_icon("merged"), do: "pull-request-merged"
+  def pull_request_state_icon("closed"), do: "pull-request-closed"
+  def pull_request_state_icon("draft"), do: "pull-request-draft"
+  def pull_request_state_icon(_open), do: "pull-request-open"
 
   @doc """
   A repository's file table: the ref bar, the latest commit, and the entries.

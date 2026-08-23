@@ -2546,6 +2546,30 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "pull-request-state"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        A pull request on this forge is an issue row with a <code>pull_requests</code>
+        record pointing at it, which is why the two share a number space. That made
+        PR #119 and issue #114 read as duplicates of each other. This is the glyph that
+        tells them apart, coloured off the same category ladder <code>issue_state/1</code>
+        uses so both kinds stay in one palette.
+      </p>
+      <div class="flex flex-wrap gap-x-6 gap-y-3">
+        <Circle.pull_request_state state="open" show_label />
+        <Circle.pull_request_state state="draft" show_label />
+        <Circle.pull_request_state state="merged" show_label />
+        <Circle.pull_request_state state="closed" show_label />
+      </div>
+      <div class="flex flex-wrap gap-x-6 gap-y-3">
+        <Circle.issue_state state="open" show_label />
+        <Circle.pull_request_state state="open" show_label />
+      </div>
+    </div>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "issue-detail"}} = assigns) do
     ~H"""
     <div class="space-y-3">

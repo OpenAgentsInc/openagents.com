@@ -208,6 +208,19 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert has_element?(view, "#code-repo-page")
     end
 
+    test "the repository nav separates issues from pull requests", %{conn: conn} do
+      browsable()
+      {:ok, view, _html} = live(conn, "/OpenAgentsInc/openagents.com")
+
+      assert has_element?(view, "a[href='/OpenAgentsInc/openagents.com/issues']")
+      assert has_element?(view, "a[href='/OpenAgentsInc/openagents.com/pulls']")
+
+      assert has_element?(
+               view,
+               "a[href='/OpenAgentsInc/openagents.com/pulls'] [data-icon='pull-request-open']"
+             )
+    end
+
     test "the latest commit reads as how long ago, not as a calendar date", %{conn: conn} do
       browsable()
       {:ok, view, _html} = live(conn, "/OpenAgentsInc/openagents.com")

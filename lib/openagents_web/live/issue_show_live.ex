@@ -33,6 +33,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Markdown
   alias OpenAgents.Milestones
   alias OpenAgents.Notifications
+  alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RelativeTime
@@ -67,6 +68,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
        Repositories.issue_participant?(repository, user)
      )
      |> assign(:can_edit, can_write || author?(issue, user))
+     |> assign(:pull_request_state, pull_request_state(issue))
      |> assign(:editing, false)
      |> assign(:comment_form, to_form(Comment.changeset(%Comment{}, %{})))
      |> assign(:repo_labels, if(can_write, do: Labels.list_labels(repository), else: []))
@@ -342,7 +344,33 @@ defmodule OpenAgentsWeb.IssueShowLive do
               <span class="issue-heading__number">#{@issue.number}</span>
             </h1>
             <p class="issue-heading__meta">
-              <Circle.issue_state state={@issue.state} reason={@issue.state_reason} show_label />
+              <%!-- A pull request is one of these rows, so this page can be
+              reached for a number that proposes a change to code. It says so
+              with the pull request's own glyph and state, and links to the
+              surface that can review it, rather than drawing the issue circle
+              over it (#120). --%>
+              <Circle.pull_request_state
+                :if={@pull_request_state}
+                id="issue-pull-request-state"
+                state={@pull_request_state}
+                show_label
+              />
+              <Circle.issue_state
+                :if={!@pull_request_state}
+                state={@issue.state}
+                reason={@issue.state_reason}
+                show_label
+              />
+              <span :if={@pull_request_state} class="issue-heading__dot" aria-hidden="true">·</span>
+              <.link
+                :if={@pull_request_state}
+                id="issue-pull-request-link"
+                navigate={~p"/#{@owner}/#{@repo}/pulls/#{@issue.number}"}
+                class="btn"
+                data-variant="link"
+              >
+                Pull request
+              </.link>
               <span class="issue-heading__dot" aria-hidden="true">·</span>
               <span>
                 {author(@issue)} opened this {relative(@issue.inserted_at)} ago
@@ -744,6 +772,15 @@ defmodule OpenAgentsWeb.IssueShowLive do
   defp tone_for_hue(h) when h < 170, do: :success
   defp tone_for_hue(h) when h < 260, do: :info
   defp tone_for_hue(_h), do: :primary
+
+  # `nil` for a plain issue, the pull request's state for a row a pull request
+  # is built on. One query per page view, at mount, beside the issue it marks.
+  defp pull_request_state(issue) do
+    [issue]
+    |> PullRequests.markers_by_issue_id()
+    |> Map.get(issue.id)
+    |> then(&(&1 && &1.state))
+  end
 
   defp stamp(at), do: RelativeTime.ago(at)
 

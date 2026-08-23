@@ -446,6 +446,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "GitHub's two states and the one close reason that reads differently."
         },
         %{
+          slug: "pull-request-state",
+          title: "Pull request state",
+          icon: "pull-request-open",
+          source: "OpenAgentsWeb.UI.Circle.pull_request_state/1",
+          summary: "GitHub's four pull-request states, told apart from an issue's."
+        },
+        %{
           slug: "issue-detail",
           title: "Issue detail",
           icon: "document",

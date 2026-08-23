@@ -4,7 +4,15 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   GitHub-shaped keys keep their exact shape. OpenAgents-specific fields live
   under one `openagents` object, so a GitHub client sees an additional object
-  and nothing else. Each field appears only when the caller supplies it, and
+  and nothing else.
+
+  `pull_request` is the one addition that is not namespaced, because it is not
+  ours. GitHub's issues API returns both issues and pull requests and marks the
+  latter with a `pull_request` object; a client that already reads GitHub knows
+  to look for that key, and inventing `openagents.pull_request` beside it would
+  make the compatible reading the wrong one. The `?type=` filter that lists one
+  kind without the other has no GitHub counterpart, so it stays in the
+  extension namespace where the root document can publish it. Each field appears only when the caller supplies it, and
   the object appears only when at least one field does: an absent dependency
   graph is not the same fact as an issue with no prerequisites, and an absent
   progress derivation is not the same fact as an issue nobody has started.
@@ -55,7 +63,33 @@ defmodule OpenAgentsWeb.IssueJSON do
       html_url: "#{url_base}/#{owner}/#{repo}/issues/#{issue.number}",
       url: "#{url_base}/api/v3/repos/#{owner}/#{repo}/issues/#{issue.number}"
     }
+    |> put_pull_request(issue, assigns, owner, repo, url_base)
     |> put_extension(issue, assigns)
+  end
+
+  # GitHub's marker for an issue row that is a pull request. Absent on a plain
+  # issue and present on a pull request, exactly as GitHub does it: the key's
+  # presence is the fact, so a client tests for it rather than reading it.
+  # `draft` joins it at the top level for the same reason -- that is where
+  # GitHub puts it on a pull-request-backed issue.
+  #
+  # `diff_url` and `patch_url` are GitHub keys this forge has no route for. An
+  # advertised URL that answers 404 is worse than an absent one, so they are
+  # omitted until those routes exist.
+  defp put_pull_request(json, issue, assigns, owner, repo, url_base) do
+    case assigns |> Map.get(:pull_requests, %{}) |> Map.get(issue.id) do
+      nil ->
+        json
+
+      marker ->
+        json
+        |> Map.put(:draft, marker.draft)
+        |> Map.put(:pull_request, %{
+          url: "#{url_base}/api/v3/repos/#{owner}/#{repo}/pulls/#{issue.number}",
+          html_url: "#{url_base}/#{owner}/#{repo}/pulls/#{issue.number}",
+          merged_at: marker.merged_at
+        })
+    end
   end
 
   defp put_extension(json, issue, assigns) do

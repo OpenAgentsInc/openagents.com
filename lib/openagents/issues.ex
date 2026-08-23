@@ -1,5 +1,15 @@
 defmodule OpenAgents.Issues do
-  @moduledoc "Repository-scoped issues, comments, labels, milestones, and assignees."
+  @moduledoc """
+  Repository-scoped issues, comments, labels, milestones, and assignees.
+
+  A pull request is one of these rows with a `pull_requests` record pointing at
+  it, which is why the two share a number space. Every list function here
+  therefore takes a `:type` option, and it defaults to `"issue"`: a list this
+  module returns is issues unless the caller asks for more, so a count labelled
+  "Issues" counts issues. `OpenAgentsWeb.IssueController` passes `"all"` to keep
+  `GET /api/v3/repos/:owner/:repo/issues` shaped like GitHub's, which returns
+  both and marks the pull requests with a `pull_request` object.
+  """
 
   import Ecto.Query, warn: false
 
@@ -48,11 +58,15 @@ defmodule OpenAgents.Issues do
   @doc """
   One page of the filtered issue list, with the unpaginated total.
 
-  Supported options: `:state`, `:label`, `:assignee`, `:milestone`, `:q`,
-  `:blocked`, `:progress`, `:reader`, and `:page`. Filters compose; counts and
-  pages always agree because they read the same query. `:reader` is the user
-  whose readable boards `:progress` derives from, and only that option reads
-  it.
+  Supported options: `:type`, `:state`, `:label`, `:assignee`, `:milestone`,
+  `:q`, `:blocked`, `:progress`, `:reader`, and `:page`. Filters compose;
+  counts and pages always agree because they read the same query. `:reader` is
+  the user whose readable boards `:progress` derives from, and only that option
+  reads it.
+
+  `:type` defaults to `"issue"`, which excludes the issue rows pull requests
+  are built on. Pass `"pull_request"` for only those, or `"all"` for GitHub's
+  own list, which returns both.
   """
   def list_issues_page(%Repository{} = repository, opts) when is_list(opts) do
     page = max(parse_page(opts[:page]), 1)
@@ -96,9 +110,11 @@ defmodule OpenAgents.Issues do
   repository the reader has no membership in cannot reach the query's result
   no matter what the options say.
 
-  Supported options: `:state`, `:assignee`, `:author`, `:q`, and `:page`.
-  Rows come back with their repository preloaded, because a cross-repository
-  list has to say which repository each row belongs to.
+  Supported options: `:type`, `:state`, `:assignee`, `:author`, `:q`, and
+  `:page`. `:type` defaults to `"issue"` here too, so the workspace list and
+  the searches run against it are issues rather than issues and pull requests
+  together. Rows come back with their repository preloaded, because a
+  cross-repository list has to say which repository each row belongs to.
   """
   def list_visible_issues_page(user, opts \\ [])
       when (is_nil(user) or is_struct(user, User)) and is_list(opts) do
@@ -148,6 +164,7 @@ defmodule OpenAgents.Issues do
 
   defp apply_issue_filters(query, opts) do
     query
+    |> filter_type(Keyword.get(opts, :type, "issue"))
     |> maybe_filter_state(Keyword.get(opts, :state, "open"))
     |> maybe_filter_label(Keyword.get(opts, :label))
     |> maybe_filter_assignee(Keyword.get(opts, :assignee))
@@ -1057,6 +1074,33 @@ defmodule OpenAgents.Issues do
   # asks the graph rather than a column: an issue is blocked while any issue it
   # is blocked by is still open. Closing the last prerequisite moves the issue
   # into `blocked=false` with no second write.
+  # A pull request on this forge is an issue row: `pull_requests.issue_id` points
+  # at one, which is why the two share a number space. So every list built from
+  # this table lists pull requests too unless it says otherwise, and until #120
+  # none of them said otherwise -- PR #119 sat beside issue #114 with nothing
+  # marking one as a proposal to change code.
+  #
+  # The default is `"issue"` because this context is `OpenAgents.Issues` and its
+  # lists are read as issues by the surfaces that draw them and by the counts
+  # they publish. GitHub's REST list returns both, so `OpenAgentsWeb.IssueController`
+  # asks for `"all"` explicitly and stays compatible.
+  defp filter_type(query, type) when type in ["all", :all], do: query
+
+  defp filter_type(query, type) when type in ["pull_request", :pull_request],
+    do: where(query, [], exists(pull_request_query()))
+
+  defp filter_type(query, _issue_only),
+    do: where(query, [], not exists(pull_request_query()))
+
+  defp pull_request_query do
+    from pull_request in "pull_requests",
+      where: pull_request.issue_id == parent_as(:issue).id,
+      select: 1
+  end
+
+  @doc "The values `:type` accepts, in the order the API publishes them."
+  def type_values, do: ["issue", "pull_request", "all"]
+
   defp maybe_filter_blocked(query, nil), do: query
 
   defp maybe_filter_blocked(query, true),

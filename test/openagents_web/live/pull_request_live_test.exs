@@ -43,6 +43,119 @@ defmodule OpenAgentsWeb.PullRequestLiveTest do
     assert has_element?(show, "#pull-request-show")
   end
 
+  describe "telling pull requests apart from issues (#120)" do
+    setup do
+      target = repository_fixture()
+      source = repository_fixture()
+
+      plain = issue_fixture(target, %{title: "A plain issue"})
+      proposal = issue_fixture(target, %{title: "A proposed change"})
+
+      pull_request =
+        %PullRequest{}
+        |> PullRequest.changeset(%{
+          repository_id: target.id,
+          issue_id: proposal.id,
+          head_repository_id: source.id,
+          head_ref: "feature",
+          head_sha: String.duplicate("a", 40),
+          base_ref: "main",
+          base_sha: String.duplicate("b", 40),
+          draft: false
+        })
+        |> Repo.insert!()
+
+      %{target: target, plain: plain, proposal: proposal, pull_request: pull_request}
+    end
+
+    test "the issue list no longer mixes pull requests in", %{
+      conn: conn,
+      target: target,
+      plain: plain,
+      proposal: proposal
+    } do
+      {:ok, index, _html} = live(conn, "/#{target.owner}/#{target.name}/issues")
+
+      assert has_element?(
+               index,
+               "a[href='/#{target.owner}/#{target.name}/issues/#{plain.number}']"
+             )
+
+      refute has_element?(
+               index,
+               "a[href='/#{target.owner}/#{target.name}/issues/#{proposal.number}']"
+             )
+    end
+
+    test "the pull request list draws the pull-request glyph, not an issue circle", %{
+      conn: conn,
+      target: target
+    } do
+      {:ok, index, _html} = live(conn, "/#{target.owner}/#{target.name}/pulls")
+
+      assert has_element?(index, ".issue-status [data-icon='pull-request-open']")
+      refute has_element?(index, ".issue-status [data-icon='octicon-issue-opened']")
+    end
+
+    test "the repository nav counts issues and pull requests apart", %{
+      conn: conn,
+      target: target
+    } do
+      {:ok, index, _html} = live(conn, "/#{target.owner}/#{target.name}/pulls")
+
+      issues_count =
+        index
+        |> element("a[href='/#{target.owner}/#{target.name}/issues'] .repo-tabs__count")
+        |> render()
+
+      pulls_count =
+        index
+        |> element("a[href='/#{target.owner}/#{target.name}/pulls'] .repo-tabs__count")
+        |> render()
+
+      assert issues_count =~ ">1<"
+      assert pulls_count =~ ">1<"
+    end
+
+    test "the pull request page states its own state as a glyph", %{
+      conn: conn,
+      target: target,
+      proposal: proposal
+    } do
+      {:ok, show, _html} = live(conn, "/#{target.owner}/#{target.name}/pulls/#{proposal.number}")
+
+      assert has_element?(show, "#pull-request-glyph[data-category='open']")
+      assert has_element?(show, "#pull-request-state")
+    end
+
+    test "an issue page reached for a pull-request number says so and links to it", %{
+      conn: conn,
+      target: target,
+      proposal: proposal
+    } do
+      {:ok, show, _html} = live(conn, "/#{target.owner}/#{target.name}/issues/#{proposal.number}")
+
+      assert has_element?(show, "#issue-pull-request-state[data-category='open']")
+
+      assert has_element?(
+               show,
+               "#issue-pull-request-link[href='/#{target.owner}/#{target.name}/pulls/#{proposal.number}']"
+             )
+    end
+
+    test "a plain issue page keeps the issue glyph and offers no pull request", %{
+      conn: conn,
+      target: target,
+      plain: plain
+    } do
+      {:ok, show, _html} = live(conn, "/#{target.owner}/#{target.name}/issues/#{plain.number}")
+
+      refute has_element?(show, "#issue-pull-request-state")
+      refute has_element?(show, "#issue-pull-request-link")
+      assert has_element?(show, ".issue-heading__meta [data-icon='octicon-issue-opened']")
+    end
+  end
+
   describe "stacked pull request review" do
     setup do
       base =

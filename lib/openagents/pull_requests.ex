@@ -23,6 +23,60 @@ defmodule OpenAgents.PullRequests do
     )
   end
 
+  @doc """
+  The four states GitHub gives a pull request, derived in one place.
+
+  A pull request carries three independent facts — its issue's state, whether
+  it is a draft, and whether it was merged — and every surface that draws a
+  glyph or a badge has to collapse them into one word the same way. Merged
+  wins over closed because a merged pull request is also closed and only one
+  of those two readings is worth showing.
+  """
+  def state(%PullRequest{merged_at: merged_at}) when not is_nil(merged_at), do: "merged"
+  def state(%PullRequest{state: "closed"}), do: "closed"
+  def state(%PullRequest{draft: true}), do: "draft"
+  def state(%PullRequest{}), do: "open"
+
+  @doc """
+  Which of `issues` are backed by a pull request, and what that pull request is.
+
+  A pull request on this forge *is* an issue row — `pull_requests.issue_id`
+  points at one, which is why the two share a number space — so a list of
+  issues cannot tell which of its rows are pull requests without asking. The
+  answer arrives as one query for the whole page, keyed by issue id, rather
+  than one query per row.
+
+  Returns `%{issue_id => %{state: state, draft: boolean, merged_at: at}}`. An
+  absent key means a plain issue, which is the fact both the row glyph and
+  GitHub's `pull_request` marker are built on.
+  """
+  def markers_by_issue_id(issues) when is_list(issues) do
+    ids = issues |> Enum.map(& &1.id) |> Enum.reject(&is_nil/1)
+
+    if ids == [] do
+      %{}
+    else
+      from(pr in PullRequest, where: pr.issue_id in ^ids)
+      |> Repo.all()
+      |> Map.new(&{&1.issue_id, %{state: state(&1), draft: &1.draft, merged_at: &1.merged_at}})
+    end
+  end
+
+  @doc """
+  How many pull requests are open in `repository`.
+
+  The repository nav states this beside the open-issue count. Both numbers were
+  the same number until pull requests were filtered out of the issue lists, and
+  a nav that says "Issues 12" while twelve means "issues and pull requests" is
+  the confusion #120 is about.
+  """
+  def count_open(%Repository{id: id}) do
+    Repo.aggregate(
+      from(pr in PullRequest, where: pr.repository_id == ^id and pr.state == "open"),
+      :count
+    )
+  end
+
   def get_by_number!(%Repository{id: id}, number) do
     Repo.one!(
       from pr in PullRequest,

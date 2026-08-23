@@ -142,6 +142,17 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "description" =>
             "Lists issues at one derived progress value. It composes with " <>
               "state, so done needs state=all or state=closed."
+        },
+        "type" => %{
+          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/issues",
+          "type" => "string",
+          "enum" => OpenAgents.Issues.type_values(),
+          "default" => "all",
+          "description" =>
+            "Lists issues, pull requests, or both. A pull request is an issue " <>
+              "row here, so the default all matches GitHub, which returns both " <>
+              "and marks each pull request with a pull_request object. GitHub " <>
+              "has no filter that separates them, so this one is namespaced."
         }
       },
       "endpoints" => [

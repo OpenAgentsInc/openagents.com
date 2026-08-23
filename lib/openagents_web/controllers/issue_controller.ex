@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Agents.Agent
+  alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.ApiError
 
@@ -22,6 +23,7 @@ defmodule OpenAgentsWeb.IssueController do
         repo: repo,
         dependencies: Issues.dependency_graph(issues),
         progress: Issues.progress_map(issues, reader),
+        pull_requests: PullRequests.markers_by_issue_id(issues),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -56,6 +58,9 @@ defmodule OpenAgentsWeb.IssueController do
       Map.has_key?(params, "progress") and params["progress"] not in Issues.progress_values() ->
         {:error, :progress, "must be one of: #{Enum.join(Issues.progress_values(), ", ")}"}
 
+      Map.has_key?(params, "type") and params["type"] not in Issues.type_values() ->
+        {:error, :type, "must be one of: #{Enum.join(Issues.type_values(), ", ")}"}
+
       true ->
         :ok
     end
@@ -74,6 +79,13 @@ defmodule OpenAgentsWeb.IssueController do
 
   defp index_options(params, reader) do
     [
+      # GitHub's issues list returns pull requests too and marks them with a
+      # `pull_request` object, so this endpoint asks for both by default even
+      # though `OpenAgents.Issues` defaults its lists to issues alone. A client
+      # that wants one kind without the other sends `?type=`, which GitHub has
+      # no counterpart for and which `GET /api/v3` therefore publishes as an
+      # `issue.openagents` filter.
+      type: Map.get(params, "type", "all"),
       state: Map.get(params, "state", "open"),
       label: params["labels"] || params["label"],
       assignee: params["assignee"],
@@ -160,7 +172,8 @@ defmodule OpenAgentsWeb.IssueController do
       owner: owner,
       repo: repo,
       dependencies: dependencies(issue),
-      progress: progress(issue, conn.assigns[:current_user])
+      progress: progress(issue, conn.assigns[:current_user]),
+      pull_requests: PullRequests.markers_by_issue_id([issue])
     )
   rescue
     Ecto.NoResultsError -> not_found(conn)

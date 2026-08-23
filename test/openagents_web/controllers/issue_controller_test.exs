@@ -614,6 +614,122 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
   end
 
+  describe "pull requests in the issue list" do
+    setup do
+      source = OpenAgents.AccountsFixtures.repository_fixture()
+      {:ok, proposal} = Issues.create_issue(repository(), %{title: "Proposes a change"})
+
+      pull_request =
+        %OpenAgents.PullRequests.PullRequest{}
+        |> OpenAgents.PullRequests.PullRequest.changeset(%{
+          repository_id: repository().id,
+          issue_id: proposal.id,
+          head_repository_id: source.id,
+          head_ref: "feature",
+          head_sha: String.duplicate("a", 40),
+          base_ref: "main",
+          base_sha: String.duplicate("b", 40),
+          draft: false
+        })
+        |> Repo.insert!()
+
+      {:ok, plain} = Issues.create_issue(repository(), %{title: "Plain issue"})
+
+      %{plain: plain, proposal: proposal, pull_request: pull_request}
+    end
+
+    test "index returns both kinds by default, the way GitHub's does", %{
+      conn: conn,
+      plain: plain,
+      proposal: proposal
+    } do
+      %{"issues" => issues} =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+        |> json_response(200)
+
+      numbers = Enum.map(issues, & &1["number"])
+      assert plain.number in numbers
+      assert proposal.number in numbers
+    end
+
+    test "a pull-request-backed entry carries GitHub's pull_request marker", %{
+      conn: conn,
+      proposal: proposal
+    } do
+      %{"issues" => issues} =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+        |> json_response(200)
+
+      entry = Enum.find(issues, &(&1["number"] == proposal.number))
+
+      assert entry["draft"] == false
+      assert entry["pull_request"]["html_url"] =~ "/pulls/#{proposal.number}"
+      assert entry["pull_request"]["url"] =~ "/api/v3/repos/OpenAgentsInc/openagents.com/pulls/"
+      assert entry["pull_request"]["merged_at"] == nil
+    end
+
+    test "a plain issue carries neither key, so presence is the fact", %{
+      conn: conn,
+      plain: plain
+    } do
+      entry =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{plain.number}")
+        |> json_response(200)
+
+      refute Map.has_key?(entry, "pull_request")
+      refute Map.has_key?(entry, "draft")
+    end
+
+    test "the show endpoint marks a pull request too", %{conn: conn, proposal: proposal} do
+      entry =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{proposal.number}")
+        |> json_response(200)
+
+      assert entry["pull_request"]["html_url"] =~ "/pulls/#{proposal.number}"
+    end
+
+    test "type=issue lists issues without the pull requests", %{
+      conn: conn,
+      plain: plain,
+      proposal: proposal
+    } do
+      %{"issues" => issues} =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?type=issue")
+        |> json_response(200)
+
+      numbers = Enum.map(issues, & &1["number"])
+      assert plain.number in numbers
+      refute proposal.number in numbers
+    end
+
+    test "type=pull_request lists only the pull requests", %{
+      conn: conn,
+      plain: plain,
+      proposal: proposal
+    } do
+      %{"issues" => issues} =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?type=pull_request")
+        |> json_response(200)
+
+      numbers = Enum.map(issues, & &1["number"])
+      assert proposal.number in numbers
+      refute plain.number in numbers
+    end
+
+    test "index rejects a type outside the published enum", %{conn: conn} do
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?type=proposal")
+
+      assert %{"errors" => %{"type" => [message]}} = json_response(conn, 422)
+      assert message =~ "pull_request"
+    end
+  end
+
   defp place(board_repository, issue, column) do
     {:ok, project} =
       OpenAgents.Projects.create_project(board_repository, %{

@@ -969,6 +969,43 @@ defmodule OpenAgentsWeb.UI.Circle do
   end
 
   @doc """
+  GitHub's pull-request state as a glyph: open, draft, merged, or closed.
+
+  A pull request on this forge is an issue row with a `pull_requests` record
+  pointing at it, which is why the two share a number space and why PR #119 sat
+  beside issue #114 reading as a duplicate (#120). `issue_state/1` draws the
+  circle-dot and the tick; this draws the branch-and-node glyphs GitHub uses,
+  so the two kinds are told apart before a reader has read a word.
+
+  Colour comes from the same category ladder the issue glyphs use, which is
+  what keeps a pull-request row and an issue row in one palette: open is the
+  green of an open issue, merged the purple of a completed close, closed the
+  red of a cancelled one, and a draft is grey because it is not yet asking for
+  anything.
+  """
+  attr :state, :string,
+    values: ["open", "draft", "merged", "closed"],
+    required: true,
+    doc: "from `OpenAgents.PullRequests.state/1`"
+
+  attr :show_label, :boolean, default: false
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def pull_request_state(assigns) do
+    ~H"""
+    <span class={["issue-status", @class]} data-category={pull_request_category(@state)} {@rest}>
+      <UI.icon
+        name={UI.pull_request_state_icon(@state)}
+        label={if(!@show_label, do: pull_request_label(@state))}
+        class="issue-status__glyph"
+      />
+      <span :if={@show_label} class="issue-status__label">{pull_request_label(@state)}</span>
+    </span>
+    """
+  end
+
+  @doc """
   The frame of one issue's page: a heading band, the work, and a properties rail.
 
   Adapted from `issue-details.tsx`. Two decisions from the source are kept and
@@ -1262,6 +1299,18 @@ defmodule OpenAgentsWeb.UI.Circle do
 
   defp state_category("closed", _reason), do: :completed
   defp state_category(_state, _reason), do: :open
+
+  # GitHub's pull-request colours read against the same category ladder the
+  # issue glyphs use: open green, merged purple, closed red, draft grey.
+  defp pull_request_category("merged"), do: :completed
+  defp pull_request_category("closed"), do: :canceled
+  defp pull_request_category("draft"), do: :backlog
+  defp pull_request_category(_open), do: :open
+
+  defp pull_request_label("merged"), do: "Merged"
+  defp pull_request_label("closed"), do: "Closed"
+  defp pull_request_label("draft"), do: "Draft"
+  defp pull_request_label(_open), do: "Open"
 
   defp state_label("closed", "not_planned"), do: "Closed as not planned"
   defp state_label("closed", "duplicate"), do: "Closed as duplicate"

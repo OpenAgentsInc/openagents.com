@@ -13,12 +13,14 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
 
   alias OpenAgents.Diff
   alias OpenAgents.Forge.Browse
+  alias OpenAgents.Issues
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
   alias OpenAgents.Stacks
   alias OpenAgents.Stacks.Restack
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RepositoryAccess
+  alias OpenAgentsWeb.UI.Circle
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
@@ -39,6 +41,8 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
+     |> assign(:open_issue_count, open_issue_count(repository))
+     |> assign(:open_pull_request_count, open_pull_request_count(repository))
      |> assign(:pull_request, pull_request)
      |> assign(:stack_context, stack_context)
      |> assign(:stack_history, stack_history)
@@ -206,8 +210,19 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
           <:tabs>
             <.repo_tabs>
               <:tab icon="code" navigate={~p"/#{@owner}/#{@repo}"}>Code</:tab>
-              <:tab icon="empty-circle" navigate={~p"/#{@owner}/#{@repo}/issues"}>Issues</:tab>
-              <:tab icon="pull-request-open" navigate={~p"/#{@owner}/#{@repo}/pulls"} current>
+              <:tab
+                icon="octicon-issue-opened"
+                navigate={~p"/#{@owner}/#{@repo}/issues"}
+                count={@open_issue_count}
+              >
+                Issues
+              </:tab>
+              <:tab
+                icon="pull-request-open"
+                navigate={~p"/#{@owner}/#{@repo}/pulls"}
+                count={@open_pull_request_count}
+                current
+              >
                 Pull requests
               </:tab>
               <:tab icon="cube" navigate={~p"/#{@owner}/#{@repo}/projects"}>Projects</:tab>
@@ -216,6 +231,10 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
 
           <article class="mx-auto w-full max-w-5xl px-4 py-8">
             <div class="flex flex-wrap items-center gap-3">
+              <Circle.pull_request_state
+                id="pull-request-glyph"
+                state={layer_state(@pull_request)}
+              />
               <h1 class="text-2xl font-semibold text-foreground">{@pull_request.issue.title}</h1>
               <.badge id="pull-request-state" variant={state_variant(layer_state(@pull_request))}>
                 {layer_state(@pull_request)}
@@ -455,12 +474,21 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
   defp operation_label("cancelled"), do: "Stack rebase cancelled"
   defp operation_label(other), do: other
 
-  defp layer_state(pull_request) do
-    cond do
-      pull_request.merged_at -> "merged"
-      pull_request.state == "closed" -> "closed"
-      pull_request.draft -> "draft"
-      true -> "open"
+  defp layer_state(pull_request), do: PullRequests.state(pull_request)
+
+  # The repository nav states both numbers because they are two different
+  # numbers, which they were not while pull requests counted as issues (#120).
+  defp open_issue_count(repository) do
+    case Issues.count_issues(repository, state: "open") do
+      0 -> nil
+      count -> count
+    end
+  end
+
+  defp open_pull_request_count(repository) do
+    case PullRequests.count_open(repository) do
+      0 -> nil
+      count -> count
     end
   end
 

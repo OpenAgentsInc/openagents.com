@@ -1,0 +1,15 @@
+data: {"type":"response.output_item.added","response_id":"resp_repo_reread","output_index":0,"item":{"type":"reasoning","id":"rs_repo_reread","status":"in_progress","summary":[]}}
+
+data: {"type":"response.output_item.done","response_id":"resp_repo_reread","output_index":0,"item":{"type":"reasoning","id":"rs_repo_reread","status":"completed","summary":[{"type":"summary_text","text":"Read the file again to verify the edit."}],"encrypted_content":"encrypted-repo-reread"}}
+
+data: {"type":"response.output_item.added","response_id":"resp_repo_reread","output_index":1,"item":{"type":"function_call","id":"fc_repo_reread","call_id":"call_repo_reread","name":"read","arguments":"","status":"in_progress"}}
+
+data: {"type":"response.function_call_arguments.delta","response_id":"resp_repo_reread","item_id":"fc_repo_reread","output_index":1,"delta":"{\"path\":\"notes.txt\",\"from\":\"workspace\"}"}
+
+data: {"type":"response.function_call_arguments.done","response_id":"resp_repo_reread","item_id":"fc_repo_reread","output_index":1,"arguments":"{\"path\":\"notes.txt\",\"from\":\"workspace\"}"}
+
+data: {"type":"response.output_item.done","response_id":"resp_repo_reread","output_index":1,"item":{"type":"function_call","id":"fc_repo_reread","call_id":"call_repo_reread","name":"read","arguments":"{\"path\":\"notes.txt\",\"from\":\"workspace\"}","status":"completed"}}
+
+data: {"type":"response.completed","response":{"id":"resp_repo_reread","object":"response","status":"completed","model":"stealth/ox-alpha","output":[{"type":"reasoning","id":"rs_repo_reread","status":"completed","summary":[{"type":"summary_text","text":"Read the file again to verify the edit."}],"encrypted_content":"encrypted-repo-reread"},{"type":"function_call","id":"fc_repo_reread","call_id":"call_repo_reread","name":"read","arguments":"{\"path\":\"notes.txt\",\"from\":\"workspace\"}","status":"completed"}]}}
+
+data: [DONE]

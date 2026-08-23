@@ -49,7 +49,24 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
       )
 
       callback.(
-        {:tool_call_completed, %{"call_id" => "call-1", "output" => ~s({"content":"OpenAgents"})}}
+        {:tool_call_completed,
+         %{
+           "call_id" => "call-1",
+           "output" =>
+             Jason.encode!(%{
+               "schema" => "sarah.tool_outcome.v1",
+               "status" => "succeeded",
+               "result" => %{"content" => "OpenAgents"},
+               "error" => nil,
+               "workspace" => %{
+                 "type" => "forge_worktree",
+                 "path" => "/private/var/lib/openagents/workspaces/openagents.com"
+               },
+               "target_receipt_refs" => ["receipt:forge:abc123"],
+               "started_at" => "2026-08-22T19:43:28.000Z",
+               "completed_at" => "2026-08-22T19:43:28.125Z"
+             })
+         }}
       )
 
       callback.({:text_delta, "The repository is available."})
@@ -86,13 +103,39 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
     assert Enum.map(events, & &1["sequence"]) == Enum.to_list(1..6)
     assert get_in(List.last(events), ["payload", "reasoning_items"]) != nil
 
+    assert %{
+             "status" => "running",
+             "state" => "input-available"
+           } = Enum.at(events, 2)["tool_call"]
+
+    assert %{
+             "status" => "succeeded",
+             "state" => "output-available",
+             "duration_ms" => 125,
+             "workspace" => %{"path" => "openagents.com"},
+             "receipt_refs" => ["receipt:forge:abc123"],
+             "error" => nil
+           } = Enum.at(events, 3)["tool_call"]
+
     assert [user_message, assistant_message] = AccountTurns.list_messages(user)
     assert user_message.content == "Read the README."
     assert assistant_message.content == "The repository is available."
     assert assistant_message.history?
 
-    assert [%{name: "read_repository_file", state: "output-available"}] =
+    assert [
+             %{
+               name: "read_repository_file",
+               state: "output-available",
+               status: "succeeded",
+               duration_ms: 125,
+               workspace_label: "openagents.com",
+               receipt_refs: ["receipt:forge:abc123"]
+             }
+           ] =
              assistant_message.tool_calls
+
+    refute inspect(events) =~ "/private/var/lib/openagents"
+    refute inspect(assistant_message) =~ "/private/var/lib/openagents"
 
     test_process = self()
 
@@ -113,6 +156,66 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
              Enum.at(request["messages"], 1)
 
     assert_receive {:account_chat_completed, ^follow_up_run_id, {:ok, _completion}}
+  end
+
+  test "projects typed tool errors without losing lifecycle order" do
+    user = repository_user_fixture("account-chat-tool-error")
+
+    streamer = fn _request, callback, _options ->
+      callback.(
+        {:tool_call_started,
+         %{
+           "call_id" => "call-edit",
+           "name" => "edit",
+           "arguments" => ~s({"path":"README.md"})
+         }}
+      )
+
+      callback.(
+        {:tool_call_failed,
+         %{
+           "call_id" => "call-edit",
+           "output" => %{
+             "schema" => "sarah.tool_outcome.v1",
+             "status" => "failed",
+             "error" => %{
+               "code" => "workspace_read_only",
+               "message" => "The workspace is read-only."
+             },
+             "workspace" => %{
+               "type" => "forge_worktree",
+               "path" => "/private/var/lib/openagents/workspaces/repo"
+             },
+             "started_at" => "2026-08-22T19:43:28.000Z",
+             "completed_at" => "2026-08-22T19:43:28.004Z"
+           }
+         }}
+      )
+
+      {:ok, %{"assistant_content" => "I could not edit that file."}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Edit the README.", subscriber: self(), streamer: streamer)
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+
+    assert Enum.map(AccountTurns.list_events(user), & &1["type"]) == [
+             "user_message",
+             "tool_call_started",
+             "tool_call_failed",
+             "response_completed"
+           ]
+
+    failed = Enum.at(AccountTurns.list_events(user), 2)["tool_call"]
+    assert failed["status"] == "failed"
+    assert failed["state"] == "output-error"
+    assert failed["duration_ms"] == 4
+
+    assert failed["error"] == %{
+             "code" => "workspace_read_only",
+             "message" => "The workspace is read-only."
+           }
   end
 
   test "events are isolated by account" do

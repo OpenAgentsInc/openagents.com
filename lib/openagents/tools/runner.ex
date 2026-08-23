@@ -373,6 +373,35 @@ defmodule OpenAgents.Tools.Runner do
   defp error_message(:repository_workspace_unavailable),
     do: "Repository mutation is only available inside a coding job's own workspace."
 
+  defp error_message(:workspace_required),
+    do: "This tool requires an explicit repository or computer workspace."
+
+  defp error_message(:canonical_workspace_refused),
+    do: "This tool cannot operate on a canonical repository or application checkout."
+
+  defp error_message(:workspace_read_only), do: "The assigned workspace is read-only."
+  defp error_message(:invalid_workspace_path), do: "The workspace path is invalid."
+  defp error_message(:reserved_workspace_path), do: "That workspace path is host-reserved."
+  defp error_message(:workspace_path_escape), do: "The path escapes the assigned workspace."
+  defp error_message(:workspace_symlink_refused), do: "The path crosses a symbolic link."
+  defp error_message(:workspace_file_not_found), do: "The workspace file does not exist."
+  defp error_message(:workspace_path_is_directory), do: "The requested path is a directory."
+  defp error_message(:workspace_path_not_regular), do: "The requested path is not a regular file."
+  defp error_message(:workspace_invalid_encoding), do: "The file is not valid UTF-8 text."
+  defp error_message(:invalid_read_range), do: "The requested line range is invalid."
+
+  defp error_message(:workspace_line_too_large),
+    do: "A single line exceeds the 50 KiB read limit."
+
+  defp error_message(:workspace_snapshot_root_invalid),
+    do: "The host snapshot store must be outside the assigned workspace."
+
+  defp error_message(:invalid_edits), do: "The edit batch is invalid."
+  defp error_message(:overlapping_edits), do: "The edit batch contains overlapping matches."
+
+  defp error_message(:stale_workspace_digest),
+    do: "The file changed after it was read. Read it again before editing."
+
   defp error_message(:invalid_repository_path),
     do: "The path is outside the repository or invalid."
 
@@ -404,14 +433,14 @@ defmodule OpenAgents.Tools.Runner do
 
   defp error_message(:invalid_search_pattern), do: "The search pattern is not a valid regex."
   defp error_message(:invalid_code_content), do: "The code content is missing or invalid."
-  defp error_message(:empty_match_string), do: "old_string must not be empty."
-  defp error_message(:edit_is_noop), do: "old_string and new_string are identical."
+  defp error_message(:empty_match_string), do: "The text to replace must not be empty."
+  defp error_message(:edit_is_noop), do: "The replacement must change the matched text."
 
   defp error_message(:no_match),
-    do: "old_string was not found in the file (it may have changed — re-read it)."
+    do: "The text to replace was not found. Read the file again before editing it."
 
   defp error_message(:ambiguous_match),
-    do: "old_string matches more than once — include more surrounding context or set replace_all."
+    do: "The text to replace matches more than once. Include more surrounding context."
 
   defp error_message(:branch_refused),
     do: "A coding job may push only to its own openagents/job-<id> branch."

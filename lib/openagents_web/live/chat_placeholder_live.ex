@@ -118,8 +118,8 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
       %{stream_id: ^stream_id, streaming?: true} ->
         {:noreply,
          socket
-         |> update(:assistant_tool_calls, &(&1 ++ [tool_call_view(tool_call)]))
-         |> append_tool_block(tool_call_view(tool_call))}
+         |> update(:assistant_tool_calls, &(&1 ++ [AccountTurns.tool_call_view(tool_call)]))
+         |> append_tool_block(AccountTurns.tool_call_view(tool_call))}
 
       _stale_stream ->
         {:noreply, socket}
@@ -151,11 +151,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
         socket
       ) do
     update_streaming_tool(socket, stream_id, tool_result["call_id"], fn tool_call ->
-      %{
-        tool_call
-        | output: format_tool_json(tool_result["output"]),
-          state: "output-available"
-      }
+      AccountTurns.apply_tool_event(tool_call, "tool_call_completed", tool_result)
     end)
   end
 
@@ -164,7 +160,7 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
         socket
       ) do
     update_streaming_tool(socket, stream_id, tool_result["call_id"], fn tool_call ->
-      %{tool_call | error: tool_result["error"], state: "output-error"}
+      AccountTurns.apply_tool_event(tool_call, "tool_call_failed", tool_result)
     end)
   end
 
@@ -510,9 +506,44 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
         title={@tool_call.name}
         state={@tool_call.state}
       />
-      <.tool_content>
-        <.tool_input input={@tool_call.arguments} />
-        <.tool_output output={@tool_call.output} error_text={@tool_call.error} />
+      <.tool_content id={"#{@id}-content"}>
+        <dl
+          id={"#{@id}-metadata"}
+          class="grid gap-x-6 gap-y-3 border-b border-border pb-4 sm:grid-cols-3"
+        >
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-muted-foreground">Status</dt>
+            <dd class="mt-1 font-medium text-sm">{@tool_call.status}</dd>
+          </div>
+          <div :if={@tool_call.workspace_label}>
+            <dt class="text-xs uppercase tracking-wide text-muted-foreground">Workspace</dt>
+            <dd class="mt-1 truncate font-mono text-sm" title={@tool_call.workspace_label}>
+              {@tool_call.workspace_label}
+            </dd>
+          </div>
+          <div :if={is_integer(@tool_call.duration_ms)}>
+            <dt class="text-xs uppercase tracking-wide text-muted-foreground">Duration</dt>
+            <dd class="mt-1 font-medium text-sm">{format_duration(@tool_call.duration_ms)}</dd>
+          </div>
+          <div :if={@tool_call.error_code}>
+            <dt class="text-xs uppercase tracking-wide text-muted-foreground">Error code</dt>
+            <dd class="mt-1 font-mono text-sm text-destructive">{@tool_call.error_code}</dd>
+          </div>
+        </dl>
+        <.tool_input id={"#{@id}-input"} input={@tool_call.arguments} />
+        <.tool_output
+          id={"#{@id}-output"}
+          output={@tool_call.output}
+          error_text={@tool_call.error}
+        />
+        <div :if={@tool_call.receipt_refs != []} id={"#{@id}-receipts"} class="space-y-2">
+          <h4 class="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            Receipts
+          </h4>
+          <ul class="space-y-1 rounded-md bg-muted/50 p-4 font-mono text-xs">
+            <li :for={receipt <- @tool_call.receipt_refs}>{format_receipt(receipt)}</li>
+          </ul>
+        </div>
       </.tool_content>
     </.tool>
     """
@@ -566,25 +597,10 @@ defmodule OpenAgentsWeb.ChatPlaceholderLive do
     end
   end
 
-  defp format_tool_json(value) when is_binary(value) do
-    case Jason.decode(value) do
-      {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-      {:error, _reason} -> value
-    end
-  end
-
-  defp format_tool_json(value), do: Jason.encode!(value, pretty: true)
-
-  defp tool_call_view(tool_call) do
-    %{
-      call_id: tool_call["call_id"],
-      name: tool_call["name"],
-      arguments: format_tool_json(tool_call["arguments"]),
-      output: nil,
-      error: nil,
-      state: "input-available"
-    }
-  end
+  defp format_duration(duration_ms) when duration_ms < 1_000, do: "#{duration_ms} ms"
+  defp format_duration(duration_ms), do: "#{Float.round(duration_ms / 1_000, 1)} s"
+  defp format_receipt(receipt) when is_binary(receipt), do: receipt
+  defp format_receipt(receipt), do: Jason.encode!(receipt)
 
   defp update_tool_call(tool_calls, call_id, update_tool) do
     Enum.map(tool_calls, fn

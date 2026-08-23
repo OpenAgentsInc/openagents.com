@@ -166,6 +166,17 @@ the shared runner and policy checks. Add a conversation tool to the registry
 and its declared surface policy rather than wiring independent text and voice
 backends.
 
+The shared catalog exposes `read`, `write`, and `edit` only when the host binds
+the conversation to an explicit, noncanonical repository or computer
+workspace. `read` limits each result to 2,000 lines or 50 KiB. `write` replaces
+a complete file, and `edit` applies an exact, nonoverlapping batch against an
+expected digest. Mutation tools require `repository.write` and an exact
+approval receipt. They serialize changes to each path, store restorable
+snapshots outside the workspace, and reject absolute paths, traversal,
+symbolic links, canonical Forge repositories, and application checkouts. The
+model and API request can select a relative file path, but they cannot supply
+the workspace root or mint mutation authority.
+
 Bearer clients use the same account chat entry point through a personal API
 token with `chat:account` scope. Forge mutations continue to require
 `forge:write`; one scope does not imply the other. The authenticated account,

@@ -33,6 +33,79 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
            |> json_response(401) == %{"error" => "invalid_api_token"}
   end
 
+  test "events expose the same ordered tool lifecycle as the browser projection", %{conn: conn} do
+    key = "chat-tool-events"
+    user = github_user("api-token-" <> key)
+
+    streamer = fn _request, callback, _options ->
+      callback.(
+        {:tool_call_started,
+         %{
+           "call_id" => "call-write",
+           "name" => "write",
+           "arguments" => ~s({"path":"notes.txt","content":"done"})
+         }}
+      )
+
+      callback.(
+        {:tool_call_completed,
+         %{
+           "call_id" => "call-write",
+           "output" => %{
+             "schema" => "sarah.tool_outcome.v1",
+             "status" => "succeeded",
+             "result" => %{"bytes_written" => 4},
+             "workspace" => %{
+               "type" => "forge_worktree",
+               "path" => "/private/var/lib/openagents/workspaces/repo"
+             },
+             "target_receipt_refs" => ["receipt:write:1"],
+             "started_at" => "2026-08-22T19:43:28.000Z",
+             "completed_at" => "2026-08-22T19:43:28.010Z"
+           }
+         }}
+      )
+
+      {:ok, %{"assistant_content" => "Wrote the file."}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             OpenAgents.Chat.AccountTurns.submit(user, "Write the note.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+
+    events =
+      conn
+      |> put_chat_api_token(key)
+      |> get(~p"/api/v3/chat/events")
+      |> json_response(200)
+      |> Map.fetch!("events")
+
+    assert Enum.map(events, & &1["type"]) == [
+             "user_message",
+             "tool_call_started",
+             "tool_call_completed",
+             "response_completed"
+           ]
+
+    completed = Enum.at(events, 2)["tool_call"]
+
+    [browser_tool] =
+      OpenAgents.Chat.AccountTurns.list_messages(user) |> List.last() |> Map.fetch!(:tool_calls)
+
+    assert completed["status"] == browser_tool.status
+    assert completed["state"] == browser_tool.state
+    assert completed["workspace"] == browser_tool.workspace
+    assert completed["duration_ms"] == browser_tool.duration_ms
+    assert completed["receipt_refs"] == browser_tool.receipt_refs
+    assert completed["output"] == browser_tool.output
+    assert completed["workspace"]["path"] == "repo"
+    refute inspect(events) =~ "/private/var/lib/openagents"
+  end
+
   test "chat API requires a bearer token", %{conn: conn} do
     assert conn |> get(~p"/api/v3/chat/events") |> json_response(401) == %{
              "error" => "invalid_api_token"

@@ -85,6 +85,142 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     end
   end
 
+  defmodule RepositorySequenceReadToolStub do
+    @moduledoc false
+    @behaviour OpenAgents.Tools.Tool
+
+    @impl true
+    def specification,
+      do:
+        OpenAgents.Chat.OpenRouterTest.sequence_tool_spec(
+          "read",
+          __MODULE__,
+          "Reads a file from the test repository workspace."
+        )
+
+    @impl true
+    def execute(%{"path" => path}, %ExecutionContext{owner_user_id: agent}) when is_pid(agent) do
+      content = Agent.get(agent, & &1)
+      {:ok, %ExecutionResult{result: %{"path" => path, "content" => content}}}
+    end
+  end
+
+  defmodule RepositorySequenceWriteToolStub do
+    @moduledoc false
+    @behaviour OpenAgents.Tools.Tool
+
+    @impl true
+    def specification,
+      do:
+        OpenAgents.Chat.OpenRouterTest.sequence_tool_spec(
+          "write",
+          __MODULE__,
+          "Writes a complete file to the test repository workspace."
+        )
+
+    @impl true
+    def execute(%{"path" => path, "content" => content}, %ExecutionContext{
+          owner_user_id: agent
+        })
+        when is_pid(agent) do
+      :ok = Agent.update(agent, fn _current -> content end)
+      {:ok, %ExecutionResult{result: %{"path" => path, "content" => content}}}
+    end
+  end
+
+  defmodule RepositorySequenceEditToolStub do
+    @moduledoc false
+    @behaviour OpenAgents.Tools.Tool
+
+    @impl true
+    def specification,
+      do:
+        OpenAgents.Chat.OpenRouterTest.sequence_tool_spec(
+          "edit",
+          __MODULE__,
+          "Edits an exact string in the test repository workspace."
+        )
+
+    @impl true
+    def execute(
+          %{"path" => path, "old_string" => old_string, "new_string" => new_string},
+          %ExecutionContext{owner_user_id: agent}
+        )
+        when is_pid(agent) do
+      case Agent.get_and_update(agent, fn content ->
+             if String.contains?(content, old_string) do
+               updated = String.replace(content, old_string, new_string)
+               {{:ok, updated}, updated}
+             else
+               {{:error, :no_match}, content}
+             end
+           end) do
+        {:ok, content} ->
+          {:ok, %ExecutionResult{result: %{"path" => path, "content" => content}}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  def sequence_tool_spec(name, implementation, description) do
+    {properties, required} =
+      case name do
+        "read" ->
+          {%{
+             "path" => %{"type" => "string"},
+             "from" => %{"type" => "string"}
+           }, ["path"]}
+
+        "write" ->
+          {%{"path" => %{"type" => "string"}, "content" => %{"type" => "string"}},
+           ["path", "content"]}
+
+        "edit" ->
+          {%{
+             "path" => %{"type" => "string"},
+             "old_string" => %{"type" => "string"},
+             "new_string" => %{"type" => "string"}
+           }, ["path", "old_string", "new_string"]}
+      end
+
+    %Tool{
+      module_id: "sarah.tool.openrouter_#{name}_sequence_test",
+      name: name,
+      version: 1,
+      description: description,
+      input_schema: %{
+        "type" => "object",
+        "properties" => properties,
+        "required" => required,
+        "additionalProperties" => false
+      },
+      output_schema: %{
+        "type" => "object",
+        "properties" => %{},
+        "additionalProperties" => true
+      },
+      side_effect: :read_only,
+      required_scope: "browser_conversation",
+      required_authority: "repository.read",
+      executor: %{id: "sarah.local", disclosure: "OpenRouter sequence test executor"},
+      maintainer: "OpenAgents",
+      attribution: ["OpenAgentsInc/openagents.com"],
+      policy_facets: %{"privacy" => "browser_scoped", "residency" => "host"},
+      module_metadata:
+        Metadata.first_party("repository.read", "browser_conversation",
+          effect: :read_only,
+          privacy: "browser_scoped",
+          residency: "host"
+        ),
+      timeout_ms: 100,
+      maximum_input_bytes: 2_048,
+      maximum_output_bytes: 2_048,
+      implementation: implementation
+    }
+  end
+
   defp tool_execution_context do
     %ExecutionContext{
       scope: "browser_conversation",
@@ -703,6 +839,183 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                "content" => "# OpenAgents\n"
              }
            } = Jason.decode!(tool_output)
+  end
+
+  test "replays provider output around ordered read, write, edit, and reread calls" do
+    repository_state = start_supervised!({Agent, fn -> "initial" end})
+
+    fixtures =
+      Enum.map(
+        ["repo_read", "repo_write", "repo_edit", "repo_reread"],
+        &repository_sequence_fixture/1
+      )
+
+    Enum.with_index(fixtures)
+    |> Enum.each(fn {fixture, index} ->
+      Req.Test.expect(__MODULE__, fn conn ->
+        assert conn.request_path == "/api/v1/responses"
+
+        assert_repository_sequence_history(
+          conn.body_params["input"],
+          Enum.take(fixtures, index)
+        )
+
+        conn
+        |> Plug.Conn.put_resp_content_type("text/event-stream")
+        |> Plug.Conn.send_resp(200, fixture.raw)
+      end)
+    end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      assert_repository_sequence_history(conn.body_params["input"], fixtures)
+
+      body =
+        sse(%{
+          "type" => "response.output_text.delta",
+          "delta" => "The file now contains alpha gamma."
+        }) <>
+          sse(%{
+            "type" => "response.completed",
+            "response" => %{
+              "id" => "resp_repo_final",
+              "object" => "response",
+              "status" => "completed",
+              "model" => "stealth/ox-alpha",
+              "output" => [
+                %{
+                  "type" => "message",
+                  "id" => "msg_repo_final",
+                  "role" => "assistant",
+                  "status" => "completed",
+                  "content" => [
+                    %{
+                      "type" => "output_text",
+                      "text" => "The file now contains alpha gamma.",
+                      "annotations" => []
+                    }
+                  ]
+                }
+              ]
+            }
+          }) <> "data: [DONE]\n\n"
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    parent = self()
+
+    assert {:ok, tool_registry_snapshot} =
+             Registry.build([
+               RepositorySequenceReadToolStub,
+               RepositorySequenceWriteToolStub,
+               RepositorySequenceEditToolStub
+             ])
+
+    execution_context = %{
+      tool_execution_context()
+      | owner_user_id: repository_state
+    }
+
+    assert {:ok, %{"assistant_content" => "The file now contains alpha gamma."}} =
+             OpenRouter.stream(
+               %{
+                 "model" => "stealth/ox-alpha",
+                 "messages" => [
+                   %{
+                     "role" => "user",
+                     "content" => "Read notes.txt, rewrite it, edit it, and read it again."
+                   }
+                 ]
+               },
+               &send(parent, {:openrouter_event, &1}),
+               api_key: "test-openrouter-key",
+               tool_registry_snapshot: tool_registry_snapshot,
+               tool_execution_context: execution_context,
+               request_options: [plug: {Req.Test, __MODULE__}]
+             )
+
+    assert Agent.get(repository_state, & &1) == "alpha gamma"
+
+    assert_repository_sequence_events([
+      {"call_repo_read", "read", "initial"},
+      {"call_repo_write", "write", "alpha beta"},
+      {"call_repo_edit", "edit", "alpha gamma"},
+      {"call_repo_reread", "read", "alpha gamma"}
+    ])
+  end
+
+  defp assert_repository_sequence_history([user_input | history], prior_fixtures) do
+    assert user_input == %{
+             "type" => "message",
+             "role" => "user",
+             "content" => [
+               %{
+                 "type" => "input_text",
+                 "text" => "Read notes.txt, rewrite it, edit it, and read it again."
+               }
+             ]
+           }
+
+    remaining =
+      Enum.reduce(prior_fixtures, history, fn fixture, remaining ->
+        {provider_output, remaining} = Enum.split(remaining, length(fixture.output))
+        assert provider_output == fixture.output
+
+        assert [
+                 %{
+                   "type" => "function_call_output",
+                   "call_id" => call_id,
+                   "output" => encoded_outcome
+                 }
+                 | remaining
+               ] = remaining
+
+        assert call_id == fixture.call_id
+        assert %{"schema" => "sarah.tool_outcome.v1"} = Jason.decode!(encoded_outcome)
+        remaining
+      end)
+
+    assert remaining == []
+  end
+
+  defp assert_repository_sequence_events(expected) do
+    Enum.each(expected, fn {call_id, name, expected_content} ->
+      assert_receive {:openrouter_event,
+                      {:tool_call_started, %{"call_id" => ^call_id, "name" => ^name}}}
+
+      assert_receive {:openrouter_event,
+                      {:tool_call_completed,
+                       %{"call_id" => ^call_id, "output" => encoded_outcome}}}
+
+      assert %{
+               "status" => "succeeded",
+               "result" => %{"content" => ^expected_content}
+             } = Jason.decode!(encoded_outcome)
+    end)
+  end
+
+  defp repository_sequence_fixture(name) do
+    raw =
+      Path.expand("../../fixtures/openrouter/responses_#{name}_call.sse", __DIR__)
+      |> File.read!()
+
+    response =
+      raw
+      |> String.split("\n")
+      |> Enum.filter(&String.starts_with?(&1, "data: "))
+      |> Enum.map(&String.replace_prefix(&1, "data: ", ""))
+      |> Enum.reject(&(&1 == "[DONE]"))
+      |> Enum.map(&Jason.decode!/1)
+      |> Enum.find_value(fn
+        %{"type" => "response.completed", "response" => response} -> response
+        _event -> nil
+      end)
+
+    function_call = Enum.find(response["output"], &(&1["type"] == "function_call"))
+
+    %{raw: raw, output: response["output"], call_id: function_call["call_id"]}
   end
 
   defp expected_tool_provider_output do

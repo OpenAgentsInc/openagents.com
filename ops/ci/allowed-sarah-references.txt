@@ -13,6 +13,7 @@
 ^docs/2026-08-21-sarah-computers-and-scv-architecture-audit\.md:
 ^docs/chat-inference-plan\.md:
 ^docs/component-library\.md:
+^docs/episode-triage\.md:
 ^docs/github-auth-plan\.md:
 ^docs/issues-projects-ui-roadmap\.md:
 ^docs/sarah-integration-plan\.md:

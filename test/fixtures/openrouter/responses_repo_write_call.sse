@@ -1,0 +1,15 @@
+data: {"type":"response.output_item.added","response_id":"resp_repo_write","output_index":0,"item":{"type":"reasoning","id":"rs_repo_write","status":"in_progress","summary":[]}}
+
+data: {"type":"response.output_item.done","response_id":"resp_repo_write","output_index":0,"item":{"type":"reasoning","id":"rs_repo_write","status":"completed","summary":[{"type":"summary_text","text":"Replace the file with the requested draft."}],"encrypted_content":"encrypted-repo-write"}}
+
+data: {"type":"response.output_item.added","response_id":"resp_repo_write","output_index":1,"item":{"type":"function_call","id":"fc_repo_write","call_id":"call_repo_write","name":"write","arguments":"","status":"in_progress"}}
+
+data: {"type":"response.function_call_arguments.delta","response_id":"resp_repo_write","item_id":"fc_repo_write","output_index":1,"delta":"{\"path\":\"notes.txt\",\"content\":\"alpha beta\"}"}
+
+data: {"type":"response.function_call_arguments.done","response_id":"resp_repo_write","item_id":"fc_repo_write","output_index":1,"arguments":"{\"path\":\"notes.txt\",\"content\":\"alpha beta\"}"}
+
+data: {"type":"response.output_item.done","response_id":"resp_repo_write","output_index":1,"item":{"type":"function_call","id":"fc_repo_write","call_id":"call_repo_write","name":"write","arguments":"{\"path\":\"notes.txt\",\"content\":\"alpha beta\"}","status":"completed"}}
+
+data: {"type":"response.completed","response":{"id":"resp_repo_write","object":"response","status":"completed","model":"stealth/ox-alpha","output":[{"type":"reasoning","id":"rs_repo_write","status":"completed","summary":[{"type":"summary_text","text":"Replace the file with the requested draft."}],"encrypted_content":"encrypted-repo-write"},{"type":"function_call","id":"fc_repo_write","call_id":"call_repo_write","name":"write","arguments":"{\"path\":\"notes.txt\",\"content\":\"alpha beta\"}","status":"completed"}]}}
+
+data: [DONE]

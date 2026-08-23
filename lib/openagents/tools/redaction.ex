@@ -3,6 +3,11 @@ defmodule OpenAgents.Tools.Redaction do
 
   @redacted "[REDACTED]"
   @sensitive_fragments ~w(api_key authorization cookie credential password private_key secret token)
+  @secret_patterns [
+    ~r/\bsk-(?:or-v1-)?[A-Za-z0-9_-]{16,}\b/,
+    ~r/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+\/-]+=*\b/i,
+    ~r/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/
+  ]
 
   @spec redact(term()) :: term()
   def redact(value) when is_map(value) do
@@ -17,6 +22,11 @@ defmodule OpenAgents.Tools.Redaction do
     do: value |> Tuple.to_list() |> Enum.map(&redact/1) |> List.to_tuple()
 
   def redact(value), do: value
+
+  @spec redact_text(String.t()) :: String.t()
+  def redact_text(value) when is_binary(value) do
+    Enum.reduce(@secret_patterns, value, &Regex.replace(&1, &2, @redacted))
+  end
 
   defp sensitive_key?(key) when is_atom(key), do: key |> Atom.to_string() |> sensitive_key?()
 

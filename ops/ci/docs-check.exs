@@ -9,6 +9,7 @@ defmodule OpenAgents.DocsCheck do
   @lexical_exceptions MapSet.new([
                         "docs/2026-08-20-integration-hardening-and-staging-readiness-recommendations.md",
                         "docs/2026-08-20-test-coverage-audit.md",
+                        "docs/episode-triage.md",
                         "docs/decisions/0005-use-basecoat-and-one-component-system.md"
                       ])
 

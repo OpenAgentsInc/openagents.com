@@ -147,4 +147,101 @@ defmodule OpenAgentsWeb.ChatPlaceholderTest do
     assert final_reasoning.text == "Report the failure."
     assert is_nil(final_reasoning.duration)
   end
+
+  test "the browser renders durable tool workspace, duration, output, and receipts", %{conn: conn} do
+    key = "placeholder-tool-metadata"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    streamer = fn _request, callback, _options ->
+      callback.(
+        {:tool_call_started,
+         %{
+           "call_id" => "call-read",
+           "name" => "read",
+           "arguments" => ~s({"path":"README.md"})
+         }}
+      )
+
+      callback.(
+        {:tool_call_completed,
+         %{
+           "call_id" => "call-read",
+           "output" => %{
+             "schema" => "sarah.tool_outcome.v1",
+             "status" => "succeeded",
+             "result" => %{"content" => "OpenAgents"},
+             "workspace" => %{
+               "type" => "forge_worktree",
+               "path" => "/private/var/lib/openagents/workspaces/repo"
+             },
+             "target_receipt_refs" => ["receipt:read:1"],
+             "started_at" => "2026-08-22T19:43:28.000Z",
+             "completed_at" => "2026-08-22T19:43:28.025Z"
+           }
+         }}
+      )
+
+      {:ok, %{"assistant_content" => "Read the file."}}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             OpenAgents.Chat.AccountTurns.submit(user, "Read the README.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    block_id = "chat-placeholder-block-#{run_id}-0"
+    assert has_element?(view, "##{block_id}-metadata", "succeeded")
+    assert has_element?(view, "##{block_id}-metadata", "repo")
+    refute render(view) =~ "/private/var/lib/openagents"
+    assert has_element?(view, "##{block_id}-metadata", "25 ms")
+    assert has_element?(view, "##{block_id}-output", "OpenAgents")
+    assert has_element?(view, "##{block_id}-receipts", "receipt:read:1")
+  end
+
+  test "streaming typed tool failures retain status and error code" do
+    socket =
+      %Phoenix.LiveView.Socket{}
+      |> Phoenix.Component.assign(:stream_id, 84)
+      |> Phoenix.Component.assign(:streaming?, true)
+      |> Phoenix.Component.assign(:assistant_tool_calls, [])
+      |> Phoenix.Component.assign(:assistant_blocks, [])
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 84,
+         {:tool_call_started, %{"call_id" => "call-edit", "name" => "edit", "arguments" => "{}"}}},
+        socket
+      )
+
+    {:noreply, socket} =
+      OpenAgentsWeb.ChatPlaceholderLive.handle_info(
+        {:openrouter_stream_event, 84,
+         {:tool_call_failed,
+          %{
+            "call_id" => "call-edit",
+            "output" => %{
+              "schema" => "sarah.tool_outcome.v1",
+              "status" => "failed",
+              "error" => %{
+                "code" => "workspace_read_only",
+                "message" => "The workspace is read-only."
+              },
+              "workspace" => %{"path" => "/private/var/lib/openagents/workspaces/repo"}
+            }
+          }}},
+        socket
+      )
+
+    assert [%{tool_call: tool}] = socket.assigns.assistant_blocks
+    assert tool.status == "failed"
+    assert tool.state == "output-error"
+    assert tool.error_code == "workspace_read_only"
+    assert tool.error == "The workspace is read-only."
+    assert tool.workspace_label == "repo"
+  end
 end

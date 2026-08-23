@@ -39,12 +39,16 @@ defmodule OpenAgents.Changelog do
     viewer = opts[:viewer]
 
     cond do
-      not Visibility.allows?(repo, :ledger) -> {:error, :not_public}
+      not Visibility.allows?(repo, :ledger) ->
+        {:error, :not_public}
+
       opts[:refresh] ->
         rows = build(repo, viewer)
         if is_nil(viewer), do: put_cache(repo, rows)
         {:ok, rows}
-      true -> {:ok, cached(repo, viewer)}
+
+      true ->
+        {:ok, cached(repo, viewer)}
     end
   end
 

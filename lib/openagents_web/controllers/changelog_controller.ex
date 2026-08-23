@@ -9,6 +9,11 @@ defmodule OpenAgentsWeb.ChangelogController do
 
   use OpenAgentsWeb, :controller
 
+  import OpenAgentsWeb.UserAuth, only: [fetch_current_user: 2]
+
+  plug :fetch_session
+  plug :fetch_current_user
+
   def show(conn, params) do
     repo = Map.get(params, "repo", "openagents.com")
     viewer = conn.assigns[:current_user]

@@ -13,6 +13,7 @@ defmodule OpenAgents.Transparency do
 
   import Ecto.Changeset
 
+  alias OpenAgents.Accounts
   alias OpenAgents.Transparency.ArtifactLink
 
   @tier_rank %{dark: 0, pulse: 1, ledger: 2, glass: 3}
@@ -39,7 +40,11 @@ defmodule OpenAgents.Transparency do
   A revoked `ArtifactLink` always resolves to `:dark`.
   """
   def effective_tier(%ArtifactLink{revoked_at: nil} = link, viewer) do
-    clamp(tier_atom(link.tier), viewer)
+    if owner?(link, viewer) or admin?(viewer) do
+      max_tier(:glass, link.tier)
+    else
+      clamp(tier_atom(link.tier), viewer)
+    end
   end
 
   def effective_tier(%ArtifactLink{}, _viewer), do: :dark
@@ -106,10 +111,40 @@ defmodule OpenAgents.Transparency do
 
   defp tier_atom(_), do: :dark
 
-  defp viewer_tier(%{tier: tier}), do: tier_atom(tier)
-  defp viewer_tier(tier) when is_binary(tier), do: tier_atom(tier)
-  defp viewer_tier(tier) when is_atom(tier) and not is_nil(tier), do: tier_atom(tier)
-  defp viewer_tier(_), do: nil
+  @doc "The viewer's own transparency tier, used to clamp artifact disclosure."
+  def viewer_tier(%{admin: true}), do: :glass
+
+  def viewer_tier(%Accounts.User{} = user),
+    do: if(Accounts.admin?(user), do: :glass, else: nil)
+
+  def viewer_tier(%{tier: tier}), do: tier_atom(tier)
+  def viewer_tier(%{account_id: _}), do: nil
+  def viewer_tier(tier) when is_binary(tier), do: tier_atom(tier)
+  def viewer_tier(tier) when is_atom(tier) and not is_nil(tier), do: tier_atom(tier)
+  def viewer_tier(_), do: nil
+
+  defp max_tier(a, b) do
+    a_atom = tier_atom(a)
+    b_atom = tier_atom(b)
+
+    if @tier_rank[a_atom] >= @tier_rank[b_atom],
+      do: a_atom,
+      else: b_atom
+  end
+
+  defp owner?(%ArtifactLink{account_id: link_id}, %{account_id: viewer_id})
+       when not is_nil(link_id) and not is_nil(viewer_id),
+       do: link_id == viewer_id
+
+  defp owner?(%ArtifactLink{account_id: link_id}, %Accounts.User{id: viewer_id})
+       when not is_nil(link_id) and not is_nil(viewer_id),
+       do: link_id == viewer_id
+
+  defp owner?(_, _), do: false
+
+  defp admin?(%{admin: true}), do: true
+  defp admin?(%Accounts.User{} = user), do: Accounts.admin?(user)
+  defp admin?(_), do: false
 
   defp clamp(tier, viewer) do
     case viewer_tier(viewer) do

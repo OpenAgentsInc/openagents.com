@@ -34,6 +34,38 @@ defmodule OpenAgentsWeb.StackJSON do
     end
   end
 
+  def render("merge_async.json", %{operation: operation} = assigns) do
+    base_url = String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
+
+    json = %{
+      operation_id: operation.id,
+      merge_status: merge_status(operation),
+      state: operation.state,
+      merge_method: Map.get(operation.request, "merge_method"),
+      pull_request: Map.get(operation.request, "pull_request_number"),
+      error: operation.error,
+      created_at: operation.inserted_at,
+      completed_at: operation.completed_at,
+      url:
+        "#{base_url}/api/v3/repos/#{assigns.owner}/#{assigns.repo}/pulls/#{assigns.pull_number}/merge-async/#{operation.id}"
+    }
+
+    case Map.get(assigns, :replay_state) do
+      nil -> json
+      replay_state -> Map.put(json, :replayed, replay_state == :replayed)
+    end
+  end
+
+  # The external contract collapses internal operation states into the
+  # three the poll surface promises: a submitted merge is pending until
+  # it either lands or terminates without landing.
+  defp merge_status(%{state: state})
+       when state in ~w(pending running waiting_for_conflict_resolution waiting_for_checks),
+       do: "pending"
+
+  defp merge_status(%{state: "succeeded"}), do: "merged"
+  defp merge_status(_operation), do: "failed"
+
   defp stack(stack, assigns) do
     base_url = String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
     owner = assigns.owner

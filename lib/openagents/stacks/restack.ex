@@ -713,14 +713,18 @@ defmodule OpenAgents.Stacks.Restack do
 
   defp ensure_no_active_operation(stack, nil) do
     active =
-      Repo.exists?(
+      Repo.one(
         from operation in Operation,
           where:
             operation.stack_id == ^stack.id and
-              operation.state in ^Operation.active_states()
+              operation.state in ^Operation.active_states(),
+          limit: 1
       )
 
-    if active, do: {:error, :operation_in_progress}, else: :ok
+    case active do
+      nil -> :ok
+      %Operation{id: id} -> {:error, {:operation_in_progress, id}}
+    end
   end
 
   defp validate_expected_version(nil, _stack), do: :ok

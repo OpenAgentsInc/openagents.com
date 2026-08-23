@@ -66,6 +66,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/pulls" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/pulls/:pull_number" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async/:operation_id" =>
+        :optional_bearer,
       "get /api/v3/repos/:owner/:repo/stacks" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/stacks/:stack_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id" =>
@@ -125,6 +127,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/orgs/:org/repos" => :required_bearer,
       "post /api/v3/orgs/:org/repos/imports" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/pulls" => :required_bearer,
+      "put /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase" => :required_bearer,

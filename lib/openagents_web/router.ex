@@ -483,6 +483,11 @@ defmodule OpenAgentsWeb.Router do
 
     get "/repos/:owner/:repo/pulls", PullRequestController, :index
     get "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :show
+
+    get "/repos/:owner/:repo/pulls/:pull_number/merge-async/:operation_id",
+        StackController,
+        :merge_async_status
+
     get "/repos/:owner/:repo/stacks", StackController, :index
     get "/repos/:owner/:repo/stacks/:stack_number", StackController, :show
 
@@ -541,6 +546,7 @@ defmodule OpenAgentsWeb.Router do
     patch "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
     post "/repos/:owner/:repo/pulls", PullRequestController, :create
     patch "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :update
+    put "/repos/:owner/:repo/pulls/:pull_number/merge-async", StackController, :merge_async
     post "/repos/:owner/:repo/stacks", StackController, :create
     post "/repos/:owner/:repo/stacks/:stack_number/append", StackController, :append
     post "/repos/:owner/:repo/stacks/:stack_number/rebase", StackController, :rebase

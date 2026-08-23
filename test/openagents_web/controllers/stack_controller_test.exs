@@ -521,6 +521,133 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
+  describe "PUT /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async" do
+    test "accepts a submission, polls it, replays retries, and reports the active conflict",
+         %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1", "layer-2"])
+      [pr_1, pr_2] = pull_request_chain(repository, oids, ["layer-1", "layer-2"])
+      conn = put_forge_api_token(conn, "merge-async", repository)
+
+      assert %{"number" => 1} =
+               conn
+               |> put_req_header("idempotency-key", "merge-async-create")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1, pr_2]})
+               |> json_response(201)
+
+      submit_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-async-1")
+        |> put("#{pulls_path(repository)}/#{pr_1}/merge-async", %{})
+
+      assert %{
+               "operation_id" => operation_id,
+               "merge_status" => "pending",
+               "state" => "pending",
+               "merge_method" => "merge",
+               "pull_request" => ^pr_1,
+               "replayed" => false,
+               "url" => poll_url
+             } = json_response(submit_conn, 202)
+
+      assert String.ends_with?(
+               poll_url,
+               "#{pulls_path(repository)}/#{pr_1}/merge-async/#{operation_id}"
+             )
+
+      poll_conn = get(conn, "#{pulls_path(repository)}/#{pr_1}/merge-async/#{operation_id}")
+
+      assert %{"operation_id" => ^operation_id, "merge_status" => "pending"} =
+               json_response(poll_conn, 200)
+
+      replay_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-async-1")
+        |> put("#{pulls_path(repository)}/#{pr_1}/merge-async", %{})
+
+      assert %{"operation_id" => ^operation_id, "replayed" => true} =
+               json_response(replay_conn, 202)
+
+      second_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-async-2")
+        |> put("#{pulls_path(repository)}/#{pr_2}/merge-async", %{})
+
+      assert %{"code" => "operation_in_progress", "operation_id" => ^operation_id} =
+               json_response(second_conn, 409)
+    end
+
+    test "scopes the poll to the submitting pull request", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1", "layer-2"])
+      [pr_1, pr_2] = pull_request_chain(repository, oids, ["layer-1", "layer-2"])
+      conn = put_forge_api_token(conn, "merge-async-scope", repository)
+
+      assert %{"number" => 1} =
+               conn
+               |> put_req_header("idempotency-key", "merge-async-scope-create")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1, pr_2]})
+               |> json_response(201)
+
+      assert %{"operation_id" => operation_id} =
+               conn
+               |> put_req_header("idempotency-key", "merge-async-scope-1")
+               |> put("#{pulls_path(repository)}/#{pr_1}/merge-async", %{})
+               |> json_response(202)
+
+      other_conn = get(conn, "#{pulls_path(repository)}/#{pr_2}/merge-async/#{operation_id}")
+      assert json_response(other_conn, 404)
+
+      bogus_conn = get(conn, "#{pulls_path(repository)}/#{pr_1}/merge-async/not-a-uuid")
+      assert json_response(bogus_conn, 404)
+    end
+
+    test "rejects an unstacked pull request and an unknown pull request", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      solo = pull_request(repository, "layer-1", "main", oids["main"], oids["layer-1"])
+      conn = put_forge_api_token(conn, "merge-async-unstacked", repository)
+
+      solo_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-async-solo-1")
+        |> put("#{pulls_path(repository)}/#{solo}/merge-async", %{})
+
+      assert %{"code" => "not_stacked"} = json_response(solo_conn, 422)
+
+      missing_conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-async-missing-1")
+        |> put("#{pulls_path(repository)}/999999/merge-async", %{})
+
+      assert json_response(missing_conn, 404)
+    end
+
+    test "refuses a caller without write access", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1"])
+      [pr_1] = pull_request_chain(repository, oids, ["layer-1"])
+      conn = put_forge_api_token(conn, "merge-async-outsider")
+
+      writer_conn =
+        Phoenix.ConnTest.build_conn()
+        |> put_forge_api_token("merge-async-owner", repository)
+
+      assert %{"number" => 1} =
+               writer_conn
+               |> put_req_header("idempotency-key", "merge-async-outsider-create")
+               |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1]})
+               |> json_response(201)
+
+      conn =
+        conn
+        |> put_req_header("idempotency-key", "merge-async-outsider-1")
+        |> put("#{pulls_path(repository)}/#{pr_1}/merge-async", %{})
+
+      assert json_response(conn, 403)
+    end
+  end
+
   describe "GET /api/v3/repos/:owner/:repo/stacks" do
     test "reads are public for a public repository", %{conn: conn} do
       repository = repository_fixture()
@@ -571,6 +698,9 @@ defmodule OpenAgentsWeb.StackControllerTest do
   end
 
   defp path(repository), do: "/api/v3/repos/#{repository.owner}/#{repository.name}/stacks"
+
+  defp pulls_path(repository),
+    do: "/api/v3/repos/#{repository.owner}/#{repository.name}/pulls"
 
   defp seed_chain(repository, branches) do
     path = Repos.ensure_repo!(repository.storage_key, repository.default_branch)

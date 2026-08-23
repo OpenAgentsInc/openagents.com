@@ -93,6 +93,11 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/conversations/:conversation_id/boxes/:box_id" => :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/commands" => :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/stop" => :required_bearer,
+      "post /api/v3/conversations/:conversation_id/boxes/:box_id/assignments" => :required_bearer,
+      "get /api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id" =>
+        :required_bearer,
+      "post /api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id/cancel" =>
+        :required_bearer,
       "post /api/v3/conversations/:conversation_id/boxes/:box_id/runs" => :required_bearer,
       "get /api/v3/conversations/:conversation_id/boxes/:box_id/runs" => :required_bearer,
       "get /api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id" => :required_bearer,
@@ -152,6 +157,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/issues" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
       "get /api/v3/agent" => :required_bearer,
+      "post /api/v3/agents/:handle/box-control" => :required_bearer,
+      "delete /api/v3/agents/:handle/box-control" => :required_bearer,
       "post /api/v3/agent/credentials" => :required_bearer,
       "post /api/v3/agent/links" => :required_bearer,
       "get /api/v3/agents/links" => :required_bearer,

@@ -13,7 +13,7 @@ defmodule OpenAgents.BoxRuns do
 
   @spec start_run(String.t(), String.t(), map(), String.t(), String.t()) ::
           {:ok, Run.t()} | {:error, term()}
-  def start_run(conversation_id, box_id, principal, command, idempotency_key)
+  def start_run(conversation_id, box_id, principal, command, idempotency_key, options \\ [])
       when is_binary(conversation_id) and is_binary(box_id) and is_map(principal) and
              is_binary(command) and is_binary(idempotency_key) do
     with {:ok, _box} <- Box.get_box(conversation_id, box_id),
@@ -24,7 +24,7 @@ defmodule OpenAgents.BoxRuns do
           {:ok, Repo.preload(run, :conversation_box)}
 
         {:new, run} ->
-          case start_worker(run.id) do
+          case start_worker(run.id, options) do
             {:ok, _pid} -> {:ok, Repo.preload(run, :conversation_box)}
             {:error, reason} -> {:error, reason}
           end
@@ -116,8 +116,11 @@ defmodule OpenAgents.BoxRuns do
   end
 
   @spec start_worker(String.t()) :: DynamicSupervisor.on_start_child()
-  def start_worker(run_id) do
-    DynamicSupervisor.start_child(OpenAgents.BoxRunSupervisor, {OpenAgents.BoxRunServer, run_id})
+  def start_worker(run_id, options \\ []) do
+    DynamicSupervisor.start_child(
+      OpenAgents.BoxRunSupervisor,
+      {OpenAgents.BoxRunServer, {run_id, options}}
+    )
   end
 
   @spec claim_dispatch(String.t()) :: {:ok, Run.t()} | {:error, term()}

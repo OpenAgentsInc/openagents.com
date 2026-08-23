@@ -10,7 +10,7 @@ defmodule OpenAgents.Agents do
   import Ecto.Query
 
   alias OpenAgents.Accounts.User
-  alias OpenAgents.Agents.{Agent, AgentToken, AgentUserLink}
+  alias OpenAgents.Agents.{Agent, AgentBoxGrant, AgentToken, AgentUserLink}
   alias OpenAgents.Audit
   alias OpenAgents.Repo
 
@@ -306,6 +306,81 @@ defmodule OpenAgents.Agents do
     else
       _ -> {:error, :link_not_found}
     end
+  end
+
+  @doc "Grants a linked agent revocable Box control."
+  @spec grant_box_control(User.t(), Agent.t()) ::
+          {:ok, AgentBoxGrant.t()} | {:error, atom()}
+  def grant_box_control(%User{id: user_id}, %Agent{id: agent_id}) do
+    with true <- linked?(agent_id, user_id) do
+      %AgentBoxGrant{}
+      |> AgentBoxGrant.changeset(%{
+        agent_id: agent_id,
+        user_id: user_id,
+        granted_by_id: user_id,
+        scope: "box:control",
+        granted_at: DateTime.utc_now()
+      })
+      |> Repo.insert()
+    else
+      _ -> {:error, :agent_not_linked}
+    end
+  end
+
+  @doc "Revokes an agent's active Box-control grant."
+  @spec revoke_box_control(User.t(), Agent.t()) :: {:ok, AgentBoxGrant.t()} | {:error, atom()}
+  def revoke_box_control(%User{id: user_id}, %Agent{id: agent_id}) do
+    case Repo.one(
+           from grant in AgentBoxGrant,
+             where:
+               grant.agent_id == ^agent_id and grant.user_id == ^user_id and
+                 grant.scope == "box:control" and is_nil(grant.revoked_at)
+         ) do
+      %AgentBoxGrant{} = grant ->
+        grant |> AgentBoxGrant.changeset(%{revoked_at: DateTime.utc_now()}) |> Repo.update()
+
+      nil ->
+        {:error, :grant_not_found}
+    end
+  end
+
+  @doc "Checks whether a linked agent has an active Box-control grant."
+  @spec box_control_granted?(Agent.t()) :: boolean()
+  def box_control_granted?(%Agent{id: agent_id}) do
+    Repo.exists?(
+      from grant in AgentBoxGrant,
+        where:
+          grant.agent_id == ^agent_id and grant.scope == "box:control" and
+            is_nil(grant.revoked_at),
+        join: link in AgentUserLink,
+        on:
+          link.agent_id == grant.agent_id and link.user_id == grant.user_id and
+            link.status == "linked"
+    )
+  end
+
+  @doc "Returns the human account that currently grants an agent Box control."
+  @spec box_control_owner(Agent.t()) :: User.t() | nil
+  def box_control_owner(%Agent{id: agent_id}) do
+    Repo.one(
+      from grant in AgentBoxGrant,
+        join: link in AgentUserLink,
+        on:
+          link.agent_id == grant.agent_id and link.user_id == grant.user_id and
+            link.status == "linked",
+        join: user in User,
+        on: user.id == grant.user_id,
+        where:
+          grant.agent_id == ^agent_id and grant.scope == "box:control" and
+            is_nil(grant.revoked_at)
+    )
+  end
+
+  defp linked?(agent_id, user_id) do
+    Repo.exists?(
+      from link in AgentUserLink,
+        where: link.agent_id == ^agent_id and link.user_id == ^user_id and link.status == "linked"
+    )
   end
 
   defp fetch_link(id) do

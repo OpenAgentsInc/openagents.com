@@ -24,6 +24,47 @@ defmodule OpenAgents.BoxClientRunsTest do
 
   test "dispatch uses one detached mkdir-and-launch command", do: begin_dispatch()
 
+  test "assignment dispatch keeps credential setup outside the child shell" do
+    token = "oa_assignment_11111111-1111-4111-8111-111111111111.secret-token"
+    run_directory = "/home/box-user/.openagents/box-runs"
+
+    Req.Test.expect(__MODULE__, fn request ->
+      command = request.body_params["command"]
+
+      assert request.body_params["env"] == %{"OPENAGENTS_FORGE_TOKEN" => token}
+      refute command =~ token
+
+      assert command =~ "root=#{run_directory}"
+      assert command =~ ~s(> "$root/forge-credential")
+      assert command =~ ~s(git config --file="$root/gitconfig")
+      assert command =~ ~s(env GIT_CONFIG_GLOBAL="$root/gitconfig")
+
+      assert command =~ "unset OPENAGENTS_FORGE_TOKEN"
+      refute command =~ "credential_setup"
+
+      script_path =
+        Path.join(
+          System.tmp_dir!(),
+          "assignment-dispatch-#{System.unique_integer([:positive])}.sh"
+        )
+
+      on_exit(fn -> File.rm(script_path) end)
+      assert :ok = File.write(script_path, command)
+      assert {_output, 0} = System.cmd("sh", ["-n", script_path])
+
+      Req.Test.json(request, %{"stdout" => "4242\n"})
+    end)
+
+    assert {:ok, 4242} =
+             Client.dispatch_run(
+               "bx_8bhkse3n",
+               "11111111-1111-4111-8111-111111111111",
+               "git push https://openagents.com/repo.git",
+               run_directory,
+               token
+             )
+  end
+
   test "poll decodes bounded output from a recorded offset" do
     encoded = Base.encode64("hello")
 

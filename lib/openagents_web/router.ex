@@ -66,6 +66,12 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.BoxControlAuth, scope: "box:control"
   end
 
+  pipeline :assignment_control_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.AssignmentControlAuth, scope: "box:control"
+  end
+
   # The deployment control plane authenticates two principals: a human holding
   # `deployments:write`, and a short-lived workflow grant. Neither carries the
   # operator-only fleet promotion authority.
@@ -384,6 +390,13 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :forge_write_api
 
+    post "/agents/:handle/box-control", AgentController, :grant_box_control
+    delete "/agents/:handle/box-control", AgentController, :revoke_box_control
+  end
+
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :forge_write_api
+
     get "/agents/links", AgentController, :links
     post "/agents/links/:id/accept", AgentController, :accept_link
     post "/agents/links/:id/reject", AgentController, :reject_link
@@ -426,6 +439,14 @@ defmodule OpenAgentsWeb.Router do
     get "/:box_id/runs/:run_id", BoxRunController, :show
     get "/:box_id/runs/:run_id/output", BoxRunController, :output
     post "/:box_id/runs/:run_id/cancel", BoxRunController, :cancel
+  end
+
+  scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do
+    pipe_through :assignment_control_api
+
+    post "/:box_id/assignments", AssignmentController, :create
+    get "/:box_id/assignments/:assignment_id", AssignmentController, :show
+    post "/:box_id/assignments/:assignment_id/cancel", AssignmentController, :cancel
   end
 
   scope "/api/v3", OpenAgentsWeb do

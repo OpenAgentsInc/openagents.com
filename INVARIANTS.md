@@ -269,6 +269,34 @@ Evidence: `OpenAgentsWeb.Plugs.BoxControlAuth`, `OpenAgents.Box`,
 `OpenAgentsWeb.BoxController`, and
 `test/openagents_web/controllers/box_controller_test.exs`.
 
+### IDENTITY-006 — Assignment credentials are repository and branch scoped
+
+Status: Current
+
+An assignment credential identifies one durable assignment and can access only
+its repository. Git receive-pack authorizes every requested ref update before
+any ref moves; the credential can update only its assignment branch. It cannot
+write a default or protected branch, close an issue, authenticate as an
+operator, or access non-Git API routes. The credential stores only a digest,
+expires with the assignment deadline, and is revoked when the assignment
+reaches a terminal state.
+
+Evidence: `OpenAgents.Forge.Assignments`,
+`OpenAgentsWeb.Plugs.ForgeGitAuth`, `OpenAgents.Forge.GitHTTP`, and
+`test/openagents/forge/assignment_test.exs`.
+
+### IDENTITY-007 — Delegated Box control is explicit and revocable
+
+Status: Current
+
+An agent can control a Box only when its linked human grants the
+`box:control` scope. The grant records the granter and lifecycle timestamps.
+Unlinking or revoking the grant prevents new Box-control requests, while
+historical agent authorship remains unchanged.
+
+Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
+and `test/openagents/agents_test.exs`.
+
 ### WORK-002 — Detached Box runs reconcile from durable evidence
 
 Status: Current
@@ -2315,6 +2343,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
+| IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
+| IDENTITY-007 | `test/openagents/agents_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |

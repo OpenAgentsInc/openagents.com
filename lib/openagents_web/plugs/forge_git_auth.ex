@@ -60,6 +60,13 @@ defmodule OpenAgentsWeb.Plugs.ForgeGitAuth do
     end
   end
 
+  defp principal_for("oa_assignment_" <> _ = token) do
+    case OpenAgents.Forge.Assignments.authenticate(token) do
+      {:ok, principal} -> {:ok, principal}
+      _ -> :error
+    end
+  end
+
   defp principal_for(token) when is_binary(token) and token != "" do
     operator_token = Application.get_env(:openagents, :forge_operator_token)
 

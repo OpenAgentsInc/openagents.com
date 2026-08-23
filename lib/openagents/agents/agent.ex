@@ -19,6 +19,7 @@ defmodule OpenAgents.Agents.Agent do
 
     has_many :tokens, OpenAgents.Agents.AgentToken
     has_many :user_links, OpenAgents.Agents.AgentUserLink
+    has_many :box_control_grants, OpenAgents.Agents.AgentBoxGrant
 
     timestamps()
   end

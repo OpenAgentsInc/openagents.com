@@ -5,6 +5,7 @@ defmodule OpenAgents.Tools.Redaction do
   @sensitive_fragments ~w(api_key authorization cookie credential password private_key secret token)
   @secret_patterns [
     ~r/\bsk-(?:or-v1-)?[A-Za-z0-9_-]{16,}\b/,
+    ~r/\boa_(?:pat|agent|assignment)_[A-Za-z0-9._-]{16,}\b/,
     ~r/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+\/-]+=*\b/i,
     ~r/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/
   ]

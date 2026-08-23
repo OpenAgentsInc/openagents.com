@@ -64,6 +64,25 @@ defmodule OpenAgents.Box.Client do
     end
   end
 
+  @spec dispatch_run(String.t(), String.t(), String.t(), String.t(), String.t()) ::
+          {:ok, integer()} | {:error, term()}
+  def dispatch_run(box_id, run_id, command, run_directory, nil),
+    do: dispatch_run(box_id, run_id, command, run_directory)
+
+  def dispatch_run(box_id, run_id, command, run_directory, credential)
+      when is_binary(box_id) and is_binary(run_id) and is_binary(command) and
+             is_binary(run_directory) and is_binary(credential) do
+    with {:ok, body} <-
+           command(box_id, %{
+             "command" => dispatch_command(run_id, command, run_directory, true),
+             "timeoutSeconds" => 30,
+             "env" => %{"OPENAGENTS_FORGE_TOKEN" => credential}
+           }),
+         {:ok, pid} <- dispatch_pid(body) do
+      {:ok, pid}
+    end
+  end
+
   @doc "Polls one detached run for output and its exit sentinel."
   @spec poll_run(String.t(), String.t(), non_neg_integer()) :: {:ok, map()} | {:error, term()}
   def poll_run(box_id, run_id, offset)
@@ -128,8 +147,31 @@ defmodule OpenAgents.Box.Client do
   end
 
   defp dispatch_command(run_id, command, run_directory) do
+    dispatch_command(run_id, command, run_directory, false)
+  end
+
+  defp dispatch_command(run_id, command, run_directory, with_credential) do
     root = run_root(run_id, run_directory)
     encoded = Base.encode64(command)
+
+    credential_setup =
+      if with_credential do
+        """
+        umask 077
+        printf 'https://x:%s@openagents.com\\n' "$OPENAGENTS_FORGE_TOKEN" > "$root/forge-credential"
+        git config --file="$root/gitconfig" credential.helper "store --file=$root/forge-credential"
+        unset OPENAGENTS_FORGE_TOKEN
+        """
+      else
+        ""
+      end
+
+    launch =
+      if with_credential do
+        ~s(nohup setsid env GIT_CONFIG_GLOBAL="$root/gitconfig" sh -c 'set +e; sh "$1" > "$2/output.log" 2>&1; status=$?; printf "%s\\n" "$status" > "$2/exit-code"; rm -f "$2/forge-credential" "$2/gitconfig"; exit "$status"' _ "$root/script.sh" "$root" </dev/null >/dev/null 2>&1 &)
+      else
+        ~s(nohup setsid sh -c 'set +e; sh "$1" > "$2/output.log" 2>&1; status=$?; printf "%s\\n" "$status" > "$2/exit-code"; rm -f "$2/forge-credential" "$2/gitconfig"; exit "$status"' _ "$root/script.sh" "$root" </dev/null >/dev/null 2>&1 &)
+      end
 
     """
     set -eu
@@ -142,7 +184,7 @@ defmodule OpenAgents.Box.Client do
     printf '%s' '#{encoded}' | base64 -d > "$root/script.sh"
     chmod 700 "$root/script.sh"
     : > "$root/output.log"
-    nohup setsid sh -c 'set +e; sh "$1" > "$2/output.log" 2>&1; status=$?; printf "%s\\n" "$status" > "$2/exit-code"; exit "$status"' _ "$root/script.sh" "$root" </dev/null >/dev/null 2>&1 &
+    #{credential_setup}#{launch}
     pid=$!
     printf '%s\\n' "$pid" > "$root/pid"
     printf '%s\\n' "$pid"
@@ -199,12 +241,14 @@ defmodule OpenAgents.Box.Client do
     if [ -f "$root/pid" ]; then
       pid=$(cat "$root/pid")
       kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
-      printf 'OA_CANCELLED=1\\n'
+      cancelled=1
     elif pkill -TERM -f -- "$root/script.sh" 2>/dev/null; then
-      printf 'OA_CANCELLED=1\\n'
+      cancelled=1
     else
-      printf 'OA_CANCELLED=0\\n'
+      cancelled=0
     fi
+    rm -f "$root/forge-credential" "$root/gitconfig"
+    printf 'OA_CANCELLED=%s\\n' "$cancelled"
     """
   end
 

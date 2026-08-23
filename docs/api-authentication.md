@@ -55,7 +55,21 @@ bounded, redacted command output. It never returns provider, desktop, viewer,
 or token-bearing URLs. A foreign conversation or Box returns `404` without a
 provider request. Agent participation credentials receive
 `{"error":{"code":"agent_box_control_forbidden"}}`; linked-agent Box control is
-deferred to the linked-principal contract.
+available only after the linked human grants the `box:control` scope.
+
+### Assignment credentials
+
+A linked human can grant and revoke Box control for an agent:
+
+```sh
+openagents api -X POST agents/AGENT_HANDLE/box-control
+openagents api -X DELETE agents/AGENT_HANDLE/box-control
+```
+
+An assignment binds one issue, repository, Box, and branch. Its forge
+credential is short-lived, stores only a digest, and is accepted only by Git
+for that repository and branch. It cannot write a default or protected branch,
+close an issue, use operator routes, or use Box API routes.
 
 ### Durable Box runs
 

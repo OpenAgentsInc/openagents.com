@@ -17,6 +17,7 @@ defmodule OpenAgents.Repositories.Repository do
     field :name_key, :string
     field :visibility, :string, default: "private"
     field :default_branch, :string, default: "main"
+    field :protected_branches, {:array, :string}, default: []
     field :description, :string
     field :pull_requests_enabled, :boolean, default: true
     field :lifecycle_state, :string, default: "provisioning"

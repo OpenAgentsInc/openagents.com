@@ -90,6 +90,26 @@ defmodule OpenAgentsWeb.AgentController do
   def reject_link(conn, %{"id" => id}), do: review_link(conn, id, :reject)
   def unlink(conn, %{"id" => id}), do: review_link(conn, id, :unlink)
 
+  def grant_box_control(conn, %{"handle" => handle}) do
+    with %Agent{} = agent <- Agents.get_by_handle(handle),
+         {:ok, grant} <- Agents.grant_box_control(conn.assigns.current_user, agent) do
+      json(conn, %{"grant" => grant_json(grant)})
+    else
+      nil -> refusal(conn, :not_found, "agent_not_found")
+      {:error, reason} -> refusal(conn, :conflict, error_code(reason))
+    end
+  end
+
+  def revoke_box_control(conn, %{"handle" => handle}) do
+    with %Agent{} = agent <- Agents.get_by_handle(handle),
+         {:ok, grant} <- Agents.revoke_box_control(conn.assigns.current_user, agent) do
+      json(conn, %{"grant" => grant_json(grant)})
+    else
+      nil -> refusal(conn, :not_found, "agent_not_found")
+      {:error, reason} -> refusal(conn, :conflict, error_code(reason))
+    end
+  end
+
   def suspend(conn, %{"handle" => handle} = params) do
     with %Agent{} = agent <- Agents.get_by_handle(handle),
          {:ok, suspended} <- Agents.suspend(agent, params["reason"] || "operator suspension") do
@@ -158,6 +178,18 @@ defmodule OpenAgentsWeb.AgentController do
       "proof_method" => link.proof_method,
       "linked_at" => link.linked_at,
       "rejected_at" => link.rejected_at
+    }
+  end
+
+  defp grant_json(grant) do
+    %{
+      "id" => grant.id,
+      "agent_id" => grant.agent_id,
+      "user_id" => grant.user_id,
+      "granted_by_id" => grant.granted_by_id,
+      "scope" => grant.scope,
+      "granted_at" => grant.granted_at,
+      "revoked_at" => grant.revoked_at
     }
   end
 

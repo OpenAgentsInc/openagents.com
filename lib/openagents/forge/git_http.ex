@@ -101,7 +101,8 @@ defmodule OpenAgents.Forge.GitHTTP do
   defp receive_pack(conn, owner, name) do
     with {:ok, repository} <- resolve_repository(conn, owner, name),
          :ok <- authorize(conn, repository, :write),
-         {:ok, body, conn} <- read_git_body(conn) do
+         {:ok, body, conn} <- read_git_body(conn),
+         :ok <- authorize_receive_pack(conn, repository, body) do
       case Pushes.handle_receive_pack(
              repository.storage_key,
              body,
@@ -223,14 +224,32 @@ defmodule OpenAgents.Forge.GitHTTP do
       preload: [namespace: namespace]
   end
 
-  defp authorize(_conn, %{visibility: "public"}, :read), do: :ok
+  defp authorize(conn, %{visibility: "public"} = repository, :read) do
+    case conn.assigns[:forge_principal] do
+      %{kind: :assignment, repository_id: repository_id} ->
+        if repository.id == repository_id, do: :ok, else: {:error, 404, "unknown repository"}
+
+      _principal ->
+        :ok
+    end
+  end
 
   defp authorize(conn, repository, :read) do
     case conn.assigns[:forge_principal] do
-      nil -> authentication_required()
-      %{kind: :user, user: user} -> member_read(repository, user)
-      %{kind: :operator} -> operational_access(repository)
-      %{kind: :machine, id: machine_id} -> machine_access(repository, machine_id, "read")
+      nil ->
+        authentication_required()
+
+      %{kind: :user, user: user} ->
+        member_read(repository, user)
+
+      %{kind: :operator} ->
+        operational_access(repository)
+
+      %{kind: :machine, id: machine_id} ->
+        machine_access(repository, machine_id, "read")
+
+      %{kind: :assignment, repository_id: repository_id} ->
+        if repository.id == repository_id, do: :ok, else: {:error, 404, "unknown repository"}
     end
   end
 
@@ -254,7 +273,38 @@ defmodule OpenAgents.Forge.GitHTTP do
 
       %{kind: :machine, id: machine_id} ->
         machine_access(repository, machine_id, "write")
+
+      %{kind: :assignment, repository_id: repository_id} ->
+        if repository.id == repository_id, do: :ok, else: {:error, 404, "unknown repository"}
     end
+  end
+
+  defp authorize_receive_pack(conn, repository, body) do
+    case conn.assigns[:forge_principal] do
+      %{kind: :assignment, repository_id: repository_id, branch: branch}
+      when repository.id == repository_id ->
+        with {:ok, refs} <- OpenAgents.Forge.GitReceivePack.refs(body),
+             true <-
+               refs != [] and Enum.all?(refs, &allowed_assignment_ref?(&1, branch, repository)) do
+          :ok
+        else
+          _ -> {:error, 403, "assignment branch is not authorized"}
+        end
+
+      %{kind: :assignment} ->
+        {:error, 404, "unknown repository"}
+
+      _principal ->
+        :ok
+    end
+  end
+
+  defp allowed_assignment_ref?(ref, branch, repository) do
+    ref == "refs/heads/" <> branch and
+      branch != repository.default_branch and
+      branch not in (repository.protected_branches || []) and
+      branch not in ["main", "master"] and
+      not String.starts_with?(branch, "protected/")
   end
 
   defp member_read(repository, user) do

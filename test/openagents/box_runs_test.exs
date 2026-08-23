@@ -285,6 +285,8 @@ defmodule OpenAgents.BoxRunsTest do
     assert requested.cancellation_requested_at
 
     Req.Test.expect(__MODULE__, fn request ->
+      assert request.body_params["command"] =~ "forge-credential"
+      assert request.body_params["command"] =~ "gitconfig"
       Req.Test.transport_error(request, :econnrefused)
     end)
 
@@ -292,6 +294,9 @@ defmodule OpenAgents.BoxRunsTest do
 
     Req.Test.expect(__MODULE__, fn request ->
       assert request.body_params["command"] =~ "kill"
+      assert request.body_params["command"] =~ "rm -f"
+      assert request.body_params["command"] =~ "forge-credential"
+      assert request.body_params["command"] =~ "gitconfig"
       Req.Test.json(request, %{"stdout" => "OA_CANCELLED=1\n"})
     end)
 
@@ -302,7 +307,12 @@ defmodule OpenAgents.BoxRunsTest do
     assert cancelled.state == "cancelled"
     assert cancelled.cancellation_requested_at
     assert cancelled.cancellation_effective_at
-    assert cancelled.cancellation_effective_at >= cancelled.cancellation_requested_at
+
+    assert DateTime.compare(
+             cancelled.cancellation_effective_at,
+             cancelled.cancellation_requested_at
+           ) in [:eq, :gt]
+
     assert {:ok, later} = BoxRuns.get_run(run.conversation_id, "bx_8bhkse3n", run.id)
     assert later.state == "cancelled"
   end
@@ -312,6 +322,9 @@ defmodule OpenAgents.BoxRunsTest do
 
     Req.Test.expect(__MODULE__, fn request ->
       assert request.body_params["command"] =~ "kill"
+      assert request.body_params["command"] =~ "rm -f"
+      assert request.body_params["command"] =~ "forge-credential"
+      assert request.body_params["command"] =~ "gitconfig"
       Req.Test.json(request, %{"stdout" => "OA_CANCELLED=1\n"})
     end)
 

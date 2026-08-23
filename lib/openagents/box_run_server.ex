@@ -8,15 +8,17 @@ defmodule OpenAgents.BoxRunServer do
   alias OpenAgents.BoxRuns
   alias OpenAgents.Repo
 
-  @spec start_link(String.t()) :: GenServer.on_start()
-  def start_link(run_id) do
-    GenServer.start_link(__MODULE__, run_id, name: via(run_id))
+  @spec start_link(String.t() | {String.t(), keyword()}) :: GenServer.on_start()
+  def start_link(run_id) when is_binary(run_id), do: start_link({run_id, []})
+
+  def start_link({run_id, options}) do
+    GenServer.start_link(__MODULE__, {run_id, options}, name: via(run_id))
   end
 
   @impl true
-  def init(run_id) do
+  def init({run_id, options}) do
     case Repo.get(Run, run_id) do
-      %Run{} = run -> {:ok, %{run: run}, {:continue, :drive}}
+      %Run{} = run -> {:ok, %{run: run, options: options}, {:continue, :drive}}
       nil -> :ignore
     end
   end
@@ -26,6 +28,7 @@ defmodule OpenAgents.BoxRunServer do
     next_state = drive(state)
 
     if terminal_state?(next_state.run) do
+      finalize_assignment(next_state.run)
       {:stop, :normal, next_state}
     else
       {:noreply, next_state}
@@ -56,11 +59,13 @@ defmodule OpenAgents.BoxRunServer do
     case Repo.get(Run, run.id) do
       %Run{} = refreshed ->
         if Run.terminal?(refreshed) do
+          finalize_assignment(refreshed)
           {:stop, :normal, %{state | run: refreshed}}
         else
           next_state = poll(%{state | run: refreshed})
 
           if terminal_state?(next_state.run) do
+            finalize_assignment(next_state.run)
             {:stop, :normal, next_state}
           else
             {:noreply, next_state}
@@ -100,7 +105,8 @@ defmodule OpenAgents.BoxRunServer do
                box_id(claimed),
                claimed.id,
                claimed.command,
-               claimed.run_directory
+               claimed.run_directory,
+               state.options[:assignment_credential]
              ) do
           {:ok, pid} ->
             {:ok, updated} = BoxRuns.mark_dispatched(claimed.id, pid)
@@ -242,6 +248,32 @@ defmodule OpenAgents.BoxRunServer do
   end
 
   defp terminal_state?(%Run{} = run), do: Run.terminal?(run)
+
+  defp finalize_assignment(
+         %Run{requesting_principal: %{"type" => "assignment", "id" => id}} = run
+       ) do
+    case Repo.get(OpenAgents.Forge.Assignment, id) do
+      %OpenAgents.Forge.Assignment{} = assignment ->
+        _ =
+          OpenAgents.Forge.Assignments.finish(
+            assignment,
+            assignment_state(run.state),
+            nil,
+            run.failure_reason
+          )
+
+        :ok
+
+      nil ->
+        :ok
+    end
+  end
+
+  defp finalize_assignment(_run), do: :ok
+
+  defp assignment_state("completed"), do: "completed"
+  defp assignment_state("cancelled"), do: "cancelled"
+  defp assignment_state(_state), do: "failed"
 
   defp via(run_id), do: {:via, Registry, {OpenAgents.BoxRunRegistry, run_id}}
 end

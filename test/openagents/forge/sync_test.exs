@@ -129,12 +129,12 @@ defmodule OpenAgents.Forge.SyncTest do
     {:ok, next_generation} =
       WAL.cas_index("unavailable-cache", generation, WAL.append_entry(valid_index, missing_entry))
 
-    assert {:error, %SyncError{operation: :materialize_cache, plug_status: 503} = error} =
+    assert {:error, %SyncError{operation: :rebuild_entry, plug_status: 503} = error} =
              Sync.ensure_fresh("unavailable-cache", "trunk")
 
     assert Plug.Exception.status(error) == 503
     refute CacheReadiness.ready?()
-    assert CacheReadiness.report()["failures"] == %{"unavailable-cache" => :materialize_cache}
+    assert CacheReadiness.report()["failures"] == %{"unavailable-cache" => :rebuild_entry}
 
     # The rebuild failed before activation, so readers never receive a partial
     # repository and the last complete cache remains available for recovery.

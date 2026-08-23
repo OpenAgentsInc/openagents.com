@@ -164,8 +164,13 @@ defmodule OpenAgents.Forge.Repos do
       end
     end)
 
+    # Replay converges refs after every WAL entry, so skipping the refs that
+    # already match keeps a full rebuild at one `update-ref` per changed ref
+    # instead of one per ref per entry.
     Enum.each(target_refs, fn {name, sha} ->
-      {_, 0} = git(path, ["update-ref", name, sha])
+      unless Map.get(current, name) == sha do
+        {_, 0} = git(path, ["update-ref", name, sha])
+      end
     end)
 
     :ok

@@ -2460,6 +2460,48 @@ Evidence: `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`,
 `OpenAgents.Forge.Pushes`, `OpenAgents.Forge.MirrorWatch`, and
 `test/openagents/push_remote_contract_test.exs`.
 
+### REPOSITORY-003 — Every accepted push replays onto an empty cache
+
+Status: Current
+
+The WAL is the durable push authority and each node's bare repository is a
+disposable projection of it, so an entry that cannot re-materialize is lost
+data, not a slow start. A node that loses its cache must be able to rebuild the
+repository from seq 0 alone.
+
+Replay applies one entry at a time and moves the refs to the post-state that
+entry recorded before the next entry runs. It has to. `git bundle unbundle`
+writes objects and no refs, a `ref_update` entry carries no payload at all, and
+`git receive-pack` re-runs push *admission* policy — expected-old-OID locks and
+shallow-boundary checks — that was already decided when the push was accepted.
+Replayed against the wrong ref state git refuses the request, a refusal
+discards the entry's whole object quarantine, and `receive-pack` exits 0 while
+doing it. Converging after every entry replays each request against exactly the
+ref state its client saw, which is the state the WAL recorded.
+
+An entry's exit status is therefore not evidence of anything. Each entry proves
+its outcome instead: every object ID it introduces must exist before its refs
+move. An entry that cannot prove it does not advance the applied sequence. The
+node then rebuilds from seq 0, and a rebuild that also cannot prove it fails
+closed with a `503` rather than serving a repository missing commits.
+
+A bundle entry states the shallow graft only when it records a `shallow` key.
+An import records one, including an explicit empty list for a complete clone; a
+`GitPlane.batch_update_refs/3` batch records none, and that silence leaves the
+graft alone. Reading silence as "no boundaries" ungrafts a shallow repository
+mid-replay, after which git walks past the boundary into parent commits the WAL
+never held and every later entry fails on them.
+
+No entry format changed to make this hold, so entries written before it replay
+under it unchanged: the contract is about how replay reads the log, not about
+what pushes write. `receive.shallowUpdate` stays off, so an accepted push
+cannot move the graft either, and the boundary an import records remains the
+only one.
+
+Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Repos`,
+`OpenAgents.Forge.CacheReadiness`, `test/openagents/forge/wal_replay_test.exs`,
+and `test/openagents/forge/sync_test.exs`.
+
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
 
 Status: Current
@@ -2673,4 +2715,5 @@ contract; the invariant prose above defines the assertion, not the filename.
 | REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
+| REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |

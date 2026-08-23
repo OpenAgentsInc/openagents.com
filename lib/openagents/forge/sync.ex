@@ -109,16 +109,47 @@ defmodule OpenAgents.Forge.Sync do
     path = Repos.ensure_repo!(repo, default_branch)
     applied = Repos.applied_seq_at(path)
 
-    index
-    |> WAL.entries()
-    |> Enum.filter(fn entry -> entry["seq"] > applied end)
-    |> Enum.each(fn entry -> apply_entry!(repo, path, entry) end)
+    case replay_entries(repo, path, index, applied) do
+      :ok ->
+        rebuild_if_objects_missing!(repo, index, default_branch)
 
-    rebuild_if_objects_missing!(repo, index, default_branch)
+      {:error, reason} ->
+        # An entry that will not materialize incrementally is not fatal on
+        # its own: the WAL still holds every entry, so rebuild from seq 0
+        # (#96). Only a rebuild that also cannot materialize fails closed.
+        Logger.warning(
+          "forge_sync_cache_rebuild repo=#{repo} code=#{OpenAgents.OperationalLog.code(reason)}"
+        )
+
+        rebuild_at_sibling!(repo, index, default_branch)
+    end
+
     path = Repos.bare_path(repo)
-    converge_refs(path, index)
+    converge_refs(path, WAL.refs(index))
     Repos.set_default_branch_at!(path, default_branch)
     :ok
+  end
+
+  # Replay every entry the repository at `path` has not applied, threading
+  # each entry's recorded post-state refs into the next one so an entry is
+  # always applied against exactly the ref state its client saw.
+  defp replay_entries(repo, path, index, applied) do
+    index
+    |> WAL.entries()
+    |> Enum.reduce_while(%{}, fn entry, previous_refs ->
+      if entry["seq"] > applied do
+        case apply_entry(repo, path, entry, previous_refs) do
+          :ok -> {:cont, entry_refs(entry)}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      else
+        {:cont, entry_refs(entry)}
+      end
+    end)
+    |> case do
+      {:error, reason} -> {:error, reason}
+      _refs -> :ok
+    end
   end
 
   defp rebuild_if_objects_missing!(repo, index, default_branch) do
@@ -137,11 +168,12 @@ defmodule OpenAgents.Forge.Sync do
     try do
       Repos.ensure_repo_at!(rebuild_path, default_branch)
 
-      index
-      |> WAL.entries()
-      |> Enum.each(fn entry -> apply_entry!(repo, rebuild_path, entry) end)
+      case replay_entries(repo, rebuild_path, index, -1) do
+        :ok -> :ok
+        {:error, reason} -> raise_sync(repo, :rebuild_entry, reason)
+      end
 
-      converge_refs(rebuild_path, index)
+      converge_refs(rebuild_path, WAL.refs(index))
       Repos.set_default_branch_at!(rebuild_path, default_branch)
 
       unless refs_materialized_at?(rebuild_path, index) do
@@ -192,40 +224,89 @@ defmodule OpenAgents.Forge.Sync do
     end)
   end
 
-  defp apply_entry!(repo, path, %{"seq" => seq, "object" => object} = entry) do
+  # Apply one WAL entry: materialize its objects, prove the objects it
+  # introduced are present, then move the refs to the post-state the entry
+  # recorded.
+  #
+  # The ref convergence is not cosmetic. `git bundle unbundle` writes objects
+  # and no refs, a `ref_update` entry carries no payload at all, and
+  # `git receive-pack` re-runs push *admission* policy — old-OID locks and
+  # shallow-boundary checks — that was already decided when the push was
+  # accepted. Replaying a request against the wrong ref state makes git
+  # refuse it, and a refusal costs the entry's objects: receive-pack drops
+  # its object quarantine when every command fails, and exits 0 while doing
+  # so. Converging per entry means each entry replays against exactly the ref
+  # state its client saw, which is the state the WAL recorded.
+  defp apply_entry(repo, path, %{"seq" => seq, "object" => object} = entry, previous_refs) do
+    with :ok <- materialize_entry(repo, path, seq, entry, object),
+         :ok <- verify_entry_objects(path, seq, entry, previous_refs) do
+      converge_refs(path, entry_refs(entry))
+      Repos.record_applied_seq_at!(path, seq)
+      :ok
+    end
+  end
+
+  defp materialize_entry(repo, path, seq, entry, object) do
     case entry["format"] || "receive_pack" do
       "receive_pack" ->
-        {:ok, payload} = WAL.get_entry(repo, object)
-        {_output, 0} = run_receive_pack(path, payload)
+        with {:ok, payload} <- WAL.get_entry(repo, object) do
+          case run_receive_pack(path, payload) do
+            {_output, 0} -> :ok
+            {_output, status} -> {:error, {:receive_pack_failed, seq, status}}
+          end
+        end
 
       "git_bundle" ->
-        :ok = unbundle_entry(repo, path, object, entry["shallow"] || [])
+        unbundle_entry(repo, path, object, entry)
 
       "empty_import" ->
         :ok
 
       # A batch ref update that introduced no new objects
-      # (`OpenAgents.Forge.GitPlane.batch_update_refs/3`); refs converge
-      # from the index.
+      # (`OpenAgents.Forge.GitPlane.batch_update_refs/3`); its refs converge
+      # from the entry.
       "ref_update" ->
         :ok
     end
-
-    Repos.record_applied_seq_at!(path, seq)
   end
 
-  # Replay is exact in the common case; converge_refs makes the final state
-  # authoritative even if an individual replayed request was non-idempotent
-  # (e.g. a non-fast-forward the original push forced).
-  defp converge_refs(path, index) do
-    target = WAL.refs(index)
+  # `git receive-pack` exits 0 even when it rejects every ref update, so an
+  # entry's own exit status proves nothing. Prove the outcome instead: every
+  # object this entry introduced must exist before its refs move. Only the
+  # object IDs the entry adds are checked, because the ones it carries over
+  # were proven when their own entry applied.
+  defp verify_entry_objects(path, seq, entry, previous_refs) do
+    known = previous_refs |> Map.values() |> MapSet.new()
 
+    missing =
+      entry
+      |> entry_refs()
+      |> Map.values()
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(known, &1))
+      |> Enum.reject(fn sha ->
+        match?({_output, 0}, Repos.git(path, ["cat-file", "-e", sha]))
+      end)
+
+    if missing == [], do: :ok, else: {:error, {:missing_ref_object, seq, missing}}
+  end
+
+  defp entry_refs(entry) do
+    case Map.get(entry, "refs") do
+      refs when is_map(refs) -> refs
+      _absent -> %{}
+    end
+  end
+
+  # The WAL is the ref authority; this makes the repository say so. Also used
+  # once at the end of a replay so an empty index deletes stale local refs.
+  defp converge_refs(path, target) do
     if Repos.refs_at(path) != target do
       Repos.set_refs_at!(path, target)
     end
   end
 
-  defp unbundle_entry(repo, path, object, shallow_boundaries) do
+  defp unbundle_entry(repo, path, object, entry) do
     temporary_path =
       Path.join(
         Application.get_env(:openagents, :repository_import_temp_dir, System.tmp_dir!()),
@@ -236,7 +317,7 @@ defmodule OpenAgents.Forge.Sync do
       with :ok <- WAL.get_entry_file(repo, object, temporary_path),
            :ok <- File.chmod(temporary_path, 0o600) do
         case Repos.git(path, ["bundle", "unbundle", temporary_path]) do
-          {_output, 0} -> write_shallow_boundaries(path, shallow_boundaries)
+          {_output, 0} -> write_shallow_boundaries(path, recorded_shallow(entry))
           {_output, _status} -> raise "repository bundle could not be materialized"
         end
       end
@@ -244,6 +325,22 @@ defmodule OpenAgents.Forge.Sync do
       File.rm(temporary_path)
     end
   end
+
+  # An import records the shallow boundaries its `--depth` fetch produced,
+  # including an explicit empty list for a complete clone. Every other bundle
+  # entry — a `GitPlane.batch_update_refs/3` batch, for instance — records no
+  # boundary key at all and therefore says nothing about the graft. Treating
+  # that silence as "no boundaries" ungrafts a shallow repository mid-replay,
+  # after which git tries to walk past the boundary and every later entry
+  # fails on a parent the WAL never held.
+  defp recorded_shallow(entry) do
+    case Map.fetch(entry, "shallow") do
+      {:ok, boundaries} when is_list(boundaries) -> boundaries
+      _unrecorded -> :unrecorded
+    end
+  end
+
+  defp write_shallow_boundaries(_path, :unrecorded), do: :ok
 
   defp write_shallow_boundaries(path, []) do
     shallow_path = Path.join(path, "shallow")

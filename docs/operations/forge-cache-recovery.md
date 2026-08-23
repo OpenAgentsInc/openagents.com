@@ -15,6 +15,14 @@ When it detects missing objects, it builds a complete sibling repository,
 verifies every authoritative ref, and atomically activates that repository.
 Readers never observe the sibling while it is incomplete.
 
+Replay applies one WAL entry at a time and moves the refs to the post-state
+that entry recorded before the next entry runs, then proves that every object
+ID the entry introduced exists. `git receive-pack` exits `0` even when it
+rejects every ref update, so the exit status is not evidence; the object check
+is. An entry that fails the check does not advance the applied sequence, and
+the node rebuilds from sequence `0` instead. See `INVARIANTS.md`,
+REPOSITORY-003.
+
 If WAL replay or activation fails, the node:
 
 - preserves the last complete local repository cache;
@@ -85,6 +93,7 @@ Run the cache, Git HTTP, and health contracts together:
 
 ```sh
 mix test test/openagents/forge/sync_test.exs \
+  test/openagents/forge/wal_replay_test.exs \
   test/openagents/forge/git_http_test.exs \
   test/openagents_web/controllers/health_controller_test.exs
 ```

@@ -28,6 +28,13 @@ defmodule OpenAgents.DocsCheck do
     {~r{/home/[A-Za-z0-9._-]+/(?:work|code)(?:/|\b)}, "Linux developer path"}
   ]
 
+  # The glossary claims code exists. A term whose module, context, or file has
+  # been renamed or removed stops being a definition and becomes a wrong answer,
+  # so the same resolution the invariants get applies to `docs/taxonomy.md`.
+  @glossary_file "docs/taxonomy.md"
+
+  @evidence_path_prefixes ["assets/", "config/", "docs/", "lib/", "ops/", "priv/", "test/"]
+
   @theme_contract_files ["AGENTS.md", "INVARIANTS.md", "docs/component-library.md"]
   @retired_theme_claims [
     {~r/\bdark-only\b/i, "retired dark-only theme claim"},
@@ -42,6 +49,7 @@ defmodule OpenAgents.DocsCheck do
       |> check_current_language()
       |> check_theme_contract()
       |> check_invariants()
+      |> check_glossary()
 
     case Enum.reverse(errors) do
       [] ->
@@ -129,8 +137,16 @@ defmodule OpenAgents.DocsCheck do
     |> check_duplicate_ids(ids)
     |> check_statuses(sections)
     |> check_proof_index(content, sections)
-    |> check_invariant_paths(content)
-    |> check_module_references(content)
+    |> check_referenced_paths("INVARIANTS.md", content)
+    |> check_module_references("INVARIANTS.md", content)
+  end
+
+  defp check_glossary(errors) do
+    content = File.read!(@glossary_file)
+
+    errors
+    |> check_referenced_paths(@glossary_file, content)
+    |> check_module_references(@glossary_file, content)
   end
 
   defp invariant_sections(content) do
@@ -198,9 +214,19 @@ defmodule OpenAgents.DocsCheck do
     end)
   end
 
-  defp check_invariant_paths(errors, content) do
-    Regex.scan(~r/`([^`]+)`/, content, capture: :all_but_first)
+  # Fenced blocks must go before code spans are read. A fence is three
+  # backticks, so an odd number of blocks flips the pairing for every span
+  # after it and the scan silently returns nothing to check.
+  defp inline_code_tokens(content) do
+    content
+    |> String.replace(~r/^```.*?^```/ms, "")
+    |> then(&Regex.scan(~r/`([^`\n]+)`/, &1, capture: :all_but_first))
     |> List.flatten()
+  end
+
+  defp check_referenced_paths(errors, file, content) do
+    content
+    |> inline_code_tokens()
     |> Enum.filter(&local_evidence_path?/1)
     |> Enum.uniq()
     |> Enum.reduce(errors, fn path, acc ->
@@ -209,17 +235,17 @@ defmodule OpenAgents.DocsCheck do
       if File.exists?(normalized) do
         acc
       else
-        ["INVARIANTS.md names missing evidence path #{path}" | acc]
+        ["#{file} names missing evidence path #{path}" | acc]
       end
     end)
   end
 
   defp local_evidence_path?(path) do
-    String.starts_with?(path, ["assets/", "config/", "docs/", "ops/", "priv/", "test/"]) or
+    String.starts_with?(path, @evidence_path_prefixes) or
       path in [".dockerignore", ".gitignore", "AGENTS.md", "INVARIANTS.md"]
   end
 
-  defp check_module_references(errors, content) do
+  defp check_module_references(errors, file, content) do
     module_files = Path.wildcard("{lib,test}/**/*.{ex,exs}")
 
     declared =
@@ -232,8 +258,8 @@ defmodule OpenAgents.DocsCheck do
       end)
       |> MapSet.new()
 
-    Regex.scan(~r/`([^`]+)`/, content, capture: :all_but_first)
-    |> List.flatten()
+    content
+    |> inline_code_tokens()
     |> Enum.reject(&String.contains?(&1, "*"))
     |> Enum.flat_map(fn token ->
       case Regex.run(
@@ -250,7 +276,7 @@ defmodule OpenAgents.DocsCheck do
       if MapSet.member?(declared, module) do
         acc
       else
-        ["INVARIANTS.md names missing module #{module}" | acc]
+        ["#{file} names missing module #{module}" | acc]
       end
     end)
   end

@@ -3,12 +3,14 @@
 What each word means here, and which layer it belongs to.
 
 This exists because the words collide. The forge and GitHub are both "the
-remote", a push looks like a deployment, and `machines.ex` sits beside a
-product that says "computers". Each confusion costs time or, worse, sends code
-to the wrong authority. A term is in this document when getting it wrong has
-already cost something, or clearly will.
+remote", a push looks like a deployment, `machines.ex` sits beside a product
+that says "computers", and a Box and a Computer both answer "which computer is
+running this?" with different consequences. Each confusion costs time or,
+worse, sends code to the wrong authority. A term is in this document when
+getting it wrong has already cost something, or clearly will.
 
-Read the layer diagram first. Most collisions are two layers using one word.
+Read the layer diagram first. Most collisions are two layers using one word,
+or two repositories using one name.
 
 ## The layers
 
@@ -30,6 +32,8 @@ Beside that stack, and often confused with it:
 ```text
   forge ───────── the canonical git remote at openagents.com
   github ──────── a read-only mirror, never authority
+  box ─────────── a sandbox VM this application provisions, caps, and reclaims
+  computer ────── someone's own machine, connected or absent, never provisioned
   receipt ─────── append-only durable evidence of something that happened
   trace ───────── public-safe ATIF projection of an agent session, not authority
   invariant ───── a contract in INVARIANTS.md with an executable proof
@@ -85,11 +89,23 @@ the issue and project controllers, which serve the local forge.
 **Receipt** — append-only durable evidence that something happened. The word
 spans several families, each tied to its own invariants: turn receipts,
 push receipts, build and deployment receipts, consent receipts, outcome
-receipts. *Checkpoint receipts are proposed; they record a session save
-point and its link to a forge commit.* Always say which one when it
-matters. Session context is not stored by pushing a metadata branch to
-GitHub. The forge already hosts the Git; PostgreSQL already hosts the
+receipts. *Checkpoint receipts are proposed and unclaimed; they would record
+a session save point and its link to a forge commit.* Always say which one
+when it matters. Session context is not stored by pushing a metadata branch
+to GitHub. The forge already hosts the Git; PostgreSQL already hosts the
 evidence. A trace is a projection of that evidence, not a receipt.
+
+**Outcome receipt** — the `module-outcome:v1:<digest>` reference a tool step
+carries and `OpenAgents.Compensation` attributes against. It is one receipt
+family among several. Do not read it as an accepted outcome.
+
+**Accepted outcome** — a graded verdict, not a receipt.
+`OpenAgents.AcceptedOutcome` evaluates an agent's completion claim against
+`priv/api-contracts/accepted-outcome-v1.json`: a scoped issue, a bound
+attempt, an exact revision, an admitted verifier with a recorded falsifier,
+and per-criterion evidence. It returns `:accepted`, `:incomplete`,
+`:unauthorized`, `:failed`, or `:not_applicable`. The issue stays the
+canonical work record; the contract only grades a claim about it.
 
 ### Traces
 
@@ -100,16 +116,27 @@ canonical in-repo schema lives in `@openagentsinc/atif`. Harbor's RFC names
 the root object a trajectory; OpenAgents product copy says trace.
 
 **Trace** — the product object: a public-safe ATIF document of an agent
-interaction, visibility-gated (`public`, `unlisted`, or `owner_only`),
-exportable and, when published, dereferenceable. Sarah's
-`GET /data/export/atif` builds one ATIF document from the owner's
-conversation (messages, tool steps, turn receipts). The shareable store and
-`/trace/{uuid}` viewer live on the Node web app (`GET /api/traces/{uuid}`,
-ingest `POST /api/traces`). A trace is not authority: PostgreSQL turns, tool
-steps, and receipts remain the source. A conversation is not a trace until
-it is exported or ingested. Changelog rows may carry `trace_ref` /
-`trace_digest` pointers. *Issue-linked traces (work-system E6) are
-proposed.*
+interaction, exportable and, when published, dereferenceable. This
+application serves exactly one trace route: `GET /data/export/atif` builds
+one ATIF document from the owner's conversation (messages, tool steps, turn
+receipts).
+
+The shareable trace store is an external surface, not part of this
+application. The `/trace/{uuid}` viewer, `GET /api/traces/{uuid}`, and ingest
+`POST /api/traces` belong to the TypeScript Cloudflare Worker in the
+`OpenAgentsInc/openagents` monorepo, which no longer answers for this domain.
+Both paths return `404` at `openagents.com`. Cite them as history or as
+another repository's surface, never as a live route here. Their
+`public` / `unlisted` / `owner_only` visibility vocabulary is not this
+application's either: repository-side disclosure uses the four levels in
+`OpenAgents.Transparency` and `OpenAgents.Forge.Visibility` — `dark`,
+`pulse`, `ledger`, `glass`.
+
+A trace is not authority: PostgreSQL turns, tool steps, and receipts remain
+the source. A conversation is not a trace until it is exported. Changelog
+rows may carry `trace_ref` and `trace_digest` pointers. Trace visibility
+tiers shipped with issue #70; binding a trace to an issue timeline
+(work-system E6, issue #10) has not.
 
 **Trajectory** — the ATIF schema name for the document (`AtifTrajectory`,
 `trajectory.json`, `trajectory_id`). Use it in schema and code. Product copy
@@ -149,10 +176,15 @@ authority.
 recall (hybrid lexical + semantic), profile memory, learned preferences,
 experience memory, graph memory. All disposable except the authoritative
 messages and tool steps underneath them. *Search over coding-agent session
-history (checkpoints, trailers, and receipts) is proposed as a use of these
-planes, not a second index.*
+history (checkpoints, trailers, and receipts) is proposed and unclaimed as a
+use of these planes, not a second index.*
 
 ### Coding-agent sessions
+
+Every italicized term in this section is proposed and unclaimed: no issue on
+the tracker claims it, so none of them has an owner, a date, or a plan. Treat them as reserved vocabulary that stops two people inventing two
+words for the same thing, not as a roadmap. Before building one, file the
+issue; when it ships, drop the italics and cite the code.
 
 These terms describe *why* a forge commit changed. Evidence lives in
 PostgreSQL receipts. The portable, redacted projection of that evidence is a
@@ -217,6 +249,25 @@ intent context, or hand off a session. Proposed as a product surface.
 Operator skill files under `.agents/skills/` are local tooling, not this
 term.*
 
+### Agents
+
+**Agent** — three things wear this word, and only one of them is a principal.
+
+- **Agent account** — a self-registered account with a handle, backed by
+  `OpenAgents.Agents`. Its credentials are deliberately narrower than a human
+  API token: it can join public conversations, but it never inherits human
+  membership or operator authority. An owner grants it box or computer control
+  per kind, and can revoke either.
+- **Coding agent** — the program that edits code, such as the OpenCode harness
+  a Box boots with. It runs inside a delegation target; it holds no account
+  here.
+- **ACP agent** — the `agent_id` a Computer's probe reports under `acp_agents`,
+  naming which local agent a delegation should start. It identifies a program
+  on someone's machine, not a principal.
+
+`agent_version` on a computer record is the version of the paired controller,
+not of any of these.
+
 ### Execution
 
 **SCV** — the durable coding-execution and supervision contract: a driver
@@ -237,13 +288,91 @@ operator-only behind `deployments:promote`, and no tenant route reaches it.
 is the execution of one admitted request. A request that policy never admits has
 no run.
 
-**Work job (`work_jobs`)** — a durable, budgeted delegated job row started by
-`deep_work.v1`. Delegation, not execution.
+**Deployment class** — how a promoted commit reaches the running fleet,
+decided by a classifier rather than by operator preference. There are three: a
+direct hot load of allowlisted BEAM-only changes, a relup for compatible
+application-level changes, and a full image build with rolling replacement for
+runtime or infrastructure changes. The classifier judges the
+whole candidate and never hot-loads the eligible part of a mixed change; one
+structural path refuses the entire direct transaction. `docs/deploymodes.md`
+holds the allowlist and the conditions.
 
-**Computers** — paired machine credentials used for agent jobs. This is the
-current product vocabulary. `/machines` is a permanent legacy redirect, and
-the `machines.ex` context still carries the old name in code. Say
-"computer" in product copy; expect `machine` in module names.
+**Boot convergence** — `OpenAgents.Forge.BootConverge`: a restarted node
+reconciles itself to the current promotion target before readiness admits it.
+It is a guard, not a deployment class. It stops a restarted node from serving
+an older target, and it promotes nothing.
+
+**Work job (`work_jobs`)** — a durable, budgeted delegated job row backed by
+`OpenAgents.Work`. Delegation, not execution. One table serves several kinds —
+`deep_work`, `delegation`, `coding`, `scv`, and `continual_learning` — so a
+work job is not automatically a `deep_work.v1` job. A Computer delegation is a
+`work_jobs` row of kind `delegation`.
+
+### Delegation targets
+
+**Delegation** — one unit of work this application hands to a substrate it
+does not run inline. `OpenAgents.Delegations` serves all of them at
+`/api/v3/conversations/{conversation_id}/delegations`: one request shape, one
+status read, one cancel, across every target kind. The facade stores no
+delegation state. The Box run ledger and the `work_jobs` ledger stay
+authoritative, and every projection is derived from them.
+
+**Delegation target kind** — `box` or `computer`. The kind travels in the
+identifier and is never inferred: a target is `box:{uuid}` or
+`computer:{uuid}`, and a delegation is `box-run:{uuid}` or
+`computer-job:{uuid}`. Authority is scoped per kind — the `box:control` and
+`computer:control` token scopes for a signed-in owner, and a per-kind grant to
+a named agent handle at `/api/v3/agents/{handle}/box-control` and
+`/api/v3/agents/{handle}/computer-control`.
+
+**Box** — a sandbox virtual machine this application rents from the Box Public
+API v1 at `ascii.dev` and bootstraps with the OpenCode harness. A Box is
+provisioned, disposable, and reclaimable: it belongs to exactly one
+conversation, carries a TTL, and is admitted against a per-conversation active
+cap, a per-owner cap, and a global cap before any provider call leaves the
+host. A request for several Boxes becomes a fan-out admission plan whose items
+are `admitted`, `queued`, or `refused`; a queued item is a logical Box that has
+cost nothing and called nothing. Reconciliation can move a Box toward a
+terminal state, but it never recreates one. `OpenAgents.Box` provisions and
+reclaims; `OpenAgents.BoxRuns` owns the detach-and-poll runs. Ledgers:
+`conversation_boxes`, `box_runs`, `box_fanout_requests`, `box_fanout_items`. A
+Box is not a container image, not an SCV environment, and not a Computer.
+
+**Computer** — someone's own machine, paired once through the CLI device flow
+and reachable only while its controller holds the WebSocket. A Computer is
+present or absent, never provisioned: it has no TTL, no admission plan, and
+nothing can create one on demand. `online?` is a live reachability read, not a
+state you can request. A delegation to a Computer becomes a `work_jobs` row of
+kind `delegation` naming an ACP agent, a prompt, and a working directory the
+owner already scoped.
+
+The distinction decides what a failure means. A Box that is gone was reclaimed,
+and you can provision another. A Computer that is gone is somebody's laptop,
+and waiting is the only recovery.
+
+**Computer, not machine** — "computer" is both the product word and the
+current code word. `OpenAgents.Computer` owns live control,
+`OpenAgents.ComputerAgentJobs` owns durable ACP delegations,
+`OpenAgents.ComputerActivity` owns the streamed live projection, and
+`OpenAgents.ComputerProjection` owns the safe read. `OpenAgents.Machines` still
+owns what it always owned: the pairing flow and the credential record behind a
+computer. A rename pass is closing the remaining gap, so write new code as
+`computer`.
+
+These `machine` surfaces stay, because renaming one breaks a client or a
+database rather than a name:
+
+- `/machines`, a permanent redirect to `/computers`.
+- The `machines` and `machine_pairings` tables.
+- The `machine_id` path segment on `/api/v3/computers/{machine_id}/agent-jobs`.
+- The `machine:{id}` PubSub topic and the matching `machine:{id}` receipt ref.
+- The `controller_socket:{machine_id}` socket id.
+- The channel refusals `machine_unavailable`, `machine_mismatch`, and
+  `machine_reconnecting`.
+
+The channel topic is already `computer:{machine_id}` and the wire protocol is
+already `openagents.computer.v1`. Check which list a `machine` string is on
+before you rename it.
 
 ### Issues and projects
 
@@ -255,6 +384,45 @@ source of truth for paths and JSON shape.
 
 **Effect CLI** — the TypeScript CLI (`@openagentsinc/cli`) that calls this
 surface via `openagents api`.
+
+### Pull requests and stacks
+
+**Pull request** — a repository-scoped proposal to merge one hosted branch
+into another, backed by an issue. The issue supplies the number, title, body,
+author, comments, and open or closed state; `OpenAgents.PullRequests` adds the
+head repository, the head and base refs, and the SHAs they resolved to. A pull
+request and an issue therefore share one number space, which is why the issue
+surfaces still list both — issue #120 is open against exactly that. New
+repositories allow pull requests; `OpenAgentsInc/openagents.com` starts with
+them disabled.
+
+**Stack** — a first-class server-side object, not a branch shape. A stack is an
+ordered list of pull request entries with stored commit boundaries: the bottom
+entry targets the trunk, and each later entry targets the head branch of the
+entry below it. Branch topology alone stays ambiguous, so the stack row is the
+identity. `OpenAgents.Stacks` caps a stack at 100 active entries, and
+`docs/stacked-prs.md` is the design.
+
+**Stack state and stack health** — two words for two different things. State is
+the stack's own lifecycle: `open`, `completed`, `dissolved`. Health describes
+the current Git graph: `healthy`, `needs_rebase`, `conflicted`, `missing_ref`,
+`head_changed`, `policy_blocked`, `operation_in_progress`. A stale graph
+records unhealthy; it never dissolves a stack.
+
+**Stack operations** — `append` adds a layer, `unstack` releases one entry,
+`dissolve` releases every entry at once (and an emptied stack dissolves on its
+own), `rebase` restacks the chain, and `merge` merges. Merging is asynchronous:
+a submit returns a durable operation id you poll, a repeated idempotency key
+answers `409` rather than merging twice, and policy is evaluated at execution
+rather than at submission.
+
+**Contiguous-prefix merge** — selecting one pull request merges it and every
+open layer below it in a single durable operation, then restacks the layers
+above onto the result. The merge result and every restack build as unreachable
+candidates and land through one batch compare-and-swap, so the trunk and the
+restacked branches move together. `partially_succeeded` is what a worker
+records when it reclaims a crashed operation and finds the refs diverged from
+the plan; it is not a routine outcome and not a request you can make.
 
 ### Forum
 
@@ -284,6 +452,37 @@ promoted offline with human approval. Shadow runs have no live effect.
 (`openagents.module_artifact.v1`). Not an Elixir module. Both words appear in
 the codebase; say which one you mean.
 
+### Outside systems
+
+**Ox Alpha** — a third-party stealth model. It is not an OpenAgents release, a
+milestone, or a subsystem. Providers publish it under different slugs:
+`stealth/ox-alpha` on OpenRouter and Nous Portal, `stealth-ox-alpha` on Venice,
+`x-preview-f-free` on OpenCode Zen. This application requests Ox Alpha and
+nothing else, so a turn fails rather than answering as another model, and every
+Box boots OpenCode against `openrouter/stealth/ox-alpha`. Ox Alpha is the
+model, OpenRouter is the gateway, and a Box is the machine it runs on. The "Ox
+Alpha stress fleet" is the work program that burns the free capacity, not the
+model. `docs/2026-08-23-ox-alpha-provider-limits.md` records the measured
+limits and the date of measurement; provider quotas move without notice.
+
+**Khala** — OpenAgents' OpenAI-compatible collective-intelligence endpoint,
+built in the separate `OpenAgentsInc/openagents` monorepo. Nothing here
+implements it, serves it, or depends on it. Bare "Khala" always means that
+endpoint. Three near-names are not it:
+
+- **Khala Sync** — the replication engine, always two words. Its
+  `khala_sync_prod` database is what `mix openagents.forum.import` read once
+  during the forum port. Nothing reads it now.
+- **Khala Code** — folded into OpenAgents Desktop; not a current product.
+- **Khala CLI** — retired.
+
+**The `OpenAgentsInc/openagents` monorepo** — a different repository from this
+one, and the source of most path confusion in these docs. It holds Khala, Khala
+Sync, Pylon, `qa-runner`, and the TypeScript Cloudflare Worker that used to
+answer for this domain. It also contains a directory named `apps/openagents.com`
+that is not this application. Before calling a cited path stale, check whether
+it lives there.
+
 ### Invariants and decisions
 
 **Invariant** — a contract recorded in `INVARIANTS.md` with an ID (for
@@ -302,7 +501,7 @@ Import components individually; never import a bundle.
 **OpenAgents style pack** — `assets/css/openagents.css`: identity tokens,
 motion, radius, color. Must be the last import so its declarations win.
 
-**`OpenAgentsWeb.UI`** — the ~22 HEEx primitives (`button/1`, `card/1`, …).
+**`OpenAgentsWeb.UI`** — the 31 HEEx primitives (`button/1`, `card/1`, …).
 Variants are data attributes (`data-variant="primary"`), not classes. There
 is exactly one component system; adding a second is forbidden.
 
@@ -314,8 +513,9 @@ is exactly one component system; adding a second is forbidden.
    target; no Git event promotes anything.
 3. **GitHub-shaped is not GitHub.** Say "the `/api/v3` surface" or "GitHub"
    depending on which server answers.
-4. **Computer, not machine**, in product copy — even though the code still
-   says `machine`.
+4. **Computer, not machine.** Product copy and new code both say `computer`.
+   The `machine` names that remain are wire, table, and route identity, and
+   renaming one breaks a client.
 5. **Name the receipt.** Turn, push, build, deployment, consent, outcome.
    When checkpoints exist, they are a receipt family, not a Git branch.
 6. **Module means two things.** Elixir module or module artifact — say which.
@@ -326,3 +526,23 @@ is exactly one component system; adding a second is forbidden.
 9. **Say which trace.** An agent trace is an ATIF document. A Decision Trace
    is ProductSpec history. A Chrome trace is a profile artifact. A trace is
    not a receipt and not a coding-agent session.
+10. **Say which delegation target.** A Box is provisioned, capped, and
+    reclaimed. A Computer is someone's machine, present or absent. The kind
+    travels in the identifier, so never write a bare target id.
+11. **A stack is an object, not a branch shape.** State is its lifecycle;
+    health is the current Git graph. They disagree on purpose.
+12. **Ox Alpha is a model; Khala is another repository's endpoint.** Neither
+    one names anything this application owns.
+13. **Say which repository.** This one, or the `OpenAgentsInc/openagents`
+    monorepo that shares the product name and a directory called
+    `apps/openagents.com`.
+14. **Proposed means unclaimed.** An italic term in this document has no owner
+    and no issue. Do not cite one as a plan.
+
+## Proof
+
+`ops/ci/docs-check.exs` resolves every module name and repository path this
+document sets in code font against the checkout, and `mix precommit` runs it.
+A term whose code moved fails the check instead of quietly becoming a wrong
+answer. The check proves that those names still exist, not that the
+definitions around them are still right. Rule 7 still needs a reader.

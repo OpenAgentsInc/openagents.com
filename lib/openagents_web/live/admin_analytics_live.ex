@@ -81,12 +81,12 @@ defmodule OpenAgentsWeb.AdminAnalyticsLive do
           <header class="admin-heading">
             <h1 id="analytics-heading">Product analytics</h1>
             <p>
-              Computed live from PostHog over the trailing twenty-four hours. These are
-              aggregate operational facts about usage; no conversation or memory content
-              is readable from this page.
+              Computed live from PostHog. Usage covers the trailing twenty-four hours,
+              and triage health uses the rolling windows shown below. These are aggregate
+              operational facts; no conversation or memory content is readable from this page.
             </p>
             <div class="admin-totals">
-              <.badge variant={:info}>TRAILING 24 HOURS</.badge>
+              <.badge variant={:info}>LIVE POSTHOG</.badge>
               <.badge
                 :if={@status == :loaded && @overview}
                 variant={:dim}
@@ -128,10 +128,51 @@ defmodule OpenAgentsWeb.AdminAnalyticsLive do
           </.alert>
 
           <.alert :if={@status == :loading} id="analytics-loading" appearance={:row}>
-            Querying PostHog for the trailing twenty-four hours…
+            Querying PostHog…
           </.alert>
 
           <div :if={@status == :loaded && @overview} class="space-y-8">
+            <section aria-labelledby="triage-health-heading">
+              <.card id="analytics-triage-health">
+                <div class="space-y-1">
+                  <h2 id="triage-health-heading" class="card-title">Triage health</h2>
+                  <p class="text-muted-foreground">
+                    Response and label health use issues created in the trailing 90 days.
+                    Issue flow covers the trailing eight weeks.
+                  </p>
+                </div>
+                <% triage = @overview.triage_health %>
+                <div class="grid gap-4 py-5 md:grid-cols-3">
+                  <div class="rounded-md border border-border p-4">
+                    <p class="text-sm text-muted-foreground">Median first maintainer response</p>
+                    <p id="triage-median-response" class="mt-2 text-2xl font-semibold">
+                      {format_hours(triage["median_first_maintainer_response_hours"])}
+                    </p>
+                  </div>
+                  <div class="rounded-md border border-border p-4">
+                    <p class="text-sm text-muted-foreground">Unlabeled after 24 hours</p>
+                    <p id="triage-unlabeled-share" class="mt-2 text-2xl font-semibold">
+                      {format_percent(triage["unlabeled_after_24h_percent"])}
+                    </p>
+                  </div>
+                  <div class="rounded-md border border-border p-4">
+                    <p class="text-sm text-muted-foreground">Eligible open issues</p>
+                    <p id="triage-eligible-issues" class="mt-2 text-2xl font-semibold">
+                      {triage["eligible_issues"]}
+                    </p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                      {triage["unlabeled_issues"]} currently have no labels.
+                    </p>
+                  </div>
+                </div>
+                <.table id="analytics-weekly-issue-flow" rows={@overview.weekly_issue_flow}>
+                  <:col :let={row} label="Week of">{row["week"]}</:col>
+                  <:col :let={row} label="Created">{row["created"]}</:col>
+                  <:col :let={row} label="Closed">{row["closed"]}</:col>
+                </.table>
+              </.card>
+            </section>
+
             <section aria-labelledby="funnel-heading">
               <.card id="analytics-funnel">
                 <h2 id="funnel-heading" class="card-title">Activation funnel</h2>
@@ -214,4 +255,15 @@ defmodule OpenAgentsWeb.AdminAnalyticsLive do
   end
 
   defp format_duration(ms) when is_integer(ms), do: "#{ms}ms"
+
+  defp format_hours(nil), do: "No data"
+  defp format_hours(hours) when is_integer(hours), do: "#{hours}h"
+
+  defp format_hours(hours) when is_float(hours),
+    do: "#{:erlang.float_to_binary(hours, decimals: 1)}h"
+
+  defp format_percent(value) when is_integer(value), do: "#{value}%"
+
+  defp format_percent(value) when is_float(value),
+    do: "#{:erlang.float_to_binary(value, decimals: 1)}%"
 end

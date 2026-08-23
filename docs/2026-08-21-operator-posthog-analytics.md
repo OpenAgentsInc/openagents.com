@@ -4,11 +4,10 @@ Date: 2026-08-21
 
 Status: Implemented; activates when read credentials are configured
 
-`/admin/analytics` gives operators the trailing-twenty-four-hour product
-picture without opening PostHog. It exists because the numbers an operator
-acts on should be one navigation away, rendered in this product's own
-components, and gated behind the same operator boundary as every other admin
-surface.
+`/admin/analytics` gives operators the product-usage and issue-triage picture
+without opening PostHog. It exists because the numbers an operator acts on
+should be one navigation away, rendered in this product's own components, and
+gated behind the same operator boundary as every other admin surface.
 
 ## How it works
 
@@ -18,7 +17,7 @@ API key and shapes the rows into plain maps. The surface adds no aggregation
 of its own: what it renders is exactly what the PostHog app answers for the
 same window, so there is no second authority that can drift from the source.
 
-One pull runs four bounded questions:
+One pull runs six bounded questions:
 
 1. **Activation funnel** — authorization starts, accounts created, returning
    sign-ins, first chat messages sent.
@@ -26,6 +25,14 @@ One pull runs four bounded questions:
    average and longest turn duration.
 3. **Event volume** — every event name with count and distinct people.
 4. **Top pages** — the eight most-viewed URLs.
+5. **Triage health** — rolling 90-day median first-maintainer response time
+   and the share of open issues still unlabeled after 24 hours.
+6. **Weekly issue flow** — issues created and closed during each of the
+   trailing eight weeks.
+
+The issue projections rely on `issue_number`, `issue_state`,
+`issue_state_changed`, `has_labels`, and `is_maintainer`. Historical events
+without those properties are excluded rather than interpreted as zeros.
 
 ## Configuration
 
@@ -53,7 +60,7 @@ The surface designs its non-happy states as first-class UI:
 | Unavailable | Danger notice with retry | PostHog did not answer; nothing stale is rendered |
 | Loaded | Cards and tables | Fresh pull with a generated-at stamp |
 
-Refresh re-runs all four questions and replaces the whole projection.
+Refresh re-runs all six questions and replaces the whole projection.
 
 ## Boundaries
 
@@ -71,6 +78,20 @@ Refresh re-runs all four questions and replaces the whole projection.
 transport failures, and the disabled path against a stubbed transport.
 `test/openagents_web/live/admin_analytics_live_test.exs` covers the access
 gates and all three non-loaded states plus refresh.
+
+## Weekly review
+
+Use the pinned **Issue triage health** PostHog dashboard (dashboard `2022873`)
+for the weekly review. Its saved insights are **Triage health snapshot**
+(`11257107`) and **Weekly issue flow** (`11257108`).
+
+1. Compare the median first-maintainer response with the prior week.
+2. Compare issue intake with closure volume and investigate a sustained gap.
+3. Label or close every eligible issue shown in the unlabeled count.
+4. Treat missing response data as insufficient instrumented history.
+5. Annotate policy, instrumentation, or staffing changes that can explain a
+   trend break.
+6. Track follow-up work in forge issues.
 
 ## Related
 

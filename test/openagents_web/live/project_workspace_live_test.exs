@@ -181,6 +181,30 @@ defmodule OpenAgentsWeb.ProjectWorkspaceLiveTest do
       assert render(view) =~ "Filed from the API"
     end
 
+    test "updates, closes, reopens, and deletes converge through PubSub", context do
+      {:ok, view, _html} = live(context.conn, ~p"/projects")
+
+      {:ok, renamed} = Projects.update_project(context.secret, %{"title" => "Renamed board"})
+      _ = :sys.get_state(view.pid)
+      assert render(view) =~ "Renamed board"
+
+      {:ok, closed} = Projects.update_project(renamed, %{"state" => "closed"})
+      _ = :sys.get_state(view.pid)
+      refute render(view) =~ "Renamed board"
+
+      assert render_patch(view, ~p"/projects?state=closed") =~ "Renamed board"
+
+      {:ok, reopened} = Projects.update_project(closed, %{"state" => "open"})
+      _ = :sys.get_state(view.pid)
+      refute render(view) =~ "Renamed board"
+
+      assert render_patch(view, ~p"/projects?state=open") =~ "Renamed board"
+
+      assert {:ok, _deleted} = Projects.delete_project(reopened)
+      _ = :sys.get_state(view.pid)
+      refute render(view) =~ "Renamed board"
+    end
+
     test "closing out of band moves the row to the closed tab", context do
       {:ok, view, _html} = live(context.conn, ~p"/projects")
 

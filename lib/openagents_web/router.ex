@@ -253,6 +253,7 @@ defmodule OpenAgentsWeb.Router do
     get "/api/status", NetworkStatusController, :show
     get "/api/changelog", ChangelogController, :show
     get "/api/contracts/repositories-v1.json", ApiContractController, :repositories_v1
+    get "/api/contracts/do-not-build-v1.json", ApiContractController, :do_not_build_v1
 
     post "/controller/pairings", ControllerPairingController, :create
     get "/controller/pairings/:id", ControllerPairingController, :show

@@ -5,6 +5,7 @@ defmodule OpenAgents.PostHogTest do
 
   setup do
     original = Application.get_env(:openagents, :posthog_analytics)
+    Application.put_env(:openagents, :posthog_analytics, personal_api_key: nil, project_id: nil)
 
     on_exit(fn ->
       if original == nil,
@@ -54,7 +55,7 @@ defmodule OpenAgents.PostHogTest do
       assert {:error, :not_configured} = PostHog.overview()
     end
 
-    test "shapes the four projections from one pull" do
+    test "shapes the six projections from one pull" do
       configure()
 
       Req.Test.expect(__MODULE__, fn conn ->
@@ -112,6 +113,33 @@ defmodule OpenAgents.PostHogTest do
         })
       end)
 
+      Req.Test.expect(__MODULE__, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert body =~ "properties.is_maintainer"
+        assert body =~ "unlabeled_after_24h_percent"
+
+        Req.Test.json(conn, %{
+          "columns" => [
+            "median_first_maintainer_response_hours",
+            "eligible_issues",
+            "unlabeled_issues",
+            "unlabeled_after_24h_percent"
+          ],
+          "results" => [[12.5, 20, 3, 15.0]]
+        })
+      end)
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert body =~ "toStartOfWeek"
+        assert body =~ "properties.issue_state_changed"
+
+        Req.Test.json(conn, %{
+          "columns" => ["week", "created", "closed"],
+          "results" => [["2026-08-10", 8, 5], ["2026-08-17", 11, 9]]
+        })
+      end)
+
       assert {:ok, overview} = PostHog.overview()
       assert %DateTime{} = overview.generated_at
 
@@ -131,6 +159,18 @@ defmodule OpenAgents.PostHogTest do
              }
 
       assert [%{"url" => "https://openagents.com/", "views" => 20} | _] = overview.top_pages
+
+      assert overview.triage_health == %{
+               "median_first_maintainer_response_hours" => 12.5,
+               "eligible_issues" => 20,
+               "unlabeled_issues" => 3,
+               "unlabeled_after_24h_percent" => 15.0
+             }
+
+      assert overview.weekly_issue_flow == [
+               %{"week" => "2026-08-10", "created" => 8, "closed" => 5},
+               %{"week" => "2026-08-17", "created" => 11, "closed" => 9}
+             ]
     end
 
     test "a rejected key is unavailable, never raised" do

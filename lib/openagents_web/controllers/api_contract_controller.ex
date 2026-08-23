@@ -4,9 +4,18 @@ defmodule OpenAgentsWeb.ApiContractController do
   use OpenAgentsWeb, :controller
 
   @contract_path "priv/api-contracts/repositories-v1.json"
+  @do_not_build_path "priv/api-contracts/do-not-build-v1.json"
 
   def repositories_v1(conn, _params) do
-    contract = File.read!(contract_file())
+    send_contract(conn, @contract_path)
+  end
+
+  def do_not_build_v1(conn, _params) do
+    send_contract(conn, @do_not_build_path)
+  end
+
+  defp send_contract(conn, path) do
+    contract = File.read!(contract_file(path))
 
     conn
     |> put_resp_content_type("application/json")
@@ -20,7 +29,7 @@ defmodule OpenAgentsWeb.ApiContractController do
   # release, and that path does not exist in the image that runs it -- so
   # `File.read!/1` raised and this endpoint answered 500 in every deployed
   # environment while passing everywhere it was compiled and run together.
-  defp contract_file, do: Application.app_dir(:openagents, @contract_path)
+  defp contract_file(path), do: Application.app_dir(:openagents, path)
 
   defp sha256(bytes) do
     bytes

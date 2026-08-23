@@ -37,9 +37,9 @@ defmodule OpenAgents.PostHog do
   end
 
   @doc """
-  Everything the operator analytics page shows, for the trailing 24 hours.
+  Everything the operator analytics page shows.
 
-  Returns `{:ok, shaped}` with four bounded projections, or
+  Returns `{:ok, shaped}` with six bounded projections, or
   `{:error, :not_configured | :unavailable}`. Each projection runs as its own
   HogQL query; a failure of any one fails the whole pull, because partial
   numbers presented next to each other read as complete.
@@ -50,14 +50,18 @@ defmodule OpenAgents.PostHog do
       with {:ok, events} <- run(event_counts_sql(), "event_counts"),
            {:ok, funnel} <- run(funnel_sql(), "funnel"),
            {:ok, chat} <- run(chat_turns_sql(), "chat_turns"),
-           {:ok, pages} <- run(top_pages_sql(), "top_pages") do
+           {:ok, pages} <- run(top_pages_sql(), "top_pages"),
+           {:ok, triage} <- run(triage_health_sql(), "triage_health"),
+           {:ok, issue_flow} <- run(weekly_issue_flow_sql(), "weekly_issue_flow") do
         {:ok,
          %{
            generated_at: DateTime.utc_now(),
            event_counts: shape_rows(events),
            funnel: shape_rows(funnel) |> List.first(%{}),
            chat_turns: shape_chat_turns(shape_rows(chat) |> List.first(%{})),
-           top_pages: shape_rows(pages)
+           top_pages: shape_rows(pages),
+           triage_health: shape_triage_health(shape_rows(triage) |> List.first(%{})),
+           weekly_issue_flow: shape_rows(issue_flow)
          }}
       end
     else
@@ -120,6 +124,89 @@ defmodule OpenAgents.PostHog do
     |> squash()
   end
 
+  defp triage_health_sql do
+    """
+    WITH issue_events AS (
+      SELECT
+        properties.owner AS owner,
+        properties.repo AS repo,
+        properties.issue_number AS issue_number,
+        minIf(timestamp, event = 'issue_created') AS created_at,
+        argMax(properties.has_labels, timestamp) AS has_labels,
+        argMax(properties.issue_state, timestamp) AS issue_state
+      FROM events
+      WHERE event IN ('issue_created', 'issue_updated')
+        AND timestamp >= now() - INTERVAL 90 DAY
+        AND notEmpty(properties.owner)
+        AND notEmpty(properties.repo)
+        AND properties.issue_number IS NOT NULL
+      GROUP BY owner, repo, issue_number
+    ),
+    first_responses AS (
+      SELECT
+        properties.owner AS owner,
+        properties.repo AS repo,
+        properties.issue_number AS issue_number,
+        min(timestamp) AS responded_at
+      FROM events
+      WHERE event = 'issue_commented'
+        AND timestamp >= now() - INTERVAL 90 DAY
+        AND properties.is_maintainer = true
+        AND properties.issue_number IS NOT NULL
+      GROUP BY owner, repo, issue_number
+    ),
+    response_times AS (
+      SELECT dateDiff('second', issues.created_at, responses.responded_at) AS seconds
+      FROM issue_events AS issues
+      INNER JOIN first_responses AS responses
+        ON issues.owner = responses.owner
+        AND issues.repo = responses.repo
+        AND issues.issue_number = responses.issue_number
+      WHERE responses.responded_at >= issues.created_at
+    ),
+    label_health AS (
+      SELECT
+        countIf(created_at <= now() - INTERVAL 1 DAY AND issue_state = 'open') AS eligible,
+        countIf(
+          created_at <= now() - INTERVAL 1 DAY
+          AND issue_state = 'open'
+          AND has_labels = false
+        ) AS unlabeled
+      FROM issue_events
+    )
+    SELECT
+      round(median(seconds) / 3600, 1) AS median_first_maintainer_response_hours,
+      (SELECT eligible FROM label_health) AS eligible_issues,
+      (SELECT unlabeled FROM label_health) AS unlabeled_issues,
+      if(
+        eligible_issues = 0,
+        0,
+        round(unlabeled_issues * 100.0 / eligible_issues, 1)
+      ) AS unlabeled_after_24h_percent
+    FROM response_times
+    """
+    |> squash()
+  end
+
+  defp weekly_issue_flow_sql do
+    """
+    SELECT
+      formatDateTime(toStartOfWeek(timestamp), '%Y-%m-%d') AS week,
+      countIf(event = 'issue_created') AS created,
+      countIf(
+        event = 'issue_updated'
+        AND properties.issue_state_changed = true
+        AND properties.issue_state = 'closed'
+      ) AS closed
+    FROM events
+    WHERE timestamp >= now() - INTERVAL 8 WEEK
+      AND event IN ('issue_created', 'issue_updated')
+    GROUP BY week
+    ORDER BY week ASC
+    """
+    |> squash()
+  end
+
   # ── shaping ──────────────────────────────────────────────────────────────
 
   defp shape_rows(%{"results" => results, "columns" => columns}) when is_list(results) do
@@ -143,6 +230,16 @@ defmodule OpenAgents.PostHog do
     }
   end
 
+  defp shape_triage_health(row) do
+    %{
+      "median_first_maintainer_response_hours" =>
+        numeric_or_nil(row["median_first_maintainer_response_hours"]),
+      "eligible_issues" => count_value(row["eligible_issues"]),
+      "unlabeled_issues" => count_value(row["unlabeled_issues"]),
+      "unlabeled_after_24h_percent" => numeric_value(row["unlabeled_after_24h_percent"])
+    }
+  end
+
   defp scalar(value) when is_integer(value) or is_float(value), do: value
   defp scalar(value) when is_binary(value), do: value
   defp scalar(nil), do: nil
@@ -158,6 +255,12 @@ defmodule OpenAgents.PostHog do
   defp duration_value(value) when is_integer(value), do: value
   defp duration_value(value) when is_float(value), do: round(value)
   defp duration_value(_other), do: nil
+
+  defp numeric_value(value) when is_integer(value) or is_float(value), do: value
+  defp numeric_value(_other), do: 0
+
+  defp numeric_or_nil(value) when is_integer(value) or is_float(value), do: value
+  defp numeric_or_nil(_other), do: nil
 
   # ── transport ────────────────────────────────────────────────────────────
 

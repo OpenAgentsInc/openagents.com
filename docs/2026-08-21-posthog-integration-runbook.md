@@ -2,17 +2,16 @@
 
 Date: 2026-08-21
 
-Status: Implemented in code; staging enablement, dashboards, and live verification remain
+Status: Implemented in code; live staging verification remains
 
 PostHog ships an agentic installer, the [AI wizard](https://github.com/PostHog/wizard), that wires PostHog into a codebase end to end. The wizard does not support Phoenix or Elixir: the framework is registered as "coming soon" in PostHog's own documentation, so running `npx @posthog/wizard` against this repository would not produce a usable integration.
 
 This document is the manual replacement. Part 1 records what the wizard does so we know the full surface we are replicating. Part 2 turns that into a concrete runbook for this Phoenix application: server-side capture from Elixir, browser analytics through our asset bundle, pageviews that survive LiveView navigation, user identification, and an event taxonomy covering every product surface. Session replay and self-driving are out of scope.
 
-Steps 1 through 7 of part 2 are implemented. What remains is operational:
+Steps 1 through 8 of part 2 are implemented. What remains is operational:
 
 1. Set `OPENAGENTS_POSTHOG_PROJECT_TOKEN` (and optionally `OPENAGENTS_POSTHOG_API_HOST`) in the staging environment.
-2. Build the starter dashboards through the PostHog MCP (step 8).
-3. Run the verification checklist against a live staging deployment (step 9).
+2. Run the verification checklist against a live staging deployment (step 9).
 
 Use this document as the single checklist for that work. Nothing in it requires the wizard.
 
@@ -234,9 +233,9 @@ Issues, projects, and forge:
 
 | Event | Where | Properties |
 | --- | --- | --- |
-| `issue_created` | `Issues.create_issue` | `owner`, `repo`, `has_labels`, `has_assignees` |
-| `issue_updated` | `Issues.update_issue` | `owner`, `repo`, `state` |
-| `issue_commented` | `Issues.create_comment` | `issue_number` |
+| `issue_created` | `Issues.create_issue` | `owner`, `repo`, `issue_number`, `issue_state`, `has_labels`, `has_assignees` |
+| `issue_updated` | `Issues.update_issue` | `owner`, `repo`, `issue_number`, `previous_issue_state`, `issue_state`, `issue_state_changed`, `has_labels` |
+| `issue_commented` | `Issues.create_comment` | `owner`, `repo`, `issue_number`, `author_role`, `is_maintainer` |
 | `label_created`, `milestone_created`, `project_created` | respective contexts | `owner`, `repo` |
 | `project_item_added` | `Projects.create_project_item` | `project_number`, `has_issue` |
 | `git_push_received` | `Forge.Pushes` live push path | `repo`, `refs_changed`, `duration_ms` |
@@ -252,7 +251,7 @@ Scoping decisions worth remembering:
 - API read endpoints (`GET`) stay uninstrumented except where they represent product activation.
 - Never capture message bodies, objective text, token material, ciphertexts, or raw query strings. `$current_url` contains query parameters; rely on the wrapper's redaction denylist and keep sensitive routes out of custom properties.
 
-### Step 8: Build the starter dashboards through the PostHog MCP
+### Step 8: Build the dashboards (implemented)
 
 Build every dashboard from your coding agent through the PostHog MCP server instead of clicking in the web app. Dashboard, insight, and annotation objects are all writable through MCP tools, so this step becomes a scripted session you can rerun and review like code.
 
@@ -281,6 +280,39 @@ The five dashboards, mapped to their queries:
 
 Keep the dashboard definitions in the agent session transcript or commit them as a script; because creation goes through MCP calls, recreating the set in staging or after a project reset is mechanical.
 
+The operations project also has the pinned **Issue triage health** dashboard
+(dashboard `2022873`). It contains:
+
+- **Triage health snapshot** (insight `11257107`): the rolling 90-day median
+  time from `issue_created` to the first `issue_commented` event whose
+  `is_maintainer` property is true, plus the share of open issues that remain
+  unlabeled 24 hours after creation.
+- **Weekly issue flow** (insight `11257108`): issues created and closed for
+  each of the trailing eight weeks. A closure is an `issue_updated` event with
+  `issue_state_changed = true` and `issue_state = "closed"`.
+
+The dashboard and its two HogQL insights were created through the PostHog REST
+API because the MCP server was unavailable during setup. This does not change
+their ownership or query semantics.
+
+Historical issue events do not contain the new triage properties. Expect the
+response, label, and closure metrics to populate from the deployment that
+introduces those properties; do not infer historical zeros from missing data.
+
+### Weekly triage review
+
+Review the pinned dashboard once each week:
+
+1. Record the median first-maintainer response and compare it with the prior
+   week.
+2. Compare issues created with issues closed. Investigate sustained intake
+   above closure volume.
+3. Open the unlabeled count and label or close each eligible issue.
+4. Treat a blank response metric as insufficient instrumented data, not a zero.
+5. Add an annotation for instrumentation, policy, or staffing changes that can
+   explain a trend break.
+6. Record follow-up work as forge issues and link the dashboard in the issue.
+
 ### Step 9: Verify
 
 Work through this checklist in staging. Browser-side checks stay manual; every server-side or ingestion check runs through the PostHog MCP against the events table, which beats tailing the web UI:
@@ -298,7 +330,11 @@ Work through this checklist in staging. Browser-side checks stay manual; every s
 
 ## Operator analytics surface
 
-`/admin/analytics` gives operators the trailing-24-hour picture without opening PostHog. It pulls computed results from the PostHog REST API at request time through `OpenAgents.PostHog` (a personal API key over HogQL), so it adds no second aggregation authority: the numbers match what the PostHog app answers for the same window.
+`/admin/analytics` gives operators the usage and triage picture without opening
+PostHog. It pulls computed results from the PostHog REST API at request time
+through `OpenAgents.PostHog` (a personal API key over HogQL), so it adds no
+second aggregation authority: the numbers match what the PostHog app answers
+for the same window.
 
 Settings (all optional; absent credentials disable the read path only, independently of capture):
 
@@ -308,14 +344,21 @@ Settings (all optional; absent credentials disable the read path only, independe
 | `OPENAGENTS_POSTHOG_PROJECT_ID` | The numeric PostHog project id |
 | `OPENAGENTS_POSTHOG_APP_HOST` | Optional; defaults to `https://us.posthog.com`. This is the app/API host, not the ingest host |
 
-The page renders four bounded projections — activation funnel, chat turn outcomes and durations, event volume, top pages — plus its non-happy states as first-class UI: unconfigured credentials, an unanswered query (with retry, never stale numbers), and loading. It shows aggregates only; no conversation content is reachable from it. The route is operator-gated like the rest of `/admin` and classified in the route authority inventory as `analytics:read`.
+The page renders six bounded projections: activation funnel, chat turn outcomes
+and durations, event volume, top pages, triage health, and weekly issue flow.
+Usage projections cover the trailing 24 hours, triage health covers 90 days,
+and issue flow covers eight weeks. It renders unconfigured credentials, an
+unanswered query (with retry, never stale numbers), and loading as first-class
+states. It shows aggregates only; no conversation content is reachable from
+it. The route is operator-gated like the rest of `/admin` and classified in the
+route authority inventory as `analytics:read`.
 
 ### Rollout order
 
 1. Steps 1-6 are implemented and covered by the test suite; they activate the moment a project token is configured.
 2. Set `OPENAGENTS_POSTHOG_PROJECT_TOKEN` in staging and confirm boot with capture live.
 3. Step 7 events flow automatically; watch volume in the first days.
-4. Step 8: build dashboards through the MCP.
+4. Step 8 is complete; review the pinned triage dashboard weekly.
 5. Step 9 gates each stage; do not stack stages without verification.
 
 ## References

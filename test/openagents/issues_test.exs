@@ -5,6 +5,17 @@ defmodule OpenAgents.IssuesTest do
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
 
+  defmodule AnalyticsSink do
+    def capture(event, distinct_id, properties) do
+      send(Application.fetch_env!(:openagents, :issues_analytics_test_pid), {
+        :captured,
+        event,
+        distinct_id,
+        properties
+      })
+    end
+  end
+
   setup do
     repository = repository_fixture()
 
@@ -25,6 +36,73 @@ defmodule OpenAgents.IssuesTest do
       Repo.update_all(from(i in Issue, where: i.id == ^issue.id), set: [inserted_at: at])
 
     Issues.get_issue!(repository(), issue.id)
+  end
+
+  describe "triage analytics" do
+    setup do
+      original_token = Application.get_env(:openagents, :posthog_project_token)
+      original_sink = Application.get_env(:openagents, :analytics_sink)
+      original_pid = Application.get_env(:openagents, :issues_analytics_test_pid)
+
+      Application.put_env(:openagents, :posthog_project_token, "phc_test")
+      Application.put_env(:openagents, :analytics_sink, AnalyticsSink)
+      Application.put_env(:openagents, :issues_analytics_test_pid, self())
+
+      on_exit(fn ->
+        restore_env(:posthog_project_token, original_token)
+        restore_env(:analytics_sink, original_sink)
+        restore_env(:issues_analytics_test_pid, original_pid)
+      end)
+
+      maintainer = repository_user_fixture("triage-maintainer")
+
+      {:ok, _membership} =
+        OpenAgents.Repositories.add_member(repository(), maintainer, "maintainer")
+
+      %{maintainer: maintainer}
+    end
+
+    test "issue creation carries stable issue and label state", %{maintainer: maintainer} do
+      assert {:ok, issue} =
+               Issues.create_issue(repository(), %{title: "Measure triage"}, maintainer)
+
+      assert_receive {:captured, "issue_created", _distinct_id, properties}
+      assert properties["owner"] == repository().owner
+      assert properties["repo"] == repository().name
+      assert properties["issue_number"] == issue.number
+      assert properties["issue_state"] == "open"
+      assert properties["has_labels"] == false
+    end
+
+    test "issue updates identify real state transitions", %{maintainer: maintainer} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Close me"}, maintainer)
+      assert_receive {:captured, "issue_created", _, _}
+
+      assert {:ok, _closed} =
+               Issues.update_issue(issue, %{"state" => "closed"}, maintainer)
+
+      assert_receive {:captured, "issue_updated", _distinct_id, properties}
+      assert properties["issue_number"] == issue.number
+      assert properties["previous_issue_state"] == "open"
+      assert properties["issue_state"] == "closed"
+      assert properties["issue_state_changed"] == true
+      assert properties["has_labels"] == false
+    end
+
+    test "comments record whether the author is a maintainer", %{maintainer: maintainer} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Respond to me"}, maintainer)
+      assert_receive {:captured, "issue_created", _, _}
+
+      assert {:ok, _comment} =
+               Issues.create_comment(issue, %{body: "Acknowledged"}, maintainer)
+
+      assert_receive {:captured, "issue_commented", _distinct_id, properties}
+      assert properties["owner"] == repository().owner
+      assert properties["repo"] == repository().name
+      assert properties["issue_number"] == issue.number
+      assert properties["author_role"] == "maintainer"
+      assert properties["is_maintainer"] == true
+    end
   end
 
   describe "list_issues/1" do
@@ -671,4 +749,7 @@ defmodule OpenAgents.IssuesTest do
   defp milestone_fixture(attrs) do
     OpenAgents.MilestonesFixtures.milestone_fixture(repository(), attrs)
   end
+
+  defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
+  defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
 end

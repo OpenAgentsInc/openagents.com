@@ -13,6 +13,7 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
 
   setup do
     original = Application.get_env(:openagents, :posthog_analytics)
+    Application.put_env(:openagents, :posthog_analytics, personal_api_key: nil, project_id: nil)
 
     on_exit(fn ->
       if original == nil,
@@ -85,8 +86,8 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
         request_options: [plug: {Req.Test, __MODULE__}]
       )
 
-      # One pull is four questions.
-      Req.Test.expect(__MODULE__, 4, fn conn -> respond_by_query(conn) end)
+      # One pull is six questions.
+      Req.Test.expect(__MODULE__, 6, fn conn -> respond_by_query(conn) end)
 
       conn = log_in_admin_user(conn, "analytics-loaded")
 
@@ -94,16 +95,20 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
       render_async(view)
 
       assert has_element?(view, "#analytics-generated-at")
+      assert has_element?(view, "#analytics-triage-health")
+      assert has_element?(view, "#analytics-weekly-issue-flow")
       assert has_element?(view, "#analytics-funnel")
       assert has_element?(view, "#analytics-chat-turns")
       assert html = render(view)
+      assert html =~ "12.5h"
+      assert html =~ "15.0%"
       assert html =~ "$pageview"
       assert html =~ "https://openagents.com/"
 
       # A second full pull backs the refresh click.
-      Req.Test.expect(__MODULE__, 4, fn conn -> respond_by_query(conn) end)
+      Req.Test.expect(__MODULE__, 6, fn conn -> respond_by_query(conn) end)
 
-      assert view |> element("#analytics-refresh") |> render_click() =~ "TRAILING 24 HOURS"
+      assert view |> element("#analytics-refresh") |> render_click() =~ "LIVE POSTHOG"
       render_async(view)
       assert has_element?(view, "#analytics-generated-at")
     end
@@ -120,7 +125,7 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
     Req.Test.expect(__MODULE__, handler)
   end
 
-  # The client asks four questions in a fixed order; each stub answers by
+  # The client asks six questions in a fixed order; each stub answers by
   # matching the HogQL in the request body rather than relying on call order.
   defp respond_by_query(conn) do
     {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -155,6 +160,23 @@ defmodule OpenAgentsWeb.AdminAnalyticsLiveTest do
             "max_duration_ms"
           ],
           "results" => [[6, 6, 0, 0, 4525.0, 7414]]
+        })
+
+      body =~ "unlabeled_after_24h_percent" ->
+        Req.Test.json(conn, %{
+          "columns" => [
+            "median_first_maintainer_response_hours",
+            "eligible_issues",
+            "unlabeled_issues",
+            "unlabeled_after_24h_percent"
+          ],
+          "results" => [[12.5, 20, 3, 15.0]]
+        })
+
+      body =~ "toStartOfWeek" ->
+        Req.Test.json(conn, %{
+          "columns" => ["week", "created", "closed"],
+          "results" => [["2026-08-10", 8, 5], ["2026-08-17", 11, 9]]
         })
 
       true ->

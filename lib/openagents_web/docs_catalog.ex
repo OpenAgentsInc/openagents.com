@@ -109,6 +109,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
           title: "Assignees",
           icon: "user",
           route: "/:owner/:repo/assignees"
+        },
+        %{
+          slug: "do-not-build-register",
+          title: "Do-not-build register",
+          icon: "info",
+          route: "/api/contracts/do-not-build-v1.json"
         }
       ]
     },

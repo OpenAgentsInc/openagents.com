@@ -193,6 +193,8 @@ defmodule OpenAgents.Issues do
         Analytics.capture("issue_created", issue_distinct_id(normalized), %{
           "owner" => repository.owner,
           "repo" => repository.name,
+          "issue_number" => issue.number,
+          "issue_state" => issue.state,
           "has_labels" => has_labels?(normalized),
           "has_assignees" => has_assignees?(normalized)
         })
@@ -235,7 +237,11 @@ defmodule OpenAgents.Issues do
         Analytics.capture("issue_updated", actor_distinct_id(actor), %{
           "owner" => repository && repository.owner,
           "repo" => repository && repository.name,
-          "state" => updated.state
+          "issue_number" => updated.number,
+          "previous_issue_state" => issue.state,
+          "issue_state" => updated.state,
+          "issue_state_changed" => issue.state != updated.state,
+          "has_labels" => updated.labels != []
         })
 
         Repositories.broadcast_issues(issue.repository_id)
@@ -608,8 +614,15 @@ defmodule OpenAgents.Issues do
     end)
     |> case do
       {:ok, comment} ->
+        repository = Repo.get(Repository, issue.repository_id)
+        author_role = repository && author && Repositories.membership_role(repository, author)
+
         Analytics.capture("issue_commented", issue_distinct_id(normalized), %{
-          "issue_number" => issue.number
+          "owner" => repository && repository.owner,
+          "repo" => repository && repository.name,
+          "issue_number" => issue.number,
+          "author_role" => author_role,
+          "is_maintainer" => author_role in ~w(owner maintainer)
         })
 
         Repositories.broadcast_issues(issue.repository_id)

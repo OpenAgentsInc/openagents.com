@@ -177,8 +177,12 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/changelog", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:changelog", false)
 
-  defp policy(%{path: "/api/contracts/repositories-v1.json", verb: verb})
-       when verb in [:get, :head],
+  defp policy(%{path: path, verb: verb})
+       when path in [
+              "/api/contracts/repositories-v1.json",
+              "/api/contracts/do-not-build-v1.json"
+            ] and
+              verb in [:get, :head],
        do: declaration(:public_read, "anonymous", "published:api-contract", false)
 
   defp policy(%{path: "/api/v3", verb: verb}) when verb in [:get, :head],

@@ -1,0 +1,399 @@
+{
+  "contract": "openagents.do-not-build.v1",
+  "version": 1,
+  "published_at": "2026-08-23",
+  "decision_states": [
+    "retired",
+    "deferred",
+    "rejected",
+    "superseded"
+  ],
+  "issue_template": {
+    "heading": "Do-not-build review",
+    "fields": [
+      "Register checked: yes",
+      "Matching entry: none or DNB-###",
+      "New evidence: required for reconsideration",
+      "Decision record: required for reconsideration"
+    ]
+  },
+  "entries": [
+    {
+      "id": "DNB-001",
+      "retired_scope": "Spark or another hosted wallet as the custody layer for agents.",
+      "match_phrases": [
+        "hosted spark wallet",
+        "spark custodial wallet",
+        "custody spark wallets",
+        "spark custody service"
+      ],
+      "current": {
+        "state": "superseded",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "Episode triage records the move from Spark custody to the self-custodial MoneyDevKit and LDK stack."
+          }
+        ],
+        "violated_principle": "Agents and users retain custody; hosted custody must not become a platform dependency.",
+        "replacement_path": "Use the MoneyDevKit and LDK self-custodial wallet stack.",
+        "owner": "OpenAgents product council",
+        "reconsideration_trigger": "A self-custodial Spark design with production evidence and no hosted custody dependency.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "superseded",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "Episode triage records the move from Spark custody to the self-custodial MoneyDevKit and LDK stack."
+            }
+          ],
+          "violated_principle": "Agents and users retain custody; hosted custody must not become a platform dependency.",
+          "replacement_path": "Use the MoneyDevKit and LDK self-custodial wallet stack.",
+          "owner": "OpenAgents product council",
+          "reconsideration_trigger": "A self-custodial Spark design with production evidence and no hosted custody dependency.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-002",
+      "retired_scope": "A NIP-90 data-vending-machine market without a named buyer and working product.",
+      "match_phrases": [
+        "nip-90 dvm market",
+        "nip-90 data vending machine market",
+        "data vending machine marketplace",
+        "dvm data market"
+      ],
+      "current": {
+        "state": "retired",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "Seller-first markets and protocol-only launches did not establish durable buyer demand."
+          }
+        ],
+        "violated_principle": "Name the buyer and ship usable software before creating a market protocol.",
+        "replacement_path": "Use the accepted-outcome economy for a verified demand path with a named buyer.",
+        "owner": "OpenAgents product council",
+        "reconsideration_trigger": "A committed buyer, executable product flow, and paid end-to-end transaction.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "retired",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "Seller-first markets and protocol-only launches did not establish durable buyer demand."
+            }
+          ],
+          "violated_principle": "Name the buyer and ship usable software before creating a market protocol.",
+          "replacement_path": "Use the accepted-outcome economy for a verified demand path with a named buyer.",
+          "owner": "OpenAgents product council",
+          "reconsideration_trigger": "A committed buyer, executable product flow, and paid end-to-end transaction.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-003",
+      "retired_scope": "Bun in the production runtime or package-manager trust path.",
+      "match_phrases": [
+        "bun production runtime",
+        "bun in the production trust path",
+        "replace npm with bun in production",
+        "deploy openagents with bun"
+      ],
+      "current": {
+        "state": "rejected",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "The production stack standardized on the existing Node and npm asset path."
+          }
+        ],
+        "violated_principle": "Minimize production trust changes that do not improve the product.",
+        "replacement_path": "Keep Node.js and npm for the browser asset build.",
+        "owner": "OpenAgents engineering",
+        "reconsideration_trigger": "A measured production requirement that Node and npm cannot satisfy.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "rejected",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "The production stack standardized on the existing Node and npm asset path."
+            }
+          ],
+          "violated_principle": "Minimize production trust changes that do not improve the product.",
+          "replacement_path": "Keep Node.js and npm for the browser asset build.",
+          "owner": "OpenAgents engineering",
+          "reconsideration_trigger": "A measured production requirement that Node and npm cannot satisfy.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-004",
+      "retired_scope": "GetAfter as a second source-control forge.",
+      "match_phrases": [
+        "build getafter as a forge",
+        "getafter second forge",
+        "revive getafter",
+        "add another forge as getafter"
+      ],
+      "current": {
+        "state": "superseded",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "The OpenAgents forge replaced the shelved GetAfter alternative."
+          }
+        ],
+        "violated_principle": "One canonical forge owns source control and work state.",
+        "replacement_path": "Extend the OpenAgents forge instead of operating a second forge.",
+        "owner": "OpenAgents engineering",
+        "reconsideration_trigger": "A legally or operationally mandatory isolation boundary the current forge cannot provide.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "superseded",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "The OpenAgents forge replaced the shelved GetAfter alternative."
+            }
+          ],
+          "violated_principle": "One canonical forge owns source control and work state.",
+          "replacement_path": "Extend the OpenAgents forge instead of operating a second forge.",
+          "owner": "OpenAgents engineering",
+          "reconsideration_trigger": "A legally or operationally mandatory isolation boundary the current forge cannot provide.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-005",
+      "retired_scope": "Paying providers for online presence, uptime, or unverified mining.",
+      "match_phrases": [
+        "pay for online presence",
+        "presence based mining",
+        "reward nodes for being online",
+        "mining payments for uptime"
+      ],
+      "current": {
+        "state": "retired",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "Episode 224 retired presence-based rewards in favor of verified machine-learning work."
+          }
+        ],
+        "violated_principle": "Settle verified outcomes, not claimed availability.",
+        "replacement_path": "Pay against accepted work receipts with verification and settlement evidence.",
+        "owner": "OpenAgents product council",
+        "reconsideration_trigger": "A fraud-resistant proof that presence itself creates measurable buyer value.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "retired",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "Episode 224 retired presence-based rewards in favor of verified machine-learning work."
+            }
+          ],
+          "violated_principle": "Settle verified outcomes, not claimed availability.",
+          "replacement_path": "Pay against accepted work receipts with verification and settlement evidence.",
+          "owner": "OpenAgents product council",
+          "reconsideration_trigger": "A fraud-resistant proof that presence itself creates measurable buyer value.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-006",
+      "retired_scope": "GitHub Copilot as an executor target for delegated work.",
+      "match_phrases": [
+        "copilot executor target",
+        "execute work through github copilot",
+        "add copilot as an executor",
+        "copilot coding agent target"
+      ],
+      "current": {
+        "state": "deferred",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "The active fleet uses controllable harnesses with explicit execution and receipt contracts."
+          }
+        ],
+        "violated_principle": "Executor targets must expose controllable lifecycle, evidence, and recovery contracts.",
+        "replacement_path": "Use the Codex, OpenCode, Probe, and owned computer-execution paths.",
+        "owner": "OpenAgents agent infrastructure",
+        "reconsideration_trigger": "Copilot exposes the lifecycle, evidence, and recovery contracts required by the fleet.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "deferred",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "The active fleet uses controllable harnesses with explicit execution and receipt contracts."
+            }
+          ],
+          "violated_principle": "Executor targets must expose controllable lifecycle, evidence, and recovery contracts.",
+          "replacement_path": "Use the Codex, OpenCode, Probe, and owned computer-execution paths.",
+          "owner": "OpenAgents agent infrastructure",
+          "reconsideration_trigger": "Copilot exposes the lifecycle, evidence, and recovery contracts required by the fleet.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-007",
+      "retired_scope": "A monolithic all-in-one business operating system.",
+      "match_phrases": [
+        "monolithic business operating system",
+        "all-in-one business operating system",
+        "single business operating system for everything"
+      ],
+      "current": {
+        "state": "rejected",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "Current plans organize work as composable issue, project, execution, receipt, and settlement surfaces."
+          }
+        ],
+        "violated_principle": "Compose bounded products around the accepted-outcome loop instead of centralizing every business function.",
+        "replacement_path": "Build interoperable forge, fleet, verification, receipt, and settlement capabilities.",
+        "owner": "OpenAgents product council",
+        "reconsideration_trigger": "Repeated user evidence that a bounded integration cannot satisfy a specific workflow.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "rejected",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "Current plans organize work as composable issue, project, execution, receipt, and settlement surfaces."
+            }
+          ],
+          "violated_principle": "Compose bounded products around the accepted-outcome loop instead of centralizing every business function.",
+          "replacement_path": "Build interoperable forge, fleet, verification, receipt, and settlement capabilities.",
+          "owner": "OpenAgents product council",
+          "reconsideration_trigger": "Repeated user evidence that a bounded integration cannot satisfy a specific workflow.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-008",
+      "retired_scope": "A standalone Rust Sarah service.",
+      "match_phrases": [
+        "rust sarah service",
+        "split sarah into a rust service",
+        "standalone sarah rust service",
+        "rewrite sarah as a rust service"
+      ],
+      "current": {
+        "state": "superseded",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/decisions/0001-integrate-the-complete-public-application.md",
+            "summary": "The integrated Phoenix application superseded the separate Sarah service plan."
+          }
+        ],
+        "violated_principle": "Keep the public product integrated unless a measured boundary requires a service split.",
+        "replacement_path": "Implement Sarah capabilities inside the Phoenix application and its owned execution boundaries.",
+        "owner": "OpenAgents engineering",
+        "reconsideration_trigger": "Measured isolation, scaling, or language requirements that cannot be met in the integrated application.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "superseded",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/decisions/0001-integrate-the-complete-public-application.md",
+              "summary": "The integrated Phoenix application superseded the separate Sarah service plan."
+            }
+          ],
+          "violated_principle": "Keep the public product integrated unless a measured boundary requires a service split.",
+          "replacement_path": "Implement Sarah capabilities inside the Phoenix application and its owned execution boundaries.",
+          "owner": "OpenAgents engineering",
+          "reconsideration_trigger": "Measured isolation, scaling, or language requirements that cannot be met in the integrated application.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    },
+    {
+      "id": "DNB-009",
+      "retired_scope": "Claude Code or another rival-owned runtime as a hard platform dependency.",
+      "match_phrases": [
+        "claude code hard dependency",
+        "rival owned runtime hard dependency",
+        "require claude code runtime",
+        "depend directly on claude code"
+      ],
+      "current": {
+        "state": "rejected",
+        "decision_date": "2026-08-23",
+        "evidence": [
+          {
+            "source": "docs/episode-triage.md",
+            "summary": "The Anthropic OAuth cutoff demonstrated the failure mode of a rival-owned runtime dependency."
+          }
+        ],
+        "violated_principle": "OpenAgents must retain runtime portability and control of critical execution paths.",
+        "replacement_path": "Keep rival runtimes behind optional adapters and maintain owned or multi-provider execution paths.",
+        "owner": "OpenAgents agent infrastructure",
+        "reconsideration_trigger": "A portable open contract with an interchangeable implementation and no vendor-controlled authentication dependency.",
+        "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+      },
+      "history": [
+        {
+          "state": "rejected",
+          "decision_date": "2026-08-23",
+          "evidence": [
+            {
+              "source": "docs/episode-triage.md",
+              "summary": "The Anthropic OAuth cutoff demonstrated the failure mode of a rival-owned runtime dependency."
+            }
+          ],
+          "violated_principle": "OpenAgents must retain runtime portability and control of critical execution paths.",
+          "replacement_path": "Keep rival runtimes behind optional adapters and maintain owned or multi-provider execution paths.",
+          "owner": "OpenAgents agent infrastructure",
+          "reconsideration_trigger": "A portable open contract with an interchangeable implementation and no vendor-controlled authentication dependency.",
+          "decision_record": "https://openagents.com/OpenAgentsInc/openagents.com/issues/93"
+        }
+      ]
+    }
+  ]
+}

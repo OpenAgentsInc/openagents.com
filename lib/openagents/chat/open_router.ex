@@ -280,7 +280,7 @@ defmodule OpenAgents.Chat.OpenRouter do
          {:ok, response} <- responses_stream_request(api_key, payload, options),
          result <- consume_responses_stream(response, on_event, payload["model"]) do
       result
-      |> carry_usage(Map.get(completion, "usage"))
+      |> carry_earlier_round(completion)
       |> continue_responses_tool_calls(
         api_key,
         payload,
@@ -315,12 +315,37 @@ defmodule OpenAgents.Chat.OpenRouter do
        do: result
 
   # A turn spends one provider request per tool round, and each response reports
-  # only what that round consumed. Carrying the earlier counts forward keeps the
-  # whole turn in the usage the completion reports.
-  defp carry_usage({:ok, completion}, earlier) when is_map(earlier),
-    do: {:ok, Map.put(completion, "usage", add_usage(Map.get(completion, "usage"), earlier))}
+  # only what that round consumed and reasoned. Carrying the earlier round's
+  # evidence forward keeps the whole turn in the completion the console stores,
+  # so a turn that reasoned before calling a tool still shows that it reasoned.
+  defp carry_earlier_round({:ok, completion}, earlier) when is_map(earlier) do
+    {:ok,
+     completion
+     |> carry_usage(Map.get(earlier, "usage"))
+     |> carry_reasoning_summary(Map.get(earlier, "reasoning_summary"))}
+  end
 
-  defp carry_usage(result, _earlier), do: result
+  defp carry_earlier_round(result, _earlier), do: result
+
+  defp carry_usage(completion, earlier) when is_map(earlier),
+    do: Map.put(completion, "usage", add_usage(Map.get(completion, "usage"), earlier))
+
+  defp carry_usage(completion, _earlier), do: completion
+
+  # Only the summary carries. The encrypted reasoning items replay to the
+  # provider on the next turn, and an intermediate round's items belong to the
+  # tool exchange that consumed them.
+  defp carry_reasoning_summary(completion, earlier) when is_binary(earlier) and earlier != "" do
+    case Map.get(completion, "reasoning_summary") do
+      summary when is_binary(summary) and summary != "" ->
+        Map.put(completion, "reasoning_summary", earlier <> "\n\n" <> summary)
+
+      _absent ->
+        Map.put(completion, "reasoning_summary", earlier)
+    end
+  end
+
+  defp carry_reasoning_summary(completion, _earlier), do: completion
 
   # A count no round reported stays absent instead of becoming a zero.
   defp add_usage(usage, earlier) when is_map(usage) and is_map(earlier),

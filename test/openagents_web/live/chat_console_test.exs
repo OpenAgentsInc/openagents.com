@@ -179,6 +179,223 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
     refute has_element?(view, "#chat-console-token-reasoning")
   end
 
+  test "a turn the provider sent no reasoning detail for omits the category", %{conn: conn} do
+    key = "console-unreported-reasoning-operator"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    streamer = fn _request, callback, _options ->
+      callback.({:text_delta, "The fleet is idle."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "The fleet is idle.",
+         "usage" => %{"input_tokens" => 24, "output_tokens" => 8, "total_tokens" => 32}
+       }}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Report the fleet.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    refute has_element?(view, "#chat-console-usage-#{run_id}", "Reasoning")
+    refute has_element?(view, "#chat-console-token-reasoning")
+  end
+
+  test "a turn that reported no reasoning and did none reports a count of none", %{conn: conn} do
+    key = "console-measured-zero-reasoning-operator"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    streamer = fn _request, callback, _options ->
+      callback.({:text_delta, "The fleet is idle."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "The fleet is idle.",
+         "usage" => %{
+           "input_tokens" => 24,
+           "output_tokens" => 8,
+           "total_tokens" => 32,
+           "output_tokens_details" => %{"reasoning_tokens" => 0}
+         }
+       }}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Report the fleet.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    assert has_element?(view, "#chat-console-usage-#{run_id}", "Reasoning 0")
+    assert has_element?(view, "#chat-console-token-reasoning", "0")
+  end
+
+  test "a measured zero beside an unreported count keeps the category off the top bar",
+       %{conn: conn} do
+    key = "console-mixed-reasoning-operator"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    # This is the production shape: one turn the model answered outright and
+    # reported a reasoning count of zero for, and one turn it visibly reasoned
+    # through while reporting the same zero. The reasoning turn reports no
+    # count, so the conversation's reasoning count is unknown, and a running
+    # list that added the two would claim the conversation reasoned none.
+    answered = fn _request, callback, _options ->
+      callback.({:text_delta, "The fleet is idle."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "The fleet is idle.",
+         "usage" => %{
+           "input_tokens" => 24,
+           "output_tokens" => 8,
+           "total_tokens" => 32,
+           "output_tokens_details" => %{"reasoning_tokens" => 0}
+         }
+       }}
+    end
+
+    reasoned = fn _request, callback, _options ->
+      callback.({:reasoning_delta, "Weighing the queue."})
+      callback.({:text_delta, "Two boxes are queued."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "Two boxes are queued.",
+         "reasoning_summary" => "Weighing the queue.",
+         "usage" => %{
+           "input_tokens" => 30,
+           "output_tokens" => 10,
+           "total_tokens" => 40,
+           "output_tokens_details" => %{"reasoning_tokens" => 0}
+         }
+       }}
+    end
+
+    assert {:ok, %{"id" => answered_id}} =
+             AccountTurns.submit(user, "Report the fleet.",
+               subscriber: self(),
+               streamer: answered
+             )
+
+    assert_receive {:account_chat_completed, ^answered_id, {:ok, _answered}}
+
+    assert {:ok, %{"id" => reasoned_id}} =
+             AccountTurns.submit(user, "Report the queue.",
+               subscriber: self(),
+               streamer: reasoned
+             )
+
+    assert_receive {:account_chat_completed, ^reasoned_id, {:ok, _reasoned}}
+
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    assert has_element?(view, "#chat-console-usage-#{answered_id}", "Reasoning 0")
+    refute has_element?(view, "#chat-console-usage-#{reasoned_id}", "Reasoning")
+    refute has_element?(view, "#chat-console-token-reasoning")
+    assert has_element?(view, "#chat-console-token-input", "54")
+    assert has_element?(view, "#chat-console-token-total", "72")
+  end
+
+  test "a zero stored before this rule reads as the unreported count it was", %{conn: conn} do
+    key = "console-legacy-zero-operator"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    streamer = fn _request, callback, _options ->
+      callback.({:reasoning_delta, "Weighing the fleet."})
+      callback.({:text_delta, "The fleet is idle."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "The fleet is idle.",
+         "reasoning_summary" => "Weighing the fleet.",
+         "usage" => %{
+           "input_tokens" => 24,
+           "output_tokens" => 8,
+           "total_tokens" => 32,
+           "output_tokens_details" => %{"reasoning_tokens" => 0}
+         }
+       }}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Report the fleet.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+
+    # A conversation the operator started before this rule carries the zero the
+    # provider sent, written by a console that read it as a count. Nothing
+    # rewrites those rows, so the read path has to reach the same answer here as
+    # it does for a row written today.
+    OpenAgents.Chat.AccountRun
+    |> OpenAgents.Repo.get!(run_id)
+    |> Ecto.Changeset.change(
+      usage: %{"input" => 24, "output" => 8, "total" => 32, "reasoning" => 0, "cached" => nil}
+    )
+    |> OpenAgents.Repo.update!()
+
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    assert has_element?(view, "#chat-console-usage-#{run_id}", "Input 24")
+    refute has_element?(view, "#chat-console-usage-#{run_id}", "Reasoning")
+    refute has_element?(view, "#chat-console-token-reasoning")
+  end
+
+  test "a total the provider never reported is labelled as the sum it is", %{conn: conn} do
+    key = "console-derived-total-operator"
+    user = github_user(key)
+    conn = log_in_admin_user(conn, key)
+
+    streamer = fn _request, callback, _options ->
+      callback.({:text_delta, "The fleet is idle."})
+
+      {:ok,
+       %{
+         "object" => "response",
+         "model" => "stealth/ox-alpha",
+         "assistant_content" => "The fleet is idle.",
+         "usage" => %{"input_tokens" => 24, "output_tokens" => 8}
+       }}
+    end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Report the fleet.",
+               subscriber: self(),
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:ok, _completion}}
+    {:ok, view, _html} = live(conn, ~p"/chat")
+
+    assert has_element?(view, "#chat-console-token-total", "Total (input + output)")
+    assert has_element?(view, "#chat-console-token-total", "32")
+  end
+
   test "a completed turn shows a context meter where a window is configured", %{conn: conn} do
     key = "console-context-operator"
     user = github_user(key)

@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Box.Fleet
-  alias OpenAgents.Chat.{AccountTurns, OpenRouter}
+  alias OpenAgents.Chat.{AccountTurns, OpenRouter, TokenUsage}
   alias OpenAgents.Conversations
   alias OpenAgents.Delegations
 
@@ -28,7 +28,6 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     "Write a short status update for the current fleet work."
   ]
 
-  @token_kinds [input: "Input", output: "Output", reasoning: "Reasoning", cached: "Cached"]
   @fleet_fast_refresh_interval_ms 1_000
   @fleet_settled_refresh_interval_ms 5_000
   @fleet_idle_refresh_interval_ms 10_000
@@ -775,37 +774,25 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     |> assign(:conversation_tokens, conversation_tokens(messages))
   end
 
-  # Provider-reported counts only, summed across the turns that reported them. A
-  # kind no turn reported stays off the list instead of reading as a zero.
+  # `TokenUsage` decides what a set of turns reports, and the per-turn line
+  # below asks it the same question about a set of one, so the running list and
+  # the turns under it cannot disagree.
   defp conversation_tokens(messages) do
     usages = messages |> Enum.map(&Map.get(&1, :usage)) |> Enum.filter(&is_map/1)
 
-    case usages do
-      [] ->
+    case TokenUsage.total(usages) do
+      nil ->
         []
 
-      usages ->
-        kinds =
-          for {key, label} <- @token_kinds,
-              count = sum_tokens(usages, key),
-              do: {key, label, count}
-
-        kinds ++ [{:total, "Total", conversation_total(usages)}]
+      {total, provenance} ->
+        TokenUsage.counts(usages) ++ [{:total, total_label(provenance), total}]
     end
   end
 
-  defp sum_tokens(usages, key) do
-    case usages |> Enum.map(&Map.get(&1, key)) |> Enum.reject(&is_nil/1) do
-      [] -> nil
-      counts -> Enum.sum(counts)
-    end
-  end
-
-  defp conversation_total(usages), do: Enum.sum(Enum.map(usages, &turn_total/1))
-
-  # A provider that leaves `total_tokens` out still reports the two sides of it.
-  defp turn_total(%{total: total}) when is_integer(total), do: total
-  defp turn_total(usage), do: (usage.input || 0) + (usage.output || 0)
+  # A provider that leaves `total_tokens` out still reports the two sides of it,
+  # and the label says so rather than presenting the sum as a reported total.
+  defp total_label(:reported), do: "Total"
+  defp total_label(:derived), do: "Total (input + output)"
 
   defp format_count(count) do
     count
@@ -820,14 +807,9 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   end
 
   defp usage_text(usage) do
-    [
-      usage.input && "Input #{usage.input}",
-      usage.output && "Output #{usage.output}",
-      usage.reasoning && "Reasoning #{usage.reasoning}",
-      usage.cached && "Cached #{usage.cached}"
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join(" · ")
+    [usage]
+    |> TokenUsage.counts()
+    |> Enum.map_join(" · ", fn {_kind, label, count} -> "#{label} #{count}" end)
   end
 
   defp submit_message(socket, message, reasoning) do

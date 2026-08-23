@@ -506,14 +506,20 @@ defmodule OpenAgents.Chat.AccountTurns do
     if run.status == "streaming", do: [user], else: [user, assistant_message(run)]
   end
 
-  # Provider-reported counts only. OpenRouter names them differently across its
-  # two APIs, and a field the provider left out stays `nil` instead of a guess.
-  defp usage_counts(%{"usage" => usage} = completion) when is_map(usage) do
+  # Provider-reported counts only, stored as the provider sent them. OpenRouter
+  # names them differently across its two APIs, and a field the provider left
+  # out stays `nil` instead of a guess. What a stored zero means is decided when
+  # the turn is read, not here, so a row keeps its evidence intact.
+  defp usage_counts(%{"usage" => usage}) when is_map(usage) do
     counts = %{
       "input" => token_count(usage["input_tokens"] || usage["prompt_tokens"]),
       "output" => token_count(usage["output_tokens"] || usage["completion_tokens"]),
       "total" => token_count(usage["total_tokens"]),
-      "reasoning" => reasoning_count(usage, completion),
+      "reasoning" =>
+        token_count(
+          detail(usage, "output_tokens_details", "reasoning_tokens") ||
+            detail(usage, "completion_tokens_details", "reasoning_tokens")
+        ),
       "cached" =>
         token_count(
           detail(usage, "input_tokens_details", "cached_tokens") ||
@@ -526,18 +532,25 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   defp usage_counts(_completion), do: nil
 
-  # Some models report a reasoning count of zero for a turn that carries
-  # reasoning output. That zero measures nothing, so the turn reports no
-  # reasoning count rather than a count of none.
-  defp reasoning_count(usage, completion) do
-    count =
-      token_count(
-        detail(usage, "output_tokens_details", "reasoning_tokens") ||
-          detail(usage, "completion_tokens_details", "reasoning_tokens")
-      )
+  defp usage_view(counts, completion) when is_map(counts),
+    do: %{
+      input: counts["input"],
+      output: counts["output"],
+      total: counts["total"],
+      reasoning: reasoning_view(counts["reasoning"], completion),
+      cached: counts["cached"]
+    }
 
-    if count == 0 and reasoned?(completion), do: nil, else: count
-  end
+  defp usage_view(_counts, _completion), do: nil
+
+  # Ox Alpha reports a reasoning count of zero for turns it plainly reasoned
+  # through, so that zero measures nothing the turn did and the turn reports no
+  # reasoning count rather than a count of none. The call is made here, against
+  # the same stored reasoning the transcript renders, so a row written before
+  # this rule reads the same way as one written after it and no stored count is
+  # ever rewritten.
+  defp reasoning_view(0, completion), do: if(reasoned?(completion), do: nil, else: 0)
+  defp reasoning_view(count, _completion), do: count
 
   defp reasoned?(%{"reasoning_summary" => summary}) when is_binary(summary) and summary != "",
     do: true
@@ -548,17 +561,6 @@ defmodule OpenAgents.Chat.AccountTurns do
     do: Enum.any?(output, &match?(%{"type" => "reasoning"}, &1))
 
   defp reasoned?(_completion), do: false
-
-  defp usage_view(counts) when is_map(counts),
-    do: %{
-      input: counts["input"],
-      output: counts["output"],
-      total: counts["total"],
-      reasoning: counts["reasoning"],
-      cached: counts["cached"]
-    }
-
-  defp usage_view(_counts), do: nil
 
   defp detail(usage, key, field) do
     case usage[key] do
@@ -584,7 +586,7 @@ defmodule OpenAgents.Chat.AccountTurns do
       error_code: run.error_code,
       retryable?: retryable_error_code?(run.error_code),
       cancelled?: run.status == "cancelled",
-      usage: usage_view(run.usage),
+      usage: usage_view(run.usage, completion),
       provider_lane: completion && completion["provider"],
       request_id: completion && completion["request_id"],
       latency_ms: run.latency_ms,

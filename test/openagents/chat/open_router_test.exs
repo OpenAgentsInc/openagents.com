@@ -965,7 +965,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
            } = Jason.decode!(tool_output)
   end
 
-  test "sums the usage every tool round reported" do
+  test "carries the usage and reasoning every tool round reported" do
     Req.Test.expect(__MODULE__, fn conn ->
       body =
         Path.expand("../../fixtures/openrouter/responses_tool_call.sse", __DIR__)
@@ -1019,7 +1019,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     parent = self()
     assert {:ok, tool_registry_snapshot} = Registry.build([RepositoryFileToolStub])
 
-    assert {:ok, %{"usage" => usage}} =
+    assert {:ok, %{"usage" => usage} = completion} =
              OpenRouter.stream(
                %{
                  "model" => "stealth/ox-alpha",
@@ -1038,6 +1038,10 @@ defmodule OpenAgents.Chat.OpenRouterTest do
              "total_tokens" => 64,
              "output_tokens_details" => %{"reasoning_tokens" => 7}
            }
+
+    # The reasoning happened before the tool call, so only the round that
+    # carried it can supply the evidence that the turn reasoned at all.
+    assert completion["reasoning_summary"] == "The user asked to read a repository file."
   end
 
   test "replays provider output around ordered read, write, edit, and reread calls" do

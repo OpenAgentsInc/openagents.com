@@ -36,6 +36,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/computers",
     "/voice/",
     "/data",
+    "/artifact-catalog",
     "/machines",
     # No trailing slash: the memory page is "/memory" itself, and its export
     # lives under it.
@@ -213,6 +214,25 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/inference/proxy"}),
     do: declaration(:internal_service, "scoped inference grant", "inference:invoke", true)
 
+  defp policy(%{path: "/api/artifact-listings" <> _path, verb: verb})
+       when verb in [:get, :head],
+       do:
+         declaration(
+           :authenticated_api,
+           "active encrypted browser session",
+           "artifact-catalog:read",
+           false
+         )
+
+  defp policy(%{path: "/api/operator/artifact-listings" <> _path, verb: verb}),
+    do:
+      declaration(
+        :operator,
+        "configured operator GitHub ID",
+        "artifact-catalog:operate",
+        verb not in [:get, :head]
+      )
+
   defp policy(%{path: "/api/v3/device/authorizations" <> _path, verb: :post}),
     do:
       declaration(
@@ -335,6 +355,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/api/computer-agent-jobs/" <> _path), do: "computer-job:self"
   defp browser_scope("/voice/" <> _path), do: "voice:self"
   defp browser_scope("/data" <> _path), do: "data:self"
+  defp browser_scope("/artifact-catalog"), do: "artifact-catalog:read"
   defp browser_scope("/memory/" <> _path), do: "memory:self"
   defp browser_scope("/github/connection"), do: "github-tools:self"
   defp browser_scope("/settings/api-tokens"), do: "api-token:self"

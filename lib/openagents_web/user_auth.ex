@@ -159,4 +159,16 @@ defmodule OpenAgentsWeb.UserAuth do
     |> Phoenix.Controller.json(%{error: "authentication_required"})
     |> halt()
   end
+
+  def require_operator_api_user(conn, _options) do
+    if Accounts.admin?(conn.assigns[:current_user]) do
+      conn
+    else
+      conn
+      |> put_status(:forbidden)
+      |> put_resp_header("cache-control", "no-store")
+      |> Phoenix.Controller.json(%{error: "operator_required"})
+      |> halt()
+    end
+  end
 end

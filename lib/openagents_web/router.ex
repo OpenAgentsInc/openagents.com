@@ -71,6 +71,10 @@ defmodule OpenAgentsWeb.Router do
     plug :require_admin_user
   end
 
+  pipeline :operator_api do
+    plug :require_operator_api_user
+  end
+
   scope "/", OpenAgentsWeb do
     pipe_through [:status_probe_compat, :browser]
 
@@ -112,6 +116,7 @@ defmodule OpenAgentsWeb.Router do
       live "/sarah", ChatLive, :index
       live "/memory", MemoryLive, :index
       live "/computers", ComputersLive, :index
+      live "/artifact-catalog", ArtifactCatalogLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
       live "/device", DeviceAuthorizationLive, :show
       live "/repositories", RepositoryIndexLive, :index
@@ -205,6 +210,23 @@ defmodule OpenAgentsWeb.Router do
     post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
     get "/computer-agent-jobs/:id", ComputerAgentJobsController, :show
     delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
+
+    get "/artifact-listings", ArtifactListingController, :index
+    get "/artifact-listings/:id", ArtifactListingController, :show
+    get "/artifact-listings/:id/export", ArtifactListingController, :export
+  end
+
+  scope "/api/operator", OpenAgentsWeb do
+    pipe_through [:authenticated_api, :operator_api]
+
+    post "/artifact-listings", ArtifactListingAdminController, :create
+    delete "/artifact-listings/:id", ArtifactListingAdminController, :delete
+    get "/artifact-listings/:id/export", ArtifactListingAdminController, :export
+    post "/artifact-listings/:id/transactions/:action", ArtifactListingAdminController, :record
+
+    post "/artifact-listings/:id/source-authorizations",
+         ArtifactListingAdminController,
+         :authorize
   end
 
   scope "/admin", OpenAgentsWeb do

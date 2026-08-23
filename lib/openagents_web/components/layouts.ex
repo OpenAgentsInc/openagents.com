@@ -780,6 +780,12 @@ defmodule OpenAgentsWeb.Layouts do
           icon="folder"
           patchable={false}
         />
+        <Layouts.sidebar_link
+          path={~p"/artifact-catalog"}
+          label="Artifact catalog"
+          icon="archive"
+          patchable={false}
+        />
       </nav>
 
       <%!-- The agent's own surfaces, grouped under her name. Chat, computers

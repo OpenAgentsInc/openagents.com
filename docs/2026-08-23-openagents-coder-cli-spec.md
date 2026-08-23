@@ -661,7 +661,7 @@ Issue and comment creation run on `:agent_participation_api` with
 | `GET /api/v3/conversations/:conversation_id/delegations/:id` | `router.ex:422` |
 | `DELETE /api/v3/conversations/:conversation_id/delegations/:id` | `router.ex:423` |
 | `GET /api/v3/computers` | `router.ex:429` |
-| `POST /api/v3/computers/:machine_id/agent-jobs` | `router.ex:431` |
+| `POST /api/v3/computers/:computer_id/agent-jobs` | `router.ex:431` |
 | `GET /api/v3/computer-agent-jobs/:id` | `router.ex:432` |
 | `POST /api/v3/conversations/:conversation_id/boxes` | `router.ex:472` |
 | `POST /api/v3/conversations/:conversation_id/boxes/:box_id/runs` | `router.ex:478` |

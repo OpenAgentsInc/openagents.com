@@ -364,11 +364,24 @@ database rather than a name:
 
 - `/machines`, a permanent redirect to `/computers`.
 - The `machines` and `machine_pairings` tables.
-- The `machine_id` path segment on `/api/v3/computers/{machine_id}/agent-jobs`.
 - The `machine:{id}` PubSub topic and the matching `machine:{id}` receipt ref.
 - The `controller_socket:{machine_id}` socket id.
 - The channel refusals `machine_unavailable`, `machine_mismatch`, and
-  `machine_reconnecting`.
+  `machine_reconnecting`, and the reply key `machine` in the controller
+  protocol `openagents.computer.v1`, which a separately released CLI reads.
+- The `machine_id` and `machine_name` properties of the `.v1` tool schemas
+  (`computer_run.v1`, `computer_agent.v1`, and their siblings), because stored
+  tool steps still replay against them.
+- The `work_jobs` JSONB keys `delegation->>'machine_id'` and
+  `authority_snapshot->>'machine_tier'`, which a check constraint and two
+  triggers cross-check against the `machines` row.
+- The `Machines.TokenVault` AAD `openagents.machine_token.v2`. Changing it
+  makes every sealed pending pairing token undecryptable, so it can only gain
+  a legacy entry, never a new name.
+
+That list is the current partial answer, not a policy. #134 settles whether
+the persistence and wire surfaces are renamed, kept, or split, and this entry
+follows whatever it decides.
 
 The channel topic is already `computer:{machine_id}` and the wire protocol is
 already `openagents.computer.v1`. Check which list a `machine` string is on

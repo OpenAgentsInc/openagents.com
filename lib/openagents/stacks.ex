@@ -152,6 +152,63 @@ defmodule OpenAgents.Stacks do
     end
   end
 
+  @doc "Loads the stack an active entry belongs to, with active entries."
+  def get_stack_for_entry!(%StackEntry{stack_id: stack_id}) do
+    Stack
+    |> Repo.get!(stack_id)
+    |> Repo.preload(entries: active_entries_query())
+  end
+
+  @doc """
+  Stack payload contexts for pull requests, keyed by pull request ID.
+
+  Each context carries the stack number, the entry's position, the active
+  size, the stack health, and the effective base — the trunk ref with its
+  live OID — in the shape ordinary pull request payloads embed
+  (docs/stacked-prs.md section 16). Unstacked pull requests have no key.
+  """
+  def payload_contexts(%Repository{} = repository, pull_requests) when is_list(pull_requests) do
+    ids = Enum.map(pull_requests, & &1.id)
+
+    entries =
+      Repo.all(
+        from entry in StackEntry,
+          where: entry.pull_request_id in ^ids and is_nil(entry.removed_at),
+          preload: [:stack]
+      )
+
+    stack_ids = entries |> Enum.map(& &1.stack_id) |> Enum.uniq()
+
+    sizes =
+      Map.new(
+        Repo.all(
+          from entry in StackEntry,
+            where: entry.stack_id in ^stack_ids and is_nil(entry.removed_at),
+            group_by: entry.stack_id,
+            select: {entry.stack_id, count(entry.id)}
+        )
+      )
+
+    trunk_oids =
+      Map.new(Enum.uniq_by(entries, & &1.stack_id), fn entry ->
+        case Browse.resolve_commit(repository, entry.stack.trunk_ref) do
+          {:ok, oid} -> {entry.stack_id, oid}
+          _other -> {entry.stack_id, nil}
+        end
+      end)
+
+    Map.new(entries, fn entry ->
+      {entry.pull_request_id,
+       %{
+         number: entry.stack.number,
+         position: entry.position,
+         size: Map.fetch!(sizes, entry.stack_id),
+         health: entry.stack.health,
+         base: %{ref: entry.stack.trunk_ref, sha: Map.fetch!(trunk_oids, entry.stack_id)}
+       }}
+    end)
+  end
+
   def get_by_number!(%Repository{id: repository_id}, number) when is_integer(number) do
     Stack
     |> Repo.get_by!(repository_id: repository_id, number: number)
@@ -421,11 +478,23 @@ defmodule OpenAgents.Stacks do
       entries = insert_entry_rows!(stack, entry_specs(pull_requests, heads, trunk_oid))
 
       record_event!(stack, "pull_request_stack.created", actor, %{
-        "number" => stack.number,
+        "stack_number" => stack.number,
         "trunk_ref" => stack.trunk_ref,
         "trunk_oid" => trunk_oid,
+        "ordering_old" => [],
+        "ordering_new" => Enum.map(entries, & &1.pull_request.issue.number),
         "entries" => Enum.map(entries, &event_entry/1)
       })
+
+      Enum.each(entries, fn entry ->
+        record_event!(stack, "pull_request.stacked", actor, %{
+          "stack_number" => stack.number,
+          "trunk_ref" => stack.trunk_ref,
+          "pull_request" => entry.pull_request.issue.number,
+          "position" => entry.position,
+          "head_oid" => entry.observed_head_oid
+        })
+      end)
 
       record_idempotency!(actor, "stack_create", idempotency_key, request_digest, stack.id)
       {%{stack | entries: entries}, :created}
@@ -448,9 +517,19 @@ defmodule OpenAgents.Stacks do
         insert_entry_row!(stack, pull_request, top.position + 1, top.observed_head_oid, head_oid)
 
       record_event!(stack, "pull_request_stack.appended", actor, %{
-        "number" => stack.number,
+        "stack_number" => stack.number,
         "trunk_ref" => stack.trunk_ref,
+        "ordering_old" => Enum.map(entries, & &1.pull_request.issue.number),
+        "ordering_new" => Enum.map(entries ++ [entry], & &1.pull_request.issue.number),
         "entries" => [event_entry(entry)]
+      })
+
+      record_event!(stack, "pull_request.stacked", actor, %{
+        "stack_number" => stack.number,
+        "trunk_ref" => stack.trunk_ref,
+        "pull_request" => pull_request.issue.number,
+        "position" => entry.position,
+        "head_oid" => entry.observed_head_oid
       })
 
       record_idempotency!(actor, "stack_append", idempotency_key, request_digest, stack.id)

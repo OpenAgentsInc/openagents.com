@@ -59,6 +59,13 @@ defmodule OpenAgents.Stacks.Restack do
             nil ->
               operation = insert_operation!(stack, actor, key, request)
               set_health!(stack, "operation_in_progress")
+
+              record_event!(stack, operation, "pull_request_stack.rebase_started", %{
+                "stack_number" => stack.number,
+                "operation_id" => operation.id,
+                "trunk_ref" => stack.trunk_ref
+              })
+
               {operation, :created}
           end
         else
@@ -529,9 +536,12 @@ defmodule OpenAgents.Stacks.Restack do
   defp record_events!(stack, operation, trunk_tip, steps) do
     changed = Enum.filter(steps, &(&1.new_head != &1.old_head))
 
-    record_event!(stack, operation, "pull_request_stack.rebased", %{
+    record_event!(stack, operation, "pull_request_stack.rebase_completed", %{
+      "stack_number" => stack.number,
       "operation_id" => operation.id,
+      "trunk_ref" => stack.trunk_ref,
       "trunk_oid" => trunk_tip,
+      "pull_requests" => Enum.map(steps, & &1.pull_request_number),
       "steps" => Enum.map(steps, &stringify_step/1)
     })
 
@@ -563,6 +573,15 @@ defmodule OpenAgents.Stacks.Restack do
       Repo.transaction(fn ->
         stack = Repo.one!(from s in Stack, where: s.id == ^operation.stack_id, lock: "FOR UPDATE")
         set_health!(stack, "conflicted")
+
+        record_event!(stack, operation, "pull_request_stack.rebase_conflicted", %{
+          "stack_number" => stack.number,
+          "operation_id" => operation.id,
+          "trunk_ref" => stack.trunk_ref,
+          "pull_request" => Map.fetch!(conflict, "pull_request_number"),
+          "position" => Map.fetch!(conflict, "position"),
+          "paths" => Map.fetch!(conflict, "paths")
+        })
 
         operation
         |> Operation.transition_changeset(%{

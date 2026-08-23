@@ -3,10 +3,18 @@ defmodule OpenAgentsWeb.PullRequestController do
 
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgents.Stacks
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
     repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
-    render(conn, :index, pull_requests: PullRequests.list(repository), owner: owner, repo: repo)
+    pull_requests = PullRequests.list(repository)
+
+    render(conn, :index,
+      pull_requests: pull_requests,
+      owner: owner,
+      repo: repo,
+      stack_contexts: Stacks.payload_contexts(repository, pull_requests)
+    )
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end
@@ -20,7 +28,12 @@ defmodule OpenAgentsWeb.PullRequestController do
         OpenAgentsWeb.ControllerHelpers.integer_param!(number)
       )
 
-    render(conn, :show, pull_request: pull_request, owner: owner, repo: repo)
+    render(conn, :show,
+      pull_request: pull_request,
+      owner: owner,
+      repo: repo,
+      stack_contexts: Stacks.payload_contexts(repository, [pull_request])
+    )
   rescue
     Ecto.NoResultsError -> not_found(conn)
   end

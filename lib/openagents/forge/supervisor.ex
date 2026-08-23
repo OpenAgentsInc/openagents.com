@@ -23,7 +23,8 @@ defmodule OpenAgents.Forge.Supervisor do
       [
         {OpenAgents.Repositories.Provisioner, []},
         {OpenAgents.Repositories.ImportWorkspaceJanitor, []},
-        {OpenAgents.Stacks.OperationWorker, []}
+        {OpenAgents.Stacks.OperationWorker, []},
+        {OpenAgents.Stacks.EventDispatcher, []}
       ]
     else
       []

@@ -71,6 +71,16 @@ defmodule OpenAgents.Stacks.Merge do
             nil ->
               operation = insert_operation!(stack, actor, key, request, position)
               set_health!(stack, "operation_in_progress")
+
+              record_event!(stack, operation, "pull_request_stack.merge_started", %{
+                "stack_number" => stack.number,
+                "operation_id" => operation.id,
+                "trunk_ref" => stack.trunk_ref,
+                "merge_method" => Map.fetch!(request, "merge_method"),
+                "pull_request" => Map.fetch!(request, "pull_request_number"),
+                "target_position" => position
+              })
+
               {operation, :created}
           end
         else
@@ -685,13 +695,27 @@ defmodule OpenAgents.Stacks.Merge do
   end
 
   defp record_events!(stack, operation, plan) do
-    record_event!(stack, operation, "pull_request_stack.merged", %{
+    record_event!(stack, operation, "pull_request_stack.merge_completed", %{
+      "stack_number" => stack.number,
       "operation_id" => operation.id,
+      "trunk_ref" => stack.trunk_ref,
       "merge_method" => Map.fetch!(plan, "merge_method"),
       "trunk_old" => Map.fetch!(plan, "trunk_old"),
       "trunk_new" => Map.fetch!(plan, "trunk_new"),
+      "pull_requests" =>
+        Enum.map(Map.fetch!(plan, "merged"), &Map.fetch!(&1, "pull_request_number")),
       "merged" => Map.fetch!(plan, "merged")
     })
+
+    Enum.each(Map.fetch!(plan, "merged"), fn step ->
+      record_event!(stack, operation, "pull_request.unstacked", %{
+        "stack_number" => stack.number,
+        "operation_id" => operation.id,
+        "pull_request" => Map.fetch!(step, "pull_request_number"),
+        "reason" => "merged",
+        "merge_commit_sha" => Map.fetch!(step, "merge_commit_sha")
+      })
+    end)
 
     Enum.each(Map.fetch!(plan, "restacked"), fn step ->
       record_event!(stack, operation, "pull_request.synchronize", %{
@@ -722,15 +746,26 @@ defmodule OpenAgents.Stacks.Merge do
   # requests' code is on the trunk, so the operation records exactly what
   # applied instead of pretending nothing happened.
   defp partially_succeed(operation, plan, reason) do
-    operation =
-      operation
-      |> Operation.transition_changeset(%{
-        state: "partially_succeeded",
-        error: error_map(reason),
-        planned_result: Map.put(plan, "refs_applied", true),
-        completed_at: DateTime.utc_now()
-      })
-      |> Repo.update!()
+    {:ok, operation} =
+      Repo.transaction(fn ->
+        stack = Repo.one!(from s in Stack, where: s.id == ^operation.stack_id, lock: "FOR UPDATE")
+
+        record_event!(stack, operation, "pull_request_stack.merge_partially_completed", %{
+          "stack_number" => stack.number,
+          "operation_id" => operation.id,
+          "trunk_ref" => stack.trunk_ref,
+          "error" => error_map(reason)
+        })
+
+        operation
+        |> Operation.transition_changeset(%{
+          state: "partially_succeeded",
+          error: error_map(reason),
+          planned_result: Map.put(plan, "refs_applied", true),
+          completed_at: DateTime.utc_now()
+        })
+        |> Repo.update!()
+      end)
 
     {:error, operation}
   end
@@ -740,6 +775,13 @@ defmodule OpenAgents.Stacks.Merge do
       Repo.transaction(fn ->
         current = Repo.one!(from s in Stack, where: s.id == ^stack.id, lock: "FOR UPDATE")
         set_health!(current, failure_health(reason))
+
+        record_event!(current, operation, "pull_request_stack.merge_failed", %{
+          "stack_number" => current.number,
+          "operation_id" => operation.id,
+          "trunk_ref" => current.trunk_ref,
+          "error" => error_map(reason)
+        })
 
         operation
         |> Operation.transition_changeset(%{

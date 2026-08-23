@@ -102,7 +102,7 @@ defmodule OpenAgents.Stacks.MergeTest do
       assert Repo.exists?(
                from event in StackEvent,
                  where:
-                   event.event_type == "pull_request_stack.merged" and
+                   event.event_type == "pull_request_stack.merge_completed" and
                      event.stack_id == ^stack.id
              )
 

@@ -88,7 +88,7 @@ defmodule OpenAgents.Stacks.RestackTest do
       assert Repo.exists?(
                from event in StackEvent,
                  where:
-                   event.event_type == "pull_request_stack.rebased" and
+                   event.event_type == "pull_request_stack.rebase_completed" and
                      event.stack_id == ^stack.id and event.stack_version == 2
              )
 

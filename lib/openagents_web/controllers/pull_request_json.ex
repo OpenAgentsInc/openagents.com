@@ -27,10 +27,20 @@ defmodule OpenAgentsWeb.PullRequestJSON do
         repo: %{full_name: "#{pr.head_repository.owner}/#{pr.head_repository.name}"}
       },
       base: %{ref: pr.base_ref, sha: pr.base_sha, repo: %{full_name: "#{owner}/#{repo}"}},
+      stack: stack_context(pr, assigns),
       created_at: pr.inserted_at,
       updated_at: pr.updated_at,
       html_url: "#{base_url}/#{owner}/#{repo}/pulls/#{pr.issue.number}",
       url: "#{base_url}/api/v3/repos/#{owner}/#{repo}/pulls/#{pr.issue.number}"
     }
+  end
+
+  # Stack membership: the stack number, this layer's position, the active
+  # size, the stack health, and the effective base — the stack trunk that
+  # governs policy — or `nil` for an unstacked pull request.
+  defp stack_context(pr, assigns) do
+    assigns
+    |> Map.get(:stack_contexts, %{})
+    |> Map.get(pr.id)
   end
 end

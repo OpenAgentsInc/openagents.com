@@ -72,8 +72,12 @@ defmodule OpenAgentsWeb.StackControllerTest do
       assert %{"position" => 3, "observed_head_oid" => head_3} = entry_3
       assert head_3 == oids["layer-3"]
 
-      assert [%StackEvent{event_type: "pull_request_stack.created", stack_version: 1}] =
-               Repo.all(StackEvent)
+      events = Repo.all(from event in StackEvent, order_by: [asc: event.inserted_at])
+
+      assert [%StackEvent{event_type: "pull_request_stack.created", stack_version: 1} | stacked] =
+               events
+
+      assert Enum.map(stacked, & &1.event_type) == List.duplicate("pull_request.stacked", 3)
 
       replay_conn =
         conn
@@ -523,6 +527,46 @@ defmodule OpenAgentsWeb.StackControllerTest do
 
       assert [] == json_response(get(conn, path(repository)), 200)
       assert json_response(get(conn, "#{path(repository)}/1"), 404)
+    end
+  end
+
+  describe "stack membership in pull request payloads" do
+    test "stacked pull requests embed the stack context; unstacked carry nil", %{conn: conn} do
+      repository = repository_fixture()
+      oids = seed_chain(repository, ["layer-1", "layer-2"])
+      [pr_1, pr_2] = pull_request_chain(repository, oids, ["layer-1", "layer-2"])
+      solo = pull_request(repository, "layer-2", "main", oids["main"], oids["layer-2"])
+      conn = put_forge_api_token(conn, "stack-payload", repository)
+
+      create_conn =
+        conn
+        |> put_req_header("idempotency-key", "stack-payload-1")
+        |> post(path(repository), %{trunk_ref: "main", pull_requests: [pr_1, pr_2]})
+
+      assert %{"number" => stack_number} = json_response(create_conn, 201)
+
+      pulls = "/api/v3/repos/#{repository.owner}/#{repository.name}/pulls"
+
+      show_conn = get(conn, "#{pulls}/#{pr_2}")
+      main_oid = oids["main"]
+
+      assert %{
+               "stack" => %{
+                 "number" => ^stack_number,
+                 "position" => 2,
+                 "size" => 2,
+                 "health" => "healthy",
+                 "base" => %{"ref" => "main", "sha" => ^main_oid}
+               }
+             } = json_response(show_conn, 200)
+
+      solo_conn = get(conn, "#{pulls}/#{solo}")
+      assert %{"stack" => nil} = json_response(solo_conn, 200)
+
+      index_conn = get(conn, pulls)
+      by_number = Map.new(json_response(index_conn, 200), &{&1["number"], &1})
+      assert %{"stack" => %{"position" => 1, "size" => 2}} = Map.fetch!(by_number, pr_1)
+      assert %{"stack" => nil} = Map.fetch!(by_number, solo)
     end
   end
 

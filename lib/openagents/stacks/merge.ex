@@ -864,8 +864,9 @@ defmodule OpenAgents.Stacks.Merge do
     end
   end
 
-  # The merge queue lands as its own slice; until then only a direct merge
-  # is available.
+  # No merge queue exists on the forge yet. OpenAgents.Stacks.MergeQueue
+  # fixes the stack contract any queue implementation must satisfy; until
+  # one lands, only a direct merge is available.
   defp parse_merge_action(params) do
     case Map.get(params, "merge_action", "direct_merge") do
       "direct_merge" -> :ok

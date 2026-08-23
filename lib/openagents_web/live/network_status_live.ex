@@ -287,6 +287,23 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   defp deploy_result_variant("needs_rolling_replace"), do: :warning
   defp deploy_result_variant(_result), do: :danger
 
+  # Classification-only receipts ran no deployment; a receipt without a
+  # recorded lane (rows older than the column) renders an honest "unknown".
+  defp deploy_type_text(%{"result" => "needs_rolling_replace"}), do: "classification only"
+  defp deploy_type_text(%{"type" => "direct_load"}), do: "direct load"
+  defp deploy_type_text(%{"type" => "relup"}), do: "relup"
+  defp deploy_type_text(%{"type" => "rolling_replacement"}), do: "rolling replacement"
+  defp deploy_type_text(_deploy), do: "unknown lane"
+
+  defp completed_text(iso) when is_binary(iso) do
+    case DateTime.from_iso8601(iso) do
+      {:ok, at, _offset} -> Calendar.strftime(at, "%Y-%m-%d %H:%M:%S UTC")
+      _error -> "—"
+    end
+  end
+
+  defp completed_text(_iso), do: "—"
+
   defp overall_badge_variant("ok"), do: :success
   defp overall_badge_variant("rolling"), do: :info
   defp overall_badge_variant("recovering"), do: :warning
@@ -493,16 +510,28 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
               deploy policy: direct hot load → relup → rolling replacement
             </p>
 
-            <div :if={@projection["forge"]["recent_deploys"] != []} class="status-forge__history">
-              <h3>Recent deploys</h3>
-              <ul class="status-events">
-                <li :for={deploy <- @projection["forge"]["recent_deploys"]}>
+            <div id="status-forge-history" class="status-forge__history">
+              <h3>Recent deployments</h3>
+              <.empty
+                :if={@projection["forge"]["recent_deploys"] == []}
+                id="status-forge-no-deploys"
+                title="No deployment receipts yet"
+              >
+                Deployment receipts appear here newest first as Forge records them.
+              </.empty>
+              <ul :if={@projection["forge"]["recent_deploys"] != []} class="status-events">
+                <li
+                  :for={deploy <- @projection["forge"]["recent_deploys"]}
+                  data-deploy-type={deploy["type"] || "none"}
+                >
                   <span class="status-events__stamp"><code>{deploy["sha"]}</code></span>
                   <.badge variant={deploy_result_variant(deploy["result"])}>
                     {deploy["result"]}
                   </.badge>
-                  {deploy["modules"]} module{if deploy["modules"] == 1, do: "", else: "s"} · push→live {ms_text(
-                    deploy["push_to_live_ms"]
+                  {deploy_type_text(deploy)} · {deploy["modules"]} module{if deploy["modules"] == 1,
+                    do: "",
+                    else: "s"} · completed {completed_text(deploy["completed_at"])} · took {ms_text(
+                    deploy["duration_ms"]
                   )}
                 </li>
               </ul>

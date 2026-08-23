@@ -13,6 +13,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
   @timestamps_opts [type: :utc_datetime_usec]
 
   @results ~w(live reverted needs_rolling_replace failed)
+  @deployment_types ~w(direct_load relup rolling_replacement)
 
   schema "forge_deploys" do
     field :repo, :string
@@ -26,6 +27,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
     field :expected_nodes, {:array, :string}, default: []
     field :node_results, :map, default: %{}
     field :result, :string
+    field :deployment_type, :string
     field :canary, :string
     field :error_code, :string
     field :rollback_verified, :boolean
@@ -37,6 +39,9 @@ defmodule OpenAgents.Forge.DeployReceipt do
 
   @doc "All deploy results."
   def results, do: @results
+
+  @doc "All deployment types."
+  def deployment_types, do: @deployment_types
 
   def changeset(receipt, attrs) do
     now = DateTime.utc_now()
@@ -60,6 +65,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
       :expected_nodes,
       :node_results,
       :result,
+      :deployment_type,
       :canary,
       :error_code,
       :rollback_verified,
@@ -77,6 +83,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
       :completed_at
     ])
     |> validate_inclusion(:result, @results)
+    |> validate_inclusion(:deployment_type, @deployment_types)
     |> validate_format(:sha, ~r/^[0-9a-f]{40}$/)
     |> validate_format(:artifact_digest, ~r/^[0-9a-f]{64}$/)
     |> validate_format(:manifest_digest, ~r/^[0-9a-f]{64}$/)
@@ -88,6 +95,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
     |> validate_node_results()
     |> unique_constraint(:deployment_id)
     |> check_constraint(:result, name: :forge_deploys_result)
+    |> check_constraint(:deployment_type, name: :forge_deploys_deployment_type)
     |> check_constraint(:artifact_digest, name: :forge_deploys_artifact_digest)
     |> check_constraint(:manifest_digest, name: :forge_deploys_manifest_digest)
     |> check_constraint(:node_results, name: :forge_deploys_node_bounds)

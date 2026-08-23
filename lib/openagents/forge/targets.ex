@@ -325,6 +325,7 @@ defmodule OpenAgents.Forge.Targets do
             artifact_digest: relup.artifact_digest,
             completed_at: now,
             deployment_id: deployment_id,
+            deployment_type: "relup",
             error_code: relup.error_code,
             expected_nodes: relup.expected_nodes,
             manifest_digest: relup.package_manifest_digest,
@@ -437,6 +438,7 @@ defmodule OpenAgents.Forge.Targets do
             artifact_digest: build.artifact_digest,
             completed_at: now,
             deployment_id: deployment_id,
+            deployment_type: "rolling_replacement",
             error_code: rolling.error_code,
             expected_nodes: rolling.expected_nodes,
             manifest_digest: manifest_digest,
@@ -448,7 +450,11 @@ defmodule OpenAgents.Forge.Targets do
             rollback_verified:
               rolling.status == "failed" and rolling.recovery == "last_known_good_restored",
             sha: target.sha,
-            started_at: now,
+            started_at:
+              if(is_integer(rolling.duration_ms),
+                do: DateTime.add(now, -rolling.duration_ms, :millisecond),
+                else: now
+              ),
             target_id: target.id
           }
 
@@ -548,6 +554,7 @@ defmodule OpenAgents.Forge.Targets do
     node_results = result_value(result, :node_results)
     error_code = result_value(result, :error_code)
     recovery = result_value(result, :recovery)
+    duration_ms = result_value(result, :duration_ms)
 
     cond do
       schema != "openagents.rolling-replacement.v1" ->
@@ -568,6 +575,9 @@ defmodule OpenAgents.Forge.Targets do
       not valid_node_results?(node_results) ->
         {:error, :invalid_rolling_result}
 
+      not (is_nil(duration_ms) or valid_duration?(duration_ms)) ->
+        {:error, :invalid_rolling_result}
+
       status == "live" and
           (Enum.any?(node_results, fn {_node, node_status} -> node_status != "ready" end) or
              not is_nil(error_code) or not is_nil(recovery)) ->
@@ -582,6 +592,7 @@ defmodule OpenAgents.Forge.Targets do
       true ->
         {:ok,
          %{
+           duration_ms: duration_ms,
            error_code: error_code,
            expected_nodes: node_results |> Map.keys() |> Enum.sort(),
            image_digest: image_digest,

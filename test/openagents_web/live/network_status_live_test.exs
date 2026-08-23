@@ -132,6 +132,8 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
       assert html =~ "Rapid deploys"
       assert has_element?(view, "#status-forge-state")
       assert html =~ "No deploys yet"
+      assert has_element?(view, "#status-forge-no-deploys")
+      assert html =~ "No deployment receipts yet"
     end
 
     test "renders the pipeline position for an advancing target", %{conn: conn} do
@@ -172,6 +174,84 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
       )
 
       assert render(view) =~ "hot deploy #{String.duplicate("c", 12)}: live"
+    end
+
+    test "renders deployment history with lane, completion time, and duration", %{conn: conn} do
+      target = seed_target("live")
+      now = DateTime.utc_now()
+
+      receipts = [
+        # Oldest: classification only.
+        %{result: "needs_rolling_replace"},
+        %{
+          result: "live",
+          deployment_type: "direct_load",
+          started_at: DateTime.add(now, -13_242, :millisecond),
+          completed_at: now
+        },
+        # Newest: a settled relup.
+        %{
+          result: "live",
+          deployment_type: "relup",
+          started_at: DateTime.add(now, -2_500, :millisecond),
+          completed_at: now
+        }
+      ]
+
+      for receipt <- receipts do
+        %DeployReceipt{}
+        |> DeployReceipt.changeset(
+          Map.merge(%{repo: "openagents.com", sha: target.sha, target_id: target.id}, receipt)
+        )
+        |> Repo.insert!()
+
+        # Distinct inserted_at ordering under usec timestamps.
+        Process.sleep(2)
+      end
+
+      {:ok, view, html} = live(conn, ~p"/status")
+
+      assert html =~ "Recent deployments"
+      assert has_element?(view, "#status-forge-history li[data-deploy-type='direct_load']")
+      assert has_element?(view, "#status-forge-history li[data-deploy-type='relup']")
+      assert has_element?(view, "#status-forge-history li[data-deploy-type='none']")
+      assert html =~ "direct load"
+      assert html =~ "classification only"
+      assert html =~ "took 13.2s"
+      assert html =~ "took 2.5s"
+      assert html =~ "completed #{Calendar.strftime(now, "%Y-%m-%d")}"
+
+      # Newest first: the relup receipt renders before the direct load.
+      {relup_at, _} = :binary.match(html, ~s(data-deploy-type="relup"))
+      {direct_at, _} = :binary.match(html, ~s(data-deploy-type="direct_load"))
+      assert relup_at < direct_at
+    end
+
+    test "the deployment list updates when Forge records a new receipt", %{conn: conn} do
+      target = seed_target("live", sha: String.duplicate("d", 40))
+      {:ok, view, html} = live(conn, ~p"/status")
+
+      refute html =~ ~s(data-deploy-type="direct_load")
+
+      %DeployReceipt{}
+      |> DeployReceipt.changeset(%{
+        repo: "openagents.com",
+        sha: target.sha,
+        target_id: target.id,
+        result: "live",
+        deployment_type: "direct_load"
+      })
+      |> Repo.insert!()
+
+      Phoenix.PubSub.broadcast(
+        OpenAgents.PubSub,
+        "forge:deploys",
+        {:forge_deploy, %{repo: "openagents.com", sha: target.sha, result: "live"}}
+      )
+
+      html = render(view)
+      assert html =~ ~s(data-deploy-type="direct_load")
+      assert html =~ "direct load"
     end
 
     test "the page is content-free: no operator identity, no module names", %{conn: conn} do

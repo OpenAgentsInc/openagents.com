@@ -99,7 +99,7 @@ defmodule OpenAgents.Forge.HotLoader do
       message = "hot_load_failed code=" <> OpenAgents.OperationalLog.code(error)
       Logger.error("forge_hot_load_failed code=#{OpenAgents.OperationalLog.code(error)}")
       advance(target_id, "failed", %{"error" => message})
-      insert_receipt(repo, sha, target_id, modules, [], "failed", nil, nil)
+      insert_receipt(repo, sha, target_id, modules, [], "failed", "direct_load", nil, nil)
       broadcast_deploy(repo, sha, "failed")
   catch
     :refused -> :ok
@@ -133,7 +133,8 @@ defmodule OpenAgents.Forge.HotLoader do
            "reasons" => reasons
          }) do
       :ok ->
-        insert_receipt(repo, sha, target_id, modules, [], "needs_rolling_replace", nil, nil)
+        # Classification only — no deployment ran, so no deployment_type.
+        insert_receipt(repo, sha, target_id, modules, [], "needs_rolling_replace", nil, nil, nil)
         broadcast_deploy(repo, sha, "needs_rolling_replace")
 
       :error ->
@@ -148,7 +149,7 @@ defmodule OpenAgents.Forge.HotLoader do
     message = "artifact_verification_failed code=" <> OpenAgents.OperationalLog.code(reason)
     Logger.error(message)
     advance(target_id, "failed", %{"error" => message})
-    insert_receipt(repo, sha, target_id, modules, [], "failed", nil, nil)
+    insert_receipt(repo, sha, target_id, modules, [], "failed", "direct_load", nil, nil)
     broadcast_deploy(repo, sha, "failed")
   end
 
@@ -312,7 +313,17 @@ defmodule OpenAgents.Forge.HotLoader do
     end
   end
 
-  defp insert_receipt(repo, sha, target_id, modules, nodes, result, canary, push_ms) do
+  defp insert_receipt(
+         repo,
+         sha,
+         target_id,
+         modules,
+         nodes,
+         result,
+         deployment_type,
+         canary,
+         push_ms
+       ) do
     %DeployReceipt{}
     |> DeployReceipt.changeset(%{
       repo: repo,
@@ -321,6 +332,7 @@ defmodule OpenAgents.Forge.HotLoader do
       modules: modules,
       nodes: nodes,
       result: result,
+      deployment_type: deployment_type,
       canary: canary,
       push_to_live_ms: push_ms
     })
@@ -340,6 +352,7 @@ defmodule OpenAgents.Forge.HotLoader do
       nodes: outcome.nodes,
       expected_nodes: outcome.expected_nodes,
       node_results: outcome.node_results,
+      deployment_type: "direct_load",
       canary: canary || outcome.canary,
       error_code: outcome.error_code,
       rollback_verified: outcome.rollback_verified,

@@ -18,12 +18,20 @@ defmodule OpenAgents.Forge.RollingReplacement do
 
   @doc "Roll an immutable image across the exact expected node set."
   def run(request, opts \\ []) do
+    started = System.monotonic_time(:millisecond)
+
     with :ok <- validate_request(request),
          {:ok, _receipt} <- gate_verify(request.sha, opts),
          {:ok, provider} <- provider(opts),
          :ok <- initial_membership(request, provider, opts) do
-      replace_nodes(request.expected_nodes, request, provider, opts, %{})
+      request.expected_nodes
+      |> replace_nodes(request, provider, opts, %{})
+      |> put_duration(started)
     end
+  end
+
+  defp put_duration({verdict, result}, started) when is_map(result) do
+    {verdict, Map.put(result, :duration_ms, System.monotonic_time(:millisecond) - started)}
   end
 
   defp replace_nodes([], request, _provider, _opts, results) do

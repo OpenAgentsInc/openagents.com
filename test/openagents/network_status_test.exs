@@ -200,6 +200,82 @@ defmodule OpenAgents.NetworkStatusTest do
       assert NetworkStatus.projection(refresh: true)["forge"]["state"] == "off"
     end
 
+    test "recent deployments expose lane, completion time, and duration, newest first" do
+      sha = String.duplicate("c", 40)
+
+      target =
+        %Target{}
+        |> Target.changeset(%{
+          repo: "openagents.com",
+          sha: sha,
+          promoted_by: "operator:1",
+          status: "live"
+        })
+        |> Repo.insert!()
+
+      now = DateTime.utc_now()
+
+      rows = [
+        # Oldest: a pre-column legacy row (no lane recorded).
+        %{result: "live", started_at: DateTime.add(now, -100, :millisecond), completed_at: now},
+        # A classification-only receipt — no deployment ran.
+        %{result: "needs_rolling_replace"},
+        %{
+          result: "live",
+          deployment_type: "direct_load",
+          started_at: DateTime.add(now, -1_500, :millisecond),
+          completed_at: now
+        },
+        %{
+          result: "failed",
+          deployment_type: "relup",
+          started_at: DateTime.add(now, -2_000, :millisecond),
+          completed_at: now
+        },
+        # Newest: a rolling replacement.
+        %{
+          result: "live",
+          deployment_type: "rolling_replacement",
+          started_at: DateTime.add(now, -60_000, :millisecond),
+          completed_at: now
+        }
+      ]
+
+      for row <- rows do
+        %DeployReceipt{}
+        |> DeployReceipt.changeset(
+          Map.merge(%{repo: "openagents.com", sha: sha, target_id: target.id}, row)
+        )
+        |> Repo.insert!()
+
+        # Distinct inserted_at ordering under usec timestamps.
+        Process.sleep(2)
+      end
+
+      deploys = NetworkStatus.projection(refresh: true)["forge"]["recent_deploys"]
+
+      assert [rolling, relup, direct, classification, legacy] = deploys
+
+      assert %{"type" => "rolling_replacement", "result" => "live", "duration_ms" => 60_000} =
+               rolling
+
+      assert %{"type" => "relup", "result" => "failed", "duration_ms" => 2_000} = relup
+      assert %{"type" => "direct_load", "result" => "live", "duration_ms" => 1_500} = direct
+
+      # Classification-only receipts stay distinguishable: no lane, no
+      # duration, and their own result.
+      assert %{"type" => nil, "result" => "needs_rolling_replace", "duration_ms" => nil} =
+               classification
+
+      # Rows older than the lane column degrade honestly to a nil type while
+      # keeping their measured duration.
+      assert %{"type" => nil, "result" => "live", "duration_ms" => 100} = legacy
+
+      for deploy <- deploys do
+        assert {:ok, _at, _offset} = DateTime.from_iso8601(deploy["completed_at"])
+      end
+    end
+
     test "loop metrics: last is newest, median over live deploys only" do
       sha = String.duplicate("b", 40)
 

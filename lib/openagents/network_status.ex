@@ -173,15 +173,32 @@ defmodule OpenAgents.NetworkStatus do
     }
   end
 
+  # Deployment history stays content-free: short sha, result, lane, module
+  # count, and timings only. `duration_ms` measures deployment start through
+  # completion; classification-only receipts (needs_rolling_replace) ran no
+  # deployment, so they carry no type and no duration.
   defp public_deploy(deploy) do
     %{
       "sha" => short_sha(deploy.sha),
       "result" => deploy.result,
+      "type" => deploy.deployment_type,
       "modules" => length(deploy.modules),
       "push_to_live_ms" => deploy.push_to_live_ms,
+      "duration_ms" => deploy_duration_ms(deploy),
+      "completed_at" => iso8601_or_nil(deploy.completed_at),
       "at" => DateTime.to_iso8601(deploy.inserted_at)
     }
   end
+
+  defp deploy_duration_ms(%{result: "needs_rolling_replace"}), do: nil
+
+  defp deploy_duration_ms(%{started_at: %DateTime{} = started, completed_at: %DateTime{} = done}),
+    do: DateTime.diff(done, started, :millisecond)
+
+  defp deploy_duration_ms(_deploy), do: nil
+
+  defp iso8601_or_nil(%DateTime{} = at), do: DateTime.to_iso8601(at)
+  defp iso8601_or_nil(_at), do: nil
 
   defp short_sha(sha) when is_binary(sha), do: String.slice(sha, 0, 12)
   defp short_sha(_sha), do: nil

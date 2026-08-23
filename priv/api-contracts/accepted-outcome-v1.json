@@ -1,0 +1,63 @@
+{
+  "contract": "openagents.accepted-outcome.v1",
+  "version": 1,
+  "published_at": "2026-08-23",
+  "summary": "When an agent claims that work is complete, the claim counts as an accepted outcome only when a scoped issue, a bound execution attempt, an admitted verifier result, a recorded falsifier, and inspectable evidence all hold. Anything less produces a typed non-accepted result. The issue remains the canonical work record.",
+  "issue_template": {
+    "required_sections": [
+      "problem",
+      "scope",
+      "acceptance_criteria",
+      "success_metrics"
+    ]
+  },
+  "attempt_binding": {
+    "required_fields": [
+      "issue_number",
+      "repository",
+      "authority",
+      "budget",
+      "revision"
+    ]
+  },
+  "verification": {
+    "required_records": [
+      "verifier",
+      "falsifier",
+      "terminal_result"
+    ],
+    "terminal_results": [
+      "passed",
+      "failed"
+    ],
+    "verifier_admission": "Evidence counts only when the verifier is admitted.",
+    "producer_verifier_separation": "When policy requires producer-verifier separation, the verifier must be independent of the producer."
+  },
+  "false_green_classes": [
+    "false_green_fixture_assert",
+    "false_green_api_mirror",
+    "false_green_mocked_seam",
+    "false_green_coverage_theater",
+    "false_green_round_up"
+  ],
+  "result_states": {
+    "accepted": "Every acceptance criterion names the evidence that satisfied it, the verifier passed against a recorded falsifier, and the attempt binds the exact revision.",
+    "non_accepted": [
+      "incomplete",
+      "unauthorized",
+      "failed"
+    ],
+    "not_applicable": [
+      "human_only_work",
+      "agents_disabled_repository"
+    ]
+  },
+  "visibility": {
+    "public_projection_excludes": [
+      "prompts",
+      "logs",
+      "private_repositories",
+      "private_receipts"
+    ]
+  }
+}

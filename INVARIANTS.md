@@ -1154,6 +1154,50 @@ Evidence: `OpenAgents.SCV.Deployments`, `OpenAgents.Work.Scv`,
 (the `scv` kind), `OpenAgents.RuntimeConfig`, and
 `test/openagents/scv/deployments_test.exs`.
 
+### OUTCOME-001 — An agent-authored claim is accepted only against the accepted-outcome contract
+
+Status: Current
+
+When an agent claims that work is complete, the claim counts as an accepted
+outcome only when every part the contract names holds; anything less is a
+typed non-accepted result, and human-only work stays outside the gate
+entirely.
+
+- **The issue is the canonical record, and it must be scoped.** A claim
+  anchors to an issue that states its problem, scope, acceptance criteria,
+  and success metrics. A claim against an issue missing any of those sections
+  is `incomplete`, never accepted.
+- **The attempt is bound, not implied.** Each execution attempt records the
+  issue number, repository, authority, budget, and exact revision it
+  produced. An attempt bound to a different issue or repository, an
+  unadmitted verifier, or a violated producer-verifier separation policy is
+  `unauthorized`.
+- **Green must have been able to be red.** The claim records an admitted
+  verifier, a falsifier, and a terminal result. A failed terminal result is
+  `failed`, and a result carrying any of the five named false-green classes
+  — `false_green_fixture_assert`, `false_green_api_mirror`,
+  `false_green_mocked_seam`, `false_green_coverage_theater`,
+  `false_green_round_up` — is `failed` even when the verifier reported green.
+- **Every criterion names its evidence.** An accepted outcome explains which
+  receipt satisfied each acceptance criterion, so the issue page can show the
+  mapping; a criterion with no evidence makes the claim `incomplete`.
+- **The public projection is content-free about private material.** A
+  projection of an evaluation carries the result state, typed reasons,
+  criterion names, and public receipt references only — never prompts, logs,
+  private repository names, or private receipt references.
+- **Human-only work is not gated.** Work by a human actor and repositories
+  with agents disabled evaluate to `not_applicable` and remain fully usable.
+
+The committed contract is `priv/api-contracts/accepted-outcome-v1.json`, and
+`OpenAgents.AcceptedOutcome.validate/1` refuses a contract whose required
+sections, attempt fields, false-green classes, or result states drift from
+the code that enforces them.
+
+Evidence: `OpenAgents.AcceptedOutcome`,
+`priv/api-contracts/accepted-outcome-v1.json`,
+`docs/accepted-outcome-contract.md`, and
+`test/openagents/accepted_outcome_test.exs`.
+
 ## Interface and release
 
 ### VOICE-001 — Spoken identity is admitted before media
@@ -2081,6 +2125,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs` |
+| OUTCOME-001 | `test/openagents/accepted_outcome_test.exs` |
 | VOICE-001 | `test/openagents/voice/config_test.exs` |
 | VOICE-002 | `test/openagents_web/controllers/voice_call_controller_test.exs` |
 | VOICE-003 | `test/openagents/voice_test.exs`, `test/openagents/voice_sessions_test.exs` |

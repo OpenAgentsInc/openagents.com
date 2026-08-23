@@ -477,16 +477,22 @@ that qualified together.
 
 ## Issue template for this program
 
-Every implementation issue should contain these sections:
+Every implementation issue must contain the four sections the
+accepted-outcome contract requires — problem, scope, acceptance criteria, and
+success metrics — plus the supporting sections below. See
+`accepted-outcome-contract.md` for how these sections gate agent-authored
+completion claims.
 
 ```md
-## Outcome
+## Problem
 
-Describe what a person or agent can do after this ships.
+Describe the measured behavior that motivates the work and link to code,
+tests, screenshots, or logs.
 
-## Current behavior
+## Scope
 
-Describe the measured behavior and link to code, tests, screenshots, or logs.
+State what this issue changes and what it leaves alone. Name the outcome a
+person or agent can reach after this ships.
 
 ## Contract
 
@@ -497,6 +503,10 @@ List the affected web routes, API routes, schemas, events, and authority rules.
 - State observable outcomes.
 - Include public and private repository behavior where relevant.
 - Include unauthorized behavior and error results.
+
+## Success metrics
+
+State how you can measure that the outcome holds after it ships.
 
 ## Verification
 
@@ -514,6 +524,12 @@ and one CLI child. Merge and deploy the additive server change first, then
 release the CLI that consumes it.
 
 ## Definition of done
+
+Agent-authored work uses the accepted-outcome contract in
+`accepted-outcome-contract.md` as its definition of done: a completion claim
+counts only when the scoped issue, bound attempt, admitted verifier,
+recorded falsifier, terminal result, and per-criterion evidence all hold.
+Contribution and review apply that same definition.
 
 An issue is done only when all applicable conditions hold:
 

@@ -65,7 +65,7 @@ defmodule OpenAgentsWeb.ForumLiveTest do
     assert has_element?(view, "#new-topic-form")
   end
 
-  test "topic thread renders posts and a reply form", %{conn: conn} do
+  test "a topic renders its posts and a reply form", %{conn: conn} do
     forum = forum()
     topic = topic(forum)
 

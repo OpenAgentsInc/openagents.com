@@ -1,8 +1,22 @@
 defmodule OpenAgentsWeb.ForumBoardLive do
-  @moduledoc "One forum board: its topics, newest activity first, and a composer."
+  @moduledoc """
+  One forum board: its topics, newest activity first, and a composer.
+
+  The board reorders itself. A topic started or replied to anywhere moves to
+  the top with its reply count, and a topic an operator pins moves above the
+  rest, none of it needing a reload.
+
+  The announcement carries a topic id and nothing else (#154), and a board
+  cannot tell from an id whether the topic is one of its own without reading,
+  so it re-reads its own page -- through `fetch_readable_forum_by_slug/2` with
+  the scope it mounted under, which is what makes a board that has stopped
+  being readable leave rather than keep serving its topics. The read is one
+  bounded page, and a burst of replies costs one of them.
+  """
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forum
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.OG
 
   def mount(%{"slug" => slug}, _session, socket) do
@@ -16,17 +30,26 @@ defmodule OpenAgentsWeb.ForumBoardLive do
          |> push_navigate(to: ~p"/forum")}
 
       {:ok, forum} ->
+        if connected?(socket), do: Forum.subscribe_posts()
+
         {:ok,
          socket
+         |> LiveRefresh.init()
          |> assign(:current_scope, socket.assigns[:current_scope])
+         |> assign(:read_scope, scope)
          |> assign(:forum, forum)
          |> assign(:page_title, forum.title)
          |> assign(:og, OG.meta(OG.forum_board(forum)))
-         |> assign(:topics, ranked_topics(forum))
          |> stream(:topics, ranked_topics(forum))
          |> assign(:form, to_form(%{"title" => "", "body_text" => ""}, as: :topic))}
     end
   end
+
+  def handle_info({:forum_posts_changed, _topic_id}, socket),
+    do: {:noreply, LiveRefresh.mark_stale(socket, :topics, &refresh_panel/2)}
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
 
   def handle_event("new_topic", %{"topic" => params}, socket) do
     user = socket.assigns[:current_user]
@@ -51,13 +74,32 @@ defmodule OpenAgentsWeb.ForumBoardLive do
           {:ok, _topic} ->
             {:noreply,
              socket
-             |> stream(:topics, ranked_topics(socket.assigns.forum), reset: true)
+             |> refresh_panel(:topics)
              |> assign(:form, to_form(%{"title" => "", "body_text" => ""}, as: :topic))
              |> put_flash(:info, "Topic created")}
 
           {:error, changeset} ->
             {:noreply, assign(socket, :form, to_form(changeset))}
         end
+    end
+  end
+
+  # The one re-read this page has, whether the write was made here or heard
+  # about. The board is re-read too, not only its topics: its own counters are
+  # rendered beside them, and a board that has stopped being readable should
+  # take its topics with it rather than keep serving a page it would now
+  # refuse.
+  defp refresh_panel(socket, :topics) do
+    case Forum.fetch_readable_forum_by_slug(socket.assigns.forum.slug, socket.assigns.read_scope) do
+      {:ok, forum} ->
+        socket
+        |> assign(:forum, forum)
+        |> stream(:topics, ranked_topics(forum), reset: true)
+
+      {:error, :not_found} ->
+        socket
+        |> put_flash(:error, "Board not found")
+        |> push_navigate(to: ~p"/forum")
     end
   end
 

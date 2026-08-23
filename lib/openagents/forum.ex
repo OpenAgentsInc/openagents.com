@@ -43,7 +43,12 @@ defmodule OpenAgents.Forum do
   def subscribe_posts, do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @posts_topic)
 
   @doc """
-  Announces that a topic gained a post.
+  Announces that a topic's visible posts moved.
+
+  A post written, hidden, or deleted says so, and so does a change to the state
+  that governs them -- a topic closed, reopened, or pinned -- because a surface
+  told nothing keeps rendering a post that has been hidden and a composer on a
+  topic that has been closed.
 
   Called after the owning write commits, never inside it: a subscriber re-reads
   the moment it hears, and an announcement from inside an open transaction
@@ -384,6 +389,15 @@ defmodule OpenAgents.Forum do
       |> Ecto.Changeset.put_change(:first_post_id, post.id)
       |> Ecto.Changeset.put_change(:latest_post_id, post.id)
     end)
+    # The board list prints this counter, so it moves in the same transaction
+    # as the topic it counts. Counting the topics to print the number instead
+    # would load a board's whole collection to measure it, once per board on a
+    # page that lists them all.
+    |> Multi.update_all(
+      :forum_topic_count,
+      from(f in Forum, where: f.id == ^forum.id),
+      inc: [topic_count: 1]
+    )
     |> Repo.transaction()
     |> case do
       {:ok, %{topic: %{id: topic_id}}} ->
@@ -476,6 +490,7 @@ defmodule OpenAgents.Forum do
       {:ok, _} ->
         Tips.withdraw_post_weight(post)
         audit_moderation("forum.post.deleted", moderator, post)
+        broadcast_posts(post.topic_id)
 
       _ ->
         :ok
@@ -494,6 +509,7 @@ defmodule OpenAgents.Forum do
       {:ok, _} ->
         Tips.withdraw_post_weight(post)
         audit_moderation("forum.post.hidden", moderator, post)
+        broadcast_posts(post.topic_id)
 
       _ ->
         :ok
@@ -515,13 +531,25 @@ defmodule OpenAgents.Forum do
     topic
     |> Ecto.Changeset.change(state: state)
     |> Repo.update()
+    |> announce()
   end
 
   def pin_topic(%Topic{} = topic, pinned?) do
     topic
     |> Ecto.Changeset.change(pin_state: if(pinned?, do: "pinned", else: "normal"))
     |> Repo.update()
+    |> announce()
   end
+
+  # A topic whose state or pin moved changes what its own page renders and
+  # where a board sorts it, so it announces itself on the same topic a post
+  # does. A failed write announces nothing.
+  defp announce({:ok, %Topic{id: id} = topic}) do
+    broadcast_posts(id)
+    {:ok, topic}
+  end
+
+  defp announce({:error, changeset}), do: {:error, changeset}
 
   @doc """
   The account that owns `actor_ref`, or `nil` when nobody has claimed it.

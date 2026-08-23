@@ -43,6 +43,7 @@ defmodule OpenAgentsWeb.HomeLive do
   alias OpenAgents.Issues
   alias OpenAgents.Projects
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.UI.Landing
 
   @repo "openagents.com"
@@ -58,8 +59,7 @@ defmodule OpenAgentsWeb.HomeLive do
 
       {:ok,
        socket
-       |> assign(:refresh_timer_ref, nil)
-       |> assign(:stale_panels, MapSet.new())
+       |> LiveRefresh.init()
        |> assign(:changed_repositories, MapSet.new())
        |> assign_dashboard()}
     else
@@ -97,7 +97,8 @@ defmodule OpenAgentsWeb.HomeLive do
      |> mark_stale(:repositories)}
   end
 
-  def handle_info(:refresh_dashboard, socket), do: {:noreply, refresh(socket)}
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
 
   def handle_info(message, socket) do
     if Changelog.ledger_event?(message),
@@ -105,45 +106,11 @@ defmodule OpenAgentsWeb.HomeLive do
       else: {:noreply, socket}
   end
 
-  # A quarter of a second. Long enough that a push burst, an import that walks
-  # a repository's issues, or a script closing a milestone's worth of them
-  # collapses into one re-read; short enough that a person who opened an issue
-  # in another tab sees the count move before they have finished looking back
-  # at this one. Every event re-arms the same timer, and only the last one
-  # fires, so the cost of a burst is one re-read rather than one per event.
-  #
-  # Which panels re-read is remembered alongside it, so an issue burst never
-  # reloads the forum, the projects, or the ledger.
-  @refresh_debounce_ms if Application.compile_env(:openagents, :runtime_environment) == :test,
-                         do: 0,
-                         else: 250
-
-  defp mark_stale(socket, panel) do
-    socket = update(socket, :stale_panels, &MapSet.put(&1, panel))
-
-    # Tests refresh synchronously so assertions do not depend on time.
-    if @refresh_debounce_ms == 0, do: refresh(socket), else: rearm(socket)
-  end
-
-  defp rearm(socket) do
-    case socket.assigns.refresh_timer_ref do
-      nil -> :ok
-      ref when is_reference(ref) -> Process.cancel_timer(ref)
-    end
-
-    assign(
-      socket,
-      :refresh_timer_ref,
-      Process.send_after(self(), :refresh_dashboard, @refresh_debounce_ms)
-    )
-  end
-
-  defp refresh(socket) do
-    socket.assigns.stale_panels
-    |> Enum.reduce(socket, &refresh_panel(&2, &1))
-    |> assign(:stale_panels, MapSet.new())
-    |> assign(:refresh_timer_ref, nil)
-  end
+  # One re-armed timer, shared with every other live surface through
+  # `LiveRefresh`, so a burst of announcements costs one re-read rather than
+  # one repaint per event. Which panels re-read is remembered beside it, so an
+  # issue burst never reloads the forum, the projects, or the ledger.
+  defp mark_stale(socket, panel), do: LiveRefresh.mark_stale(socket, panel, &refresh_panel/2)
 
   defp refresh_panel(socket, :issues), do: assign_issues(socket)
   defp refresh_panel(socket, :projects), do: assign_projects(socket)

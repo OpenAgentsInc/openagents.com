@@ -1,10 +1,25 @@
 defmodule OpenAgentsWeb.ForumTopicLive do
-  @moduledoc "One topic: its posts, oldest first, with a reply composer."
+  @moduledoc """
+  One topic: its posts, oldest first, with a reply composer.
+
+  The page follows the topic rather than showing it as it stood when you
+  opened it. A reply written anywhere -- in another browser, through the API,
+  or by an agent -- arrives without a reload, and so does a post an operator
+  hides and a topic they close.
+
+  The announcement carries a topic id and nothing else (#154), so the page
+  re-reads through `Forum.fetch_readable_topic/2` with the same scope it
+  mounted under. A board that stops being readable takes its topic with it,
+  and a post keeps the identity it was written under: a migrated post's byline
+  is its legacy name until a claim binds it, on a refresh no less than on a
+  mount.
+  """
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Forum
   alias OpenAgents.Forum.Tips
   alias OpenAgents.Markdown
+  alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.OG
 
   # Preset amounts keep tipping one click. Larger amounts go through the API.
@@ -21,11 +36,15 @@ defmodule OpenAgentsWeb.ForumTopicLive do
          |> push_navigate(to: ~p"/forum")}
 
       {:ok, topic} ->
+        if connected?(socket), do: Forum.subscribe_posts()
+
         posts = Forum.list_posts(topic)
 
         {:ok,
          socket
+         |> LiveRefresh.init()
          |> assign(:current_scope, socket.assigns[:current_scope])
+         |> assign(:read_scope, scope)
          |> assign(:topic, topic)
          |> assign(:page_title, topic.title)
          |> assign(:og, topic_og(topic, posts))
@@ -34,6 +53,18 @@ defmodule OpenAgentsWeb.ForumTopicLive do
          |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
     end
   end
+
+  # Every post on the forum announces itself on one topic, so a page reading
+  # one topic can ignore the rest by id alone rather than by reading to find
+  # out. A busy board costs this page nothing.
+  def handle_info({:forum_posts_changed, topic_id}, socket) do
+    if topic_id == socket.assigns.topic.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :posts, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
 
   def handle_event("reply", %{"post" => %{"body_text" => body_text}}, socket)
       when body_text == "" or is_nil(body_text) do
@@ -61,8 +92,7 @@ defmodule OpenAgentsWeb.ForumTopicLive do
           {:ok, _post} ->
             {:noreply,
              socket
-             |> assign(:topic, Forum.get_topic!(socket.assigns.topic.id))
-             |> stream(:posts, Forum.list_posts(socket.assigns.topic), reset: true)
+             |> refresh_panel(:posts)
              |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
 
           {:error, :topic_closed} ->
@@ -87,7 +117,7 @@ defmodule OpenAgentsWeb.ForumTopicLive do
 
       case Tips.tip_post(request) do
         {:ok, intent} ->
-          {:noreply, socket |> refresh_posts() |> put_flash(:info, tip_message(intent))}
+          {:noreply, socket |> refresh_panel(:posts) |> put_flash(:info, tip_message(intent))}
 
         {:error, {:payment_failed, intent}} ->
           {:noreply,
@@ -107,7 +137,7 @@ defmodule OpenAgentsWeb.ForumTopicLive do
       new_state = if socket.assigns.topic.state == "open", do: "closed", else: "open"
       {:ok, _} = Forum.set_topic_state(socket.assigns.topic, new_state)
 
-      {:noreply, assign(socket, :topic, Forum.get_topic!(socket.assigns.topic.id))}
+      {:noreply, refresh_panel(socket, :posts)}
     else
       _ -> {:noreply, put_flash(socket, :error, "Operators only")}
     end
@@ -118,10 +148,7 @@ defmodule OpenAgentsWeb.ForumTopicLive do
          true <- OpenAgents.Accounts.admin?(user),
          post <- Enum.find(socket.assigns.posts, &(&1.id == id)),
          {:ok, _} <- Forum.hide_post(post, user) do
-      {:noreply,
-       socket
-       |> assign(:posts, Forum.list_posts(socket.assigns.topic))
-       |> stream(:posts, Forum.list_posts(socket.assigns.topic), reset: true)}
+      {:noreply, refresh_panel(socket, :posts)}
     else
       _ -> {:noreply, put_flash(socket, :error, "Operators only")}
     end
@@ -221,12 +248,25 @@ defmodule OpenAgentsWeb.ForumTopicLive do
     OG.meta(OG.forum_topic(forum, topic, summary: summary))
   end
 
-  defp refresh_posts(socket) do
-    posts = Forum.list_posts(socket.assigns.topic)
+  # The one re-read this page has, whether the write was made here or heard
+  # about. It goes back through the same authorized read that filled the page
+  # at mount, so a topic whose board has stopped being readable leaves rather
+  # than staying open on a scope it no longer belongs to.
+  defp refresh_panel(socket, :posts) do
+    case Forum.fetch_readable_topic(socket.assigns.topic.id, socket.assigns.read_scope) do
+      {:ok, topic} ->
+        posts = Forum.list_posts(topic)
 
-    socket
-    |> assign(:posts, posts)
-    |> stream(:posts, posts, reset: true)
+        socket
+        |> assign(:topic, topic)
+        |> assign(:posts, posts)
+        |> stream(:posts, posts, reset: true)
+
+      {:error, :not_found} ->
+        socket
+        |> put_flash(:error, "Topic not found")
+        |> push_navigate(to: ~p"/forum")
+    end
   end
 
   defp tip_message(%{counted_sats: 0, exclusion_reason: reason, amount_sats: sats})

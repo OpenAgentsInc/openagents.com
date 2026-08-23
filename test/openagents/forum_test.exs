@@ -227,12 +227,61 @@ defmodule OpenAgents.ForumTest do
       {:ok, _post} = Forum.create_post(topic, Map.merge(actor(), %{body_text: "still open"}))
       assert_receive {:forum_posts_changed, _topic_id}
 
+      # Closing announces as well. A page left rendering a composer on a topic
+      # that has been closed is the same defect seen from the other side.
       {:ok, closed} = Forum.set_topic_state(topic, "closed")
+      assert_receive {:forum_posts_changed, _closed_topic_id}
 
       assert {:error, :topic_closed} =
                Forum.create_post(closed, Map.merge(actor(), %{body_text: "too late"}))
 
       refute_receive {:forum_posts_changed, _topic_id}, 20
+    end
+
+    test "a moderated post announces itself" do
+      board = forum()
+
+      {:ok, topic} =
+        Forum.create_topic(
+          board,
+          Map.merge(actor(), %{title: "Moderated", slug: "moderated", body_text: "body"})
+        )
+
+      {:ok, post} = Forum.create_post(topic, Map.merge(actor(), %{body_text: "said in haste"}))
+
+      :ok = Forum.subscribe_posts()
+
+      # A post that has been hidden or deleted is gone from every authorized
+      # read, so a surface told nothing keeps rendering it.
+      {:ok, hidden} = Forum.hide_post(post, nil)
+      assert_receive {:forum_posts_changed, hidden_topic_id}
+      assert hidden_topic_id == topic.id
+
+      {:ok, _deleted} = Forum.delete_post(hidden, nil)
+      assert_receive {:forum_posts_changed, _deleted_topic_id}
+
+      # Pinning changes where a board sorts the topic, which is what a board
+      # page renders.
+      {:ok, _pinned} = Forum.pin_topic(topic, true)
+      assert_receive {:forum_posts_changed, _pinned_topic_id}
+    end
+
+    test "a new topic moves the board counter the board list prints" do
+      board = forum()
+
+      assert board.topic_count == 0
+
+      {:ok, _topic} =
+        Forum.create_topic(
+          board,
+          Map.merge(actor(), %{title: "Counted", slug: "counted", body_text: "body"})
+        )
+
+      # The board list prints this counter. Counting the topics instead would
+      # load every board's collection to measure it, once per board.
+      assert [listed] = Forum.list_public_forums()
+      assert listed.id == board.id
+      assert listed.topic_count == 1
     end
   end
 end

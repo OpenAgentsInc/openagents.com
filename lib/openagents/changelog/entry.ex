@@ -35,6 +35,8 @@ defmodule OpenAgents.Changelog.Entry do
     field :build_receipt_id, :binary_id
     field :target_id, :binary_id
     field :deploy_receipt_id, :binary_id
+    field :artifact_link_id, :binary_id
+    field :transparency_tier, :string, default: nil
     timestamps(updated_at: false)
   end
 
@@ -58,7 +60,9 @@ defmodule OpenAgents.Changelog.Entry do
       :push_receipt_id,
       :build_receipt_id,
       :target_id,
-      :deploy_receipt_id
+      :deploy_receipt_id,
+      :artifact_link_id,
+      :transparency_tier
     ])
     |> validate_required([:repo, :sha, :summary, :category, :source, :entry_at])
     |> validate_format(:sha, ~r/^[0-9a-f]{7,40}$/)

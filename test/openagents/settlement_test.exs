@@ -43,6 +43,7 @@ defmodule OpenAgents.SettlementTest do
 
   setup do
     counter = start_supervised!({Agent, fn -> %{} end})
+    configured_visibility = Application.get_env(:openagents, :forge_public_visibility)
     Application.put_env(:openagents, :settlement_payment_gateway, Gateway)
     Application.put_env(:openagents, :settlement_test_calls, counter)
     answer_with(&settles/2)
@@ -54,7 +55,10 @@ defmodule OpenAgents.SettlementTest do
       Application.delete_env(:openagents, :settlement_payment_gateway)
       Application.delete_env(:openagents, :settlement_test_calls)
       Application.delete_env(:openagents, :settlement_test_answers)
-      Application.delete_env(:openagents, :forge_public_visibility)
+
+      if configured_visibility,
+        do: Application.put_env(:openagents, :forge_public_visibility, configured_visibility),
+        else: Application.delete_env(:openagents, :forge_public_visibility)
     end)
 
     %{repository: repository, issue: issue}

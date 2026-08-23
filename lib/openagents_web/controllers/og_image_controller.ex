@@ -205,6 +205,13 @@ defmodule OpenAgentsWeb.OgImageController do
   defp stack_placement(repository, pull_request) do
     case safe(fn -> Stacks.review_context(repository, pull_request) end) do
       {:ok, context} -> {context.position, context.size}
+      _other -> merged_stack_placement(pull_request)
+    end
+  end
+
+  defp merged_stack_placement(pull_request) do
+    case safe(fn -> Stacks.merged_context(pull_request) end) do
+      {:ok, context} -> {context.position, context.size}
       _other -> {nil, nil}
     end
   end

@@ -30,6 +30,9 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
         {:error, :not_stacked} -> nil
       end
 
+    stack_history = if stack_context, do: nil, else: merged_history(pull_request)
+    stack_placement = stack_context || stack_history
+
     {:ok,
      socket
      |> assign(:current_scope, socket.assigns[:current_scope])
@@ -38,13 +41,14 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
      |> assign(:repository, repository)
      |> assign(:pull_request, pull_request)
      |> assign(:stack_context, stack_context)
+     |> assign(:stack_history, stack_history)
      |> assign(:stack_operation, nil)
      |> assign(
        :og,
        OG.meta(
          OG.pull_request(repository.namespace.slug, repository.name, pull_request,
-           stack_position: stack_context && stack_context.position,
-           stack_size: stack_context && stack_context.size
+           stack_position: stack_placement && stack_placement.position,
+           stack_size: stack_placement && stack_placement.size
          )
        )
      )
@@ -213,8 +217,8 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
           <article class="mx-auto w-full max-w-5xl px-4 py-8">
             <div class="flex flex-wrap items-center gap-3">
               <h1 class="text-2xl font-semibold text-foreground">{@pull_request.issue.title}</h1>
-              <.badge variant={if(@pull_request.state == "open", do: :success, else: :secondary)}>
-                {@pull_request.state}
+              <.badge id="pull-request-state" variant={state_variant(layer_state(@pull_request))}>
+                {layer_state(@pull_request)}
               </.badge>
             </div>
             <p class="mt-3 text-sm text-muted-foreground">
@@ -356,12 +360,47 @@ defmodule OpenAgentsWeb.PullRequestShowLive do
                 The diff is truncated.
               </p>
             </section>
+
+            <section :if={@stack_history} id="stack-history" class="mt-8">
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 class="text-lg font-semibold text-foreground">
+                  Stack #{@stack_history.stack.number} · layer {@stack_history.position} of {@stack_history.size}
+                </h2>
+                <.badge variant={:done}>merged</.badge>
+              </div>
+
+              <.stack_map
+                id="stack-history-map"
+                number={@stack_history.stack.number}
+                trunk={@stack_history.stack.trunk_ref}
+                trunk_navigate={~p"/#{@owner}/#{@repo}/tree/#{@stack_history.stack.trunk_ref}"}
+                layers={stack_map_layers(@stack_history, @owner, @repo)}
+                class="mt-4 max-w-md"
+              />
+
+              <p id="stack-history-note" class="mt-3 text-sm text-muted-foreground">
+                This pull request merged into {@stack_history.stack.trunk_ref} as part of
+                the stack.
+              </p>
+            </section>
           </article>
         </.repo_view>
       </main>
     </Layouts.app>
     """
   end
+
+  defp merged_history(pull_request) do
+    case Stacks.merged_context(pull_request) do
+      {:ok, context} -> context
+      {:error, :not_stacked} -> nil
+    end
+  end
+
+  defp state_variant("merged"), do: :done
+  defp state_variant("open"), do: :success
+  defp state_variant("draft"), do: :dim
+  defp state_variant(_closed), do: :danger
 
   defp short(sha), do: String.slice(sha, 0, 12)
 

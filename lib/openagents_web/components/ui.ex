@@ -459,7 +459,7 @@ defmodule OpenAgentsWeb.UI do
   and never stands in for the words.
   """
   attr :variant, :atom,
-    values: [:default, :info, :success, :warning, :danger, :dim],
+    values: [:default, :info, :success, :warning, :danger, :done, :dim],
     default: :default
 
   attr :class, :any, default: nil

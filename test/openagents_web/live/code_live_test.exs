@@ -208,6 +208,29 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       assert has_element?(view, "#code-repo-page")
     end
 
+    test "the latest commit reads as how long ago, not as a calendar date", %{conn: conn} do
+      browsable()
+      {:ok, view, _html} = live(conn, "/OpenAgentsInc/openagents.com")
+
+      # The fixture commits are written as the test runs, so a stamp that reads
+      # in minutes is the proof #27 asked for: the coarse span, not `%Y-%m-%d`.
+      stamp = view |> element(".file-table__commit time") |> render()
+
+      assert stamp =~ ~r/\d+[mhd] ago/
+      refute stamp =~ ~r/\d{4}-\d{2}-\d{2}</
+
+      # Precision moved rather than disappeared.
+      assert has_element?(view, ".file-table__commit time[datetime][title]")
+    end
+
+    test "every recent commit carries the same relative stamp", %{conn: conn} do
+      browsable()
+      {:ok, view, _html} = live(conn, "/OpenAgentsInc/openagents.com")
+
+      assert has_element?(view, "#repo-commits time[datetime][title]")
+      assert view |> element("#repo-commits li:first-child time") |> render() =~ ~r/\d+[mhd] ago/
+    end
+
     test "renders the README as a formatted document", %{conn: conn} do
       browsable()
       {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com")
@@ -613,6 +636,16 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       # page in either case.
       refute html =~ "diff-file"
       refute html =~ @audit_heading
+    end
+
+    test "the commit stamp reads relatively and keeps the exact moment", %{
+      conn: conn,
+      short: short
+    } do
+      {:ok, view, _html} = live(conn, "/OpenAgentsInc/openagents.com/commit/#{short}")
+
+      assert has_element?(view, "#code-commit-page time[datetime][title]")
+      assert view |> element("#code-commit-page time") |> render() =~ ~r/\d+[mhd] ago/
     end
 
     test "the diff is published once the repo is browsable", %{conn: conn, short: short} do

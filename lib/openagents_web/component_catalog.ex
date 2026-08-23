@@ -241,6 +241,13 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           icon: "text",
           source: "OpenAgentsWeb.UI.textarea/1",
           summary: "Unwrapped multiline text primitive."
+        },
+        %{
+          slug: "openagents-time-ago",
+          title: "Time ago",
+          icon: "clock",
+          source: "OpenAgentsWeb.UI.time_ago/1",
+          summary: "One relative stamp, with the exact moment in title and datetime."
         }
       ]
     },

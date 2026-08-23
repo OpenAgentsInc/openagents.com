@@ -631,6 +631,43 @@ defmodule OpenAgentsWeb.UI do
     """
   end
 
+  @doc """
+  When something happened, drawn as how long ago and nothing more.
+
+  A repository's latest commit said `2026-08-22` while the issue list on the
+  next tab said `4m ago` for work of the same age, so the forge spoke two time
+  dialects on adjacent pages (#27). This is the one answer both now read: the
+  coarse span from `OpenAgentsWeb.RelativeTime` — minutes for the first hour,
+  hours for the first day, days after that.
+
+  Shortening what is drawn never removes precision, only moves it. The exact
+  moment stays one hover away in `title` and machine-readable in `datetime`, so
+  a reader who needs the second still has it and a parser never sees prose.
+
+  A moment the component cannot read renders nothing at all, because an empty
+  `<time>` element claims a fact it does not have.
+  """
+  attr :at, :any,
+    default: nil,
+    doc: "a `DateTime`, a `NaiveDateTime` read as UTC, or an ISO 8601 string"
+
+  attr :class, :any, default: nil
+  attr :rest, :global
+
+  def time_ago(assigns) do
+    assigns = assign(assigns, :span, OpenAgentsWeb.RelativeTime.ago(assigns.at))
+
+    ~H"""
+    <time
+      :if={@span}
+      class={@class}
+      datetime={OpenAgentsWeb.RelativeTime.machine(@at)}
+      title={OpenAgentsWeb.RelativeTime.exact(@at)}
+      {@rest}
+    >{@span}</time>
+    """
+  end
+
   @doc "An empty state explaining what would appear here and how."
   attr :id, :string, default: nil
   attr :title, :string, required: true

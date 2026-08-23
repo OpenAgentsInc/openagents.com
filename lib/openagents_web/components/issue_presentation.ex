@@ -19,6 +19,7 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
   use Phoenix.Component
 
   alias OpenAgents.Issues.Issue
+  alias OpenAgentsWeb.RelativeTime
   alias OpenAgentsWeb.UI.Circle
 
   attr :id, :string, required: true
@@ -150,18 +151,14 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
   def author(%{user: %{} = user}), do: user["login"] || user[:login] || "anonymous"
   def author(_issue), do: "anonymous"
 
-  @doc "How long ago, coarsely: minutes, then hours, then days."
-  def relative(nil), do: nil
+  @doc """
+  How long ago, coarsely: minutes, then hours, then days.
 
-  def relative(at) do
-    at = if is_struct(at, NaiveDateTime), do: DateTime.from_naive!(at, "Etc/UTC"), else: at
-
-    case DateTime.diff(DateTime.utc_now(), at, :second) do
-      s when s < 3_600 -> "#{max(div(s, 60), 1)}m"
-      s when s < 86_400 -> "#{div(s, 3_600)}h"
-      s -> "#{div(s, 86_400)}d"
-    end
-  end
+  The implementation lives in `OpenAgentsWeb.RelativeTime`, which every recency
+  surface shares. This name stays because the row and the issue page already
+  read it, and one relative-time answer serving both is the point.
+  """
+  defdelegate relative(at), to: RelativeTime, as: :since
 
   @doc "The `owner/name` a cross-repository row shows, from a preloaded issue."
   def repository_path(%{repository: %{owner: owner, name: name}}), do: "#{owner}/#{name}"

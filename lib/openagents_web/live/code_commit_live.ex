@@ -154,7 +154,7 @@ defmodule OpenAgentsWeb.CodeCommitLive do
               <h1 class="code-commit-subject">{@commit.subject}</h1>
               <p class="code-meta">
                 <code>{short(@commit.sha)}</code>
-                · {@commit.author} · {@commit.committed_at}
+                · {@commit.author} · <.time_ago at={@commit.committed_at} />
                 <span :for={parent <- @commit.parents}>
                   · parent
                   <.text_button navigate={"#{@base}/commit/#{short(parent)}"}>

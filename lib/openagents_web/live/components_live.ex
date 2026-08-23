@@ -702,6 +702,22 @@ defmodule OpenAgentsWeb.ComponentsLive do
     """
   end
 
+  defp component_demo(%{item: %{slug: "openagents-time-ago"}} = assigns) do
+    ~H"""
+    <ul class="space-y-2 text-sm text-muted-foreground">
+      <li>
+        Pushed <UI.time_ago at={DateTime.add(DateTime.utc_now(), -240, :second)} />
+      </li>
+      <li>
+        Pushed <UI.time_ago at={DateTime.add(DateTime.utc_now(), -4 * 3_600, :second)} />
+      </li>
+      <li>
+        Pushed <UI.time_ago at={DateTime.add(DateTime.utc_now(), -9 * 86_400, :second)} />
+      </li>
+    </ul>
+    """
+  end
+
   defp component_demo(%{item: %{slug: "openagents-label"}} = assigns) do
     ~H"""
     <div class="space-y-2 max-w-sm">

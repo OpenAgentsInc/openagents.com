@@ -177,16 +177,6 @@ defmodule OpenAgentsWeb.CodeRepoLive do
     _error -> nil
   end
 
-  # `%cI` from `Browse.log/3`, which is strict ISO 8601.
-  defp committed_at(%{committed_at: stamp}) when is_binary(stamp) do
-    case DateTime.from_iso8601(stamp) do
-      {:ok, at, _offset} -> at
-      _unparseable -> nil
-    end
-  end
-
-  defp committed_at(_commit), do: nil
-
   defp initial(name) when is_binary(name) do
     name |> String.trim() |> String.first() |> Kernel.||("?") |> String.upcase()
   end
@@ -288,9 +278,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
               <.text_button navigate={"#{@base}/commit/#{short(@latest.sha)}"}>
                 <code>{short(@latest.sha)}</code>
               </.text_button>
-              <time :if={committed_at(@latest)} datetime={@latest.committed_at}>
-                {Calendar.strftime(committed_at(@latest), "%Y-%m-%d")}
-              </time>
+              <.time_ago at={@latest.committed_at} />
             </:commit>
           </.file_table>
 
@@ -330,6 +318,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
                 </.text_button>
                 <span class="code-commit-line">{commit.subject}</span>
                 <span class="code-commit-author">{commit.author}</span>
+                <.time_ago at={commit.committed_at} />
               </li>
             </ol>
           </.card>

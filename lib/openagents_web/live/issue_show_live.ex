@@ -35,6 +35,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Notifications
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.OG
+  alias OpenAgentsWeb.RelativeTime
   alias OpenAgentsWeb.UI.Circle
 
   def mount(%{"owner" => owner, "repo" => repo, "number" => number}, _session, socket) do
@@ -744,18 +745,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   defp tone_for_hue(h) when h < 260, do: :info
   defp tone_for_hue(_h), do: :primary
 
-  defp stamp(nil), do: nil
-  defp stamp(at), do: "#{relative(at)} ago"
+  defp stamp(at), do: RelativeTime.ago(at)
 
-  defp relative(nil), do: nil
-
-  defp relative(at) do
-    at = if is_struct(at, NaiveDateTime), do: DateTime.from_naive!(at, "Etc/UTC"), else: at
-
-    case DateTime.diff(DateTime.utc_now(), at, :second) do
-      s when s < 3_600 -> "#{max(div(s, 60), 1)}m"
-      s when s < 86_400 -> "#{div(s, 3_600)}h"
-      s -> "#{div(s, 86_400)}d"
-    end
-  end
+  defp relative(at), do: RelativeTime.since(at)
 end

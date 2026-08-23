@@ -67,6 +67,27 @@ defmodule OpenAgentsWeb.RepositoryController do
     Ecto.NoResultsError -> render_error(conn, :not_found)
   end
 
+  def update(conn, %{
+        "owner" => owner,
+        "repo" => name,
+        "pull_requests_enabled" => enabled
+      }) do
+    case Repositories.update_pull_request_setting(
+           owner,
+           name,
+           conn.assigns.current_user,
+           enabled
+         ) do
+      {:ok, repository} ->
+        json(conn, projection(repository, conn.assigns.current_user, base_url(conn)))
+
+      {:error, reason} ->
+        render_error(conn, reason)
+    end
+  end
+
+  def update(conn, _params), do: render_error(conn, :invalid_pull_request_setting)
+
   def delete(conn, %{"owner" => owner, "repo" => name}) do
     case Repositories.delete_owned_repository(owner, name, conn.assigns.current_user,
            surface: "api"
@@ -215,6 +236,18 @@ defmodule OpenAgentsWeb.RepositoryController do
 
   defp render_error(conn, :not_found),
     do: error(conn, :not_found, "not_found", "Repository not found")
+
+  defp render_error(conn, :forbidden),
+    do: error(conn, :forbidden, "forbidden", "Only a repository owner can update settings")
+
+  defp render_error(conn, :invalid_pull_request_setting),
+    do:
+      error(
+        conn,
+        :unprocessable_entity,
+        "invalid_pull_request_setting",
+        "pull_requests_enabled must be a boolean"
+      )
 
   defp render_error(conn, :invalid_pagination),
     do: error(conn, :unprocessable_entity, "invalid_pagination", "Pagination input is invalid")

@@ -63,6 +63,10 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:og, OG.meta(OG.repo_card_for(repository)))
      |> assign(:clone_url, RepositoryAccess.clone_url(repository))
      |> assign(:delete_allowed?, delete_allowed?)
+     |> assign(
+       :pull_request_settings_form,
+       pull_request_settings_form(repository.pull_requests_enabled)
+     )
      |> assign(:delete_error, nil)
      |> assign(
        :delete_form,
@@ -132,6 +136,32 @@ defmodule OpenAgentsWeb.CodeRepoLive do
     end
   end
 
+  def handle_event(
+        "update_pull_request_setting",
+        %{"repository" => %{"pull_requests_enabled" => enabled}},
+        socket
+      ) do
+    enabled = enabled == "true"
+
+    case Repositories.update_pull_request_setting(
+           socket.assigns.owner,
+           socket.assigns.repo,
+           socket.assigns.current_user,
+           enabled
+         ) do
+      {:ok, repository} ->
+        {:noreply,
+         socket
+         |> assign(:repository, repository)
+         |> assign(:pull_request_settings_form, pull_request_settings_form(enabled))
+         |> put_flash(:info, "Pull request settings updated.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "OpenAgents could not update pull request settings.")}
+    end
+  end
+
   defp short(sha), do: String.slice(sha, 0, 12)
 
   # The tab carries a count only when there is something to count, the way the
@@ -162,6 +192,10 @@ defmodule OpenAgentsWeb.CodeRepoLive do
   end
 
   defp initial(_name), do: "?"
+
+  defp pull_request_settings_form(enabled) do
+    to_form(%{"pull_requests_enabled" => enabled}, as: :repository)
+  end
 
   @impl true
   def render(assigns) do
@@ -298,6 +332,30 @@ defmodule OpenAgentsWeb.CodeRepoLive do
                 <span class="code-commit-author">{commit.author}</span>
               </li>
             </ol>
+          </.card>
+
+          <.card :if={@delete_allowed?} id="repository-pull-request-settings">
+            <header>
+              <h2>Pull requests</h2>
+            </header>
+            <p class="text-sm text-muted-foreground">
+              Allow contributors to propose changes from another hosted repository and branch.
+            </p>
+            <.form
+              for={@pull_request_settings_form}
+              id="repository-pull-request-settings-form"
+              phx-submit="update_pull_request_setting"
+              class="space-y-3"
+            >
+              <.input
+                field={@pull_request_settings_form[:pull_requests_enabled]}
+                type="checkbox"
+                label="Allow new pull requests"
+              />
+              <.button id="repository-pull-request-settings-submit" type="submit">
+                Save pull request settings
+              </.button>
+            </.form>
           </.card>
 
           <.card

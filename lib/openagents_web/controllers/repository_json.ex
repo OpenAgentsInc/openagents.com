@@ -19,6 +19,7 @@ defmodule OpenAgentsWeb.RepositoryJSON do
       "visibility" => repository.visibility,
       "description" => repository.description,
       "default_branch" => repository.default_branch,
+      "pull_requests_enabled" => repository.pull_requests_enabled,
       "lifecycle_state" => repository.lifecycle_state,
       "provision_error_code" => repository.provision_error_code,
       "clone_url" => base_url <> "/#{owner}/#{repository.name}.git",

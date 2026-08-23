@@ -60,6 +60,8 @@ defmodule OpenAgentsWeb.RouteAuthority do
   @optional_forge_read_paths [
     "/api/v3/repos/:owner/:repo/issues",
     "/api/v3/repos/:owner/:repo/issues/:issue_number",
+    "/api/v3/repos/:owner/:repo/pulls",
+    "/api/v3/repos/:owner/:repo/pulls/:pull_number",
     "/api/v3/repos/:owner/:repo/projectsV2",
     "/api/v3/repos/:owner/:repo/projectsV2/:project_number",
     "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items",

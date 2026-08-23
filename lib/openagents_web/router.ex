@@ -189,6 +189,8 @@ defmodule OpenAgentsWeb.Router do
 
     live_session :forge_issues,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
+      live "/:owner/:repo/pulls/:number", PullRequestShowLive, :show
+      live "/:owner/:repo/pulls", PullRequestIndexLive, :index
       live "/:owner/:repo/issues/:number", IssueShowLive, :show
       live "/:owner/:repo/issues", IssueIndexLive, :index
     end
@@ -298,6 +300,8 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo", RepositoryController, :show
     get "/repos/:owner/:repo/issues", IssueController, :index
     get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
+    get "/repos/:owner/:repo/pulls", PullRequestController, :index
+    get "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :show
     get "/repos/:owner/:repo/projectsV2", ProjectController, :index
     get "/repos/:owner/:repo/projectsV2/:project_number", ProjectController, :show
     get "/repos/:owner/:repo/projectsV2/:project_number/items", ProjectController, :items
@@ -317,6 +321,7 @@ defmodule OpenAgentsWeb.Router do
     post "/user/repos", RepositoryController, :create_user
     post "/orgs/:org/repos", RepositoryController, :create_organization
     delete "/repos/:owner/:repo", RepositoryController, :delete
+    patch "/repos/:owner/:repo", RepositoryController, :update
     post "/user/repos/imports", RepositoryImportController, :create_user
     post "/orgs/:org/repos/imports", RepositoryImportController, :create_organization
     get "/repository-imports/:id", RepositoryImportController, :show
@@ -324,6 +329,8 @@ defmodule OpenAgentsWeb.Router do
     post "/repos/:owner/:repo/issues", IssueController, :create
     put "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
     patch "/repos/:owner/:repo/issues/:issue_number", IssueController, :update
+    post "/repos/:owner/:repo/pulls", PullRequestController, :create
+    patch "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :update
     post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
     put "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
     patch "/repos/:owner/:repo/issues/comments/:id", CommentController, :update

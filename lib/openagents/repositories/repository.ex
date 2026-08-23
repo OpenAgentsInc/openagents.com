@@ -16,6 +16,7 @@ defmodule OpenAgents.Repositories.Repository do
     field :visibility, :string, default: "private"
     field :default_branch, :string, default: "main"
     field :description, :string
+    field :pull_requests_enabled, :boolean, default: true
     field :lifecycle_state, :string, default: "provisioning"
     field :provisioning_kind, :string, default: "empty"
     field :provision_error_code, :string
@@ -40,6 +41,7 @@ defmodule OpenAgents.Repositories.Repository do
       :visibility,
       :default_branch,
       :description,
+      :pull_requests_enabled,
       :lifecycle_state,
       :provisioning_kind,
       :provision_error_code,

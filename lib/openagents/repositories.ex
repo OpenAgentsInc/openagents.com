@@ -116,6 +116,25 @@ defmodule OpenAgents.Repositories do
     )
   end
 
+  @doc "Updates whether an owner allows new pull requests for a repository."
+  def update_pull_request_setting(owner, name, %User{} = actor, enabled)
+      when is_boolean(enabled) do
+    repository = get_visible_by_path!(owner, name, actor)
+
+    if owner?(repository, actor) do
+      repository
+      |> Repository.changeset(%{pull_requests_enabled: enabled})
+      |> Repo.update()
+    else
+      {:error, :forbidden}
+    end
+  rescue
+    Ecto.NoResultsError -> {:error, :not_found}
+  end
+
+  def update_pull_request_setting(_owner, _name, _actor, _enabled),
+    do: {:error, :invalid_pull_request_setting}
+
   def create_repository(attrs) do
     owner = fetch_attr!(attrs, :owner)
 

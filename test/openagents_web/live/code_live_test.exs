@@ -422,6 +422,56 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       refute has_element?(view, "#repository-danger-zone")
       refute has_element?(view, "#repository-delete-form")
     end
+
+    test "an owner can update the pull request setting", %{conn: conn} do
+      owner = github_user("pull-request-setting-owner", "pull-request-setting-owner")
+
+      assert {:ok, _repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "pull-request-setting", visibility: "private"},
+                 "pull-request-setting-ui"
+               )
+
+      owner_conn = Plug.Test.init_test_session(conn, %{"user_id" => owner.id})
+      {:ok, view, _html} = live(owner_conn, "/pull-request-setting-owner/pull-request-setting")
+
+      assert has_element?(view, "#repository-pull-request-settings")
+      assert has_element?(view, "#repository-pull-request-settings-form")
+
+      view
+      |> form("#repository-pull-request-settings-form", %{
+        "repository" => %{"pull_requests_enabled" => "false"}
+      })
+      |> render_submit()
+
+      repository =
+        OpenAgents.Repositories.get_by_path!(
+          "pull-request-setting-owner",
+          "pull-request-setting"
+        )
+
+      refute repository.pull_requests_enabled
+    end
+
+    test "a non-owner never sees pull request settings", %{conn: conn} do
+      owner = github_user("pull-request-control-owner", "pull-request-control-owner")
+      viewer = github_user("pull-request-control-viewer", "pull-request-control-viewer")
+
+      assert {:ok, repository, :created} =
+               OpenAgents.Repositories.create_user_repository(
+                 owner,
+                 %{name: "pull-request-control", visibility: "private"},
+                 "pull-request-setting-controls"
+               )
+
+      assert {:ok, _membership} = OpenAgents.Repositories.add_member(repository, viewer, "viewer")
+      viewer_conn = Plug.Test.init_test_session(conn, %{"user_id" => viewer.id})
+      {:ok, view, _html} = live(viewer_conn, "/pull-request-control-owner/pull-request-control")
+
+      refute has_element?(view, "#repository-pull-request-settings")
+      refute has_element?(view, "#repository-pull-request-settings-form")
+    end
   end
 
   describe "/code/:repo/blob/:ref/*path" do

@@ -164,8 +164,8 @@ ops/staging/cleanup-run.sh gate14-20260820-0001 --apply
 ```
 
 The command targets a fixed staging fleet node through Identity-Aware Proxy.
-It refuses the canonical repository, administrator accounts, online machines,
-machines with queued or running work, active text turns or voice sessions, and
+It refuses the canonical repository, administrator accounts, online computers,
+computers with queued or running work, active text turns or voice sessions, and
 accounts that own an unregistered project, machine, or recording. It performs
 all database deletions in one transaction and removes the manifest only after
 the transaction succeeds. An interrupted or refused cleanup remains safe to

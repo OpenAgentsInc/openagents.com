@@ -43,8 +43,8 @@ defmodule OpenAgentsWeb.ComputersController do
 
   def update(conn, _params), do: error(conn, :not_found, "computer_not_found")
 
-  def probe(conn, %{"machine_id" => machine_id}) do
-    with {:ok, machine} <- Machines.get_machine(conn.assigns.current_user.id, machine_id),
+  def probe(conn, %{"computer_id" => computer_id}) do
+    with {:ok, machine} <- Machines.get_machine(conn.assigns.current_user.id, computer_id),
          :ok <- probe_enabled(),
          :ok <- probe_active(machine),
          {:ok, report} <- Computer.request_probe(machine.id),

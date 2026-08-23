@@ -93,10 +93,10 @@
     },
     {
       "id": "machines_work",
-      "title": "Machines and delegated work",
+      "title": "Computers and delegated work",
       "cases": [
         {"id": "machine-001", "title": "Pairing, one-time claim, approval, inventory, state, and revoke work", "execution": "hybrid"},
-        {"id": "machine-002", "title": "Machine token replay fails after claim and revoke", "execution": "automated"},
+        {"id": "machine-002", "title": "Computer token replay fails after claim and revoke", "execution": "automated"},
         {"id": "machine-003", "title": "A harmless real coding-agent job reports live and terminal state in chat", "execution": "manual"},
         {"id": "machine-004", "title": "Cancellation and worker restart preserve committed evidence without duplicate execution", "execution": "hybrid"},
         {"id": "machine-005", "title": "Cleanup removes the ephemeral controller home and disposable project", "execution": "manual"}

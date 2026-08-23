@@ -36,7 +36,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     # transcript, never a block under the composer.
     assert has_element?(view, "#chat-rail #chat-rail-body #delegation-rail")
     assert has_element?(view, "#delegation-rail #delegation-live[data-status='running']")
-    assert has_element?(view, "#delegation-live .delegation-live__machine", "rail-box")
+    assert has_element?(view, "#delegation-live .delegation-live__computer", "rail-box")
     assert has_element?(view, "#delegation-live .delegation-live__subject", "claude")
     assert has_element?(view, ~s(#cancel-delegation[aria-label="Cancel delegation"]))
     assert has_element?(view, "#delegation-live div.delegation-log[phx-update='ignore']")
@@ -126,7 +126,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     first = start_delegation(first_machine, "claude")
     FakeController.chunk(first.pid, first.request_id, "first delegation working")
     assert_push_event(view, "delegation:chunk", %{text: "first delegation working"}, 1_000)
-    assert has_element?(view, "#delegation-live .delegation-live__machine", "first-box")
+    assert has_element?(view, "#delegation-live .delegation-live__computer", "first-box")
 
     second = start_delegation(second_machine, "codex")
     FakeController.chunk(second.pid, second.request_id, "second delegation working")
@@ -134,8 +134,8 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
 
     # One live panel: the newest delegation owns it; the superseded one is a
     # bounded summary line beneath.
-    assert has_element?(view, "#delegation-live .delegation-live__machine", "second-box")
-    refute has_element?(view, "#delegation-live .delegation-live__machine", "first-box")
+    assert has_element?(view, "#delegation-live .delegation-live__computer", "second-box")
+    refute has_element?(view, "#delegation-live .delegation-live__computer", "first-box")
     assert has_element?(view, ".delegation-summary--superseded", "first-box")
 
     for caller <- [first, second] do

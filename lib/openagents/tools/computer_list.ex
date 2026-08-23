@@ -16,7 +16,7 @@ defmodule OpenAgents.Tools.ComputerList do
       description:
         "Lists the computers the signed-in user has paired through the " <>
           "sarah-computer-controller CLI, including whether each one is currently connected. " <>
-          "Use this before asking anything about the user's own machine.",
+          "Use this before asking anything about the user's own computer.",
       input_schema: input_schema(),
       output_schema: output_schema(),
       side_effect: :read_only,
@@ -24,7 +24,7 @@ defmodule OpenAgents.Tools.ComputerList do
       required_authority: "computer.control",
       executor: %{
         id: "sarah.computer.registry",
-        disclosure: "Paired machine records for the signed-in owner"
+        disclosure: "Paired computer records for the signed-in owner"
       },
       maintainer: "OpenAgents",
       attribution: ["OpenAgentsInc/openagents.com"],

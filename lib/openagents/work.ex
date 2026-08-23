@@ -814,19 +814,19 @@ defmodule OpenAgents.Work do
   defp fallback_report(_repo, %Job{kind: "delegation"} = locked_job, status) do
     authority = locked_job.authority_snapshot || %{}
     agent = authority["agent_id"] || "the agent"
-    machine = authority["machine_name"] || "the machine"
+    computer = authority["machine_name"] || "the computer"
 
     case status do
       "interrupted" ->
-        "Delegation to #{agent} on #{machine} was interrupted by a server restart " <>
+        "Delegation to #{agent} on #{computer} was interrupted by a server restart " <>
           "before it finished. It did not complete; start it again to continue. " <>
           "Goal: #{locked_job.goal}"
 
       "cancelled" ->
-        "Delegation to #{agent} on #{machine} was cancelled. Goal: #{locked_job.goal}"
+        "Delegation to #{agent} on #{computer} was cancelled. Goal: #{locked_job.goal}"
 
       _other ->
-        "Delegation to #{agent} on #{machine} ended #{status} before reporting a result. " <>
+        "Delegation to #{agent} on #{computer} ended #{status} before reporting a result. " <>
           "Goal: #{locked_job.goal}"
     end
   end

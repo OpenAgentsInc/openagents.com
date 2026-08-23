@@ -51,7 +51,7 @@ defmodule OpenAgents.Work.DelegationReportTest do
     refute content =~ "[transcript truncated]"
 
     # The work is still named, and the whole message stays chat-sized.
-    assert content =~ "The agent ran 61 tool calls on the machine."
+    assert content =~ "The agent ran 61 tool calls on the computer."
     assert String.length(content) < 1_000
   end
 

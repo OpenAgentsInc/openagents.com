@@ -6,7 +6,7 @@
     {"id": "failure-002", "title": "PostgreSQL restart and temporary connection exhaustion recover without data loss"},
     {"id": "failure-003", "title": "PubSub interruption preserves durable truth and LiveView reconnects"},
     {"id": "failure-004", "title": "Turn, voice, work, semantic, builder, and deployer process termination follows each recovery contract"},
-    {"id": "failure-005", "title": "Machine disconnect during a job preserves committed evidence and permits bounded recovery"},
+    {"id": "failure-005", "title": "Computer disconnect during a job preserves committed evidence and permits bounded recovery"},
     {"id": "failure-006", "title": "Artifact-store unavailability and corrupt cache fail closed and reconverge"},
     {"id": "failure-007", "title": "One unreachable fleet node does not expand authority or produce a partial live deployment"},
     {"id": "failure-008", "title": "Node membership change during deployment preserves transaction and readiness invariants"},

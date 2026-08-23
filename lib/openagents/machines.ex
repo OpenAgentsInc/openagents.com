@@ -1,10 +1,10 @@
 defmodule OpenAgents.Machines do
   @moduledoc """
-  Paired computer-controller machines and their device-style pairing flow.
+  Paired computers and their device-style controller pairing flow.
 
   A pairing starts unauthenticated from the CLI, is approved by the signed-in
   account owner in the browser, and is claimed once by the CLI with a poll
-  secret. Sarah stores only a digest of the machine token; the plaintext is
+  secret. Sarah stores only a digest of the computer token; the plaintext is
   sealed at rest solely for the claim window and wiped on claim.
   """
 
@@ -232,10 +232,10 @@ defmodule OpenAgents.Machines do
   ]
 
   @doc """
-  Approval receipts backed by the owner's explicit machine pairings.
+  Approval receipts backed by the owner's explicit computer pairings.
 
   Approving a pairing on /computers is the operator's explicit approval for
-  the machine-effect modules; each active machine yields one receipt per
+  the computer-effect modules; each active computer yields one receipt per
   module, scoped to the current conversation.
   """
   @spec approval_receipts(String.t() | nil, String.t()) :: [map()]

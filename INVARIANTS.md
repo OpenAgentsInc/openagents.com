@@ -300,7 +300,7 @@ historical agent authorship remains unchanged.
 Evidence: `OpenAgents.Agents`, `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 and `test/openagents/agents_test.exs`.
 
-### IDENTITY-008 — Computer control is independent and machine-bound
+### IDENTITY-008 — Computer control is independent and computer-bound
 
 Status: Current
 
@@ -311,7 +311,7 @@ Computer routes do not accept a Box grant, and Box routes do not accept a
 Computer grant. The local computer controller remains authoritative over
 declared roots, presence, probe-reported ACP agents, prompt bounds, and
 execution; the API cannot widen a tier, add a root, or request an unadvertised
-capability. Computer projections never expose a machine token, token digest, or
+capability. Computer projections never expose a computer token, token digest, or
 raw probe document.
 
 Evidence: `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
@@ -329,7 +329,7 @@ substrate authority without storing a mirrored delegation record. Box and
 Computer identifiers are opaque, kind-prefixed references to their durable
 substrate records; malformed, unknown, and foreign references are
 indistinguishable from missing references. The projection is bounded and
-redacted, and does not expose provider URLs, machine credentials, probe
+redacted, and does not expose provider URLs, computer credentials, probe
 documents, prompts, or subprocess environments.
 
 Evidence: `OpenAgents.Delegations`, `OpenAgentsWeb.Plugs.DelegationAuth`,
@@ -349,7 +349,7 @@ delivered in the server-to-controller `agent` frame for injection into that
 delegated process environment. It is not persisted in a job, journal, prompt,
 output, shell environment, global Git configuration, or API response. The
 credential expires with the assignment and is revoked when the assignment
-completes, is cancelled, expires, or loses its machine or controller.
+completes, is cancelled, expires, or loses its computer or controller.
 Computer validation and local controller refusal remain authoritative.
 
 Evidence: `OpenAgents.Forge.Assignments`,
@@ -1239,10 +1239,10 @@ ends the job as explicit `budget_exhausted`. Every terminal path (`completed`,
 streamed report text is persisted as it arrives, and a job that dies before a
 narrative gets an honest host summary of its committed step evidence.
 PostgreSQL constrains status transitions and makes terminal jobs and terminal
-steps immutable. A delegation additionally binds one account-owned machine,
+steps immutable. A delegation additionally binds one account-owned computer,
 its admission-time authority snapshot, its bounded execution budget, and its
 immutable request. Only the generation-fenced ACP session ID may change after
-admission; workers read machine, agent, working directory, and wall-clock
+admission; workers read computer, agent, working directory, and wall-clock
 authority from the immutable fields. Startup recovery RESUMES orphaned active
 jobs (#97): it
 restarts each job's supervised worker, which re-claims through the generation
@@ -1301,7 +1301,7 @@ typed refusals), `OpenAgents.Work.Coding`, `OpenAgents.Forge.Pushes` /
 Status: Current
 
 An SCV deployment is the one lane where OpenAgents runs a coding agent on
-hardware we own and pay for, rather than on a machine the person paired and
+hardware we own and pay for, rather than on a computer the person paired and
 powers. Every other execution path is bounded by something outside our
 control; this one is not, so its ceiling is written down and enforced rather
 than assumed.
@@ -1947,7 +1947,7 @@ server-side before broadcast: per event, cumulative (the same 65,536-byte
 ceiling the collection enforces), and in event count, with an explicit
 truncation marker once capped. PubSub stays projection, never authority:
 nothing about the stream is persisted, reload degrades to status-only, and the
-durable step outcome remains the record. Machine tokens, argv, env, prompts,
+durable step outcome remains the record. Computer tokens, argv, env, prompts,
 and paths never enter a live event, and the topic is owner-scoped by
 construction, so only the owner's conversation ever receives it.)
 
@@ -2171,7 +2171,7 @@ Status: Current
 The public `/status` page and `/api/status` publish exactly one projection
 (`OpenAgents.NetworkStatus`, schema-versioned): cluster membership and quorum,
 Raft membership, per-node release/hot-load versions, uptimes, and counts.
-Counts only, never content — no machine names, job goals or ids,
+Counts only, never content — no computer names, job goals or ids,
 conversation data, provider identifiers, or internal node names/addresses
 (nodes render as stable positional labels). It shares the leaderboard's
 UI-001 posture (read-only, cannot mount or invoke OpenAgents) and renders through

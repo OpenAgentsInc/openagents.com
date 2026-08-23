@@ -75,7 +75,7 @@ Run this procedure before scheduling the production window:
    missing schema facts.
 5. Record content-free counts for users, visitors, conversations, messages,
    turns, forge targets, forge builds, forge deploys, voice calls, recordings,
-   machines, and coding jobs. Record only counts and integrity statuses.
+   computers, and coding jobs. Record only counts and integrity statuses.
 6. Apply the bridge with the successful backup identifier:
 
    ```sh

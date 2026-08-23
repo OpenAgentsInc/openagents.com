@@ -113,7 +113,7 @@ validates a temporary copy before replacing the report and recomputes
 ## Prohibited content
 
 Never retain session cookies, OAuth codes, access or refresh tokens, database
-passwords, machine credentials, provider keys, private keys, authenticated
+passwords, computer credentials, provider keys, private keys, authenticated
 database URLs, raw prompts, messages, transcripts, memory values, tool payloads,
 SDP, audio, or private administrative content.
 

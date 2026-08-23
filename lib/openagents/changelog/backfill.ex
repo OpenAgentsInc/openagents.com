@@ -105,7 +105,7 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-19 13:35:00Z],
         "34a2666",
         "agents",
-        "Cloud machines: Sarah's computer controllers run on GCE VMs, with no GCP identity and read-only deploy keys."
+        "Cloud computers: Sarah's computer controllers run on GCE VMs, with no GCP identity and read-only deploy keys."
       ),
       e(~U[2026-08-19 13:02:00Z], "3a236b6", "ui", "Centered the ghost mic button icon."),
       e(
@@ -218,7 +218,7 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-18 03:05:00Z],
         "4189c37",
         "agents",
-        "computer_agent.v1: delegate work to any ACP coding agent — Claude, Devin, Codex — on a paired machine."
+        "computer_agent.v1: delegate work to any ACP coding agent — Claude, Devin, Codex — on a paired computer."
       ),
       e(
         ~U[2026-08-18 03:28:00Z],
@@ -249,7 +249,7 @@ defmodule OpenAgents.Changelog.Backfill do
         ~U[2026-08-17 19:26:00Z],
         "a218029",
         "agents",
-        "Computer pairing: Sarah requests work on your machines through the open-source controller, and the machine enforces policy."
+        "Computer pairing: Sarah requests work on your computers through the open-source controller, and the computer enforces policy."
       ),
       e(
         ~U[2026-08-17 18:11:00Z],

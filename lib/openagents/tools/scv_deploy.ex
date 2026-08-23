@@ -2,7 +2,7 @@ defmodule OpenAgents.Tools.ScvDeploy do
   @moduledoc """
   First-party `scv_deploy.v1`: deploys an OpenCode SCV on OpenAgents capacity.
 
-  Every other way Sarah runs code ends on a machine the person owns. This one
+  Every other way Sarah runs code ends on a computer the person owns. This one
   ends on ours: a bounded OpenCode run against an exact revision of a
   repository in our own forge, under the read-only permission profile, on the
   admitted model. Because it spends our capacity rather than the caller's, it
@@ -36,7 +36,7 @@ defmodule OpenAgents.Tools.ScvDeploy do
           "read-only against the current head of its default branch. Returns " <>
           "immediately with a job reference: acknowledge briefly, do NOT wait, and " <>
           "the SCV's report posts back into this conversation when it finishes. " <>
-          "Prefer computer_agent when the person wants work on their own machine.",
+          "Prefer computer_agent when the person wants work on their own computer.",
       input_schema: input_schema(),
       output_schema: output_schema(),
       side_effect: :external_effect,

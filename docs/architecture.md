@@ -30,7 +30,7 @@ browser
 OpenAgents Phoenix application
   |-- public and authenticated web surfaces
   |-- Sarah conversation, voice, memory, and work orchestration
-  |-- issues, projects, machines, and data rights
+  |-- issues, projects, computers, and data rights
   |-- Git HTTP and forge deployment control
   |-- server-side provider adapters
   |
@@ -94,9 +94,9 @@ the exhaustive route ledger and enforcement tests.
 | Public | Anonymous visitor | Home, docs, status, changelog, allowed public code | Read-only behavior, bounded output, and visibility policy |
 | Authenticated | Active OpenAgents user | Chat, data rights, computers, issues, projects | Signed session, CSRF protection for browser mutations, and owner or repository scope |
 | Operator | Configured active administrator | Administration, promotion, deployment, recording review | Authenticated session plus server-side operator authorization on every action |
-| Machine | Paired machine credential | Controller socket, presence, and agent jobs | Hashed or encrypted scoped token, explicit machine ownership, rotation, and revocation |
+| Computer | Paired computer credential | Controller socket, presence, and agent jobs | Hashed or encrypted scoped token, explicit computer ownership, rotation, and revocation |
 | Internal service | Configured service identity or signed grant | Inference proxy and build/deployment adapters | Narrow audience and scope, expiry, replay defense, and no browser-held service secret |
-| Git | Machine or operator Git credential | `/git` fetch and push | HTTP Basic transport with server-side token verification and repository authorization |
+| Git | Computer or operator Git credential | `/git` fetch and push | HTTP Basic transport with server-side token verification and repository authorization |
 
 Route placement does not prove authorization. A controller, LiveView mount, or
 socket must enforce the class and resource scope at the server boundary. Until
@@ -111,7 +111,7 @@ programs, and voice. It is not an application-wide contract.
 
 The browser can receive bounded provider-derived events and media negotiation
 results, but it must never receive an OpenAI API key, GitHub access token,
-forge operator token, machine token, recording key, or internal-service signing
+forge operator token, computer token, recording key, or internal-service signing
 key. Adapters own transport details, timeouts, bounded retries, response
 validation, error normalization, and secret redaction. Product contexts own
 durable lifecycle and policy.

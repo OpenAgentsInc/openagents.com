@@ -6,8 +6,8 @@ defmodule OpenAgents.Incidents.Fixer do
   A fixer is a `OpenAgents.Work.Job` whose goal is the incident: reproduce, diagnose
   in the repo, and **propose** a minimal patch (open a PR). It proposes, it does
   not deploy — the change rides the normal review path, and its delegation is
-  gated by the same machine-pairing approval receipts every computer delegation
-  is. The job runs on the owner's paired machine via the governed tools.
+  gated by the same computer-pairing approval receipts every computer delegation
+  is. The job runs on the owner's paired computer via the governed tools.
 
   Safe by default: autonomous fixing is **off** unless
   `config :openagents, :incident_fixer_enabled` is true. Until an operator enables
@@ -53,7 +53,7 @@ defmodule OpenAgents.Incidents.Fixer do
   @fixable_origins ~w(turn_server voice_session)
 
   # A fixer needs a fixable origin, an owner, a conversation to report back into,
-  # a paired machine to work on, no fixer already attached, and headroom under
+  # a paired computer to work on, no fixer already attached, and headroom under
   # the rate limit.
   defp spawnable?(%Incident{} = incident) do
     incident.origin in @fixable_origins and

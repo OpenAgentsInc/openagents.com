@@ -68,7 +68,7 @@ The baseline did not provide a user repository lifecycle:
 - Forge storage and visibility use repository names from runtime configuration,
   while Issues and Projects use stable repository UUIDs from PostgreSQL.
 - Git HTTP paths contain a repository name without an owner namespace.
-- Git HTTP accepts an operator credential or paired-machine credential without
+- Git HTTP accepts an operator credential or paired-computer credential without
   checking an ordinary user's repository membership.
 - The public code route has a literal `OpenAgentsInc` owner segment.
 
@@ -657,8 +657,8 @@ Resolve Git paths through the repository database:
 - Authenticated `upload-pack` requires pull access to the resolved repository.
 - `receive-pack` requires an active user, `forge:write`, and a writable
   repository membership.
-- Machine credentials require an explicit repository grant and operation
-  scope. Pairing a machine does not grant access to every repository.
+- Computer credentials require an explicit repository grant and operation
+  scope. Pairing a computer does not grant access to every repository.
 - The operator credential remains an operational recovery path. It must not be
   the normal CLI credential.
 - A private, missing, suspended, failed, or unauthorized repository returns an
@@ -1112,7 +1112,7 @@ Add tests for:
 - Hidden private clone without a credential.
 - Member clone, contributor push, reader push refusal, and nonmember refusal.
 - Token expiry and revocation during a Git session.
-- A paired machine with and without an explicit repository grant.
+- A paired computer with and without an explicit repository grant.
 - Compatibility of the existing `openagents.com` Git remote.
 - Proof that a user repository cannot enter build, promotion, or deployment
   paths.

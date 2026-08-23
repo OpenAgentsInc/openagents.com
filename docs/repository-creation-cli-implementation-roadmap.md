@@ -283,7 +283,7 @@ and assertions that neither side receives a synchronization call.
    operations and resolve it to a user principal.
 4. Check repository membership and role before private upload-pack or any
    receive-pack operation.
-5. Preserve paired-machine and operator credentials only for their documented
+5. Preserve paired-computer and operator credentials only for their documented
    operational lanes. Do not let them bypass repository resolution.
 6. Return indistinguishable `404` responses for private or missing repository
    reads where concealment applies.
@@ -463,7 +463,7 @@ result. Do not store tokens, local absolute paths, or repository content.
 | 3. Repository REST API | Complete | Repository controllers, JSON contract, namespace quota, idempotency, and pagination tests |
 | 4. Durable provisioning | Complete | Provisioning outbox, reclaimable worker, bounded import timeout, crash-workspace recovery, audit events, and cache reconstruction tests |
 | 5. One-time GitHub import | Complete | Frozen refs, depth-1 Git bundle WAL entry, preserved shallow boundaries, cache-loss, and no-later-sync tests |
-| 6. Repository Git HTTP authorization | Complete | Public reads, PAT writes, token reauthentication, role refusal, explicit machine grants, audited writes, and legacy-route tests |
+| 6. Repository Git HTTP authorization | Complete | Public reads, PAT writes, token reauthentication, role refusal, explicit computer grants, audited writes, and legacy-route tests |
 | 7. CLI device authorization | Complete | One-time device-code context, API, browser approval, and polling tests |
 | 8. Repository browser interface | Complete | Paginated list, create, import, empty, failed, private, and code-route LiveView tests |
 | 9. CLI package scaffold | Complete | `@openagentsinc/cli`, Effect 4 command graph, build, and package inspection |

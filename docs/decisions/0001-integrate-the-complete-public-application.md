@@ -17,7 +17,7 @@ dependent on undocumented code.
 Keep the complete OpenAgents product in this AGPL-3.0 repository. The
 `openagents.com` application owns the web interface, Sarah behavior,
 conversation lifecycle, providers, tools, memory, delegated work, voice,
-machines, issues, projects, forge, data rights, and operator surfaces.
+computers, issues, projects, forge, data rights, and operator surfaces.
 
 Use external services only through explicit infrastructure or provider
 adapters. Do not move product policy or Sarah behavior behind an undocumented

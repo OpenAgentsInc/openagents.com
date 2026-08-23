@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.ComputerChannel do
   version, tier, roots, platform, probe report), `probe_result`, streamed
   `chunk` events, one terminal `exit`, or `refused` when local policy denies a
   request. Every inbound payload is bounded before it touches the database, and
-  a revoked machine is disconnected immediately.
+  a revoked computer is disconnected immediately.
   """
 
   use Phoenix.Channel

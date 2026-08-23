@@ -2,7 +2,7 @@ defmodule OpenAgents.Inference.Grant do
   @moduledoc """
   A delegation-scoped inference grant (`sarah.inference_grant.v1`).
 
-  Authority for one paired-machine coding delegation to call the Sarah
+  Authority for one paired-computer coding delegation to call the Sarah
   inference proxy, metered against the owner's account. It is **not** a
   provider credential: the OpenAI key never leaves the server (RELEASE-002).
   A grant is generation-fenced by its conversation, budgeted (tokens / calls
@@ -59,7 +59,7 @@ defmodule OpenAgents.Inference.Grant do
       :expires_at
     ])
     # machine_id is nil for Sarah-internal grants (a coding job metering its
-    # own runtime, #122); machine-bound probe delegations always set it.
+    # own runtime, #122); computer-bound probe delegations always set it.
     |> validate_required([
       :owner_visitor_id,
       :conversation_id,

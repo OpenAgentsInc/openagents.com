@@ -136,7 +136,7 @@ defmodule OpenAgents.Work.JobServer do
 
     tool_snapshot
     |> Registry.prompt_definitions(intent,
-      machine_paired?: Machines.active_machine?(owner.user_id)
+      computer_paired?: Machines.active_machine?(owner.user_id)
     )
     |> Enum.filter(fn definition ->
       case Map.fetch(tool_snapshot.tools, definition.name) do
@@ -330,10 +330,10 @@ defmodule OpenAgents.Work.JobServer do
         scope_ref: scope_ref,
         authorities: execution_authorities(state.job),
         # A durable job acts for the same signed-in owner in the same
-        # conversation, so it carries the same machine-pairing approval receipts
+        # conversation, so it carries the same computer-pairing approval receipts
         # a browser turn does. Without these, a computer delegation delegated
         # into a job (the durable path for work longer than one turn) would be
-        # refused module_approval_required even though the machine is paired.
+        # refused module_approval_required even though the computer is paired.
         approval_receipts:
           Machines.approval_receipts(state.owner.user_id, scope_ref) ++
             job_approval_receipts(state.job, scope_ref),

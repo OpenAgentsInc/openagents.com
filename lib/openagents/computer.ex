@@ -2,15 +2,15 @@ defmodule OpenAgents.Computer do
   @moduledoc """
   Server-side view of connected computer controllers.
 
-  A connected machine's channel process registers under `{:machine, machine_id}`
+  A connected computer's channel process registers under `{:machine, machine_id}`
   in the cluster-wide `OpenAgents.HordeRegistry`, so any node in the fleet can reach
   a controller regardless of which node terminates its WebSocket (channel pids
   are location-transparent). Requests are correlated by a server-minted
   `request_id` and answered by the controller over the channel; the caller
-  waits bounded and never blocks on an offline machine.
+  waits bounded and never blocks on an offline computer.
 
   While a streamed request runs, `OpenAgents.ComputerActivity` re-broadcasts a
-  bounded projection of the stream on the machine owner's conversation topic —
+  bounded projection of the stream on the computer owner's conversation topic —
   a live view only; the collected output returned here stays the authority
   for the durable tool-step outcome.
   """
@@ -94,7 +94,7 @@ defmodule OpenAgents.Computer do
   end
 
   @doc """
-  Runs one argv-array command on the machine and collects its streamed output.
+  Runs one argv-array command on the computer and collects its streamed output.
 
   The controller's local policy decides whether the command runs at all; a
   denial comes back as `{:refused, reason, detail}`. Output is collected
@@ -107,7 +107,7 @@ defmodule OpenAgents.Computer do
   end
 
   @doc """
-  Delegates a prompt to a named ACP coding agent on the machine.
+  Delegates a prompt to a named ACP coding agent on the computer.
 
   The payload carries `agent_id` naming the agent the controller should run,
   plus `prompt` and optional `cwd`, `resume_session_id`, and `timeout_ms`.

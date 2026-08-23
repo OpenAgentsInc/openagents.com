@@ -9,7 +9,7 @@ defmodule OpenAgents.Tools.Selector do
   to lexical alone when embeddings are unavailable — a turn is never starved of
   tools because the vector index is cold. `module_discover` is always included
   as an explicit escape hatch so the model can search further when the automatic
-  selection missed something. When the owner has an active paired machine,
+  selection missed something. When the owner has an active paired computer,
   `computer_list`, `computer_probe`, and `computer_agent` are always included
   too so a short follow-up cannot drop the delegation chain.
   """
@@ -18,13 +18,13 @@ defmodule OpenAgents.Tools.Selector do
   alias OpenAgents.Tools.Discovery.Doc
 
   @always_included ["module_discover"]
-  @paired_machine_tools ["computer_list", "computer_probe", "computer_agent"]
+  @paired_computer_tools ["computer_list", "computer_probe", "computer_agent"]
   @embedding_weight 0.7
   @lexical_weight 0.3
 
   @doc """
   Names that must stay in the exposed set. Always includes `module_discover`.
-  `opts[:always_include]` adds extra names; `opts[:machine_paired?]` adds the
+  `opts[:always_include]` adds extra names; `opts[:computer_paired?]` adds the
   computer delegation chain.
   """
   @spec always_include(keyword()) :: [String.t()]
@@ -32,8 +32,8 @@ defmodule OpenAgents.Tools.Selector do
     extras = opts |> Keyword.get(:always_include, []) |> List.wrap()
 
     extras =
-      if Keyword.get(opts, :machine_paired?, false) do
-        extras ++ @paired_machine_tools
+      if Keyword.get(opts, :computer_paired?, false) do
+        extras ++ @paired_computer_tools
       else
         extras
       end
@@ -46,7 +46,7 @@ defmodule OpenAgents.Tools.Selector do
   the selected `Tool` structs highest-relevance first and how many were left
   out. `opts`: `:top_k` (default from config), `:tags` (a MapSet/list to
   require — tag-filtered discovery), `:always_include` (extra tool names that
-  must stay exposed), `:machine_paired?` (also keep the computer delegation
+  must stay exposed), `:computer_paired?` (also keep the computer delegation
   chain). Always-includes may exceed `top_k` by a small fixed number.
   """
   @spec select(Snapshot.t(), String.t() | nil, keyword()) ::

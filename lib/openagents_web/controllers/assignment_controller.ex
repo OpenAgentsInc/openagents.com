@@ -24,7 +24,7 @@ defmodule OpenAgentsWeb.AssignmentController do
     end
   end
 
-  def create(conn, %{"conversation_id" => conversation_id, "machine_id" => machine_id} = params) do
+  def create(conn, %{"conversation_id" => conversation_id, "computer_id" => computer_id} = params) do
     principal = conn.assigns[:current_agent] || conn.assigns[:current_user]
 
     case OpenAgentsWeb.BoxRateLimiter.allow?(principal_id(principal), :run_create) do
@@ -35,7 +35,7 @@ defmodule OpenAgentsWeb.AssignmentController do
         create_assignment(
           conn,
           conversation_id,
-          machine_id,
+          computer_id,
           Map.put(params, "target_kind", "computer"),
           principal
         )
@@ -131,7 +131,7 @@ defmodule OpenAgentsWeb.AssignmentController do
         nil ->
           OpenAgents.Agents.control_owner(
             conn.assigns[:current_agent],
-            if(conn.params["machine_id"], do: "computer", else: "box")
+            if(conn.params["computer_id"], do: "computer", else: "box")
           )
 
         user ->

@@ -1,5 +1,5 @@
 defmodule OpenAgents.Machines.TokenVault do
-  @moduledoc "AES-256-GCM sealing for machine tokens awaiting pairing claim."
+  @moduledoc "AES-256-GCM sealing for computer tokens awaiting pairing claim."
 
   @version 2
   @legacy_version 1

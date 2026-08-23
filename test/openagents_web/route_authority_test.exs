@@ -180,12 +180,12 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:box_control_api]
   end
 
-  test "operator and machine surfaces cannot drift into browser or public classes" do
+  test "operator and computer surfaces cannot drift into browser or public classes" do
     assert route!(:get, "/admin").class == :operator
     assert route!(:get, "/admin/forge").scope == "forge:promote"
     assert route!(:get, "/admin/scv/accounts").scope == "scv:account:connect"
-    assert route!(:post, "/controller/pairings").class == :machine
-    assert route!(:get, "/controller/pairings/:id").scope == "machine:pairing:claim"
+    assert route!(:post, "/controller/pairings").class == :computer
+    assert route!(:get, "/controller/pairings/:id").scope == "computer:pairing:claim"
     assert route!(:post, "/api/inference/proxy").class == :internal_service
     assert Enum.find(RouteAuthority.socket_inventory(), &(&1.path == "/controller/socket"))
 

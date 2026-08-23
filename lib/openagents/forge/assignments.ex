@@ -217,7 +217,7 @@ defmodule OpenAgents.Forge.Assignments do
     end
   end
 
-  @doc "Finishes every active Computer assignment bound to a revoked machine."
+  @doc "Finishes every active Computer assignment bound to a revoked computer."
   def finish_for_machine(machine_id, reason \\ "machine_revoked") when is_binary(machine_id) do
     Repo.all(
       from assignment in Assignment,

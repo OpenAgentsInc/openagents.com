@@ -391,7 +391,7 @@ or bounds are wrong.
 | `OpenAgents.Tools.Registry`, `OpenAgents.Tools.Runner`, and tool receipts | Reuse schema validation, authority checks, cancellation, timeout handling, output bounds, and normalized outcomes | Add an `scv` execution surface and an SCV-only tool catalog. The model must never receive promotion, policy-edit, or deployment tools. |
 | `OpenAgents.Work.JobServer` and `OpenAgents.Work` | Reuse the durable-step, generation-fence, forced-report, and recovery patterns | Do not add `scv` to `work_jobs.kind`. Work jobs are conversation- and owner-scoped, have a ten-minute limit, run the coding-lieutenant role program, and terminate after one report. |
 | `OpenAgents.Work.Coding` and repository tools | Reuse exact-match edit semantics, safe path resolution, commit receipts, and branch confinement | Replace per-user approval receipts and the fixed `openagents/job-<id>` lifecycle with SCV service authority, durable run workspaces, richer Git inspection, and full test execution. |
-| `OpenAgents.Inference` | Reuse metering concepts and server-held provider credentials | Add a service-principal ledger or generalize grants to identify an SCV. Do not invent a visitor, conversation, or machine to satisfy the current schema. |
+| `OpenAgents.Inference` | Reuse metering concepts and server-held provider credentials | Add a service-principal ledger or generalize grants to identify an SCV. Do not invent a visitor, conversation, or computer to satisfy the current schema. |
 | `OpenAgents.Forge.Pushes` and the WAL | Reuse the push acknowledgment barrier and immutable push receipts | Give an SCV executor a repository-scoped, branch-scoped credential. It must not receive the operator token or a credential that can update arbitrary refs. |
 | `OpenAgents.Forge.Builder` and the build worker | Reuse isolated exact-SHA builds, structural classification, artifact verification, and bounded output | Keep the web release compiler-free. Run SCV commands in a separate worker identity and make candidate gate receipts durable outside one worker's `.git` directory. |
 | `OpenAgents.Forge.Targets` and deployment coordinators | Reuse newest-target fencing, direct-load transactions, relup, rolling replacement, boot convergence, and receipts | Add a policy-authorized SCV promotion path that remains separate from a push. Preserve human promotion for every class outside the admitted SCV policy. |
@@ -1537,7 +1537,7 @@ Give an SCV separate, narrow identities for:
 - promotion receipt signing or verification;
 - read-only operational measurements.
 
-Do not reuse a browser session, user API token, machine pairing token, Forge
+Do not reuse a browser session, user API token, computer pairing token, Forge
 operator token, release cookie, or cloud deployment identity.
 
 ### Repository content and prompt injection

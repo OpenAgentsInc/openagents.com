@@ -1549,7 +1549,7 @@ defmodule OpenAgentsWeb.ChatLive do
           >
             <div class="delegation-live__header">
               <.status_indicator state="running" label="RUNNING" />
-              <span class="delegation-live__machine">{@delegation.machine_name}</span>
+              <span class="delegation-live__computer">{@delegation.machine_name}</span>
               <span class="delegation-live__subject">{delegation_subject(@delegation)}</span>
               <time
                 id={"delegation-elapsed-#{@delegation.ref}"}
@@ -1618,7 +1618,7 @@ defmodule OpenAgentsWeb.ChatLive do
   slot :inner_block
 
   # A finished (or superseded) delegation as one bounded summary line: status
-  # dot reinforcing the status word, machine and subject, then stop reason and
+  # dot reinforcing the status word, computer and subject, then stop reason and
   # duration when the terminal carried them.
   defp delegation_summary_row(assigns) do
     ~H"""

@@ -3,7 +3,7 @@ defmodule OpenAgents.Tools.ComputerProbe do
   Asks a paired computer what it has: host facts, coding agents, and toolchains.
 
   Read-only. The controller runs a fixed discovery set locally and refuses
-  anything else; if the machine is offline the outcome is typed rather than
+  anything else; if the computer is offline the outcome is typed rather than
   imagined.
   """
 
@@ -26,7 +26,7 @@ defmodule OpenAgents.Tools.ComputerProbe do
           "coding agents (claude, codex, cursor-agent, aider and similar), and toolchains " <>
           "(git, node, python, cargo and similar), including each ACP agent's configured " <>
           "model, reasoning effort, and mode when declared. Pass machine_id from computer_list. " <>
-          "Discovery is read-only; it never changes the machine.",
+          "Discovery is read-only; it never changes the computer.",
       input_schema: input_schema(),
       output_schema: output_schema(),
       side_effect: :read_only,

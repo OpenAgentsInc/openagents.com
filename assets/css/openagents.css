@@ -3284,7 +3284,7 @@
     white-space: nowrap;
   }
 
-  .delegation-live__machine,
+  .delegation-live__computer,
   .delegation-live__elapsed {
     color: var(--text-dim);
     font-family: var(--font-mono, ui-monospace, monospace);

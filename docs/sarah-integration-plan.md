@@ -16,7 +16,7 @@ The complete conversational product was integrated into the public
 - Accounts, OAuth, durable conversations, messages, turns, and provenance.
 - Persona, role, Blueprint, provider, tool, and program-artifact contracts.
 - Profile, lexical, semantic, experience, graph, and portability memory paths.
-- Delegated work, connected computers, machines, and incidents.
+- Delegated work, connected computers, and incidents.
 - Voice sessions, transcripts, usage, recordings, and release controls.
 - Operator, status, leaderboard, changelog, data-rights, issues, projects, and
   forge surfaces.
@@ -33,7 +33,7 @@ defines that boundary.
 The work landed in these broad stages:
 
 1. Application dependencies, supervision, accounts, and authentication.
-2. Conversation, turn, receipt, memory, work, machine, and voice schemas.
+2. Conversation, turn, receipt, memory, work, computer, and voice schemas.
 3. Persona, context, provider, module, tool, collective, and observability
    domains.
 4. Chat, voice, operator, computer, status, changelog, and forge web surfaces.
@@ -50,7 +50,7 @@ measurement history.
 ## Data lineage
 
 The integration extended the existing `users` authority and added visitors,
-conversations, messages, turns, memory, voice, work, machines, and forge
+conversations, messages, turns, memory, voice, work, computers, and forge
 records. Historical migration filenames that contain Sarah names remain
 immutable migration lineage; renaming an already-applied migration would make
 schema history less trustworthy.

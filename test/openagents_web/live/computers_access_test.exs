@@ -13,7 +13,7 @@ defmodule OpenAgentsWeb.ComputersAccessTest do
 
     refute has_element?(view, "#computer-#{machine.id}")
 
-    render_click(view, "revoke_machine", %{"id" => machine.id})
+    render_click(view, "revoke_computer", %{"id" => machine.id})
 
     assert has_element?(view, "#pairing-error", "Computer not found")
     refute has_element?(view, "#computer-#{machine.id}")

@@ -3,14 +3,14 @@ defmodule OpenAgents.Tools.ComputerDevin do
   Delegates a coding task to the Devin agent running on a paired computer.
 
   Deprecated: superseded by `OpenAgents.Tools.ComputerAgent` (`computer_agent.v1`),
-  which delegates to any ACP agent named in the machine's probe inventory.
+  which delegates to any ACP agent named in the computer's probe inventory.
   This tool keeps working for one release and now rides the same generic
   `agent` channel request with `agent_id` `"devin"`.
 
   The controller speaks the Agent Client Protocol (ACP v1) to a local
   `devin acp` subprocess: it negotiates the protocol version, opens a session
   in a folder the user shared, sends the prompt, streams the agent's progress
-  back, and answers the agent's permission requests from the machine's own
+  back, and answers the agent's permission requests from the computer's own
   policy tier. Nothing here can widen what that tier permits, and the
   subprocess is killed on cancellation, timeout, or disconnection.
   """
@@ -35,7 +35,7 @@ defmodule OpenAgents.Tools.ComputerDevin do
         "Deprecated: use computer_agent with agent_id \"devin\" instead. " <>
           "Asks the Devin coding agent on one of the user's paired computers to do a coding task. " <>
           "Pass machine_id from computer_list (Devin must appear in its coding agents) and a " <>
-          "prompt describing the task. Optional: cwd (absolute path inside the machine's shared " <>
+          "prompt describing the task. Optional: cwd (absolute path inside the computer's shared " <>
           "folders), session_id to continue an earlier Devin session (long tasks should be " <>
           "resumed across turns with it), and timeout_ms. Returns " <>
           "Devin's streamed output plus a session id for follow-up work. If Devin is missing or " <>

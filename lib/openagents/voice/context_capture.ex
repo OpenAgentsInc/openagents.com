@@ -53,7 +53,7 @@ defmodule OpenAgents.Voice.ContextCapture do
              tool_snapshot,
              execution_context,
              voice_intent(conversation),
-             machine_paired?: Machines.active_machine?(owner.user_id)
+             computer_paired?: Machines.active_machine?(owner.user_id)
            )
        }}
     end
@@ -63,7 +63,7 @@ defmodule OpenAgents.Voice.ContextCapture do
   # of the conversation so far — the recent user turns. A delegation-heavy
   # conversation surfaces the computer tools; a memory conversation the memory
   # tools. module_discover is always included as the escape hatch. A paired
-  # machine also keeps the computer delegation tools attached.
+  # computer also keeps the computer delegation tools attached.
   defp voice_intent(%Conversation{id: conversation_id}) do
     from(m in Message,
       where: m.conversation_id == ^conversation_id and m.role == "user",

@@ -10,10 +10,10 @@ defmodule OpenAgentsWeb.ComputerAgentJobsController do
   alias OpenAgents.Work
   alias OpenAgents.Work.Job
 
-  def create(conn, %{"machine_id" => machine_id} = params) do
+  def create(conn, %{"computer_id" => computer_id} = params) do
     user = conn.assigns.current_user
 
-    with {:ok, machine} <- Machines.get_machine(user.id, machine_id),
+    with {:ok, machine} <- Machines.get_machine(user.id, computer_id),
          {:ok, conversation} <- Conversations.ensure_conversation(user),
          {:ok, job} <- ComputerAgentJobs.start(user, machine, conversation, params) do
       Analytics.capture("agent_job_created", Analytics.distinct_id(user), %{

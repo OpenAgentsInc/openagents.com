@@ -10,7 +10,7 @@ defmodule OpenAgents.NetworkStatus do
   release version, hot-load revision (`OpenAgents.BuildInfo`), relup marker, and
   uptime. Public SCV activity includes only a pseudonymous label, lifecycle
   state, admitted tool category, and normalized action. Connected controller
-  machines and active work jobs remain counts only. No names, goals, internal
+  computers and active work jobs remain counts only. No names, goals, internal
   ids, addresses, prompts, repository paths, tool output, or reports appear.
 
   Honesty rules the shape:

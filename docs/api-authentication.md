@@ -97,8 +97,8 @@ used by fan-out admission.
 The `computer:control` scope gives a human account token access to the
 connected Computer API. It is independent from `box:control`: neither scope
 confers the other. The scope reaches `GET /api/v3/computers`,
-`POST /api/v3/computers/:machine_id/probe`,
-`POST /api/v3/computers/:machine_id/agent-jobs`,
+`POST /api/v3/computers/:computer_id/probe`,
+`POST /api/v3/computers/:computer_id/agent-jobs`,
 `GET /api/v3/computer-agent-jobs/:id`, and
 `DELETE /api/v3/computer-agent-jobs/:id`:
 
@@ -128,7 +128,7 @@ surface.
 
 The Computer listing includes each connected Computer's tier, declared roots,
 presence, and ACP agents reported by its latest probe. The API does not expose
-the machine token, its digest, or the raw probe document. To create an agent
+the computer token, its digest, or the raw probe document. To create an agent
 job, select an ACP agent reported by that probe and provide a current working
 directory inside one of the Computer's declared roots. The local controller
 remains the authority for presence, advertised agents, root confinement,
@@ -152,7 +152,7 @@ The response lists kind-prefixed target IDs. Box entries include their labels
 and lifecycle state. Computer entries include their presence, tier, declared
 roots, and the ACP agents reported by the latest probe. The response uses the
 same safe Computer projection as the Computer API and does not include
-machine tokens, token digests, or raw probe documents.
+computer tokens, token digests, or raw probe documents.
 
 Start a delegation with one envelope:
 
@@ -180,7 +180,7 @@ Both substrates retain their durable status records. Box delegations read
 `OpenAgents.Box.Run` state and bounded output. Computer delegations read the
 durable `Work` delegation job and its bounded report. Unknown, malformed, and
 foreign IDs return the same missing response. Output is redacted through the
-shared Box output boundary where applicable; provider URLs, prompts, machine
+shared Box output boundary where applicable; provider URLs, prompts, computer
 credentials, raw probe documents, and subprocess environments do not reach
 the response.
 
@@ -219,7 +219,7 @@ unauthorized.
 Before a Computer assignment starts, the server uses the existing Computer
 validation authority. The Computer must be active and online, its latest probe
 must report the requested ACP agent, and `cwd` must be inside a declared root.
-The machine owner must explicitly enable scoped forge credentials for that
+The computer owner must explicitly enable scoped forge credentials for that
 Computer. Without that opt-in, the delegation still runs but the server does
 not deliver assignment push authority and reports the typed refusal
 `computer_scoped_forge_credentials_not_enabled`. The local controller can
@@ -384,16 +384,16 @@ the event journal as account data.
 first-party browser interface. They require an active encrypted browser session
 and CSRF protection. They are not a CLI authentication mechanism.
 
-## Machines and internal inference
+## Computers and internal inference
 
 Controller pairing returns a poll secret that expires after 10 minutes and can
-claim a machine credential once. Machine credentials are scoped to one owner,
-machine, and tier; expire according to `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS`;
+claim a computer credential once. Computer credentials are scoped to one owner,
+computer, and tier; expire according to `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS`;
 are stored only as digests after claim; allow one active channel registration;
 and disconnect immediately on revocation or expiry.
 
 The inference proxy accepts only a server-minted `sig_…` grant. Each grant is
-scoped to a conversation and optional paired machine, expires, is
+scoped to a conversation and optional paired computer, expires, is
 generation-fenced and revocable, and has call, token, and cost ceilings. It is
 not an OpenAI credential and cannot select a model outside the grant.
 

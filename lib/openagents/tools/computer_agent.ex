@@ -6,10 +6,10 @@ defmodule OpenAgents.Tools.ComputerAgent do
   subprocess it launched by id: it negotiates the protocol version, opens a
   session in a folder the user shared, sends the prompt, streams the agent's
   progress back, and answers the agent's permission requests from the
-  machine's own policy tier. Nothing here can widen what that tier permits,
+  computer's own policy tier. Nothing here can widen what that tier permits,
   and the subprocess is killed on cancellation, timeout, or disconnection.
 
-  The `agent_id` must appear in the machine's last committed probe report
+  The `agent_id` must appear in the computer's last committed probe report
   (`acp_agents`), so delegation targets come from committed facts rather than
   guesses. Supersedes `computer_devin.v1`, which hard-coded one agent.
   """
@@ -39,10 +39,10 @@ defmodule OpenAgents.Tools.ComputerAgent do
           "this returns immediately with a job_id and status 'started' — acknowledge briefly " <>
           "and do NOT wait; several delegations run at once, each streams in the live panel " <>
           "and posts its result back into the conversation when done. agent_id must be in " <>
-          "the machine's last computer_probe acp_agents inventory (run computer_probe first); " <>
+          "the computer's last computer_probe acp_agents inventory (run computer_probe first); " <>
           "honor the person's agent choice, else prefer one whose auth_ready is true. If " <>
           "starting is refused, report it and try a different agent or ask. machine_id comes " <>
-          "from computer_list; omit only when exactly one machine is paired. cwd must be " <>
+          "from computer_list; omit only when exactly one computer is paired. cwd must be " <>
           "the project path (not the pairing root). Name it in the argument or prompt. " <>
           "Prefer resume_session_id from the last job in this conversation with the " <>
           "same cwd and agent after a timeout or cancel; start fresh after a cwd change. " <>
@@ -213,7 +213,7 @@ defmodule OpenAgents.Tools.ComputerAgent do
     |> put_in_result(
       "detail",
       String.slice(
-        "agent_not_available: no probe evidence for \"#{agent_id}\" on this machine; " <>
+        "agent_not_available: no probe evidence for \"#{agent_id}\" on this computer; " <>
           "probed agents: #{listed}",
         0,
         500
@@ -225,7 +225,7 @@ defmodule OpenAgents.Tools.ComputerAgent do
     base(machine, agent_id, arguments, "refused")
     |> put_in_result(
       "detail",
-      "agent_not_available: no probed ACP agents are on record for this machine; " <>
+      "agent_not_available: no probed ACP agents are on record for this computer; " <>
         "run computer_probe first"
     )
   end

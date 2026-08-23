@@ -26,7 +26,7 @@ Before injecting a failure, confirm all of these conditions:
 - Database backups, snapshots, rollback artifacts, and last-known-good release
   identities are current and restore-tested.
 - A manifest-scoped disposable run owns every test account, repository,
-  recording, and product machine.
+  recording, and product computer.
 - The operator has a stop condition, a recovery command, and an observation
   window for the single failure being injected.
 - No unrelated staging user or test is active.
@@ -147,9 +147,9 @@ builder, and deployer paths. Use the supervisor-visible PID, not a broad system
 kill. Prove each durable terminal state, restart behavior, idempotency fence,
 receipt, and user-visible recovery contract.
 
-### Machine disconnect
+### Computer disconnect
 
-Disconnect a disposable machine during a harmless committed step. Prove that
+Disconnect a disposable computer during a harmless committed step. Prove that
 the lease or step cannot execute twice, committed evidence survives, the job
 reaches a bounded state, reconnection does not expand authority, and revoke plus
 cleanup still work.

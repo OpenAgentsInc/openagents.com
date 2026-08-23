@@ -818,7 +818,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
   defp component_demo(%{item: %{slug: "openagents-empty"}} = assigns) do
     ~H"""
     <UI.empty id="openagents-empty-demo" title="No delegations yet">
-      Work you delegate to a paired machine will appear here.
+      Work you delegate to a paired computer will appear here.
     </UI.empty>
     """
   end
@@ -1025,7 +1025,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <div class="space-y-2">
         <p class="text-sm text-base-content/60">
           Work-item lifecycle — rect nodes, because a work item is inert data, not a
-          running machine.
+          running state machine.
         </p>
         <Graph.graph_surface view_box="0 0 640 78" label="Work item statuses" prefix="demo-item">
           <Graph.graph_node
@@ -1778,7 +1778,7 @@ defmodule OpenAgentsWeb.ComponentsLive do
         >
           <:action><UI.button variant={:primary} class="w-full">Start</UI.button></:action>
           <:feature>Managed database and backups</:feature>
-          <:feature>Agents on our machines</:feature>
+          <:feature>Agents on our computers</:feature>
           <:feature>Usage receipts</:feature>
         </Landing.pricing_column>
       </div>

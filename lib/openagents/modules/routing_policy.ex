@@ -57,8 +57,8 @@ defmodule OpenAgents.Modules.RoutingPolicy do
   end
 
   @doc """
-  Policy for owners with an active paired machine: pairing approval on
-  /computers is the operator's explicit approval, so machine-effect modules
+  Policy for owners with an active paired computer: pairing approval on
+  /computers is the operator's explicit approval, so computer-effect modules
   (`external_effect` with `explicit_operator_approval`) become routable.
   Execution still requires a matching approval receipt per module.
   """

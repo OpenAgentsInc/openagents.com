@@ -44,7 +44,7 @@ defmodule OpenAgents.Tools.SelectorTest do
       for intent <- ["try again", "use the machine", "hello"] do
         names =
           snapshot
-          |> Selector.select_tools(intent, top_k: 3, machine_paired?: true)
+          |> Selector.select_tools(intent, top_k: 3, computer_paired?: true)
           |> Enum.map(& &1.name)
 
         assert "computer_agent" in names
@@ -74,7 +74,7 @@ defmodule OpenAgents.Tools.SelectorTest do
       assert length(Selector.select_tools(snapshot, "anything", top_k: 4)) <= 5
 
       # +1 module_discover and +3 paired-machine tools when outside top_k.
-      assert length(Selector.select_tools(snapshot, "anything", top_k: 4, machine_paired?: true)) <=
+      assert length(Selector.select_tools(snapshot, "anything", top_k: 4, computer_paired?: true)) <=
                8
     end
 

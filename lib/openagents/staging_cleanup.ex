@@ -4,7 +4,7 @@ defmodule OpenAgents.StagingCleanup do
 
   Cleanup can touch only resources that a harness registered under a bounded
   run ID. Registration is immutable, and cleanup fails closed for the canonical
-  repository, administrator accounts, online machines, active work, and account
+  repository, administrator accounts, online computers, active work, and account
   data that still has an active turn or voice session.
   """
 

@@ -15,16 +15,16 @@ defmodule OpenAgentsWeb.ComputersLive do
   def mount(_params, _session, socket) do
     socket =
       socket
-      |> stream_configure(:machines, dom_id: &"computer-#{&1.id}")
+      |> stream_configure(:computers, dom_id: &"computer-#{&1.id}")
       |> assign(:page_title, "Computers · Sarah")
       |> assign(:controller_enabled?, Computer.enabled?())
       |> assign(:pairing_form, to_form(%{"code" => ""}, as: :pairing))
       |> assign(:pairing_error, nil)
       |> assign(:operation_success, nil)
-      |> assign(:subscribed_machine_ids, MapSet.new())
+      |> assign(:subscribed_computer_ids, MapSet.new())
       |> assign(:presence, %{})
-      |> assign(:machine_count, 0)
-      |> load_machines()
+      |> assign(:computer_count, 0)
+      |> load_computers()
 
     if connected?(socket), do: schedule_presence_refresh()
     {:ok, socket}
@@ -60,7 +60,7 @@ defmodule OpenAgentsWeb.ComputersLive do
              "Computer \"#{machine.name}\" paired. It will appear online after the controller connects."
          })
          |> assign(:pairing_form, to_form(%{"code" => ""}, as: :pairing))
-         |> load_machines()}
+         |> load_computers()}
 
       {:error, reason} ->
         {:noreply,
@@ -92,7 +92,7 @@ defmodule OpenAgentsWeb.ComputersLive do
            message:
              "Scoped forge credentials are now #{if(enabled, do: "allowed", else: "disabled")} for \"#{machine.name}\"."
          })
-         |> load_machines()}
+         |> load_computers()}
 
       {:error, _reason} ->
         {:noreply,
@@ -102,7 +102,7 @@ defmodule OpenAgentsWeb.ComputersLive do
     end
   end
 
-  def handle_event("revoke_machine", %{"id" => machine_id}, socket) do
+  def handle_event("revoke_computer", %{"id" => machine_id}, socket) do
     case Machines.revoke_machine(socket.assigns.current_user, machine_id) do
       {:ok, machine} ->
         {:noreply,
@@ -114,7 +114,7 @@ defmodule OpenAgentsWeb.ComputersLive do
              "Access for \"#{machine.name}\" was revoked. Any active connection was closed."
          })
          |> assign(:pairing_error, nil)
-         |> load_machines()}
+         |> load_computers()}
 
       {:error, _reason} ->
         {:noreply,
@@ -134,7 +134,7 @@ defmodule OpenAgentsWeb.ComputersLive do
         {:noreply,
          socket
          |> assign(:presence, presence_map)
-         |> stream_insert(:machines, machine)}
+         |> stream_insert(:computers, machine)}
 
       {:error, :machine_not_found} ->
         {:noreply, socket}
@@ -150,7 +150,7 @@ defmodule OpenAgentsWeb.ComputersLive do
     {:noreply,
      socket
      |> assign(:presence, presence_map)
-     |> stream_insert(:machines, machine)}
+     |> stream_insert(:computers, machine)}
   end
 
   def handle_info({:machine_updated, %Machine{}}, socket), do: {:noreply, socket}
@@ -163,7 +163,7 @@ defmodule OpenAgentsWeb.ComputersLive do
         {:noreply,
          socket
          |> assign(:presence, presence_map)
-         |> stream_insert(:machines, machine)}
+         |> stream_insert(:computers, machine)}
 
       {:error, :machine_not_found} ->
         {:noreply, socket}
@@ -172,14 +172,14 @@ defmodule OpenAgentsWeb.ComputersLive do
 
   def handle_info(:refresh_computer_presence, socket) do
     schedule_presence_refresh()
-    {:noreply, load_machines(socket)}
+    {:noreply, load_computers(socket)}
   end
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
-  defp load_machines(socket) do
+  defp load_computers(socket) do
     machines = Machines.list_machines(socket.assigns.current_user.id)
-    socket = subscribe_to_machines(socket, machines)
+    socket = subscribe_to_computers(socket, machines)
 
     presence =
       Map.new(machines, fn machine ->
@@ -188,20 +188,20 @@ defmodule OpenAgentsWeb.ComputersLive do
 
     socket
     |> assign(:presence, presence)
-    |> assign(:machine_count, length(machines))
-    |> stream(:machines, machines, reset: true)
+    |> assign(:computer_count, length(machines))
+    |> stream(:computers, machines, reset: true)
   end
 
-  defp subscribe_to_machines(socket, machines) do
+  defp subscribe_to_computers(socket, machines) do
     if connected?(socket) do
-      subscribed = socket.assigns.subscribed_machine_ids
+      subscribed = socket.assigns.subscribed_computer_ids
       machine_ids = MapSet.new(machines, & &1.id)
 
       machine_ids
       |> MapSet.difference(subscribed)
       |> Enum.each(&Computer.subscribe/1)
 
-      assign(socket, :subscribed_machine_ids, MapSet.union(subscribed, machine_ids))
+      assign(socket, :subscribed_computer_ids, MapSet.union(subscribed, machine_ids))
     else
       socket
     end
@@ -337,7 +337,7 @@ defmodule OpenAgentsWeb.ComputersLive do
                   <h2 id="computers-list-heading">Paired computers</h2>
                   <p>Credential access and live presence are shown separately.</p>
                 </div>
-                <.badge variant={:dim}>{@machine_count} total</.badge>
+                <.badge variant={:dim}>{@computer_count} total</.badge>
               </header>
 
               <div id="computers-list" class="computers-list" phx-update="stream">
@@ -350,11 +350,11 @@ defmodule OpenAgentsWeb.ComputersLive do
                 </.empty>
 
                 <.card
-                  :for={{dom_id, machine} <- @streams.machines}
+                  :for={{dom_id, machine} <- @streams.computers}
                   id={dom_id}
                   class="computer-card"
                   state={machine.status}
-                  data-machine-id={machine.id}
+                  data-computer-id={machine.id}
                   data-presence={if(online?(machine, @presence), do: "online", else: "offline")}
                 >
                   <div class="computer-card__top">
@@ -433,7 +433,7 @@ defmodule OpenAgentsWeb.ComputersLive do
                     <.text_button
                       id={"revoke-#{machine.id}"}
                       tone={:danger}
-                      phx-click="revoke_machine"
+                      phx-click="revoke_computer"
                       phx-value-id={machine.id}
                       phx-disable-with="Revoking…"
                       data-confirm={"Revoke access for #{machine.name}? Running work on this computer may stop."}

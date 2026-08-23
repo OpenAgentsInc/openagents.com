@@ -54,9 +54,9 @@ bounded within the same admitted generation and does not create another call.
 
 ## Work jobs
 
-Each delegated machine job durably binds the owner, conversation, machine,
+Each delegated computer job durably binds the owner, conversation, computer,
 admission-time authority snapshot, and budget snapshot. Each claim increments
-the PostgreSQL generation fence. The worker reads the machine, agent, working
+the PostgreSQL generation fence. The worker reads the computer, agent, working
 directory, and wall-clock limit from the immutable admission fields. A database
 trigger makes the delegation request immutable except for its fenced ACP
 session checkpoint. `WorkRecovery` restarts an active singleton; the new worker
@@ -93,4 +93,4 @@ result can become authoritative.
 
 The broader Gate 8 suites continue to own cancellation, malformed provider
 events, reconnect, duplicate delivery, memory isolation, data rights, voice
-recording, machine credentials, and harmless delegated-work behavior.
+recording, computer credentials, and harmless delegated-work behavior.

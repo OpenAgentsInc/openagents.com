@@ -113,7 +113,7 @@ defmodule OpenAgents.Turns.TurnServer do
                  Registry.prompt_definitions(
                    tool_snapshot,
                    current_user_text(messages),
-                   machine_paired?: Machines.active_machine?(owner.user_id)
+                   computer_paired?: Machines.active_machine?(owner.user_id)
                  ),
                else: []
              )

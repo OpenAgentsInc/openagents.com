@@ -3,7 +3,7 @@ defmodule OpenAgents.Incidents.Triage do
   Typed classifier for failure reasons — never ad-hoc string matching for the
   decision itself, only exact-code lookups over a modeled table.
 
-  - `expected`  — the user or the world caused it (cancelled, machine offline,
+  - `expected`  — the user or the world caused it (cancelled, computer offline,
     an agent at capacity). State it plainly; do not escalate.
   - `degraded`  — a transient, usually-retryable fault (a provider hiccup,
     a task exit, a transport drop). Record it; escalate only on recurrence.

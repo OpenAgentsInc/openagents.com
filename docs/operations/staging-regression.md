@@ -43,7 +43,7 @@ Start only after Gates 12 and 13 produce all of the following:
   receipt, and rollback-compatibility receipt for the actual staging target.
 - Web and distributed nodes reporting the same candidate Git SHA and digest.
 - A manifest-scoped disposable test run registered for every account,
-  repository, recording, and product machine that the regression creates.
+  repository, recording, and product computer that the regression creates.
 
 Keep the candidate directory private under `.git`. Confirm its checksum before
 each use. Install `curl`, `jq`, `sha256sum`, `strings`, and a current browser test
@@ -208,7 +208,7 @@ higher-level result:
 | 5 | Voice and recording | 12 | Fake-media results, request statuses, generation and recording receipts |
 | 6 | Leaderboard and admin | 6 | Anonymous field checks, authorization checks, operator receipts |
 | 7 | Issues and Projects | 6 | API and LiveView checks, cross-repository refusal receipts |
-| 8 | Machines and work | 5 | Pairing lifecycle, real harmless job, restart and cleanup receipts |
+| 8 | Computers and work | 5 | Pairing lifecycle, real harmless job, restart and cleanup receipts |
 | 9 | Forge and deployment | 11 | Git, WAL, build, rollback, relup, and rolling-replacement receipts |
 | 10 | Logs and truth | 6 | Exact-window log summary, content scan, and bounded database truth |
 
@@ -228,8 +228,8 @@ Run cross-account and cross-repository checks with two staging-owned identities.
 Prove refusal with statuses and bounded row counts. Do not capture access tokens,
 session cookies, OAuth codes, CSRF values, response bodies, or database values.
 
-For machine tests, keep claim and machine credentials only in process memory.
-Use a harmless disposable project, revoke the machine, prove replay refusal,
+For computer tests, keep claim and computer credentials only in process memory.
+Use a harmless disposable project, revoke the computer, prove replay refusal,
 and remove its ephemeral controller home and project before cleanup.
 
 ## Exercise voice with fake media
@@ -344,6 +344,6 @@ Apply cleanup only after the bounded counts match the run:
 ops/staging/cleanup-run.sh "$run_id" --apply
 ```
 
-Prove the run manifest is empty, machine credentials no longer work, the
+Prove the run manifest is empty, computer credentials no longer work, the
 ephemeral controller files are gone, and retained evidence still validates.
 Cleanup never converts a failed regression into a pass.

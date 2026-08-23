@@ -47,7 +47,7 @@ defmodule OpenAgents.Work.DelegationServer do
         {:ok, ra_gen} = Sessions.claim({:delegation, job_id}, :delegation)
         # On a handoff, a prior owner may have checkpointed the live ACP session
         # id in Ra — resume that session by id instead of starting a fresh one,
-        # so no orphaned agent is left on the machine (M2 external re-attach).
+        # so no orphaned agent is left on the computer (M2 external re-attach).
         resume_id = adopt_resume_session_id(job_id)
         state = start_delegation(running, ra_gen, resume_id)
         {:ok, state, {:continue, :noop}}
@@ -137,7 +137,7 @@ defmodule OpenAgents.Work.DelegationServer do
 
     task =
       Task.Supervisor.async_nolink(OpenAgents.ProviderTaskSupervisor, fn ->
-        # On an adopt (resume_id set) the machine's controller is likely mid-
+        # On an adopt (resume_id set) the computer's controller is likely mid-
         # reconnect after the node loss that relocated us here — give it a
         # bounded window (node-death detection + LB failover + rejoin) to
         # re-register before declaring it offline. Fresh delegations keep the
@@ -266,8 +266,8 @@ defmodule OpenAgents.Work.DelegationServer do
   defp report_line(job, status, output, detail, payload) do
     authority = job.authority_snapshot || %{}
     agent = authority["agent_id"] || "agent"
-    machine = authority["machine_name"] || "the machine"
-    header = "Delegation to #{agent} on #{machine} — #{human_status(status)}."
+    computer = authority["machine_name"] || "the computer"
+    header = "Delegation to #{agent} on #{computer} — #{human_status(status)}."
 
     body =
       [
@@ -312,7 +312,7 @@ defmodule OpenAgents.Work.DelegationServer do
     transcript = AcpTranscript.decode(output)
 
     if String.contains?(transcript, "User refused permission") do
-      "Write tools were refused by the machine policy. A coding task cannot " <>
+      "Write tools were refused by the computer policy. A coding task cannot " <>
         "finish until Edit/Write is allowed at curated tier inside declared roots."
     end
   end
@@ -349,8 +349,8 @@ defmodule OpenAgents.Work.DelegationServer do
   defp output_block(_output), do: nil
 
   defp tool_count_line(0), do: nil
-  defp tool_count_line(1), do: "The agent ran 1 tool call on the machine."
-  defp tool_count_line(count), do: "The agent ran #{count} tool calls on the machine."
+  defp tool_count_line(1), do: "The agent ran 1 tool call on the computer."
+  defp tool_count_line(count), do: "The agent ran #{count} tool calls on the computer."
 
   defp bound_report(summary) do
     if String.length(summary) <= @maximum_report_output do

@@ -4,7 +4,7 @@ defmodule OpenAgentsWeb.ControllerPairingController do
 
   `create` is unauthenticated: it registers a pending pairing and returns a
   short code the signed-in owner approves in the browser. `show` is polled by
-  the CLI with the poll secret and hands the machine token over exactly once.
+  the CLI with the poll secret and hands the computer token over exactly once.
   """
 
   use OpenAgentsWeb, :controller

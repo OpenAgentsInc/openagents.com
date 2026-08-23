@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     :authenticated_browser,
     :authenticated_api,
     :operator,
-    :machine,
+    :computer,
     :internal_service,
     :git_transport
   ]
@@ -109,9 +109,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
         path: "/controller/socket",
         handler: "OpenAgentsWeb.ControllerSocket",
         action: "connect",
-        class: :machine,
-        principal: "active paired-machine bearer",
-        scope: "machine:channel",
+        class: :computer,
+        principal: "active paired-computer bearer",
+        scope: "computer:channel",
         mutation: true
       }
     ]
@@ -185,7 +185,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
        do:
          declaration(
            :git_transport,
-           "anonymous read or authorized user, operator, or paired-machine HTTP credential",
+           "anonymous read or authorized user, operator, or paired-computer HTTP credential",
            "git:repository",
            true
          )
@@ -212,10 +212,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
     do: declaration(:public_read, "anonymous", "published:api-extensions", false)
 
   defp policy(%{path: "/controller/pairings", verb: :post}),
-    do: declaration(:machine, "unpaired machine", "machine:pairing:create", true)
+    do: declaration(:computer, "unpaired computer", "computer:pairing:create", true)
 
   defp policy(%{path: "/controller/pairings/:id"}),
-    do: declaration(:machine, "expiring one-time poll secret", "machine:pairing:claim", true)
+    do: declaration(:computer, "expiring one-time poll secret", "computer:pairing:claim", true)
 
   defp policy(%{path: "/api/inference/proxy"}),
     do: declaration(:internal_service, "scoped inference grant", "inference:invoke", true)
@@ -243,8 +243,8 @@ defmodule OpenAgentsWeb.RouteAuthority do
        when path in [
               "/api/v3/computers",
               "/api/v3/computers/:id",
-              "/api/v3/computers/:machine_id/probe",
-              "/api/v3/computers/:machine_id/agent-jobs",
+              "/api/v3/computers/:computer_id/probe",
+              "/api/v3/computers/:computer_id/agent-jobs",
               "/api/v3/computer-agent-jobs/:id"
             ] do
     declaration(
@@ -333,7 +333,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/computers/:machine_id/assignments",
+         path: "/api/v3/conversations/:conversation_id/computers/:computer_id/assignments",
          verb: :post
        }),
        do:
@@ -346,7 +346,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{
          path:
-           "/api/v3/conversations/:conversation_id/computers/:machine_id/assignments/:assignment_id",
+           "/api/v3/conversations/:conversation_id/computers/:computer_id/assignments/:assignment_id",
          verb: :get
        }),
        do:
@@ -359,7 +359,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{
          path:
-           "/api/v3/conversations/:conversation_id/computers/:machine_id/assignments/:assignment_id/cancel",
+           "/api/v3/conversations/:conversation_id/computers/:computer_id/assignments/:assignment_id/cancel",
          verb: :post
        }),
        do:

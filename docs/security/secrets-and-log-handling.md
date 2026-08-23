@@ -45,7 +45,7 @@ use distinct names and values and remains locked.
 `GITHUB_CLIENT_ID` and `GITHUB_TOKEN_ENCRYPTION_KEY_ID` are identifiers, not
 secrets. `DB_PASSWORD` is not used by the admitted staging profile because it
 uses `DATABASE_URL`; if socket mode is admitted later, give it its own named
-secret and update this table first. First-party API tokens, machine tokens,
+secret and update this table first. First-party API tokens, computer tokens,
 pairing secrets, inference grants, browser cookies, and OAuth codes are minted
 credentials, never deployment configuration and never Secret Manager values.
 The two Codex slots are preallocated containers for credentials that an

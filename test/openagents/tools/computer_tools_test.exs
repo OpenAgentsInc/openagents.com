@@ -730,7 +730,7 @@ defmodule OpenAgents.Tools.ComputerToolsTest do
     job = OpenAgents.Work.get_job!(outcome["result"]["job_id"])
     assert job.status == "failed"
     assert job.report =~ "I'll inspect the repo."
-    assert job.report =~ "Write tools were refused by the machine policy"
+    assert job.report =~ "Write tools were refused by the computer policy"
     assert job.report =~ "Edit: chat_live.ex (failed)"
     refute job.report =~ "toolu_"
     refute job.report =~ "VGVybWluYWw"

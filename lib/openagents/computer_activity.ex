@@ -3,7 +3,7 @@ defmodule OpenAgents.ComputerActivity do
   Ephemeral live projection of one streamed computer delegation.
 
   While `OpenAgents.Computer` collects a delegation's streamed output, this module
-  re-broadcasts a bounded projection of the stream over PubSub on the machine
+  re-broadcasts a bounded projection of the stream over PubSub on the computer
   owner's conversation topic — the delegation start, each bounded chunk, and
   the typed terminal — so the chat interface can show the remote agent working
   while it works. PubSub is a low-latency projection and never the data
@@ -12,7 +12,7 @@ defmodule OpenAgents.ComputerActivity do
   outcome. A reload mid-delegation degrades to status-only.
 
   The topic is owner-scoped by construction: Sarah is a one-conversation
-  product, delegations require the `browser_conversation` scope of the machine
+  product, delegations require the `browser_conversation` scope of the computer
   owner, and the topic is keyed by that owner's conversation id, which only
   the owner's own LiveView subscribes to.
 
@@ -21,7 +21,7 @@ defmodule OpenAgents.ComputerActivity do
   broadcast event, `@maximum_total_bytes` cumulative (mirroring the
   65,536-byte collection cap in `OpenAgents.Computer`), and at most
   `@maximum_chunk_events` chunk events per delegation. Once any cap is hit,
-  one truncation event is broadcast and chunk broadcasting stops. Machine
+  one truncation event is broadcast and chunk broadcasting stops. Computer
   tokens, argv, env, prompts, and filesystem paths never enter an event.
   """
 
@@ -47,7 +47,7 @@ defmodule OpenAgents.ComputerActivity do
   Opens the projection for one delegation and broadcasts its start event.
 
   Returns projection state to thread through the collect loop, or `nil` when
-  the machine's owning conversation cannot be resolved — every later call is
+  the computer's owning conversation cannot be resolved — every later call is
   then a no-op and the delegation runs exactly as before, unprojected.
   """
   @spec begin(String.t(), :run | :agent, String.t(), map()) :: map() | nil

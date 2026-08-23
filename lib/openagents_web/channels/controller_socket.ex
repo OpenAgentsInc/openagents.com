@@ -2,9 +2,9 @@ defmodule OpenAgentsWeb.ControllerSocket do
   @moduledoc """
   Socket for outbound computer-controller connections.
 
-  Authenticated by a machine token in the connect params. The token is
+  Authenticated by a computer token in the connect params. The token is
   digest-compared server-side and never logged; the socket carries only the
-  machine and owner identifiers.
+  computer and owner identifiers.
   """
 
   use Phoenix.Socket

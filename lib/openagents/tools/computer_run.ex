@@ -3,11 +3,11 @@ defmodule OpenAgents.Tools.ComputerRun do
   Runs one command on one of the user's paired computers.
 
   The command is a typed argv array — never a shell string — and the
-  controller's local policy is the final authority: a machine paired at a
+  controller's local policy is the final authority: a computer paired at a
   lower tier, a denied command, or a path outside its declared roots comes
   back as a typed refusal, not an execution. Output is streamed on the
-  machine, collected bounded here, and secret-shaped text is masked before
-  it ever leaves the machine.
+  computer, collected bounded here, and secret-shaped text is masked before
+  it ever leaves the computer.
   """
 
   @behaviour OpenAgents.Tools.Tool
@@ -29,8 +29,8 @@ defmodule OpenAgents.Tools.ComputerRun do
         "Runs one command on one of the user's paired computers and returns its output and " <>
           "exit code. Pass machine_id from computer_list and the command as an argv array " <>
           "(for example [\"git\", \"status\"]) — shell syntax like pipes or && is not supported. " <>
-          "The machine's own policy can refuse a command; a refusal names the reason. " <>
-          "Optional: cwd (absolute path inside the machine's shared folders) and timeout_ms.",
+          "The computer's own policy can refuse a command; a refusal names the reason. " <>
+          "Optional: cwd (absolute path inside the computer's shared folders) and timeout_ms.",
       input_schema: input_schema(),
       output_schema: output_schema(),
       side_effect: :external_effect,

@@ -277,7 +277,7 @@ defmodule OpenAgentsWeb.Router do
     get "/capacity", CapacityController, :show
     post "/computers/pairings/:id/approve", ComputersController, :approve_pairing
     delete "/computers/:id", ComputersController, :delete
-    post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
+    post "/computers/:computer_id/agent-jobs", ComputerAgentJobsController, :create
     get "/computer-agent-jobs/:id", ComputerAgentJobsController, :show
     delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
 
@@ -445,8 +445,8 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :computer_control_api
 
     get "/computers", ComputersController, :index
-    post "/computers/:machine_id/probe", ComputersController, :probe
-    post "/computers/:machine_id/agent-jobs", ComputerAgentJobsController, :create
+    post "/computers/:computer_id/probe", ComputersController, :probe
+    post "/computers/:computer_id/agent-jobs", ComputerAgentJobsController, :create
     get "/computer-agent-jobs/:id", ComputerAgentJobsController, :show
     delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
   end
@@ -509,9 +509,9 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3/conversations/:conversation_id/computers", OpenAgentsWeb do
     pipe_through :assignment_computer_control_api
 
-    post "/:machine_id/assignments", AssignmentController, :create
-    get "/:machine_id/assignments/:assignment_id", AssignmentController, :show
-    post "/:machine_id/assignments/:assignment_id/cancel", AssignmentController, :cancel
+    post "/:computer_id/assignments", AssignmentController, :create
+    get "/:computer_id/assignments/:assignment_id", AssignmentController, :show
+    post "/:computer_id/assignments/:assignment_id/cancel", AssignmentController, :cancel
   end
 
   scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do

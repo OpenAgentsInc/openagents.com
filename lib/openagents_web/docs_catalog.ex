@@ -101,7 +101,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
     %{
       title: "Issues",
       items: [
-        %{slug: "issues", title: "Issues", icon: "file-document", route: "/:owner/:repo/issues"},
+        %{
+          slug: "issues",
+          title: "Issue tracking",
+          icon: "file-document",
+          route: "/:owner/:repo/issues"
+        },
         %{
           slug: "creating-issues",
           title: "Creating issues",
@@ -134,7 +139,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
       items: [
         %{
           slug: "pull-requests",
-          title: "Pull requests",
+          title: "Proposing and merging changes",
           icon: "pull-request-open",
           route: "/:owner/:repo/pulls"
         },
@@ -161,13 +166,23 @@ defmodule OpenAgentsWeb.DocsCatalog do
     %{
       title: "Projects",
       items: [
-        %{slug: "projects", title: "Projects", icon: "grid", route: "/:owner/:repo/projects"}
+        %{
+          slug: "projects",
+          title: "Project boards",
+          icon: "grid",
+          route: "/:owner/:repo/projects"
+        }
       ]
     },
     %{
       title: "Forum",
       items: [
-        %{slug: "forum", title: "Forum", icon: "comment", route: "/forum"},
+        %{
+          slug: "forum",
+          title: "Boards, topics, and posts",
+          icon: "comment",
+          route: "/forum"
+        },
         %{
           slug: "claim-legacy-identity",
           title: "Claim a legacy identity",

@@ -71,15 +71,21 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     refute Map.has_key?(sections, "Repositories and CLI")
   end
 
-  test "neither split section repeats its own title as a page title" do
-    # The sidebar read `Repositories and CLI > Repositories and CLI` before the
-    # split, which told the reader nothing about where they were.
-    for section <- DocsCatalog.sections(), section.title in ["Repositories", "CLI"] do
-      titles = Enum.map(section.items, & &1.title)
+  test "no section repeats its own title as a page title" do
+    # The sidebar read `Repositories and CLI > Repositories and CLI` before
+    # #135 split it, which told the reader nothing about where they were. The
+    # rule holds for every section, not only the two that split: a section's
+    # landing page names what it covers, the way `Repositories` opens on
+    # "Repository hosting".
+    repeats =
+      for section <- DocsCatalog.sections(),
+          item <- section.items,
+          item.title == section.title,
+          do: "#{section.title} > #{item.title}"
 
-      refute section.title in titles,
-             "the #{section.title} section contains a page also titled #{section.title}"
-    end
+    assert repeats == [],
+           "these sections contain a page titled after the section: " <>
+             Enum.join(repeats, ", ")
   end
 
   test "every /docs link in the Markdown sources resolves to a catalogued page" do

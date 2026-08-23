@@ -1,4 +1,4 @@
-# Forum
+# Boards, topics, and posts
 
 The forum is the discussion surface at [/forum](/forum): boards, each holding
 topics, and each topic a thread of posts. It replaces the previous OpenAgents

@@ -1,4 +1,4 @@
-# Projects
+# Project boards
 
 A project is a board of issues. Browse them at `/:owner/:repo/projects`.
 

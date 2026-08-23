@@ -1,4 +1,4 @@
-# Issues
+# Issue tracking
 
 An issue is a unit of work in a repository. Browse them at
 `/:owner/:repo/issues`.

@@ -1,4 +1,4 @@
-# Pull requests
+# Proposing and merging changes
 
 A pull request proposes merging one branch into another. Browse a
 repository's pull requests at `/:owner/:repo/pulls`, and open one to review

@@ -62,6 +62,29 @@ DELETE /api/v3/repos/:owner/:repo/issues/comments/:id
 List responses use named envelopes. For example, the issue list returns an
 object with an `issues` array.
 
+## Pull requests and stacks
+
+```text
+GET    /api/v3/repos/:owner/:repo/pulls
+POST   /api/v3/repos/:owner/:repo/pulls
+GET    /api/v3/repos/:owner/:repo/pulls/:pull_number
+PATCH  /api/v3/repos/:owner/:repo/pulls/:pull_number
+
+GET    /api/v3/repos/:owner/:repo/stacks
+POST   /api/v3/repos/:owner/:repo/stacks
+GET    /api/v3/repos/:owner/:repo/stacks/:stack_number
+POST   /api/v3/repos/:owner/:repo/stacks/:stack_number/append
+POST   /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase
+POST   /api/v3/repos/:owner/:repo/stacks/:stack_number/merge
+POST   /api/v3/repos/:owner/:repo/stacks/:stack_number/unstack
+POST   /api/v3/repos/:owner/:repo/stacks/:stack_number/dissolve
+PUT    /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async
+```
+
+See [Pull requests](/docs/pull-requests) for the pull request endpoints and
+the [Stacks API](/docs/stacks-api) for stacks, durable operations,
+idempotency, and optimistic concurrency.
+
 ## Issue prerequisites
 
 An issue can wait on other issues in the same repository.
@@ -280,5 +303,7 @@ editable. See [Projects](/docs/projects).
 
 ## Know what is not implemented
 
-Pull requests, reviews, webhooks, releases, SSH Git transport, and Git LFS
-object storage are outside the current subset.
+Pull request reviews, webhooks, releases, SSH Git transport, and Git LFS
+object storage are outside the current subset. Pull requests and stacked pull
+requests are implemented — see [Pull requests](/docs/pull-requests) and the
+[Stacks API](/docs/stacks-api).

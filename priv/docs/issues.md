@@ -15,6 +15,10 @@ A title, a description, a state, and the people and labels attached to it. Each
 issue carries a number that is unique within its repository and never reused,
 so a reference to an issue stays valid after it is closed.
 
+[Pull requests](/docs/pull-requests) share the same number sequence: a pull
+request is an issue paired with a branch comparison, so issue and pull
+request numbers never collide within a repository.
+
 ## Comments
 
 Comments are ordered and attributed. Editing one is limited to its author,

@@ -119,6 +119,35 @@ defmodule OpenAgentsWeb.DocsCatalog do
       ]
     },
     %{
+      title: "Pull requests",
+      items: [
+        %{
+          slug: "pull-requests",
+          title: "Pull requests",
+          icon: "pull-request-open",
+          route: "/:owner/:repo/pulls"
+        },
+        %{
+          slug: "stacked-pull-requests",
+          title: "Stacked pull requests",
+          icon: "stack",
+          route: "/:owner/:repo/pulls/:number"
+        },
+        %{
+          slug: "stack-actions",
+          title: "Rebase and restructure a stack",
+          icon: "reload",
+          route: "/:owner/:repo/pulls/:number"
+        },
+        %{
+          slug: "merging-stacks",
+          title: "Merging stacks",
+          icon: "check-circle",
+          route: "/api/v3/repos/:owner/:repo/stacks"
+        }
+      ]
+    },
+    %{
       title: "Projects",
       items: [
         %{slug: "projects", title: "Projects", icon: "grid", route: "/:owner/:repo/projects"}
@@ -169,6 +198,12 @@ defmodule OpenAgentsWeb.DocsCatalog do
           title: "REST API",
           icon: "square-code",
           route: "/api/v3/repos/:owner/:repo/issues"
+        },
+        %{
+          slug: "stacks-api",
+          title: "Stacks API",
+          icon: "square-code",
+          route: "/api/v3/repos/:owner/:repo/stacks"
         },
         %{slug: "status-api", title: "Status API", icon: "info", route: "/api/status"}
       ]

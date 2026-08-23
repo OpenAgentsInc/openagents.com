@@ -120,6 +120,52 @@ defmodule OpenAgents.InferenceTest do
     end
   end
 
+  describe "fences" do
+    test "mint/1 accepts a thread fence and names no conversation" do
+      owner = github_user("inf-thread")
+      {:ok, thread} = OpenAgents.Threads.open(owner, "Reach a model from a thread")
+
+      {:ok, grant, token} =
+        Inference.mint(%{
+          owner_visitor_id: thread.owner_visitor_id,
+          thread_id: thread.id,
+          machine_id: nil
+        })
+
+      assert grant.thread_id == thread.id
+      assert grant.conversation_id == nil
+      assert {:ok, %Grant{status: "active"}} = Inference.resolve(token)
+    end
+
+    test "mint/1 refuses a grant naming both fences or neither" do
+      input = scope("inf-both")
+
+      assert {:error, changeset} =
+               Inference.mint(Map.put(input, :thread_id, Ecto.UUID.generate()))
+
+      assert %{thread_id: _} = errors_on(changeset)
+
+      assert {:error, changeset} = Inference.mint(Map.delete(input, :conversation_id))
+      assert %{thread_id: _} = errors_on(changeset)
+    end
+
+    test "revoke_active_for_thread revokes every active grant for one thread" do
+      owner = github_user("inf-thread-fence")
+      {:ok, thread} = OpenAgents.Threads.open(owner, "Fence a thread")
+
+      {:ok, _grant, token} =
+        Inference.mint(%{
+          owner_visitor_id: thread.owner_visitor_id,
+          thread_id: thread.id,
+          machine_id: nil
+        })
+
+      assert {1, nil} = Inference.revoke_active_for_thread(thread.id)
+      assert {:error, :grant_revoked} = Inference.resolve(token)
+      assert {0, nil} = Inference.revoke_active_for_thread(nil)
+    end
+  end
+
   describe "generation fence" do
     test "revoke_active_for_conversation revokes every active grant for one conversation" do
       scope = scope("fence")

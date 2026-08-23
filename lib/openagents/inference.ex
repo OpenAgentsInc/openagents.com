@@ -22,15 +22,20 @@ defmodule OpenAgents.Inference do
   @token_prefix "sig_"
 
   @type mint_input :: %{
-          owner_visitor_id: String.t(),
-          conversation_id: String.t(),
-          machine_id: String.t()
+          required(:owner_visitor_id) => String.t(),
+          optional(:conversation_id) => String.t() | nil,
+          optional(:thread_id) => String.t() | nil,
+          optional(:machine_id) => String.t() | nil
         }
 
   @doc """
-  Mint a grant for one delegation. Returns `{:ok, grant, token}` where `token`
-  is the ONLY time the plaintext exists — the caller injects it into the probe
-  process and it is never stored, logged, or recoverable.
+  Mint a grant for one bounded body of work. Returns `{:ok, grant, token}`
+  where `token` is the ONLY time the plaintext exists — the caller injects it
+  into the probe process and it is never stored, logged, or recoverable.
+
+  The input names exactly one fence: `:thread_id` for a thread, or
+  `:conversation_id` for the account conversation. Both, or neither, is refused
+  by the changeset and independently by PostgreSQL (THREAD-001).
   """
   @spec mint(mint_input()) :: {:ok, Grant.t(), String.t()} | {:error, Ecto.Changeset.t()}
   def mint(%{} = input) do
@@ -38,8 +43,9 @@ defmodule OpenAgents.Inference do
 
     attrs = %{
       owner_visitor_id: input.owner_visitor_id,
-      conversation_id: input.conversation_id,
-      machine_id: input.machine_id,
+      conversation_id: Map.get(input, :conversation_id),
+      thread_id: Map.get(input, :thread_id),
+      machine_id: Map.get(input, :machine_id),
       model_id: model_id(),
       token_digest: digest(token),
       max_total_tokens: max_total_tokens(),
@@ -142,6 +148,26 @@ defmodule OpenAgents.Inference do
   end
 
   def revoke(%Grant{} = grant), do: {:ok, grant}
+
+  @doc """
+  Revoke every active grant for a thread.
+
+  This is the thread's generation fence, and unlike the conversation function
+  below it has callers: `OpenAgents.Threads.mint_grant/1` runs it before every
+  mint, and every terminal transition in `OpenAgents.Threads` runs it inside the
+  transaction that writes the terminal row. A thread therefore has at most one
+  live grant, and a terminal thread has none.
+  """
+  @spec revoke_active_for_thread(String.t()) :: {non_neg_integer(), nil}
+  def revoke_active_for_thread(thread_id) when is_binary(thread_id) do
+    stamp = now()
+
+    Grant
+    |> where([g], g.thread_id == ^thread_id and g.status == "active")
+    |> Repo.update_all(set: [status: "revoked", revoked_at: stamp, updated_at: stamp])
+  end
+
+  def revoke_active_for_thread(_), do: {0, nil}
 
   @doc "Revoke every active grant for a conversation (generation fence on a new turn/delegation)."
   @spec revoke_active_for_conversation(String.t()) :: {non_neg_integer(), nil}

@@ -433,6 +433,10 @@ one user converge on the same conversation and therefore the same text and
 voice limits. Pre-authentication browser rows remain inaccessible legacy data
 and are never silently claimed during login.
 
+A thread is not a conversation and does not count against this uniqueness: an
+account holds as many threads as it has pieces of work, each with its own
+objective, transcript, and model authority (THREAD-001).
+
 Evidence: unique indexes and identity-source constraint in
 `create_github_users`, `OpenAgents.Conversations.ensure_conversation/1`, and
 account continuity/isolation/rate tests in `OpenAgents.AccountsTest`.
@@ -1473,6 +1477,58 @@ Evidence: `OpenAgents.AcceptedOutcome`,
 `priv/api-contracts/accepted-outcome-v1.json`,
 `docs/accepted-outcome-contract.md`, and
 `test/openagents/accepted_outcome_test.exs`.
+
+### THREAD-001 — A thread owns its own model authority, and names it exactly once
+
+Status: Current
+
+A thread is the unit of agent work: one objective, its turns, its transcript,
+and its budget (`docs/taxonomy.md`). It is account-scoped, plural, and
+disposable. A thread belongs to the account's owner visitor and requires no
+conversation, so DATA-002 is unchanged — the account still has exactly one
+conversation, and a thread is not one.
+
+- **A grant names exactly one fence.** `inference_grants.conversation_id` is
+  nullable and `inference_grants.thread_id` is nullable, and
+  `inference_grant_exactly_one_fence` refuses any row that names both or
+  neither. A grant is the only way a client reaches a model without holding a
+  provider key, so an unfenced grant would be unattributable spend and a
+  doubly-fenced one would be spend attributed twice. PostgreSQL refuses both,
+  and `OpenAgents.Inference.Grant.mint_changeset/1` refuses the same rows
+  earlier.
+- **A fence, once set, cannot be acquired or exchanged.** The immutability
+  trigger compares both fence columns with `IS DISTINCT FROM`, so a
+  thread-scoped grant cannot later acquire a conversation and a
+  conversation-scoped grant cannot later acquire a thread. Comparing a NULL
+  column with `<>` yields NULL and raises nothing, which is exactly how a
+  machine-less grant could once have acquired a machine
+  (`priv/repo/migrations/20260819080000_allow_machineless_inference_grants.exs`).
+- **A thread's authority is singular.** At most one active grant may name a
+  thread, enforced by `inference_grants_one_active_thread_index`.
+  `OpenAgents.Threads.mint_grant/1` revokes the thread's active grants and
+  advances `threads.generation` in the same transaction as the mint, so an
+  earlier generation's token is provably stale rather than merely old.
+- **Authority does not outlive the thread.** Every terminal transition
+  (`OpenAgents.Threads.finish/2`, `OpenAgents.Threads.cancel/2`) revokes the
+  thread's active grants inside the transaction that writes the terminal row,
+  and `mint_grant/1` refuses a thread that is not open. Deleting a thread — or
+  the account, under the DATA-004 cascade — deletes its grants with it.
+- **A thread is bounded.** The objective is capped at 32 KB and the terminal
+  report at 32 KB, both by check constraint; every transcript entry is pinned
+  to `openagents.thread.event.v1` with a 16 KB payload ceiling and no
+  `updated_at`; and a thread is open with no report or terminal with one,
+  never both and never neither.
+
+There is no cap on concurrent open threads or on concurrent active grants per
+account. That ceiling belongs at admission, on the route that mints authority
+for a caller, and no such route exists yet.
+
+Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
+`OpenAgents.Threads.Event`, `OpenAgents.Inference.mint/1`,
+`priv/repo/migrations/20260823221415_create_threads_and_thread_events.exs`,
+`priv/repo/migrations/20260823221416_allow_thread_scoped_inference_grants.exs`,
+`test/openagents/threads/grant_fence_test.exs`, and
+`test/openagents/threads_test.exs`.
 
 ## Tenant deployment control plane
 
@@ -3243,6 +3299,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs` |
+| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
 | DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |

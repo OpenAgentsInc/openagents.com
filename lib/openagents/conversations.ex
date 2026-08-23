@@ -49,6 +49,18 @@ defmodule OpenAgents.Conversations do
   end
 
   @doc """
+  The account's owner visitor, created if absent, without creating a
+  conversation.
+
+  The visitor is the account's storage root: conversations, profile memory,
+  inference grants, and now threads all hang off it, and DATA-004 cascades
+  from it. A thread needs that root and nothing else, so this is the entry
+  point that lets an account own work without owning a second conversation.
+  """
+  @spec ensure_owner_visitor(User.t()) :: Visitor.t()
+  def ensure_owner_visitor(%User{id: user_id}), do: ensure_user_visitor(user_id)
+
+  @doc """
   Whether this account has ever sent a message to the agent.
 
   Asks for a message the *person* wrote. Every conversation is created with an

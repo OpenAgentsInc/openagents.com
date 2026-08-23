@@ -1,14 +1,18 @@
 defmodule OpenAgents.Inference.Grant do
   @moduledoc """
-  A delegation-scoped inference grant (`sarah.inference_grant.v1`).
+  A fenced inference grant (`sarah.inference_grant.v1`).
 
-  Authority for one paired-computer coding delegation to call the Sarah
-  inference proxy, metered against the owner's account. It is **not** a
-  provider credential: the OpenAI key never leaves the server (RELEASE-002).
-  A grant is generation-fenced by its conversation, budgeted (tokens / calls
-  / estimated cost), time-bounded, and revocable. Only the token digest is
-  stored; the plaintext is returned once at mint and injected into the probe
+  Authority for one bounded body of work to call the Sarah inference proxy,
+  metered against the owner's account. It is **not** a provider credential: the
+  OpenAI key never leaves the server (RELEASE-002). A grant is budgeted (tokens
+  / calls / estimated cost), time-bounded, and revocable. Only the token digest
+  is stored; the plaintext is returned once at mint and injected into the probe
   process by the controller at spawn.
+
+  Every grant names exactly one fence — a thread or a conversation, never both
+  and never neither (THREAD-001). The conversation fence is the original one
+  and is unchanged; the thread fence is what lets a coding session reach a
+  model without borrowing the account's single conversation.
   """
 
   use Ecto.Schema
@@ -26,6 +30,7 @@ defmodule OpenAgents.Inference.Grant do
   schema "inference_grants" do
     field :owner_visitor_id, :binary_id
     field :conversation_id, :binary_id
+    field :thread_id, :binary_id
     field :machine_id, :binary_id
     field :model_id, :string
     field :token_digest, :binary, redact: true
@@ -50,6 +55,7 @@ defmodule OpenAgents.Inference.Grant do
     |> cast(attrs, [
       :owner_visitor_id,
       :conversation_id,
+      :thread_id,
       :machine_id,
       :model_id,
       :token_digest,
@@ -62,7 +68,6 @@ defmodule OpenAgents.Inference.Grant do
     # own runtime, #122); computer-bound probe delegations always set it.
     |> validate_required([
       :owner_visitor_id,
-      :conversation_id,
       :model_id,
       :token_digest,
       :max_total_tokens,
@@ -73,7 +78,26 @@ defmodule OpenAgents.Inference.Grant do
     |> validate_number(:max_total_tokens, greater_than: 0)
     |> validate_number(:max_calls, greater_than: 0)
     |> validate_number(:max_cost_microusd, greater_than: 0)
+    |> validate_exactly_one_fence()
     |> unique_constraint(:token_digest)
+    |> unique_constraint(:thread_id, name: :inference_grants_one_active_thread_index)
+    |> check_constraint(:conversation_id, name: :inference_grant_exactly_one_fence)
+  end
+
+  # A grant with no fence is unattributable spend; a grant with two is spend
+  # attributed twice. PostgreSQL refuses both independently
+  # (`inference_grant_exactly_one_fence`); this is the same refusal, earlier.
+  defp validate_exactly_one_fence(changeset) do
+    case {get_field(changeset, :conversation_id), get_field(changeset, :thread_id)} do
+      {conversation_id, nil} when is_binary(conversation_id) ->
+        changeset
+
+      {nil, thread_id} when is_binary(thread_id) ->
+        changeset
+
+      _neither_or_both ->
+        add_error(changeset, :thread_id, "must name exactly one thread or conversation")
+    end
   end
 
   @doc "Record one metered call: forward-only usage/count, terminal on budget."

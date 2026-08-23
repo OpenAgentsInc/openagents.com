@@ -243,9 +243,16 @@ ACP-side runtime; that is a mapping at one boundary, not a second name for the
 record. Two executors already disagree about the word, so some mapping is
 unavoidable, and the record takes the name that matches its shape.
 
-*The durable `threads` table is proposed.* Today the pieces are spread across
-turns, work jobs, box runs, and SCV runs, and only SCV runs are free of a
-conversation. See the audit in `docs/2026-08-23-thread-primitive-audit.md`.
+The durable `threads` table exists. A thread is an account-scoped row owned by
+the account's visitor root, carrying its objective, its admitted execution
+shape, its status, its generation fence, its metered usage, and its terminal
+report, with an append-only transcript in `thread_events`. Model authority
+binds to it: an inference grant names a thread or a conversation, never both
+and never neither (THREAD-001). The context is `OpenAgents.Threads`, the record
+is `OpenAgents.Threads.Thread`, and the transcript entry is
+`OpenAgents.Threads.Event`. The route that opens a thread for a caller, and the
+CLI that stops writing to the conversation, are still to come; see the audit in
+`docs/2026-08-23-thread-primitive-audit.md`.
 
 **Thread transcript** — the prompts, responses, tool activity, code changes,
 and metadata that explain what happened in a thread. Authoritative copies live

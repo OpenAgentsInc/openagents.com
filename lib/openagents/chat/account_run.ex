@@ -9,6 +9,7 @@ defmodule OpenAgents.Chat.AccountRun do
     belongs_to :conversation, OpenAgents.Conversations.Conversation
     has_many :events, OpenAgents.Chat.AccountEvent, foreign_key: :run_id
     field :status, :string
+    field :backend, :string
     field :reasoning_effort, :string
     field :user_content, :string
     field :assistant_content, :string
@@ -26,6 +27,7 @@ defmodule OpenAgents.Chat.AccountRun do
     run
     |> cast(attrs, [
       :status,
+      :backend,
       :reasoning_effort,
       :user_content,
       :assistant_content,
@@ -40,11 +42,13 @@ defmodule OpenAgents.Chat.AccountRun do
     |> validate_required([
       :conversation_id,
       :status,
+      :backend,
       :reasoning_effort,
       :user_content,
       :started_at
     ])
     |> validate_inclusion(:status, ["streaming", "completed", "failed", "cancelled"])
+    |> validate_inclusion(:backend, OpenAgents.Chat.Backends.ids())
     |> foreign_key_constraint(:conversation_id)
     |> unique_constraint(:conversation_id,
       name: :account_chat_runs_one_streaming_per_conversation

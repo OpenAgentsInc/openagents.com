@@ -99,6 +99,48 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
     assert field["enum"] == Issues.progress_values()
   end
 
+  test "the backend enum the root document publishes is the one the context derives", %{
+    conn: conn
+  } do
+    parameter =
+      conn
+      |> get(~p"/api/v3")
+      |> json_response(200)
+      |> get_in(["extensions", "chat.openagents", "parameters", "model"])
+
+    assert parameter["enum"] == OpenAgents.Chat.Backends.ids()
+    assert parameter["default"] == OpenAgents.Chat.Backends.default_id()
+    assert parameter["default"] in parameter["enum"]
+  end
+
+  test "every published backend is one a turn actually accepts", %{conn: conn} do
+    document = conn |> get(~p"/api/v3") |> json_response(200)
+    published = get_in(document, ["extensions", "chat.openagents", "backends"])
+
+    assert Enum.map(published, & &1["id"]) == OpenAgents.Chat.Backends.ids()
+
+    # A published id the endpoint would refuse is the drift this rule exists to
+    # catch, so each one is offered to the endpoint that names it.
+    for backend <- published do
+      accepted =
+        conn
+        |> put_chat_api_token("governance-backend-" <> backend["id"])
+        |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => backend["id"]})
+
+      assert json_response(accepted, 202)["turn"]["model"] == backend["id"]
+    end
+  end
+
+  test "a model outside the published enum is refused with a field-level 422", %{conn: conn} do
+    refusal =
+      conn
+      |> put_chat_api_token("governance-backend-unknown")
+      |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => "not-a-legal-value"})
+
+    assert %{"errors" => errors} = json_response(refusal, 422)
+    assert Map.has_key?(errors, "model")
+  end
+
   defp documented_fields(conn, extension) do
     conn
     |> get(~p"/api/v3")

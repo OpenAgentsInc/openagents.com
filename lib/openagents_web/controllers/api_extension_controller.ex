@@ -110,6 +110,27 @@ defmodule OpenAgentsWeb.ApiExtensionController do
   }
 
   @extensions %{
+    "chat.openagents" => %{
+      "version" => "2026-08-23",
+      "description" =>
+        "The inference backends an account chat turn may choose between. " <>
+          "Every backend answers with the same events and the same terminal " <>
+          "shape, so the choice changes which model replies and nothing else.",
+      "endpoints" => ["POST /api/v3/chat/turns", "GET /api/v3/chat/events"],
+      "parameters" => %{
+        "model" => %{
+          "endpoint" => "POST /api/v3/chat/turns",
+          "type" => "string",
+          "enum" => OpenAgents.Chat.Backends.ids(),
+          "default" => OpenAgents.Chat.Backends.default_id(),
+          "description" =>
+            "The backend that answers the turn. Omitted or empty selects the " <>
+              "default. A value outside this enum is refused with a " <>
+              "field-level 422 naming `model`."
+        }
+      },
+      "backends" => OpenAgents.Chat.Backends.catalog()
+    },
     "capacity.openagents" => %{
       "version" => "2026-08-23",
       "description" => "Owner-safe quantity-based capacity and matching projections.",

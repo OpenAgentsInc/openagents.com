@@ -5,7 +5,7 @@ defmodule OpenAgents.Chat.AccountTurns do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Analytics
   alias OpenAgents.Analytics.Chat, as: ChatAnalytics
-  alias OpenAgents.Chat.{AccountEvent, AccountRun, OpenRouter}
+  alias OpenAgents.Chat.{AccountEvent, AccountRun, Backends, OpenRouter}
   alias OpenAgents.Conversations
   alias OpenAgents.Repo
 
@@ -26,16 +26,17 @@ defmodule OpenAgents.Chat.AccountTurns do
     content = String.trim(content)
     reasoning = OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, "high"))
     subscriber = Keyword.get(options, :subscriber)
-    streamer = Keyword.get(options, :streamer, &OpenRouter.stream/3)
 
-    with :ok <- validate_content(content),
+    with {:ok, backend} <- Backends.fetch(Keyword.get(options, :backend)),
+         streamer = Keyword.get(options, :streamer, Backends.streamer(backend)),
+         :ok <- validate_content(content),
          {:ok, conversation} <- Conversations.ensure_conversation(user),
-         {:ok, run} <- create_run(conversation.id, content, reasoning),
-         {:ok, _pid} <- start_provider(run, user, subscriber, streamer) do
+         {:ok, run} <- create_run(conversation.id, content, reasoning, backend),
+         {:ok, _pid} <- start_provider(run, user, subscriber, streamer, backend) do
       {:ok, run_projection(run)}
     else
       {:provider_start_failed, run, reason} ->
-        finish_run(run.id, {:error, :turn_start_failed})
+        finish_run(run.id, {:error, :turn_start_failed}, Backends.default())
         capture_run_outcome(run, user, {:error, :turn_start_failed})
         {:error, reason}
 
@@ -150,7 +151,7 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   defp validate_content(_content), do: :ok
 
-  defp create_run(conversation_id, content, reasoning) do
+  defp create_run(conversation_id, content, reasoning, backend) do
     now = DateTime.utc_now()
 
     result =
@@ -159,6 +160,7 @@ defmodule OpenAgents.Chat.AccountTurns do
           %AccountRun{conversation_id: conversation_id}
           |> AccountRun.changeset(%{
             status: "streaming",
+            backend: backend.id,
             reasoning_effort: reasoning,
             user_content: content,
             started_at: now
@@ -244,12 +246,12 @@ defmodule OpenAgents.Chat.AccountTurns do
     |> Enum.map_join("", fn payload -> payload["value"] || "" end)
   end
 
-  defp start_provider(run, user, subscriber, streamer) do
+  defp start_provider(run, user, subscriber, streamer, backend) do
     request = %{
-      "model" => OpenRouter.default_model(),
+      "model" => Backends.model(backend),
       "reasoning" => run.reasoning_effort,
       "messages" =>
-        provider_history(run.conversation_id, run.id) ++
+        provider_history(run.conversation_id, run.id, backend) ++
           [%{"role" => "user", "content" => run.user_content}]
     }
 
@@ -278,7 +280,7 @@ defmodule OpenAgents.Chat.AccountTurns do
                _kind, _reason -> {:error, :provider_unavailable}
              end
 
-           finish_run(run.id, result)
+           finish_run(run.id, result, backend)
            capture_run_outcome(run, user, result)
            notify(subscriber, {:account_chat_completed, run.id, result})
          end) do
@@ -370,7 +372,7 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   defp capture_run_outcome(_run, _user, _result), do: :ok
 
-  defp finish_run(run_id, {:ok, completion}) do
+  defp finish_run(run_id, {:ok, completion}, _backend) do
     # Token counts are read before redaction, which blanks every field whose
     # name contains `token`, and are stored beside the redacted completion.
     usage = usage_counts(completion)
@@ -384,8 +386,8 @@ defmodule OpenAgents.Chat.AccountTurns do
     })
   end
 
-  defp finish_run(run_id, {:error, reason}) do
-    error = public_error(reason)
+  defp finish_run(run_id, {:error, reason}, backend) do
+    error = public_error(reason, backend)
     code = error_code(reason)
 
     terminal_update(run_id, "response_failed", %{"reason" => error, "code" => code}, %{
@@ -441,11 +443,19 @@ defmodule OpenAgents.Chat.AccountTurns do
     |> Repo.insert!()
   end
 
-  defp provider_history(conversation_id, excluded_run_id) do
+  # History replays into the provider that wrote it. An OpenRouter Responses
+  # output list is not a Gemini turn and vice versa, so a conversation that
+  # switches backends replays only the turns the chosen backend produced rather
+  # than handing one provider another's transcript shape. A row written before
+  # backends were named is an Ox Alpha turn, which is what its `NULL` means.
+  defp provider_history(conversation_id, excluded_run_id, backend) do
+    default_id = Backends.default_id()
+
     from(r in AccountRun,
       where:
         r.conversation_id == ^conversation_id and r.id != ^excluded_run_id and
-          r.status == "completed",
+          r.status == "completed" and
+          coalesce(r.backend, ^default_id) == ^backend.id,
       order_by: [asc: r.inserted_at, asc: r.id]
     )
     |> Repo.all()
@@ -688,21 +698,31 @@ defmodule OpenAgents.Chat.AccountTurns do
     do: OpenAgents.Tools.Redaction.redact(payload)
 
   defp normalize_payload(payload), do: %{"value" => OpenAgents.Tools.Redaction.redact(payload)}
-  defp public_error(:missing_api_key), do: "OpenRouter is not configured for this environment."
-  defp public_error(:rate_limited), do: "OpenRouter is rate-limited. Try again."
+  # A failure names the backend that failed. A turn answered by Gemini that
+  # reports OpenRouter as unavailable sends the reader to the wrong provider,
+  # and with more than one backend that is now a reachable mistake rather than
+  # a hypothetical one.
+  defp public_error(reason, %{label: label}), do: public_error(reason, label)
 
-  defp public_error(:service_unavailable),
-    do: "OpenRouter is unavailable right now. Try again."
+  defp public_error(:missing_api_key, label),
+    do: "#{label} is not configured for this environment."
 
-  defp public_error(:stream_interrupted),
+  defp public_error(:rate_limited, label), do: "#{label} is rate-limited. Try again."
+
+  defp public_error(:service_unavailable, label),
+    do: "#{label} is unavailable right now. Try again."
+
+  defp public_error(:stream_interrupted, _label),
     do: "The response stream stopped before it finished. Try again."
 
-  defp public_error(:invalid_response),
-    do: "OpenRouter returned a response this console could not read. Try again."
+  defp public_error(:invalid_response, label),
+    do: "#{label} returned a response this console could not read. Try again."
 
-  defp public_error(:provider_unavailable), do: "OpenRouter could not complete that message."
-  defp public_error(:turn_start_failed), do: "The chat turn could not start."
-  defp public_error(_reason), do: "OpenRouter could not complete that message."
+  defp public_error(:provider_unavailable, label),
+    do: "#{label} could not complete that message."
+
+  defp public_error(:turn_start_failed, _label), do: "The chat turn could not start."
+  defp public_error(_reason, label), do: "#{label} could not complete that message."
 
   defp error_code(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp error_code({:provider_error, code, _detail}) when is_binary(code), do: code
@@ -881,10 +901,15 @@ defmodule OpenAgents.Chat.AccountTurns do
     if Path.type(path) == :absolute, do: Path.basename(path), else: path
   end
 
+  # The accepted turn names the backend it went to. A caller that sent no
+  # `model` still learns which one answered, so a default it did not choose is
+  # never something it has to infer.
   defp run_projection(run),
     do: %{
       "id" => run.id,
       "status" => run.status,
+      "model" => run.backend,
+      "provider_model" => Backends.model(Backends.fetch!(run.backend)),
       "reasoning_effort" => run.reasoning_effort,
       "latency_ms" => run.latency_ms,
       "started_at" => DateTime.to_iso8601(run.started_at)

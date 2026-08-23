@@ -150,6 +150,7 @@ config :openagents,
 if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
   config :openagents, :openrouter_api_key, optional_text.("OPENROUTER_API_KEY")
+  config :openagents, :gemini_api_key, optional_text.("GEMINI_API_KEY")
   config :openagents, :box_api_key, optional_text.("BOX_API_KEY")
 end
 
@@ -462,6 +463,7 @@ if config_env() == :prod and runtime_role == :web do
     github_oauth_scopes: github_oauth_scopes,
     openai_api_key: required_text.("OPENAI_API_KEY"),
     openrouter_api_key: optional_text.("OPENROUTER_API_KEY"),
+    gemini_api_key: optional_text.("GEMINI_API_KEY"),
     box_api_key: optional_text.("BOX_API_KEY"),
     inference_proxy_url: optional_text.("OPENAGENTS_INFERENCE_PROXY_URL"),
     forge_enabled: forge_enabled,

@@ -465,7 +465,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
     assert has_element?(view, "#chat-console-retry-#{run_id}")
   end
 
-  test "the composer shows a safe inline error when OpenRouter is not configured", %{conn: conn} do
+  test "the composer names the backend that is not configured", %{conn: conn} do
     conn = log_in_admin_user(conn, "console-composer-operator")
     {:ok, view, _html} = live(conn, ~p"/chat")
 
@@ -479,7 +479,9 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
              "Draft the release notes."
            )
 
-    assert has_element?(view, ~s([role="alert"]), "OpenRouter is not configured")
+    # The backend is named, not the gateway behind it, so a turn answered by a
+    # second backend cannot report the first one as the thing that failed.
+    assert has_element?(view, ~s([role="alert"]), "Ox Alpha is not configured")
     assert has_element?(view, ~s(#chat_message), "Draft the release notes.")
   end
 

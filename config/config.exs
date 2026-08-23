@@ -102,6 +102,8 @@ config :openagents,
   openai_api_key: nil,
   openrouter_api_key: nil,
   openrouter_model: "stealth/ox-alpha",
+  gemini_api_key: nil,
+  gemini_model: "gemini-3.7-flash",
   box_api_key: nil,
   box_api: [
     base_url: "https://ascii.dev/api/box/v1",

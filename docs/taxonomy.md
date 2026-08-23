@@ -499,13 +499,22 @@ the codebase; say which one you mean.
 **Ox Alpha** — a third-party stealth model. It is not an OpenAgents release, a
 milestone, or a subsystem. Providers publish it under different slugs:
 `stealth/ox-alpha` on OpenRouter and Nous Portal, `stealth-ox-alpha` on Venice,
-`x-preview-f-free` on OpenCode Zen. This application requests Ox Alpha and
-nothing else, so a turn fails rather than answering as another model, and every
-Box boots OpenCode against `openrouter/stealth/ox-alpha`. Ox Alpha is the
-model, OpenRouter is the gateway, and a Box is the machine it runs on. The "Ox
+`x-preview-f-free` on OpenCode Zen. It is the default backend a chat turn uses
+and the only one a Box boots OpenCode against (`openrouter/stealth/ox-alpha`).
+A turn fails rather than silently answering as another model: naming a backend
+is explicit, and an unsupported name is refused. Ox Alpha is the model,
+OpenRouter is the gateway, and a Box is the machine it runs on. The "Ox
 Alpha stress fleet" is the work program that burns the free capacity, not the
 model. `docs/2026-08-23-ox-alpha-provider-limits.md` records the measured
 limits and the date of measurement; provider quotas move without notice.
+
+**Backend** — one model and the adapter that reaches it, named by a stable id
+a client sends and a label a person reads. `OpenAgents.Chat.Backends` is the
+single list; `GET /api/v3` publishes the ids so a client discovers the set
+instead of hardcoding it. Say backend for the choice and model for the thing
+chosen: Ox Alpha and Gemini 3.7 Flash are models, and each is reached through
+one backend. A backend is not a provider — OpenRouter and Google are
+providers, and a provider can serve more than one backend.
 
 **Khala** — OpenAgents' OpenAI-compatible collective-intelligence endpoint,
 built in the separate `OpenAgentsInc/openagents` monorepo. Nothing here

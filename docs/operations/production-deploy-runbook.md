@@ -133,6 +133,27 @@ gcloud compute instances add-metadata sarah-fleet-N --zone <zone> \
 Metadata changes take effect at the next instance reset, which the rolling
 replacement performs. Never print secret values.
 
+### Pending: `GEMINI_API_KEY`
+
+The Gemini 3.7 Flash chat backend needs `GEMINI_API_KEY` in the fleet
+environment. Step 1 is already done: the secret is `openagents-gemini-api-key`
+in `openagentsgemini`. Steps 2 and 3 are not, and until they are, a production
+turn that names `gemini-3.7-flash` fails with `missing_api_key` rather than
+answering. The rest of the API is unaffected, and no other backend changes.
+
+Add to the startup script:
+
+```sh
+export GEMINI_API_KEY="$(secret openagents-gemini-api-key)"
+```
+
+and add `GEMINI_API_KEY` to `ENV_NAMES`. Confirm the accessor grant first:
+
+```sh
+CLOUDSDK_CONFIG=<sa-config> gcloud secrets get-iam-policy openagents-gemini-api-key \
+  --project openagentsgemini
+```
+
 ## 5. Promote and classify
 
 Promote the exact SHA through `/admin/forge`, or through the operator API

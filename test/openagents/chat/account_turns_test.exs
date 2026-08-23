@@ -246,4 +246,78 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
     assert AccountTurns.list_events(user) != []
     assert AccountTurns.list_events(other_user) == []
   end
+
+  test "a backend replays only the history it wrote" do
+    # An OpenRouter Responses output list is not a Gemini turn. Handing one
+    # provider another's transcript shape is a request the provider refuses, so
+    # switching backends starts from the turns that backend actually produced.
+    user = repository_user_fixture("account-chat-backend-history")
+    test_process = self()
+
+    recorder = fn label ->
+      fn request, _callback, _options ->
+        send(test_process, {:request, label, request})
+        {:ok, %{"assistant_content" => "Answered by #{label}."}}
+      end
+    end
+
+    assert {:ok, %{"id" => first_id, "model" => "ox-alpha"}} =
+             AccountTurns.submit(user, "First.", subscriber: self(), streamer: recorder.("ox"))
+
+    assert_receive {:request, "ox", _first_request}
+    assert_receive {:account_chat_completed, ^first_id, {:ok, _completion}}
+
+    assert {:ok, %{"id" => second_id, "model" => "gemini-3.7-flash"}} =
+             AccountTurns.submit(user, "Second.",
+               subscriber: self(),
+               backend: "gemini-3.7-flash",
+               streamer: recorder.("gemini")
+             )
+
+    assert_receive {:request, "gemini", gemini_request}
+    assert_receive {:account_chat_completed, ^second_id, {:ok, _completion}}
+
+    # Gemini sees its own first turn and nothing from the Ox Alpha lane.
+    assert gemini_request["messages"] == [%{"role" => "user", "content" => "Second."}]
+    assert gemini_request["model"] == "gemini-3.7-flash"
+
+    assert {:ok, %{"id" => third_id}} =
+             AccountTurns.submit(user, "Third.", subscriber: self(), streamer: recorder.("ox"))
+
+    assert_receive {:request, "ox", ox_request}
+    assert_receive {:account_chat_completed, ^third_id, {:ok, _completion}}
+
+    assert Enum.map(ox_request["messages"], & &1["content"]) == [
+             "First.",
+             "Answered by ox.",
+             "Third."
+           ]
+  end
+
+  test "a failure names the backend that failed" do
+    user = repository_user_fixture("account-chat-backend-error")
+    streamer = fn _request, _callback, _options -> {:error, :rate_limited} end
+
+    assert {:ok, %{"id" => run_id}} =
+             AccountTurns.submit(user, "Hello.",
+               subscriber: self(),
+               backend: "gemini-3.7-flash",
+               streamer: streamer
+             )
+
+    assert_receive {:account_chat_completed, ^run_id, {:error, :rate_limited}}
+
+    assistant = AccountTurns.list_messages(user) |> List.last()
+    assert assistant.error =~ "Gemini 3.7 Flash"
+    refute assistant.error =~ "OpenRouter"
+  end
+
+  test "an unsupported backend never creates a turn" do
+    user = repository_user_fixture("account-chat-backend-unknown")
+
+    assert {:error, :unsupported_backend} =
+             AccountTurns.submit(user, "Hello.", backend: "gpt-4")
+
+    assert AccountTurns.list_messages(user) == []
+  end
 end

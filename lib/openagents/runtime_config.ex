@@ -112,7 +112,8 @@ defmodule OpenAgents.RuntimeConfig do
 
   @spec fetch_secret(:openai_api_key | :openrouter_api_key) ::
           {:ok, String.t()} | {:error, :not_configured}
-  def fetch_secret(secret) when secret in [:openai_api_key, :openrouter_api_key] do
+  def fetch_secret(secret)
+      when secret in [:openai_api_key, :openrouter_api_key, :gemini_api_key] do
     case Application.fetch_env(:openagents, secret) do
       {:ok, value} when is_binary(value) and byte_size(value) > 0 -> {:ok, value}
       _missing -> {:error, :not_configured}

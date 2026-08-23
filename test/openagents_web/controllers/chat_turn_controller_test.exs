@@ -189,4 +189,50 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
   test "chat API requires a bearer token", %{conn: conn} do
     assert conn |> get(~p"/api/v3/chat/events") |> api_error_code(401) == "unauthenticated"
   end
+
+  describe "backend selection" do
+    test "a turn names the backend it went to, whether or not it chose one", %{conn: conn} do
+      for {sent, expected} <- [
+            {%{}, "ox-alpha"},
+            {%{"model" => "gemini-3.7-flash"}, "gemini-3.7-flash"}
+          ] do
+        key = "chat-backend-" <> expected
+
+        response =
+          conn
+          |> put_chat_api_token(key)
+          |> post(~p"/api/v3/chat/turns", Map.merge(%{"message" => "Hello."}, sent))
+          |> json_response(202)
+
+        assert response["turn"]["model"] == expected
+      end
+    end
+
+    test "an unsupported model is a field-level refusal, not the default", %{conn: conn} do
+      refusal =
+        conn
+        |> put_chat_api_token("chat-bad-backend")
+        |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => "gpt-4"})
+
+      body = json_response(refusal, 422)
+
+      assert body["code"] == "validation_failed"
+      assert body["status"] == 422
+      assert Map.has_key?(body["errors"], "model")
+      assert hd(body["errors"]["model"]) =~ "gemini-3.7-flash"
+
+      # The key published clients already read stays beside the envelope.
+      assert body["error"] == "unsupported_model"
+    end
+
+    test "an empty model means no preference rather than a bad one", %{conn: conn} do
+      response =
+        conn
+        |> put_chat_api_token("chat-empty-backend")
+        |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => ""})
+        |> json_response(202)
+
+      assert response["turn"]["model"] == "ox-alpha"
+    end
+  end
 end

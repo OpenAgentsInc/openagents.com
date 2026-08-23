@@ -270,6 +270,14 @@ defmodule OpenAgentsWeb.RouteAuthority do
           false
         )
 
+      pull_request_browser_path?(path) and verb in [:get, :head] ->
+        declaration(
+          :public_read,
+          "anonymous visitor or signed-in person",
+          "forge:pull-requests:web",
+          false
+        )
+
       repository_browser_path?(path) and verb in [:get, :head] ->
         declaration(
           :public_read,
@@ -316,6 +324,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp issue_browser_path?(path) do
     path == "/:owner/:repo/issues" or
       String.match?(path, ~r{\A/:owner/:repo/issues/:number\z})
+  end
+
+  defp pull_request_browser_path?(path) do
+    path == "/:owner/:repo/pulls" or
+      String.match?(path, ~r{\A/:owner/:repo/pulls/:number\z})
   end
 
   defp repository_browser_path?(path) do

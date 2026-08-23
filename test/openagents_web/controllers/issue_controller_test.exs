@@ -251,4 +251,101 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert message =~ "positive integer"
     end
   end
+
+  describe "the openagents issue extension" do
+    test "show carries the dependency graph and names the extension", %{conn: conn} do
+      {:ok, blocked} = Issues.create_issue(repository(), %{title: "Waiting"})
+      {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
+      assert :ok = Issues.add_dependencies(blocked, [blocker.number])
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{blocked.number}")
+
+      assert %{
+               "openagents" => %{
+                 "blocked" => true,
+                 "blocked_by" => [%{"number" => number, "state" => "open"}],
+                 "blocks" => []
+               }
+             } = json_response(conn, 200)
+
+      assert number == blocker.number
+      assert get_resp_header(conn, "x-openagents-extensions") == ["issue.openagents"]
+    end
+
+    test "index carries the graph for every issue on the page", %{conn: conn} do
+      {:ok, blocked} = Issues.create_issue(repository(), %{title: "Waiting"})
+      {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
+      assert :ok = Issues.add_dependencies(blocked, [blocker.number])
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => issues} = json_response(conn, 200)
+      by_number = Map.new(issues, &{&1["number"], &1["openagents"]})
+
+      assert %{"blocked" => true, "blocked_by" => [_one]} = by_number[blocked.number]
+      assert %{"blocked" => false, "blocks" => [_one]} = by_number[blocker.number]
+    end
+
+    test "an issue without prerequisites reports an empty graph", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Ready"})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"blocked" => false, "blocked_by" => [], "blocks" => []}} =
+               json_response(conn, 200)
+    end
+  end
+
+  describe "the blocked filter" do
+    test "index lists only the issues waiting on an open prerequisite", %{conn: conn} do
+      {:ok, blocked} = Issues.create_issue(repository(), %{title: "Waiting"})
+      {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
+      {:ok, _ready} = Issues.create_issue(repository(), %{title: "Ready"})
+      assert :ok = Issues.add_dependencies(blocked, [blocker.number])
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=true")
+
+      assert %{"issues" => [issue], "pagination" => %{"total" => 1}} = json_response(conn, 200)
+      assert issue["title"] == "Waiting"
+    end
+
+    test "index lists the issues an agent can start now", %{conn: conn} do
+      {:ok, blocked} = Issues.create_issue(repository(), %{title: "Waiting"})
+      {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
+      {:ok, _ready} = Issues.create_issue(repository(), %{title: "Ready"})
+      assert :ok = Issues.add_dependencies(blocked, [blocker.number])
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=false")
+
+      assert %{"issues" => issues, "pagination" => %{"total" => 2}} = json_response(conn, 200)
+      assert Enum.map(issues, & &1["title"]) |> Enum.sort() == ["Prerequisite", "Ready"]
+    end
+
+    test "closing the prerequisite moves the issue to the unblocked list", %{conn: conn} do
+      {:ok, blocked} = Issues.create_issue(repository(), %{title: "Waiting"})
+      {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
+      assert :ok = Issues.add_dependencies(blocked, [blocker.number])
+
+      patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{blocker.number}", %{
+        state: "closed"
+      })
+
+      blocked_conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=true")
+      assert %{"issues" => [], "pagination" => %{"total" => 0}} = json_response(blocked_conn, 200)
+
+      ready_conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=false")
+
+      assert %{"issues" => [issue], "pagination" => %{"total" => 1}} =
+               json_response(ready_conn, 200)
+
+      assert issue["title"] == "Waiting"
+    end
+
+    test "index rejects a blocked value that is not a boolean", %{conn: conn} do
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=maybe")
+
+      assert %{"errors" => %{"blocked" => [message]}} = json_response(conn, 422)
+      assert message =~ "true or false"
+    end
+  end
 end

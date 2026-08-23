@@ -82,6 +82,36 @@ openagents api -X POST -f body="The fix is available in staging." \
   repos/OWNER/REPO/issues/41/comments
 ```
 
+## Prerequisites
+
+An issue can wait on other issues in the same repository.
+
+| Operation | Method | Path |
+|---|---|---|
+| Read the graph | `GET` | `repos/OWNER/REPO/issues/NUMBER/dependencies` |
+| Record prerequisites | `POST` | `repos/OWNER/REPO/issues/NUMBER/dependencies` |
+| Remove one | `DELETE` | `repos/OWNER/REPO/issues/NUMBER/dependencies/BLOCKER_NUMBER` |
+
+Record that issue 42 waits on issues 9 and 12:
+
+```sh
+printf '%s' '{"blocked_by":[9,12]}' | \
+  openagents api -X POST --input - \
+  repos/OWNER/REPO/issues/42/dependencies
+```
+
+Pick up work that nothing blocks:
+
+```sh
+openagents api "repos/OWNER/REPO/issues?state=open&blocked=false"
+```
+
+Every issue response also carries `openagents.blocked`, `openagents.blocked_by`,
+and `openagents.blocks`. `blocked` is derived from the prerequisites' state, so
+closing the last open prerequisite unblocks the issue with no second write. An
+unknown number, a self reference, and an edge that would close a cycle each
+return `422`, and none of the batch is recorded.
+
 ## Projects
 
 There are no named `project` commands. Construct every Projects V2 route manually under `repos/OWNER/REPO/projectsV2`.

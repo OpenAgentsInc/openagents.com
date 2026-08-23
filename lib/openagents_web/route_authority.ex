@@ -60,6 +60,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   @optional_forge_read_paths [
     "/api/v3/repos/:owner/:repo/issues",
     "/api/v3/repos/:owner/:repo/issues/:issue_number",
+    "/api/v3/repos/:owner/:repo/issues/:issue_number/dependencies",
     "/api/v3/repos/:owner/:repo/pulls",
     "/api/v3/repos/:owner/:repo/pulls/:pull_number",
     "/api/v3/repos/:owner/:repo/projectsV2",
@@ -179,6 +180,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/contracts/repositories-v1.json", verb: verb})
        when verb in [:get, :head],
        do: declaration(:public_read, "anonymous", "published:api-contract", false)
+
+  defp policy(%{path: "/api/v3", verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:api-extensions", false)
 
   defp policy(%{path: "/controller/pairings", verb: :post}),
     do: declaration(:machine, "unpaired machine", "machine:pairing:create", true)

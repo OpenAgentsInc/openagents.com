@@ -5,7 +5,7 @@ defmodule OpenAgents.Issues do
 
   alias OpenAgents.Accounts.User
   alias OpenAgents.Analytics
-  alias OpenAgents.Issues.{Comment, Issue}
+  alias OpenAgents.Issues.{Comment, Issue, IssueDependency}
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
   alias OpenAgents.Milestones
@@ -31,8 +31,8 @@ defmodule OpenAgents.Issues do
   One page of the filtered issue list, with the unpaginated total.
 
   Supported options: `:state`, `:label`, `:assignee`, `:milestone`, `:q`,
-  and `:page`. Filters compose; counts and pages always agree because they
-  read the same query.
+  `:blocked`, and `:page`. Filters compose; counts and pages always agree
+  because they read the same query.
   """
   def list_issues_page(%Repository{} = repository, opts) when is_list(opts) do
     page = max(parse_page(opts[:page]), 1)
@@ -131,6 +131,7 @@ defmodule OpenAgents.Issues do
     |> maybe_filter_assignee(Keyword.get(opts, :assignee))
     |> maybe_filter_milestone(Keyword.get(opts, :milestone))
     |> maybe_filter_search(Keyword.get(opts, :q))
+    |> maybe_filter_blocked(Keyword.get(opts, :blocked))
   end
 
   def get_issue!(%Repository{id: repository_id}, id) do
@@ -307,6 +308,217 @@ defmodule OpenAgents.Issues do
       end)
 
     update_issue(issue, %{"assignees" => assignees})
+  end
+
+  @doc """
+  The prerequisite edges touching `issues`, keyed by issue id.
+
+  One query serves a whole page, so rendering a list never walks the graph once
+  per row. Each entry carries what the issue waits on, what waits on it, and
+  whether any prerequisite is still open.
+  """
+  def dependency_graph(issues) when is_list(issues) do
+    ids = Enum.map(issues, & &1.id)
+    base = Map.new(ids, &{&1, %{blocked_by: [], blocks: []}})
+
+    from(dependency in IssueDependency,
+      join: blocked in Issue,
+      on: blocked.id == dependency.issue_id,
+      join: blocker in Issue,
+      on: blocker.id == dependency.blocked_by_issue_id,
+      where: dependency.issue_id in ^ids or dependency.blocked_by_issue_id in ^ids,
+      select: %{
+        blocked_id: blocked.id,
+        blocker_id: blocker.id,
+        blocked_summary: %{number: blocked.number, title: blocked.title, state: blocked.state},
+        blocker_summary: %{number: blocker.number, title: blocker.title, state: blocker.state}
+      }
+    )
+    |> Repo.all()
+    |> Enum.reduce(base, fn edge, graph ->
+      graph
+      |> collect_edge(edge.blocked_id, :blocked_by, edge.blocker_summary)
+      |> collect_edge(edge.blocker_id, :blocks, edge.blocked_summary)
+    end)
+    |> Map.new(fn {id, entry} -> {id, derive_blocked(entry)} end)
+  end
+
+  @doc "The prerequisite edges of one issue, in the shape `dependency_graph/1` returns."
+  def dependencies(%Issue{} = issue), do: [issue] |> dependency_graph() |> Map.fetch!(issue.id)
+
+  defp collect_edge(graph, issue_id, key, summary) do
+    case Map.fetch(graph, issue_id) do
+      {:ok, entry} -> Map.put(graph, issue_id, Map.update!(entry, key, &[summary | &1]))
+      :error -> graph
+    end
+  end
+
+  # An issue is blocked while a prerequisite is still open, so the flag is read
+  # from the prerequisites already loaded rather than stored on the issue.
+  defp derive_blocked(%{blocked_by: blocked_by, blocks: blocks}) do
+    blocked_by = Enum.sort_by(blocked_by, & &1.number)
+
+    %{
+      blocked_by: blocked_by,
+      blocks: Enum.sort_by(blocks, & &1.number),
+      blocked: Enum.any?(blocked_by, &(&1.state == "open"))
+    }
+  end
+
+  @doc """
+  Records the issues numbered `numbers` as prerequisites of `issue`.
+
+  All of them or none: the numbers are validated and inserted in one
+  transaction, so a request naming one unknown issue records nothing. Adding a
+  prerequisite that is already recorded succeeds without a second row.
+
+  Returns `:ok`, or `{:error, reason}` where reason is
+  `{:invalid_number, value}`, `{:self_reference, number}`,
+  `{:missing_issue, number}`, or `{:cycle, numbers}`. The cycle numbers name
+  the path the edge would close, starting and ending at `issue`.
+  """
+  def add_dependencies(%Issue{} = issue, numbers, actor \\ nil)
+      when is_list(numbers) and (is_nil(actor) or is_struct(actor, User)) do
+    Repo.transaction(fn ->
+      Enum.each(numbers, fn number ->
+        case add_dependency(issue, number, actor) do
+          :ok -> :ok
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    end)
+    |> case do
+      {:ok, _result} ->
+        Repositories.broadcast_issues(issue.repository_id)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp add_dependency(issue, number, actor) do
+    with {:ok, number} <- normalize_issue_number(number),
+         :ok <- reject_self_reference(issue, number),
+         {:ok, blocker} <- fetch_blocker(issue, number),
+         :ok <- reject_cycle(issue, blocker) do
+      insert_dependency(issue, blocker, actor)
+    end
+  end
+
+  defp normalize_issue_number(number) when is_integer(number) and number > 0, do: {:ok, number}
+
+  defp normalize_issue_number(number) when is_binary(number) do
+    case Integer.parse(number) do
+      {parsed, ""} -> normalize_issue_number(parsed)
+      _other -> {:error, {:invalid_number, number}}
+    end
+  end
+
+  defp normalize_issue_number(number), do: {:error, {:invalid_number, number}}
+
+  defp reject_self_reference(%Issue{number: number}, number),
+    do: {:error, {:self_reference, number}}
+
+  defp reject_self_reference(_issue, _number), do: :ok
+
+  defp fetch_blocker(issue, number) do
+    case Repo.get_by(Issue, repository_id: issue.repository_id, number: number) do
+      %Issue{} = blocker -> {:ok, blocker}
+      nil -> {:error, {:missing_issue, number}}
+    end
+  end
+
+  # The new edge closes a cycle exactly when the prerequisite already waits on
+  # the issue it would block. A backlog whose graph can contain a cycle cannot
+  # be scheduled, so the walk runs before the insert rather than at read time.
+  defp reject_cycle(issue, blocker) do
+    case dependency_path(blocker.id, issue.id) do
+      nil -> :ok
+      path -> {:error, {:cycle, [issue.number | issue_numbers(path)]}}
+    end
+  end
+
+  defp dependency_path(from_id, target_id),
+    do: walk_dependencies([[from_id]], MapSet.new([from_id]), target_id)
+
+  defp walk_dependencies([], _visited, _target_id), do: nil
+
+  defp walk_dependencies([path | queue], visited, target_id) do
+    next_ids = blocker_ids(hd(path))
+
+    if target_id in next_ids do
+      Enum.reverse([target_id | path])
+    else
+      unvisited = Enum.reject(next_ids, &MapSet.member?(visited, &1))
+
+      walk_dependencies(
+        queue ++ Enum.map(unvisited, &[&1 | path]),
+        Enum.into(unvisited, visited),
+        target_id
+      )
+    end
+  end
+
+  defp blocker_ids(issue_id) do
+    Repo.all(
+      from dependency in IssueDependency,
+        where: dependency.issue_id == ^issue_id,
+        select: dependency.blocked_by_issue_id
+    )
+  end
+
+  defp issue_numbers(ids) do
+    numbers =
+      from(issue in Issue, where: issue.id in ^ids, select: {issue.id, issue.number})
+      |> Repo.all()
+      |> Map.new()
+
+    Enum.flat_map(ids, fn id ->
+      case Map.fetch(numbers, id) do
+        {:ok, number} -> [number]
+        :error -> []
+      end
+    end)
+  end
+
+  defp insert_dependency(issue, blocker, actor) do
+    %IssueDependency{}
+    |> IssueDependency.changeset(%{
+      "repository_id" => issue.repository_id,
+      "issue_id" => issue.id,
+      "blocked_by_issue_id" => blocker.id,
+      "created_by_user_id" => actor && actor.id
+    })
+    |> Repo.insert(on_conflict: :nothing, conflict_target: [:issue_id, :blocked_by_issue_id])
+    |> case do
+      {:ok, _dependency} -> :ok
+      {:error, changeset} -> {:error, {:invalid_dependency, changeset}}
+    end
+  end
+
+  @doc """
+  Removes the prerequisite numbered `number` from `issue`.
+
+  Returns `{:error, {:missing_dependency, number}}` when the edge is not
+  recorded, because a silent no-op hides the mismatch from the caller.
+  """
+  def remove_dependency(%Issue{} = issue, number) do
+    with {:ok, number} <- normalize_issue_number(number),
+         {:ok, blocker} <- fetch_blocker(issue, number) do
+      from(dependency in IssueDependency,
+        where: dependency.issue_id == ^issue.id and dependency.blocked_by_issue_id == ^blocker.id
+      )
+      |> Repo.delete_all()
+      |> case do
+        {0, _returned} ->
+          {:error, {:missing_dependency, number}}
+
+        {_count, _returned} ->
+          Repositories.broadcast_issues(issue.repository_id)
+          :ok
+      end
+    end
   end
 
   def set_milestone(%Issue{} = issue, nil) do
@@ -703,6 +915,26 @@ defmodule OpenAgents.Issues do
       [issue],
       fragment("coalesce((? ->> 'number')::int, -1)", issue.milestone) == ^number
     )
+  end
+
+  # Blocked is a property of the prerequisite's current state, so the filter
+  # asks the graph rather than a column: an issue is blocked while any issue it
+  # is blocked by is still open. Closing the last prerequisite moves the issue
+  # into `blocked=false` with no second write.
+  defp maybe_filter_blocked(query, nil), do: query
+
+  defp maybe_filter_blocked(query, true),
+    do: where(query, [], exists(open_blocker_query()))
+
+  defp maybe_filter_blocked(query, false),
+    do: where(query, [], not exists(open_blocker_query()))
+
+  defp open_blocker_query do
+    from dependency in IssueDependency,
+      join: blocker in Issue,
+      on: blocker.id == dependency.blocked_by_issue_id,
+      where: dependency.issue_id == parent_as(:issue).id and blocker.state == "open",
+      select: 1
   end
 
   defp maybe_filter_search(query, nil), do: query

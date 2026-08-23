@@ -262,6 +262,8 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :api
 
+    get "/", ApiExtensionController, :show
+
     post "/device/authorizations", DeviceAuthorizationController, :create
     post "/device/authorizations/token", DeviceAuthorizationController, :token
 
@@ -300,6 +302,11 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo", RepositoryController, :show
     get "/repos/:owner/:repo/issues", IssueController, :index
     get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
+
+    get "/repos/:owner/:repo/issues/:issue_number/dependencies",
+        IssueDependencyController,
+        :index
+
     get "/repos/:owner/:repo/pulls", PullRequestController, :index
     get "/repos/:owner/:repo/pulls/:pull_number", PullRequestController, :show
     get "/repos/:owner/:repo/projectsV2", ProjectController, :index
@@ -335,6 +342,15 @@ defmodule OpenAgentsWeb.Router do
     put "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
     patch "/repos/:owner/:repo/issues/comments/:id", CommentController, :update
     delete "/repos/:owner/:repo/issues/comments/:id", CommentController, :delete
+
+    post "/repos/:owner/:repo/issues/:issue_number/dependencies",
+         IssueDependencyController,
+         :create
+
+    delete "/repos/:owner/:repo/issues/:issue_number/dependencies/:blocked_by_number",
+           IssueDependencyController,
+           :delete
+
     post "/repos/:owner/:repo/issues/:issue_number/labels", IssueLabelController, :create
     delete "/repos/:owner/:repo/issues/:issue_number/labels/:name", IssueLabelController, :delete
     post "/repos/:owner/:repo/issues/:issue_number/assignees", IssueAssigneeController, :create

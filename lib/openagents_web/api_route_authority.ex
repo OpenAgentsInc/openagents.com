@@ -49,6 +49,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/milestones/:milestone_number" => :anonymous,
       "get /api/v3/repos/:owner/:repo/assignees" => :anonymous,
       "get /api/v3/repos/:owner/:repo/assignees/:assignee" => :anonymous,
+      # Anonymous by design: the extension index is a public API description.
+      "get /api/v3" => :anonymous,
       # Anonymous by design: device authorization bootstraps credentials.
       "post /api/v3/device/authorizations" => :anonymous,
       "post /api/v3/device/authorizations/token" => :anonymous,
@@ -59,6 +61,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/issues" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/issues/:issue_number" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/pulls" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/pulls/:pull_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2" => :optional_bearer,
@@ -96,6 +99,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/forum/claims" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :required_bearer,
+      "delete /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies/:blocked_by_number" =>
+        :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/labels" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/labels" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/milestones" => :required_bearer,

@@ -11,10 +11,13 @@ defmodule OpenAgentsWeb.IssueController do
     with :ok <- validate_index_params(params),
          {issues, total} <-
            Issues.list_issues_page(repository, index_options(params)) do
-      render(conn, :index,
+      conn
+      |> put_extensions_header()
+      |> render(:index,
         issues: issues,
         owner: owner,
         repo: repo,
+        dependencies: Issues.dependency_graph(issues),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -43,6 +46,9 @@ defmodule OpenAgentsWeb.IssueController do
       Map.has_key?(params, "page") and not valid_page?(params["page"]) ->
         {:error, :page, "must be a positive integer"}
 
+      Map.has_key?(params, "blocked") and blocked_filter(params["blocked"]) == :invalid ->
+        {:error, :blocked, "must be true or false"}
+
       true ->
         :ok
     end
@@ -66,9 +72,20 @@ defmodule OpenAgentsWeb.IssueController do
       assignee: params["assignee"],
       milestone: params["milestone"],
       q: params["q"],
+      blocked: blocked_filter(params["blocked"]),
       page: params["page"]
     ]
   end
+
+  # An agent asking "what can I start right now?" sends `blocked=false`. The
+  # answer is derived from prerequisite state, so no value other than the two
+  # booleans has a meaning to guess at.
+  defp blocked_filter(nil), do: nil
+  defp blocked_filter("true"), do: true
+  defp blocked_filter("false"), do: false
+  defp blocked_filter(true), do: true
+  defp blocked_filter(false), do: false
+  defp blocked_filter(_value), do: :invalid
 
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
     repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
@@ -77,7 +94,13 @@ defmodule OpenAgentsWeb.IssueController do
       {:ok, %Issue{} = issue} ->
         conn
         |> put_status(:created)
-        |> render(:show, issue: issue, owner: owner, repo: repo)
+        |> put_extensions_header()
+        |> render(:show,
+          issue: issue,
+          owner: owner,
+          repo: repo,
+          dependencies: dependencies(issue)
+        )
 
       {:error, %Ecto.Changeset{} = changeset} ->
         conn
@@ -101,7 +124,9 @@ defmodule OpenAgentsWeb.IssueController do
         OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
       )
 
-    render(conn, :show, issue: issue, owner: owner, repo: repo)
+    conn
+    |> put_extensions_header()
+    |> render(:show, issue: issue, owner: owner, repo: repo, dependencies: dependencies(issue))
   rescue
     Ecto.NoResultsError ->
       conn
@@ -127,7 +152,14 @@ defmodule OpenAgentsWeb.IssueController do
 
     case Issues.update_issue(issue, params, conn.assigns.current_user) do
       {:ok, %Issue{} = issue} ->
-        render(conn, :show, issue: issue, owner: owner, repo: repo)
+        conn
+        |> put_extensions_header()
+        |> render(:show,
+          issue: issue,
+          owner: owner,
+          repo: repo,
+          dependencies: dependencies(issue)
+        )
 
       {:error, %Ecto.Changeset{} = changeset} ->
         conn
@@ -140,6 +172,13 @@ defmodule OpenAgentsWeb.IssueController do
       |> put_status(:not_found)
       |> json(%{message: "Not Found"})
   end
+
+  defp dependencies(%Issue{} = issue), do: Issues.dependency_graph([issue])
+
+  # The extension namespace is discoverable from the response itself, so a
+  # client never has to infer which OpenAgents fields this deployment sends.
+  defp put_extensions_header(conn),
+    do: put_resp_header(conn, "x-openagents-extensions", "issue.openagents")
 
   defp not_found(conn) do
     conn |> put_status(:not_found) |> json(%{message: "Not Found"})

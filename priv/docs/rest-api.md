@@ -62,6 +62,49 @@ DELETE /api/v3/repos/:owner/:repo/issues/comments/:id
 List responses use named envelopes. For example, the issue list returns an
 object with an `issues` array.
 
+## Issue prerequisites
+
+An issue can wait on other issues in the same repository.
+
+```text
+GET    /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies
+POST   /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies
+DELETE /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies/:blocked_by_number
+```
+
+`POST` takes the issue numbers this issue waits on and returns the resulting
+graph:
+
+```json
+{ "blocked_by": [9, 12] }
+```
+
+```json
+{
+  "blocked": true,
+  "blocked_by": [{ "number": 9, "title": "Deliver the work system", "state": "open" }],
+  "blocks": []
+}
+```
+
+Every issue response carries the same object under `openagents`, and a response
+that carries it names the namespace in the `x-openagents-extensions` header.
+`GET /api/v3` lists the extension fields this deployment serves.
+
+`blocked` is derived from the prerequisites' own state, so closing the last open
+prerequisite unblocks the issue with no second write. The issue list filters on
+it, which answers "what can an agent start right now":
+
+```text
+GET /api/v3/repos/:owner/:repo/issues?blocked=false
+GET /api/v3/repos/:owner/:repo/issues?blocked=true
+```
+
+Prerequisites stay inside one repository. An unknown number, a self reference,
+and an edge that would close a cycle each return `422 Unprocessable Entity`,
+and none of the batch is recorded. Reading the graph needs the same access as
+reading the issue. Recording or removing an edge needs repository write access.
+
 ## Labels
 
 ```text

@@ -64,6 +64,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/issues/:issue_number/dependencies" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/pulls" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/pulls/:pull_number" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/stacks" => :optional_bearer,
+      "get /api/v3/repos/:owner/:repo/stacks/:stack_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number" => :optional_bearer,
       "get /api/v3/repos/:owner/:repo/projectsV2/:project_number/items" => :optional_bearer,
@@ -99,6 +101,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/orgs/:org/repos/imports" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/issues" => :required_bearer,
       "post /api/v3/repos/:owner/:repo/pulls" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks" => :required_bearer,
+      "post /api/v3/repos/:owner/:repo/stacks/:stack_number/append" => :required_bearer,
       # pipe_through :forge_write_api — forum writes and identity claims.
       "post /api/v3/forum/topics" => :required_bearer,
       "post /api/v3/forum/topics/:topic_id/posts" => :required_bearer,

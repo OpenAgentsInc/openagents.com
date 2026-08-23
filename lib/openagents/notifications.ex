@@ -60,7 +60,7 @@ defmodule OpenAgents.Notifications do
   def subscribe(issue, user, reason)
 
   def subscribe(%Issue{} = issue, %User{} = user, reason)
-      when reason in ~w(author commented mentioned manual) do
+      when reason in ~w(author commented mentioned assigned manual) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     replace =
@@ -145,6 +145,118 @@ defmodule OpenAgents.Notifications do
     subscribe_author(issue, author, "commented")
     deliver(issue, comment, author, "comment:#{comment.id}", comment.body)
     :ok
+  end
+
+  @doc """
+  Announces what changed about an issue.
+
+  The event kinds are derived from the difference between the issue before and
+  the issue after, inside the transaction that wrote it. There is no
+  `issue_events` table to read from, and `update_issue/3` is the one chokepoint
+  every state change, label edit and assignment passes through, so the
+  difference is the only honest source of a typed event today. Deriving it here
+  keeps that chokepoint single: no caller writes a second update path to
+  announce what it did.
+
+  A change to the title, the body, the milestone or the lock announces nothing.
+  Those are edits to a document, not events in a thread, and an inbox that
+  reported every typo correction would stop being read.
+
+  Assignment addresses one person, so it reaches the assignee whether or not
+  they followed the issue, and starts them following it. Everything else
+  reaches the people already following.
+  """
+  def issue_updated(%Issue{} = before, %Issue{} = updated, actor) do
+    case derive_events(before, updated) do
+      [] ->
+        :ok
+
+      events ->
+        repository = Repo.get(Repository, updated.repository_id)
+        Enum.each(events, &deliver_event(updated, repository, actor, &1))
+        :ok
+    end
+  end
+
+  # An event is a kind, the fragment that identifies this transition, and who
+  # it addresses. The fragment names the field and its new value rather than a
+  # row id, because the transition has no row of its own.
+  defp derive_events(before, updated) do
+    state_events(before, updated) ++
+      assignee_events(before, updated) ++ label_events(before, updated)
+  end
+
+  defp state_events(%Issue{state: state}, %Issue{state: state}), do: []
+
+  defp state_events(_before, %Issue{state: state}),
+    do: [{"state_changed", "state:#{state}", :subscribers}]
+
+  defp assignee_events(before, updated) do
+    was = assignee_logins(before)
+    now = assignee_logins(updated)
+
+    Enum.map(now -- was, &{"assigned", "assigned:#{&1}", {:login, &1}}) ++
+      Enum.map(was -- now, &{"unassigned", "unassigned:#{&1}", {:login, &1}})
+  end
+
+  defp label_events(before, updated) do
+    was = label_names(before)
+    now = label_names(updated)
+
+    Enum.map(now -- was, &{"labeled", "labeled:#{&1}", :subscribers}) ++
+      Enum.map(was -- now, &{"unlabeled", "unlabeled:#{&1}", :subscribers})
+  end
+
+  defp assignee_logins(%Issue{assignees: assignees}),
+    do: assignees |> List.wrap() |> Enum.map(&String.downcase(entry(&1, "login"))) |> Enum.uniq()
+
+  defp label_names(%Issue{labels: labels}),
+    do: labels |> List.wrap() |> Enum.map(&String.downcase(entry(&1, "name"))) |> Enum.uniq()
+
+  # The JSON columns come back from PostgreSQL with string keys and are built
+  # in memory with them too, but a caller can hand `update_issue/3` a map keyed
+  # either way. Comparing stringified keys reads both without turning a value
+  # from a request body into an atom.
+  defp entry(map, key) when is_map(map) do
+    Enum.find_value(map, "", fn {found, value} -> to_string(found) == key && to_string(value) end)
+  end
+
+  defp entry(_map, _key), do: ""
+
+  # The transition has no row of its own, so the key is the issue, the second
+  # the update landed on, and the field with its new value. A retried request
+  # derives no event at all — the second attempt sees the change already
+  # applied and the difference is empty — and two writers racing to the same
+  # transition in the same second collide on this key instead of notifying
+  # twice.
+  defp deliver_event(%Issue{} = issue, repository, actor, {kind, fragment, audience}) do
+    dedupe_key = "issue:#{issue.id}:#{DateTime.to_unix(issue.updated_at)}:#{fragment}"
+    actor_login = actor_login(actor)
+    actor_id = author_id(actor)
+
+    readers =
+      audience
+      |> recipients(issue)
+      |> Enum.filter(&readable?(repository, &1))
+
+    # Being handed an issue makes you a follower of it. The subscription is
+    # written before the preference filter, because muting the announcement is
+    # not the same as declining the work.
+    if kind == "assigned", do: Enum.each(readers, &subscribe(issue, &1, "assigned"))
+
+    readers
+    |> Enum.reject(&(&1.id == actor_id))
+    |> Enum.filter(&enabled?(&1, kind))
+    |> Enum.each(&insert_notification(&1, issue, nil, kind, actor_login, dedupe_key))
+  end
+
+  defp recipients(:subscribers, %Issue{} = issue), do: subscribers(issue)
+
+  defp recipients({:login, login}, _issue) do
+    Repo.all(
+      from user in User,
+        where: fragment("lower(?)", user.github_login) == ^login and user.status == "active"
+    )
   end
 
   defp subscribe_author(issue, %User{} = author, reason), do: subscribe(issue, author, reason)
@@ -238,8 +350,15 @@ defmodule OpenAgents.Notifications do
     |> Repo.exists?()
   end
 
-  defp enabled?(%User{} = user, "mention"), do: preferences(user).mentions_enabled
-  defp enabled?(%User{} = user, "issue_comment"), do: preferences(user).issue_comments_enabled
+  defp enabled?(%User{} = user, kind), do: category_enabled(preferences(user), kind)
+
+  defp category_enabled(preferences, "mention"), do: preferences.mentions_enabled
+  defp category_enabled(preferences, "issue_comment"), do: preferences.issue_comments_enabled
+  defp category_enabled(preferences, "assigned"), do: preferences.assignments_enabled
+  defp category_enabled(preferences, "unassigned"), do: preferences.assignments_enabled
+  defp category_enabled(preferences, "labeled"), do: preferences.label_changes_enabled
+  defp category_enabled(preferences, "unlabeled"), do: preferences.label_changes_enabled
+  defp category_enabled(preferences, "state_changed"), do: preferences.issue_activity_enabled
 
   defp actor_login(%User{github_login: login}), do: login
   defp actor_login(%{handle: handle}) when is_binary(handle), do: handle
@@ -352,7 +471,7 @@ defmodule OpenAgents.Notifications do
     case existing do
       %Preference{id: nil} ->
         Repo.insert(changeset,
-          on_conflict: {:replace, [:mentions_enabled, :issue_comments_enabled, :updated_at]},
+          on_conflict: {:replace, Preference.categories() ++ [:updated_at]},
           conflict_target: [:user_id]
         )
 

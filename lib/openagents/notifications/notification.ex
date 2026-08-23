@@ -5,6 +5,12 @@ defmodule OpenAgents.Notifications.Notification do
   It is a pointer, not a copy. Nothing here renders without a second read of
   the issue through the recipient's own visibility, so a row that outlives the
   recipient's access to the repository reveals nothing.
+
+  Seven kinds. `mention` and `issue_comment` announce something somebody wrote.
+  `assigned`, `unassigned`, `labeled`, `unlabeled` and `state_changed` announce
+  a change to the issue itself, derived from the difference between the issue
+  before and after an update. The record still names no label and no state: the
+  kind says which field moved, and reading the issue says what it moved to.
   """
 
   use Ecto.Schema
@@ -18,7 +24,7 @@ defmodule OpenAgents.Notifications.Notification do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @kinds ~w(mention issue_comment)
+  @kinds ~w(mention issue_comment assigned unassigned labeled unlabeled state_changed)
 
   schema "notifications" do
     field :kind, :string

@@ -336,11 +336,16 @@ defmodule OpenAgents.NotificationsTest do
       %{author: author, watcher: watcher, repository: repository, issue: issue}
     end
 
-    test "both categories are on for an account that never chose", %{author: author} do
+    test "every category but label changes is on for an account that never chose", %{
+      author: author
+    } do
       preferences = Notifications.preferences(author)
 
       assert preferences.mentions_enabled
       assert preferences.issue_comments_enabled
+      assert preferences.assignments_enabled
+      assert preferences.issue_activity_enabled
+      refute preferences.label_changes_enabled
       refute Notifications.preferences_recorded?(author)
     end
 
@@ -437,5 +442,284 @@ defmodule OpenAgents.NotificationsTest do
       assert Notifications.list_notifications(nil) == []
       assert Notifications.unread_count(nil) == 0
     end
+  end
+
+  describe "issue event fan-out" do
+    setup do
+      actor = repository_user_fixture("actor-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(actor)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, watcher)
+
+      %{actor: actor, watcher: watcher, repository: repository, issue: issue}
+    end
+
+    test "closing an issue reaches a subscriber", %{
+      actor: actor,
+      watcher: watcher,
+      issue: issue
+    } do
+      {:ok, _closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+
+      assert [notification] = Notifications.list_notifications(watcher)
+      assert notification.kind == "state_changed"
+      assert notification.issue_id == issue.id
+      assert notification.actor_login == actor.github_login
+      assert is_nil(notification.comment_id)
+    end
+
+    test "reopening reaches a subscriber as a second record", %{
+      actor: actor,
+      watcher: watcher,
+      issue: issue
+    } do
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+      {:ok, _reopened} = Issues.update_issue(closed, %{"state" => "open"}, actor)
+
+      assert [_reopen, _close] = Notifications.list_notifications(watcher)
+      assert Notifications.unread_count(watcher) == 2
+    end
+
+    test "editing the title announces nothing", %{actor: actor, watcher: watcher, issue: issue} do
+      {:ok, _renamed} = Issues.update_issue(issue, %{"title" => "a better title"}, actor)
+
+      assert Notifications.list_notifications(watcher) == []
+    end
+
+    test "labelling reaches a subscriber who asked for label changes", %{
+      actor: actor,
+      watcher: watcher,
+      issue: issue
+    } do
+      {:ok, _preferences} =
+        Notifications.update_preferences(watcher, %{label_changes_enabled: true})
+
+      {:ok, labelled} = Issues.add_labels(issue, ["bug"], actor)
+
+      assert [notification] = Notifications.list_notifications(watcher)
+      assert notification.kind == "labeled"
+
+      {:ok, _unlabelled} = Issues.remove_label(labelled, "bug", actor)
+
+      assert kinds(watcher) == ~w(labeled unlabeled)
+    end
+
+    test "labelling reaches nobody by default", %{actor: actor, watcher: watcher, issue: issue} do
+      {:ok, _labelled} = Issues.add_labels(issue, ["bug"], actor)
+
+      assert Notifications.list_notifications(watcher) == []
+    end
+
+    test "assignment reaches the assignee who never followed the issue", %{
+      actor: actor,
+      repository: repository,
+      issue: issue
+    } do
+      stranger = repository_user_fixture("stranger-#{System.unique_integer([:positive])}")
+      {:ok, _member} = Repositories.add_member(repository, stranger, "contributor")
+
+      refute Notifications.subscribed?(issue, stranger)
+
+      {:ok, _assigned} = Issues.add_assignees(issue, [stranger.github_login], actor)
+
+      assert [notification] = Notifications.list_notifications(stranger)
+      assert notification.kind == "assigned"
+      assert notification.actor_login == actor.github_login
+    end
+
+    test "assignment starts the assignee following the issue", %{
+      actor: actor,
+      repository: repository,
+      issue: issue
+    } do
+      stranger = repository_user_fixture("stranger-#{System.unique_integer([:positive])}")
+      {:ok, _member} = Repositories.add_member(repository, stranger, "contributor")
+
+      {:ok, assigned} = Issues.add_assignees(issue, [stranger.github_login], actor)
+
+      assert Notifications.subscribed?(assigned, stranger)
+
+      {:ok, _comment} = Issues.create_comment(assigned, %{"body" => "over to you"}, actor)
+
+      assert kinds(stranger) == ~w(assigned issue_comment)
+    end
+
+    test "unassignment reaches the account taken off", %{
+      actor: actor,
+      repository: repository,
+      issue: issue
+    } do
+      stranger = repository_user_fixture("stranger-#{System.unique_integer([:positive])}")
+      {:ok, _member} = Repositories.add_member(repository, stranger, "contributor")
+
+      {:ok, assigned} = Issues.add_assignees(issue, [stranger.github_login], actor)
+      {:ok, _removed} = Issues.remove_assignees(assigned, [stranger.github_login], actor)
+
+      assert kinds(stranger) == ~w(assigned unassigned)
+    end
+
+    test "assigning yourself announces nothing to yourself", %{
+      watcher: watcher,
+      issue: issue
+    } do
+      {:ok, _assigned} = Issues.add_assignees(issue, [watcher.github_login], watcher)
+
+      assert Notifications.list_notifications(watcher) == []
+    end
+
+    test "turning assignments off stops delivery to the assignee", %{
+      actor: actor,
+      repository: repository,
+      issue: issue
+    } do
+      stranger = repository_user_fixture("stranger-#{System.unique_integer([:positive])}")
+      {:ok, _member} = Repositories.add_member(repository, stranger, "contributor")
+
+      {:ok, _preferences} =
+        Notifications.update_preferences(stranger, %{assignments_enabled: false})
+
+      {:ok, _assigned} = Issues.add_assignees(issue, [stranger.github_login], actor)
+
+      assert Notifications.list_notifications(stranger) == []
+    end
+
+    test "turning issue activity off stops state changes but leaves comments", %{
+      actor: actor,
+      watcher: watcher,
+      issue: issue
+    } do
+      {:ok, _preferences} =
+        Notifications.update_preferences(watcher, %{issue_activity_enabled: false})
+
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+      {:ok, _comment} = Issues.create_comment(closed, %{"body" => "done"}, actor)
+
+      assert [%{kind: "issue_comment"}] = Notifications.list_notifications(watcher)
+    end
+
+    test "an unattributed close still reaches the subscriber", %{
+      watcher: watcher,
+      issue: issue
+    } do
+      {:ok, _closed} = Issues.update_issue(issue, %{"state" => "closed"})
+
+      assert [notification] = Notifications.list_notifications(watcher)
+      assert notification.kind == "state_changed"
+      assert is_nil(notification.actor_login)
+    end
+  end
+
+  describe "issue event authorization" do
+    test "a private repository never notifies a subscriber who is no longer a member" do
+      owner = repository_user_fixture("owner-#{System.unique_integer([:positive])}")
+      former = repository_user_fixture("former-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(owner, %{visibility: "private"})
+      {:ok, _member} = Repositories.add_member(repository, former, "contributor")
+
+      # Following the issue while a member, then losing membership. The
+      # subscription row survives, so nothing but fan-out's own predicate
+      # stands between this account and a record about a private issue.
+      {:ok, issue} = Issues.create_issue(repository, %{title: "internal"}, former)
+      :ok = Repositories.remove_member(repository, owner, former.id)
+
+      assert Notifications.subscribed?(issue, former)
+
+      {:ok, _closed} = Issues.update_issue(issue, %{"state" => "closed"}, owner)
+
+      assert Notifications.list_notifications(former) == []
+      assert Notifications.unread_count(former) == 0
+    end
+
+    test "assigning an account that cannot write the repository is refused before fan-out" do
+      owner = repository_user_fixture("owner-#{System.unique_integer([:positive])}")
+      outsider = repository_user_fixture("outsider-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(owner, %{visibility: "private"})
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "internal"}, owner)
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Issues.update_issue(
+          issue,
+          %{"assignees" => [%{"login" => outsider.github_login}]},
+          owner
+        )
+      end
+
+      assert Notifications.list_notifications(outsider) == []
+    end
+
+    test "an event notification disappears when the recipient's membership ends" do
+      owner = repository_user_fixture("owner-#{System.unique_integer([:positive])}")
+      reader = repository_user_fixture("reader-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(owner, %{visibility: "private"})
+      {:ok, _member} = Repositories.add_member(repository, reader, "viewer")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "internal"}, reader)
+      {:ok, _closed} = Issues.update_issue(issue, %{"state" => "closed"}, owner)
+
+      assert [%{kind: "state_changed"}] = Notifications.list_notifications(reader)
+
+      :ok = Repositories.remove_member(repository, owner, reader.id)
+
+      assert Notifications.list_notifications(reader) == []
+      assert Notifications.unread_count(reader) == 0
+    end
+  end
+
+  describe "issue event idempotency" do
+    test "replaying the same derivation writes one record" do
+      actor = repository_user_fixture("actor-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(actor)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, watcher)
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+
+      assert Notifications.unread_count(watcher) == 1
+
+      :ok = Notifications.issue_updated(issue, closed, actor)
+      :ok = Notifications.issue_updated(issue, closed, actor)
+
+      assert Notifications.unread_count(watcher) == 1
+    end
+
+    test "a replay after the record was read does not resurrect it as unread" do
+      actor = repository_user_fixture("actor-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(actor)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, watcher)
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+
+      {:ok, 1} = Notifications.mark_all_read(watcher)
+
+      :ok = Notifications.issue_updated(issue, closed, actor)
+
+      assert Notifications.unread_count(watcher) == 0
+    end
+
+    test "closing an already closed issue derives nothing" do
+      actor = repository_user_fixture("actor-#{System.unique_integer([:positive])}")
+      watcher = repository_user_fixture("watcher-#{System.unique_integer([:positive])}")
+      repository = repository_with_member_fixture(actor)
+      {:ok, _member} = Repositories.add_member(repository, watcher, "contributor")
+
+      {:ok, issue} = Issues.create_issue(repository, %{title: "a title"}, watcher)
+      {:ok, closed} = Issues.update_issue(issue, %{"state" => "closed"}, actor)
+      {:ok, _again} = Issues.update_issue(closed, %{"state" => "closed"}, actor)
+
+      assert Notifications.unread_count(watcher) == 1
+    end
+  end
+
+  # Two events landing in the same second share an `inserted_at`, and the
+  # tiebreak is a random UUID, so asserting on delivery order would assert on
+  # nothing. Compare the set of kinds instead.
+  defp kinds(user) do
+    user |> Notifications.list_notifications() |> Enum.map(& &1.kind) |> Enum.sort()
   end
 end

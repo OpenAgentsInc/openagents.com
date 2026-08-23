@@ -17,7 +17,10 @@ defmodule OpenAgents.Notifications.IssueSubscription do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @reasons ~w(author commented mentioned manual)
+  # `assigned` is its own reason: being handed an issue is not the same as
+  # opening it, commenting on it, or being named in it, and the difference is
+  # worth keeping when somebody asks why they are hearing about a thread.
+  @reasons ~w(author commented mentioned assigned manual)
 
   schema "issue_subscriptions" do
     field :reason, :string

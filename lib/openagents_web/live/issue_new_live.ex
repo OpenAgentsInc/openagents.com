@@ -77,7 +77,7 @@ defmodule OpenAgentsWeb.IssueNewLive do
 
       case Issues.create_issue(repository, %{"title" => title, "body" => body}, user) do
         {:ok, issue} ->
-          issue = apply_metadata(issue, labels, milestone)
+          issue = apply_metadata(issue, labels, milestone, user)
 
           {:noreply,
            socket
@@ -98,12 +98,12 @@ defmodule OpenAgentsWeb.IssueNewLive do
     {:noreply, put_flash(socket, :error, "That issue action is not available.")}
   end
 
-  defp apply_metadata(issue, labels, milestone) do
+  defp apply_metadata(issue, labels, milestone, author) do
     labels = List.wrap(labels) |> Enum.reject(&(&1 == ""))
 
     issue =
       if labels != [] do
-        case Issues.add_labels(issue, labels) do
+        case Issues.add_labels(issue, labels, author) do
           {:ok, updated} -> updated
           _error -> issue
         end

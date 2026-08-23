@@ -269,6 +269,14 @@ defmodule OpenAgents.Issues do
       with {:ok, updated} <- issue |> Issue.changeset(normalized) |> Repo.update(),
            :ok <- sync_label_relationships(updated),
            :ok <- sync_assignee_relationships(updated) do
+        # Inside the transaction, and derived here rather than at the call
+        # sites. This function is the one path every state change, label edit
+        # and assignment takes, so it is the only place that can see the
+        # difference between the issue before and after; announcing it anywhere
+        # else would mean a second write path that could disagree with this
+        # one. The actor arrives as an argument because `add_assignees/3` and
+        # its neighbours now carry one.
+        Notifications.issue_updated(issue, updated, actor)
         updated
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -307,12 +315,22 @@ defmodule OpenAgents.Issues do
     Issue.changeset(issue, attrs)
   end
 
-  def add_labels(%Issue{} = issue, names) when is_list(names) do
+  @doc """
+  Adds labels to an issue on behalf of `actor`.
+
+  The actor is optional so that a caller with nobody to attribute — a script,
+  an import — still works, and is threaded through by every caller that has a
+  signed-in account. Without it, `update_issue/3` cannot say who labelled the
+  issue and the notification it derives is unattributed.
+  """
+  def add_labels(issue, names, actor \\ nil)
+
+  def add_labels(%Issue{} = issue, names, actor) when is_list(names) do
     repository = repository_stub(issue.repository_id)
 
     with {:ok, new_labels} <- resolve_or_create_labels(repository, names) do
       labels = ((issue.labels || []) ++ new_labels) |> Enum.uniq_by(& &1["name"])
-      update_issue(issue, %{"labels" => labels})
+      update_issue(issue, %{"labels" => labels}, actor)
     end
   end
 
@@ -329,13 +347,25 @@ defmodule OpenAgents.Issues do
     end
   end
 
-  def remove_label(%Issue{} = issue, name) when is_binary(name) do
+  @doc "Removes one label from an issue on behalf of `actor`."
+  def remove_label(issue, name, actor \\ nil)
+
+  def remove_label(%Issue{} = issue, name, actor) when is_binary(name) do
     decoded = URI.decode(name)
     labels = Enum.reject(issue.labels || [], &label_match?(&1, decoded))
-    update_issue(issue, %{"labels" => labels})
+    update_issue(issue, %{"labels" => labels}, actor)
   end
 
-  def add_assignees(%Issue{} = issue, logins) when is_list(logins) do
+  @doc """
+  Assigns an issue to the named accounts on behalf of `actor`.
+
+  Being assigned an issue is the notification a person can least afford to
+  miss, and "somebody assigned this to you" is not the same message as
+  "this was assigned to you". The actor is what tells them apart.
+  """
+  def add_assignees(issue, logins, actor \\ nil)
+
+  def add_assignees(%Issue{} = issue, logins, actor) when is_list(logins) do
     repository = repository_stub(issue.repository_id)
 
     new =
@@ -346,10 +376,13 @@ defmodule OpenAgents.Issues do
       end)
 
     assignees = ((issue.assignees || []) ++ new) |> Enum.uniq_by(& &1["login"])
-    update_issue(issue, %{"assignees" => assignees})
+    update_issue(issue, %{"assignees" => assignees}, actor)
   end
 
-  def remove_assignees(%Issue{} = issue, logins) when is_list(logins) do
+  @doc "Takes the named accounts off an issue on behalf of `actor`."
+  def remove_assignees(issue, logins, actor \\ nil)
+
+  def remove_assignees(%Issue{} = issue, logins, actor) when is_list(logins) do
     logins = logins |> Enum.map(&String.downcase/1) |> MapSet.new()
 
     assignees =
@@ -357,7 +390,7 @@ defmodule OpenAgents.Issues do
         String.downcase(assignee["login"]) in logins
       end)
 
-    update_issue(issue, %{"assignees" => assignees})
+    update_issue(issue, %{"assignees" => assignees}, actor)
   end
 
   @doc "The progress values this API serves, in the order work moves through them."

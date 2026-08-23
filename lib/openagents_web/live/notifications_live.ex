@@ -4,11 +4,15 @@ defmodule OpenAgentsWeb.NotificationsLive do
 
   ## What reaches this page
 
-  Two things. Somebody named you with `@your-login` in an issue or a comment,
-  or somebody commented on an issue you follow. You follow an issue by opening
-  it, commenting on it, being named in it, or pressing **Subscribe** on it, and
-  you stop by pressing **Unsubscribe** — which sticks, so commenting again does
-  not quietly resubscribe you.
+  Somebody named you with `@your-login` in an issue or a comment, somebody
+  commented on an issue you follow, somebody closed or reopened one, somebody
+  labelled one, or somebody assigned one to you. You follow an issue by opening
+  it, commenting on it, being named in it, being assigned it, or pressing
+  **Subscribe** on it, and you stop by pressing **Unsubscribe** — which sticks,
+  so commenting again does not quietly resubscribe you.
+
+  Assignment is the exception to following: it reaches you whether or not you
+  followed the issue, because it is addressed to you by name.
 
   ## Authorization
 
@@ -28,6 +32,7 @@ defmodule OpenAgentsWeb.NotificationsLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Notifications
+  alias OpenAgents.Notifications.Preference
   alias OpenAgents.Repositories
 
   def mount(_params, _session, socket) do
@@ -53,10 +58,7 @@ defmodule OpenAgentsWeb.NotificationsLive do
   end
 
   def handle_event("update_preferences", %{"preferences" => params}, socket) do
-    attrs = %{
-      mentions_enabled: checked?(params["mentions_enabled"]),
-      issue_comments_enabled: checked?(params["issue_comments_enabled"])
-    }
+    attrs = Map.new(Preference.categories(), &{&1, checked?(params[Atom.to_string(&1)])})
 
     case Notifications.update_preferences(socket.assigns.current_scope, attrs) do
       {:ok, _preferences} ->
@@ -82,10 +84,9 @@ defmodule OpenAgentsWeb.NotificationsLive do
     |> assign(
       :preferences_form,
       to_form(
-        %{
-          "mentions_enabled" => preferences.mentions_enabled,
-          "issue_comments_enabled" => preferences.issue_comments_enabled
-        },
+        Map.new(Preference.categories(), fn category ->
+          {Atom.to_string(category), Map.fetch!(Map.from_struct(preferences), category)}
+        end),
         as: :preferences
       )
     )
@@ -185,9 +186,11 @@ defmodule OpenAgentsWeb.NotificationsLive do
           </h2>
 
           <p class="text-sm text-muted-foreground">
-            Both categories start on. Neither can reach a stranger: comments reach
-            you only on issues you already took part in, and a mention needs
-            somebody to name you.
+            Every category except label changes starts on. None of them can reach a
+            stranger: comments and activity reach you only on issues you already
+            took part in, a mention needs somebody to name you, and an assignment
+            names you. Label changes start off because a label moves for a query
+            rather than for a reader.
           </p>
 
           <.form
@@ -206,6 +209,21 @@ defmodule OpenAgentsWeb.NotificationsLive do
               type="checkbox"
               label="Comments on issues you follow"
             />
+            <.input
+              field={@preferences_form[:assignments_enabled]}
+              type="checkbox"
+              label="Issues assigned to you"
+            />
+            <.input
+              field={@preferences_form[:issue_activity_enabled]}
+              type="checkbox"
+              label="Closed and reopened on issues you follow"
+            />
+            <.input
+              field={@preferences_form[:label_changes_enabled]}
+              type="checkbox"
+              label="Label changes on issues you follow"
+            />
           </.form>
         </section>
       </div>
@@ -215,8 +233,16 @@ defmodule OpenAgentsWeb.NotificationsLive do
 
   defp kind_label("mention"), do: "Mentioned you"
   defp kind_label("issue_comment"), do: "New comment"
+  defp kind_label("assigned"), do: "Assigned to you"
+  defp kind_label("unassigned"), do: "Unassigned from you"
+  defp kind_label("labeled"), do: "Label added"
+  defp kind_label("unlabeled"), do: "Label removed"
+  defp kind_label("state_changed"), do: "State changed"
   defp kind_label(_kind), do: "Activity"
 
+  # The two kinds addressed to one person by name carry the accent; the rest
+  # are activity on a thread and read as metadata.
   defp kind_variant("mention"), do: :info
+  defp kind_variant("assigned"), do: :info
   defp kind_variant(_kind), do: :dim
 end

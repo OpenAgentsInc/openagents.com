@@ -36,7 +36,7 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
 
     logins = params["assignees"] || []
 
-    case Issues.add_assignees(issue, logins) do
+    case Issues.add_assignees(issue, logins, conn.assigns.current_user) do
       {:ok, %Issues.Issue{} = issue} ->
         json(conn, %{assignees: issue.assignees})
 
@@ -65,7 +65,7 @@ defmodule OpenAgentsWeb.IssueAssigneeController do
 
     logins = params["assignees"] || []
 
-    case Issues.remove_assignees(issue, logins) do
+    case Issues.remove_assignees(issue, logins, conn.assigns.current_user) do
       {:ok, %Issues.Issue{} = issue} ->
         json(conn, %{assignees: issue.assignees})
 

@@ -2787,20 +2787,38 @@ makes a replayed fan-out a no-op, so a retried request never notifies twice and
 never returns a read record to unread.
 
 A record stores identifiers, a kind, and the actor's login — never a title, a
-body, or any repository content. Fan-out refuses a recipient who cannot read
-the repository, and every read composes `OpenAgents.Repositories.readable_by/2`
-again against the reader's current membership, so a record that outlives the
-recipient's access stops rendering rather than disclosing a private issue.
-Marking read is scoped to the addressed account, and both delivery categories
-default to on because neither can reach an account that has not already taken
-part in the issue or been named in it.
+body, a label name, a state, or any other repository content. Fan-out refuses a
+recipient who cannot read the repository, and every read composes
+`OpenAgents.Repositories.readable_by/2` again against the reader's current
+membership, so a record that outlives the recipient's access stops rendering
+rather than disclosing a private issue. Marking read is scoped to the addressed
+account.
+
+Assignment, label and state notifications are derived from the difference
+between the issue before and after an update, inside `Issues.update_issue/3` —
+the one path every such change takes. There is no `issue_events` table, so the
+difference is the event; announcing one anywhere else would be a second write
+path that could disagree with this one. A derived event has no row of its own
+to key on, so its `dedupe_key` names the issue, the second its update landed
+on, and the field with its new value. That keeps replay a no-op from both
+sides: a retried request derives nothing, because the second attempt sees the
+change already applied, and two writers racing to the same transition in the
+same second collide on the key instead of notifying twice.
+
+Every delivery category names what it delivers, so switching one off has an
+effect you can predict from its name and no category silently widens to carry
+a kind it is not named for. Four default on, because none of them can reach an
+account that has not already taken part in the issue, been named in it, or been
+assigned it. Label changes default off: a label moves for a query rather than
+for a reader, and it addresses nobody.
 
 Delivery is in-product only. Accounts carry no email address and no outbound
 mail adapter is configured, so no channel here leaves the application.
 
 Evidence: `OpenAgents.Notifications`, `OpenAgents.Notifications.Mentions`,
-`OpenAgentsWeb.NotificationsLive`, `test/openagents/notifications_test.exs`,
-and `test/openagents_web/live/notifications_live_test.exs`.
+`OpenAgents.Issues.update_issue/3`, `OpenAgentsWeb.NotificationsLive`,
+`test/openagents/notifications_test.exs`, and
+`test/openagents_web/live/notifications_live_test.exs`.
 
 ### FORGEAPI-001 — One error envelope, and a route inventory derived from the router
 

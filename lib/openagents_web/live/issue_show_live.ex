@@ -169,9 +169,9 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
         {:ok, updated} =
           if Enum.any?(issue.labels || [], &(&1["name"] == name)) do
-            Issues.remove_label(issue, name)
+            Issues.remove_label(issue, name, socket.assigns.current_user)
           else
-            Issues.add_labels(issue, [name])
+            Issues.add_labels(issue, [name], socket.assigns.current_user)
           end
 
         {:noreply, load(socket, updated)}
@@ -189,9 +189,9 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
         {:ok, updated} =
           if Enum.any?(issue.assignees || [], &(&1["login"] == login)) do
-            Issues.remove_assignees(issue, [login])
+            Issues.remove_assignees(issue, [login], socket.assigns.current_user)
           else
-            Issues.add_assignees(issue, [login])
+            Issues.add_assignees(issue, [login], socket.assigns.current_user)
           end
 
         {:noreply, load(socket, updated)}

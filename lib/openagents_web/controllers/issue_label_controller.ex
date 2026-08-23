@@ -36,7 +36,7 @@ defmodule OpenAgentsWeb.IssueLabelController do
 
     names = params["labels"] || []
 
-    case Issues.add_labels(issue, names) do
+    case Issues.add_labels(issue, names, conn.assigns.current_user) do
       {:ok, %Issues.Issue{} = issue} ->
         json(conn, %{labels: issue.labels})
 
@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.IssueLabelController do
     decoded = URI.decode(name)
 
     if Enum.any?(issue.labels || [], &(&1["name"] == decoded)) do
-      case Issues.remove_label(issue, name) do
+      case Issues.remove_label(issue, name, conn.assigns.current_user) do
         {:ok, %Issues.Issue{} = issue} ->
           json(conn, %{labels: issue.labels})
 

@@ -94,9 +94,9 @@ defmodule OpenAgentsWeb.IssueIndexLive do
       issue = issue!(socket, id)
 
       if Enum.any?(issue.assignees || [], &(&1["login"] == login)) do
-        Issues.remove_assignees(issue, [login])
+        Issues.remove_assignees(issue, [login], socket.assigns.current_user)
       else
-        Issues.add_assignees(issue, [login])
+        Issues.add_assignees(issue, [login], socket.assigns.current_user)
       end
 
       {:noreply, load(socket)}

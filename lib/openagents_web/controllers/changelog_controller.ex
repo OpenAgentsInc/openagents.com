@@ -11,8 +11,9 @@ defmodule OpenAgentsWeb.ChangelogController do
 
   def show(conn, params) do
     repo = Map.get(params, "repo", "openagents.com")
+    viewer = conn.assigns[:current_user]
 
-    case OpenAgents.Changelog.projection(repo) do
+    case OpenAgents.Changelog.projection(repo, viewer: viewer) do
       {:ok, payload} ->
         json(conn, payload)
 

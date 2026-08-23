@@ -36,10 +36,15 @@ defmodule OpenAgents.Changelog do
   ledger. Pass `refresh: true` to bypass the cache (PubSub-driven callers).
   """
   def timeline(repo, opts \\ []) do
+    viewer = opts[:viewer]
+
     cond do
       not Visibility.allows?(repo, :ledger) -> {:error, :not_public}
-      opts[:refresh] -> {:ok, put_cache(repo, build(repo))}
-      true -> {:ok, cached(repo)}
+      opts[:refresh] ->
+        rows = build(repo, viewer)
+        if is_nil(viewer), do: put_cache(repo, rows)
+        {:ok, rows}
+      true -> {:ok, cached(repo, viewer)}
     end
   end
 
@@ -69,12 +74,16 @@ defmodule OpenAgents.Changelog do
 
   # ── assembly ─────────────────────────────────────────────────────────────
 
-  defp cached(repo) do
-    now = System.monotonic_time(:millisecond)
+  defp cached(repo, viewer) do
+    if is_nil(viewer) do
+      now = System.monotonic_time(:millisecond)
 
-    case :persistent_term.get(@cache_key, nil) do
-      {^repo, at, rows} when now - at < @cache_ttl_ms -> rows
-      _ -> put_cache(repo, build(repo))
+      case :persistent_term.get(@cache_key, nil) do
+        {^repo, at, rows} when now - at < @cache_ttl_ms -> rows
+        _ -> put_cache(repo, build(repo, nil))
+      end
+    else
+      build(repo, viewer)
     end
   end
 
@@ -83,7 +92,7 @@ defmodule OpenAgents.Changelog do
     rows
   end
 
-  defp build(repo) do
+  defp build(repo, viewer) do
     entries = safely(fn -> authored_entries(repo) end, [])
     receipts = safely(fn -> receipt_index(repo) end, %{pushes: [], builds: [], deploys: []})
 
@@ -98,10 +107,10 @@ defmodule OpenAgents.Changelog do
     (authored ++ uncovered)
     |> Enum.sort_by(& &1.entry_at, {:desc, DateTime})
     |> Enum.take(@entry_limit)
-    |> redact_rows()
+    |> redact_rows(viewer)
   end
 
-  defp redact_rows(rows) do
+  defp redact_rows(rows, viewer) do
     link_ids =
       rows
       |> Enum.map(& &1[:artifact_link_id])
@@ -120,7 +129,7 @@ defmodule OpenAgents.Changelog do
 
     Enum.map(rows, fn row ->
       link = row[:artifact_link_id] && Map.get(by_id, row[:artifact_link_id])
-      Transparency.redact_for_viewer(row, link)
+      Transparency.redact_for_viewer(row, link, viewer)
     end)
   end
 

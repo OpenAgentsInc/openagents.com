@@ -20,7 +20,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
   @impl true
   def mount(_params, _session, socket) do
     rows =
-      case Changelog.timeline(@repo) do
+      case Changelog.timeline(@repo, viewer: socket.assigns.current_user) do
         {:ok, rows} -> rows
         {:error, :not_public} -> raise OpenAgentsWeb.PublicNotFoundError
       end
@@ -53,7 +53,7 @@ defmodule OpenAgentsWeb.ChangelogLive do
              :forge_build_ready,
              :forge_deploy
            ] do
-    case Changelog.timeline(@repo, refresh: true) do
+    case Changelog.timeline(@repo, refresh: true, viewer: socket.assigns.current_user) do
       {:ok, rows} -> {:noreply, assign(socket, :rows, rows)}
       _ -> {:noreply, socket}
     end

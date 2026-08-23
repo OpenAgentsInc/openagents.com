@@ -58,6 +58,35 @@ defmodule OpenAgentsWeb.SidebarStateTest do
     end
   end
 
+  describe "the forum row" do
+    test "an ordinary account sees it under Leaderboard on the application shell", %{conn: conn} do
+      conn = log_in_github_user(conn, "forum-row-shell")
+      {:ok, view, html} = live(conn, ~p"/leaderboard")
+
+      assert has_element?(view, ~s(#sidebar .sidebar-footer a[href="/forum"]))
+
+      footer = html |> String.split(~s(class="sidebar-footer")) |> Enum.at(1)
+      leaderboard = :binary.match(footer, ~s(href="/leaderboard"))
+      forum = :binary.match(footer, ~s(href="/forum"))
+
+      assert leaderboard != :nomatch and forum != :nomatch
+      assert elem(leaderboard, 0) < elem(forum, 0), "Forum must follow Leaderboard"
+    end
+
+    test "an operator sees it too, ahead of the admin row", %{conn: conn} do
+      conn = log_in_admin_user(conn, "forum-row-operator")
+      {:ok, view, _html} = live(conn, ~p"/leaderboard")
+
+      assert has_element?(view, ~s(#sidebar .sidebar-footer a[href="/forum"]))
+    end
+
+    test "a visitor does not, because the forum needs a session", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/leaderboard")
+
+      refute has_element?(view, ~s(.sidebar-footer a[href="/forum"]))
+    end
+  end
+
   describe "collapsed sections survive the first paint" do
     test "a collapsed section renders collapsed, not open-then-corrected", %{conn: conn} do
       conn =

@@ -231,7 +231,19 @@ config :openagents,
     # through `owner_user_id`, the one owner field every conversation caller
     # populates correctly today.
     OpenAgents.Tools.ConnectedRepositoryRead,
-    OpenAgents.Tools.ConnectedRepositoryList
+    OpenAgents.Tools.ConnectedRepositoryList,
+
+    # File a request the person made in chat as an issue, in a repository they
+    # can write to (#77). The one tool here that is not read-only, and the
+    # reason TOOL-006 now says "read-only, or gated on a current consent
+    # receipt" rather than "read-only". It declares `:external_effect` with
+    # `approval_enforcement: "host_receipt"`, so `SurfacePolicy` demands an
+    # explicit, current, person-signed receipt bound to this module, version,
+    # and conversation — checked when the catalog is built as well as when the
+    # tool runs. On a turn with no such receipt it is not offered, so it costs
+    # nothing and never trains anyone to ignore a refusal. Authority stays the
+    # caller's: it files under their own repository membership.
+    OpenAgents.Tools.IssueCapture
   ],
   conversation_reset_enabled: false,
   github_api: [

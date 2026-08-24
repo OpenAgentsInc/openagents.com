@@ -330,6 +330,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/forum/topics" => {:required_bearer, :forum, :legacy},
       "post /api/v3/forum/topics/:topic_id/posts" => {:required_bearer, :forum, :legacy},
       "post /api/v3/repos/:owner/:repo/issues" => {:required_bearer, :issue, :envelope},
+      "post /api/v3/repos/:owner/:repo/issues/capture" => {:required_bearer, :issue, :envelope},
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" =>
         {:required_bearer, :comment, :envelope},
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/completion_claim" =>

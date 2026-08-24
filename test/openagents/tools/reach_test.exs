@@ -42,9 +42,13 @@ defmodule OpenAgents.Tools.ReachTest do
 
       # `computer_list` deliberately needs no paired Computer: listing zero of
       # them is how the model learns to tell the person to pair one. Repository
-      # tools declare nothing because their gate is per-repository membership,
-      # which depends on an argument the catalog has not seen yet.
+      # *read* tools declare nothing because their gate is per-repository
+      # membership, which depends on an argument the catalog has not seen yet.
+      # `capture_issue` does declare an owner: it files under the person's own
+      # membership, so no owner means no possible success, whatever repository
+      # the argument later names.
       assert declared == %{
+               "capture_issue" => [:signed_in_owner],
                "computer_agent" => [:signed_in_owner, :paired_computer],
                "computer_devin" => [:signed_in_owner, :paired_computer],
                "computer_list" => [:signed_in_owner],

@@ -243,6 +243,38 @@ defmodule OpenAgents.Issues do
     Repo.get_by!(Issue, id: id, repository_id: repository_id)
   end
 
+  @doc """
+  The oldest open issue in `repository` whose title normalizes to `normalized`.
+
+  The comparison is exact on the normalized form, never a substring or keyword
+  match: `maybe_filter_search/2` exists for a person narrowing a list, where a
+  loose match costs nothing, but a loose match here would silently swallow a
+  distinct request into an unrelated issue. `OpenAgents.Issues.Capture` is the
+  only caller and `Capture.normalize_title/1` is the only normalizer; the SQL
+  below reproduces it so the comparison happens in the index scan rather than
+  by loading every open issue.
+
+  Returns `nil` when nothing matches. Pull-request-backed rows are excluded:
+  they share the number space but a pull request is not the issue a request
+  should be folded into.
+  """
+  @spec open_issue_with_normalized_title(Repository.t(), String.t()) :: Issue.t() | nil
+  def open_issue_with_normalized_title(%Repository{id: repository_id}, normalized)
+      when is_binary(normalized) and normalized != "" do
+    repository_id
+    |> issue_query(state: "open", type: "issue")
+    |> where(
+      [issue: issue],
+      fragment("btrim(regexp_replace(lower(?), '[^a-z0-9]+', ' ', 'g'))", issue.title) ==
+        ^normalized
+    )
+    |> order_by([issue: issue], asc: issue.number)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  def open_issue_with_normalized_title(%Repository{}, _normalized), do: nil
+
   def get_issue_by_number!(%Repository{id: repository_id}, number) when is_integer(number),
     do: Repo.get_by!(Issue, repository_id: repository_id, number: number)
 

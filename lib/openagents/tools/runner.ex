@@ -311,6 +311,7 @@ defmodule OpenAgents.Tools.Runner do
               :publication_receipt_stale,
               :publication_branch_refused,
               :pull_requests_disabled,
+              :repository_write_access_required,
               :forbidden,
               :box_quota_reached,
               :box_not_owned,
@@ -457,6 +458,26 @@ defmodule OpenAgents.Tools.Runner do
 
   defp error_message(:repository_not_found),
     do: "The repository does not exist or you cannot access it."
+
+  # Names the authority rather than the outcome. "You cannot do that" sends the
+  # person back to the agent; naming the missing role sends them to whoever can
+  # grant it.
+  defp error_message(:repository_write_access_required),
+    do:
+      "Filing an issue there needs write access to that repository, and this account holds " <>
+        "no owner, maintainer, or contributor role in it. Ask an owner for one."
+
+  defp error_message(:blank_problem_statement),
+    do: "Filing an issue needs the person's request in their own words."
+
+  defp error_message(:problem_statement_too_long),
+    do: "The request is too long to file as one issue. Summarize it first."
+
+  defp error_message(:section_too_long),
+    do: "One of the drafted issue sections is too long to file."
+
+  defp error_message(:invalid_issue),
+    do: "The drafted issue was rejected by the tracker."
 
   defp error_message(:ambiguous_repository_name),
     do: "More than one visible repository has that name. Use owner/name."

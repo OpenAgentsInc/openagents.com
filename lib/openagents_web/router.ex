@@ -480,6 +480,10 @@ defmodule OpenAgentsWeb.Router do
     post "/forum/topics", ForumApiController, :create_topic
     post "/forum/topics/:topic_id/posts", ForumApiController, :create_post
     post "/repos/:owner/:repo/issues", IssueController, :create
+    # Drafts, deduplicates, and files one problem statement (#77). It sits
+    # beside :create rather than replacing it: :create is the GitHub-compatible
+    # operation and takes a finished issue, this one takes a sentence.
+    post "/repos/:owner/:repo/issues/capture", IssueController, :capture
     post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
 
     post "/repos/:owner/:repo/issues/:issue_number/completion_claim",

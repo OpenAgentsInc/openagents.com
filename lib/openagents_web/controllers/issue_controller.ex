@@ -1,8 +1,10 @@
 defmodule OpenAgentsWeb.IssueController do
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Accounts.User
   alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
+  alias OpenAgents.Issues.Capture
   alias OpenAgents.Issues.CompletionClaims
   alias OpenAgents.Issues.Evidence
   alias OpenAgents.Issues.Issue
@@ -169,6 +171,78 @@ defmodule OpenAgentsWeb.IssueController do
         unknown_reference(conn, unresolved)
     end
   end
+
+  @doc """
+  Captures one problem statement as a drafted, deduplicated issue (#77).
+
+  The API mirror of the `capture_issue` chat tool. Both call
+  `OpenAgents.Issues.Capture.capture/3`, so the drafted template, the
+  authorization decision, and the deduplication rule are one implementation
+  rather than two that agree today.
+
+  The status distinguishes the two outcomes without a body key: `201` when the
+  issue was created, `200` when an open issue already matched and is being
+  returned instead. A client that retries the same statement therefore sees
+  `200` and the same number, which is what makes the operation idempotent for
+  the caller rather than only for the database.
+
+  Agents are refused: filing under a personal membership is the point, and an
+  `Agent` principal holds no repository membership to file under.
+  """
+  def capture(conn, %{"owner" => owner, "repo" => repo} = params) do
+    case conn.assigns[:current_user] do
+      %User{} = actor -> capture_for(conn, actor, owner, repo, params)
+      _agent_or_absent -> participation_forbidden(conn, conn.assigns[:current_agent])
+    end
+  end
+
+  defp capture_for(conn, actor, owner, repo, params) do
+    case write_issue(fn -> Capture.capture(actor, "#{owner}/#{repo}", params) end) do
+      {:ok, %{issue: issue, repository: repository, outcome: outcome}} ->
+        conn
+        |> put_status(if(outcome == :created, do: :created, else: :ok))
+        |> put_extensions_header()
+        |> render(:show,
+          issue: issue,
+          owner: owner,
+          repo: repo,
+          dependencies: dependencies(issue),
+          progress: progress(issue, actor),
+          work: work(issue, repository, actor),
+          evidence: evidence(issue, repository, actor),
+          completion_claims: completion_claims(issue)
+        )
+
+      {:error, :repository_not_found} ->
+        not_found(conn)
+
+      {:error, :repository_write_access_required} ->
+        ApiError.refuse(conn, "repository_write_access_required")
+
+      {:error, {:invalid_issue, errors}} ->
+        ApiError.validation_failed(conn, errors)
+
+      {:error, %UnknownReference{} = unresolved} ->
+        unknown_reference(conn, unresolved)
+
+      {:error, reason} when is_atom(reason) ->
+        ApiError.validation_failed(conn, %{"problem" => [capture_message(reason)]})
+    end
+  end
+
+  defp capture_message(:blank_problem_statement),
+    do: "can't be blank"
+
+  defp capture_message(:problem_statement_too_long),
+    do: "is too long to file as one issue"
+
+  defp capture_message(:section_too_long),
+    do: "one of the drafted sections is too long to file"
+
+  defp capture_message(:invalid_repository),
+    do: "the repository must be an owner/name path"
+
+  defp capture_message(reason), do: "is invalid (#{reason})"
 
   # Writing an issue resolves a label, an assignee, and a milestone by name, and
   # a name this repository does not have is a rejected field rather than a

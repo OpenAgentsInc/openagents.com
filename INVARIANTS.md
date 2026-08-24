@@ -1664,17 +1664,44 @@ Evidence: `OpenAgents.Tools.Reach`, `OpenAgents.Tools.Selector`,
 `test/openagents/chat/open_router/tool_runtime_test.exs`, and
 `OpenAgents.DependencyBoundaryTest`.
 
-### TOOL-006 — The shipped tool catalog is a closed, read-only set
+### TOOL-006 — The shipped tool catalog is a closed set, read-only but for consent
 
 Status: Current
 
 The catalog the product installs at boot is enumerated, not accumulated. Every
-module in `config/config.exs` under `:tools` is read-only, requires an
-authority every conversation caller already holds, and is admitted by name.
-A tool that ships must work for every caller that can see it; offering a tool
-that always refuses trains the model and the person to ignore refusals.
-TOOL-005 narrows the offer to what this caller can reach; this invariant
-narrows what exists to be offered at all. Neither substitutes for the other.
+module in `config/config.exs` under `:tools` requires an authority every
+conversation caller already holds, is admitted by name, and is **either
+read-only, or gated on a current consent receipt**. A tool that ships must
+work for every caller that can see it; offering a tool that always refuses
+trains the model and the person to ignore refusals. TOOL-005 narrows the offer
+to what this caller can reach; this invariant narrows what exists to be
+offered at all. Neither substitutes for the other.
+
+"Gated on a current consent receipt" is not a softening, and it is the only
+admitted exception to read-only. It means the module declares a non-read-only
+`side_effect` together with metadata that sends
+`OpenAgents.Modules.SurfacePolicy.authorize_execution/2` down its receipt path
+— an explicit, person-signed receipt bound to that exact module, version, and
+`scope_ref`. For an `external_effect` that is the `external_confirmation` or
+`explicit_operator_approval` class the surface contract already requires. The
+`reversible_write` plus `executor_consent` combination, which runs without
+asking anyone, does not qualify. Because
+`OpenAgents.Tools.AdmittedCatalog` applies the same check when it builds the
+catalog, such a tool is *not offered* on a turn where the person has not
+consented, rather than offered and refused: the standing prompt cost is zero
+and the "works for every caller that can see it" rule above still holds, since
+the only callers who can see it are the ones who consented. There is no
+standing grant to record and no "always" to accumulate — the receipt is scoped
+to one conversation and re-checked on every call, which is the ask-every-time
+rung of the approval ladder in
+`docs/2026-08-23-openagents-coder-cli-spec.md`, section 7.3.
+
+Filing an issue from chat (`OpenAgents.Tools.IssueCapture`) is the first and
+currently the only module admitted under that exception. It writes to a public
+tracker, so it is `:external_effect`; it files under the requesting account's
+own repository membership, so it mints no authority of its own; and a caller
+holding no writing role is refused with a typed error that names the missing
+role rather than a silent fallback to a repository they did not choose.
 
 Modules that are not admitted stay in `lib/openagents/tools/` and stay under
 test through the broader fixture catalog in `config/test.exs`, which must

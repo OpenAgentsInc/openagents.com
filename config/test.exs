@@ -175,5 +175,6 @@ config :openagents, :tools, [
   OpenAgents.Tools.RepoEdit,
   OpenAgents.Tools.RepoWrite,
   OpenAgents.Tools.RepoCommitPush,
+  OpenAgents.Tools.IssueCapture,
   OpenAgents.Tools.TestRecall
 ]

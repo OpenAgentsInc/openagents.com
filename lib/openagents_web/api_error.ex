@@ -43,6 +43,13 @@ defmodule OpenAgentsWeb.ApiError do
     "unauthenticated" => {401, "Requires authentication"},
     "forbidden" => {403, "Forbidden"},
     "agent_participation_forbidden" => {403, "This agent may not participate in this repository"},
+    # Capturing an issue from chat (#77). A plain `forbidden` would leave the
+    # caller unable to tell "no such repository" from "no writing role in a
+    # repository you can already see", and only the second is something they
+    # can fix by asking an owner. It is only ever returned for a repository the
+    # caller can already read, so it discloses nothing a 404 was protecting.
+    "repository_write_access_required" =>
+      {403, "Writing to this repository needs an owner, maintainer, or contributor role"},
     "not_found" => {404, "Not Found"},
     "label_not_on_issue" => {404, "Label does not exist on this issue"},
     "dependency_not_found" => {404, "Not a prerequisite of this issue"},

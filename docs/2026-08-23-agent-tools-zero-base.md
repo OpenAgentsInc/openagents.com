@@ -22,7 +22,10 @@
 
 The catalog held **37 tool modules** in one flat list at `config/config.exs:176`,
 installed at boot by `lib/openagents/application.ex:41` and gated only by the
-`:tools` feature flag. It is now **6**.
+`:tools` feature flag. It is now **6** — **7 since 2026-08-24**, when #77
+re-admitted `capture_issue` through the section 6 criteria. Section 11 records
+that decision and what it changed in TOOL-006; sections 5 and 6 describe the
+six-tool base it started from.
 
 Three findings drove the size of the cut, and each is stronger than "too many
 tools".
@@ -684,6 +687,75 @@ bring them back in a change that names the criteria each one now meets.
   boundary was inherited, not chosen, and it means the five tools it drops now
   have neither a shipped surface nor fixture coverage. Deciding whether they
   should be dropped from the tree entirely is a separate call.
+
+---
+
+## 11. The first re-admission: `capture_issue` (2026-08-24)
+
+Issue #77 admitted a seventh module, `OpenAgents.Tools.IssueCapture`. It is the
+first tool to come back, and the first that is not read-only, so TOOL-006 moved
+with it: the shipped catalog is now "read-only, **or** gated on a current
+consent receipt", and nothing else. Section 6's six criteria, answered.
+
+1. **It works for every caller that can see it.** It resolves the account
+   through `owner_user_id`, the one owner field every conversation caller
+   populates correctly today — the same field that let `read_repository_file`
+   survive the cut, and the field summary finding 1 shows `owner_visitor_id`
+   gets wrong. It declares `reach: [:signed_in_owner]`, so an unresolved owner
+   never sees it, and its `external_confirmation` gate means the only callers
+   offered it are those holding a current consent receipt.
+2. **Its authority is one the caller genuinely holds.** `repository.write`, and
+   the blanket grant is deliberately *not* the evidence. The real gate is
+   per-repository membership, checked at execution against the requesting
+   account through `Repositories.writable?/2` — the same shape as the
+   repository read tools, whose gate also depends on an argument the catalog
+   has not seen. The tool mints no authority: it can file exactly where the
+   person could have filed by hand.
+3. **Its refusal path has a test.**
+   `test/openagents/tools/issue_capture_test.exs` asserts the typed refusals a
+   person actually reads: `repository_write_access_required` (with a message
+   naming the missing role), `repository_not_found` for a repository the caller
+   cannot see, `repository_authentication_required` for a conversation with no
+   account, and `module_approval_required` with no consent receipt. Each
+   asserts nothing was filed.
+4. **Its declared effect matches what it does.** `:external_effect`. A filed
+   issue is public, numbered, and notifies watchers; section 7.2 of the coder
+   spec settles that "open an issue" is an external effect even with nothing on
+   disk changed. This is the criterion `deep_work`, `box_new`, and `code_check`
+   each fail, and it is why the surface contract then forces
+   `external_confirmation` rather than the `executor_consent` path that would
+   have let it run unasked.
+5. **Its description says when not to use it.** Four negatives: not to answer a
+   question or look something up, not to record a preference or a note, not
+   without the person asking for the request to be tracked, not twice for one
+   request, and never with a guessed repository.
+6. **It earns its prompt budget.** 1,570 bytes encoded, which would be the
+   largest definition in the catalog — but **zero on a turn
+   where the person has not consented**, because `AdmittedCatalog` applies the
+   receipt check when it builds the catalog, so the tool is omitted rather than
+   offered-and-refused. It is charged only on turns where someone has already
+   said yes to filing. That is the opposite of the `scv_deploy` shape section 6
+   warns about, which paid its full cost on every turn to be refused on almost
+   all of them.
+
+Two things this did not settle, named rather than hidden.
+
+- **Nothing mints the consent receipt yet.** The gate is real and tested, but
+  no surface currently produces a `sarah.module_approval.v1` receipt with
+  `approval_class: "external_confirmation"` for this module, so in production
+  the tool is presently inert: never offered, never run. That is the correct
+  failure direction — an ungated public write would be the wrong one — but the
+  capability is not reachable from chat until the preview-and-consent step
+  #77's contract calls for is built on the chat surface. The authenticated API
+  operation, `POST /api/v3/repos/:owner/:repo/issues/capture`, needs no receipt
+  because the person is asking directly rather than through a model, and it
+  works today.
+- **Deduplication is exact, not semantic.** No embedding index over issues
+  exists — `Tools.Embeddings` covers the tool catalog and the pgvector tables
+  cover conversation messages — so `Issues.Capture.dedupe/2` matches normalized
+  titles exactly. It misses real duplicates rather than swallowing distinct
+  requests, which is the safe direction, and it is the single place that
+  changes if issue embeddings ever land.
 
 ---
 

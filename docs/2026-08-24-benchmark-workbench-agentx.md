@@ -109,18 +109,30 @@ Shape:
   run at bounded concurrency with provider consent where terms require
   it. Full-ladder runs are for endpoints we own.
 
-## 4. Workbench axis 2: effectiveness (graded agent runs)
+## 4. Workbench axis 2: effectiveness (graded agent runs on Harbor)
 
 **Goal:** a number that moves when `openagents coder` gets better or
 worse, computed the same way every time.
 
+This axis runs on **Harbor**, the Terminal-Bench 2.0 harness from the
+Terminal-Bench team (`projects/repos/harbor`) — the full plan is
+`docs/2026-08-24-harbor-terminal-bench-plan.md`. Harbor is the right
+engine rather than a hand-rolled runner because it already is the graded
+agent-effectiveness harness: an 80-dataset registry (Terminal-Bench 2.0,
+SWE-bench, Aider Polyglot, and more behind one contract), 48 existing
+agent adapters that make the competitive baseline free, pluggable
+container environments, and — decisively — **ATIF as its native
+trajectory format**, the same v1.7 the coder already exports.
+
 Shape:
 
-- A curated task suite replayed through the real CLI, not a harness fork:
-  start with a bounded public set (a SWE-bench-lite subset is the obvious
-  candidate; InferenceX itself wires SWE-bench rows into its agentic
-  evals) plus an owned set drawn from this tracker's own closed issues —
-  tasks with known accepted outcomes and receipts.
+- An `openagents-coder` installed-agent adapter (out-of-tree first;
+  Harbor takes a custom import path, no fork needed), writing the
+  coder's own ATIF export as each trial's trajectory.
+- First dataset `terminal-bench@2.0` — agent-agnostic terminal work,
+  closest to what the coder is for — then SWE-bench and Aider Polyglot
+  from the same registry with zero new harness code, plus an owned set
+  drawn from this tracker's own closed issues later.
 - Each run pins: CLI version, model catalog revision, plugin set, task
   digest. Scores validate against floors in a `thresholds.yaml`; a run
   below floor fails the gate rather than shipping a quiet regression.
@@ -169,8 +181,11 @@ Shape:
    proxy-vs-direct per catalog model at bounded concurrency, receipted
    results into `bench-results`. Acceptance: one honest comparison table
    for two models with proxy overhead quantified.
-2. **Effectiveness suite v1** (monorepo): 20–30 graded tasks through the
-   real CLI with thresholds and cost-per-accepted-outcome reporting.
+2. **Harbor adapter for the coder** (`OpenAgentsInc/openagents#35`): the
+   `BaseInstalledAgent` subclass with ATIF out and typed error mapping.
+   **Effectiveness suite v1** (`OpenAgentsInc/openagents#34`, blocked by
+   the adapter): Terminal-Bench 2.0 per compute-mix lane beside the stock
+   adapters, with thresholds and cost-per-accepted-outcome reporting.
    Acceptance: two consecutive scheduled runs producing comparable rows,
    and one deliberate regression caught by the floor.
 3. **Thread-to-WEKA trace exporter** (openagents.com): consent-gated

@@ -91,6 +91,43 @@ defmodule OpenAgents.Chat.AccountTurns do
     end
   end
 
+  @doc """
+  Subscribes the caller to one account conversation's turns.
+
+  `Conversations.subscribe/1` is the wrong topic for what `list_messages/1`
+  renders: these turns are `account_chat_runs` rows and never become
+  `Conversations.Message` rows, so a surface listening there hears nothing
+  about them. The message is `{:account_turns_changed, conversation_id}` and
+  carries nothing else, so a subscriber re-reads through `list_messages/1`,
+  which resolves the caller's own conversation and can never hand it another
+  account's turns.
+  """
+  def subscribe_turns(conversation_id) when is_binary(conversation_id),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, turns_topic(conversation_id))
+
+  @doc """
+  Announces that a conversation's turns moved.
+
+  Called after the owning transaction commits, never inside it: a subscriber
+  re-reads the moment it hears, and an announcement from inside an open
+  transaction hands it the conversation as it was.
+
+  A turn announces when it starts, when it is cancelled, and when it reaches a
+  terminal state -- the three points where `list_messages/1` returns something
+  different. Streamed deltas do not announce: a run in `streaming` contributes
+  only its user message to that projection, and the browser holding the stream
+  already has the deltas.
+  """
+  def broadcast_turns(conversation_id) when is_binary(conversation_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      turns_topic(conversation_id),
+      {:account_turns_changed, conversation_id}
+    )
+  end
+
+  defp turns_topic(conversation_id), do: "account_turns:" <> conversation_id
+
   def active?(%User{} = user) do
     case Conversations.get_conversation_for_user(user) do
       nil ->
@@ -174,6 +211,7 @@ defmodule OpenAgents.Chat.AccountTurns do
 
     case result do
       {:ok, run} ->
+        broadcast_turns(run.conversation_id)
         {:ok, run}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -232,8 +270,12 @@ defmodule OpenAgents.Chat.AccountTurns do
       end)
 
     case result do
-      {:ok, run} -> {:ok, run_projection(run)}
-      {:error, reason} -> {:error, reason}
+      {:ok, run} ->
+        broadcast_turns(run.conversation_id)
+        {:ok, run_projection(run)}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -405,22 +447,27 @@ defmodule OpenAgents.Chat.AccountTurns do
   defp terminal_update(run_id, kind, payload, attrs) do
     now = DateTime.utc_now()
 
-    Repo.transaction(fn ->
-      run = Repo.one!(from r in AccountRun, where: r.id == ^run_id, lock: "FOR UPDATE")
+    result =
+      Repo.transaction(fn ->
+        run = Repo.one!(from r in AccountRun, where: r.id == ^run_id, lock: "FOR UPDATE")
 
-      if run.status == "streaming" do
-        append_event_locked!(run, kind, payload, now)
+        if run.status == "streaming" do
+          append_event_locked!(run, kind, payload, now)
 
-        attrs =
-          attrs
-          |> Map.put(:completed_at, now)
-          |> Map.put(:latency_ms, DateTime.diff(now, run.started_at, :millisecond))
+          attrs =
+            attrs
+            |> Map.put(:completed_at, now)
+            |> Map.put(:latency_ms, DateTime.diff(now, run.started_at, :millisecond))
 
-        run |> AccountRun.changeset(attrs) |> Repo.update!()
-      else
-        run
-      end
-    end)
+          run |> AccountRun.changeset(attrs) |> Repo.update!()
+        else
+          run
+        end
+      end)
+
+    with {:ok, run} <- result, do: broadcast_turns(run.conversation_id)
+
+    result
   end
 
   defp append_event(run_id, kind, payload) do

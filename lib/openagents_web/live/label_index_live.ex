@@ -7,20 +7,42 @@ defmodule OpenAgentsWeb.LabelIndexLive do
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
   alias OpenAgents.Repositories
+  alias OpenAgentsWeb.LiveRefresh
 
   def mount(%{"owner" => owner, "repo" => repo}, _session, socket) do
     repository = visible_repository!(owner, repo, socket.assigns.current_user)
-    can_write = Repositories.writable?(repository, socket.assigns.current_user)
+
+    # A label created from the API, the CLI, or another tab belongs on this
+    # page without a reload, and this page is where a person watches for it.
+    if connected?(socket), do: Labels.subscribe_labels(repository.id)
 
     {:ok,
      socket
+     |> LiveRefresh.init()
      |> assign(:current_scope, socket.assigns[:current_scope])
      |> assign(:owner, owner)
      |> assign(:repo, repo)
      |> assign(:repository, repository)
-     |> assign(:can_write, can_write)
-     |> assign(:labels, Labels.list_labels(repository))
-     |> assign(:form, to_form(Labels.change_label(%Label{})))}
+     |> assign(:form, to_form(Labels.change_label(%Label{})))
+     |> refresh_panel(:labels)}
+  end
+
+  def handle_info({:labels_changed, repository_id}, socket) do
+    if repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :labels, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
+  # The list and the authority to change it are read together, so the page
+  # cannot offer a delete button to a viewer whose membership was withdrawn
+  # while they were looking at it.
+  defp refresh_panel(socket, :labels) do
+    socket
+    |> refresh_authority()
+    |> assign(:labels, Labels.list_labels(socket.assigns.repository))
   end
 
   def handle_event("save", %{"label" => label_params}, socket) do
@@ -35,7 +57,7 @@ defmodule OpenAgentsWeb.LabelIndexLive do
         {:ok, _label} ->
           {:noreply,
            socket
-           |> assign(:labels, Labels.list_labels(socket.assigns.repository))
+           |> refresh_panel(:labels)
            |> assign(:form, to_form(Labels.change_label(%Label{})))
            |> put_flash(:info, "Label created")}
 
@@ -56,7 +78,7 @@ defmodule OpenAgentsWeb.LabelIndexLive do
 
       {:noreply,
        socket
-       |> assign(:labels, Labels.list_labels(socket.assigns.repository))
+       |> refresh_panel(:labels)
        |> put_flash(:info, "Label deleted")}
     else
       {:noreply, put_flash(socket, :error, "Only repository members can delete labels.")}

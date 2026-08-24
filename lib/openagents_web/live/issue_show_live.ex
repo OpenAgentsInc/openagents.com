@@ -61,7 +61,15 @@ defmodule OpenAgentsWeb.IssueShowLive do
     user = socket.assigns.current_user
     can_write = Repositories.writable?(repository, user)
 
-    if connected?(socket), do: Repositories.subscribe_issues(repository.id)
+    # Three topics, because three different writes change this page. The issue
+    # topic carries the issue and its timeline; the label and milestone topics
+    # carry the pickers, which until now moved only when an issue happened to
+    # move as well.
+    if connected?(socket) do
+      Repositories.subscribe_issues(repository.id)
+      Labels.subscribe_labels(repository.id)
+      Milestones.subscribe_milestones(repository.id)
+    end
 
     {:ok,
      socket
@@ -241,6 +249,15 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   def handle_info({:issues_changed, _other_repository}, socket), do: {:noreply, socket}
 
+  def handle_info({message, repository_id}, socket)
+      when message in [:labels_changed, :milestones_changed] and
+             repository_id == socket.assigns.repository.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :pickers, &refresh_panel/2)}
+
+  def handle_info({message, _other_repository}, socket)
+      when message in [:labels_changed, :milestones_changed],
+      do: {:noreply, socket}
+
   def handle_info(:live_refresh, socket),
     do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
 
@@ -248,6 +265,12 @@ defmodule OpenAgentsWeb.IssueShowLive do
     socket = refresh_authority(socket)
     load(socket, socket.assigns.issue)
   end
+
+  # A label or a milestone written elsewhere re-reads the pickers, and reads
+  # the authority that decides whether to offer them in the same call, so the
+  # two cannot disagree. It leaves the timeline alone: nothing about the issue
+  # moved.
+  defp refresh_panel(socket, :pickers), do: refresh_authority(socket)
 
   defp author?(%Issue{author_user_id: author_id}, %OpenAgents.Accounts.User{id: user_id})
        when is_binary(author_id),

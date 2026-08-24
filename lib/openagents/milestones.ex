@@ -13,6 +13,37 @@ defmodule OpenAgents.Milestones do
   alias OpenAgents.Milestones.Milestone
 
   @doc """
+  Subscribes the caller to one repository's milestones.
+
+  The message is `{:milestones_changed, repository_id}` and carries nothing
+  else, so a subscriber re-reads through its own visibility and authorization
+  predicates.
+
+  It says the milestone set moved, not that the issue counts beside it did.
+  Those hang off issue rows and arrive on the issue topic, so a page showing
+  both subscribes to both.
+  """
+  def subscribe_milestones(repository_id) when is_binary(repository_id),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, milestones_topic(repository_id))
+
+  @doc """
+  Announces that one repository's milestones moved.
+
+  Called after the owning write commits, never inside it: a subscriber re-reads
+  the moment it hears, and an announcement from inside an open transaction
+  hands it the repository as it was.
+  """
+  def broadcast_milestones(repository_id) when is_binary(repository_id) do
+    Phoenix.PubSub.broadcast(
+      OpenAgents.PubSub,
+      milestones_topic(repository_id),
+      {:milestones_changed, repository_id}
+    )
+  end
+
+  defp milestones_topic(repository_id), do: "milestones:" <> repository_id
+
+  @doc """
   Returns the list of milestones.
 
   ## Examples
@@ -113,6 +144,7 @@ defmodule OpenAgents.Milestones do
           "repo" => repository.name
         })
 
+        broadcast_milestones(repository.id)
         {:ok, milestone}
 
       result ->
@@ -157,6 +189,8 @@ defmodule OpenAgents.Milestones do
 
     case milestone |> Milestone.changeset(attrs) |> Repo.update() do
       {:ok, updated} ->
+        broadcast_milestones(updated.repository_id)
+
         {:ok,
          get_milestone!(
            %Repository{id: updated.repository_id},
@@ -181,7 +215,14 @@ defmodule OpenAgents.Milestones do
 
   """
   def delete_milestone(%Milestone{} = milestone) do
-    Repo.delete(milestone)
+    case Repo.delete(milestone) do
+      {:ok, deleted} ->
+        broadcast_milestones(deleted.repository_id)
+        {:ok, deleted}
+
+      result ->
+        result
+    end
   end
 
   @doc """

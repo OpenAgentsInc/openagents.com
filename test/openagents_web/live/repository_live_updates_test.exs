@@ -52,11 +52,9 @@ defmodule OpenAgentsWeb.RepositoryLiveUpdatesTest do
       {:ok, _label} =
         Labels.create_label(context.repository, %{"name" => "needs-triage", "color" => "ededed"})
 
-      # The label write does not announce itself, so this is the issue topic
-      # doing the work: any write to the repository's issues re-reads
-      # everything the page derived from the repository, not only the issue.
-      Repositories.broadcast_issues(context.repository.id)
-
+      # The label write announces itself now, so no issue has to move for the
+      # picker to catch up. Before `Labels.broadcast_labels/1` existed this
+      # only worked when an issue happened to be written as well.
       assert render(view) =~ "needs-triage"
     end
 
@@ -74,8 +72,6 @@ defmodule OpenAgentsWeb.RepositoryLiveUpdatesTest do
           %{"title" => "Second quarter"},
           context.member
         )
-
-      Repositories.broadcast_issues(context.repository.id)
 
       assert render(view) =~ "Second quarter"
     end
@@ -101,6 +97,142 @@ defmodule OpenAgentsWeb.RepositoryLiveUpdatesTest do
       # The pickers are read beside the authority that decides whether to offer
       # them, so they cannot disagree: no write access, nothing offered.
       refute render(view) =~ "needs-triage"
+    end
+
+    test "a label deleted elsewhere leaves the picker", context do
+      {:ok, label} =
+        Labels.create_label(context.repository, %{"name" => "wont-fix", "color" => "ededed"})
+
+      {:ok, issue} =
+        Issues.create_issue(context.repository, %{"title" => "Keeps a picker"}, context.member)
+
+      {:ok, view, _html} = live(context.conn, issue_path(context.repository, issue))
+
+      assert render(view) =~ "wont-fix"
+
+      {:ok, _deleted} = Labels.delete_label(label)
+
+      refute render(view) =~ "wont-fix"
+    end
+
+    test "a milestone written elsewhere does not reload the timeline", context do
+      {:ok, issue} =
+        Issues.create_issue(context.repository, %{"title" => "Has a comment"}, context.member)
+
+      {:ok, view, _html} = live(context.conn, issue_path(context.repository, issue))
+
+      queries =
+        capture_queries(view.pid, fn ->
+          {:ok, _milestone} =
+            Milestones.create_milestone(
+              context.repository,
+              %{"title" => "Third quarter"},
+              context.member
+            )
+
+          render(view)
+        end)
+
+      # The pickers moved; nothing about the issue did. A page that reloaded
+      # its timeline on every neighbouring write would pay for the comments,
+      # the attempts, and the closing references once per label a script
+      # creates.
+      assert Enum.any?(queries, &(&1 =~ ~s("milestones")))
+      refute Enum.any?(queries, &(&1 =~ ~s("issue_comments")))
+    end
+  end
+
+  describe "the label index" do
+    test "a label created elsewhere joins the list", context do
+      {:ok, view, _html} =
+        live(context.conn, ~p"/#{context.repository.owner}/#{context.repository.name}/labels")
+
+      assert has_element?(view, "#labels-empty")
+
+      {:ok, _label} =
+        Labels.create_label(context.repository, %{"name" => "from-the-api", "color" => "ededed"})
+
+      assert has_element?(view, "#labels", "from-the-api")
+      refute has_element?(view, "#labels-empty")
+    end
+
+    test "write access withdrawn elsewhere retires the form", context do
+      {:ok, _label} =
+        Labels.create_label(context.repository, %{"name" => "still-here", "color" => "ededed"})
+
+      {:ok, view, _html} =
+        live(context.conn, ~p"/#{context.repository.owner}/#{context.repository.name}/labels")
+
+      assert has_element?(view, "#new-label-form")
+
+      revoke_write_access!(context.repository, context.member)
+
+      {:ok, _other} =
+        Labels.create_label(context.repository, %{"name" => "written-after", "color" => "ededed"})
+
+      # The list and the authority to change it are read in the same call, so
+      # the page cannot go on offering a delete button to a viewer who can no
+      # longer use it.
+      refute has_element?(view, "#new-label-form")
+      assert has_element?(view, "#labels", "written-after")
+    end
+  end
+
+  describe "the milestone index" do
+    test "a milestone created elsewhere joins the list", context do
+      {:ok, view, _html} =
+        live(context.conn, ~p"/#{context.repository.owner}/#{context.repository.name}/milestones")
+
+      refute render(view) =~ "Opened by a script"
+
+      {:ok, _milestone} =
+        Milestones.create_milestone(
+          context.repository,
+          %{"title" => "Opened by a script"},
+          context.member
+        )
+
+      assert render(view) =~ "Opened by a script"
+    end
+
+    test "a milestone deleted elsewhere leaves the list", context do
+      {:ok, milestone} =
+        Milestones.create_milestone(
+          context.repository,
+          %{"title" => "Retired elsewhere"},
+          context.member
+        )
+
+      {:ok, view, _html} =
+        live(context.conn, ~p"/#{context.repository.owner}/#{context.repository.name}/milestones")
+
+      assert render(view) =~ "Retired elsewhere"
+
+      {:ok, _deleted} = Milestones.delete_milestone(milestone)
+
+      refute render(view) =~ "Retired elsewhere"
+    end
+
+    test "a milestone written elsewhere still counts its issues by aggregate", context do
+      {:ok, view, _html} =
+        live(context.conn, ~p"/#{context.repository.owner}/#{context.repository.name}/milestones")
+
+      queries =
+        capture_queries(view.pid, fn ->
+          {:ok, _milestone} =
+            Milestones.create_milestone(
+              context.repository,
+              %{"title" => "Counted by aggregate"},
+              context.member
+            )
+
+          render(view)
+        end)
+
+      issue_reads = Enum.filter(queries, &(&1 =~ ~s(FROM "issues")))
+
+      assert issue_reads != []
+      assert Enum.all?(issue_reads, &(&1 =~ "count("))
     end
   end
 
@@ -341,6 +473,9 @@ defmodule OpenAgentsWeb.RepositoryLiveUpdatesTest do
 
       {:ok, _milestone} =
         Milestones.create_milestone(other, %{"title" => "Somewhere else"}, context.member)
+
+      {:ok, _label} =
+        Labels.create_label(other, %{"name" => "elsewhere", "color" => "ededed"})
 
       {:ok, _issue} = Issues.create_issue(other, %{"title" => "Not here"}, context.member)
 

@@ -16,8 +16,13 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
 
     # The three numbers beside a milestone are counts of issues, so they move
     # whenever the repository's issues do -- from the API, the CLI, or another
-    # tab -- and not only when somebody edits a milestone here.
-    if connected?(socket), do: Repositories.subscribe_issues(repository.id)
+    # tab -- and not only when somebody edits a milestone here. The milestone
+    # topic carries the other half: a milestone opened, renamed, closed, or
+    # deleted elsewhere changes which rows the page has to draw at all.
+    if connected?(socket) do
+      Repositories.subscribe_issues(repository.id)
+      Milestones.subscribe_milestones(repository.id)
+    end
 
     {:ok,
      socket
@@ -31,7 +36,8 @@ defmodule OpenAgentsWeb.MilestoneIndexLive do
      |> refresh_panel(:milestones)}
   end
 
-  def handle_info({:issues_changed, repository_id}, socket) do
+  def handle_info({message, repository_id}, socket)
+      when message in [:issues_changed, :milestones_changed] do
     if repository_id == socket.assigns.repository.id,
       do: {:noreply, LiveRefresh.mark_stale(socket, :milestones, &refresh_panel/2)},
       else: {:noreply, socket}

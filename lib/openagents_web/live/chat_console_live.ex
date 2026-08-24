@@ -20,6 +20,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   alias OpenAgents.Chat.{AccountTurns, OpenRouter, TokenUsage}
   alias OpenAgents.Conversations
   alias OpenAgents.Delegations
+  alias OpenAgentsWeb.LiveRefresh
 
   @suggestions [
     "Summarize what the Ox Alpha stress fleet measures today.",
@@ -84,6 +85,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
 
     socket =
       socket
+      |> LiveRefresh.init()
       |> assign(:page_title, "Chat")
       |> assign(:conversation, conversation)
       |> assign(:fleet, Delegations.projection(socket.assigns.current_user, conversation.id))
@@ -101,7 +103,16 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
       |> assign(:last_prompt, "")
       |> assign(:stream_id, nil)
 
-    if connected?(socket), do: schedule_fleet_refresh(socket)
+    # The transcript is a projection of `account_chat_runs`, which the API and
+    # another browser session both write. `Conversations.subscribe/1` is the
+    # wrong topic for it -- those writes never create a `Conversations.Message`
+    # -- so the console listens on the turn topic the runs themselves announce
+    # on, and re-reads through `list_messages/1`, which resolves this account's
+    # own conversation.
+    if connected?(socket) do
+      AccountTurns.subscribe_turns(conversation.id)
+      schedule_fleet_refresh(socket)
+    end
 
     {:ok, socket}
   end
@@ -244,7 +255,24 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
     end)
   end
 
+  # A turn taken elsewhere -- the account API, another tab -- moves the
+  # transcript. A burst collapses into one re-read through the shared timer
+  # rather than one repaint per turn.
+  def handle_info({:account_turns_changed, conversation_id}, socket) do
+    if conversation_id == socket.assigns.conversation.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :messages, &refresh_panel/2)},
+      else: {:noreply, socket}
+  end
+
+  def handle_info(:live_refresh, socket),
+    do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
+
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  # A run still streaming contributes only its user message to this read, so
+  # the panel is safe to re-read while this socket holds a stream of its own.
+  defp refresh_panel(socket, :messages),
+    do: assign_messages(socket, AccountTurns.list_messages(socket.assigns.current_user))
 
   @impl true
   def render(assigns) do

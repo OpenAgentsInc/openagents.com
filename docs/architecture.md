@@ -312,6 +312,7 @@ decision and current operator procedure.
 - [ADR 0005: Use Basecoat and one OpenAgents component system](decisions/0005-use-basecoat-and-one-component-system.md)
 - [ADR 0006: Isolate web and distributed fleet staging](decisions/0006-isolate-web-and-distributed-fleet-staging.md)
 - [ADR 0007: Cut over to forge-canonical source control only after proof](decisions/0007-cut-over-to-forge-canonical-source-control-after-proof.md)
+- [ADR 0008: Publish the forge WAL anchor at a well-known path](decisions/0008-publish-the-forge-wal-anchor-at-a-well-known-path.md)
 
 ## Superseded narratives
 

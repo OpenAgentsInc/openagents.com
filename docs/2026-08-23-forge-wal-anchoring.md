@@ -4,7 +4,7 @@
 **Commit measured:** `7e5f7b1` on `openagents/main`, the forge
 **Question:** `EXIT-002` proves the served repository can be checked against the WAL without trusting the operator's database, and its own conclusion is that the check is tamper-evident and not tamper-proof. What would make a *consistent* rewrite of the log detectable, what does each option really cost, and what can no option here achieve?
 **Method:** direct reading of every writer of a WAL entry (`lib/openagents/forge/pushes.ex`, `lib/openagents/forge/git_plane.ex`, `lib/openagents/repositories/importer.ex`, `lib/openagents/repositories/provisioner.ex`), the log itself (`lib/openagents/forge/wal.ex` and its two adapters), the reader that replays it (`lib/openagents/forge/sync.ex`), the verifier (`lib/openagents/forge/verification.ex`), the derived receipt (`lib/openagents/forge/push_receipt.ex`), and the invariants they are bound to (`INVARIANTS.md`, `REPOSITORY-003`, `EXIT-001` through `EXIT-004`). Claims this repository cannot settle are in section 6 with what would settle them.
-**Status:** Stages 1, 2, and 4 shipped. Stages 3 and 5 are open.
+**Status:** Stages 1, 2, 4, and 5 shipped. Stage 3 is open.
 
 ---
 
@@ -277,8 +277,14 @@ surface is one that multiple parties read.
 **What a verifier needs.** The anchor's location and the ability to read it. No
 key.
 
-**Verdict.** Correct second step, and the cheapest useful version is the mirror
-commit, precisely because it is already half-built. Staged as 3 and 5.
+**Verdict.** Correct second step. The surface is settled by ADR 0008
+(`docs/decisions/0008-publish-the-forge-wal-anchor-at-a-well-known-path.md`,
+stage 5): a self-served anchor document at a well-known path, unsigned, with
+each anchor naming the digest of the anchor before it. The mirror commit is not
+the interim it looked like here — no mirror is configured, and a ref reached by
+`git push --mirror` is force-writable by the same credential, so the anchor
+branch would not be append-only. Every rejected surface publishes *that
+document's digest*, so escalation is additive. Staged as 3 and 5.
 
 ### 3.4 A client-side receipt returned to the pusher
 
@@ -466,23 +472,35 @@ entries the operator holds is the backfill section 7 rules out.
 
 **Size:** small, but it is a migration, so `RELEASE-001` applies.
 
-### Stage 5 — Decide the durable publication surface (open question, large)
+### Stage 5 — Decide the durable publication surface (decision) — SETTLED
 
-**Seam:** none in this repository yet.
+**Seam:** none in this repository; the decision is
+`docs/decisions/0008-publish-the-forge-wal-anchor-at-a-well-known-path.md`.
 
-Choosing between a self-run append-only log, a third-party timestamping service,
-and a public chain is a cost and custody decision, not an implementation one.
-Section 6 lists what would settle it. Until it is settled, stage 3's mirror
-commit is the honest interim: witnessed, cheap, and not overstated.
+Settled by naming the verifier first. The pusher is served by stage 2 already;
+the verifier stage 3 is for is a stranger reading a public repository, who needs
+a commitment reachable with no account, no credential, and no request to the
+operator. The chosen surface is one unsigned JSON anchor document at a stable
+well-known path, published on an interval off the push path, with each anchor
+naming the digest of the anchor before it.
+
+The ADR is explicit that the document proves nothing on its own — the operator
+serves it — and that its value is making a commitment cheap for a third party to
+keep a copy of, since a copy is what contradicts a rewrite. A GitHub mirror
+commit, a public transparency log, a Nostr relay set, and a Bitcoin-anchored
+commitment are all rejected *for now* with what each would require, and each of
+them publishes this document's digest, so adopting one later adds a witness
+rather than replacing the surface.
 
 ---
 
 ## 6. What this repository cannot settle
 
-- **Where the anchor should live.** The options differ in cost, in who reads
-  them, and in what happens when publication stops. Settling it needs a decision
-  about who the verifier is expected to be — a pusher, a user, or an auditor —
-  and only the first is served by stage 2 alone.
+- **Where the anchor should live.** Settled by ADR 0008 after naming the
+  verifier: a stranger reading a public repository, not the pusher stage 2
+  already serves. What this repository still cannot settle is whether anybody
+  outside it will ever *witness* the published anchor, which is the residue
+  #151 carries.
 - **Whether the operator will accept a custody split.** Signing is only worth
   building after that answer, and the answer is not a code change.
 - **What the production logs actually contain.** Every claim here about existing

@@ -570,6 +570,7 @@ defmodule OpenAgentsWeb.Router do
     delete "/threads/:thread_id", ThreadController, :delete
     get "/threads/:thread_id/events", ThreadController, :events
     post "/threads/:thread_id/events", ThreadController, :record
+    post "/threads/:thread_id/grants", ThreadController, :mint
   end
 
   scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do

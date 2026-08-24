@@ -120,6 +120,44 @@ defmodule OpenAgentsWeb.ThreadController do
     end)
   end
 
+  def mint(conn, %{"thread_id" => thread_id}) do
+    with_thread(conn, thread_id, fn thread ->
+      # Re-minting is the resume fence: it revokes every active grant, bumps
+      # the generation, and hands back fresh authority on the same thread, so
+      # a resumed session can never race a zombie of its former self
+      # (THREAD-001). The plaintext token exists exactly once, in this
+      # response, like the one `POST /api/v3/threads` returns.
+      case Threads.mint_grant(thread) do
+        {:ok, minted, grant, token} ->
+          conn
+          |> put_extension_header()
+          |> put_status(:created)
+          |> json(%{"thread" => thread_view(minted), "grant" => minted_view(grant, token)})
+
+        {:error, :thread_terminal} ->
+          sentence =
+            "This thread is #{thread.status} and holds no authority to re-mint. " <>
+              "Open another thread instead."
+
+          ApiError.refuse(conn, "thread_terminal",
+            message: sentence,
+            errors: %{"thread" => [sentence]}
+          )
+
+        {:error, :credit_exhausted} ->
+          credit_exhausted(conn)
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          ApiError.changeset(conn, changeset)
+
+        {:error, _reason} ->
+          ApiError.validation_failed(conn, %{
+            "thread" => ["The grant could not be minted. Try again."]
+          })
+      end
+    end)
+  end
+
   defp append(conn, thread, event_type, payload) do
     case Threads.record_event(thread, event_type, payload) do
       {:ok, updated} ->

@@ -700,4 +700,57 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["threads"] == []
     end
   end
+
+  describe "POST /api/v3/threads/:thread_id/grants" do
+    test "re-mints authority on the same thread and revokes the old grant", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-remint")
+
+      created =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "Resume me."})
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+      old_token = created["grant"]["token"]
+      assert {:ok, _usable} = Inference.resolve(old_token)
+
+      body = authenticated |> post(~p"/api/v3/threads/#{id}/grants") |> json_response(201)
+
+      assert body["thread"]["id"] == id
+      assert body["thread"]["status"] == "open"
+      new_token = body["grant"]["token"]
+      assert is_binary(new_token) and new_token != old_token
+      assert {:ok, _usable} = Inference.resolve(new_token)
+      assert {:error, :grant_revoked} = Inference.resolve(old_token)
+    end
+
+    test "a terminal thread refuses with thread_terminal", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-remint-terminal")
+
+      created =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "Close me first."})
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+      _cancelled = authenticated |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+
+      refused = authenticated |> post(~p"/api/v3/threads/#{id}/grants") |> json_response(422)
+      assert refused["code"] == "thread_terminal"
+    end
+
+    test "another account's thread is not found", %{conn: conn} do
+      owner = put_chat_api_token(conn, "thread-remint-owner")
+
+      created =
+        owner
+        |> post(~p"/api/v3/threads", %{"objective" => "Mine alone."})
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+
+      stranger = put_chat_api_token(recycle(conn), "thread-remint-stranger")
+      assert stranger |> post(~p"/api/v3/threads/#{id}/grants") |> json_response(404)
+    end
+  end
 end

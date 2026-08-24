@@ -23,11 +23,12 @@ defmodule OpenAgents.Inference do
   @token_prefix "sig_"
 
   @type ceilings :: %{
-          required(:max_total_tokens) => pos_integer(),
-          required(:max_calls) => pos_integer(),
-          required(:max_cost_microusd) => pos_integer(),
-          # nil is a grant with no clock: budget and revocation bound it, time
-          # does not.
+          required(:max_total_tokens) => pos_integer() | nil,
+          required(:max_calls) => pos_integer() | nil,
+          required(:max_cost_microusd) => pos_integer() | nil,
+          # nil is unbounded, on every one of these. A grant with no ceilings
+          # and no clock is bounded by revocation alone, which is what a
+          # thread's grant is.
           required(:ttl_seconds) => pos_integer() | nil
         }
 
@@ -350,19 +351,25 @@ defmodule OpenAgents.Inference do
     tokens = integer(grant.usage["total_tokens"])
     cost = integer(grant.usage["estimated_cost_microusd"])
 
-    grant.call_count >= grant.max_calls or
-      tokens >= grant.max_total_tokens or
-      cost >= grant.max_cost_microusd
+    reached?(grant.call_count, grant.max_calls) or
+      reached?(tokens, grant.max_total_tokens) or
+      reached?(cost, grant.max_cost_microusd)
   end
 
   defp would_exhaust?(%Grant{} = grant, merged) do
     tokens = integer(merged["total_tokens"])
     cost = integer(merged["estimated_cost_microusd"])
 
-    grant.call_count + 1 >= grant.max_calls or
-      tokens >= grant.max_total_tokens or
-      cost >= grant.max_cost_microusd
+    reached?(grant.call_count + 1, grant.max_calls) or
+      reached?(tokens, grant.max_total_tokens) or
+      reached?(cost, grant.max_cost_microusd)
   end
+
+  # A ceiling that was never set cannot be reached. Comparing against nil would
+  # raise in Elixir's term order rather than answer — `1 >= nil` is false, which
+  # would have read as "not reached" by accident rather than by decision.
+  defp reached?(_spent, nil), do: false
+  defp reached?(spent, ceiling), do: spent >= ceiling
 
   # ── usage accounting (voice Usage pattern) ──────────────────────────────
 

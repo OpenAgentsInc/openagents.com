@@ -90,7 +90,15 @@ defmodule OpenAgents.Inference.CreditTest do
     {:ok, remaining} = Threads.ceilings(owner.id)
 
     assert remaining.max_cost_microusd == Credit.remaining(owner.id)
-    assert remaining.max_cost_microusd > Threads.ceilings().max_cost_microusd
+
+    # The account's credit is the only ceiling a thread gets. The configured
+    # per-thread cost cap was $2 and is now unset, so the cost ceiling is not a
+    # cap being raised to the remainder — it is the remainder, and nothing else
+    # bounds the thread.
+    assert is_nil(Threads.ceilings().max_cost_microusd)
+    assert is_nil(remaining.max_calls)
+    assert is_nil(remaining.max_total_tokens)
+    assert is_nil(remaining.ttl_seconds)
   end
 
   test "an account with nothing left is refused rather than minted a grant" do

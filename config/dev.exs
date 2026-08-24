@@ -57,11 +57,17 @@ config :openagents,
 # to bundle .js and .css sources.
 config :openagents, OpenAgentsWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
+  # `PHX_LISTEN_ALL=true` widens it to every interface, like the PORT
+  # override below and for the same reason: a Gym benchmark container
+  # reaching the dev server through host.docker.internal needs a non-loopback
+  # bind, and flipping it should not mean editing checked-in config.
   # 4000 unless `PORT` says otherwise. Another agent verifying a git-forge
   # receipt needs the canonical port free, and moving this server aside should
   # not mean editing checked-in config to do it.
-  http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("PORT") || "4000")],
+  http: [
+    ip: if(System.get_env("PHX_LISTEN_ALL") == "true", do: {0, 0, 0, 0}, else: {127, 0, 0, 1}),
+    port: String.to_integer(System.get_env("PORT") || "4000")
+  ],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

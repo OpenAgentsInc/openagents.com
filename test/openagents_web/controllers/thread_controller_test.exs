@@ -318,7 +318,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
   end
 
   describe "GET /api/v3/threads/:thread_id" do
-    test "reports status and usage against the ceiling", %{conn: conn} do
+    test "reports usage, and reports no remainder where there is no ceiling", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-read")
 
       created =
@@ -336,11 +336,19 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["grant"]["status"] == "active"
       assert body["grant"]["call_count"] == 1
       assert body["grant"]["usage"]["total_tokens"] == 15
-      assert body["grant"]["limits"]["max_total_tokens"] == Threads.ceilings().max_total_tokens
-      assert body["grant"]["remaining"]["calls"] == Threads.ceilings().max_calls - 1
+      # A thread's grant sets no call or token ceiling, so there is no
+      # remainder to count down. `null` is what the client already reads as
+      # "no limit"; a number here would have been invented.
+      assert is_nil(Threads.ceilings().max_calls)
+      assert is_nil(body["grant"]["limits"]["max_total_tokens"])
+      assert is_nil(body["grant"]["remaining"]["calls"])
+      assert is_nil(body["grant"]["remaining"]["total_tokens"])
 
-      assert body["grant"]["remaining"]["total_tokens"] ==
-               Threads.ceilings().max_total_tokens - 15
+      # Cost is still ceiled, at what the account's credit has left, and its
+      # remainder is a real figure.
+      assert body["grant"]["remaining"]["cost_microusd"] ==
+               body["grant"]["limits"]["max_cost_microusd"] -
+                 body["grant"]["usage"]["estimated_cost_microusd"]
 
       refute Map.has_key?(body["grant"], "token")
     end

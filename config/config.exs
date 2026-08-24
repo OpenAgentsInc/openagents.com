@@ -320,9 +320,13 @@ config :openagents,
   # most one live grant per open thread, so the account's concurrent
   # thread-scoped authority is bounded by eight of the ceilings below.
   maximum_open_threads_per_account: 8,
-  thread_grant_max_total_tokens: 1_000_000,
-  thread_grant_max_calls: 256,
-  thread_grant_max_cost_microusd: 2_000_000,
+  # Unbounded, all three. A coding session reached 256 calls, a million tokens,
+  # and two dollars in an afternoon, and was told to start a new session — the
+  # same interruption the clock below used to cause, by another route. A
+  # thread is bounded by revocation and by the account's credit.
+  thread_grant_max_total_tokens: nil,
+  thread_grant_max_calls: nil,
+  thread_grant_max_cost_microusd: nil,
   # No clock on a thread's authority. It expiring on a wall clock ended a
   # coding session mid-sentence and told the reader to start a new one, when
   # nothing had gone wrong except that an hour had passed. Budget and

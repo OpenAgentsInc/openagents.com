@@ -725,6 +725,10 @@ defmodule OpenAgentsWeb.ThreadController do
 
   defp spent(_grant, _key), do: 0
 
+  # An unbounded ceiling has no remainder to report. `null` is what the client
+  # already reads for "no limit" in `limits`, and reporting a number here would
+  # have meant inventing one.
+  defp remaining(nil, _spent), do: nil
   defp remaining(ceiling, spent), do: max(ceiling - spent, 0)
 
   defp stamp(nil), do: nil

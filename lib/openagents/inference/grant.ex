@@ -70,17 +70,15 @@ defmodule OpenAgents.Inference.Grant do
     # thread's authority is bounded by budget and revocation, not by how long
     # the reader has been working. A computer-bound delegation still sets one,
     # where the deadline is a security bound rather than a convenience.
-    |> validate_required([
-      :owner_visitor_id,
-      :model_id,
-      :token_digest,
-      :max_total_tokens,
-      :max_calls,
-      :max_cost_microusd
-    ])
+    |> validate_required([:owner_visitor_id, :model_id, :token_digest])
+    # A ceiling is optional and nil is unbounded, but a ceiling that is present
+    # and non-positive is a grant that could never buy a call.
+    # `validate_number/3` does not run on a nil change, so these still hold
+    # wherever a figure was given.
     |> validate_number(:max_total_tokens, greater_than: 0)
     |> validate_number(:max_calls, greater_than: 0)
     |> validate_number(:max_cost_microusd, greater_than: 0)
+    |> check_constraint(:max_calls, name: :inference_grant_positive_ceilings)
     |> validate_exactly_one_fence()
     |> unique_constraint(:token_digest)
     |> unique_constraint(:thread_id, name: :inference_grants_one_active_thread_index)

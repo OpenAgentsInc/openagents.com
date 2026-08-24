@@ -2202,13 +2202,20 @@ conversation, and a thread is not one.
   mint at all. `test/openagents/threads/credit_race_test.exs` proves the
   serialized figures, the exhausted refusal under race, and the unchanged
   serial ceilings.
-- **A thread's authority has no clock, and spent authority releases the slot
-  without being asked.** `inference_grants.expires_at` is nullable and a
-  thread's grant is minted without one: a thread is bounded by its budget
-  (calls, tokens, cost) and by revocation, and by nothing else. It used to
-  carry `thread_grant_ttl_seconds`, and the reaper closed the open thread it
-  fenced as `authority_expired` — which ended a coding session mid-work
-  because an hour had passed, with nothing wrong and nothing finished. The
+- **A thread's authority has no clock and no ceiling of its own, and spent
+  authority releases the slot without being asked.**
+  `inference_grants.expires_at`, `max_calls`, `max_total_tokens`, and
+  `max_cost_microusd` are all nullable, and nil is unbounded on each. A
+  thread's grant is minted with no deadline and no call or token ceiling: it is
+  bounded by revocation and by the account's credit, which is what
+  `max_cost_microusd` carries, and by nothing else. The database still refuses
+  a ceiling that is present and non-positive
+  (`inference_grant_positive_ceilings`), because a grant that could never buy a
+  call is a different thing from a grant with no limit. It used to
+  carry `thread_grant_ttl_seconds`, 256 calls, a million tokens, and two
+  dollars, and the reaper closed the open thread it fenced as
+  `authority_expired` — each of which ended a coding session mid-work in an
+  afternoon, with nothing wrong and nothing finished. The
   ceiling still clears itself: `OpenAgents.Threads.reap_expired/1` runs at
   admission and on every read of a thread, and an open thread that has minted
   authority and holds none — its budget spent, or its grant revoked — becomes

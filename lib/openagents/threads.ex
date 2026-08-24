@@ -549,12 +549,14 @@ defmodule OpenAgents.Threads do
   """
   @spec ceilings() :: Inference.ceilings()
   def ceilings do
+    # All four unbounded. A thread is bounded by revocation and by the
+    # account's credit, and by nothing else: 256 calls, a million tokens, two
+    # dollars, and an hour were each reached in an afternoon's work, and each
+    # ended a session that had nothing wrong with it.
     %{
-      max_total_tokens: setting(:thread_grant_max_total_tokens, 1_000_000),
-      max_calls: setting(:thread_grant_max_calls, 256),
-      max_cost_microusd: setting(:thread_grant_max_cost_microusd, 2_000_000),
-      # No clock. A thread is bounded by the three ceilings above and by
-      # revocation; how long the reader has been working is not a bound.
+      max_total_tokens: setting(:thread_grant_max_total_tokens, nil),
+      max_calls: setting(:thread_grant_max_calls, nil),
+      max_cost_microusd: setting(:thread_grant_max_cost_microusd, nil),
       ttl_seconds: setting(:thread_grant_ttl_seconds, nil)
     }
   end

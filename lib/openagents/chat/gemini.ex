@@ -28,7 +28,14 @@ defmodule OpenAgents.Chat.Gemini do
 
   alias OpenAgents.Chat.Gemini.StreamDecoder
 
-  @endpoint "https://generativelanguage.googleapis.com/v1beta/models"
+  # Vertex Express, not the Generative Language endpoint. The two speak the same
+  # `generateContent` request and response, and take the same API key, but the
+  # key this deployment holds is authorized for one of them: Generative
+  # Language answers `PERMISSION_DENIED` for every method, including
+  # `ListModels`, under both the query parameter and the `x-goog-api-key`
+  # header. Vertex Express answers normally, streams over `?alt=sse`, and
+  # returns the `thought: true` parts the decoder splits on.
+  @endpoint "https://aiplatform.googleapis.com/v1/publishers/google/models"
   @default_model "gemini-3.7-flash"
   @model_label "Gemini 3.7 Flash"
   @maximum_output_tokens 8192

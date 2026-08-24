@@ -423,6 +423,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "conversation, and a grant names one or the other, never both " <>
           "(THREAD-001).",
       "endpoints" => [
+        "GET /api/v3/models",
         "POST /api/v3/threads",
         "GET /api/v3/threads/{thread_id}",
         "DELETE /api/v3/threads/{thread_id}"
@@ -442,9 +443,13 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "default" => OpenAgents.Inference.Models.default_id(),
           "description" =>
             "The model the thread's grant pins, and therefore the model every " <>
-              "call at the inference proxy reaches. A value outside this enum " <>
-              "is refused with a field-level 422 naming `model`. Open a second " <>
-              "thread to run other work on another model."
+              "call at the inference proxy reaches. GET /api/v3/models is the " <>
+              "typed catalog behind this enum, with each model's provider, " <>
+              "ceilings, and availability. A value outside this enum is " <>
+              "refused with a field-level 422 naming `model`; a listed model " <>
+              "whose provider is not configured is refused with " <>
+              "`model_unavailable`. It is never replaced silently. Open a " <>
+              "second thread to run other work on another model."
         },
         "reasoning" => %{
           "endpoint" => "POST /api/v3/threads",

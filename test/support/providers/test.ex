@@ -11,6 +11,10 @@ defmodule OpenAgents.Providers.Test do
   @impl true
   def capabilities, do: [:text, :tool_calls, :usage]
 
+  # The test lane needs no credential, so it is always configured.
+  @impl true
+  def configured?, do: true
+
   @impl true
   def stream(%Request{} = request, on_event) do
     if request.previous_response_id do

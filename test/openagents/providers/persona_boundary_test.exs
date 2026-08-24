@@ -67,6 +67,7 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.Providers.OpenRouter => :outbound_http,
     OpenAgents.Providers.RecordingTestProvider => :in_process,
     OpenAgents.Providers.Test => :in_process,
+    OpenAgents.Providers.UnconfiguredTestProvider => :in_process,
     OpenAgents.Voice.OpenAI.CallClient => :outbound_http,
     OpenAgents.Voice.OpenAI.Sideband => :outbound_socket,
     OpenAgents.Voice.TestCallProvider => :in_process,

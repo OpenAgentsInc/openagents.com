@@ -20,6 +20,11 @@ defmodule OpenAgents.Providers.OpenAI do
   def capabilities, do: [:text, :tool_calls, :usage]
 
   @impl true
+  def configured? do
+    match?({:ok, _key}, OpenAgents.RuntimeConfig.fetch_secret(:openai_api_key))
+  end
+
+  @impl true
   def stream(%Request{} = request, on_event) when is_function(on_event, 1) do
     stream(request, on_event, [])
   end

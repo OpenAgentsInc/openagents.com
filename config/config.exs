@@ -103,6 +103,32 @@ config :openagents,
   openai_api_key: nil,
   openrouter_api_key: nil,
   openrouter_model: "stealth/ox-alpha",
+  # The typed model catalog (`OpenAgents.Inference.Models`, PROVIDER-002):
+  # every model this deployment serves, in the order a client should offer
+  # them; the first entry is the default. `id` is the public name a caller
+  # asks for, `provider_model` the string the vendor is called with, and
+  # either may be `{:config, key}` to follow a runtime-configurable value.
+  # `provider` names a lane whose adapter module and credential are configured
+  # separately, so no secret lives here; a lane whose credential is absent is
+  # listed as unavailable, never silently substituted. `max_output` is the
+  # per-call output cap the proxy's adapters actually send (4,096 tokens);
+  # `context_window` is the ceiling this deployment publishes for the lane.
+  model_catalog: [
+    %{
+      id: {:config, :openai_model},
+      provider: :openai,
+      provider_model: {:config, :openai_model},
+      context_window: 272_000,
+      max_output: 4_096
+    },
+    %{
+      id: "ox-alpha",
+      provider: :openrouter,
+      provider_model: {:config, :openrouter_model},
+      context_window: 256_000,
+      max_output: 4_096
+    }
+  ],
   gemini_api_key: nil,
   gemini_model: "gemini-3.7-flash",
   box_api_key: nil,

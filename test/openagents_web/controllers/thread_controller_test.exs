@@ -99,6 +99,33 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["grant"]["model"] == OpenAgents.Inference.Models.default_id()
     end
 
+    test "a catalog model whose provider is not configured is refused, never substituted",
+         %{conn: conn} do
+      previous = Application.get_env(:openagents, :openrouter_provider)
+
+      Application.put_env(
+        :openagents,
+        :openrouter_provider,
+        OpenAgents.Providers.UnconfiguredTestProvider
+      )
+
+      on_exit(fn -> Application.put_env(:openagents, :openrouter_provider, previous) end)
+
+      body =
+        conn
+        |> put_chat_api_token("thread-unavailable-model")
+        |> post(~p"/api/v3/threads", %{
+          "objective" => "Ask for the unconfigured lane.",
+          "model" => "ox-alpha"
+        })
+        |> json_response(503)
+
+      assert body["code"] == "model_unavailable"
+      assert Map.has_key?(body["errors"], "model")
+      # The refusal names what is currently available.
+      assert body["message"] =~ OpenAgents.Inference.Models.default_id()
+    end
+
     test "a model the proxy cannot route is refused, naming the field", %{conn: conn} do
       body =
         conn
@@ -434,7 +461,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
         |> post(
           ~p"/api/inference/proxy",
           Jason.encode!(%{
-            "model" => "ignored-by-proxy",
+            "model" => created["grant"]["model"],
             "messages" => [%{"role" => "user", "content" => "hello there"}],
             "stream" => true
           })

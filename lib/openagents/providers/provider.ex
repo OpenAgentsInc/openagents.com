@@ -12,6 +12,19 @@ defmodule OpenAgents.Providers.Provider do
   @type capability :: :text | :tool_calls | :usage
   @callback capabilities() :: [capability()]
 
+  @doc """
+  Whether this adapter's credential is configured on this deployment.
+
+  Optional. `OpenAgents.Inference.Models` asks it to publish availability in
+  the model catalog and to refuse an unavailable model before a call is made
+  (PROVIDER-002). An adapter that does not export it is taken as configured —
+  the test adapters need no credential. The answer says only that a secret is
+  present, never what it is.
+  """
+  @callback configured?() :: boolean()
+
+  @optional_callbacks configured?: 0
+
   @callback stream(
               OpenAgents.Providers.Request.t(),
               (OpenAgents.Providers.ProviderEvent.t() -> any())

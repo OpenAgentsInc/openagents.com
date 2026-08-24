@@ -560,6 +560,10 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v3", OpenAgentsWeb do
     pipe_through :chat_account_api
 
+    # The typed model catalog the thread admission checks against. It sits in
+    # the thread scope because it names what a thread grant can be minted for.
+    get "/models", ModelCatalogController, :index
+
     post "/threads", ThreadController, :create
     get "/threads", ThreadController, :index
     get "/threads/:thread_id", ThreadController, :show

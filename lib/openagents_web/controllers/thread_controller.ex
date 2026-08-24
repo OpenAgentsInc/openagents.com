@@ -44,6 +44,7 @@ defmodule OpenAgentsWeb.ThreadController do
       open(conn, objective, options)
     else
       {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
+      {:unavailable, model_id} -> unavailable_model(conn, model_id)
     end
   end
 
@@ -293,6 +294,7 @@ defmodule OpenAgentsWeb.ThreadController do
 
   defp execution_shape(params) do
     with {:ok, model} <- admitted(params, "model", Models.ids(), Models.default_id()),
+         :ok <- serving(model),
          {:ok, reasoning} <-
            admitted(params, "reasoning", Thread.reasoning_efforts(), Threads.default_reasoning()),
          {:ok, profile} <-
@@ -304,6 +306,33 @@ defmodule OpenAgentsWeb.ThreadController do
            ) do
       {:ok, [model: model, reasoning: reasoning, permission_profile: profile]}
     end
+  end
+
+  # An admitted model whose provider credential is not configured is refused
+  # here rather than minted into a grant that can only fail at its first call
+  # (PROVIDER-002): the catalog lists it as unavailable, and opening a thread
+  # on it would be authority for work the deployment cannot do.
+  defp serving(model_id) do
+    case Models.fetch(model_id) do
+      {:ok, model} ->
+        if Models.available?(model), do: :ok, else: {:unavailable, model_id}
+
+      # `admitted/4` has already bound the id to the catalog.
+      :error ->
+        {:unavailable, model_id}
+    end
+  end
+
+  defp unavailable_model(conn, model_id) do
+    sentence =
+      "#{inspect(model_id)} is in the catalog but its provider is not configured " <>
+        "on this deployment. Currently available: " <>
+        "#{Enum.join(Models.available_ids(), ", ")}. See GET /api/v3/models."
+
+    ApiError.refuse(conn, "model_unavailable",
+      message: sentence,
+      errors: %{"model" => [sentence]}
+    )
   end
 
   # A value outside the enum is refused rather than replaced by the default: a

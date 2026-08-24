@@ -59,6 +59,12 @@ defmodule OpenAgentsWeb.ApiError do
     # malformed request and not a forbidden one: the same call succeeds once
     # the caller revokes one, so it is the rate-limit status and its own code.
     "thread_quota_reached" => {429, "This account holds the maximum number of open threads"},
+    # Model availability (PROVIDER-002). The model is in the catalog but its
+    # provider credential is not configured on this deployment, which is the
+    # server's condition and not the caller's mistake: the same call succeeds
+    # once the operator configures the lane, so it is the unavailable status
+    # and its own code — never a silent substitution.
+    "model_unavailable" => {503, "The model's provider is not configured on this deployment"},
     "thread_terminal" => {422, "This thread is terminal and its transcript is closed"},
     # Spending the account's inference credit is not a rate limit: no amount of
     # waiting or revoking makes the same call succeed, so it is the payment

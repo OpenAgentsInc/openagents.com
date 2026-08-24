@@ -1187,6 +1187,45 @@ Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
 `OpenAgents.Inference.ModelsTest`, `OpenAgents.Providers.Test`,
 `OpenAgents.TurnProviderEventsTest`, and `OpenAgents.DependencyBoundaryTest`.
 
+### PROVIDER-002 — Model selection is honest: no silent substitution
+
+Status: Current
+
+A turn is never answered by a different model than the one requested without
+the caller being told. `OpenAgents.Inference.Models` is the one config-driven
+catalog (`config :openagents, :model_catalog`) of the models this deployment
+serves, `GET /api/v3/models` publishes it — id, provider lane, context and
+output ceilings, availability — and every admission checks the same list, so
+the offered set and the refused-against set cannot drift.
+
+Concretely:
+
+- A model outside the catalog is refused with a typed error naming the served
+  set — a field-level `422` at `POST /api/v3/threads`, `model_not_served` at
+  the inference proxy — never replaced by a default.
+- A model in the catalog whose provider credential is not configured is
+  **listed as unavailable rather than omitted**, and selecting it is refused
+  with `model_unavailable` at thread admission and at the proxy, before any
+  provider is called. Availability is the adapter's own report
+  (`configured?/0`); it says only that a credential is present, never what it
+  is.
+- A proxy body naming a served model other than the grant's is refused with
+  `model_mismatch` naming both, rather than silently answered by the grant's.
+- Every successful proxy response attributes the effective model — the
+  `x-openagents-model` header and each SSE chunk's `model` field — so a
+  client renders what answered rather than what it assumed. Because a
+  mismatch is refused, requested and effective agree on every `200`.
+
+The chat lane keeps the same law through `OpenAgents.Chat.Backends`: an
+unsupported `model` on `POST /api/v3/chat/turns` is a typed `422`, and
+`GET /api/v3` publishes the supported enum from the same list.
+
+Evidence: `OpenAgents.Inference.Models`, `OpenAgentsWeb.ModelCatalogController`,
+`OpenAgentsWeb.InferenceProxyController`, `OpenAgentsWeb.ThreadController`,
+`OpenAgents.Inference.ModelsTest`, `OpenAgentsWeb.ModelCatalogControllerTest`,
+`OpenAgentsWeb.InferenceProxyControllerTest`, and
+`OpenAgentsWeb.ThreadControllerTest`.
+
 ## Tool authority and execution
 
 ### TOOL-001 — A turn uses one immutable tool catalog
@@ -4821,6 +4860,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TURN-005 | `test/openagents/turn_tool_loop_test.exs` |
 | PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
 | PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs`, `test/openagents/dependency_boundary_test.exs` |
+| PROVIDER-002 | `test/openagents/inference/models_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
 | TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |
 | COLLECTIVE-001 | `test/openagents/collective_test.exs` |
 | COLLECTIVE-002 | `test/openagents/collective_generalizer_test.exs` |

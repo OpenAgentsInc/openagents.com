@@ -57,7 +57,7 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
     conn =
       post_chat(conn, token, %{
-        "model" => "ignored-by-proxy",
+        "model" => OpenAgents.Inference.Models.default_id(),
         "messages" => [
           %{"role" => "system", "content" => "You are helpful."},
           %{"role" => "user", "content" => "hello there"}
@@ -68,8 +68,17 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert conn.status == 200
     assert get_resp_header(conn, "content-type") |> hd() =~ "text/event-stream"
 
+    # The effective model is attributed on the response itself (PROVIDER-002):
+    # the header and every chunk name the model that answered.
+    assert get_resp_header(conn, "x-openagents-model") ==
+             [OpenAgents.Inference.Models.default_id()]
+
     events = sse_events(conn.resp_body)
     assert List.last(events) == "[DONE]"
+
+    for chunk <- events, chunk != "[DONE]" do
+      assert Jason.decode!(chunk)["model"] == OpenAgents.Inference.Models.default_id()
+    end
 
     # The Test provider's default path streams "I hear you. You said: <prompt>".
     text =
@@ -175,17 +184,81 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
            )
   end
 
-  test "the model is pinned by the grant, not the request body", %{conn: conn} do
-    %{grant: grant, token: token} = grant("model-pin")
+  test "a body naming a model outside the catalog is refused, naming the served set",
+       %{conn: conn} do
+    %{grant: grant, token: token} = grant("model-not-served")
 
-    _conn =
+    conn =
       post_chat(conn, token, %{
         "model" => "attacker/gpt-9-ultra",
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
 
-    # The grant's model_id is Sarah's configured model, never the body's.
+    # Never a 202-and-answer-from-another-model (#160): the refusal is typed,
+    # echoes what was asked, and names what is served.
+    assert conn.status == 422
+    error = Jason.decode!(conn.resp_body)["error"]
+    assert error["code"] == "model_not_served"
+    assert error["requested"] == "attacker/gpt-9-ultra"
+    assert error["served"] == OpenAgents.Inference.Models.ids()
+
+    # The grant's model_id stays Sarah's configured model, never the body's.
     assert grant.model_id == Application.fetch_env!(:openagents, :openai_model)
+  end
+
+  test "a body naming a served model other than the grant's is refused, never substituted",
+       %{conn: conn} do
+    %{token: token} = grant("model-mismatch")
+
+    conn =
+      post_chat(conn, token, %{
+        "model" => "ox-alpha",
+        "messages" => [%{"role" => "user", "content" => "hello"}]
+      })
+
+    assert conn.status == 422
+    error = Jason.decode!(conn.resp_body)["error"]
+    assert error["code"] == "model_mismatch"
+    assert error["requested"] == "ox-alpha"
+    assert error["granted"] == OpenAgents.Inference.Models.default_id()
+    assert error["served"] == OpenAgents.Inference.Models.ids()
+  end
+
+  test "the vendor spelling of the grant's model is the same name, not a mismatch",
+       %{conn: conn} do
+    %{token: token} = grant("model-vendor-spelling", model_id: "ox-alpha")
+
+    conn =
+      post_chat(conn, token, %{
+        "model" => OpenAgents.Chat.OpenRouter.default_model(),
+        "messages" => [%{"role" => "user", "content" => "hi"}]
+      })
+
+    assert conn.status == 200
+    assert get_resp_header(conn, "x-openagents-model") == ["ox-alpha"]
+  end
+
+  test "a grant on a lane without a credential is refused before any provider call",
+       %{conn: conn} do
+    # Minted while the lane was configured; the credential goes away under a
+    # live grant. The UnconfiguredTestProvider raises from `stream/2`, so a
+    # 503 here also proves no provider was called.
+    %{token: token} = grant("model-lane-unavailable", model_id: "ox-alpha")
+
+    previous = Application.get_env(:openagents, :openrouter_provider)
+
+    Application.put_env(
+      :openagents,
+      :openrouter_provider,
+      OpenAgents.Providers.UnconfiguredTestProvider
+    )
+
+    on_exit(fn -> Application.put_env(:openagents, :openrouter_provider, previous) end)
+
+    conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
+
+    assert conn.status == 503
+    assert Jason.decode!(conn.resp_body)["error"]["code"] == "model_unavailable"
   end
 
   test "missing bearer is rejected", %{conn: conn} do

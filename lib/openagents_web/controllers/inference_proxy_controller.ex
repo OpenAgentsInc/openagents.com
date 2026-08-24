@@ -12,6 +12,12 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   back as chat-completions SSE that probe's parser consumes. Provider JSON,
   credentials, and raw errors never cross this boundary.
 
+  Model selection is honest (PROVIDER-002): a body that names a model the
+  catalog does not serve, or a served model other than the grant's, is refused
+  with a typed error naming the served set, never answered by another model.
+  Every 200 attributes the effective model — the `x-openagents-model` header
+  and each chunk's `model` field — so a client renders what answered.
+
   The probe→proxy hop is buffered (the provider still streams from the vendor
   internally); probe's transport reads the whole body before parsing, so this
   matches its consumer and keeps failure handling honest.
@@ -31,8 +37,10 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     with {:ok, token} <- bearer(conn),
          {:ok, grant} <- resolve(token),
          {:ok, model} <- route(grant),
+         :ok <- serving(model),
+         :ok <- requested_model(model, conn.body_params),
          {:ok, request} <- build_request(model, conn.body_params) do
-      run(conn, grant, model.provider, request)
+      run(conn, grant, model, request)
     else
       {:error, reason} -> refuse(conn, reason)
     end
@@ -48,6 +56,35 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     case Models.fetch(grant.model_id) do
       {:ok, model} -> {:ok, model}
       :error -> {:error, :model_unavailable}
+    end
+  end
+
+  # A routed model whose adapter reports no credential is refused before the
+  # call, not answered by another lane (PROVIDER-002).
+  defp serving(model) do
+    if Models.available?(model), do: :ok, else: {:error, :model_unavailable}
+  end
+
+  # The grant pins the model, and a body that names one must name the same
+  # model. Ignoring the field would answer a request that asked for one model
+  # with another and say nothing — the silent substitution of issue #160 —
+  # so a disagreement is a typed refusal that names the served set
+  # (PROVIDER-002). Either spelling of the granted model (public id or vendor
+  # string) is the same name.
+  defp requested_model(model, body) do
+    case Map.get(body, "model") do
+      absent when absent in [nil, ""] ->
+        :ok
+
+      requested when is_binary(requested) ->
+        case Models.fetch(requested) do
+          {:ok, %{id: id}} when id == model.id -> :ok
+          {:ok, %{id: other}} -> {:error, {:model_mismatch, other, model.id}}
+          :error -> {:error, {:model_not_served, requested}}
+        end
+
+      _not_a_string ->
+        {:error, :invalid_request}
     end
   end
 
@@ -136,12 +173,12 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   # ── run + translate ─────────────────────────────────────────────────────
 
-  defp run(conn, grant, provider, request) do
+  defp run(conn, grant, model, request) do
     parent = self()
 
     # The provider pushes events synchronously; capture them to this process's
     # mailbox and drain in order once the call returns.
-    result = provider.stream(request, fn event -> send(parent, {:proxy_event, event}) end)
+    result = model.adapter.stream(request, fn event -> send(parent, {:proxy_event, event}) end)
     events = drain_events([])
 
     case result do
@@ -149,10 +186,16 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         usage = usage_of(events)
         _ = meter(grant, usage)
 
+        # The effective model is attributed on the response itself — the
+        # header and every chunk's `model` field — so a client renders what
+        # answered, not what it assumed (PROVIDER-002). Because a mismatched
+        # request was refused above, requested and effective are the same
+        # name on every 200.
         conn
         |> put_resp_content_type("text/event-stream")
         |> put_resp_header("cache-control", "no-store")
-        |> send_resp(200, sse_body(events))
+        |> put_resp_header("x-openagents-model", model.id)
+        |> send_resp(200, sse_body(events, model.id))
 
       {:error, reason} ->
         # A failure that produced partial usage is still metered; the probe
@@ -183,7 +226,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   end
 
   # Translate the ordered provider events into a chat-completions SSE body.
-  defp sse_body(events) do
+  # Every chunk carries the effective model id, the field an OpenAI-compatible
+  # parser already reads as "the model that answered".
+  defp sse_body(events, model_id) do
     saw_tool_call = Enum.any?(events, &match?({:tool_call, _}, &1))
     finish_reason = if saw_tool_call, do: "tool_calls", else: "stop"
 
@@ -192,33 +237,36 @@ defmodule OpenAgentsWeb.InferenceProxyController do
       |> Enum.with_index()
       |> Enum.flat_map(fn {event, index} -> event_chunks(event, index) end)
 
-    finish = [
-      data(%{"choices" => [%{"index" => 0, "delta" => %{}, "finish_reason" => finish_reason}]})
-    ]
+    finish = [%{"choices" => [%{"index" => 0, "delta" => %{}, "finish_reason" => finish_reason}]}]
 
     usage_chunk =
       case usage_of(events) do
         usage when usage == %{} -> []
-        usage -> [data(%{"choices" => [], "usage" => wire_usage(usage)})]
+        usage -> [%{"choices" => [], "usage" => wire_usage(usage)}]
       end
 
-    IO.iodata_to_binary([chunks, finish, usage_chunk, "data: [DONE]\n\n"])
+    frames =
+      Enum.map(chunks ++ finish ++ usage_chunk, fn payload ->
+        data(Map.put(payload, "model", model_id))
+      end)
+
+    IO.iodata_to_binary([frames, "data: [DONE]\n\n"])
   end
 
   defp event_chunks({:text_delta, text}, _index) when text != "" do
-    [data(%{"choices" => [%{"index" => 0, "delta" => %{"content" => text}}]})]
+    [%{"choices" => [%{"index" => 0, "delta" => %{"content" => text}}]}]
   end
 
   # Reasoning rides the OpenRouter chat-completions extension field —
   # `delta.reasoning` alongside `delta.content` — the shape the CLI's
   # OpenAI-compatible parser already expects from that vendor surface.
   defp event_chunks({:reasoning_delta, text}, _index) when text != "" do
-    [data(%{"choices" => [%{"index" => 0, "delta" => %{"reasoning" => text}}]})]
+    [%{"choices" => [%{"index" => 0, "delta" => %{"reasoning" => text}}]}]
   end
 
   defp event_chunks({:tool_call, tool_call}, index) do
     [
-      data(%{
+      %{
         "choices" => [
           %{
             "index" => 0,
@@ -237,7 +285,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
             }
           }
         ]
-      })
+      }
     ]
   end
 
@@ -274,12 +322,33 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   end
 
   defp refuse(conn, reason) do
-    {status, code} = status_for(reason)
+    {status, error} = error_for(reason)
 
     conn
     |> put_resp_content_type("application/json")
     |> put_resp_header("cache-control", "no-store")
-    |> send_resp(status, Jason.encode!(%{"error" => %{"code" => code}}))
+    |> send_resp(status, Jason.encode!(%{"error" => error}))
+  end
+
+  # The model refusals name the served set, because the fix for either is to
+  # ask for a model on that list.
+  defp error_for({:model_not_served, requested}) do
+    {422, %{"code" => "model_not_served", "requested" => requested, "served" => Models.ids()}}
+  end
+
+  defp error_for({:model_mismatch, requested, granted}) do
+    {422,
+     %{
+       "code" => "model_mismatch",
+       "requested" => requested,
+       "granted" => granted,
+       "served" => Models.ids()
+     }}
+  end
+
+  defp error_for(reason) do
+    {status, code} = status_for(reason)
+    {status, %{"code" => code}}
   end
 
   defp status_for(:missing_grant), do: {401, "missing_grant"}

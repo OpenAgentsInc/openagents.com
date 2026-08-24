@@ -77,7 +77,10 @@ defmodule OpenAgents.DataRights.AccountExport do
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
+  alias OpenAgents.Repositories.Membership
   alias OpenAgents.Repositories.Repository
+  alias OpenAgents.Reputation
+  alias OpenAgents.Reputation.Attestation
   alias OpenAgents.Stacks.{Stack, StackEntry}
   alias OpenAgents.Threads.{Event, Thread}
 
@@ -96,6 +99,7 @@ defmodule OpenAgents.DataRights.AccountExport do
   @maximum_stacks 2_000
   @maximum_stack_entries 10_000
   @maximum_issue_dependencies 5_000
+  @maximum_attestations 5_000
 
   @doc """
   Builds the account's export document.
@@ -157,6 +161,10 @@ defmodule OpenAgents.DataRights.AccountExport do
       "account_actor_ref" => account_actor_ref(user),
       "authored_actor_refs" => refs,
       "claims" => Enum.map(actor_links, &actor_link_export/1),
+      "reputation_subject_claims" =>
+        user
+        |> Reputation.list_subject_claims()
+        |> Enum.map(&Reputation.subject_claim_projection/1),
       "resolution_rule" =>
         "A legacy forum identity resolves to this account only through a claim with " <>
           "status \"linked\". Posts under a pending, rejected, or unclaimed actor_ref " <>
@@ -607,7 +615,73 @@ defmodule OpenAgents.DataRights.AccountExport do
           "not a member of reaches this document.",
       "pull_requests" => pull_requests_export(user, readable),
       "stacks" => stacks_export(user, readable),
-      "issue_dependencies" => issue_dependencies_export(user, readable)
+      "issue_dependencies" => issue_dependencies_export(user, readable),
+      "attestations" => attestations_export(user, readable)
+    }
+  end
+
+  # A reputation attestation names its subject with a bare string, so the
+  # filter is the subject binding rather than an authoring column: the strings
+  # this account has a `linked` claim on in `reputation_subject_claims`. An
+  # account with no linked claim gets nothing, and a subject another account
+  # holds is unreachable, because the table's unique index on `subject_id`
+  # means one string resolves to at most one account.
+  #
+  # Disclosure does not widen here. `readable_by/2` admits a public repository
+  # to a non-member, and `OpenAgentsWeb.ReputationController` shows such a
+  # reader `public` attestations only, so the same membership test gates the
+  # `repository` and `private` tiers in this document. The account is active —
+  # `build/1` refuses an inactive one — so a membership row is the whole of
+  # `Repositories.member?/2` here.
+  defp attestations_export(user, readable) do
+    subject_ids = Reputation.linked_subject_ids(user)
+
+    rows =
+      Repo.all(
+        from attestation in Attestation,
+          join: repository in subquery(readable),
+          on: repository.id == attestation.repository_id,
+          left_join: membership in Membership,
+          on: membership.repository_id == repository.id and membership.user_id == ^user.id,
+          where:
+            attestation.subject_id in ^subject_ids and
+              (attestation.transparency_tier == "public" or not is_nil(membership.user_id)),
+          order_by: [asc: attestation.attested_at, asc: attestation.id],
+          limit: ^(@maximum_attestations + 1),
+          select: {attestation, repository.owner, repository.name}
+      )
+
+    %{
+      "subject_resolution_rule" =>
+        "An attestation reaches this document only through a reputation subject claim with " <>
+          "status \"linked\". The issuer supplies a bare subject_id, so nothing but an " <>
+          "established claim says the subject is this account's, and one subject string " <>
+          "resolves to at most one account.",
+      "established_subjects" => subject_ids,
+      "records" => rows |> Enum.take(@maximum_attestations) |> Enum.map(&attestation_export/1),
+      "records_truncated" => length(rows) > @maximum_attestations
+    }
+  end
+
+  # The signed claim travels verbatim beside its signature and the issuer key,
+  # so a recipient checks the attestation offline the way
+  # `OpenAgentsWeb.ReputationController` lets a stranger check it.
+  defp attestation_export({attestation, owner_login, name}) do
+    %{
+      "id" => attestation.id,
+      "repository" => repository_path(owner_login, name),
+      "issue_number" => attestation.issue_number,
+      "event_type" => attestation.event_type,
+      "subject_id" => attestation.subject_id,
+      "issuer_key_id" => attestation.issuer_key_id,
+      "transparency_tier" => attestation.transparency_tier,
+      "claim" => attestation.claim,
+      "claim_digest" => attestation.claim_digest,
+      "signature" => attestation.signature,
+      "signature_algorithm" => attestation.signature_algorithm,
+      "revoked" => not is_nil(attestation.revoked_at),
+      "revocation_reason_code" => attestation.revocation_reason_code,
+      "attested_at" => iso8601(attestation.attested_at)
     }
   end
 
@@ -827,7 +901,8 @@ defmodule OpenAgents.DataRights.AccountExport do
       "pull_requests" => @maximum_pull_requests,
       "stacks" => @maximum_stacks,
       "stack_entries" => @maximum_stack_entries,
-      "issue_dependencies" => @maximum_issue_dependencies
+      "issue_dependencies" => @maximum_issue_dependencies,
+      "attestations" => @maximum_attestations
     }
   end
 
@@ -847,16 +922,6 @@ defmodule OpenAgents.DataRights.AccountExport do
           "Git history leaves through the authenticated Git transport, not this document.",
         "mechanism" => "git clone with an oa_pat_ token",
         "issue" => nil
-      },
-      %{
-        "family" => "reputation",
-        "reason" =>
-          "A reputation attestation names a subject_id — a solver identity string the issuer " <>
-            "supplies — and nothing on this surface resolves one to an account. The issuer is " <>
-            "the operator's admitted signing key, and no route creates an attestation, so " <>
-            "there is no record here this account authored and no filter that would find one.",
-        "mechanism" => "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/attestations",
-        "issue" => 171
       },
       %{
         "family" => "forum",

@@ -593,6 +593,16 @@ defmodule OpenAgentsWeb.Router do
     post "/forum/claims", ForumApiController, :create_claim
     get "/forum/claims", ForumApiController, :list_claims
 
+    # Reputation subject claims. An attestation names its subject with a bare
+    # string, so an account establishes which strings are its own the way it
+    # claims a legacy forum identity: it asks, and an operator decides.
+    post "/reputation/subject-claims", ReputationController, :create_subject_claim
+    get "/reputation/subject-claims", ReputationController, :list_subject_claims
+
+    # Claim review. The controller refuses a non-operator token.
+    get "/reputation/subject-claims/pending", ReputationController, :pending_subject_claims
+    patch "/reputation/subject-claims/:id", ReputationController, :update_subject_claim
+
     # Moderation and claim review. The controller refuses a non-operator token.
     get "/forum/claims/pending", ForumApiController, :pending_claims
     patch "/forum/claims/:id", ForumApiController, :update_claim

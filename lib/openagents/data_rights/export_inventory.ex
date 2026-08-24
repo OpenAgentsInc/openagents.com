@@ -52,9 +52,6 @@ defmodule OpenAgents.DataRights.ExportInventory do
           note: String.t()
         }
 
-  # No binding from a reputation subject to an account, #171.
-  @reputation_subject_issue 171
-
   # The account-scoped export of forge-owned and forum-owned records, #143.
   @account_export "GET /data/export/account"
   @account_export_proof {:test, "test/openagents/data_rights/account_export_test.exs"}
@@ -325,21 +322,22 @@ defmodule OpenAgents.DataRights.ExportInventory do
         "The prerequisite edges the account recorded, with both issue numbers and " <>
           "the prerequisite's own state, behind the same readable_by gate."
     },
-
-    # ── reachable, but nothing here names an account ──────────────────────
     %{
       family: :reputation,
       api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/attestations",
-      proof: nil,
-      issue: @reputation_subject_issue,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
       note:
-        "The only family #165 could not move. An attestation names a subject_id " <>
-          "the issuer supplies and an issuer_key_id that is the operator's; no " <>
-          "column, and no table on this surface, resolves either to an account. " <>
-          "There is no filter that would find an account's own attestations, so " <>
-          "the export names the gap instead of returning an empty list."
+        "An attestation names its subject with a bare string the issuer supplies, " <>
+          "so the filter is a binding rather than an authoring column: the " <>
+          "subject strings the account holds a linked claim on in " <>
+          "reputation_subject_claims, #171. The table's unique index on " <>
+          "subject_id means one string resolves to at most one account. The " <>
+          "records travel under repository_work behind the same readable_by " <>
+          "gate, and the repository and private tiers stay behind the membership " <>
+          "test OpenAgentsWeb.ReputationController applies."
     },
 
     # ── not a record a user authors and takes with them ───────────────────

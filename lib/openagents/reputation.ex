@@ -20,6 +20,12 @@ defmodule OpenAgents.Reputation do
       state. It trusts no column and no caller.
     * `revoke/4` and `correct/4` publish a linked invalidating event.
 
+  A subject is a bare string inside the signed claim, so the context also
+  owns the binding that resolves one to an account: `claim_subject/2`,
+  `approve_subject_claim/1`, and `reject_subject_claim/1`. Only a `linked`
+  claim resolves a subject, and `linked_subject_ids/1` is the one filter an
+  account-scoped read may use.
+
   Reads project the stored claim verbatim, so a client can verify an
   attestation the forge serves without trusting the surface that displayed it.
   """
@@ -32,7 +38,9 @@ defmodule OpenAgents.Reputation do
   alias OpenAgents.Provenance.Canonical
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
-  alias OpenAgents.Reputation.{Attestation, Claim, PolicyReceipt, SigningKey}
+  alias OpenAgents.Accounts.User
+  alias OpenAgents.Forum.ActorLink
+  alias OpenAgents.Reputation.{Attestation, Claim, PolicyReceipt, SigningKey, SubjectClaim}
 
   @policy_id "openagents.reputation.verifier.v1"
   @policy_version 1
@@ -381,6 +389,181 @@ defmodule OpenAgents.Reputation do
       "revoked" => length(revoked),
       "score" => nil
     }
+  end
+
+  ## ── the subject binding ────────────────────────────────────────────────
+
+  @doc """
+  Records an account's claim on an attestation subject.
+
+  The claim starts `pending`: nothing has established that the subject is this
+  account's, so nothing resolves yet. `attributes` carries `:subject_kind`,
+  `:subject_id`, and for the two kinds that name another namespace, the row
+  that already established the identity — `:forum_actor_link_id` for a legacy
+  forum actor, `:agent_id` for an agent.
+
+  The cross-namespace checks live here because a `CHECK` constraint cannot read
+  another table: a `forum_actor` claim must name a `linked` `forum_actor_links`
+  row belonging to this account whose `actor_ref` is the subject, and an
+  `agent` claim must name a `linked` `agent_user_links` row for this account.
+  The shape checks — which kind admits which reference, and that an `account`
+  subject is this account's own actor reference — are constraints on the table.
+  """
+  @spec claim_subject(User.t(), map()) :: {:ok, SubjectClaim.t()} | {:error, term()}
+  def claim_subject(%User{} = user, attributes) do
+    attributes = Map.new(attributes, fn {key, value} -> {to_string(key), value} end)
+
+    with :ok <- validate_subject_reference(user, attributes) do
+      %SubjectClaim{}
+      |> SubjectClaim.changeset(
+        Map.merge(attributes, %{
+          "user_id" => user.id,
+          "status" => "pending",
+          "proof_evidence" => %{"started_at" => DateTime.to_iso8601(DateTime.utc_now())}
+        })
+      )
+      |> Repo.insert()
+    end
+  end
+
+  @doc "Approves a pending subject claim after its proof has been checked."
+  @spec approve_subject_claim(SubjectClaim.t()) :: {:ok, SubjectClaim.t()} | {:error, term()}
+  def approve_subject_claim(%SubjectClaim{status: "pending"} = claim) do
+    now = DateTime.utc_now()
+
+    claim
+    |> SubjectClaim.changeset(%{
+      status: "linked",
+      linked_at: now,
+      proof_evidence:
+        Map.put(claim.proof_evidence || %{}, "approved_at", DateTime.to_iso8601(now))
+    })
+    |> Repo.update()
+  end
+
+  def approve_subject_claim(%SubjectClaim{}), do: {:error, :not_pending}
+
+  @doc "Rejects a pending subject claim."
+  @spec reject_subject_claim(SubjectClaim.t()) :: {:ok, SubjectClaim.t()} | {:error, term()}
+  def reject_subject_claim(%SubjectClaim{status: "pending"} = claim) do
+    claim
+    |> SubjectClaim.changeset(%{status: "rejected", rejected_at: DateTime.utc_now()})
+    |> Repo.update()
+  end
+
+  def reject_subject_claim(%SubjectClaim{}), do: {:error, :not_pending}
+
+  @doc "Every subject claim this account made, newest first."
+  @spec list_subject_claims(User.t()) :: [SubjectClaim.t()]
+  def list_subject_claims(%User{id: user_id}) do
+    Repo.all(
+      from claim in SubjectClaim,
+        where: claim.user_id == ^user_id,
+        order_by: [desc: claim.inserted_at, desc: claim.id]
+    )
+  end
+
+  @doc "Every subject claim still waiting on an operator, oldest first."
+  @spec list_pending_subject_claims() :: [SubjectClaim.t()]
+  def list_pending_subject_claims do
+    Repo.all(
+      from claim in SubjectClaim,
+        where: claim.status == "pending",
+        order_by: [asc: claim.inserted_at, asc: claim.id]
+    )
+  end
+
+  @doc "The subject claim behind `id`, or `{:error, :not_found}`."
+  @spec fetch_subject_claim(String.t()) :: {:ok, SubjectClaim.t()} | {:error, :not_found}
+  def fetch_subject_claim(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} ->
+        case Repo.get(SubjectClaim, uuid) do
+          %SubjectClaim{} = claim -> {:ok, claim}
+          nil -> {:error, :not_found}
+        end
+
+      :error ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
+  The subject strings this account has established.
+
+  Only a `linked` claim resolves a subject, so a pending or rejected claim
+  widens nothing. An account with no linked claim gets `[]`, and a read
+  filtered on `[]` returns nothing rather than everything.
+  """
+  @spec linked_subject_ids(User.t()) :: [String.t()]
+  def linked_subject_ids(%User{id: user_id}) do
+    Repo.all(
+      from claim in SubjectClaim,
+        where: claim.user_id == ^user_id and claim.status == "linked",
+        select: claim.subject_id,
+        order_by: [asc: claim.subject_id]
+    )
+  end
+
+  @doc "The public projection of one subject claim."
+  @spec subject_claim_projection(SubjectClaim.t()) :: map()
+  def subject_claim_projection(%SubjectClaim{} = claim) do
+    %{
+      "id" => claim.id,
+      "subject_kind" => claim.subject_kind,
+      "subject_id" => claim.subject_id,
+      "status" => claim.status,
+      "proof_method" => claim.proof_method,
+      "forum_actor_link_id" => claim.forum_actor_link_id,
+      "agent_id" => claim.agent_id,
+      "claimed_at" => iso8601(claim.inserted_at),
+      "linked_at" => iso8601(claim.linked_at),
+      "rejected_at" => iso8601(claim.rejected_at)
+    }
+  end
+
+  defp iso8601(nil), do: nil
+  defp iso8601(%DateTime{} = at), do: DateTime.to_iso8601(at)
+
+  # An `account` subject is checked by the table: the string has to be this
+  # account's own actor reference. The other two kinds name a row in another
+  # namespace, and only a link that namespace already established counts.
+  defp validate_subject_reference(_user, %{"subject_kind" => "account"}), do: :ok
+
+  defp validate_subject_reference(user, %{"subject_kind" => "forum_actor"} = attributes) do
+    link =
+      Repo.get_by(ActorLink,
+        id: cast_uuid(attributes["forum_actor_link_id"]),
+        user_id: user.id,
+        status: "linked"
+      )
+
+    cond do
+      is_nil(link) -> {:error, :forum_actor_not_linked}
+      link.actor_ref != attributes["subject_id"] -> {:error, :subject_is_not_the_actor_ref}
+      true -> :ok
+    end
+  end
+
+  defp validate_subject_reference(user, %{"subject_kind" => "agent"} = attributes) do
+    linked? =
+      Repo.exists?(
+        from link in OpenAgents.Agents.AgentUserLink,
+          where:
+            link.agent_id == ^cast_uuid(attributes["agent_id"]) and
+              link.user_id == ^user.id and link.status == "linked"
+      )
+
+    if linked?, do: :ok, else: {:error, :agent_not_linked}
+  end
+
+  defp validate_subject_reference(_user, _attributes), do: {:error, :unsupported_subject_kind}
+
+  defp cast_uuid(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> Ecto.UUID.generate()
+    end
   end
 
   defp persist(policy, key, signer, repository, outcome, evidence, attributes) do

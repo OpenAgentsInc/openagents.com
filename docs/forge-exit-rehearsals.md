@@ -238,8 +238,9 @@ returning a shorter document that reads as complete.
    collection publishes its own cap; a truncated collection is flagged, and Box
    run output reports the full byte size alongside the capped bytes.
 2. Read `"not_included"`. It names the families the document does not carry and
-   why, including the one repository-keyed family that has no account-scoped
-   read (#171).
+   why. Reputation attestations left that list when #171 bound an attestation
+   subject to an account; they now travel under `"repository_work"`, and only a
+   subject the account holds a `linked` claim on reaches the document.
 3. Compare against `OpenAgents.DataRights.ExportInventory`, which `EXIT-001`
    enforces against the surface in both directions, and against the same
    counts published at `GET /api/status` under `independence.export`.

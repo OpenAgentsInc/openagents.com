@@ -158,15 +158,18 @@ its own owner and push receipts left through no route at all. The ledger keeps
 the `blocked` status and its shape checks, because the honest move when a
 family becomes unreadable is to record it.
 
-What is reachable and still has no account-scoped read: reputation
-attestations. This is the one repository-keyed family issue #165 could not
-move, and the reason is not enumeration. An attestation names a `subject_id`
-that the issuer supplies and an `issuer_key_id` that is the operator's; no
-column, and no table on this surface, resolves either to an account, and no
-route creates an attestation. There is no filter that would find an account's
-own attestations, so the export names the gap in `not_included` rather than
-returning an empty list that reads like an answer. Issue #171 carries the
-subject binding that would make the read possible.
+Nothing is `partial` today either, and reputation attestations were the last
+family to move. Issue #165 could not move them, and the reason was never
+enumeration: an attestation names its subject with a bare string the issuer
+supplies, so what was missing was a binding rather than a query. Issue #171
+added it. `reputation_subject_claims` resolves a subject the way
+`forum_actor_links` resolves a legacy forum identity — a claim you make, an
+operator decides, and only a `linked` claim resolves — and its unique index on
+`subject_id` means one subject never resolves to two accounts. The attestations
+travel under `repository_work` behind the same `readable_by/2` join the other
+repository-keyed families use, and the `repository` and `private` transparency
+tiers stay behind the same membership test the API applies, so a wider export
+never means wider disclosure.
 
 Who owns a migrated forum post is the subtle question in the account export,
 and it is answered rather than assumed. Two identities resolve to an account:
@@ -254,9 +257,9 @@ The one omission is the `refs/internal/` namespace, where stack boundary
 commits are retained without being advertised; the proof asserts that this is
 the *only* omission, so withholding a branch would turn it red.
 
-That is exit for source. It is not yet exit for everything: an account cannot
-identify its own reputation attestations, private repository exports are not
-encrypted, and no commitment to the WAL is published outside operator storage.
+That is exit for source. It is not yet exit for everything: private repository
+exports are not encrypted, and no commitment to the WAL is published outside
+operator storage.
 Those are covered by the gaps above rather than by a claim. Saying so is the
 point. Five green invariants that assert less than they appear to would be
 worse than five plus a recorded gap.
@@ -312,7 +315,6 @@ the one people clone from.
 | Gap | Issue |
 | --- | --- |
 | The live forge cannot serve a full clone of its own repository | #179 |
-| No binding from a reputation attestation's subject to an account, so an account cannot identify its own attestations | #171 |
 | No commitment to the WAL is published outside operator storage, so a consistent rewrite still verifies clean | #151 |
 | No export is encrypted to a key the recipient holds, and no column is encrypted at rest | #178 |
 | Five of six exit rehearsals have never been performed | #180 |

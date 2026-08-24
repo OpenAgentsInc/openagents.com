@@ -22,6 +22,7 @@ defmodule OpenAgents.DataRights.AccountExportTest do
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
+  alias OpenAgents.Reputation
   alias OpenAgents.Stacks
   alias OpenAgents.Threads
 
@@ -355,7 +356,8 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       end
 
       families = Enum.map(export["not_included"], & &1["family"])
-      assert "reputation" in families
+      # `reputation` left this list when #171 gave the subject a binding.
+      refute "reputation" in families
       assert "repository_content" in families
       assert "conversation" in families
 
@@ -520,6 +522,153 @@ defmodule OpenAgents.DataRights.AccountExportTest do
   # something a person can read — a repository path, a topic and board slug, an
   # issue number, an agent handle — rather than only by a UUID this forge would
   # have to resolve. Replacing any of those with an id alone turns this red.
+  describe "a reputation attestation's subject" do
+    test "an attestation naming a subject this account established comes back" do
+      user = github_user("account-export-attest", "export-attest")
+      repository = private_repository_with_member("export-attest-private", user)
+      issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Attested"})
+
+      link_subject!(user, "user:" <> user.id)
+      attestation = attest!(repository, issue, "user:" <> user.id, "repository")
+
+      assert {:ok, export} = AccountExport.build(user)
+      work = export["repository_work"]
+
+      assert [record] = work["attestations"]["records"]
+      assert record["id"] == attestation.id
+      assert record["subject_id"] == "user:" <> user.id
+      assert record["repository"] == repository.owner <> "/" <> repository.name
+      assert record["issue_number"] == issue.number
+      assert record["transparency_tier"] == "repository"
+      refute work["attestations"]["records_truncated"]
+
+      # The signed claim travels verbatim, so the recipient checks it offline.
+      assert record["claim"]["subject"]["actor_id"] == "user:" <> user.id
+      assert record["claim_digest"] == attestation.claim_digest
+
+      assert OpenAgents.Reputation.Claim.valid_signature?(
+               record["claim"],
+               record["signature"],
+               issuer_public_key(attestation)
+             )
+
+      assert work["attestations"]["established_subjects"] == ["user:" <> user.id]
+      assert work["attestations"]["subject_resolution_rule"] =~ "linked"
+    end
+
+    # Without the linked-claim filter this attestation would come back to
+    # whoever asked. Dropping `Reputation.linked_subject_ids/1` from
+    # `attestations_export/2` turns this red.
+    test "an attestation whose subject the account has not established stays behind" do
+      user = github_user("account-export-attest-none", "export-attest-none")
+      repository = private_repository_with_member("export-attest-none-private", user)
+      issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Not mine"})
+
+      _attestation = attest!(repository, issue, "actor:someone-else", "repository")
+
+      assert {:ok, export} = AccountExport.build(user)
+      assert export["repository_work"]["attestations"]["records"] == []
+      assert export["repository_work"]["attestations"]["established_subjects"] == []
+    end
+
+    test "a pending claim resolves nothing, and only the operator's decision does" do
+      user = github_user("account-export-attest-pending", "export-attest-pending")
+      repository = private_repository_with_member("export-attest-pending-private", user)
+      issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Pending"})
+
+      {:ok, claim} =
+        Reputation.claim_subject(user, %{
+          subject_kind: "account",
+          subject_id: "user:" <> user.id
+        })
+
+      _attestation = attest!(repository, issue, "user:" <> user.id, "repository")
+
+      assert {:ok, pending_export} = AccountExport.build(user)
+      assert pending_export["repository_work"]["attestations"]["records"] == []
+
+      {:ok, _linked} = Reputation.approve_subject_claim(claim)
+
+      assert {:ok, export} = AccountExport.build(user)
+      assert [_record] = export["repository_work"]["attestations"]["records"]
+
+      assert [projected] = export["identities"]["reputation_subject_claims"]
+      assert projected["status"] == "linked"
+      assert projected["subject_kind"] == "account"
+    end
+
+    # Disclosure does not widen. `readable_by/2` admits a public repository to
+    # a non-member, and the controller shows such a reader `public` only.
+    # Dropping the membership test from `attestations_export/2` turns this red.
+    test "a repository or private tier attestation stays behind for a non-member" do
+      user = github_user("account-export-attest-tier", "export-attest-tier")
+      public_repository = OpenAgents.AccountsFixtures.repository_fixture()
+      issue = OpenAgents.IssuesFixtures.issue_fixture(public_repository, %{title: "Tiered"})
+      other = OpenAgents.IssuesFixtures.issue_fixture(public_repository, %{title: "Open"})
+
+      link_subject!(user, "user:" <> user.id)
+      refute Repositories.member?(public_repository, user)
+
+      withheld = attest!(public_repository, issue, "user:" <> user.id, "repository")
+      disclosed = attest!(public_repository, other, "user:" <> user.id, "public")
+
+      assert {:ok, export} = AccountExport.build(user)
+      ids = Enum.map(export["repository_work"]["attestations"]["records"], & &1["id"])
+
+      assert disclosed.id in ids
+      refute withheld.id in ids
+    end
+
+    # A public-tier attestation in a repository that went private afterwards is
+    # the one case the tier test admits and `readable_by/2` does not, so this is
+    # what isolates the join: replacing `subquery(readable)` with `Repository`
+    # in `attestations_export/2` turns this red and nothing else in this file.
+    test "a public tier attestation in a repository the account cannot read stays behind" do
+      user = github_user("account-export-attest-shut", "export-attest-shut")
+      other = github_user("account-export-attest-shut-owner", "export-attest-shut-owner")
+      repository = OpenAgents.AccountsFixtures.repository_fixture()
+      issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Was public"})
+
+      link_subject!(user, "user:" <> user.id)
+      attestation = attest!(repository, issue, "user:" <> user.id, "public")
+
+      assert {:ok, before} = AccountExport.build(user)
+      assert [%{"id" => id}] = before["repository_work"]["attestations"]["records"]
+      assert id == attestation.id
+
+      # The repository closes. The attestation's tier still says `public`, so
+      # only the repository visibility predicate withholds it now.
+      repository
+      |> Ecto.Changeset.change(visibility: "private")
+      |> Repo.update!()
+
+      {:ok, _membership} = Repositories.add_member(repository, other, "owner")
+      refute Repositories.member?(repository, user)
+
+      assert {:ok, export} = AccountExport.build(user)
+      assert export["repository_work"]["attestations"]["records"] == []
+    end
+
+    # Both gates withhold this one, and that is the honest description: for a
+    # private repository at the `repository` tier the membership test and
+    # `readable_by/2` coincide, so this asserts the outcome rather than
+    # isolating one join. The test above isolates it.
+    test "an attestation in a private repository the account cannot read stays behind" do
+      user = github_user("account-export-attest-closed", "export-attest-closed")
+      other = github_user("account-export-attest-owner", "export-attest-owner")
+      repository = private_repository_with_member("export-attest-closed-private", other)
+      issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Closed"})
+
+      link_subject!(user, "user:" <> user.id)
+      _attestation = attest!(repository, issue, "user:" <> user.id, "repository")
+
+      refute Repositories.member?(repository, user)
+
+      assert {:ok, export} = AccountExport.build(user)
+      assert export["repository_work"]["attestations"]["records"] == []
+    end
+  end
+
   describe "the document resolves without the forge" do
     test "every record names its context in readable terms", %{board: board} do
       user = github_user("account-export-standalone", "export-standalone")
@@ -605,6 +754,67 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       actor_ref: actor_ref,
       actor_display_name: actor_ref
     })
+  end
+
+  defp link_subject!(user, subject_id) do
+    {:ok, claim} =
+      Reputation.claim_subject(user, %{subject_kind: "account", subject_id: subject_id})
+
+    {:ok, linked} = Reputation.approve_subject_claim(claim)
+    linked
+  end
+
+  defp attest!(repository, issue, subject_id, tier) do
+    policy =
+      case Reputation.admit_policy(reputation_operator()) do
+        {:ok, policy} -> policy
+        {:error, _already_admitted} -> List.last(Reputation.policies())
+      end
+
+    keypair = OpenAgents.Reputation.Claim.generate_keypair()
+
+    {:ok, key} =
+      Reputation.admit_key(%{public_key: keypair.public_key, issuer: "account-export"})
+
+    decision = OpenAgents.CompensationFixtures.outcome_decision_fixture()
+
+    {:ok, attestation} =
+      Reputation.issue(policy, %{key_id: key.key_id, private_key: keypair.private_key}, %{
+        event_type: "completion",
+        subject_id: subject_id,
+        outcome: %{kind: "compensation_outcome_decision", ref: decision.decision_receipt_ref},
+        repository: repository,
+        issue_number: issue.number,
+        revision: String.duplicate("a", 40),
+        artifact_digest: String.duplicate("1", 64),
+        confidence_ppm: 900_000,
+        transparency_tier: tier,
+        evidence: [
+          %{
+            kind: "outcome",
+            ref: decision.decision_receipt_ref,
+            digest: decision.outcome_digest,
+            observed_at: DateTime.to_iso8601(DateTime.utc_now())
+          }
+        ]
+      })
+
+    attestation
+  end
+
+  defp issuer_public_key(attestation) do
+    Reputation.keys()
+    |> Enum.find(&(&1.key_id == attestation.issuer_key_id))
+    |> Map.fetch!(:public_key)
+  end
+
+  defp reputation_operator do
+    %{
+      authenticated: true,
+      actor_id: "operator:account-export",
+      auth_method: "test_session",
+      approval_receipt_ref: "account-export:#{System.unique_integer([:positive])}"
+    }
   end
 
   defp private_repository_with_member(name, user) do

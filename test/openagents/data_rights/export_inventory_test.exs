@@ -16,6 +16,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
   alias OpenAgents.Issues
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
+  alias OpenAgents.Reputation
   alias OpenAgentsWeb.ApiRouteAuthority
 
   # Families whose recorded status this test observes rather than trusts.
@@ -38,7 +39,8 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     :deployment,
     :pull_request,
     :stack,
-    :issue_dependency
+    :issue_dependency,
+    :reputation
   ]
 
   describe "coverage" do
@@ -301,10 +303,80 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     blocker = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "exit blocker"})
     :ok = Issues.add_dependencies(blocked, [blocker.number], owner)
 
+    seed_attestation(owner, repository)
+
+    :ok
+  end
+
+  # A reputation attestation names its subject with a bare string, so the seed
+  # has to establish the binding as well as the record: a claim the account
+  # makes and the operator decides. Without the linked claim the export
+  # returns nothing here, which is what this family recorded before #171.
+  defp seed_attestation(owner, repository) do
+    {:ok, claim} =
+      Reputation.claim_subject(owner, %{
+        subject_kind: "account",
+        subject_id: "user:" <> owner.id
+      })
+
+    {:ok, _linked} = Reputation.approve_subject_claim(claim)
+
+    issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "exit attested"})
+
+    policy =
+      case Reputation.admit_policy(%{
+             authenticated: true,
+             actor_id: "operator:export-inventory",
+             auth_method: "test_session",
+             approval_receipt_ref: "export-inventory:#{System.unique_integer([:positive])}"
+           }) do
+        {:ok, policy} -> policy
+        {:error, _already_admitted} -> List.last(Reputation.policies())
+      end
+
+    keypair = OpenAgents.Reputation.Claim.generate_keypair()
+
+    {:ok, key} =
+      Reputation.admit_key(%{public_key: keypair.public_key, issuer: "export-inventory"})
+
+    decision = OpenAgents.CompensationFixtures.outcome_decision_fixture()
+
+    {:ok, _attestation} =
+      Reputation.issue(policy, %{key_id: key.key_id, private_key: keypair.private_key}, %{
+        event_type: "completion",
+        subject_id: "user:" <> owner.id,
+        outcome: %{kind: "compensation_outcome_decision", ref: decision.decision_receipt_ref},
+        repository: repository,
+        issue_number: issue.number,
+        revision: String.duplicate("a", 40),
+        artifact_digest: String.duplicate("1", 64),
+        confidence_ppm: 900_000,
+        transparency_tier: "repository",
+        evidence: [
+          %{
+            kind: "outcome",
+            ref: decision.decision_receipt_ref,
+            digest: decision.outcome_digest,
+            observed_at: DateTime.to_iso8601(DateTime.utc_now())
+          }
+        ]
+      })
+
     :ok
   end
 
   ## ── probes ─────────────────────────────────────────────────────────────
+
+  defp probe(:reputation, %{account_export: export}) do
+    attestations = export["repository_work"]["attestations"]
+
+    if Enum.any?(
+         attestations["records"],
+         &(&1["subject_id"] in attestations["established_subjects"])
+       ),
+       do: :portable,
+       else: :partial
+  end
 
   defp probe(:pull_request, %{account_export: export}) do
     if Enum.any?(

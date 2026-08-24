@@ -1197,12 +1197,26 @@ stay inside the repository, and a `private` attestation withholds the outcome
 reference and every evidence reference from the signed claim while remaining
 verifiable.
 
+A subject is a bare string inside the signed claim, and it stays that way. What
+resolves one to an account is a separate binding, `reputation_subject_claims`:
+a claim the account makes and an operator decides, where only a `linked` claim
+resolves and a unique index on `subject_id` means one string never resolves to
+two accounts. The binding carries the kind — `account`, `forum_actor`, or
+`agent` — with one `CHECK` constraint per kind, because putting the kind on the
+attestation would either leave it outside the signature or invalidate every
+signature already published. Nothing in issuance or verification reads the
+binding: an attestation is exactly as valid, and exactly as checkable, for a
+subject no account has claimed.
+
 Evidence: `OpenAgents.Reputation`, `OpenAgents.Reputation.Claim`,
 `OpenAgents.Reputation.Attestation`, `OpenAgents.Reputation.SigningKey`,
-`OpenAgents.Reputation.PolicyReceipt`, the append-only and uniqueness
-constraints on `reputation_attestations`, `OpenAgentsWeb.ReputationController`,
-`test/openagents/reputation_test.exs`, and
-`test/openagents_web/controllers/reputation_controller_test.exs`.
+`OpenAgents.Reputation.PolicyReceipt`, `OpenAgents.Reputation.SubjectClaim`,
+the append-only and uniqueness constraints on `reputation_attestations`, the
+per-kind reference constraint on `reputation_subject_claims`,
+`OpenAgentsWeb.ReputationController`, `test/openagents/reputation_test.exs`,
+`test/openagents/reputation/subject_claim_test.exs`,
+`test/openagents_web/controllers/reputation_subject_claim_controller_test.exs`,
+and `test/openagents_web/controllers/reputation_controller_test.exs`.
 
 ### SETTLEMENT-001 — A bounty pays once, against fingerprinted evidence
 
@@ -2322,6 +2336,12 @@ sentence:
   `PATCH /api/v3/forum/topics/:id` and `PATCH /api/v3/forum/posts/:id`; and
   approving or rejecting an identity claim from `/admin/forum/claims` and
   `PATCH /api/v3/forum/claims/:id`.
+- Approving or rejecting a reputation subject claim under
+  `GET /api/v3/reputation/subject-claims/pending` and
+  `PATCH /api/v3/reputation/subject-claims/:id`
+  (`OpenAgentsWeb.ReputationController`). The decision binds an attestation
+  subject to an account under `EXIT-001`; it never issues, revokes, or alters
+  an attestation, and `REPUTATION-001`'s verification does not read it.
 - Suspending and reinstating an agent under `/api/operator/agents/:handle`.
 - Creating, authorizing, recording against, and deleting artifact listings under
   `/api/operator/artifact-listings`.
@@ -2920,6 +2940,14 @@ anonymous caller — the posture `LEADERBOARD-001` gets from
 `OpenAgents.Leaderboard.Entry`'s field set. Degrading may not introduce a key
 either: a failed read is absent, never an error string.
 
+A list-element key path is published only while that list has an element, so
+the enumeration follows the data in both directions. `independence.export.gaps`
+is empty today because `EXIT-001` records no `partial` or `blocked` family, and
+its `family`, `status`, and `issue` paths are therefore not declared. A family
+that becomes a gap republishes all three, and the enumeration fails until this
+contract readmits them — which is the decision being asked for, not an
+accident.
+
 What the projection carries beside counts is the bounded public SCV activity
 band (`scvs`: a derived public id, a label, a status, a weight, and one
 bounded activity line), the forge deploy lane (short shas, statuses, timings,
@@ -3371,8 +3399,9 @@ this ledger records the change rather than trailing it.
 trip it rather than reading its source: one `forum` post and topic, one
 `thread` with a transcript entry, one `push_receipt`, one `box` lease and run,
 one `computer`, one `agent` link, one `deployment` request, one
-`pull_request`, one `stack` with its entry, and one `issue_dependency` are
-seeded and read back through the route in an authenticated session. A family
+`pull_request`, one `stack` with its entry, one `issue_dependency`, and one
+`reputation` attestation whose subject the account established are seeded and
+read back through the route in an authenticated session. A family
 whose record stops coming back turns this red, and so does a receipt returned
 under a principal that is not the requesting account. `push_receipt` is probed
 there rather than against the route inventory: what the account gets back is
@@ -3406,21 +3435,44 @@ means two accounts cannot both resolve one legacy identity. The claims
 themselves travel in the document at every status, so an account can see what
 it asked for and what the operator decided.
 
-No family is `blocked` today, which is a result rather than a default: #142
-opened the private-repository metadata reads, #143 exported the forge-owned and
-forum-owned families, and #165 added the cross-repository read. One family
-stays `partial`, and it is not an enumeration problem. A `reputation`
-attestation names a `subject_id` the issuer supplies and an `issuer_key_id`
-that is the operator's; no column, and no table on this surface, resolves
-either to an account, and no route creates an attestation. There is no filter
-that would find an account's own attestations, so the ledger records the gap
-and issue #171 carries the subject binding. The export names that omission in
-its own `not_included` section rather than leaving a recipient to infer it.
+No family is `blocked` or `partial` today, which is a result rather than a
+default: #142 opened the private-repository metadata reads, #143 exported the
+forge-owned and forum-owned families, #165 added the cross-repository read, and
+#171 closed the last gap. `reputation` was that gap, and it was never an
+enumeration problem. An attestation names its subject with a bare string the
+issuer supplies, so what was missing was a binding rather than a query. The
+binding is `reputation_subject_claims`, and it resolves a subject the way
+`forum_actor_links` resolves a legacy forum identity: a claim an account makes,
+an operator decides, and only a `linked` claim resolves. Its unique index is on
+`subject_id` alone rather than on the kind and the string together, because an
+attestation names its subject with the bare string — so one string resolves to
+at most one account, and two accounts cannot both answer to it. The
+attestations travel under `repository_work` behind the same `readable_by/2`
+join the other three repository-keyed families use, and the `repository` and
+`private` transparency tiers stay behind the membership test
+`OpenAgentsWeb.ReputationController` applies, so widening the export never
+widens disclosure. What the export still omits it names in its own
+`not_included` section rather than leaving a recipient to infer it.
+
+The subject kind lives on the claim rather than on the attestation, and that
+follows from `REPUTATION-001` rather than from convenience. An attestation's
+`subject_id` sits inside the Ed25519-signed claim, so a `subject_kind` column
+on `reputation_attestations` would either stay outside the signature — a field
+a verifier must not trust — or change the claim shape and invalidate every
+signature already published. Three kinds stay distinct, because collapsing them
+is what produced a bare string: `account`, whose subject is this forge's own
+`user:<account-id>` reference and which the table checks without an operator;
+`forum_actor`, which carries the `forum_actor_links` row that established a
+legacy identity; and `agent`, which carries the `agents` row. One `CHECK`
+constraint states all three rules in SQL, so the shape is the database's
+decision rather than a changeset's, and a row inserted past every changeset is
+still refused.
 
 Evidence: `OpenAgents.DataRights.ExportInventory`,
 `OpenAgents.DataRights.AccountExport`, `OpenAgentsWeb.ApiRouteAuthority`,
 `test/openagents/data_rights/export_inventory_test.exs`,
-`test/openagents/data_rights/account_export_test.exs`, and
+`test/openagents/data_rights/account_export_test.exs`,
+`test/openagents/reputation/subject_claim_test.exs`, and
 `docs/forge-operator-independence.md`.
 
 ### EXIT-002 — Served state is checkable against the WAL with no database
@@ -3544,10 +3596,11 @@ links, pull requests, stacks, and issue dependencies leave through
 metadata reads answer their own members now. A stack's boundary object ids
 travel in that document precisely because a clone cannot fetch the refs holding
 them, so the withheld namespace costs the account the refs and not the shape of
-its own work. Reputation attestations remain `EXIT-001`'s recorded gap rather
-than a claim here, and issue #171 carries them. A single complete invariant
-plus a recorded gap is worth more than four that assert less than they appear
-to.
+its own work. Reputation attestations leave through that document too, now that
+#171 bound an attestation subject to an account, and they carry their signed
+claim verbatim rather than depending on this invariant to be checkable. One
+complete invariant about the Git plane is worth more than four that assert less
+than they appear to.
 
 Amended 2026-08-23 (issue #179): the advertised ref set was the whole
 population, and it is not what a clone walks. A clone follows every advertised

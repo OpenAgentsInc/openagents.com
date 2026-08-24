@@ -340,6 +340,10 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "delete /api/v3/agents/links/:id" => {:required_bearer, :agent, :legacy},
       "post /api/v3/forum/claims" => {:required_bearer, :forum, :legacy},
       "get /api/v3/forum/claims" => {:required_bearer, :forum, :legacy},
+      "post /api/v3/reputation/subject-claims" => {:required_bearer, :reputation, :legacy},
+      "get /api/v3/reputation/subject-claims" => {:required_bearer, :reputation, :legacy},
+      "get /api/v3/reputation/subject-claims/pending" => {:required_bearer, :reputation, :legacy},
+      "patch /api/v3/reputation/subject-claims/:id" => {:required_bearer, :reputation, :legacy},
       # Moderation and claim review: a bearer the controller then checks for
       # operator authority.
       "patch /api/v3/forum/topics/:id" => {:required_bearer, :forum, :legacy},

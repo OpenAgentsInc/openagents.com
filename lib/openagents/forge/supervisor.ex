@@ -13,9 +13,19 @@ defmodule OpenAgents.Forge.Supervisor do
       [
         {Task.Supervisor, name: OpenAgents.Forge.TaskSupervisor},
         {OpenAgents.Forge.MirrorWatch, []}
-      ] ++ repository_children() ++ deploy_lane_children()
+      ] ++ anchor_children() ++ repository_children() ++ deploy_lane_children()
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  # The WAL anchor publisher (EXIT-005, ADR 0008). Off the push path by
+  # construction: a slow or failing anchor must never be able to refuse a push.
+  defp anchor_children do
+    if Application.get_env(:openagents, :forge_wal_anchor_enabled, true) do
+      [{OpenAgents.Forge.AnchorPublisher, []}]
+    else
+      []
+    end
   end
 
   defp repository_children do

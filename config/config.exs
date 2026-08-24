@@ -296,6 +296,11 @@ config :openagents,
   forge_operator_token: nil,
   forge_mirror_urls: %{},
   forge_wal_adapter: OpenAgents.Forge.WAL.Local,
+  # The published WAL anchor (EXIT-005, ADR 0008). The interval is also the
+  # anchor's exposure window: everything pushed after the last anchor is
+  # unanchored until the next one.
+  forge_wal_anchor_enabled: true,
+  forge_wal_anchor_interval_ms: 3_600_000,
   forge_wal_dir: nil,
   forge_wal_bucket: nil,
   forge_gcs_token_provider: nil,

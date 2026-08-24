@@ -81,7 +81,10 @@ defmodule OpenAgents.Repositories.VisibilityJoinTest do
     OpenAgents.Projects => "the workspace-wide project list and the project-item reads",
     OpenAgents.Notifications => "the inbox read and the fan-out gate",
     OpenAgents.DataRights.AccountExport =>
-      "the pull requests, stacks, and issue dependencies an export may carry"
+      "the pull requests, stacks, and issue dependencies an export may carry",
+    OpenAgents.Forge.Anchor =>
+      "the repositories the published WAL anchor names, which is an anonymous " <>
+        "surface and must reach exactly what an anonymous reader already reaches"
   }
 
   # Every site in `lib/` that names the predicate's own terms — a repository's

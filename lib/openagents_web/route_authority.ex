@@ -226,6 +226,13 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/status", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:status", false)
 
+  # The published WAL anchor (EXIT-005, ADR 0008). Anonymous read: a
+  # commitment a stranger cannot fetch without a credential is a commitment
+  # the operator decides who may check.
+  defp policy(%{path: "/.well-known/openagents-forge-anchor.json", verb: verb})
+       when verb in [:get, :head],
+       do: declaration(:public_read, "anonymous", "published:forge-wal-anchor", false)
+
   # The agent front door. Public by construction: it describes how to ask and
   # carries no instance data, so there is nothing in it to withhold.
   defp policy(%{path: path, verb: verb})

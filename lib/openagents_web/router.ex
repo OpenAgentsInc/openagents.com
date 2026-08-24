@@ -383,6 +383,11 @@ defmodule OpenAgentsWeb.Router do
     get "/health", HealthController, :show
     get "/healthz", HealthController, :show
     get "/api/status", NetworkStatusController, :show
+
+    # The published WAL anchor (EXIT-005, ADR 0008). Anonymous by
+    # construction: an anchor a reader must authenticate for is an anchor the
+    # operator can withhold from the reader who would check it.
+    get "/.well-known/openagents-forge-anchor.json", ForgeAnchorController, :show
     get "/api/changelog", ChangelogController, :show
     get "/api/contracts/repositories-v1.json", ApiContractController, :repositories_v1
     get "/api/contracts/do-not-build-v1.json", ApiContractController, :do_not_build_v1

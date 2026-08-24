@@ -117,7 +117,12 @@ defmodule OpenAgents.NetworkStatusTest do
     "independence.private_data.issue",
     "independence.schema",
     "independence.verification",
+    # The anchor's address, its publication state, and whether anybody outside
+    # the operator witnesses it. Three keys, because ADR 0008 turns on
+    # publication and witnessing being different facts.
+    "independence.verification.anchor",
     "independence.verification.anchor_published",
+    "independence.verification.anchor_witnessed",
     "independence.verification.chained",
     "independence.verification.issue",
     "independence.verification.property",

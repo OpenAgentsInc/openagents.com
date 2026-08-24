@@ -94,6 +94,10 @@ config :openagents,
   forge_repos: ["openagents.com", "demo"],
   forge_operator_token: "forge_test_operator_token_0123456789",
   forge_deploy_lane_enabled: false,
+  # The anchor publisher is off by default: the tests that exercise it drive
+  # `OpenAgents.Forge.Anchor.publish/1` themselves, so no timer writes anchor
+  # rows underneath a test that is asserting there are none.
+  forge_wal_anchor_enabled: false,
   forge_repo_owners: %{"openagents.com" => "OpenAgentsInc", "demo" => "OpenAgentsInc"}
 
 config :openagents, :migrate_on_boot, false

@@ -63,6 +63,16 @@ refs. A push is a receipt, not a deployment.
 forge to GitHub. GitHub is a mirror only; nothing on GitHub can affect what
 the forge serves.
 
+**Anchor** — the periodic published commitment to the WAL
+(`OpenAgents.Forge.Anchor`, ADR 0008): one document per interval at
+`/.well-known/openagents-forge-anchor.json` naming each public repository's
+head chain link, chained to the anchor before it. An anchor is **not a
+receipt** — it is evidence held by whoever kept a copy, never a record of what
+happened to one party, and never ref authority. Say *published* when the
+operator served it and *witnessed* when somebody outside the operator attests
+to it; today the anchor is published and unwitnessed, and the two words are not
+interchangeable.
+
 **Push to the forge, never to GitHub:**
 
 ```sh
@@ -726,7 +736,8 @@ is exactly one component system; adding a second is forbidden.
    **Where `machine` stays, and why**. `machine` in `contribution.machine`
    means machine-readable and is a different word.
 5. **Name the receipt.** Turn, push, build, deployment, consent, outcome.
-   When checkpoints exist, they are a receipt family, not a Git branch.
+   When checkpoints exist, they are a receipt family, not a Git branch. An
+   anchor is not a receipt.
 6. **Module means two things.** Elixir module or module artifact — say which.
 7. **An invariant is not true until its proof runs green.**
 8. **Agent work is a thread.** A thread is not Sarah's one conversation
@@ -748,6 +759,9 @@ is exactly one component system; adding a second is forbidden.
     `apps/openagents.com`.
 14. **Proposed means unclaimed.** An italic term in this document has no owner
     and no issue. Do not cite one as a plan.
+15. **Published is not witnessed.** A surface the operator serves is published.
+    Witnessed means a party outside the operator attests to it. Never write
+    "anchored" where only the first holds.
 
 ## Proof
 

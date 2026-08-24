@@ -4,7 +4,7 @@
 **Commit measured:** `7e5f7b1` on `openagents/main`, the forge
 **Question:** `EXIT-002` proves the served repository can be checked against the WAL without trusting the operator's database, and its own conclusion is that the check is tamper-evident and not tamper-proof. What would make a *consistent* rewrite of the log detectable, what does each option really cost, and what can no option here achieve?
 **Method:** direct reading of every writer of a WAL entry (`lib/openagents/forge/pushes.ex`, `lib/openagents/forge/git_plane.ex`, `lib/openagents/repositories/importer.ex`, `lib/openagents/repositories/provisioner.ex`), the log itself (`lib/openagents/forge/wal.ex` and its two adapters), the reader that replays it (`lib/openagents/forge/sync.ex`), the verifier (`lib/openagents/forge/verification.ex`), the derived receipt (`lib/openagents/forge/push_receipt.ex`), and the invariants they are bound to (`INVARIANTS.md`, `REPOSITORY-003`, `EXIT-001` through `EXIT-004`). Claims this repository cannot settle are in section 6 with what would settle them.
-**Status:** Stages 1, 2, 4, and 5 shipped. Stage 3 is open.
+**Status:** All five stages shipped. What remains is a witness, which no stage here can supply.
 
 ---
 
@@ -433,20 +433,37 @@ is a convenience for a lost terminal.
 rejected push, plus direct unit tests of the shapes the annotator must refuse
 to touch in `test/openagents/forge/git_http_test.exs`.
 
-### Stage 3 — Publish the head where the operator does not solely control it (this repository, medium)
+### Stage 3 — Publish the head where a stranger can read it (this repository, medium) — SHIPPED
 
-**Seam:** a scheduled job beside `OpenAgents.Forge.MirrorWatch`, never on the
-push path.
+**Seam:** `OpenAgents.Forge.AnchorPublisher`, a scheduled job beside
+`OpenAgents.Forge.MirrorWatch` and not on the push path at all.
 
-Publish `{repo, entries, head link, ref-map digest, published_at}` on an
-interval. The cheapest surface with a real third party is a commit to the GitHub
-mirror, which keeps GitHub as a witness and not as authority; `:forge_mirror_urls`
-is empty today (`config/config.exs:297`), so this stage has to configure a
-mirror before it can use one. A second surface with independent readers is
-strictly better and is the stage 5 question.
+Every interval, `OpenAgents.Forge.Anchor` writes one document and
+`OpenAgentsWeb.ForgeAnchorController` serves its stored bytes verbatim at
+`/.well-known/openagents-forge-anchor.json`, with no credential. Per repository
+an anonymous reader can already see: the entry count, the head sequence, the
+head chain link, the ref-map digest, and the sequence the chain starts at. Per
+anchor: its own sequence, its `published_at`, and the `sha256` of the anchor
+before it, so the published sequence is a chain and one archived anchor pins
+every anchor before it.
 
-**Size:** medium, mostly operational. **What it settles:** everything at or
-before the last published head becomes checkable by a stranger.
+The population is `OpenAgents.Repositories.readable_by/2` with no user, because
+naming a private repository would publish its existence and its push count on
+an anonymous surface `TRANSPARENCY-001` keeps a dark repository off entirely. A
+private repository is therefore anchored for nobody and its pusher's receipt
+stays the only commitment to it.
+
+The title of this stage said "where the operator does not solely control it",
+and this surface does not do that, which is stated rather than glossed. The
+operator serves the document. What changed is that a commitment covering every
+public repository's whole log prefix is now cheap for anybody to keep a copy
+of, and a copy is the thing that contradicts a rewrite. `/status` publishes
+`anchor_published` and `anchor_witnessed` separately for exactly that reason.
+
+**Size:** medium. **What it settles:** everything at or before the last
+published head becomes checkable by a stranger *who kept the document*.
+**What it does not:** a stranger who kept nothing, a rewrite of the anchor
+history itself for a reader who kept nothing, withholding, or a split view.
 
 ### Stage 4 — Store the link beside the derived receipt (this repository, small) — SHIPPED
 
@@ -555,7 +572,9 @@ and not a property.
 | Invariant | Change |
 | --- | --- |
 | `EXIT-002` | Amended. The caveat now names the chain, says what it does and does not add, and points here for the publication that would close it. |
-| `EXIT-005` | New in stage 1, amended by stage 2. Every WAL entry commits to the entry before it, the chain is checkable against an externally held link, and the link now leaves the forge at acknowledgment for the pusher to hold. |
+| `EXIT-005` | New in stage 1, amended by stages 2 and 3. Every WAL entry commits to the entry before it, the chain is checkable against an externally held link, the link leaves the forge at acknowledgment for the pusher to hold, and a periodic anchor document publishes the head of every public repository to anyone, chained to the anchor before it and stated to be unwitnessed. |
 | `REPOSITORY-003` | Unchanged, and load-bearing. Replay reads entries one at a time against the ref state each recorded, which is what makes an entry an individually meaningful unit worth chaining. |
 | `EXIT-003` | Amended by stage 4. The receipt now carries the entry's link, still derived from the WAL in both directions, and the proof shows a rewritten stored link changing no verification outcome. |
 | `EXIT-001` | Amended by stage 2. `push_receipt` moves from `blocked` to `portable`, and its probe calls the published route rather than the route inventory. |
+| `EXIT-006` | Amended by stage 3. The verification section counts published anchors instead of reading a config flag, and reports `anchor_witnessed` as a separate axis that keeps the forge degraded. |
+| `STATUS-001` | Amended by stage 3. The published key set gains `independence.verification.anchor`, `.anchor_published`, and `.anchor_witnessed`. |

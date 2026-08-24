@@ -215,17 +215,27 @@ The verifier recomputes the chain, reports a broken or missing link, and
 accepts an anchor — a sequence and link obtained anywhere other than this log —
 against which it reports a disagreement.
 
-The limit is worth naming as plainly as the capability, and the chain moves it
-rather than removing it. Nothing here publishes a link outside the operator's
-own storage yet, so an operator who rewrites an entry, its key, the index, and
-every link after it produces a self-consistent log that verifies clean.
-Content addressing and the chain make tampering *evident*, not *impossible*.
-What the chain buys is that one link remembered elsewhere now covers a whole
-prefix of the log, which is why the next step is publication and not
-cryptography. `docs/2026-08-23-forge-wal-anchoring.md` weighs the options —
-a client-side receipt to the pusher, a periodic external anchor, and signing —
-with their true costs, and stages them. It also states what none of them can
-do: an anchor detects rewriting, never withholding.
+That link now leaves the operator's storage twice. A pusher gets it in their
+own `git push` output. Everyone else gets it from
+`/.well-known/openagents-forge-anchor.json`, which
+`OpenAgents.Forge.AnchorPublisher` rewrites on an interval with each public
+repository's head, and which needs no credential to read. A stranger who keeps
+one of those documents can later report the rewrite that defeats content
+addressing on its own.
+
+The limit is worth naming as plainly as the capability, and publication moves
+it rather than removing it. **The operator serves the anchor**, so the document
+proves nothing on its own; its value is that keeping a copy is cheap and a copy
+is what contradicts a later rewrite. Nobody outside the operator witnesses it,
+which is why `/status` reports `anchor_published` and `anchor_witnessed` as two
+separate facts and stays degraded on the second. Content addressing and the
+chain make tampering *evident*, not *impossible*.
+`docs/decisions/0008-publish-the-forge-wal-anchor-at-a-well-known-path.md`
+records why this surface and not a mirror commit, a public transparency log, a
+relay set, or a chain anchor, with what each of those would require.
+`docs/2026-08-23-forge-wal-anchoring.md` weighs the options with their true
+costs and stages them. Both state what none of them can do: an anchor detects
+rewriting, never withholding.
 
 ## Mirror recovery
 
@@ -292,9 +302,10 @@ The gaps below are not only recorded here. `OpenAgents.Forge.Independence`
 publishes them in `OpenAgents.NetworkStatus`, so `/status` and
 `GET /api/status` report the forge as independence-degraded while any of them
 stands, under `EXIT-006`. The export counts are read from the ledger rather
-than restated, and the verification section reports `anchor_published` as
-`false` while no anchor is configured, so the difference between a
-tamper-evident log and a tamper-proof one is published rather than blurred.
+than restated, and the verification section counts the anchors actually
+published and reports `anchor_witnessed` separately, so the difference between
+a tamper-evident log, a published anchor, and a witnessed one is published
+rather than blurred.
 
 A forge that records its limits in a document and reports itself healthy on its
 status page has hidden them.
@@ -315,6 +326,6 @@ the one people clone from.
 | Gap | Issue |
 | --- | --- |
 | The live forge cannot serve a full clone of its own repository | #179 |
-| No commitment to the WAL is published outside operator storage, so a consistent rewrite still verifies clean | #151 |
+| The published WAL anchor is served by the operator and witnessed by nobody, so a consistent rewrite is caught only by a reader who kept a copy | #151 |
 | No export is encrypted to a key the recipient holds, and no column is encrypted at rest | #178 |
 | Five of six exit rehearsals have never been performed | #180 |

@@ -15,6 +15,7 @@ defmodule OpenAgents.Forge.IndependenceDisclosureTest do
   import Phoenix.LiveViewTest
 
   alias OpenAgents.DataRights.ExportInventory
+  alias OpenAgents.Forge.Anchor
   alias OpenAgents.Forge.Independence
 
   # Every string the disclosure may contain. A repository path, an account id,
@@ -25,9 +26,19 @@ defmodule OpenAgents.Forge.IndependenceDisclosureTest do
     docs/forge-operator-independence.md
     single_operator
     tamper_evident
-    tamper_evident_with_anchor
+    tamper_evident_published
+    /.well-known/openagents-forge-anchor.json
     portable partial blocked not_user_data
   )
+
+  # The projection is briefly cached so anonymous traffic cannot become an rpc
+  # storm. A test that publishes an anchor would otherwise leave that state in
+  # the cache for whichever test runs next.
+  setup do
+    :persistent_term.erase({OpenAgents.NetworkStatus, :cache})
+    on_exit(fn -> :persistent_term.erase({OpenAgents.NetworkStatus, :cache}) end)
+    :ok
+  end
 
   describe "the disclosure derives from the ledger" do
     test "every gap the export ledger records is published, and no other" do
@@ -65,22 +76,32 @@ defmodule OpenAgents.Forge.IndependenceDisclosureTest do
       assert Independence.degraded?()
     end
 
+    # The publication state is read from the anchors that exist, not from a
+    # flag someone can set, so this test publishes a real one.
     test "publishing an anchor changes the verification claim" do
-      previous = Application.get_env(:openagents, :forge_wal_anchor)
-      Application.put_env(:openagents, :forge_wal_anchor, %{seq: 1, link: "abc"})
-
-      on_exit(fn ->
-        case previous do
-          nil -> Application.delete_env(:openagents, :forge_wal_anchor)
-          value -> Application.put_env(:openagents, :forge_wal_anchor, value)
-        end
-      end)
+      {:ok, _anchor} = Anchor.publish()
 
       verification = Independence.projection()["verification"]
 
       assert verification["anchor_published"]
-      assert verification["property"] == "tamper_evident_with_anchor"
-      assert verification["issue"] == nil
+      assert verification["property"] == "tamper_evident_published"
+      assert verification["anchor"] == Anchor.path()
+    end
+
+    # The whole point of ADR 0008: the operator serves the anchor, so
+    # publishing it does not make it evidence against the operator. A
+    # disclosure that closed the verification axis on publication alone would
+    # be claiming exactly what the anchor cannot show.
+    test "a published anchor is still not witnessed, and still reports degraded" do
+      {:ok, _anchor} = Anchor.publish()
+
+      projection = Independence.projection()
+
+      assert projection["verification"]["anchor_published"]
+      refute projection["verification"]["anchor_witnessed"]
+      assert projection["verification"]["issue"] == 151
+      assert projection["degraded"]
+      assert Independence.degraded?()
     end
 
     test "an unencrypted private export is disclosed rather than softened" do
@@ -124,12 +145,30 @@ defmodule OpenAgents.Forge.IndependenceDisclosureTest do
       assert view |> element("#status-independence-summary") |> render() =~ "degraded"
       assert has_element?(view, "#status-independence-verification")
       assert has_element?(view, "#status-independence-private-data")
+      refute has_element?(view, "#status-independence-anchor-witness")
 
       rendered = render(view)
 
       for entry <- ExportInventory.with_status(:partial) do
         assert rendered =~ Atom.to_string(entry.family)
       end
+    end
+
+    test "a published anchor is named on the page and still called unwitnessed",
+         %{conn: conn} do
+      Ecto.Adapters.SQL.Sandbox.mode(OpenAgents.Repo, {:shared, self()})
+      {:ok, _anchor} = Anchor.publish()
+      :persistent_term.erase({OpenAgents.NetworkStatus, :cache})
+
+      conn = put_req_header(conn, "accept", "text/html")
+      {:ok, view, _html} = live(conn, ~p"/status")
+
+      assert view |> element("#status-independence-verification") |> render() =~ Anchor.path()
+
+      assert view |> element("#status-independence-anchor-witness") |> render() =~
+               "witnessed by nobody"
+
+      assert view |> element("#status-independence-summary") |> render() =~ "degraded"
     end
   end
 

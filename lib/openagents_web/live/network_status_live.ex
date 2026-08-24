@@ -581,6 +581,23 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
                     @projection["independence"]["verification"]["issue"]
                   )}
                 </span>
+                <span :if={@projection["independence"]["verification"]["anchor_published"]}>
+                  · anchor at
+                  <.link href={@projection["independence"]["verification"]["anchor"]}>
+                    <code>{@projection["independence"]["verification"]["anchor"]}</code>
+                  </.link>
+                </span>
+                <span
+                  :if={
+                    @projection["independence"]["verification"]["anchor_published"] and
+                      not @projection["independence"]["verification"]["anchor_witnessed"]
+                  }
+                  id="status-independence-anchor-witness"
+                >
+                  · published by the operator, witnessed by nobody{issue_text(
+                    @projection["independence"]["verification"]["issue"]
+                  )}
+                </span>
               </li>
               <li id="status-independence-private-data">
                 private data: access controlled, not encrypted{issue_text(

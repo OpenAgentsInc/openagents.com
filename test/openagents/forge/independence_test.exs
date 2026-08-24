@@ -11,7 +11,17 @@ defmodule OpenAgents.Forge.IndependenceTest do
 
   use OpenAgents.DataCase, async: false
 
-  alias OpenAgents.Forge.{PushReceipt, Pushes, Repos, Sync, Verification, WAL}
+  alias OpenAgents.Forge.{
+    Anchor,
+    Independence,
+    PushReceipt,
+    Pushes,
+    Repos,
+    Sync,
+    Verification,
+    WAL
+  }
+
   alias OpenAgents.Repo
 
   defmodule TestPipeline do
@@ -73,6 +83,7 @@ defmodule OpenAgents.Forge.IndependenceTest do
     %{
       base: base,
       repo: repository.storage_key,
+      repository: repository,
       url: "http://x:#{plaintext}@127.0.0.1:#{port}/exit-owner/demo.git"
     }
   end
@@ -357,6 +368,99 @@ defmodule OpenAgents.Forge.IndependenceTest do
       assert status != 0, "the non-fast-forward push was accepted:\n#{output}"
       assert output =~ "rejected"
       refute output =~ "wal-receipt"
+    end
+  end
+
+  ## ── EXIT-005: the anchor published to a stranger ───────────────────────
+
+  describe "the anchor published at a well-known path" do
+    test "a stranger who kept the document reports a consistent rewrite", context do
+      publish_repository!(context)
+      seed_history!(context)
+
+      {:ok, published} = Anchor.publish()
+
+      # The anchor a stranger holds is the bytes they fetched, so the head
+      # comes out of the served document and not out of the log it commits to.
+      head = document_head!(published, context)
+
+      rewrite_first_entry_consistently!(context, "a payload the pusher never sent")
+
+      # Nothing inside the operator's storage disagrees with anything else in
+      # it. This is the case `EXIT-002` cannot catch, and #167's receipt only
+      # catches for the one person who pushed.
+      assert {:ok, %{findings: []}} = Verification.verify(context.repo)
+
+      assert {:error, %{findings: findings}} = Verification.verify(context.repo, anchor: head)
+      assert %{"seq" => _seq} = detail(findings, "anchor_mismatch")
+    end
+
+    test "the served bytes are what the digest and the next anchor name", context do
+      publish_repository!(context)
+      seed_history!(context)
+
+      {:ok, first} = Anchor.publish()
+      {:ok, second} = Anchor.publish()
+
+      # A reader hashes the file they fetched, so the stored digest has to be
+      # a digest of the stored bytes and nothing re-rendered from columns.
+      assert Anchor.digest(first.body) == first.digest
+      assert Anchor.digest(second.body) == second.digest
+
+      # The published sequence is itself a chain: one archived anchor pins
+      # every anchor before it, the way an entry link pins every entry.
+      assert first.anchor_seq == 0
+      assert first.previous_digest == nil
+      assert second.anchor_seq == 1
+      assert second.previous_digest == first.digest
+    end
+
+    test "a private repository is anchored for nobody", context do
+      seed_history!(context)
+
+      # The repository is private in this setup, and the anchor is anonymous.
+      # Naming it here would publish its existence and its push count on a
+      # surface `TRANSPARENCY-001` keeps a dark repository off entirely.
+      {:ok, private_anchor} = Anchor.publish()
+      assert repository_section(private_anchor, context) == nil
+
+      publish_repository!(context)
+      {:ok, public_anchor} = Anchor.publish()
+      assert %{"entries" => entries} = repository_section(public_anchor, context)
+      assert entries > 0
+    end
+
+    test "the document states that nobody witnesses it", context do
+      publish_repository!(context)
+      seed_history!(context)
+
+      {:ok, published} = Anchor.publish()
+      document = Jason.decode!(published.body)
+
+      # ADR 0008: the operator serves this, so it proves nothing on its own.
+      # The claim has to travel with the artifact, not only with the docs.
+      refute document["witnessed"]
+      refute document["signed"]
+      assert document["trust"] =~ "witnessed by nobody"
+      assert document["decision"] =~ "0008"
+    end
+
+    test "each axis of the disclosure decides degraded on its own", _context do
+      clean_export = %{"gaps" => []}
+      encrypted = %{"exports_encrypted" => true}
+      unencrypted = %{"exports_encrypted" => false}
+      published_unwitnessed = %{"anchor_published" => true, "anchor_witnessed" => false}
+      witnessed = %{"anchor_published" => true, "anchor_witnessed" => true}
+      unpublished = %{"anchor_published" => false, "anchor_witnessed" => false}
+
+      # Publishing the anchor is not witnessing it, and the disclosure has to
+      # keep reporting degraded on the second. Every other axis is clean here,
+      # so this asserts the witness disjunct rather than riding on a constant.
+      assert Independence.degraded?(clean_export, published_unwitnessed, encrypted)
+      assert Independence.degraded?(clean_export, unpublished, encrypted)
+      assert Independence.degraded?(clean_export, witnessed, unencrypted)
+      assert Independence.degraded?(%{"gaps" => [%{}]}, witnessed, encrypted)
+      refute Independence.degraded?(clean_export, witnessed, encrypted)
     end
   end
 
@@ -653,6 +757,34 @@ defmodule OpenAgents.Forge.IndependenceTest do
   end
 
   defp work_dir(context), do: Path.join(context.base, "work")
+
+  # The setup's repository is private, which is what a repository is by
+  # default. The anchor's population is what an anonymous reader can already
+  # see, so a test about publication has to publish first.
+  defp publish_repository!(context) do
+    context.repository
+    |> Ecto.Changeset.change(visibility: "public")
+    |> Repo.update!()
+  end
+
+  defp repository_section(anchor, context) do
+    path = "#{context.repository.owner}/#{context.repository.name}"
+
+    anchor.body
+    |> Jason.decode!()
+    |> Map.fetch!("repositories")
+    |> Enum.find(&(&1["repo"] == path))
+  end
+
+  defp document_head!(anchor, context) do
+    case repository_section(anchor, context) do
+      %{"head_seq" => seq, "head_link" => link} when is_integer(seq) and is_binary(link) ->
+        %{seq: seq, link: link}
+
+      other ->
+        flunk("the published anchor carried no head for the repository: #{inspect(other)}")
+    end
+  end
 
   # What an operator with write access to their own object storage can do:
   # replace an accepted entry, re-derive its content-addressed key, and

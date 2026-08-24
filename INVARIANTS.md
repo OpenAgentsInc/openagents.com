@@ -3054,6 +3054,12 @@ that becomes a gap republishes all three, and the enumeration fails until this
 contract readmits them — which is the decision being asked for, not an
 accident.
 
+The independence disclosure also carries the anchor's own address
+(`/.well-known/openagents-forge-anchor.json`), which is a fixed path and not
+instance data: it is where a reader goes to hold the forge to `EXIT-005`, and a
+disclosure that named a gap without naming the surface that closes it would be
+asking the reader to go looking.
+
 What the projection carries beside counts is the bounded public SCV activity
 band (`scvs`: a derived public id, a label, a status, a weight, and one
 bounded activity line), the forge deploy lane (short shas, statuses, timings,
@@ -3216,8 +3222,10 @@ model, each named below.
   the anonymous one.
 - **Listing composes the predicate.** The modules that compose `readable_by/2`
   are `OpenAgents.Repositories`, `OpenAgents.Issues`, `OpenAgents.Projects`,
-  `OpenAgents.Notifications`, and `OpenAgents.DataRights.AccountExport` — five,
-  not the four the amendment above named.
+  `OpenAgents.Notifications`, `OpenAgents.DataRights.AccountExport`, and
+  `OpenAgents.Forge.Anchor` — six, not the four the amendment above named. The
+  last is the published WAL anchor (`EXIT-005`), which is anonymous and must
+  name exactly the repositories an anonymous reader already reaches.
 - **The predicate's terms live in one file, plus four stated exceptions.**
   Every site in `lib/` naming a repository's `visibility` or `lifecycle_state`
   against `"public"` or `"ready"` is classified, and the four that decide reach
@@ -3867,16 +3875,51 @@ values from the WAL afterwards. A pusher who keeps that line holds a value the
 operator cannot retroactively change, and `verify/2` with it as `:anchor`
 reports `anchor_mismatch` against a log rewritten at or before that sequence.
 
-What that is worth is bounded and the bounds are the point. It covers one
-repository's log, up to one sequence, for the one party who wrote it down. It
-is not publication: nobody else can check it, a pusher who keeps nothing holds
-nothing, and re-fetching the link returns the forge's current answer rather than
-independent evidence. The route is a convenience for a lost terminal, not a
-second source.
+That covers one repository's log, up to one sequence, for the one party who
+wrote it down. **The link also leaves the forge on a schedule, for everyone
+else.** `OpenAgents.Forge.AnchorPublisher` writes one document per interval,
+served verbatim at `/.well-known/openagents-forge-anchor.json` with no
+credential: per repository an anonymous reader can already see, the entry
+count, the head sequence, the head chain link, the ref-map digest, and the
+sequence the chain starts at. The proof takes the head out of the *served
+bytes*, performs the rewrite that defeats `EXIT-002`, and asserts both halves —
+clean with no anchor, `anchor_mismatch` with the one a stranger kept.
 
-No push may fail on this. The link is derived from data already in hand with no
-I/O, by an encoder that is total by construction, and the derivation is wrapped
-so a link that cannot be produced is omitted rather than raised. The entry then
+The publication is chained the way the entries are: each anchor names the
+`sha256` of the anchor document before it, so one archived anchor pins every
+anchor before it, and the served bytes are stored and returned verbatim because
+a reader hashes what they fetched. `published_at` advances every interval
+whether or not the log moved, which is what lets a reader see that publication
+has stopped.
+
+**Publishing an anchor is not having one witnessed, and the two are published
+as two facts.** The operator serves this document and could serve any document,
+so it proves nothing on its own; its value is that keeping a copy is cheap and a
+copy is what contradicts a later rewrite. `OpenAgents.Forge.Independence`
+reports `anchor_published` from the anchors that exist and `anchor_witnessed`
+as `false`, and `EXIT-006` stays degraded on the second axis. The head is not
+signed: a signature made with a key the operator holds, over a document the
+operator serves, adds nothing against the operator. ADR 0008 records the
+surfaces rejected — a mirror commit, a public transparency log, a Nostr relay
+set, a Bitcoin-anchored commitment — with what each would require, and each of
+them would publish this document's digest rather than replace it.
+
+The bounds stay the point. A reader who keeps nothing holds nothing. Everything
+pushed after the last anchor is unanchored, so the exposure window is the
+interval. A split view is narrowed and not closed. A private repository is
+anchored for nobody, because naming it would publish its existence on an
+anonymous surface `TRANSPARENCY-001` keeps a dark repository off entirely, and
+its pusher's own receipt stays the only commitment to it. Re-fetching either
+the anchor or the receipt route returns the forge's current answer rather than
+independent evidence.
+
+No push may fail on this. Publication is a scheduled job beside
+`OpenAgents.Forge.MirrorWatch` and is not on the push path at all — not even on
+the derived side of the acknowledgment barrier — because a slow or failing
+anchor must never be able to refuse a push. The link is derived from data
+already in hand with no I/O, by an encoder that is total by construction, and
+the derivation is wrapped so a link that cannot be produced is omitted rather
+than raised. The entry then
 enters the log unchained and the verifier reports `chain_link_missing`, which is
 something to find out about rather than a reason to refuse a push the forge can
 accept. The side-band line inherits the same discipline: it is formatted after
@@ -3900,11 +3943,15 @@ serves stale state, or refuses a clone holds every one of those powers still.
 
 Evidence: `OpenAgents.Forge.WAL`, `OpenAgents.Forge.Verification`,
 `OpenAgents.Forge.GitHTTP`, `OpenAgentsWeb.PushReceiptController`,
+`OpenAgents.Forge.Anchor`, `OpenAgents.Forge.AnchorPublisher`,
+`OpenAgentsWeb.ForgeAnchorController`,
 `test/openagents/forge/wal_test.exs`,
 `test/openagents/forge/git_http_test.exs`,
 `test/openagents/forge/independence_test.exs`,
-`test/openagents_web/controllers/push_receipt_controller_test.exs`, and
-`docs/2026-08-23-forge-wal-anchoring.md`.
+`test/openagents_web/controllers/push_receipt_controller_test.exs`,
+`test/openagents_web/controllers/forge_anchor_controller_test.exs`,
+`docs/2026-08-23-forge-wal-anchoring.md`, and
+`docs/decisions/0008-publish-the-forge-wal-anchor-at-a-well-known-path.md`.
 
 ### EXIT-006 — The status surface discloses every gap the ledger records
 
@@ -3924,12 +3971,20 @@ flattering direction. The export section is counted from
 `OpenAgents.DataRights.ExportInventory`: a family that regresses to `partial`
 or `blocked` appears on the status page without anyone editing the disclosure,
 and a gap closed elsewhere disappears from it in the same commit. The
-verification section reads the configured anchor source and reports
-`anchor_published` as `false` while none is configured, so the difference
-between `EXIT-005`'s tamper-*evident* chain and a tamper-*proof* log is
-published rather than blurred; issue #168 publishes the anchor. `degraded` is
-the disjunction of the three axes, so nothing waits on a person deciding when
-to say so, and it is expected to be true today.
+verification section counts the anchors `OpenAgents.Forge.Anchor` has actually
+published rather than reading a config flag, so a publisher that has stopped
+reports `false` without anyone editing the disclosure. It publishes
+`anchor_published` and `anchor_witnessed` as two facts, because they are two
+facts: the operator serves the anchor document, so publishing one leaves a
+consistent rewrite undetectable to anyone who kept no copy of it, and
+`anchor_witnessed` is `false` while no party outside the operator attests to
+it (ADR 0008; issue #151 carries the witness). The difference between
+`EXIT-005`'s tamper-*evident* chain and a tamper-*proof* log is therefore
+published rather than blurred. `degraded` is the disjunction of the axes, so
+nothing waits on a person deciding when to say so, and it is expected to be
+true today. Two of the axes are constants, so `degraded?/0` would stay true
+even if one were dropped from the disjunction; `degraded?/3` is public for
+exactly that reason and the proof varies one axis at a time through it.
 
 One claim is stated rather than derived and it says so: no export is encrypted
 to a key the recipient holds and no Ecto column in this repository is encrypted
@@ -3947,7 +4002,8 @@ that cannot assemble it renders the page without it rather than failing.
 Four mutations were confirmed to fail the proof and reverted: publishing an
 empty gap list while the ledger records gaps; making `degraded` constant;
 adding the forge's repository name to the projection; and claiming exports are
-encrypted.
+encrypted. A fifth was added with the anchor: dropping the witness axis from
+the disjunction, which `degraded?/0` cannot detect and `degraded?/3` does.
 
 Evidence: `OpenAgents.Forge.Independence`, `OpenAgents.NetworkStatus`,
 `OpenAgentsWeb.NetworkStatusLive`,
@@ -4556,7 +4612,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-002 | `test/openagents/forge/independence_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
-| EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs` |
+| EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs`, `test/openagents_web/controllers/forge_anchor_controller_test.exs` |
 | EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |

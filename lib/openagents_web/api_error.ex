@@ -59,6 +59,7 @@ defmodule OpenAgentsWeb.ApiError do
     # malformed request and not a forbidden one: the same call succeeds once
     # the caller revokes one, so it is the rate-limit status and its own code.
     "thread_quota_reached" => {429, "This account holds the maximum number of open threads"},
+    "thread_terminal" => {422, "This thread is terminal and its transcript is closed"},
     # Spending the account's inference credit is not a rate limit: no amount of
     # waiting or revoking makes the same call succeed, so it is the payment
     # status and its own code.

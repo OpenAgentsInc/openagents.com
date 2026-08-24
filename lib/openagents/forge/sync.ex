@@ -75,6 +75,28 @@ defmodule OpenAgents.Forge.Sync do
     synchronize(repo, fn -> do_replay_missing(repo, index, default_branch) end)
   end
 
+  @doc """
+  Discard the local bare-repository projection and re-materialize it from the
+  WAL, from sequence zero.
+
+  Use this when the projection is *wrong* rather than merely behind, where
+  `ensure_fresh/1` and `replay_missing/3` would trust its existing state. It
+  builds the whole repository in a sibling directory, proves every ref tip
+  resolves, and only then swaps it in place, so readers never see a partial
+  projection. Returns `:ok` on success and a typed error when the WAL cannot
+  produce a servable projection. Takes no mirror input; `EXIT-003` holds the
+  authority boundary.
+  """
+  def rebuild(repo, default_branch \\ "main") do
+    synchronize(repo, fn ->
+      case WAL.read_index(repo) do
+        {:error, :not_found} -> :ok
+        {:ok, _generation, index} -> rebuild_at_sibling!(repo, index, default_branch)
+        {:error, reason} -> raise_sync(repo, :read_wal, reason)
+      end
+    end)
+  end
+
   # Reentrant: `:global` locks are not reference counted, so a nested
   # `:global.trans` on the same id releases the lock when the inner call
   # exits (for example `ensure_fresh/2` inside a locked write). The process

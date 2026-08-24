@@ -205,7 +205,58 @@ defmodule OpenAgents.Forge.SyncTest do
              )
   end
 
-  defp git!(directory, args) do
+  test "rebuild re-materializes the projection from sequence zero and preserves the head", %{
+    root: root
+  } do
+    {index, sha} = put_bundle_entry!(root, "rebuild-repo", "trunk")
+    assert :ok = Sync.ensure_fresh("rebuild-repo", "trunk")
+
+    # Append a second commit so the WAL holds more than the trivial first
+    # entry; the rebuilt projection must end at the newest head.
+    source = Path.join(root, "rebuild-repo-source")
+    File.write!(Path.join(source, "second.md"), "second commit\n")
+    git!(source, ["add", "second.md"])
+    git!(source, ["commit", "-m", "Second commit"])
+
+    sha2 = source |> git!(["rev-parse", "HEAD"]) |> String.trim()
+    refs = %{"refs/heads/trunk" => sha2}
+    bundle = Path.join(root, "rebuild-repo-2.bundle")
+    git!(source, ["bundle", "create", bundle, "--all"])
+
+    {:ok, object} = WAL.put_entry_file("rebuild-repo", 1, bundle)
+
+    entry = %{
+      "seq" => 1,
+      "object" => object,
+      "format" => "git_bundle",
+      "refs" => refs,
+      "principal" => "test",
+      "pushed_at" => DateTime.to_iso8601(DateTime.utc_now())
+    }
+
+    {:ok, generation, _} = WAL.read_index("rebuild-repo")
+    {:ok, _} = WAL.cas_index("rebuild-repo", generation, WAL.append_entry(index, entry))
+    assert :ok = Sync.ensure_fresh("rebuild-repo", "trunk")
+
+    bare_path = Repos.bare_path("rebuild-repo")
+    assert String.trim(git_bare!(bare_path, ["rev-parse", "trunk"])) == sha2
+
+    # Rebuild is the operator recovery for a *wrong* projection: discard and
+    # re-materialize from sequence zero. It must land on the same head.
+    assert :ok = Sync.rebuild("rebuild-repo", "trunk")
+
+    assert String.trim(git_bare!(bare_path, ["rev-parse", "trunk"])) == sha2
+    assert Repos.refs("rebuild-repo") == refs
+    assert String.trim(git_bare!(bare_path, ["show", "trunk:second.md"])) == "second commit"
+
+    # The one-argument form the runbooks name resolves the default branch the
+    # same way ensure_fresh/1 does, so `Sync.rebuild("{storage_key}")` runs.
+    assert :ok = Sync.rebuild("rebuild-repo")
+    assert String.trim(git_bare!(bare_path, ["rev-parse", "trunk"])) == sha2
+    assert String.trim(git_bare!(bare_path, ["symbolic-ref", "HEAD"])) == "refs/heads/trunk"
+  end
+
+
     {output, 0} = System.cmd("git", args, cd: directory, stderr_to_stdout: true)
     output
   end

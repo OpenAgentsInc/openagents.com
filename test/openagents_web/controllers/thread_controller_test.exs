@@ -496,4 +496,120 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     on_exit(restore)
     restore
   end
+
+  describe "a thread's transcript" do
+    setup %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-transcript")
+
+      created =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "Remember me."})
+        |> json_response(201)
+
+      %{authenticated: authenticated, id: created["thread"]["id"]}
+    end
+
+    test "records an event and advances the count", %{authenticated: conn, id: id} do
+      before = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "event_type" => "turn.user",
+          "payload" => %{"text" => "list the open issues"}
+        })
+        |> json_response(201)
+
+      # Opening a thread records its own lifecycle event, so the count is a
+      # delta rather than a total.
+      assert body["thread"]["event_count"] == before["thread"]["event_count"] + 1
+    end
+
+    test "reads the transcript back, oldest first", %{authenticated: conn, id: id} do
+      for text <- ["first", "second", "third"] do
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "event_type" => "turn.user",
+          "payload" => %{"text" => text}
+        })
+        |> json_response(201)
+      end
+
+      body = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+
+      # The server's copy is the only copy: a client reads this back rather than
+      # keeping its own, so two machines on one thread see one transcript.
+      texts =
+        body["events"]
+        |> Enum.filter(&(&1["event_type"] == "turn.user"))
+        |> Enum.map(& &1["payload"]["text"])
+
+      assert texts == ["first", "second", "third"]
+      assert Enum.all?(body["events"], &(&1["schema"] == "openagents.thread.event.v1"))
+    end
+
+    test "refuses an event with no type", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{"payload" => %{"text" => "x"}})
+        |> json_response(422)
+
+      assert body["errors"]["event_type"] != nil
+    end
+
+    test "refuses to append to a revoked thread", %{authenticated: conn, id: id} do
+      conn |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{"event_type" => "turn.user"})
+        |> json_response(422)
+
+      # A transcript that keeps growing after the report was written is not the
+      # transcript the report describes.
+      assert body["code"] == "thread_terminal"
+    end
+
+    test "does not read another account's transcript", %{authenticated: conn, id: id} do
+      conn
+      |> post(~p"/api/v3/threads/#{id}/events", %{"event_type" => "turn.user"})
+      |> json_response(201)
+
+      stranger = put_chat_api_token(build_conn(), "thread-stranger")
+
+      assert stranger |> get(~p"/api/v3/threads/#{id}/events") |> json_response(404)
+    end
+  end
+
+  describe "GET /api/v3/threads" do
+    test "lists the account's threads, newest first", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-index")
+
+      for objective <- ["older", "newer"] do
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => objective})
+        |> json_response(201)
+      end
+
+      body = authenticated |> get(~p"/api/v3/threads") |> json_response(200)
+
+      # A client that outlives its process needs a way back to the work it was
+      # doing, and the account is the only place that knows.
+      assert Enum.map(body["threads"], & &1["objective"]) == ["newer", "older"]
+    end
+
+    test "does not list another account's threads", %{conn: conn} do
+      put_chat_api_token(conn, "thread-mine")
+      |> post(~p"/api/v3/threads", %{"objective" => "mine"})
+      |> json_response(201)
+
+      body =
+        build_conn()
+        |> put_chat_api_token("thread-theirs")
+        |> get(~p"/api/v3/threads")
+        |> json_response(200)
+
+      assert body["threads"] == []
+    end
+  end
 end

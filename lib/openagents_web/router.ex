@@ -559,8 +559,11 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :chat_account_api
 
     post "/threads", ThreadController, :create
+    get "/threads", ThreadController, :index
     get "/threads/:thread_id", ThreadController, :show
     delete "/threads/:thread_id", ThreadController, :delete
+    get "/threads/:thread_id/events", ThreadController, :events
+    post "/threads/:thread_id/events", ThreadController, :record
   end
 
   scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do

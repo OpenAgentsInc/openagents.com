@@ -154,7 +154,13 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
 
     for route <- routes, route.plug_opts != :create do
       path = String.replace(route.path, ":thread_id", thread_id)
-      body = conn |> dispatch_route(route.verb, path) |> json_response(200)
+
+      # Whatever it answers. A route that refuses this bare call — `record`
+      # requires an event type — is still a route that must not put a token in
+      # its body, and the invariant is about what reaches the caller rather
+      # than about which status it reaches them with.
+      answered = dispatch_route(conn, route.verb, path)
+      body = Jason.decode!(answered.resp_body)
 
       refute token?(body),
              """

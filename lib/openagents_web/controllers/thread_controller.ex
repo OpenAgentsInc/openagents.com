@@ -47,6 +47,61 @@ defmodule OpenAgentsWeb.ThreadController do
     end
   end
 
+  @doc """
+  The account's threads, newest first.
+
+  A client that outlives its process needs a way back to the work it was doing,
+  and the account is the only place that knows. Bounded by the context, which
+  caps what a list may return.
+  """
+  def index(conn, params) do
+    user = conn.assigns.current_user
+    _reaped = Threads.reap_expired(user)
+
+    threads = Threads.list_for_user(user, listing_options(params))
+
+    conn
+    |> put_extension_header()
+    |> json(%{"threads" => Enum.map(threads, &thread_view/1)})
+  end
+
+  @doc """
+  A thread's transcript, oldest first.
+
+  This is where a session's history lives. It is the server's copy and the only
+  copy: a client reads it back rather than keeping its own, so two machines
+  reading one thread see one transcript rather than two that have diverged.
+  """
+  def events(conn, %{"thread_id" => thread_id} = params) do
+    with_thread(conn, thread_id, fn thread ->
+      events = Threads.list_events(thread, listing_options(params))
+
+      conn
+      |> put_extension_header()
+      |> json(%{
+        "thread_id" => thread.id,
+        "event_count" => thread.event_count,
+        "events" => Enum.map(events, &event_view/1)
+      })
+    end)
+  end
+
+  @doc """
+  Append one event to a thread's transcript.
+
+  Append-only and bounded: the payload is capped by the database, and a
+  terminal thread refuses, because a transcript that keeps growing after the
+  report was written is not the transcript the report describes.
+  """
+  def record(conn, %{"thread_id" => thread_id} = params) do
+    with_thread(conn, thread_id, fn thread ->
+      case event_parameters(params) do
+        {:ok, event_type, payload} -> append(conn, thread, event_type, payload)
+        {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
+      end
+    end)
+  end
+
   def show(conn, %{"thread_id" => thread_id}) do
     with_thread(conn, thread_id, fn thread -> render_thread(conn, :ok, thread) end)
   end
@@ -62,6 +117,29 @@ defmodule OpenAgentsWeb.ThreadController do
         {:error, changeset} -> ApiError.changeset(conn, changeset)
       end
     end)
+  end
+
+  defp append(conn, thread, event_type, payload) do
+    case Threads.record_event(thread, event_type, payload) do
+      {:ok, updated} ->
+        conn
+        |> put_extension_header()
+        |> put_status(:created)
+        |> json(%{"thread" => thread_view(updated)})
+
+      {:error, :thread_terminal} ->
+        sentence =
+          "This thread is #{thread.status} and its transcript is closed. " <>
+            "Open another thread to record more work."
+
+        ApiError.refuse(conn, "thread_terminal",
+          message: sentence,
+          errors: %{"thread" => [sentence]}
+        )
+
+      {:error, changeset} ->
+        ApiError.changeset(conn, changeset)
+    end
   end
 
   # ── admission ───────────────────────────────────────────────────────────
@@ -151,6 +229,48 @@ defmodule OpenAgentsWeb.ThreadController do
 
   # ── parameters ──────────────────────────────────────────────────────────
 
+  # A limit outside the bounds is clamped by the context rather than refused: a
+  # listing is a read, and a caller asking for more than the cap gets the cap.
+  defp listing_options(params) do
+    case Map.get(params, "limit") do
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {limit, ""} -> [limit: limit]
+          _unparsed -> []
+        end
+
+      _absent ->
+        []
+    end
+  end
+
+  defp event_parameters(params) do
+    with {:ok, event_type} <- event_type(params),
+         {:ok, payload} <- payload(params) do
+      {:ok, event_type, payload}
+    end
+  end
+
+  defp event_type(%{"event_type" => event_type}) when is_binary(event_type) do
+    if String.trim(event_type) == "" do
+      {:refused, "event_type", "The event type names what happened and cannot be blank."}
+    else
+      {:ok, event_type}
+    end
+  end
+
+  defp event_type(_params) do
+    {:refused, "event_type", "An event requires an event_type: what happened."}
+  end
+
+  defp payload(%{"payload" => payload}) when is_map(payload), do: {:ok, payload}
+
+  defp payload(%{"payload" => payload}) do
+    {:refused, "payload", "#{inspect(payload)} is not an object."}
+  end
+
+  defp payload(_params), do: {:ok, %{}}
+
   defp objective(%{"objective" => objective}) when is_binary(objective) do
     if String.trim(objective) == "" do
       {:refused, "objective", "The objective states what the thread is for and cannot be blank."}
@@ -205,6 +325,15 @@ defmodule OpenAgentsWeb.ThreadController do
   # The thread's `model` and its grant's are now the same admitted id, so only
   # the grant's is published: it is the one the request will actually use, and
   # printing the same name twice invites a reader to think they can differ.
+
+  defp event_view(event) do
+    %{
+      "schema" => event.schema,
+      "event_type" => event.event_type,
+      "payload" => event.payload,
+      "emitted_at" => stamp(event.emitted_at)
+    }
+  end
 
   defp thread_view(%Thread{} = thread) do
     %{

@@ -17,6 +17,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
 
   schema "forge_deploys" do
     field :repo, :string
+    field :repository_id, :binary_id
     field :sha, :string
     field :target_id, :binary_id
     field :deployment_id, :binary_id
@@ -55,6 +56,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
     receipt
     |> cast(attrs, [
       :repo,
+      :repository_id,
       :sha,
       :target_id,
       :deployment_id,
@@ -93,6 +95,7 @@ defmodule OpenAgents.Forge.DeployReceipt do
     |> validate_length(:canary, max: 255)
     |> validate_length(:error_code, max: 128)
     |> validate_node_results()
+    |> foreign_key_constraint(:repository_id)
     |> unique_constraint(:deployment_id)
     |> check_constraint(:result, name: :forge_deploys_result)
     |> check_constraint(:deployment_type, name: :forge_deploys_deployment_type)

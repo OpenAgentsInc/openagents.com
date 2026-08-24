@@ -201,6 +201,10 @@ None of that is a storage difference, and none of it should grow into one.
 
 **The mirror stays separate.** It is an export with no read path, and folding it into the store would only couple the WAL to a third party's availability. Separate does not mean unguarded: because it force-pushes and cannot detect a mirror that is ahead (section 3.1), the boundary needs a lease, not just a direction.
 
+**Two repositories can produce the same receipt `repo` string, and which string decides depends on the table.** `#181` asked this question of this audit, so here is the answer. `forge_pushes.repo` is written from `Repository.storage_key` on both paths that reach it — `GitHTTP.receive_pack/3` (`lib/openagents/forge/git_http.ex:109`) and `Pushes.reconcile_receipts/1` (`lib/openagents/forge/janitor.ex:122`) — and `storage_key` carries a unique index, so a push receipt names exactly one repository and always will. `forge_builds.repo` and `forge_deploys.repo` are written from `Target.repo`, which `Targets.validate_deployable_repo/1` (`lib/openagents/forge/targets.ex:945`) constrains to a member of `:forge_repos` *or* to `"#{owner}/#{allowed}"` — a repository **name**, or an `owner/name` path. Repository names are unique only within a namespace (`unique_index(:repositories, [:namespace_id, :name_key])`), so `alice/demo` and `bob/demo` are both legal and both produce the string `demo`. That collision is real today for every repository except the grandfathered one, whose name and storage key happen to be the same literal.
+
+The consequence is that the three `repo` columns are not one identifier space, and `Pushes.receipt_repo_keys/1` exists to bridge them. `#181` settled it by giving `forge_builds` and `forge_deploys` a nullable `repository_id`, backfilled where a name resolved to exactly one repository, and by leaving `forge_pushes` alone for the reason `EXIT-003` gives: every column there must be re-derivable from the WAL, and a key only PostgreSQL can produce would make the database a second opinion about a push.
+
 ---
 
 ## 3. Failure modes, ranked

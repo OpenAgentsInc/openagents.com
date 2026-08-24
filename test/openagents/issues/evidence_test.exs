@@ -15,6 +15,7 @@ defmodule OpenAgents.Issues.EvidenceTest do
 
   alias OpenAgents.Deployments.CheckResult
   alias OpenAgents.Forge.{Assignment, BuildReceipt, DeployReceipt, PushReceipt}
+  alias OpenAgents.Forge.ReceiptRepository
   alias OpenAgents.Issues
   alias OpenAgents.Issues.{ClosingReference, ClosingReferences, Evidence, EvidenceEntry}
   alias OpenAgents.Machines
@@ -327,6 +328,74 @@ defmodule OpenAgents.Issues.EvidenceTest do
     end
   end
 
+  describe "which repository a receipt names" do
+    # `forge_builds.repo` holds a repository *name*, and `repositories` is
+    # unique on `{namespace_id, name_key}` rather than on `name`. Before #181
+    # this receipt recorded no evidence at all: two repositories answered to
+    # the name, and attaching it to the wrong issue is worse than attaching it
+    # to none. The key settles it without a name lookup.
+    test "a receipt whose name two repositories answer to is still evidence", context do
+      %{repository: repository, issue: issue} = context
+      closing_reference(context, @sha)
+
+      _decoy =
+        repository_fixture(%{owner: "EvidenceDecoy", name: repository.name, visibility: "public"})
+
+      assert ReceiptRepository.resolve(repository.name) == nil
+
+      receipt = named_build_receipt(repository, repository.name, repository.id, @sha)
+
+      assert [entry] = Evidence.record_build(receipt)
+      assert entry.issue_id == issue.id
+      assert entry.receipt_id == receipt.id
+    end
+
+    # The refusal survives for a row the backfill could not settle. This is the
+    # honest half: a null key is "not settled", and the name behind it still
+    # answers for two repositories, so nothing is recorded.
+    test "a receipt with no key whose name is ambiguous records nothing", context do
+      %{repository: repository} = context
+      closing_reference(context, @sha)
+
+      _decoy =
+        repository_fixture(%{
+          owner: "EvidenceDecoy2",
+          name: repository.name,
+          visibility: "public"
+        })
+
+      receipt = named_build_receipt(repository, repository.name, nil, @sha)
+
+      assert Evidence.record_build(receipt) == []
+    end
+
+    test "a receipt naming a repository the forge does not track records nothing", context do
+      closing_reference(context, @sha)
+      receipt = named_build_receipt(context.repository, "gone-from-the-forge", nil, @sha)
+
+      assert Evidence.record_build(receipt) == []
+    end
+
+    # A repository whose name and storage key differ is the ordinary case:
+    # every repository created since storage keys became UUIDs is one. The
+    # sweep restricted itself to `receipt_repo_keys(storage_key)`, which does
+    # not contain the name a build receipt is actually written with, so the
+    # key is what finds it.
+    test "the sweep finds a receipt written under a name, not a storage key", context do
+      %{repository: repository, issue: issue, user: user} = context
+      refute repository.storage_key == repository.name
+
+      receipt = named_build_receipt(repository, repository.name, repository.id, @sha)
+      assignment = attempt(context, @sha, "completed")
+
+      assert Evidence.bind_attempt(assignment) != []
+
+      entries = Evidence.for_issue(issue)
+      assert Enum.any?(entries, &(&1.receipt_id == receipt.id and &1.family == "build"))
+      assert user
+    end
+  end
+
   describe "the edge is never a work record" do
     test "an edge stores no steps, no report, and no budget", _context do
       fields = EvidenceEntry.__schema__(:fields)
@@ -361,6 +430,18 @@ defmodule OpenAgents.Issues.EvidenceTest do
       closed: true,
       closed_by_user_id: user.id
     })
+    |> Repo.insert!()
+  end
+
+  defp named_build_receipt(_repository, repo, repository_id, sha) do
+    %BuildReceipt{}
+    |> BuildReceipt.start_changeset(%{
+      repo: repo,
+      repository_id: repository_id,
+      sha: sha,
+      target_id: Ecto.UUID.generate()
+    })
+    |> Ecto.Changeset.put_change(:status, "complete")
     |> Repo.insert!()
   end
 

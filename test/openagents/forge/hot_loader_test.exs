@@ -157,6 +157,11 @@ defmodule OpenAgents.Forge.HotLoaderTest do
 
     assert receipt.result == "live"
     assert receipt.repo == "openagents.com"
+
+    # #181: a deploy receipt written after the key exists names its repository,
+    # so `Changelog` and `Evidence` read a key rather than resolve a name.
+    assert receipt.repository_id == "00000000-0000-4000-8000-000000000001"
+
     assert receipt.target_id == target.id
     assert receipt.modules == [name]
     assert receipt.canary == "ok"
@@ -276,6 +281,11 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     refute Code.ensure_loaded?(mod)
     assert Repo.get!(Target, target.id).status == "failed"
     assert deploy_receipt(sha).result == "failed"
+
+    # #181: the failed-load path writes its own receipt, and it names the
+    # repository too. Dropping the key from `HotLoader.insert_receipt/9` turns
+    # this red.
+    assert deploy_receipt(sha).repository_id == "00000000-0000-4000-8000-000000000001"
 
     assert_receive {:forge_deploy, %{repo: "openagents.com", sha: ^sha, result: "failed"}}
   end

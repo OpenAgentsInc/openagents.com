@@ -18,6 +18,7 @@ defmodule OpenAgents.Forge.Targets do
   alias OpenAgents.Analytics
   alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.DeployReceipt
+  alias OpenAgents.Forge.ReceiptRepository
   alias OpenAgents.Forge.{Pushes, Target}
   alias OpenAgents.Repo
 
@@ -234,6 +235,7 @@ defmodule OpenAgents.Forge.Targets do
             receipt_attrs
             |> Map.put(:target_id, target.id)
             |> Map.put(:repo, target.repo)
+            |> Map.put(:repository_id, ReceiptRepository.resolve_id(target.repo))
             |> Map.put(:sha, target.sha)
             |> Map.put(:result, status)
 
@@ -340,6 +342,7 @@ defmodule OpenAgents.Forge.Targets do
               end),
             push_to_live_ms: relup.duration_ms,
             repo: target.repo,
+            repository_id: build.repository_id,
             result: relup.status,
             rollback_verified:
               relup.status == "failed" and
@@ -561,6 +564,7 @@ defmodule OpenAgents.Forge.Targets do
             node_results: rolling.node_results,
             nodes: Enum.map(rolling.expected_nodes, &"#{&1}=#{rolling.node_results[&1]}"),
             repo: target.repo,
+            repository_id: build.repository_id,
             result: rolling.status,
             rollback_verified:
               rolling.status == "failed" and rolling.recovery == "last_known_good_restored",

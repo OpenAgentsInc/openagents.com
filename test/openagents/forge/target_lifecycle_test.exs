@@ -2,7 +2,7 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
   use OpenAgents.DataCase, async: false
   import OpenAgents.AccountsFixtures
 
-  alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, Repos, Targets}
+  alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, ReceiptRepository, Repos, Targets}
 
   @rolling_nodes ["openagents@10.42.0.11", "openagents@10.42.0.12"]
   @rolling_digest "sha256:" <> String.duplicate("c", 64)
@@ -163,6 +163,32 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     assert Repo.get!(OpenAgents.Forge.Target, target.id).status == "deploying"
   end
 
+  test "a fleet commit names the repository its target's name settles to", %{sha: sha} do
+    {:ok, target} = Targets.promote("demo", sha, "operator:test")
+    {:ok, _building} = Targets.advance(target.id, "building")
+    {:ok, _built} = Targets.advance(target.id, "built")
+    {:ok, _deploying} = Targets.begin_deployment(target.id)
+
+    # Created after promotion: a repository answering to `demo` also changes
+    # what `Pushes.mirror_storage_key/1` returns, and promotion resolves the
+    # bare cache through it. The receipt key is resolved at settlement.
+    demo = repository_fixture(%{owner: "FleetDemoOrg", name: "demo"})
+    assert ReceiptRepository.resolve("demo").id == demo.id
+
+    deployment_id = Ecto.UUID.generate()
+
+    assert {:ok, %{receipt: receipt}} =
+             Targets.finish_deployment(
+               target.id,
+               "live",
+               %{"deployment_id" => deployment_id},
+               %{deployment_id: deployment_id, expected_nodes: [], nodes: [], node_results: %{}}
+             )
+
+    assert receipt.repo == "demo"
+    assert receipt.repository_id == demo.id
+  end
+
   test "fleet commit writes the live target and terminal receipt atomically", %{sha: sha} do
     {:ok, target} = Targets.promote("demo", sha, "operator:test")
     {:ok, _building} = Targets.advance(target.id, "building")
@@ -195,6 +221,14 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
 
     assert live.status == "live"
     assert receipt.result == "live"
+
+    # #181: `demo` is an allowlist name no repository on this forge answers to,
+    # so the receipt records a null key rather than a guess. A null here means
+    # "not settled", never "no repository".
+    assert receipt.repo == "demo"
+    assert receipt.repository_id == nil
+    assert OpenAgents.Forge.ReceiptRepository.resolve("demo") == nil
+
     assert receipt.deployment_id == deployment_id
     assert receipt.artifact_digest == digest
     assert receipt.manifest_digest == manifest_digest
@@ -206,10 +240,18 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     {:ok, _built} = Targets.advance(target.id, "built")
     {:ok, _rolling} = Targets.advance(target.id, "needs_rolling_replace")
 
+    repository = repository_fixture()
     artifact_digest = String.duplicate("a", 64)
     manifest = %{"classification" => "needs_rolling_replace", "source_sha" => sha}
 
-    insert_build_receipt!(target, manifest, artifact_digest)
+    insert_build_receipt!(
+      target,
+      manifest,
+      artifact_digest,
+      ["Elixir.OpenAgents.BuildInfo"],
+      repository.id
+    )
+
     authorize_rolling!(target, sha)
     observe_rolling!(target, sha)
 
@@ -228,6 +270,10 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
              "openagents@10.42.0.12" => "ready"
            }
 
+    # #181: a rolling-replacement receipt inherits the build's repository key
+    # rather than resolving the name a second time.
+    assert receipt.repository_id == repository.id
+
     assert Targets.live("demo").id == target.id
 
     assert {:error, {:invalid_transition, "live", "live"}} =
@@ -240,6 +286,7 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     {:ok, _built} = Targets.advance(target.id, "built")
     {:ok, _relup} = Targets.advance(target.id, "needs_rolling_replace")
 
+    repository = repository_fixture()
     build_digest = String.duplicate("a", 64)
     package_digest = String.duplicate("c", 64)
     package_manifest_digest = String.duplicate("d", 64)
@@ -247,7 +294,9 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     insert_build_receipt!(
       target,
       %{"classification" => "needs_rolling_replace", "source_sha" => sha},
-      build_digest
+      build_digest,
+      ["Elixir.OpenAgents.BuildInfo"],
+      repository.id
     )
 
     result =
@@ -265,6 +314,9 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
     assert receipt.result == "live"
     assert receipt.artifact_digest == package_digest
     assert receipt.manifest_digest == package_manifest_digest
+
+    # #181: a relup receipt inherits the build's repository key too.
+    assert receipt.repository_id == repository.id
     assert receipt.push_to_live_ms == 53_876
 
     assert receipt.node_results == %{
@@ -577,11 +629,13 @@ defmodule OpenAgents.Forge.TargetLifecycleTest do
          target,
          manifest,
          artifact_digest,
-         modules \\ ["Elixir.OpenAgents.BuildInfo"]
+         modules \\ ["Elixir.OpenAgents.BuildInfo"],
+         repository_id \\ nil
        ) do
     %BuildReceipt{}
     |> BuildReceipt.changeset(%{
       repo: target.repo,
+      repository_id: repository_id,
       sha: target.sha,
       target_id: target.id,
       status: "complete",

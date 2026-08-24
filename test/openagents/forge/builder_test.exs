@@ -5,6 +5,7 @@ defmodule OpenAgents.Forge.BuilderTest do
   alias OpenAgents.Forge.BuildExecutor.Sidecar
   alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.Builder
+  alias OpenAgents.Forge.ReceiptRepository
   alias OpenAgents.Forge.FakeBuildExecutor
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target
@@ -116,6 +117,12 @@ defmodule OpenAgents.Forge.BuilderTest do
       # Receipt row.
       receipt = Repo.get_by!(BuildReceipt, repo: "openagents.com", sha: sha)
       assert receipt.target_id == target.id
+
+      # #181: a receipt written after the key exists names its repository, so
+      # no reader has to resolve `repo` back to one. Removing `repository_id`
+      # from `Builder`'s start changeset turns this red.
+      assert receipt.repository_id == ReceiptRepository.resolve_id("openagents.com")
+      assert receipt.repository_id == "00000000-0000-4000-8000-000000000001"
       assert receipt.modules == [module]
       assert receipt.warnings == "warn: something minor"
       assert receipt.tests == nil

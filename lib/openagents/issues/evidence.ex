@@ -68,6 +68,7 @@ defmodule OpenAgents.Issues.Evidence do
   alias OpenAgents.Deployments.Request, as: DeploymentRequest
   alias OpenAgents.Deployments.Run, as: DeploymentRun
   alias OpenAgents.Forge.{Assignment, BuildReceipt, DeployReceipt, PushReceipt}
+  alias OpenAgents.Forge.ReceiptRepository
   alias OpenAgents.Issues.{ClosingReference, EvidenceEntry, Issue}
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
@@ -309,7 +310,7 @@ defmodule OpenAgents.Issues.Evidence do
   defp receipt_facts("build", id) do
     case Repo.get(BuildReceipt, id) do
       %BuildReceipt{} = receipt ->
-        with %Repository{} = repository <- repository_for(receipt.repo) do
+        with %Repository{} = repository <- repository_for(receipt) do
           {:ok,
            %{
              repository: repository,
@@ -362,7 +363,7 @@ defmodule OpenAgents.Issues.Evidence do
   end
 
   defp forge_deployment_facts(%DeployReceipt{} = receipt) do
-    case repository_for(receipt.repo) do
+    case repository_for(receipt) do
       %Repository{} = repository ->
         {:ok,
          %{
@@ -513,47 +514,46 @@ defmodule OpenAgents.Issues.Evidence do
     )
   end
 
-  # `forge_builds` and `forge_deploys` key on `repo` as a string rather than a
-  # repository foreign key, so this join inherits that ambiguity. It is resolved
-  # only when exactly one repository answers to the name; two candidates record
-  # nothing rather than guessing which issue the receipt belongs to.
-  defp repository_for(repo) when is_binary(repo) do
-    keys = OpenAgents.Forge.Pushes.receipt_repo_keys(repo)
-
-    Repository
-    |> where([repository], repository.storage_key in ^keys or repository.name in ^keys)
-    |> limit(2)
-    |> Repo.all()
-    |> case do
-      [%Repository{} = repository] -> repository
-      _ambiguous_or_absent -> nil
-    end
+  # A receipt written since #181 carries `repository_id`, so the evidence chain
+  # no longer depends on a name resolving to exactly one repository. The string
+  # is read only for a row the backfill could not settle, and there it keeps the
+  # old refusal: two candidates record nothing rather than guessing which issue
+  # the receipt belongs to.
+  defp repository_for(%{repository_id: repository_id}) when is_binary(repository_id) do
+    Repo.get(Repository, repository_id)
   end
 
-  defp repository_for(_repo), do: nil
+  defp repository_for(%{repo: repo}), do: repository_by_name(repo)
+
+  defp repository_by_name(repo) when is_binary(repo) do
+    ReceiptRepository.resolve(repo)
+  end
+
+  defp repository_by_name(_repo), do: nil
 
   defp sweep(%Repository{} = repository, commit_sha, %Assignment{} = assignment) do
-    # The receipt tables key on `repo` as a string. Restricting the sweep to
-    # this repository's own keys keeps a receipt for another repository's
-    # identical sha out of the answer before the repository resolution runs.
+    # A receipt that names this repository is matched by its key. The string is
+    # the fallback for a row the backfill could not settle, and restricting it
+    # to this repository's own keys keeps a receipt for another repository's
+    # identical sha out of the answer.
     keys = OpenAgents.Forge.Pushes.receipt_repo_keys(repository.storage_key)
 
     builds =
-      Repo.all(
-        from build in BuildReceipt,
-          where: build.sha == ^commit_sha and build.repo in ^keys,
-          select: build.id,
-          limit: @claimant_limit
-      )
+      BuildReceipt
+      |> ReceiptRepository.scope(repository, keys)
+      |> where([build], build.sha == ^commit_sha)
+      |> select([build], build.id)
+      |> limit(@claimant_limit)
+      |> Repo.all()
       |> Enum.map(&%{family: "build", receipt_id: &1})
 
     deploys =
-      Repo.all(
-        from deploy in DeployReceipt,
-          where: deploy.sha == ^commit_sha and deploy.repo in ^keys,
-          select: deploy.id,
-          limit: @claimant_limit
-      )
+      DeployReceipt
+      |> ReceiptRepository.scope(repository, keys)
+      |> where([deploy], deploy.sha == ^commit_sha)
+      |> select([deploy], deploy.id)
+      |> limit(@claimant_limit)
+      |> Repo.all()
       |> Enum.map(&%{family: "deployment", receipt_id: &1})
 
     checks =

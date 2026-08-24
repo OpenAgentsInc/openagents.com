@@ -3609,6 +3609,14 @@ storage alone. A row written before the column existed carries no link and is
 not repaired in place, because a link the operator writes over their own store
 is not evidence.
 
+The direction is also what keeps a column *out* of this table. `ISSUE-003` gave
+`forge_builds` and `forge_deploys` a `repository_id` because their `repo` string
+is a repository name two repositories can share. `forge_pushes.repo` is a
+storage key, which is unique, so it already names exactly one repository — and a
+key only PostgreSQL could produce would not survive `reconcile_receipts/1`,
+which rebuilds this table from the WAL alone. The absence is the invariant
+holding, not an omission.
+
 Two operational facts bound the claim. `:forge_mirror_urls` is empty in
 `config/config.exs` and set by no environment, so no mirror runs today and
 GitHub holds whatever was last pushed to it directly, which is the trade
@@ -4044,6 +4052,28 @@ deployment, a cancelled attempt, and a superseded run each keep their edge with
 the receipt's own terminal word in `result`. An issue's history is what
 happened, not what worked.
 
+**A receipt names its repository, and a name it cannot settle stays unsettled.**
+`forge_builds.repo` and `forge_deploys.repo` hold `Target.repo`, a repository
+*name* or an `owner/name` path, and `repositories` is unique on
+`{namespace_id, name_key}` rather than on `name` — so one string can answer for
+two repositories, and #148 recorded no evidence at all when it did. Both tables
+carry `repository_id` now (#181): every receipt written since names its
+repository, and the evidence chain reads that key rather than a name. The
+string survives as the fallback for the rows the backfill could not settle, and
+it is read only for those rows, so a shared name can no longer pull one
+repository's receipts into another's answer. The refusal survives where it
+still applies: an unsettled name resolves to nothing, and nothing resolves to
+no evidence rather than to a guess. A null key means "not settled", never "no
+repository".
+
+`forge_pushes` deliberately has no such key. Its `repo` is
+`Repository.storage_key`, which carries a unique index, so a push receipt
+already names exactly one repository — and `EXIT-003` requires every column
+there to be re-derivable from the WAL by
+`OpenAgents.Forge.Pushes.reconcile_receipts/1`. A key only PostgreSQL can
+produce would make the database a second opinion about a record the WAL alone
+decides, which is the thing `EXIT-002` and `EXIT-005` exist to prevent.
+
 **The two deployment planes stay distinct.** An issue in this repository is
 evidenced by `forge_deploys` on the `forge` plane, whose one environment is the
 fleet. An issue in a tenant repository is evidenced by `deployment_runs` on the
@@ -4063,7 +4093,9 @@ that produced it. Missing evidence is a smaller failure than a lost receipt.
 
 Evidence: `OpenAgents.Issues.Evidence`, `OpenAgents.Issues.EvidenceEntry`,
 `OpenAgents.Issues.ClosingReferences`, `OpenAgents.Forge.Assignments`,
-`test/openagents/issues/evidence_test.exs`, and
+`OpenAgents.Forge.ReceiptRepository`,
+`test/openagents/issues/evidence_test.exs`,
+`test/openagents/forge/receipt_repository_test.exs`, and
 `test/openagents_web/controllers/issue_controller_test.exs`.
 
 ### ISSUE-004 — Agent work on an issue starts through one admission

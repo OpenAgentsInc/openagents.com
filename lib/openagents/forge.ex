@@ -15,7 +15,7 @@ defmodule OpenAgents.Forge do
 
   import Ecto.Query
 
-  alias OpenAgents.Forge.{Pushes, PushReceipt}
+  alias OpenAgents.Forge.{Pushes, PushReceipt, ReceiptRepository}
   alias OpenAgents.Repo
 
   @doc "Whether the forge endpoint is enabled (default true; env-gated in prod)."
@@ -34,19 +34,28 @@ defmodule OpenAgents.Forge do
     |> Repo.all()
   end
 
-  @doc "Recent deploy receipts for one repo, newest first, bounded."
+  @doc """
+  Recent deploy receipts for one repo, newest first, bounded.
+
+  A receipt that names its repository is matched by that key; `repo` is read
+  only for a row the #181 backfill could not settle.
+  """
   def recent_deploys(repo, limit \\ 20) do
     OpenAgents.Forge.DeployReceipt
-    |> where([d], d.repo == ^repo)
+    |> ReceiptRepository.scope(ReceiptRepository.resolve(repo), [repo])
     |> order_by([d], desc: d.inserted_at)
     |> limit(^limit)
     |> Repo.all()
   end
 
-  @doc "Recent build receipts for one repo, newest first, bounded."
+  @doc """
+  Recent build receipts for one repo, newest first, bounded.
+
+  Keyed the same way `recent_deploys/2` is.
+  """
   def recent_builds(repo, limit \\ 20) do
     OpenAgents.Forge.BuildReceipt
-    |> where([b], b.repo == ^repo)
+    |> ReceiptRepository.scope(ReceiptRepository.resolve(repo), [repo])
     |> order_by([b], desc: b.inserted_at)
     |> limit(^limit)
     |> Repo.all()

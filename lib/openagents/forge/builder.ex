@@ -18,6 +18,7 @@ defmodule OpenAgents.Forge.Builder do
   alias OpenAgents.Forge.BuildArtifact
   alias OpenAgents.Forge.BuildExecutor
   alias OpenAgents.Forge.BuildProtocol
+  alias OpenAgents.Forge.ReceiptRepository
   alias OpenAgents.Forge.BuildReceipt
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Target
@@ -95,6 +96,9 @@ defmodule OpenAgents.Forge.Builder do
       %BuildReceipt{id: build_id}
       |> BuildReceipt.start_changeset(%{
         repo: target.repo,
+        # Resolved once, here, where an unsettled name records nothing rather
+        # than a guess. Every read afterwards uses the key.
+        repository_id: ReceiptRepository.resolve_id(target.repo),
         sha: target.sha,
         target_id: target.id,
         baseline_manifest: baseline_manifest

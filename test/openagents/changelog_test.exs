@@ -11,7 +11,8 @@ defmodule OpenAgents.ChangelogTest do
   use OpenAgents.DataCase, async: false
   alias OpenAgents.Changelog
   alias OpenAgents.Changelog.{Backfill, Entry}
-  alias OpenAgents.Forge.{DeployReceipt, PushReceipt}
+  alias OpenAgents.Forge
+  alias OpenAgents.Forge.{DeployReceipt, PushReceipt, ReceiptRepository}
   alias OpenAgents.Transparency.ArtifactLink
 
   setup do
@@ -210,6 +211,51 @@ defmodule OpenAgents.ChangelogTest do
       assert row.summary == "Short-sha entry from backfill lane"
       assert row.deploy.push_to_live_ms == 5_540
       assert row.receipt_ids.deploy == deploy.id
+    end
+  end
+
+  describe "which repository a receipt belongs to" do
+    # `forge_builds.repo` and `forge_deploys.repo` hold a repository *name*, and
+    # `Targets.promote/4` admits both the bare name and the `owner/name` path.
+    # Before #181 the changelog matched the string exactly, so a receipt written
+    # under one form was invisible to a projection asking for the other, even
+    # though both settle to the same repository. The key settles it.
+    test "a receipt written under the owner/name path reaches the bare-name projection" do
+      sha = full_sha("feed0181")
+      {:ok, _entry} = Changelog.record(entry_attrs(%{sha: sha, summary: "Keyed receipt"}))
+
+      repository = ReceiptRepository.resolve("openagents.com")
+      assert repository.id == "00000000-0000-4000-8000-000000000001"
+
+      deploy =
+        insert_deploy!(%{
+          repo: "OpenAgentsInc/openagents.com",
+          repository_id: repository.id,
+          sha: sha
+        })
+
+      assert {:ok, payload} = Changelog.projection("openagents.com", refresh: true)
+      assert [entry] = payload["entries"]
+      assert entry["receipt_ids"]["deploy"] == deploy.id
+
+      # `OpenAgents.Forge.receipts_for/2` reads the same way.
+      assert Enum.any?(Forge.receipts_for("openagents.com", sha), fn
+               {:deploys, deploys} -> Enum.any?(deploys, &(&1.id == deploy.id))
+               _other -> false
+             end)
+    end
+
+    # A receipt whose name the backfill could not settle still reads. It keeps
+    # a null key, and the string is what finds it.
+    test "a receipt with no key still reaches the projection by its string" do
+      sha = full_sha("feed0182")
+      {:ok, _entry} = Changelog.record(entry_attrs(%{sha: sha, summary: "Unkeyed receipt"}))
+
+      deploy = insert_deploy!(%{repo: "openagents.com", repository_id: nil, sha: sha})
+
+      assert {:ok, payload} = Changelog.projection("openagents.com", refresh: true)
+      assert [entry] = payload["entries"]
+      assert entry["receipt_ids"]["deploy"] == deploy.id
     end
   end
 

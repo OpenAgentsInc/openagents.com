@@ -653,16 +653,20 @@ to a reader who can already read the issue, and to no one else.
   `forge_builds` and `forge_deploys`. A commit's age therefore never changes
   the answer. Evidence written before this change does not exist, so there is
   no backfill to size; the earliest edge is the first receipt after deployment.
-- **Should the receipt tables gain a repository foreign key? Still open, and
-  stage 4 refuses rather than guesses.** `forge_pushes`, `forge_builds`, and
-  `forge_deploys` all key on `repo` as a string. `Evidence` resolves that
-  string through `Pushes.receipt_repo_keys/1`
-  (`lib/openagents/forge/pushes.ex:295`) and records an edge only when exactly
-  one repository answers to the name; two candidates record nothing rather than
-  attaching a receipt to the wrong issue. That is safe but lossy, and a
-  repository foreign key on the three receipt tables would remove the case
-  entirely. `#181` carries that work; settle the name question first with
-  `docs/2026-08-21-repository-storage-architecture-audit.md`.
+- **Should the receipt tables gain a repository foreign key? Settled by `#181`,
+  and the answer is two tables, not three.** The three `repo` columns do not
+  hold the same kind of value. `forge_pushes.repo` is `Repository.storage_key`,
+  which carries a unique index, so a push receipt already names exactly one
+  repository; it gained no key, because `EXIT-003` requires every column there
+  to be re-derivable from the WAL and a key only PostgreSQL can produce would
+  make the database a second opinion. `forge_builds.repo` and
+  `forge_deploys.repo` hold `Target.repo` — a repository name, or an
+  `owner/name` path — and `repositories` is unique on `{namespace_id,
+  name_key}` rather than on `name`, so one string can answer for two
+  repositories. Both gained a nullable `repository_id`, backfilled where the
+  name settled to exactly one repository. Stage 4's refusal survives where it
+  still applies: an unsettled name resolves to nothing, and nothing resolves to
+  no evidence rather than to a guess.
 - **Does the tenant deployment plane or the forge deployment plane own an
   issue's deployment evidence? Settled: both, and the row says which.** Stage 4
   records `plane` on every edge — `forge` for a `forge_deploys` receipt, whose

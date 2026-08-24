@@ -16,7 +16,7 @@ defmodule OpenAgents.Changelog do
   import Ecto.Query
 
   alias OpenAgents.Changelog.Entry
-  alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, PushReceipt, Visibility}
+  alias OpenAgents.Forge.{BuildReceipt, DeployReceipt, PushReceipt, ReceiptRepository, Visibility}
   alias OpenAgents.Repo
   alias OpenAgents.Transparency
   alias OpenAgents.Transparency.ArtifactLink
@@ -212,7 +212,13 @@ defmodule OpenAgents.Changelog do
     |> Repo.all()
   end
 
+  # `forge_pushes.repo` is `Repository.storage_key`, which is unique, so a push
+  # receipt is already keyed. Build and deploy receipts hold a repository name,
+  # so they match on `repository_id` where they have one and on the name only
+  # where the #181 backfill could not settle them.
   defp receipt_index(repo) do
+    repository = ReceiptRepository.resolve(repo)
+
     %{
       pushes:
         PushReceipt
@@ -222,13 +228,13 @@ defmodule OpenAgents.Changelog do
         |> Repo.all(),
       builds:
         BuildReceipt
-        |> where([r], r.repo == ^repo)
+        |> ReceiptRepository.scope(repository, [repo])
         |> order_by([r], desc: r.inserted_at)
         |> limit(@receipt_scan)
         |> Repo.all(),
       deploys:
         DeployReceipt
-        |> where([r], r.repo == ^repo)
+        |> ReceiptRepository.scope(repository, [repo])
         |> order_by([r], desc: r.inserted_at)
         |> limit(@receipt_scan)
         |> Repo.all()

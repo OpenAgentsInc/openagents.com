@@ -15,6 +15,7 @@ defmodule OpenAgents.Forge.HotLoader do
   alias OpenAgents.Forge.BuildArtifact
   alias OpenAgents.Forge.Deployment
   alias OpenAgents.Forge.DeploymentLane
+  alias OpenAgents.Forge.ReceiptRepository
   alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Forge.{Pushes, PushReceipt}
   alias OpenAgents.Forge.Targets
@@ -342,6 +343,7 @@ defmodule OpenAgents.Forge.HotLoader do
     %DeployReceipt{}
     |> DeployReceipt.changeset(%{
       repo: repo,
+      repository_id: ReceiptRepository.resolve_id(repo),
       sha: sha,
       target_id: target_id,
       modules: modules,

@@ -15,6 +15,7 @@ defmodule OpenAgents.Forge.BuildReceipt do
 
   schema "forge_builds" do
     field :repo, :string
+    field :repository_id, :binary_id
     field :sha, :string
     field :target_id, :binary_id
     field :status, :string, default: "running"
@@ -36,10 +37,11 @@ defmodule OpenAgents.Forge.BuildReceipt do
   @doc "Create the durable `running` row before handing work to the sidecar."
   def start_changeset(receipt, attrs) do
     receipt
-    |> cast(attrs, [:repo, :sha, :target_id, :baseline_manifest])
+    |> cast(attrs, [:repo, :repository_id, :sha, :target_id, :baseline_manifest])
     |> put_change(:status, "running")
     |> validate_required([:repo, :sha, :target_id, :status])
     |> validate_format(:sha, ~r/^[0-9a-f]{40}$/)
+    |> foreign_key_constraint(:repository_id)
     |> unique_constraint(:target_id, name: :forge_builds_one_running_attempt_per_target)
   end
 
@@ -83,6 +85,7 @@ defmodule OpenAgents.Forge.BuildReceipt do
     receipt
     |> cast(attrs, [
       :repo,
+      :repository_id,
       :sha,
       :target_id,
       :status,

@@ -19,6 +19,14 @@ candidate:
   configuration, migration, module-deletion, or otherwise unclassified
   changes.
 
+`OpenAgents.Forge.DeploymentLane.classify/2` makes that choice, and it reads
+the fleet's relup topology verdict before choosing rather than discovering it
+one node at a time. A fleet that cannot support relup is classified onto
+rolling replacement with the verdict as its reason, so this runbook's relup
+lane is reached only by a fleet that could survive it. `INVARIANTS.md`,
+RELEASE-009 states the classification; RELEASE-008 states the preinstall
+refusal that remains underneath it.
+
 Production relups and rolling replacements require explicit operator authority.
 For a rolling replacement, also require an immutable image digest, two
 remaining healthy nodes, and exact revision checks after each replacement.
@@ -148,6 +156,12 @@ express this fleet's topology, so the relup lane is unavailable and the
 candidate belongs on the rolling replacement lane below. The refused node keeps
 its previous permanent release, nothing was staged or unpacked, and there is no
 reverse installation to attempt.
+
+Reaching this refusal means the classifier was bypassed.
+`OpenAgents.Forge.DeploymentLane.fleet_topology/1` asks every member the same
+question first, so a candidate on an incompatible fleet is routed to rolling
+replacement before a lane is chosen. The refusal stays as the backstop for a
+fleet whose topology changed between classification and installation.
 
 To make the relup lane available again, the offending application has to start
 an OTP `supervisor` as its top process. Do not weaken the preflight instead.

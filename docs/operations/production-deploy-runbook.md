@@ -162,12 +162,48 @@ paths call `OpenAgents.Forge.Promotion`, so they apply one policy and write
 one kind of receipt. The target moves `promoted → building → built`, and the
 classifier decides the deployment route:
 
+`OpenAgents.Forge.DeploymentLane.classify/2` chooses the lane, from three
+inputs and before any node is touched: the build manifest's structural
+classification, the hot-load allowlist, and the fleet's own relup topology
+verdict, read from every member by `fleet_topology/1`.
+
 - **Direct deploy**: the diff touches only allowlisted BEAM modules. The
   forge hot loop handles it; watch the target go `deploying → live`.
 - **`needs_rolling_replace`**: anything structural — `config/*`, migrations,
   dependencies, assets, ERTS, or release-private files. Continue below.
+- **Relup**: an application transition between two concrete `X.Y.Z` versions,
+  on a fleet whose topology supports it. Not reachable today, and the
+  classification says which of the two conditions failed. See below.
 
-Keep the classification receipt.
+Keep the classification receipt. On a `needs_rolling_replace` target the
+`details` map carries `reasons` and the `topology` verdict the lane was chosen
+against:
+
+```sh
+openagents api admin/forge/targets/$TARGET_ID
+```
+
+The verdict names counts of fleet members, never their names, and each
+application whose top process OTP release handling cannot inspect. Two reasons
+are worth reading directly:
+
+- `topology_incompatible:libring:HashRing.Supervisor` — the fleet cannot take
+  the relup lane. `HashRing.App.start/2` returns a `DynamicSupervisor`, so
+  `:release_handler.install_release/1` cannot find that application's top
+  supervisor. The candidate is classified onto rolling replacement rather than
+  entering the relup lane and refusing on its first step. `INVARIANTS.md`,
+  RELEASE-008 explains the refusal that remains underneath as the backstop, and
+  RELEASE-009 the classification in front of it.
+- `relup_lane_unadmitted` — the fleet could have taken the lane, but the hot
+  loop does not admit it. RELEASE-005 keeps the relup workers disabled until
+  isolated staging proves their provider and topology, and
+  `OpenAgents.Forge.RelupDeployment.run/2` still has no production caller.
+
+The verdict is read from the fleet at classification time rather than published
+by the release gate, because it describes the running fleet and not the
+candidate bytes: the gate runs on a builder that is not the fleet, and a node
+can restart into a different application set in between. The gate keeps proving
+the RELEASE-008 refusal in its `relup_topology` stage.
 
 ### Promote without a browser
 

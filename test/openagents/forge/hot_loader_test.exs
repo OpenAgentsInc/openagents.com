@@ -241,7 +241,14 @@ defmodule OpenAgents.Forge.HotLoaderTest do
     receipt = deploy_receipt(sha)
     assert receipt.result == "needs_rolling_replace"
 
-    assert Repo.get!(Target, target.id).details["reasons"] == ["off_allowlist:#{off_name}"]
+    details = Repo.get!(Target, target.id).details
+    assert details["reasons"] == ["off_allowlist:#{off_name}"]
+
+    # RELEASE-009: the lane was chosen in front, and the target carries the
+    # fleet topology verdict it was chosen against.
+    assert details["topology"]["schema"] == "openagents.deployment-lane.topology.v1"
+    assert details["topology"]["nodes"] >= 1
+    assert details["topology"]["unreadable"] == 0
 
     assert_receive {:forge_deploy,
                     %{repo: "openagents.com", sha: ^sha, result: "needs_rolling_replace"}}

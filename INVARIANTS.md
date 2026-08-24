@@ -2657,6 +2657,57 @@ Evidence: `OpenAgents.Forge.RelupTopology`, `OpenAgents.Forge.RelupNode`,
 `test/openagents/forge/relup_deployment_test.exs`, `ops/ci/gate.sh`, and
 `docs/operations/release-deployment-fallbacks.md`.
 
+### RELEASE-009 — A candidate's lane is chosen from the fleet's topology verdict
+
+Status: Current
+
+A deployment lane is a decision taken in front, not the residue of a failure.
+Before any node is touched, `OpenAgents.Forge.DeploymentLane.classify/2` folds
+three inputs into one lane: the build manifest's structural classification, the
+hot-load allowlist, and the fleet's own relup topology verdict read from every
+member by `fleet_topology/1`. The chosen lane, the reasons that chose it, and
+the verdict it was chosen against travel together, and the rolling target
+carries all three.
+
+The verdict is a property of the running fleet, not of the candidate bytes, so
+it is a runtime read rather than a gate artifact. The release gate runs on a
+builder that is not the fleet, and a fleet node can restart into a different
+application set between the gate and the deployment, so the only reading true
+at the moment of choosing is the one taken then. The gate keeps proving the
+RELEASE-008 refusal in its `relup_topology` stage.
+
+The read fails closed in every direction. A member that cannot be reached, that
+raises, or that answers with anything but a report counts as unreadable; an
+empty member list is unread rather than unanimous; and an absent verdict is
+treated as unsupported. Only a fleet where every member answered and no member
+named an application OTP release handling cannot inspect supports relup.
+
+A fleet that cannot support relup therefore never enters the relup lane. The
+candidate is classified onto digest-addressed rolling replacement with the
+verdict recorded as its reason — `topology_incompatible:libring:HashRing.Supervisor`
+for the concrete case RELEASE-008 describes — instead of entering the lane and
+refusing on its first preinstall step. That refusal is unchanged and remains
+the backstop: this invariant decides, and RELEASE-008 still guards.
+
+The relup lane also requires its caller to admit it, which
+`OpenAgents.Forge.HotLoader` does not. RELEASE-005 keeps the relup workers
+disabled until isolated staging proves their provider and topology, and
+`OpenAgents.Forge.RelupDeployment.run/2` still has no production caller, so the
+coordinator sees only the direct and rolling lanes and a relup-shaped candidate
+records `relup_lane_unadmitted`. Neither condition is an operator flag: the
+verdict comes from the fleet and the admission is a named argument.
+
+The verdict is content-free. It carries a count of fleet members and a count of
+unreadable ones, never their names, alongside the bounded
+application-to-supervisor entries `OpenAgents.Forge.RelupTopology` already
+produces.
+
+Evidence: `OpenAgents.Forge.DeploymentLane`, `OpenAgents.Forge.HotLoader`,
+`OpenAgents.Forge.RelupTopology`,
+`test/openagents/forge/deployment_lane_test.exs`,
+`test/openagents/forge/hot_loader_test.exs`, and
+`docs/operations/production-deploy-runbook.md`.
+
 ### STATUS-001 — The status page publishes one bounded, content-free projection
 
 Status: Current
@@ -3668,6 +3719,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-006 | `test/openagents/forge/rolling_boot_convergence_test.exs`, `test/openagents/forge/rolling_replacement_test.exs`, `test/openagents/forge/target_lifecycle_test.exs`, `test/openagents/forge/boot_converge_test.exs` |
 | RELEASE-007 | `test/openagents/release/image_layer_cache_test.exs`, `ops/ci/contracts.sh` |
 | RELEASE-008 | `test/openagents/forge/relup_topology_test.exs`, `test/openagents/forge/relup_deployment_test.exs`, `ops/ci/gate.sh` |
+| RELEASE-009 | `test/openagents/forge/deployment_lane_test.exs`, `test/openagents/forge/hot_loader_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |

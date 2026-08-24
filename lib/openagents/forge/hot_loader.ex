@@ -14,6 +14,7 @@ defmodule OpenAgents.Forge.HotLoader do
 
   alias OpenAgents.Forge.BuildArtifact
   alias OpenAgents.Forge.Deployment
+  alias OpenAgents.Forge.DeploymentLane
   alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Forge.{Pushes, PushReceipt}
   alias OpenAgents.Forge.Targets
@@ -105,18 +106,24 @@ defmodule OpenAgents.Forge.HotLoader do
     :refused -> :ok
   end
 
+  # The lane is chosen once, in front, from the candidate's manifest and the
+  # fleet's own relup topology verdict, before any node is touched. The relup
+  # lane is not admitted here: RELEASE-005 keeps its workers disabled until
+  # isolated staging proves their provider and topology, so this coordinator
+  # sees only the direct and rolling lanes. RELEASE-008's preinstall refusal
+  # remains the backstop underneath.
   defp route_verified(build, verified, artifact_bytes) do
     allowlist = Application.get_env(:openagents, :forge_hot_load_allowlist, @default_allowlist)
     offending = Enum.reject(verified.modules, &allowlisted?(&1, allowlist))
 
-    cond do
-      verified.manifest["classification"] != "direct_candidate" ->
-        route_rolling(build, verified.manifest["structural_reasons"])
+    lane =
+      DeploymentLane.classify(verified.manifest,
+        offending: offending,
+        topology: DeploymentLane.fleet_topology()
+      )
 
-      offending != [] ->
-        route_rolling(build, Enum.map(offending, &"off_allowlist:#{&1}"))
-
-      true ->
+    case lane do
+      %{"lane" => "direct"} ->
         build =
           build
           |> Map.put(:artifact_digest, verified.digest)
@@ -124,13 +131,21 @@ defmodule OpenAgents.Forge.HotLoader do
           |> Map.put(:manifest, verified.manifest)
 
         deploy(build, verified, artifact_bytes)
+
+      %{"reasons" => reasons, "topology" => topology} ->
+        route_rolling(build, reasons, topology)
     end
   end
 
-  defp route_rolling(%{repo: repo, sha: sha, target_id: target_id, modules: modules}, reasons) do
+  defp route_rolling(
+         %{repo: repo, sha: sha, target_id: target_id, modules: modules},
+         reasons,
+         topology
+       ) do
     case advance(target_id, "needs_rolling_replace", %{
            "modules" => modules,
-           "reasons" => reasons
+           "reasons" => reasons,
+           "topology" => topology
          }) do
       :ok ->
         # Classification only — no deployment ran, so no deployment_type.

@@ -25,6 +25,9 @@ defmodule OpenAgents.Forge.Verification do
     push produces this.
   * `object_missing` — the repository cannot produce an object the WAL says a
     push introduced.
+  * `object_unreachable` — the repository produces every ref tip but cannot
+    produce something an advertised ref reaches, so a clone aborts partway
+    through the walk even though every tip resolves.
   * `chain_link_mismatch` — an entry's recorded link is not the link its own
     contents and its predecessor's link produce (`OpenAgents.Forge.WAL.chain_link/2`).
   * `chain_link_missing` — an entry carries no link although an earlier entry
@@ -99,6 +102,7 @@ defmodule OpenAgents.Forge.Verification do
             entry_findings(storage_key, entries) ++
             ref_findings(storage_key, index) ++
             object_findings(storage_key, entries) ++
+            reachability_findings(storage_key, index) ++
             chain_findings(entries) ++
             anchor_findings(entries, normalize_anchor(opts[:anchor]))
 
@@ -253,6 +257,64 @@ defmodule OpenAgents.Forge.Verification do
     |> Enum.map(fn {name, sha} ->
       finding("object_missing", %{"ref" => name, "object" => sha})
     end)
+  end
+
+  ## Every object a clone walks into is present
+
+  # `object_missing` checks the ref tips an accepted push named. A clone does
+  # not stop at the tips: it walks each one into its ancestors, and git
+  # `upload-pack` aborts the entire transfer on the first object it cannot
+  # read. A repository can therefore hold every tip the WAL recorded and still
+  # be impossible to clone, which is what #179 was.
+  #
+  # The population is the exportable ref set — what a clone actually asks for
+  # — and it is walked by git rather than enumerated here, so an object nobody
+  # thought to name is covered by the same walk that would fail a clone.
+  # A shallow graft the repository legitimately carries stops the walk at its
+  # boundary, so a grafted repository is clean here: it is servable, and
+  # servable is the claim.
+  defp reachability_findings(storage_key, index) do
+    path = Repos.bare_path(storage_key)
+
+    tips =
+      index
+      |> WAL.refs()
+      |> exportable_refs()
+      |> Map.values()
+      |> Enum.uniq()
+      |> Enum.sort()
+      |> Enum.filter(fn sha -> match?({_output, 0}, Repos.git(path, ["cat-file", "-e", sha])) end)
+
+    if tips == [] do
+      []
+    else
+      unreachable_findings(path, tips)
+    end
+  end
+
+  defp unreachable_findings(path, tips) do
+    # Discarded output in the common case: a repository whose history walks
+    # is the answer, and its object list is not worth carrying.
+    case Repos.git(path, ["rev-list", "--objects", "--quiet"] ++ tips) do
+      {_output, 0} -> []
+      {_output, _status} -> walk_failure_findings(path, tips)
+    end
+  end
+
+  defp walk_failure_findings(path, tips) do
+    case Repos.git(path, ["rev-list", "--missing=print"] ++ tips) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.filter(&String.starts_with?(&1, "?"))
+        |> Enum.map(&(&1 |> binary_part(1, byte_size(&1) - 1) |> String.split(" ") |> hd()))
+        |> Enum.uniq()
+        |> Enum.sort()
+        |> Enum.map(&finding("object_unreachable", %{"object" => &1}))
+
+      {_output, _status} ->
+        [finding("object_unreachable", %{"reason" => "history walk failed"})]
+    end
   end
 
   ## Each entry commits to the entry before it

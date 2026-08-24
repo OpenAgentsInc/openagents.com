@@ -127,7 +127,103 @@ defmodule OpenAgents.Forge.Sync do
     path = Repos.bare_path(repo)
     converge_refs(path, WAL.refs(index))
     Repos.set_default_branch_at!(path, default_branch)
+    ensure_servable_graft(repo, path, index)
     :ok
+  end
+
+  # A clone walks from every ref into its ancestors, so a projection holding a
+  # commit whose parents it does not hold cannot be cloned at all: git
+  # `upload-pack` aborts the whole transfer rather than serving a truncated
+  # history. The `shallow` file is what stops that walk, and it is the only
+  # thing that does.
+  #
+  # A WAL entry states a boundary only when it carries a `shallow` key
+  # (`REPOSITORY-003`). Entries written before that key existed carry none, so
+  # a repository seeded from a shallow fetch — this forge's own among them —
+  # projects onto disk ungrafted and refuses every full clone while every ref
+  # tip still resolves. Every tip-shaped check therefore stays green, which is
+  # how #179 survived to be found by someone cloning.
+  #
+  # The boundary is derived from the objects the projection actually holds
+  # rather than only from what an entry remembered to record: a commit whose
+  # parent is absent *is* a boundary, whatever the log says.
+  #
+  # Derived boundaries are added to the recorded ones rather than replacing
+  # them, and that union is defensive rather than proven. A recorded boundary
+  # is by definition a commit whose parent is absent, so the derivation finds
+  # every recorded boundary any ref reaches, and removing the union reddens
+  # nothing. It is kept for the boundary no ref reaches — which git prunes on
+  # its own — so nothing here claims more than the derivation proves.
+  #
+  # Gated on the applied sequence so a current cache pays nothing. A cache
+  # whose marker is absent is checked once, which is what repairs a projection
+  # damaged before this existed.
+  defp ensure_servable_graft(repo, path, index) do
+    seq = WAL.next_seq(index) - 1
+
+    if Repos.graft_seq_at(path) == seq do
+      :ok
+    else
+      repair_graft(repo, path)
+      Repos.record_graft_seq_at!(path, seq)
+    end
+  end
+
+  defp repair_graft(repo, path) do
+    unless servable?(path) do
+      case derived_boundaries(path) do
+        [] ->
+          # Unwalkable and no boundary derivable: the repository is missing
+          # objects a graft cannot excuse. Left alone rather than papered
+          # over, and reported by `OpenAgents.Forge.Verification`.
+          Logger.warning("forge_sync_graft_underivable repo=#{repo}")
+
+        derived ->
+          boundaries = Enum.sort(Enum.uniq(recorded_boundaries(path) ++ derived))
+          Logger.warning("forge_sync_graft_repaired repo=#{repo} count=#{length(boundaries)}")
+          write_shallow_boundaries(path, boundaries)
+      end
+    end
+  end
+
+  # The same walk `upload-pack` performs, with its output discarded: `--quiet`
+  # keeps a large repository's object list out of the BEAM while still failing
+  # on the first object the walk cannot read.
+  defp servable?(path) do
+    match?({_output, 0}, Repos.git(path, ["rev-list", "--objects", "--quiet", "--all"]))
+  end
+
+  # `--missing=print` reports an unreadable object as `?<oid>` instead of
+  # aborting, so one walk yields both the missing objects and the parent lists
+  # naming them. A commit with a missing parent is a boundary.
+  defp derived_boundaries(path) do
+    case Repos.git(path, ["rev-list", "--all", "--parents", "--missing=print"]) do
+      {output, 0} -> boundaries_from(output)
+      {_output, _status} -> []
+    end
+  end
+
+  defp boundaries_from(output) do
+    lines = String.split(output, "\n", trim: true)
+
+    missing =
+      for "?" <> object <- lines,
+          into: MapSet.new(),
+          do: object |> String.split(" ", parts: 2) |> hd()
+
+    for line <- lines,
+        not String.starts_with?(line, "?"),
+        [commit | parents] = String.split(line, " ", trim: true),
+        Enum.any?(parents, &MapSet.member?(missing, &1)),
+        uniq: true,
+        do: commit
+  end
+
+  defp recorded_boundaries(path) do
+    case File.read(Path.join(path, "shallow")) do
+      {:ok, contents} -> String.split(contents, "\n", trim: true)
+      {:error, _absent} -> []
+    end
   end
 
   # Replay every entry the repository at `path` has not applied, threading

@@ -86,6 +86,29 @@ alone was not enough: it runs against a forge the test builds, never against
 the one people clone from. Steps 3 through 5 were exercised through the
 executable proofs rather than by hand.
 
+**Diagnosed, same day.** Nothing was lost. The forge never held `c91327d6`.
+This repository's log was seeded from a `--depth=1` fetch, which copies one
+commit per ref and no ancestry, and it was written before WAL entries carried
+a `shallow` key. The log therefore records no boundary, replay had none to
+write, and the projection reached disk holding a commit whose parent it did
+not have. Asked for that parent, the forge answers `not our ref`: the object
+is absent rather than corrupt, and no rebuild from the WAL can produce it,
+because the WAL never held it either. Everything pushed since the seed —
+282 commits — is present and intact.
+
+What broke the clone is the missing graft rather than the missing history. A
+`shallow` file naming the seed commit stops the walk at the boundary, and a
+clone then succeeds and reports honestly that history ends there; without it
+`git upload-pack` walks past the boundary and aborts the whole transfer. Every
+check the forge had asked whether ref *tips* resolved, and they all did, which
+is why `EXIT-004` stayed green throughout.
+
+`EXIT-004` now walks the exportable refs instead of listing them, and
+`OpenAgents.Forge.Sync` reconciles the graft against the objects a projection
+actually holds, so a repository that cannot be walked repairs itself from the
+WAL. The pre-seed history remains outside this forge and is not recoverable
+from it. Rerun step 1 to confirm the live forge serves a full clone.
+
 ## 2. Detect a forged, missing, reordered, or mismatched receipt
 
 **Proves:** a verifier holding only the WAL and the bare repository — no

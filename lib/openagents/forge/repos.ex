@@ -204,6 +204,34 @@ defmodule OpenAgents.Forge.Repos do
     File.write!(Path.join(path, "openagents-wal-seq"), Integer.to_string(seq))
   end
 
+  @doc """
+  The WAL sequence at which this bare repo's shallow graft was last checked.
+
+  Separate from the applied sequence because the two answer different
+  questions. The applied sequence says which entries materialized; this says
+  whether the objects they materialized can be walked from the refs, which is
+  what `git upload-pack` needs and what `OpenAgents.Forge.Sync` reconciles.
+  A cache written before this marker existed reports `-1` and is therefore
+  checked once, which is how an already-damaged projection repairs itself.
+  """
+  def graft_seq_at(path) do
+    case File.read(Path.join(path, "openagents-graft-seq")) do
+      {:ok, contents} ->
+        case Integer.parse(String.trim(contents)) do
+          {seq, _} -> seq
+          :error -> -1
+        end
+
+      {:error, _} ->
+        -1
+    end
+  end
+
+  @doc false
+  def record_graft_seq_at!(path, seq) when is_integer(seq) do
+    File.write!(Path.join(path, "openagents-graft-seq"), Integer.to_string(seq))
+  end
+
   @doc "Run git with `--git-dir` pinned to the bare repo. Returns {output, status}."
   def git(git_dir, args, opts \\ []) do
     System.cmd(

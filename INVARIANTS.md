@@ -3253,9 +3253,22 @@ what pushes write. `receive.shallowUpdate` stays off, so an accepted push
 cannot move the graft either, and the boundary an import records remains the
 only one.
 
+Amended 2026-08-23 (issue #179): a recorded boundary is not the only boundary
+there is. Entries written before the `shallow` key existed record nothing, so a
+log seeded from a shallow fetch states no graft at all and replay had none to
+write — which left the projection holding a commit whose parent it did not
+have, unwalkable and therefore unservable, while every ref tip resolved. The
+graft is now reconciled against the objects rather than read only from the log:
+after replay, a commit whose parent is absent is treated as a boundary and
+added to whatever the log recorded. It runs only when the projection cannot be
+walked, and is gated on the applied sequence, so a current cache pays for one
+traversal and a cache damaged before this existed repairs itself on the next
+read rather than on the next deploy.
+
 Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Repos`,
 `OpenAgents.Forge.CacheReadiness`, `test/openagents/forge/wal_replay_test.exs`,
-and `test/openagents/forge/sync_test.exs`.
+`test/openagents/forge/sync_test.exs`, and
+`test/openagents/forge/independence_test.exs`.
 
 ### EXIT-001 — The export ledger matches the surface in both directions
 
@@ -3475,8 +3488,36 @@ than a claim here, and issue #171 carries them. A single complete invariant
 plus a recorded gap is worth more than four that assert less than they appear
 to.
 
+Amended 2026-08-23 (issue #179): the advertised ref set was the whole
+population, and it is not what a clone walks. A clone follows every advertised
+ref into its ancestors, and `git upload-pack` aborts the entire transfer on the
+first object it cannot read, so a repository holding every tip the WAL recorded
+can still be impossible to clone. This forge's own repository was in exactly
+that state. Its log was seeded from a `--depth=1` fetch before WAL entries
+carried a `shallow` key, so it recorded no boundary, the projection reached
+disk ungrafted, and every full clone aborted on the parent of the seed commit
+while every tip resolved and every check here stayed green.
+
+The population is closed by the walk rather than by a list.
+`OpenAgents.Forge.Verification` runs `git rev-list --objects` over the
+exportable ref set and reports `object_unreachable` for anything the walk
+cannot read, so an object nobody thought to name is covered by the same
+traversal that would fail a clone. `OpenAgents.Forge.Sync` reconciles the
+`shallow` graft against the objects the projection actually holds — a commit
+whose parent is absent is a boundary, whatever the log recorded — so a
+projection that cannot be walked repairs itself from the WAL rather than
+waiting to be found by someone cloning. A grafted repository is clean here,
+because it is servable: history that says where it stops is a different thing
+from history that dangles.
+
+The proof builds the failing shape rather than describing it — a seq 0 bundle
+from a `--depth=1` fetch recorded with no `shallow` key, a real push on top,
+and a real clone over the transport. Removing the reconciliation reproduces
+#179's abort in the test suite, which is what "against a real history" has to
+mean for an invariant that was green while the live forge could not be cloned.
+
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.Repos`,
-`OpenAgents.Forge.GitHTTP`, and
+`OpenAgents.Forge.Sync`, `OpenAgents.Forge.GitHTTP`, and
 `test/openagents/forge/independence_test.exs`.
 
 ### EXIT-005 — Every WAL entry commits to the entry before it
@@ -4157,7 +4198,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
-| REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs` |
+| REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs`, `test/openagents/forge/independence_test.exs` |
 | EXIT-001 | `test/openagents/data_rights/export_inventory_test.exs`, `test/openagents/data_rights/account_export_test.exs` |
 | EXIT-002 | `test/openagents/forge/independence_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |

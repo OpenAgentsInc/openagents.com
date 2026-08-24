@@ -569,6 +569,53 @@ defmodule OpenAgents.Forge.IndependenceTest do
       assert Map.has_key?(served, "refs/internal/boundary")
       assert Repos.refs_at(clone) == Verification.exportable_refs(served)
     end
+
+    test "a repository seeded from a shallow fetch still serves a full clone", context do
+      # The shape this forge's own repository is in, and the one #179 named:
+      # seq 0 is a bundle from a `--depth=1` fetch, written before WAL entries
+      # carried a `shallow` key, so the log states no boundary and the
+      # projection holds a commit whose parent it does not have. Every ref tip
+      # resolves, so every tip-shaped check passes; a clone still aborts.
+      seed_unrecorded_shallow_import!(context)
+      :ok = Sync.ensure_fresh(context.repo)
+
+      # A real push on top, so what is cloned is the production shape rather
+      # than a bare seed: pushes layered over an unrecorded shallow boundary.
+      work = Path.join(context.base, "shallow-work")
+      sh!(context.base, "git", ["clone", "--depth=1", context.url, work])
+      sh!(work, "git", ["config", "user.email", "test@example.com"])
+      sh!(work, "git", ["config", "user.name", "Forge Test"])
+      commit_and_push!(work, "after.txt", "after\n", "after")
+
+      clone = Path.join(context.base, "seeded")
+      sh!(context.base, "git", ["clone", context.url, clone])
+
+      assert File.read!(Path.join(clone, "after.txt")) == "after\n"
+      assert File.read!(Path.join(clone, "history-3.txt")) == "history 3\n"
+      sh!(clone, "git", ["fsck", "--no-progress"])
+      assert {:ok, %{findings: []}} = Verification.verify(context.repo)
+    end
+
+    test "a history a clone cannot walk is reported even when every tip resolves", context do
+      seed_unrecorded_shallow_import!(context)
+      :ok = Sync.ensure_fresh(context.repo)
+
+      path = Repos.bare_path(context.repo)
+      {:ok, _generation, index} = WAL.read_index(context.repo)
+      head = index |> WAL.refs() |> Map.fetch!("refs/heads/main")
+
+      # Every tip is present, which is all `object_missing` asks.
+      assert {_output, 0} = Repos.git(path, ["cat-file", "-e", head])
+
+      # Ungraft the projection the way a replay written before `REPOSITORY-003`
+      # did, without touching a single object.
+      File.rm(Path.join(path, "shallow"))
+
+      assert {:error, %{findings: findings}} = Verification.verify(context.repo)
+      assert %{"object" => object} = detail(findings, "object_unreachable")
+      assert object =~ ~r/^[0-9a-f]{40,64}$/
+      refute Enum.any?(findings, &(&1.code == "object_missing"))
+    end
   end
 
   ## ── helpers ────────────────────────────────────────────────────────────
@@ -646,6 +693,67 @@ defmodule OpenAgents.Forge.IndependenceTest do
       commit_and_push!(work, "feature.txt", "feature\n", "feature", "feature")
       sh!(work, "git", ["checkout", "main"])
     end
+
+    :ok
+  end
+
+  # A `--depth=1` fetch bundled with `--all` and recorded as the seq 0 entry
+  # *without* a `shallow` key, which is what every entry written before that
+  # key existed looks like. `OpenAgents.Repositories.Importer` records the key
+  # now, and nothing backfills a log that predates it, so this is not a
+  # hypothetical shape.
+  defp seed_unrecorded_shallow_import!(context) do
+    source = Path.join(context.base, "seed-source")
+    File.mkdir_p!(source)
+    sh!(source, "git", ["init", "--initial-branch=main", "."])
+    sh!(source, "git", ["config", "user.email", "test@example.com"])
+    sh!(source, "git", ["config", "user.name", "Forge Test"])
+
+    Enum.each(1..3, fn n ->
+      File.write!(Path.join(source, "history-#{n}.txt"), "history #{n}\n")
+      sh!(source, "git", ["add", "."])
+      sh!(source, "git", ["commit", "-m", "history #{n}"])
+    end)
+
+    snapshot = Path.join(context.base, "seed-snapshot.git")
+    sh!(context.base, "git", ["init", "--bare", "--initial-branch=main", snapshot])
+
+    sh!(context.base, "git", [
+      "--git-dir",
+      snapshot,
+      "fetch",
+      "--depth=1",
+      source,
+      "refs/heads/main:refs/heads/main"
+    ])
+
+    bundle = Path.join(context.base, "seed-snapshot.bundle")
+    sh!(context.base, "git", ["--git-dir", snapshot, "bundle", "create", bundle, "--all"])
+
+    head =
+      context.base
+      |> sh!("git", ["--git-dir", snapshot, "rev-parse", "refs/heads/main"])
+      |> String.trim()
+
+    {expected, index} =
+      case WAL.read_index(context.repo) do
+        {:ok, generation, index} -> {generation, index}
+        {:error, :not_found} -> {:none, WAL.new_index()}
+      end
+
+    seq = WAL.next_seq(index)
+    {:ok, object} = WAL.put_entry_file(context.repo, seq, bundle)
+
+    entry = %{
+      "seq" => seq,
+      "object" => object,
+      "format" => "git_bundle",
+      "refs" => %{"refs/heads/main" => head},
+      "principal" => "bootstrap:test",
+      "pushed_at" => DateTime.to_iso8601(DateTime.utc_now())
+    }
+
+    {:ok, _generation} = WAL.cas_index(context.repo, expected, WAL.append_entry(index, entry))
 
     :ok
   end

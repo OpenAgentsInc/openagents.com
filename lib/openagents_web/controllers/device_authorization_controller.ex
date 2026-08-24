@@ -42,7 +42,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationController do
     case params["scope"] || params["scopes"] do
       scope when is_binary(scope) -> String.split(scope, " ", trim: true)
       scopes when is_list(scopes) -> Enum.filter(scopes, &(&1 in ApiTokens.allowed_scopes()))
-      _absent -> ["forge:write"]
+      _absent -> ApiTokens.default_scopes()
     end
   end
 

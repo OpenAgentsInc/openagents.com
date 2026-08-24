@@ -48,7 +48,12 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.Voice.CallProvider,
     OpenAgents.Voice.SidebandProvider
   ]
-  @configured_provider_keys [:provider, :voice_call_provider, :voice_sideband_provider]
+  @configured_provider_keys [
+    :provider,
+    :openrouter_provider,
+    :voice_call_provider,
+    :voice_sideband_provider
+  ]
 
   # Every provider adapter, classified by what it can put in front of a model.
   #
@@ -59,6 +64,8 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
   #   * `:in_process` — it never leaves the VM, so it has no model to instruct.
   @adapters %{
     OpenAgents.Providers.OpenAI => :outbound_http,
+    OpenAgents.Providers.OpenRouter => :outbound_http,
+    OpenAgents.Providers.RecordingTestProvider => :in_process,
     OpenAgents.Providers.Test => :in_process,
     OpenAgents.Voice.OpenAI.CallClient => :outbound_http,
     OpenAgents.Voice.OpenAI.Sideband => :outbound_socket,
@@ -90,6 +97,8 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgentsWeb.InferenceProxyController => :relays_caller_instructions,
     OpenAgents.Conversations => :pins_a_composed_request,
     OpenAgents.Providers.OpenAI => :adapter,
+    OpenAgents.Providers.OpenRouter => :adapter,
+    OpenAgents.Providers.RecordingTestProvider => :adapter,
     OpenAgents.Providers.Test => :adapter,
     OpenAgents.Providers.Request => :the_struct_itself
   }

@@ -98,6 +98,7 @@ config :openagents,
   voice_operational_retention_days: 90,
   voice_compaction_input_token_threshold: 16_000,
   provider: OpenAgents.Providers.OpenAI,
+  openrouter_provider: OpenAgents.Providers.OpenRouter,
   openai_model: "gpt-5.6-luna",
   openai_api_key: nil,
   openrouter_api_key: nil,
@@ -273,6 +274,12 @@ config :openagents,
   thread_grant_max_calls: 256,
   thread_grant_max_cost_microusd: 2_000_000,
   thread_grant_ttl_seconds: 3_600,
+  # The inference credit an account draws its threads against. Signing in is
+  # what raises it: a visitor holding only a browser key gets the same figure a
+  # single thread used to get, and an account with a user behind it gets $100 to
+  # spend across every thread it opens.
+  account_credit_microusd: 100_000_000,
+  visitor_credit_microusd: 2_000_000,
   inference_input_price_microusd_per_ktoken: 1_250,
   inference_output_price_microusd_per_ktoken: 10_000,
   forge_enabled: false,

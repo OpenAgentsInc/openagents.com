@@ -5,6 +5,7 @@ defmodule OpenAgents.ThreadsTest do
 
   alias OpenAgents.Conversations
   alias OpenAgents.Inference
+  alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
   alias OpenAgents.Repo
   alias OpenAgents.Threads
@@ -271,7 +272,11 @@ defmodule OpenAgents.ThreadsTest do
 
       assert grant.max_total_tokens == ceilings.max_total_tokens
       assert grant.max_calls == ceilings.max_calls
-      assert grant.max_cost_microusd == ceilings.max_cost_microusd
+
+      # Money is the account's, not the thread's: the cost ceiling is what the
+      # account has left of its credit, so a second thread cannot mint itself a
+      # fresh allowance (`OpenAgents.Inference.Credit`).
+      assert grant.max_cost_microusd == Credit.remaining(grant.owner_visitor_id)
 
       delegation = Inference.delegation_ceilings()
 

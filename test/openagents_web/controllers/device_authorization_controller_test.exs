@@ -57,7 +57,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     assert %{
              "access_token" => "oa_pat_" <> _secret,
              "token_type" => "Bearer",
-             "scope" => "forge:write",
+             "scope" => "chat:account forge:write",
              "expires_in" => expires_in
            } = json_response(claimed, 200)
 
@@ -143,6 +143,42 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
 
     # Seven days, the privileged ceiling, not the ordinary thirty.
     assert expires_in <= 7 * 24 * 60 * 60
+  end
+
+  # Signing in is what a person does before they use the product, so the token
+  # it mints has to reach the product. `openagents coder` opens a thread, and a
+  # login that names no scope used to mint a repository-only token that the
+  # thread route refused, which read as "my login cannot open a chat".
+  test "a login that names no scope can open a thread", %{conn: conn} do
+    %{"device_code" => device_code, "user_code" => user_code} =
+      conn
+      |> post(~p"/api/v3/device/authorizations", %{})
+      |> json_response(201)
+
+    user = github_user("device-chat", "device-chat-owner")
+    assert {:ok, _authorization} = OpenAgents.DeviceAuthorizations.approve(user_code, user)
+
+    %{"access_token" => token, "scope" => scope} =
+      conn
+      |> recycle()
+      |> post(~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      |> json_response(200)
+
+    assert scope == "chat:account forge:write"
+
+    opened =
+      conn
+      |> recycle()
+      |> put_req_header("authorization", "Bearer " <> token)
+      |> post(~p"/api/v3/threads", %{"objective" => "run the coder"})
+
+    assert %{"thread" => %{"id" => _id}, "grant" => %{"token" => _grant, "limits" => limits}} =
+             json_response(opened, 201)
+
+    # Signing in is also what raises the money: the thread is granted the
+    # account credit, not the visitor's.
+    assert limits["max_cost_microusd"] ==
+             Application.fetch_env!(:openagents, :account_credit_microusd)
   end
 
   test "an unknown scope is refused rather than silently narrowed", %{conn: conn} do

@@ -22,7 +22,7 @@ defmodule OpenAgents.DeviceAuthorizations do
   @interval_seconds 5
   @maximum_create_attempts 3
 
-  def create(scopes \\ ["forge:write"])
+  def create(scopes \\ ApiTokens.default_scopes())
 
   def create(scopes) when is_list(scopes), do: create(scopes, @maximum_create_attempts)
 

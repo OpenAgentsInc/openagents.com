@@ -1173,8 +1173,18 @@ module's import table and fails when one gains that dependency, which is what
 the earlier adapter-behavior tests could not do: they exercised the adapter
 rather than the code that must not know about it.
 
+A grant names one model and the proxy routes it. `OpenAgents.Inference.Models`
+is the list of models a grant may name, and it keeps the id a client asks for
+(`ox-alpha`) apart from the string the provider is called with
+(`stealth/ox-alpha`), so a routed vendor string can change without invalidating
+grants that already name the model. The adapter for each model is read from
+configuration, so no caller holds a compile-time dependency on one.
+
 Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
-`OpenAgents.Providers.OpenAI.StreamDecoderTest`, `OpenAgents.Providers.Test`,
+`OpenAgents.Providers.OpenAI.StreamDecoderTest`,
+`OpenAgents.Providers.OpenRouter`,
+`OpenAgents.Providers.OpenRouter.StreamDecoderTest`,
+`OpenAgents.Inference.ModelsTest`, `OpenAgents.Providers.Test`,
 `OpenAgents.TurnProviderEventsTest`, and `OpenAgents.DependencyBoundaryTest`.
 
 ## Tool authority and execution
@@ -1971,12 +1981,18 @@ conversation, and a thread is not one.
   caller leaves nothing behind. Because a thread has at most one live grant,
   capping open threads caps the account's concurrent thread-scoped authority by
   the same number.
-- **A thread's budget is its own.** `OpenAgents.Threads.ceilings/0` reads the
-  `thread_grant_*` settings and passes them to `OpenAgents.Inference.mint/1`,
-  which otherwise applies the delegation ceilings. A delegation is one probe
-  run the server admitted before minting anything; a thread is authority a
-  caller asked for. The two budgets are stated separately, and neither moves
-  the other.
+- **A thread's budget is its own, and its money is the account's.**
+  `OpenAgents.Threads.ceilings/0` reads the `thread_grant_*` settings and
+  passes them to `OpenAgents.Inference.mint/1`, which otherwise applies the
+  delegation ceilings. A delegation is one probe run the server admitted before
+  minting anything; a thread is authority a caller asked for. The two budgets
+  are stated separately, and neither moves the other. The cost figure is the
+  exception: `OpenAgents.Threads.ceilings/1` lowers it to what
+  `OpenAgents.Inference.Credit.remaining/1` says the account has left, so
+  opening a second thread hands out no second allowance and an account with
+  nothing left is refused `:credit_exhausted` rather than minted a grant it
+  cannot spend. `GET /api/v3` publishes both allowances, because a client that
+  read a fixed per-thread cost cap would be reading a budget nobody is given.
 - **Expiry revokes without being asked.** `OpenAgents.Threads.reap_expired/1`
   runs at admission and on every read of a thread: an active grant past
   `expires_at` becomes `expired`, and an open thread that has minted authority

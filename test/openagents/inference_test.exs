@@ -42,6 +42,20 @@ defmodule OpenAgents.InferenceTest do
       refute grant.token_digest == token
       assert grant.token_digest == :crypto.hash(:sha256, token)
     end
+
+    test "pins a named model, publishing the public id rather than the vendor one" do
+      {:ok, grant, _token} = Inference.mint(Map.put(scope("mint-ox"), :model_id, "ox-alpha"))
+
+      assert grant.model_id == "ox-alpha"
+    end
+
+    test "refuses a model the proxy cannot route, naming only the model" do
+      input = Map.put(scope("mint-unrouted"), :model_id, "attacker/gpt-9-ultra")
+
+      assert {:error, changeset} = Inference.mint(input)
+      assert [model_id: {sentence, _opts}] = changeset.errors
+      assert sentence =~ "is not a model this proxy routes"
+    end
   end
 
   describe "resolve/1" do

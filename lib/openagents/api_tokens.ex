@@ -27,6 +27,13 @@ defmodule OpenAgents.ApiTokens do
     "computer:control"
   ]
   @privileged_scopes ["deployments:promote"]
+  # What signing in gets you. Both scopes are what a person who signs in from
+  # the CLI came for: `forge:write` to push, `chat:account` to talk to a model
+  # and to open a coder thread. Leaving chat out made a plain `openagents auth
+  # login` produce a credential that could not open a thread, and the refusal
+  # arrived one command later, which reads as the product being broken rather
+  # than as a scope not asked for.
+  @default_scopes ["chat:account", "forge:write"]
   @default_lifetime_days 30
   @maximum_lifetime_days 90
   @privileged_maximum_lifetime_days 7
@@ -34,6 +41,10 @@ defmodule OpenAgents.ApiTokens do
   @doc "Every scope a credential may carry."
   @spec allowed_scopes() :: [String.t()]
   def allowed_scopes, do: @allowed_scopes
+
+  @doc "The scopes a credential carries when its requester names none."
+  @spec default_scopes() :: [String.t()]
+  def default_scopes, do: @default_scopes
 
   @doc """
   Scopes that only a current operator may be issued.

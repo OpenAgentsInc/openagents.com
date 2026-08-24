@@ -9,6 +9,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
   alias OpenAgents.Inference
+  alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
   alias OpenAgents.Repo
   alias OpenAgents.Threads
@@ -31,9 +32,11 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert grant["url"] =~ "/api/inference/proxy"
       assert grant["limits"]["max_calls"] == Threads.ceilings().max_calls
       assert grant["limits"]["max_total_tokens"] == Threads.ceilings().max_total_tokens
-      assert grant["limits"]["max_cost_microusd"] == Threads.ceilings().max_cost_microusd
-
+      # The cost ceiling is what this account has left of its credit, so
+      # opening another thread does not mint another allowance.
       minted = Repo.get_by!(Grant, thread_id: thread["id"])
+      assert grant["limits"]["max_cost_microusd"] == Credit.remaining(minted.owner_visitor_id)
+
       assert minted.conversation_id == nil
       assert minted.status == "active"
     end
@@ -71,6 +74,43 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       assert thread["reasoning_effort"] == "low"
       assert thread["permission_profile"] == "workspace_write"
+    end
+
+    test "a caller may open a thread on another routed model", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-ox-alpha")
+        |> post(~p"/api/v3/threads", %{
+          "objective" => "Delegate the edit.",
+          "model" => "ox-alpha"
+        })
+        |> json_response(201)
+
+      assert body["grant"]["model"] == "ox-alpha"
+    end
+
+    test "a thread names the default model when its caller names none", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-default-model")
+        |> post(~p"/api/v3/threads", %{"objective" => "Take the default."})
+        |> json_response(201)
+
+      assert body["grant"]["model"] == OpenAgents.Inference.Models.default_id()
+    end
+
+    test "a model the proxy cannot route is refused, naming the field", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-bad-model")
+        |> post(~p"/api/v3/threads", %{
+          "objective" => "Ask for the impossible.",
+          "model" => "attacker/gpt-9-ultra"
+        })
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert Map.has_key?(body["errors"], "model")
     end
 
     test "an objective is required", %{conn: conn} do
@@ -137,6 +177,37 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["message"] =~ "#{limit}"
       assert [message] = body["errors"]["threads"]
       assert message =~ "#{limit}"
+    end
+
+    # An account that has spent its credit has nothing to mint a grant against,
+    # and a thread without authority is not a thread anyone can work, so the
+    # refusal names the money rather than reading as a transient failure.
+    test "an account that has spent its credit is refused with what it spent", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-credit")
+
+      opened =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "Spend it all."})
+        |> json_response(201)
+
+      grant = Repo.get_by!(Grant, thread_id: opened["thread"]["id"])
+      allowance = Credit.allowance(grant.owner_visitor_id)
+      price = Application.fetch_env!(:openagents, :inference_output_price_microusd_per_ktoken)
+
+      {:ok, _metered} =
+        Inference.record_usage(grant, %{"output_tokens" => div(allowance, price) * 1_000})
+
+      assert Credit.remaining(grant.owner_visitor_id) == 0
+
+      body =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "One more, on empty."})
+        |> json_response(402)
+
+      assert body["code"] == "credit_exhausted"
+      assert body["message"] =~ "$100.00"
+      assert [message] = body["errors"]["credit"]
+      assert message =~ "$100.00"
     end
 
     test "the cap counts one account's threads, never another's", %{conn: conn} do

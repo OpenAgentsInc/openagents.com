@@ -52,6 +52,7 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:cancel, 1} => :thread_struct,
     {:cancel, 2} => :thread_struct,
     {:ceilings, 0} => :no_thread,
+    {:ceilings, 1} => :no_thread,
     {:default_permission_profile, 0} => :no_thread,
     {:default_reasoning, 0} => :no_thread,
     {:finish, 2} => :thread_struct,

@@ -59,6 +59,10 @@ defmodule OpenAgentsWeb.ApiError do
     # malformed request and not a forbidden one: the same call succeeds once
     # the caller revokes one, so it is the rate-limit status and its own code.
     "thread_quota_reached" => {429, "This account holds the maximum number of open threads"},
+    # Spending the account's inference credit is not a rate limit: no amount of
+    # waiting or revoking makes the same call succeed, so it is the payment
+    # status and its own code.
+    "credit_exhausted" => {402, "This account has spent its inference credit"},
     # Push receipts are read from the WAL, not from PostgreSQL, so a storage
     # that will not answer is a temporary unreadability rather than an absence.
     # Reporting it as `not_found` would tell a pusher their push is not on

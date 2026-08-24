@@ -1,11 +1,13 @@
 defmodule OpenAgentsWeb.InferenceProxyControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
+
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Grant
   alias OpenAgents.Machines
+  alias OpenAgents.Providers.RecordingTestProvider
   alias OpenAgents.Repo
 
-  defp grant(key) do
+  defp grant(key, options \\ []) do
     owner = github_user("proxy-#{key}")
     {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(owner)
 
@@ -20,12 +22,19 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
     {:ok, machine} = Machines.approve_pairing(owner, code)
 
-    {:ok, grant, token} =
-      Inference.mint(%{
-        owner_visitor_id: conversation.visitor_id,
-        conversation_id: conversation.id,
-        machine_id: machine.id
-      })
+    mint_input = %{
+      owner_visitor_id: conversation.visitor_id,
+      conversation_id: conversation.id,
+      machine_id: machine.id
+    }
+
+    mint_input =
+      case Keyword.fetch(options, :model_id) do
+        {:ok, model_id} -> Map.put(mint_input, :model_id, model_id)
+        :error -> mint_input
+      end
+
+    {:ok, grant, token} = Inference.mint(mint_input)
 
     %{grant: grant, token: token}
   end
@@ -143,5 +152,53 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     conn = post_chat(conn, token, %{"messages" => []})
     assert conn.status == 400
     assert Jason.decode!(conn.resp_body)["error"]["code"] == "empty_input"
+  end
+
+  describe "routing the grant's model" do
+    setup do
+      previous = Application.get_env(:openagents, :openrouter_provider)
+      Application.put_env(:openagents, :openrouter_provider, RecordingTestProvider)
+      Application.put_env(:openagents, :test_recording_provider_observer, self())
+
+      on_exit(fn ->
+        Application.put_env(:openagents, :openrouter_provider, previous)
+        Application.delete_env(:openagents, :test_recording_provider_observer)
+      end)
+    end
+
+    test "an ox-alpha grant reaches the OpenRouter lane with the vendor model", %{conn: conn} do
+      %{token: token} = grant("ox-alpha", model_id: "ox-alpha")
+
+      conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
+
+      assert conn.status == 200
+      assert_received {:recorded_request, "test.recording_provider", request}
+      assert request.model_id == OpenAgents.Chat.OpenRouter.default_model()
+    end
+
+    test "a default grant stays on the default lane", %{conn: conn} do
+      %{token: token} = grant("default-lane")
+
+      conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
+
+      assert conn.status == 200
+      refute_received {:recorded_request, _id, _request}
+    end
+
+    test "a grant naming a model the proxy cannot route is refused", %{conn: conn} do
+      %{token: token} = grant("withdrawn")
+
+      # A grant's model column is immutable and the mint refuses an unroutable
+      # name, so the only way here is the routed set changing underneath a live
+      # grant — a model withdrawn after it was issued.
+      configured = Application.fetch_env!(:openagents, :openai_model)
+      Application.put_env(:openagents, :openai_model, "#{configured}-withdrawn")
+      on_exit(fn -> Application.put_env(:openagents, :openai_model, configured) end)
+
+      conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
+
+      assert conn.status == 503
+      assert Jason.decode!(conn.resp_body)["error"]["code"] == "model_unavailable"
+    end
   end
 end

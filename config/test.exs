@@ -45,6 +45,7 @@ config :openagents, :github_token_decryption_keys, %{}
 
 # Test fakes for providers and voice sideband so the suite never reaches the network.
 config :openagents, :provider, OpenAgents.Providers.Test
+config :openagents, :openrouter_provider, OpenAgents.Providers.Test
 config :openagents, :voice_call_provider, OpenAgents.Voice.TestCallProvider
 config :openagents, :voice_sideband_provider, OpenAgents.Voice.TestSidebandProvider
 

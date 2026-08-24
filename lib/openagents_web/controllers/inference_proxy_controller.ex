@@ -4,8 +4,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   a delegated probe calls with its delegation-scoped grant as the bearer.
 
   It authenticates the grant (never a provider credential), translates the
-  request into a provider-neutral `OpenAgents.Providers.Request`, fans it into the
-  configured `OpenAgents.Providers.Provider` (PROVIDER-001) — so the OpenAI key
+  request into a provider-neutral `OpenAgents.Providers.Request`, fans it into
+  the `OpenAgents.Providers.Provider` that serves the grant's model
+  (`OpenAgents.Inference.Models`, PROVIDER-001) — so the provider credential
   never leaves the server (RELEASE-002) — meters token usage against the
   grant's budget (VOICE-010 pattern), and streams the typed provider events
   back as chat-completions SSE that probe's parser consumes. Provider JSON,
@@ -21,6 +22,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   require Logger
 
   alias OpenAgents.Inference
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Providers.{Request, ToolDefinition, ToolOutput}
 
   def create(conn, _params) do
@@ -28,8 +30,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     # proxy never re-reads or re-parses it.
     with {:ok, token} <- bearer(conn),
          {:ok, grant} <- resolve(token),
-         {:ok, request} <- build_request(grant, conn.body_params) do
-      run(conn, grant, request)
+         {:ok, model} <- route(grant),
+         {:ok, request} <- build_request(model, conn.body_params) do
+      run(conn, grant, model.provider, request)
     else
       {:error, reason} -> refuse(conn, reason)
     end
@@ -37,12 +40,23 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   # ── request assembly ────────────────────────────────────────────────────
 
-  defp build_request(grant, %{"messages" => messages} = body) when is_list(messages) do
+  # The grant's model names the provider and the string that provider is called
+  # with. A grant minted before the model was routable — or one whose model has
+  # since been withdrawn — is refused here rather than sent to a provider that
+  # does not serve it.
+  defp route(grant) do
+    case Models.fetch(grant.model_id) do
+      {:ok, model} -> {:ok, model}
+      :error -> {:error, :model_unavailable}
+    end
+  end
+
+  defp build_request(model, %{"messages" => messages} = body) when is_list(messages) do
     {system, turns} = Enum.split_with(messages, &(role(&1) == "system"))
 
     request = %Request{
       # The grant pins the model; a request body cannot select another.
-      model_id: grant.model_id,
+      model_id: model.provider_model,
       instructions: join_text(system),
       input: Enum.flat_map(turns, &input_message/1),
       tool_definitions: tool_definitions(body["tools"]),
@@ -56,7 +70,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     end
   end
 
-  defp build_request(_grant, _body), do: {:error, :invalid_request}
+  defp build_request(_model, _body), do: {:error, :invalid_request}
 
   defp input_message(%{"role" => "tool"}), do: []
 
@@ -100,8 +114,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   # ── run + translate ─────────────────────────────────────────────────────
 
-  defp run(conn, grant, request) do
-    provider = Application.fetch_env!(:openagents, :provider)
+  defp run(conn, grant, provider, request) do
     parent = self()
 
     # The provider pushes events synchronously; capture them to this process's
@@ -251,6 +264,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   defp status_for(:body_too_large), do: {413, "body_too_large"}
   defp status_for(:invalid_json), do: {400, "invalid_json"}
   defp status_for(:provider_failed), do: {502, "provider_failed"}
+  defp status_for(:model_unavailable), do: {503, "model_unavailable"}
   defp status_for(_), do: {400, "bad_request"}
 
   # ── small helpers ───────────────────────────────────────────────────────

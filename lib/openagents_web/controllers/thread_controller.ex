@@ -18,16 +18,20 @@ defmodule OpenAgentsWeb.ThreadController do
     every request first retires the account's elapsed authority, so a grant
     past its expiry stops being live whether or not anyone presents it.
 
-  The model is not a parameter. The proxy pins the model from the grant so a
-  request body cannot select another, and offering a choice the grant would
-  overrule would tell a caller it got a model it did not get. `GET /api/v3`
-  publishes the model the grant carries instead.
+  The model is admitted here and nowhere else. A request body sent to the proxy
+  still cannot select a model — the proxy pins the grant's — so the one place a
+  caller states which model it wants is the thread it opens, and the response
+  publishes the model the grant carries. Admitting it at the door is what lets
+  a coding session run its own turns on one model and its delegated children on
+  another: it opens a second thread on `ox-alpha` and gets authority for
+  `ox-alpha`, with its own budget, rather than borrowing the first thread's.
   """
 
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Conversations
   alias OpenAgents.Inference
-  alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.{Credit, Grant, Models}
   alias OpenAgents.Threads
   alias OpenAgents.Threads.Thread
   alias OpenAgentsWeb.ApiError
@@ -73,6 +77,9 @@ defmodule OpenAgentsWeb.ThreadController do
       {:error, :thread_quota_reached} ->
         quota_reached(conn)
 
+      {:error, :credit_exhausted} ->
+        credit_exhausted(conn)
+
       {:error, %Ecto.Changeset{} = changeset} ->
         ApiError.changeset(conn, changeset)
 
@@ -98,6 +105,25 @@ defmodule OpenAgentsWeb.ThreadController do
       errors: %{"threads" => [sentence]}
     )
   end
+
+  # A thread spends the account's credit, so an exhausted balance is not a
+  # thing to retry. The refusal names the allowance that was spent, because
+  # that is the fact a reader acts on.
+  defp credit_exhausted(conn) do
+    visitor = Conversations.ensure_owner_visitor(conn.assigns.current_user)
+
+    sentence =
+      "This account has spent its inference credit of " <>
+        "#{dollars(Credit.allowance(visitor.id))}. " <>
+        "Nothing is left to mint a thread against."
+
+    ApiError.refuse(conn, "credit_exhausted",
+      message: sentence,
+      errors: %{"credit" => [sentence]}
+    )
+  end
+
+  defp dollars(microusd), do: "$#{:erlang.float_to_binary(microusd / 1_000_000, decimals: 2)}"
 
   # ── reading ─────────────────────────────────────────────────────────────
 
@@ -138,7 +164,8 @@ defmodule OpenAgentsWeb.ThreadController do
   end
 
   defp execution_shape(params) do
-    with {:ok, reasoning} <-
+    with {:ok, model} <- admitted(params, "model", Models.ids(), Models.default_id()),
+         {:ok, reasoning} <-
            admitted(params, "reasoning", Thread.reasoning_efforts(), Threads.default_reasoning()),
          {:ok, profile} <-
            admitted(
@@ -147,7 +174,7 @@ defmodule OpenAgentsWeb.ThreadController do
              Thread.permission_profiles(),
              Threads.default_permission_profile()
            ) do
-      {:ok, [reasoning: reasoning, permission_profile: profile]}
+      {:ok, [model: model, reasoning: reasoning, permission_profile: profile]}
     end
   end
 
@@ -175,10 +202,9 @@ defmodule OpenAgentsWeb.ThreadController do
 
   # ── views ───────────────────────────────────────────────────────────────
 
-  # The thread carries a `model` column for an executor that runs it, and the
-  # proxy pins a different one from the grant. Publishing both would put two
-  # model names in one response with nothing saying which the caller gets, so
-  # only the grant's is served: it is the one the request will actually use.
+  # The thread's `model` and its grant's are now the same admitted id, so only
+  # the grant's is published: it is the one the request will actually use, and
+  # printing the same name twice invites a reader to think they can differ.
 
   defp thread_view(%Thread{} = thread) do
     %{

@@ -58,7 +58,7 @@ defmodule OpenAgents.Threads do
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference
-  alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.{Credit, Grant, Models}
   alias OpenAgents.Repo
   alias OpenAgents.Threads.Event
   alias OpenAgents.Threads.Thread
@@ -71,9 +71,11 @@ defmodule OpenAgents.Threads do
   Open a thread for an account.
 
   The owner visitor is resolved (and created if absent) without touching the
-  account's conversation. The admitted execution shape defaults to the chat
-  lane's configured model, `high` reasoning, and the `read_only` permission
-  profile; a caller may narrow or widen only within the admitted vocabulary.
+  account's conversation. The admitted execution shape defaults to
+  `OpenAgents.Inference.Models.default_id/0`, `high` reasoning, and the
+  `read_only` permission profile; a caller may narrow or widen only within the
+  admitted vocabulary. The thread's model is the model its grant pins, so a
+  caller that opens a thread on `ox-alpha` gets authority for `ox-alpha`.
 
   Admission is where the ceiling lives. Elapsed authority is reaped first, so a
   slot held by an abandoned thread is released before the count is taken, and
@@ -107,7 +109,8 @@ defmodule OpenAgents.Threads do
   """
   @spec open_and_mint(User.t() | Visitor.t(), String.t(), keyword()) ::
           {:ok, Thread.t(), Grant.t(), String.t()}
-          | {:error, :thread_quota_reached | :thread_terminal | Ecto.Changeset.t()}
+          | {:error,
+             :thread_quota_reached | :thread_terminal | :credit_exhausted | Ecto.Changeset.t()}
   def open_and_mint(owner, objective, options \\ []) do
     with {:ok, thread} <- open(owner, objective, options) do
       case mint_grant(thread) do
@@ -134,7 +137,7 @@ defmodule OpenAgents.Threads do
 
     attributes = %{
       objective: objective,
-      model: Keyword.get(options, :model) || OpenRouter.default_model(),
+      model: Keyword.get(options, :model) || Models.default_id(),
       reasoning_effort:
         OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
       permission_profile: Keyword.get(options, :permission_profile, @default_permission_profile)
@@ -234,6 +237,12 @@ defmodule OpenAgents.Threads do
   @doc """
   Mint model authority for a thread.
 
+  The grant pins the thread's own model, so the model a caller was admitted to
+  at `open/3` is the model every call on the thread reaches. A thread opened
+  before models were admitted carries a vendor string rather than an admitted
+  id; `OpenAgents.Inference.Models.fetch/1` resolves that spelling, and
+  anything else it cannot route is refused rather than quietly replaced.
+
   This is the fence. In one transaction: the thread is locked and refused
   unless it is open, every active grant naming it is revoked, `generation` is
   bumped, and a fresh grant is minted against the thread — never against a
@@ -241,7 +250,7 @@ defmodule OpenAgents.Threads do
   """
   @spec mint_grant(Thread.t()) ::
           {:ok, Thread.t(), Grant.t(), String.t()}
-          | {:error, :thread_terminal | Ecto.Changeset.t()}
+          | {:error, :thread_terminal | :credit_exhausted | Ecto.Changeset.t()}
   def mint_grant(%Thread{} = thread) do
     Repo.transaction(fn ->
       case locked(thread.id) do
@@ -249,12 +258,14 @@ defmodule OpenAgents.Threads do
           _revoked = Inference.revoke_active_for_thread(current.id)
 
           with {:ok, fenced} <- current |> Thread.generation_changeset() |> Repo.update(),
+               {:ok, ceilings} <- ceilings(fenced.owner_visitor_id),
                {:ok, grant, token} <-
                  Inference.mint(%{
                    owner_visitor_id: fenced.owner_visitor_id,
                    thread_id: fenced.id,
                    machine_id: nil,
-                   ceilings: ceilings()
+                   model_id: fenced.model,
+                   ceilings: ceilings
                  }) do
             {fenced, grant, token}
           else
@@ -312,6 +323,10 @@ defmodule OpenAgents.Threads do
   ceilings in `OpenAgents.Inference`, because a thread's budget is not a
   delegation's budget. `GET /api/v3` publishes this map, so a client reads the
   budget it was given rather than discovering it by exhausting it.
+
+  The cost figure here is the configured per-thread cap. What a particular
+  thread is minted for is `ceilings/1`, which is this map with the cost lowered
+  to what the account's credit has left.
   """
   @spec ceilings() :: Inference.ceilings()
   def ceilings do
@@ -321,6 +336,23 @@ defmodule OpenAgents.Threads do
       max_cost_microusd: setting(:thread_grant_max_cost_microusd, 2_000_000),
       ttl_seconds: setting(:thread_grant_ttl_seconds, 3_600)
     }
+  end
+
+  @doc """
+  The ceilings this account's next thread is minted with.
+
+  A thread spends the account's credit rather than a fresh allowance of its
+  own, so the cost ceiling is what `OpenAgents.Inference.Credit.remaining/1`
+  says is left — a signed-in account's whole balance is available to one thread
+  if that is what the work needs. An account with nothing left is refused
+  `:credit_exhausted` instead of being minted a grant it cannot spend.
+  """
+  @spec ceilings(String.t()) :: {:ok, Inference.ceilings()} | {:error, :credit_exhausted}
+  def ceilings(visitor_id) when is_binary(visitor_id) do
+    case Credit.remaining(visitor_id) do
+      0 -> {:error, :credit_exhausted}
+      remaining -> {:ok, %{ceilings() | max_cost_microusd: remaining}}
+    end
   end
 
   @doc "How many threads one account may hold open at once."

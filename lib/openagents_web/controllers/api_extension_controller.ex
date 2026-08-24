@@ -38,6 +38,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
 
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Inference.Credit
   alias OpenAgentsWeb.ApiError
   alias OpenAgentsWeb.ApiRouteAuthority
   alias OpenAgentsWeb.ContributionContract
@@ -434,6 +435,17 @@ defmodule OpenAgentsWeb.ApiExtensionController do
             "What this body of work is for. Required, non-blank, and capped " <>
               "at 32 KB."
         },
+        "model" => %{
+          "endpoint" => "POST /api/v3/threads",
+          "type" => "string",
+          "enum" => OpenAgents.Inference.Models.ids(),
+          "default" => OpenAgents.Inference.Models.default_id(),
+          "description" =>
+            "The model the thread's grant pins, and therefore the model every " <>
+              "call at the inference proxy reaches. A value outside this enum " <>
+              "is refused with a field-level 422 naming `model`. Open a second " <>
+              "thread to run other work on another model."
+        },
         "reasoning" => %{
           "endpoint" => "POST /api/v3/threads",
           "type" => "string",
@@ -458,12 +470,17 @@ defmodule OpenAgentsWeb.ApiExtensionController do
       "limits" => %{
         "maximum_open_threads_per_account" => OpenAgents.Threads.maximum_open_per_account(),
         "grant" => thread_grant_ceilings(),
+        "credit" => credit_allowances(),
         "description" =>
           "Admission is capped: an account already holding " <>
             "`maximum_open_threads_per_account` open threads is refused with " <>
             "`thread_quota_reached` until it revokes one. The grant ceilings " <>
             "are the thread's own and are not the delegation ceilings a probe " <>
-            "run is minted with. Authority that passes `expires_at` stops " <>
+            "run is minted with. The cost ceiling is not among them: a " <>
+            "thread's grant is minted for what the credit under `credit` has " <>
+            "left, every thread of one account draws against that same " <>
+            "balance, and an account with nothing left is refused " <>
+            "`credit_exhausted`. Authority that passes `expires_at` stops " <>
             "being live and stops holding a slot, with or without a request."
       },
       "grant" => %{
@@ -489,8 +506,24 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     %{
       "max_total_tokens" => ceilings.max_total_tokens,
       "max_calls" => ceilings.max_calls,
-      "max_cost_microusd" => ceilings.max_cost_microusd,
       "ttl_seconds" => ceilings.ttl_seconds
+    }
+  end
+
+  # The two allowances a caller can be minted against. A thread's
+  # `max_cost_microusd` is whichever of these applies minus what the account
+  # has already spent, so publishing the allowance describes the balance while
+  # publishing a per-thread number would describe nothing.
+  defp credit_allowances do
+    %{
+      "account_microusd" => Credit.account_allowance(),
+      "visitor_microusd" => Credit.visitor_allowance(),
+      "description" =>
+        "A signed-in account draws against `account_microusd` and an " <>
+          "anonymous visitor against `visitor_microusd`, for the life of the " <>
+          "account rather than per thread. A thread's grant is minted for the " <>
+          "remainder, so `grant.max_cost_microusd` in the mint response is " <>
+          "what is left rather than a fixed cap."
     }
   end
 

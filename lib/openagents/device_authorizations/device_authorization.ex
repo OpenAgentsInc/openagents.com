@@ -12,7 +12,7 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
     field :device_code_digest, :binary
     field :user_code_digest, :binary
     field :state, :string, default: "pending"
-    field :scopes, {:array, :string}, default: ["forge:write"]
+    field :scopes, {:array, :string}, default: ["chat:account", "forge:write"]
     field :interval_seconds, :integer, default: 5
     field :poll_count, :integer, default: 0
     field :last_polled_at, :utc_datetime_usec
@@ -66,7 +66,7 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
           else: add_error(changeset, :scopes, "is not an allowed scope set")
 
       _empty ->
-        put_change(changeset, :scopes, ["forge:write"])
+        put_change(changeset, :scopes, OpenAgents.ApiTokens.default_scopes())
     end
   end
 end

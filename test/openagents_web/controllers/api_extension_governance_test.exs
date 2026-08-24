@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   """
   use OpenAgentsWeb.ConnCase
 
+  alias OpenAgents.Inference.{Credit, Grant}
   alias OpenAgents.Issues
   alias OpenAgents.ProjectItems
   alias OpenAgents.Projects
@@ -179,19 +180,26 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
 
     assert limits["grant"]["max_total_tokens"] == ceilings.max_total_tokens
     assert limits["grant"]["max_calls"] == ceilings.max_calls
-    assert limits["grant"]["max_cost_microusd"] == ceilings.max_cost_microusd
     assert limits["grant"]["ttl_seconds"] == ceilings.ttl_seconds
 
-    granted =
+    # The cost figure is the account's credit rather than a per-thread cap, so
+    # the document publishes the allowances and the mint reports the remainder.
+    refute Map.has_key?(limits["grant"], "max_cost_microusd")
+    assert limits["credit"]["account_microusd"] == Credit.account_allowance()
+    assert limits["credit"]["visitor_microusd"] == Credit.visitor_allowance()
+
+    created =
       conn
       |> put_chat_api_token("governance-thread-budget")
       |> post(~p"/api/v3/threads", %{"objective" => "Measure the published budget."})
       |> json_response(201)
-      |> get_in(["grant", "limits"])
+
+    granted = created["grant"]["limits"]
+    owner = OpenAgents.Repo.get_by!(Grant, thread_id: created["thread"]["id"]).owner_visitor_id
 
     assert granted["max_total_tokens"] == limits["grant"]["max_total_tokens"]
     assert granted["max_calls"] == limits["grant"]["max_calls"]
-    assert granted["max_cost_microusd"] == limits["grant"]["max_cost_microusd"]
+    assert granted["max_cost_microusd"] == Credit.remaining(owner)
   end
 
   test "every published thread parameter value is one the route actually accepts", %{conn: conn} do

@@ -16,7 +16,7 @@ defmodule OpenAgents.Inference do
   """
 
   import Ecto.Query
-  alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.{Grant, Models}
   alias OpenAgents.Machines.Machine
   alias OpenAgents.Repo
 
@@ -34,6 +34,7 @@ defmodule OpenAgents.Inference do
           optional(:conversation_id) => String.t() | nil,
           optional(:thread_id) => String.t() | nil,
           optional(:machine_id) => String.t() | nil,
+          optional(:model_id) => String.t() | nil,
           optional(:ceilings) => ceilings()
         }
 
@@ -52,6 +53,10 @@ defmodule OpenAgents.Inference do
   lives as long as someone is working — so `OpenAgents.Threads` passes
   `OpenAgents.Threads.ceilings/0` rather than borrowing these numbers.
 
+  The input may name its own `:model_id`. Without one a grant takes
+  `OpenAgents.Inference.Models.default_id/0`, and a name the proxy cannot route
+  is refused here rather than at the first call.
+
   A grant that names a computer is minted only while that computer is active,
   and only inside the transaction that established it (IDENTITY-008). A revoked
   computer answers `{:error, :machine_revoked}`.
@@ -59,6 +64,13 @@ defmodule OpenAgents.Inference do
   @spec mint(mint_input()) ::
           {:ok, Grant.t(), String.t()} | {:error, Ecto.Changeset.t() | :machine_revoked}
   def mint(%{} = input) do
+    case model_id(Map.get(input, :model_id)) do
+      {:ok, model_id} -> mint(input, model_id)
+      :error -> {:error, unadmitted_model(Map.get(input, :model_id))}
+    end
+  end
+
+  defp mint(%{} = input, model_id) do
     token = @token_prefix <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
     ceilings = Map.get(input, :ceilings) || delegation_ceilings()
 
@@ -67,7 +79,7 @@ defmodule OpenAgents.Inference do
       conversation_id: Map.get(input, :conversation_id),
       thread_id: Map.get(input, :thread_id),
       machine_id: Map.get(input, :machine_id),
-      model_id: model_id(),
+      model_id: model_id,
       token_digest: digest(token),
       max_total_tokens: ceilings.max_total_tokens,
       max_calls: ceilings.max_calls,
@@ -404,7 +416,31 @@ defmodule OpenAgents.Inference do
 
   defp now, do: DateTime.utc_now()
 
-  defp model_id, do: Application.fetch_env!(:openagents, :openai_model)
+  # A grant may pin only a model the proxy can route, so an unadmitted name is
+  # refused at the mint rather than at the first call: a token that cannot be
+  # spent is worse than no token, because its holder learns that only after
+  # believing it had authority.
+  defp model_id(nil), do: {:ok, Models.default_id()}
+
+  defp model_id(requested) do
+    case Models.fetch(requested) do
+      {:ok, model} -> {:ok, model.id}
+      :error -> :error
+    end
+  end
+
+  defp unadmitted_model(requested) do
+    sentence =
+      "#{inspect(requested)} is not a model this proxy routes. " <>
+        "Admitted: #{Enum.join(Models.ids(), ", ")}."
+
+    # Only the model is reported. Running the full mint changeset here would
+    # answer a wrong model name with a list of every field the caller never
+    # sent, burying the one thing it can fix.
+    %Grant{}
+    |> Ecto.Changeset.change()
+    |> Ecto.Changeset.add_error(:model_id, sentence)
+  end
 
   defp max_total_tokens,
     do: Application.get_env(:openagents, :inference_grant_max_total_tokens, 2_000_000)

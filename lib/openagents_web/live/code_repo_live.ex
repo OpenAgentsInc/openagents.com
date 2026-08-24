@@ -55,6 +55,7 @@ defmodule OpenAgentsWeb.CodeRepoLive do
      |> assign(:page_title, "#{repository.name} · code")
      |> assign(:repository, repository)
      |> assign(:repository_import, repository.repository_import)
+     |> assign(:mirror?, Repositories.mirror?(repository))
      |> assign(:repo, repository.name)
      |> assign(:owner, repository.namespace.slug)
      |> assign(:base, base)
@@ -202,6 +203,11 @@ defmodule OpenAgentsWeb.CodeRepoLive do
          put_flash(socket, :error, "OpenAgents could not update pull request settings.")}
     end
   end
+
+  # "none" is the recorded absence of a license, not a missing value, and it
+  # is rendered as a sentence rather than as the bare token the database holds.
+  defp upstream_license_label(%{upstream_license: "none"}), do: "No license found upstream"
+  defp upstream_license_label(%{upstream_license: license}), do: license
 
   defp short(sha), do: String.slice(sha, 0, 12)
 
@@ -458,7 +464,10 @@ defmodule OpenAgentsWeb.CodeRepoLive do
           </.card>
 
           <:about>
-            <.repo_about description={@repository.description}>
+            <.repo_about
+              description={@repository.description}
+              license={if @mirror?, do: upstream_license_label(@repository)}
+            >
               <%!-- The file that is actually there, under the name it actually
               has. A fixed `README.md` is a guess, and a repository whose readme
               is named anything else gets a rail link to a 404. --%>
@@ -482,8 +491,49 @@ defmodule OpenAgentsWeb.CodeRepoLive do
             <%!-- REPOSITORY-001: an import freezes one authorized ref map and
             schedules no later synchronization. Keep that provenance beside
             the repository metadata instead of interrupting the code tree. --%>
+            <%!-- REPOSITORY-001: a mirror is not an owned repository, and the
+            page says so where a reader is looking at the repository rather
+            than only in the API. The upstream is named, its license travels
+            or its absence is stated, and the one-way rule is written down
+            beside the clone URL that would otherwise imply a push. --%>
             <section
-              :if={@repository_import}
+              :if={@mirror?}
+              id="repo-upstream-mirror"
+              class="repo-import-provenance"
+              aria-labelledby="repo-upstream-mirror-title"
+            >
+              <h2 id="repo-upstream-mirror-title">Upstream mirror</h2>
+              <dl>
+                <div>
+                  <dt>Upstream</dt>
+                  <dd>
+                    <.link href={@repository.upstream_url} rel="noopener nofollow">
+                      {@repository.upstream_url}
+                    </.link>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Upstream license</dt>
+                  <dd>{upstream_license_label(@repository)}</dd>
+                </div>
+                <div :if={@repository_import && @repository_import.source_head_sha}>
+                  <dt>Snapshot</dt>
+                  <dd><code>{short(@repository_import.source_head_sha)}</code></dd>
+                </div>
+                <div :if={@repository_import}>
+                  <dt>State</dt>
+                  <dd>{@repository_import.state}</dd>
+                </div>
+              </dl>
+              <p>
+                OpenAgents does not own this repository. It is a one-way copy of the
+                upstream above, taken once, and it accepts no pushes. Contribute
+                to the upstream instead.
+              </p>
+            </section>
+
+            <section
+              :if={@repository_import && not @mirror?}
               id="repo-import-provenance"
               class="repo-import-provenance"
               aria-labelledby="repo-import-provenance-title"

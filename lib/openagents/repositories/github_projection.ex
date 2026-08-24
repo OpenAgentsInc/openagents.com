@@ -86,7 +86,9 @@ defmodule OpenAgents.Repositories.GitHubProjection do
          source_ref_digest: references["digest"],
          source_head_sha: refs["refs/heads/#{default_branch}"],
          source_refs: refs,
-         source_uses_lfs: lfs_warning?
+         source_uses_lfs: lfs_warning?,
+         source_public: repository["private"] == false,
+         source_license: repository["license"]
        }, repository}
     else
       {:error, :github_token_missing} -> {:error, :github_connection_required}

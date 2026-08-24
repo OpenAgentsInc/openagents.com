@@ -25,6 +25,8 @@ defmodule OpenAgents.Repositories.Repository do
     field :provision_error_code, :string
     field :storage_key, :string
     field :ready_at, :utc_datetime_usec
+    field :upstream_url, :string
+    field :upstream_license, :string
 
     belongs_to :namespace, OpenAgents.Repositories.Namespace
     belongs_to :created_by_user, OpenAgents.Accounts.User
@@ -81,6 +83,7 @@ defmodule OpenAgents.Repositories.Repository do
     |> check_constraint(:lifecycle_state, name: :repositories_lifecycle_state_check)
     |> check_constraint(:provisioning_kind, name: :repositories_provisioning_kind_check)
     |> check_constraint(:ready_at, name: :repositories_ready_state_check)
+    |> check_constraint(:upstream_url, name: :repositories_upstream_mirror_check)
   end
 
   def creation_changeset(repository, attrs, namespace, created_by_user_id, provisioning_kind) do
@@ -102,6 +105,42 @@ defmodule OpenAgents.Repositories.Repository do
     |> changeset(attrs)
     |> put_change(:created_by_user_id, created_by_user_id)
   end
+
+  @doc """
+  Build an upstream mirror: a repository whose content comes from a public
+  source this forge does not own.
+
+  The upstream fields are deliberately absent from `changeset/2`'s `cast`
+  list and are written only here, through `put_change/3`. Caller-supplied
+  attributes therefore cannot make a repository claim an upstream, and the
+  ordinary import path cannot produce a mirror however its attributes are
+  shaped. A mirror exists only because a caller asked this function for one.
+
+  `license` is the upstream's SPDX identifier, or the literal `"none"` when
+  the upstream publishes no license. `nil` is not accepted: the database
+  constraint pairs the two columns, and a mirror that says nothing about its
+  license is exactly the state this refuses to represent.
+  """
+  def mirror_creation_changeset(
+        repository,
+        attrs,
+        namespace,
+        created_by_user_id,
+        upstream_url,
+        license
+      )
+      when is_binary(upstream_url) and is_binary(license) do
+    repository
+    |> creation_changeset(attrs, namespace, created_by_user_id, "github_import")
+    |> put_change(:upstream_url, upstream_url)
+    |> put_change(:upstream_license, license)
+    |> validate_length(:upstream_url, min: 12, max: 500)
+    |> validate_format(:upstream_url, ~r{\Ahttps://[a-z0-9.-]+/[^\s]+\z})
+    |> validate_length(:upstream_license, min: 1, max: 60)
+  end
+
+  @doc "Whether this repository is an upstream mirror rather than an owned repository."
+  def mirror?(%__MODULE__{upstream_url: url}), do: is_binary(url)
 
   defp normalize_creation_name(attrs) do
     case Map.get(attrs, :name, Map.get(attrs, "name")) do

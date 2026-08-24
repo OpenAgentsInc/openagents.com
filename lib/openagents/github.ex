@@ -347,6 +347,7 @@ defmodule OpenAgents.GitHub do
          "archived" => repository["archived"] == true,
          "default_branch" => bounded_string(default_branch, 255),
          "language" => bounded_string(repository["language"], 60),
+         "license" => bounded_string(license_spdx_id(repository["license"]), 60),
          "pushed_at" => bounded_string(repository["pushed_at"], 32),
          "size_kb" => bounded_size(repository["size"]),
          "permissions" => permissions,
@@ -356,6 +357,17 @@ defmodule OpenAgents.GitHub do
   end
 
   defp project_repository(_body), do: {:error, :github_response_invalid}
+
+  # GitHub answers `null` for a repository with no license file, and a
+  # `spdx_id` of `NOASSERTION` for one whose license it could not identify.
+  # Both are "no license this projection can name", and both must stay
+  # distinguishable from a real identifier downstream, so neither is
+  # smuggled through as a string here.
+  defp license_spdx_id(%{"spdx_id" => spdx_id})
+       when is_binary(spdx_id) and spdx_id != "" and spdx_id != "NOASSERTION",
+       do: spdx_id
+
+  defp license_spdx_id(_license), do: nil
 
   defp project_organization_membership(%{
          "state" => "active",

@@ -322,6 +322,120 @@ defmodule OpenAgents.Repositories do
     end
   end
 
+  @doc """
+  Bring in a public repository this account does not own, as an upstream
+  mirror in the account's own namespace.
+
+  This is not the import gate relaxed. `create_user_import/4` still refuses a
+  source owned by anyone else, because an import claims the snapshot as this
+  account's own repository and says nothing about where it came from. A mirror
+  makes the opposite claim: it names the upstream on every surface that shows
+  it, carries the upstream's license or records that there is none, and
+  refuses every push, because there is no path back to the upstream and a
+  copy that silently diverges from the source it names is worse than one that
+  will not move.
+
+  The source must be public. A private repository this account can read
+  through its own GitHub grant is not something the forge may republish under
+  a mirror's provenance, so `:source_repository_not_public` refuses it before
+  any row exists.
+  """
+  def create_user_mirror(%User{} = user, source, attrs, idempotency_key)
+      when is_map(source) and is_map(attrs) and is_binary(idempotency_key) do
+    with {:ok, namespace} <- ensure_user_namespace(user),
+         {:ok, mirror} <- mirror_provenance(source) do
+      create_repository_transaction(
+        user,
+        namespace,
+        attrs,
+        source,
+        "github_mirror",
+        "github_import",
+        idempotency_key,
+        mirror
+      )
+    end
+  end
+
+  @doc "Bring in a public repository as an upstream mirror in an organization namespace."
+  def create_organization_mirror(
+        %User{} = user,
+        %Namespace{kind: "organization"} = namespace,
+        source,
+        attrs,
+        idempotency_key
+      )
+      when is_map(source) and is_map(attrs) and is_binary(idempotency_key) do
+    with {:ok, mirror} <- mirror_provenance(source) do
+      create_repository_transaction(
+        user,
+        namespace,
+        attrs,
+        source,
+        "github_mirror",
+        "github_import",
+        idempotency_key,
+        mirror
+      )
+    end
+  end
+
+  @doc """
+  Whether this repository is an upstream mirror.
+
+  One predicate, so the Git plane, the API projection, and the page all decide
+  mirror-ness the same way and a fifth reader cannot invent a sixth rule.
+  """
+  def mirror?(%Repository{} = repository), do: Repository.mirror?(repository)
+
+  defp mirror_provenance(source) do
+    full_name = fetch_attr!(source, :source_full_name)
+    license = fetch_attr(source, :source_license)
+
+    cond do
+      fetch_attr(source, :source_public) != true ->
+        {:error, :source_repository_not_public}
+
+      not is_binary(full_name) ->
+        {:error, :invalid_import}
+
+      true ->
+        {:ok, {"https://github.com/" <> full_name, normalize_license(license)}}
+    end
+  end
+
+  # An upstream with no license is not an upstream whose license is unknown.
+  # GitHub answers `null` for a repository with no license file and
+  # `NOASSERTION` for one whose license it cannot identify; both become the
+  # literal "none", which the surfaces render as a statement rather than a
+  # blank.
+  defp normalize_license(license)
+       when is_binary(license) and license != "" and license != "NOASSERTION",
+       do: String.slice(license, 0, 60)
+
+  defp normalize_license(_license), do: "none"
+
+  defp repository_creation_changeset(repository, attrs, namespace, user_id, kind, nil),
+    do: Repository.creation_changeset(repository, attrs, namespace, user_id, kind)
+
+  defp repository_creation_changeset(
+         repository,
+         attrs,
+         namespace,
+         user_id,
+         _kind,
+         {upstream_url, license}
+       ),
+       do:
+         Repository.mirror_creation_changeset(
+           repository,
+           attrs,
+           namespace,
+           user_id,
+           upstream_url,
+           license
+         )
+
   def list_visible_repositories(%User{} = user) do
     Repo.all(
       from repository in readable_by(Repository, user),
@@ -1162,12 +1276,14 @@ defmodule OpenAgents.Repositories do
          source,
          operation,
          provisioning_kind,
-         idempotency_key
+         idempotency_key,
+         mirror \\ nil
        ) do
     normalized_request = %{
       namespace_id: namespace.id,
       repository: normalize_repository_attrs(attrs),
-      source: normalize_source(source)
+      source: normalize_source(source),
+      mirror: mirror
     }
 
     request_digest = digest(normalized_request)
@@ -1190,7 +1306,8 @@ defmodule OpenAgents.Repositories do
               operation,
               provisioning_kind,
               idempotency_key,
-              request_digest
+              request_digest,
+              normalized_request.mirror
             )
         end
       end)
@@ -1222,13 +1339,14 @@ defmodule OpenAgents.Repositories do
          operation,
          provisioning_kind,
          idempotency_key,
-         request_digest
+         request_digest,
+         mirror
        ) do
     lock_and_validate_quota!(namespace.id)
 
     repository =
       %Repository{}
-      |> Repository.creation_changeset(attrs, namespace, user.id, provisioning_kind)
+      |> repository_creation_changeset(attrs, namespace, user.id, provisioning_kind, mirror)
       |> Repo.insert!()
 
     Audit.record!("repository.created", {:user, user.id}, "repository", repository.id,
@@ -1278,12 +1396,16 @@ defmodule OpenAgents.Repositories do
         created_import
       end
 
+    # The outbox names the executor, not the caller's intent. A mirror and an
+    # import are copied by the same provisioning path, so both queue
+    # `github_import` here while the idempotency record keeps them apart: one
+    # key must never replay an import as a mirror or the reverse.
     outbox =
       %ProvisioningOutbox{}
       |> ProvisioningOutbox.changeset(
         repository.id,
         repository_import && repository_import.id,
-        operation
+        outbox_operation(provisioning_kind)
       )
       |> Repo.insert!()
 
@@ -1318,7 +1440,10 @@ defmodule OpenAgents.Repositories do
     end
   end
 
-  defp replay_result(request, "github_import") do
+  defp outbox_operation("empty"), do: "create"
+  defp outbox_operation("github_import"), do: "github_import"
+
+  defp replay_result(request, operation) when operation in ["github_import", "github_mirror"] do
     repository =
       Repository
       |> Repo.get!(request.repository_id)

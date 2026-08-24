@@ -255,6 +255,25 @@ defmodule OpenAgents.Forge.GitHTTP do
     end
   end
 
+  # An upstream mirror is one-way by construction. There is no push to the
+  # upstream it names, so accepting a push here would produce a copy that
+  # claims an origin it has silently diverged from — worse than a copy that
+  # will not move.
+  #
+  # The refusal sits on the Git plane rather than in a controller because this
+  # is where a push actually lands: `advertise/4` and `receive_pack/3` are the
+  # only two callers, both reach it through this clause, and the clause is
+  # ahead of every principal. An operator token, a paired computer's grant,
+  # and an assignment credential are refused the same way an account is, so
+  # there is no principal for which the mirror is writable.
+  defp authorize(_conn, %{upstream_url: upstream_url}, :write) when is_binary(upstream_url) do
+    {:error, 403,
+     "this repository is an upstream mirror of #{upstream_url} and accepts no pushes. " <>
+       "A mirror is one-way: it carries the upstream's history and its license, " <>
+       "and nothing here can be pushed back to the upstream. " <>
+       "Create your own repository if you want to push."}
+  end
+
   defp authorize(conn, repository, :write) do
     case conn.assigns[:forge_principal] do
       nil ->
@@ -357,7 +376,7 @@ defmodule OpenAgents.Forge.GitHTTP do
        [{"www-authenticate", ~s(Basic realm="openagents-forge")}]}
 
   defp send_git_error(conn, {:error, status, message}) do
-    conn |> send_resp(status, message) |> halt()
+    conn |> put_resp_content_type("text/plain") |> send_resp(status, message) |> halt()
   end
 
   defp send_git_error(conn, {:error, %OpenAgents.Forge.SyncError{}}) do

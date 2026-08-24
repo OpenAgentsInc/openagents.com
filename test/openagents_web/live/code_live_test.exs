@@ -383,6 +383,79 @@ defmodule OpenAgentsWeb.CodeLiveTest do
       refute html =~ "Synced"
     end
 
+    test "an upstream mirror names its upstream to an anonymous reader", %{conn: conn} do
+      owner = github_user("mirror-page-owner", "mirror-page-owner")
+
+      assert {:ok, repository, _import, :created} =
+               OpenAgents.Repositories.create_user_mirror(
+                 owner,
+                 %{
+                   source_repository_id: 909,
+                   source_owner_id: 777_777,
+                   source_full_name: "tobi/walgit",
+                   source_default_branch: "main",
+                   source_ref_digest: String.duplicate("a", 64),
+                   source_head_sha: String.duplicate("c", 40),
+                   source_refs: %{"refs/heads/main" => String.duplicate("c", 40)},
+                   source_uses_lfs: false,
+                   source_public: true,
+                   source_license: "MIT"
+                 },
+                 %{name: "walgit", visibility: "public", default_branch: "main"},
+                 "mirror-page-key"
+               )
+
+      repository
+      |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+      |> Repo.update!()
+
+      # No session: a stranger reading the page is the reader most likely to
+      # mistake a mirror for something this account wrote.
+      {:ok, view, html} = live(conn, "/mirror-page-owner/walgit")
+
+      assert has_element?(view, ".repo-view__rail #repo-upstream-mirror")
+      assert html =~ "Upstream mirror"
+      assert html =~ "https://github.com/tobi/walgit"
+      assert html =~ "MIT"
+      assert html =~ "accepts no pushes"
+
+      # The import block claims OpenAgents owns the snapshot. A mirror makes
+      # the opposite claim, so the two never appear together.
+      refute has_element?(view, "#repo-import-provenance")
+      refute html =~ "Imported from GitHub"
+    end
+
+    test "a mirror of an unlicensed upstream says so rather than staying silent", %{conn: conn} do
+      owner = github_user("unlicensed-mirror-page", "unlicensed-mirror-page")
+
+      assert {:ok, repository, _import, :created} =
+               OpenAgents.Repositories.create_user_mirror(
+                 owner,
+                 %{
+                   source_repository_id: 910,
+                   source_owner_id: 777_777,
+                   source_full_name: "tobi/unlicensed",
+                   source_default_branch: "main",
+                   source_ref_digest: String.duplicate("a", 64),
+                   source_head_sha: String.duplicate("c", 40),
+                   source_refs: %{"refs/heads/main" => String.duplicate("c", 40)},
+                   source_uses_lfs: false,
+                   source_public: true,
+                   source_license: nil
+                 },
+                 %{name: "unlicensed", visibility: "public", default_branch: "main"},
+                 "unlicensed-mirror-page-key"
+               )
+
+      repository
+      |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+      |> Repo.update!()
+
+      {:ok, _view, html} = live(conn, "/unlicensed-mirror-page/unlicensed")
+
+      assert html =~ "No license found upstream"
+    end
+
     test "a repository created empty shows no import provenance", %{conn: conn} do
       owner = github_user("no-provenance-owner", "no-provenance-owner")
 

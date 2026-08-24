@@ -237,6 +237,11 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
           <span class="font-normal text-muted-foreground">{@repository.namespace.slug}/</span>{@repository.name}
         </.link>
         <.badge variant={:dim}>{@repository.visibility}</.badge>
+        <%!-- A mirror in a list of owned repositories is the easiest place to
+        misread one for the other, so the row says which it is. --%>
+        <.badge :if={@repository.upstream_url} id={"#{@id}-mirror"} variant={:dim}>
+          upstream mirror
+        </.badge>
         <.badge :if={@repository.lifecycle_state != "ready"} variant={state_variant(@repository)}>
           {@repository.lifecycle_state}
         </.badge>
@@ -259,7 +264,19 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
         <span :if={@source} aria-hidden="true">·</span>
         <%!-- REPOSITORY-001: the snapshot was copied once and is never
         resynchronized, so the row says so rather than implying a mirror. --%>
-        <span :if={@source} id={"#{@id}-provenance"} data-source={@source}>
+        <span
+          :if={@source && @repository.upstream_url}
+          id={"#{@id}-provenance"}
+          data-source={@source}
+        >
+          One-way mirror of <code class="text-foreground">{@repository.upstream_url}</code>,
+          licensed {@repository.upstream_license}
+        </span>
+        <span
+          :if={@source && is_nil(@repository.upstream_url)}
+          id={"#{@id}-provenance"}
+          data-source={@source}
+        >
           Imported once from GitHub, from <code class="text-foreground">{@source}</code>
         </span>
       </div>

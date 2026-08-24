@@ -136,6 +136,7 @@ defmodule OpenAgents.Repositories.Importer do
          :ok <-
            import_stage(repository, repository_import, "fetch_source", fn ->
              fetch_source(
+               repository,
                source_repository,
                source_url,
                credential,
@@ -220,23 +221,33 @@ defmodule OpenAgents.Repositories.Importer do
     end
   end
 
-  defp fetch_source(source_repository, source_url, credential, temporary_directory, options) do
+  defp fetch_source(
+         repository,
+         source_repository,
+         source_url,
+         credential,
+         temporary_directory,
+         options
+       ) do
     with {:ok, environment} <- credential_environment(credential, temporary_directory) do
       git_runner = Keyword.get(options, :git_runner, &Repos.git/3)
 
-      args = [
-        "-c",
-        "credential.helper=",
-        "fetch",
-        "--force",
-        "--prune",
-        "--depth=1",
-        "--no-tags",
-        "--no-recurse-submodules",
-        source_url,
-        "+refs/heads/*:refs/heads/*",
-        "+refs/tags/*:refs/tags/*"
-      ]
+      args =
+        [
+          "-c",
+          "credential.helper=",
+          "fetch",
+          "--force",
+          "--prune"
+        ] ++
+          depth_arguments(repository) ++
+          [
+            "--no-tags",
+            "--no-recurse-submodules",
+            source_url,
+            "+refs/heads/*:refs/heads/*",
+            "+refs/tags/*:refs/tags/*"
+          ]
 
       case git_runner.(source_repository, args, env: environment) do
         {_output, 0} ->
@@ -249,6 +260,18 @@ defmodule OpenAgents.Repositories.Importer do
       end
     end
   end
+
+  # An owned import takes the tip and states its boundary; the account can push
+  # the rest of the history it already has. A mirror has no such recourse: no
+  # push reaches it, and there is no path back to the upstream, so a boundary
+  # here would be permanent and every clone of the mirror would carry it. The
+  # copy is therefore full, and `shallow_boundaries/1` then records the empty
+  # boundary set the fetch actually produced rather than assuming it.
+  #
+  # Both branches record what happened. Neither leaves the WAL silent about
+  # its boundary, which is the failure #179 found.
+  defp depth_arguments(%Repository{upstream_url: url}) when is_binary(url), do: []
+  defp depth_arguments(_repository), do: ["--depth=1"]
 
   defp credential_environment(nil, _temporary_directory),
     do: {:ok, [{"GIT_TERMINAL_PROMPT", "0"}]}

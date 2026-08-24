@@ -456,6 +456,125 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     sh!(machine_clone, "git", ["push", "origin", "HEAD:main"])
   end
 
+  test "an upstream mirror serves a complete clone and refuses every push", %{
+    base: base,
+    port: port,
+    token: token,
+    user: user
+  } do
+    source = Path.join(base, "walgit-source")
+    File.mkdir_p!(source)
+    sh!(source, "git", ["init", "--initial-branch=main"])
+    sh!(source, "git", ["config", "user.email", "test@example.com"])
+    sh!(source, "git", ["config", "user.name", "Upstream"])
+
+    Enum.each(1..3, fn index ->
+      File.write!(Path.join(source, "README.md"), "revision #{index}\n")
+      sh!(source, "git", ["add", "README.md"])
+      sh!(source, "git", ["commit", "-m", "Revision #{index}"])
+    end)
+
+    head = source |> sh!("git", ["rev-parse", "HEAD"]) |> String.trim()
+    refs = %{"refs/heads/main" => head}
+
+    {:ok, mirror, _import, :created} =
+      Repositories.create_user_mirror(
+        user,
+        %{
+          source_repository_id: 909,
+          source_owner_id: 777_777,
+          source_full_name: "tobi/walgit",
+          source_default_branch: "main",
+          source_ref_digest: ref_digest(source, refs),
+          source_head_sha: head,
+          source_refs: refs,
+          source_uses_lfs: false,
+          source_public: true,
+          source_license: "MIT"
+        },
+        %{name: "walgit", visibility: "public", default_branch: "main"},
+        "git-http-mirror-key"
+      )
+
+    :ok = OpenAgents.Repositories.Importer.import(mirror, source_url: source)
+
+    mirror
+    |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
+    |> Repo.update!()
+
+    mirror_url = "http://x:#{token}@127.0.0.1:#{port}/git-http-owner/walgit.git"
+
+    # A mirror is still a forge repository: EXIT-004 holds for it. The clone
+    # walks to the root because the copy was taken whole, so no boundary can
+    # abort the transfer.
+    clone = Path.join(base, "walgit-clone")
+    sh!(base, "git", ["clone", mirror_url, clone])
+    assert String.trim(sh!(clone, "git", ["rev-list", "--count", "HEAD"])) == "3"
+
+    # `sh!/3` flunks on a nonzero exit, so this asserts fsck succeeded; the
+    # refutations catch the dangling and missing objects fsck reports while
+    # still exiting zero.
+    fsck = sh!(clone, "git", ["fsck", "--full"])
+    refute fsck =~ "missing"
+    refute fsck =~ "broken"
+
+    sh!(clone, "git", ["config", "user.email", "test@example.com"])
+    sh!(clone, "git", ["config", "user.name", "Forge Test"])
+    File.write!(Path.join(clone, "local.txt"), "local\n")
+    sh!(clone, "git", ["add", "local.txt"])
+    sh!(clone, "git", ["commit", "-m", "Local commit"])
+
+    {output, status} =
+      System.cmd("git", ["-c", "credential.helper=", "push", "origin", "HEAD:main"],
+        cd: clone,
+        stderr_to_stdout: true
+      )
+
+    assert status != 0
+    assert output =~ "403"
+
+    # The git client stops at the ref advertisement, so a refusal that lived
+    # only there would look complete while `POST /git-receive-pack` stayed
+    # open. Both are asserted, against the same account whose token clones the
+    # repository fine.
+    advertisement =
+      Req.get!(
+        "http://127.0.0.1:#{port}/git-http-owner/walgit.git/info/refs?service=git-receive-pack",
+        auth: {:basic, "x:#{token}"},
+        retry: false
+      )
+
+    assert advertisement.status == 403
+    assert advertisement.body =~ "upstream mirror of https://github.com/tobi/walgit"
+    assert advertisement.body =~ "accepts no pushes"
+
+    receive_pack =
+      Req.post!(
+        "http://127.0.0.1:#{port}/git-http-owner/walgit.git/git-receive-pack",
+        auth: {:basic, "x:#{token}"},
+        headers: [{"content-type", "application/x-git-receive-pack-request"}],
+        body: "0000",
+        retry: false
+      )
+
+    assert receive_pack.status == 403
+    assert receive_pack.body =~ "upstream mirror of https://github.com/tobi/walgit"
+
+    # Nothing moved: the mirror still holds exactly what the upstream had.
+    assert Repos.refs(mirror.storage_key) == refs
+  end
+
+  defp ref_digest(source, refs) do
+    refs
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map_join("\n", fn {name, sha} ->
+      object_type = source |> sh!("git", ["cat-file", "-t", sha]) |> String.trim()
+      Enum.join([name, object_type, sha], "\0")
+    end)
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+  end
+
   test "the legacy initial repository path remains available", %{
     base: base,
     port: port,

@@ -8,9 +8,10 @@ defmodule OpenAgents.Admin do
   readable by exactly one identity rather than by the internet
   (`INVARIANTS.md` ADMIN-001).
 
-  Nothing here writes. The operator listens and reads; there is no ban control,
-  no message injection, no deletion, and no configuration change on this path, so
-  a mistake in the surface cannot alter anyone's conversation.
+  Nothing in this module writes: there is no ban control, no message injection,
+  no deletion, and no configuration change on this path, so a mistake here
+  cannot alter anyone's conversation. The wider operator surface does write, and
+  ADMIN-001 enumerates where.
   """
 
   import Ecto.Query

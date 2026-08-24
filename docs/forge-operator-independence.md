@@ -43,11 +43,15 @@ every other.
   request data, so raising a repository from `dark` through `pulse` and `ledger`
   to `glass` ships through the receipted deploy pipeline rather than through a
   button. The operator owns that configuration.
-- **Write through several product surfaces.** Deployment starts, forum
-  moderation, agent suspension, artifact listings, and continual-learning jobs
-  are operator writes today. `ADMIN-001` still describes the operator path as
-  read-only with one exception, which is now understated; issue #146 tracks
-  correcting it.
+- **Write through several product surfaces.** Deployment starts, Codex account
+  connection, forum moderation, identity-claim review, agent suspension,
+  artifact listings, and continual-learning jobs are operator writes today.
+  `ADMIN-001` enumerates each of them by route, and
+  `test/openagents_web/operator_surface_test.exs` compares that enumeration
+  against the router and against every module that consults
+  `OpenAgents.Accounts.admin?/1`, so a new operator write cannot land without
+  amending the invariant. None of them reaches an account row, a conversation,
+  a message, or a ban.
 
 ### What the operator can see
 
@@ -55,8 +59,9 @@ every other.
   identity, status, join and last-authentication times, and message and issue
   counts.
 - **Recorded call audio.** `OpenAgentsWeb.AdminRecordingController` unseals and
-  streams any account's call recording. The privacy copy in the product says
-  so.
+  streams any account's call recording at `GET /admin/recordings/:id/audio`. The
+  privacy copy in the product says so, and `ADMIN-001` now names the route
+  rather than denying it.
 - **Everything in PostgreSQL.** There are no encrypted Ecto column types
   anywhere in this application. Issue bodies, comments, conversation messages,
   repository metadata, and every receipt family are stored as plaintext. Three
@@ -70,7 +75,12 @@ every other.
   node.
 
 None of these reads is audited. There is no record of which accounts or which
-recordings an operator opened.
+recordings an operator opened, and `ADMIN-001` records that absence as a
+decision rather than an oversight. An access log written by the operator's
+application into the operator's database is evidence to the operator and to
+nobody else, so it would read as a control while constraining nothing. Making
+the read accountable needs the same signature or external anchor the WAL lacks,
+which is issue #151.
 
 ### What you take on trust
 
@@ -200,9 +210,12 @@ plus a recorded gap.
 | `EXIT-002` | Served state is checkable against the WAL with no database. |
 | `EXIT-003` | Recovery comes from the WAL; the mirror is strictly lossy and is never an input. |
 | `EXIT-004` | A clone is complete and self-hosting. |
+| `ADMIN-001` | The operator surface is an enumerated set of reads and writes, and the enumeration is checked against the router. |
 
-Their proofs are `test/openagents/data_rights/export_inventory_test.exs` and
-`test/openagents/forge/independence_test.exs`. Every proof was mutation-checked:
+Their proofs are `test/openagents/data_rights/export_inventory_test.exs`,
+`test/openagents/forge/independence_test.exs`, and
+`test/openagents_web/operator_surface_test.exs`. Every proof was
+mutation-checked:
 each property was broken deliberately, the proof was confirmed to fail, and the
 break was reverted.
 
@@ -212,5 +225,4 @@ break was reverted.
 | --- | --- |
 | Private-repository metadata reads answer `404` to their owner | #142 |
 | No account-scoped export of forge-owned and forum-owned data | #143 |
-| `ADMIN-001` understates the operator surface | #146 |
 | WAL entries are unsigned and anchored nowhere outside operator storage | #151 |

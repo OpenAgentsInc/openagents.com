@@ -2,6 +2,10 @@ defmodule OpenAgentsWeb.AdminRecordingController do
   @moduledoc """
   Streams one call recording to an authenticated operator.
 
+  This is the route that hands one person another person's voice, so ADMIN-001
+  names it and `test/openagents_web/operator_surface_test.exs` holds it in the
+  enumerated operator surface. The read is not audited; ADMIN-001 records why.
+
   The reader sends the complete ordered recording because later WebM, Ogg, and
   MP4 chunks depend on the first chunk's container header. It advertises no
   range support, unseals one chunk at a time, and never loads a complete call

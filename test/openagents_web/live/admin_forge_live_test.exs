@@ -1,9 +1,9 @@
 defmodule OpenAgentsWeb.AdminForgeLiveTest do
   @moduledoc """
-  `/admin/forge` carries the one write ADMIN-001 (as amended 2026-08-18)
-  permits on the operator surface: promoting a pushed commit as the fleet
-  target. The gate is the same as `/admin`; the write is receipted with the
-  operator identity; only WAL-pushed SHAs are promotable.
+  `/admin/forge` carries one of the writes ADMIN-001 enumerates on the operator
+  surface: promoting a pushed commit as the fleet target. The gate is the same
+  as `/admin`; the write is receipted with the operator identity; only
+  WAL-pushed SHAs are promotable.
   """
 
   use OpenAgentsWeb.ConnCase, async: false

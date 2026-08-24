@@ -1351,7 +1351,7 @@ behavior except through the receipted pipeline. Concretely:
   refused with a typed outcome. The clone is removed when the job ends.
 - **Promotion is an operator action.** No OpenAgents tool can promote, deploy, or
   hot-load. The job's report links the pushed SHA; the `/admin/forge`
-  Promote click (ADMIN-001 as amended) is the human approval receipt, and
+  Promote click (enumerated by ADMIN-001) is the human approval receipt, and
   the allowlist of hot-loadable modules remains operator-owned data. The
   operator API under FLEETPROMOTE-001 is the same approval by a scripted
   operator, not a way around one.
@@ -1986,9 +1986,11 @@ conversation rather than a failed one.
 Recording is a property of the voice surface, not a per-account setting. While
 it is enabled there is no opt-out flag and none may be added without changing
 this contract; the disclosure states the situation rather than offering a
-choice, and typed chat remains available and is never recorded. No current
-account or operator route returns stored audio; account export carries
-recording metadata rather than its sound.
+choice, and typed chat remains available and is never recorded. No account
+route returns stored audio and account export carries recording metadata rather
+than its sound, but the operator route named in ADMIN-001 unseals and streams
+it; the seal here defends against a stolen database, not against the person who
+holds the key.
 
 Evidence: `OpenAgents.Voice.Recordings`, `OpenAgents.Voice.Recording`,
 `OpenAgents.Voice.RecordingChunk`, `OpenAgents.Voice.RecordingVault`, the
@@ -1997,7 +1999,7 @@ Evidence: `OpenAgents.Voice.Recordings`, `OpenAgents.Voice.Recording`,
 `OpenAgentsWeb.VoiceRecordingControllerTest`, `assets/test/voice_recording_test.mjs`,
 and `test/openagents/voice/recordings_test.exs`.
 
-### ADMIN-001 — One operator reads across accounts, and only reads
+### ADMIN-001 — One operator reads across accounts, including call audio, and writes on an enumerated set of surfaces
 
 Status: Current
 
@@ -2015,35 +2017,84 @@ reconnect. A non-operator receives exactly what an unauthenticated visitor
 receives, with no flash and no distinct status, so the surface never announces
 that it exists. No product surface links to it.
 
-The operator path is read-only. It exposes no ban, no message, no deletion, and
-no configuration change, so a mistake in that surface cannot alter anyone's
-conversation.
+This contract states what that authority is, not what it ought to be. It
+constrains nobody; it makes the surface countable, and the proof fails when the
+count changes.
 
-Amended 2026-08-18 (forge deploy lane, issue #119): the forge panel at
-`/admin/forge` is the one deliberate exception, and it is a narrow one. Its
-only write is promoting an already-pushed commit as the fleet deploy target
-(`OpenAgents.Forge.Promotion`, which calls `OpenAgents.Forge.Targets`),
-receipted with the promoting operator's identity in the append-only
-`forge_fleet_targets` ledger. Only SHAs present in the WAL-backed repository
-are promotable, so the surface cannot introduce code — it can only approve
-code that already survived the push path. Amended again for issue #57: the
-same promotion is reachable without a browser at
-`POST /api/v3/admin/forge/targets`, through the same context and under
-FLEETPROMOTE-001, which is stricter than a browser session rather than looser. It
-still cannot touch any account, conversation, message, ban, or product
-configuration; ADMIN-001's read-only rule continues to bind everything else
-on the operator surface, including the original `/admin` panel unchanged. It
-may show the bounded fields of `OpenAgents.Admin.Call`: account display
-identity, call lifecycle, model, token total, transcript-item count, and
-recording completeness metadata. No routed controller returns recording audio,
-transcript content, composed instructions, tool catalogs, provider call
-identity, or recall material. Calls with no uploaded recording are listed with
-the reason rather than hidden, so the panel cannot present an incomplete
-history as a complete one.
+**What the operator reads.** The `/admin` panel shows the bounded fields of
+`OpenAgents.Admin.Call`: account display identity, call lifecycle, model, token
+total, transcript-item count, and recording completeness metadata. Calls with no
+uploaded recording are listed with the reason rather than hidden, so the panel
+cannot present an incomplete history as a complete one. No routed controller
+returns transcript content, composed instructions, tool catalogs, provider call
+identity, or recall material.
+
+Decrypted call audio is the exception, and it is deliberate.
+`OpenAgentsWeb.AdminRecordingController` answers `GET /admin/recordings/:id/audio`
+for any account's recording, resolving it through `OpenAgents.Admin.get_recording/1`
+and unsealing each chunk from `OpenAgents.Voice.RecordingVault` on the way out.
+The sealing under VOICE-012 defends against a stolen database, not against the
+operator, and the product says so rather than implying otherwise: the voice
+disclosure in `OpenAgentsWeb.MemoryLive` tells every account that call audio is
+readable by an operator. A route that hands one person another person's voice is
+worth naming exactly, so it is named here and enumerated in the proof.
+
+That read is not audited, and this ledger records the absence rather than
+covering it. An access log written by the operator's application into the
+operator's database is evidence to the operator and to nobody else, so it would
+read as a control while constraining nothing — the failure mode
+`docs/taxonomy.md` naming rule 7 exists to prevent. Making the read
+accountable needs the signature or external anchor that `docs/forge-operator-independence.md`
+already names as missing from the WAL, and until that exists the honest
+statement is that the operator can listen and no record of it survives.
+
+**What the operator writes.** The operator path is not read-only. Every write it
+holds is enumerated below, and the proof asserts the enumeration rather than the
+sentence:
+
+- Promoting an already-pushed commit as the fleet deploy target, from
+  `/admin/forge` and from `POST /api/v3/admin/forge/targets`
+  (`OpenAgents.Forge.Promotion` into `OpenAgents.Forge.Targets`), receipted with
+  the promoting operator's identity in the append-only `forge_fleet_targets`
+  ledger. Only SHAs present in the WAL-backed repository are promotable, so the
+  surface cannot introduce code — it can only approve code that already survived
+  the push path. Under FLEETPROMOTE-001 the token path is stricter than a browser
+  session rather than looser.
+- Connecting and disconnecting Codex accounts and starting SCV deployments from
+  `/admin/scv/accounts` (`OpenAgents.SCV.CodexAccounts`,
+  `OpenAgents.SCV.Deployments`).
+- Forum moderation: closing, reopening, and pinning a topic and hiding or
+  deleting a post, from `OpenAgentsWeb.ForumTopicLive` and from
+  `PATCH /api/v3/forum/topics/:id` and `PATCH /api/v3/forum/posts/:id`; and
+  approving or rejecting an identity claim from `/admin/forum/claims` and
+  `PATCH /api/v3/forum/claims/:id`.
+- Suspending and reinstating an agent under `/api/operator/agents/:handle`.
+- Creating, authorizing, recording against, and deleting artifact listings under
+  `/api/operator/artifact-listings`.
+- Creating, cancelling, resuming, and replaying continual-learning jobs under
+  `/api/operator/continual-learning/jobs`.
+
+Reading a private forum board and raising a repository's transparency tier to
+`glass` are operator reads that widen with the same allowlist
+(`OpenAgents.Forum`, `OpenAgents.Transparency`).
+
+None of these touches an account row, a conversation, a message, or a ban.
+That bound is what remains of the original read-only claim, and it is the part
+that is true.
+
+The enumeration is executable. `OpenAgentsWeb.RouteAuthority` classifies every
+router entry, and the proof compares the operator-class routes against a
+declared table; separately it compares every module that consults
+`OpenAgents.Accounts.admin?/1`, read from each module's compiled import table,
+against a second declared table. A new operator route or a new operator gate
+anywhere in `lib/` fails the proof until this contract is amended to name it.
 
 Evidence: `OpenAgents.Accounts.admin?/1`, `OpenAgents.Admin`,
-`OpenAgents.Admin.Call`, `OpenAgentsWeb.AdminLive`, `OpenAgents.AdminTest`, and
-`OpenAgentsWeb.AdminLiveTest`.
+`OpenAgents.Admin.Call`, `OpenAgentsWeb.AdminLive`,
+`OpenAgentsWeb.AdminRecordingController`, `OpenAgentsWeb.RouteAuthority`,
+`OpenAgents.AdminTest`, `OpenAgentsWeb.AdminLiveTest`,
+`test/openagents_web/controllers/admin_recording_controller_test.exs`, and
+`test/openagents_web/operator_surface_test.exs`.
 
 ### DATA-004 — The authenticated user can export and delete OpenAgents product data
 
@@ -2059,8 +2110,10 @@ audio included, through `voice_recordings`' cascade to the session. The export
 names each call's recording — status, container, size, duration claim, digest,
 and that it is encrypted at rest — without embedding the audio, because a JSON
 export is the wrong container for Opus and base64 in a text field would be
-worse. No current product route returns stored audio to an account or operator;
-what exists is disclosed and exported as metadata, and deletion removes it.
+worse. No product route returns stored audio to an account; what an account
+gets is disclosed and exported as metadata, and deletion removes it. The one
+route that returns the audio itself is the operator route ADMIN-001 enumerates,
+and the voice disclosure states that an operator can read it.
 Detailed terminal voice
 operations purge automatically after 90 days while the minimal provenance stub
 follows canonical voice messages until complete deletion. Disposable semantic
@@ -2113,10 +2166,12 @@ governed by LEADERBOARD-001, not a second product interface, and it does not
 introduce navigation chrome into the conversation.
 
 `/admin` is an operator tool rather than a product surface. It is reachable
-only by the allowlisted operator under ADMIN-001, is read only, cannot mount or
-invoke OpenAgents, and holds no conversation. It adds nothing to the conversation
-interface: no link, no affordance, and no chrome, for operators and
-non-operators alike. Being an operator tool is not license for product
+only by the allowlisted operator under ADMIN-001, cannot mount or invoke
+OpenAgents, and holds no conversation. The panel at `/admin` itself only reads
+and pages; the writes the wider operator surface holds are enumerated in
+ADMIN-001 and reach no account, conversation, message, or ban. It adds nothing
+to the conversation interface: no link, no affordance, and no chrome, for
+operators and non-operators alike. Being an operator tool is not license for product
 chrome — the anti-references in `docs/architecture.md` still describe what the product
 does not become.
 
@@ -3343,9 +3398,9 @@ contract; the invariant prose above defines the assertion, not the filename.
 | VOICE-009 | `test/openagents/voice_test.exs` |
 | VOICE-010 | `test/openagents/voice/release_operations_test.exs`, `test/openagents/voice/usage_test.exs` |
 | VOICE-011 | `test/openagents/voice/release_operations_test.exs`, `test/openagents_web/controllers/voice_telemetry_controller_test.exs` |
-| VOICE-012 | `test/openagents/voice/recordings_test.exs`, `test/openagents_web/controllers/voice_recording_controller_test.exs` |
-| ADMIN-001 | `test/openagents/admin_test.exs`, `test/openagents_web/live/admin_live_test.exs`, `test/openagents_web/live/admin_forge_live_test.exs` |
-| DATA-004 | `test/openagents_web/controllers/data_controller_test.exs`, `test/openagents/data_rights/atif_export_test.exs` |
+| VOICE-012 | `test/openagents/voice/recordings_test.exs`, `test/openagents_web/controllers/voice_recording_controller_test.exs`, `test/openagents_web/operator_surface_test.exs` |
+| ADMIN-001 | `test/openagents_web/operator_surface_test.exs`, `test/openagents_web/controllers/admin_recording_controller_test.exs`, `test/openagents/admin_test.exs`, `test/openagents_web/live/admin_live_test.exs`, `test/openagents_web/live/admin_forge_live_test.exs` |
+| DATA-004 | `test/openagents_web/controllers/data_controller_test.exs`, `test/openagents/data_rights/atif_export_test.exs`, `test/openagents_web/operator_surface_test.exs` |
 | UI-001 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
 | UI-002 | `test/openagents_web/tool_activity_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
 | UI-003 | `test/openagents_web/ui_test.exs`, `test/openagents_web/component_catalog_test.exs` |

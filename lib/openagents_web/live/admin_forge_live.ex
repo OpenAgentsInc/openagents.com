@@ -2,9 +2,9 @@ defmodule OpenAgentsWeb.AdminForgeLive do
   @moduledoc """
   The forge deploy panel: recent pushes, the current fleet target and its
   deploy-lane status, deploy receipts with the push→live loop time, and the
-  one write the operator surface permits — **Promote** (ADMIN-001 as amended
-  2026-08-18): approving an already-pushed commit as the fleet target,
-  receipted with the operator's identity. Only WAL-pushed SHAs are
+  one write this panel permits — **Promote** (enumerated by ADMIN-001):
+  approving an already-pushed commit as the fleet target, receipted with the
+  operator's identity. Only WAL-pushed SHAs are
   promotable; everything else here is a read-only projection that updates
   live off the forge PubSub topics.
 

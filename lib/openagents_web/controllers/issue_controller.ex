@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.IssueController do
 
   alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
+  alias OpenAgents.Issues.CompletionClaims
   alias OpenAgents.Issues.Evidence
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Agents.Agent
@@ -28,6 +29,7 @@ defmodule OpenAgentsWeb.IssueController do
         pull_requests: PullRequests.markers_by_issue_id(issues),
         work: Assignments.attempts_for_issues(issues),
         evidence: Evidence.for_issues(issues),
+        completion_claims: CompletionClaims.for_issues(issues),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -134,7 +136,8 @@ defmodule OpenAgentsWeb.IssueController do
             dependencies: dependencies(issue),
             progress: progress(issue, actor),
             work: work(issue),
-            evidence: evidence(issue)
+            evidence: evidence(issue),
+            completion_claims: completion_claims(issue)
           )
 
         {:error, %Ecto.Changeset{} = changeset} ->
@@ -181,7 +184,8 @@ defmodule OpenAgentsWeb.IssueController do
       progress: progress(issue, conn.assigns[:current_user]),
       pull_requests: PullRequests.markers_by_issue_id([issue]),
       work: work(issue),
-      evidence: evidence(issue)
+      evidence: evidence(issue),
+      completion_claims: completion_claims(issue)
     )
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -214,7 +218,8 @@ defmodule OpenAgentsWeb.IssueController do
           dependencies: dependencies(issue),
           progress: progress(issue, conn.assigns.current_user),
           work: work(issue),
-          evidence: evidence(issue)
+          evidence: evidence(issue),
+          completion_claims: completion_claims(issue)
         )
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -234,6 +239,11 @@ defmodule OpenAgentsWeb.IssueController do
   # index, for the same reason: a detail response and a row in the list can
   # never disagree about what shipped an issue.
   defp evidence(%Issue{} = issue), do: Evidence.for_issues([issue])
+
+  # The claims read through the same page-shaped function as the index, for the
+  # same reason: a detail response and a row in the list can never disagree
+  # about what was claimed for an issue.
+  defp completion_claims(%Issue{} = issue), do: CompletionClaims.for_issues([issue])
 
   # Progress is derived from the boards this reader can open, so an agent
   # authenticating as itself never inherits a private board's column.

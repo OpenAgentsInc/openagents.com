@@ -284,6 +284,7 @@
     20260824011303,
     20260824024146,
     20260824031651,
+    20260824032138,
     20260824032226
   ],
   "required_tables": [
@@ -298,7 +299,9 @@
     "github_oauth_attempts",
     "forge_fleet_targets",
     "forge_builds",
-    "forge_deploys"
+    "forge_deploys",
+    "repository_closure_policies",
+    "issue_completion_claims"
   ],
   "required_columns": {
     "users": [
@@ -493,13 +496,16 @@
     "users_ban_state_check",
     "visitors_identity_source_check",
     "forge_fleet_target_status",
-    "forge_deploys_result"
+    "forge_deploys_result",
+    "issue_completion_claims_close_requires_accepted",
+    "issue_completion_claims_state"
   ],
   "required_indexes": [
     "users_github_id_index",
     "visitors_browser_key_hash_index",
     "visitors_user_id_index",
-    "github_oauth_attempts_state_digest_index"
+    "github_oauth_attempts_state_digest_index",
+    "issue_completion_claims_issue_id_assignment_id_revision_index"
   ],
   "pre_baseline_required_indexes": [
     "forge_builds_repo_sha_target_id_index"

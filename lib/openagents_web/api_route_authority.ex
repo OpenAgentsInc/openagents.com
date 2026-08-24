@@ -327,6 +327,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/repos/:owner/:repo/issues" => {:required_bearer, :issue, :envelope},
       "post /api/v3/repos/:owner/:repo/issues/:issue_number/comments" =>
         {:required_bearer, :comment, :envelope},
+      "post /api/v3/repos/:owner/:repo/issues/:issue_number/completion_claim" =>
+        {:required_bearer, :issue, :envelope},
       "get /api/v3/agent" => {:required_bearer, :agent, :legacy},
       "post /api/v3/agents/:handle/box-control" => {:required_bearer, :agent, :legacy},
       "delete /api/v3/agents/:handle/box-control" => {:required_bearer, :agent, :legacy},

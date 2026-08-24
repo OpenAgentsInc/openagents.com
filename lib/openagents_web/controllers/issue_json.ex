@@ -103,6 +103,7 @@ defmodule OpenAgentsWeb.IssueJSON do
       |> put_progress(Map.get(assigns, :progress), issue)
       |> put_work(Map.get(assigns, :work), issue)
       |> put_evidence(Map.get(assigns, :evidence), issue)
+      |> put_completion_claims(Map.get(assigns, :completion_claims), issue)
 
     if extension == %{}, do: json, else: Map.put(json, :openagents, extension)
   end
@@ -134,6 +135,34 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   defp put_evidence(extension, evidence, issue) when is_map(evidence) do
     Map.put(extension, :evidence, evidence |> Map.get(issue.id, []) |> Enum.map(&evidence_json/1))
+  end
+
+  defp put_completion_claims(extension, nil, _issue), do: extension
+
+  defp put_completion_claims(extension, claims, issue) when is_map(claims) do
+    Map.put(
+      extension,
+      :completion_claims,
+      claims |> Map.get(issue.id, []) |> Enum.map(&completion_claim_json/1)
+    )
+  end
+
+  defp completion_claim_json(claim) do
+    %{
+      id: claim.id,
+      revision: claim.revision,
+      state: claim.state,
+      reasons: claim.reasons,
+      criteria: claim.criteria,
+      verifier: claim.verifier,
+      falsifier: claim.falsifier,
+      closed: claim.closed,
+      closed_at: claim.closed_at,
+      closed_by_actor: claim.closed_by_actor,
+      contradicted_at: claim.contradicted_at,
+      contradiction_reason: claim.contradiction_reason,
+      recorded_at: claim.recorded_at
+    }
   end
 
   defp evidence_json(entry) do

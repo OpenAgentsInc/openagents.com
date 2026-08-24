@@ -112,6 +112,82 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     }
   }
 
+  @issue_completion_claim %{
+    "type" => "object",
+    "description" =>
+      "One graded completion claim: what an attempt asserted about the " <>
+        "issue's intent at one exact revision, and how the accepted-outcome " <>
+        "contract graded it. A receipt says what evaluated a commit; this " <>
+        "says what was claimed about the outcome, which is a different " <>
+        "question and the only one that can close an issue.",
+    "properties" => %{
+      "id" => %{"type" => "string"},
+      "revision" => %{"type" => "string"},
+      "state" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Issues.CompletionClaim.states(),
+        "description" =>
+          "The graded verdict. `not_applicable` is human-authored work or a " <>
+            "repository that has not enabled agents, which the contract does " <>
+            "not gate at all."
+      },
+      "reasons" => %{
+        "type" => "array",
+        "items" => %{"type" => "string"},
+        "description" =>
+          "The typed reasons a non-accepted verdict carries, and the reason " <>
+            "an accepted claim did not close the issue when it did not."
+      },
+      "criteria" => %{
+        "type" => "array",
+        "items" => %{
+          "type" => "object",
+          "properties" => %{
+            "criterion" => %{"type" => "string"},
+            "evidence" => %{"type" => ["string", "null"]},
+            "visibility" => %{"type" => "string", "enum" => ["public", "private"]}
+          }
+        },
+        "description" =>
+          "Which evidence satisfied which acceptance criterion. A criterion " <>
+            "satisfied by a private repository's evidence appears as " <>
+            "satisfied without the reference."
+      },
+      "verifier" => %{"type" => ["string", "null"]},
+      "falsifier" => %{
+        "type" => ["string", "null"],
+        "description" =>
+          "The observation that would have made this claim red: the same " <>
+            "check name, on the same commit and artifact digest, reporting " <>
+            "failed."
+      },
+      "closed" => %{
+        "type" => "boolean",
+        "description" =>
+          "Whether this claim closed the issue. Only a qualification receipt " <>
+            "for this exact revision can, only on a repository that opted " <>
+            "in, and only when no receipt for that revision failed."
+      },
+      "closed_at" => %{"type" => ["string", "null"]},
+      "closed_by_actor" => %{
+        "type" => ["string", "null"],
+        "description" =>
+          "The system principal an automatic close is attributed to. It is " <>
+            "never a user id: a person's close leaves a closing reference " <>
+            "with a user behind it instead."
+      },
+      "contradicted_at" => %{
+        "type" => ["string", "null"],
+        "description" =>
+          "When a later receipt disagreed with the evidence this claim " <>
+            "rested on. The issue is never reopened; the claim stops reading " <>
+            "as uncontested."
+      },
+      "contradiction_reason" => %{"type" => ["string", "null"]},
+      "recorded_at" => %{"type" => "string"}
+    }
+  }
+
   @promise_record %{
     "type" => "object",
     "description" => "A state-gated promise record stored in a project item.",
@@ -227,6 +303,15 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "first, empty when nothing has evaluated one. A failed build, " <>
               "a reverted deployment, and a superseded run all stay: the " <>
               "chain is what happened, not what worked."
+        },
+        "completion_claims" => %{
+          "type" => "array",
+          "items" => @issue_completion_claim,
+          "description" =>
+            "Every completion claim graded against this issue, oldest " <>
+              "first. A claim is stored whether or not it was accepted and " <>
+              "whether or not it closed anything, so a refusal is on the " <>
+              "record rather than silent."
         }
       },
       "filters" => %{

@@ -338,6 +338,37 @@ The design that follows, for stage 6:
   policy requires it; the attempt records who produced the revision, so the
   check has both halves.
 
+### What stage 6 shipped, and what it deliberately did not
+
+`issue_completion_claims` stores one graded verdict per
+`{issue, attempt, revision}`. `OpenAgents.Issues.CompletionClaims` grades it
+with `AcceptedOutcome.evaluate/1` and takes exactly one judgment from the
+caller: which evidence satisfied which acceptance criterion. Mapping intent to
+evidence is the judgment no record can make on its own, which is why it is
+claimed; everything else is derived, which is why it cannot be asserted. The
+issue's sections come from its body, the attempt's five fields from
+`forge_assignments` and its work job's budget snapshot, the verifier from the
+check result the evidence resolves to, and the falsifier from that check's own
+identity reporting `failed`. Separation is always required on this path.
+
+The narrowing that closes the gap between "a receipt evaluated this commit" and
+"the outcome was produced": **only a `qualification` receipt can satisfy an
+acceptance criterion**, and only at the exact revision with the status
+`succeeded`. `deployment_check_results` is the one family whose row is a verdict
+about named bytes, published by an authorized principal that is not the attempt.
+A push proves receipt of bytes, a build proves the tree compiles, and a
+deployment proves placement — each real, none of them the issue's intent. All
+four still record on the evidence chain, and a failing edge in any family
+withholds the close.
+
+Closing also needs two per-repository opt-ins, both false by default
+(`repository_closure_policies`), and it never reopens: a failing receipt
+arriving after an accepted claim closed the issue stamps `contradicted_at` on
+the claim and leaves the issue closed for a person to act on. `#130` is
+untouched, and the two closes are told apart by their records — a
+`closed_by_user_id` on a closing reference, or `system:accepted-outcome` on a
+claim. See `INVARIANTS.md`, `OUTCOME-001`.
+
 ---
 
 ## 6. The staged plan

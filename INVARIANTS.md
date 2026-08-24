@@ -1766,10 +1766,65 @@ The committed contract is `priv/api-contracts/accepted-outcome-v1.json`, and
 sections, attempt fields, false-green classes, or result states drift from
 the code that enforces them.
 
+**The claim is durable, and only the caller's judgment comes from the caller.**
+`issue_completion_claims` stores one graded verdict per
+`{issue, attempt, revision}`: the state, the typed reasons, and which evidence
+satisfied which acceptance criterion. A caller supplies the
+criterion-to-evidence mapping and, optionally, false-green classes against its
+own result — an assertion that can only make the verdict worse. Everything
+else `OpenAgents.Issues.CompletionClaims` grades is read from records: the
+issue's four sections from its body, the attempt's five binding fields from
+`forge_assignments` and the `budget_snapshot` on its `work_jobs` row, the
+verifier from the published check result the evidence resolves to, and the
+falsifier as that check's own identity reporting `failed`. Producer-verifier
+separation is always required on this path, so an attempt whose requester also
+published the check is `unauthorized`.
+
+**Only a qualification receipt can close an issue, and only under an opt-in.**
+An acceptance criterion is satisfied only by an `issue_evidence` edge that is a
+`qualification` receipt, for that issue, at that exact revision, with the
+status `succeeded`. `deployment_check_results` is the one family whose row is a
+verdict about named bytes — identity is `{repository, name, commit, artifact
+digest}` — and whose publisher is an authorized principal that is not the
+attempt. A push records receipt of bytes and carries no result at all; a build
+records that a tree compiles, which is necessary for anything to work and
+sufficient for nothing to be done; a deployment records that an artifact
+reached an environment, which is placement rather than behavior. All four
+still record on the evidence chain; only one qualifies. On top of that,
+closing requires the repository to have opted in twice —
+`repository_closure_policies.agents_enabled` and `verified_closing_enabled`,
+both false by default, with an absent row meaning the same as both false — and
+requires that no evidence edge for that issue at that revision carries its
+family's word for failure.
+
+**A later receipt contradicts; it never reopens.** A failing edge arriving for
+an issue and revision an accepted claim rested on stamps `contradicted_at` and
+names the edge that disagreed. The issue stays closed, because reopening on a
+later signal is a separate policy with its own failure modes (`ISSUE-001`), and
+rule four stops any further close on that revision.
+
+**There is one automatic closer, and an automatic close is attributable.**
+`OpenAgents.Issues.ClosingReferences` remains the trailer path and is
+unchanged: a person wrote `Closes #N`, their write authority was checked, and
+the commit was reachable from the default branch. This path closes only issues
+that are still open, so a trailer close that already happened is recorded as a
+claim and moves nothing. Neither path reads commit prose;
+`OpenAgents.Forge.CommitReferences` is still the only reader of it. A reader
+tells the two apart by the record: a person's close leaves an
+`issue_closing_references` row with a `closed_by_user_id`, and a verified close
+leaves an `issue_completion_claims` row whose `closed_by_actor` is
+`system:accepted-outcome` and never a user id. PostgreSQL refuses any row that
+claims a close on a verdict other than `accepted`
+(`issue_completion_claims_close_requires_accepted`).
+
 Evidence: `OpenAgents.AcceptedOutcome`,
+`OpenAgents.Issues.CompletionClaims`, `OpenAgents.Issues.CompletionClaim`,
+`OpenAgents.Issues.ClosurePolicy`,
 `priv/api-contracts/accepted-outcome-v1.json`,
-`docs/accepted-outcome-contract.md`, and
-`test/openagents/accepted_outcome_test.exs`.
+`docs/accepted-outcome-contract.md`,
+`test/openagents/accepted_outcome_test.exs`,
+`test/openagents/issues/completion_claims_test.exs`, and
+`test/openagents_web/controllers/issue_completion_claim_controller_test.exs`.
 
 ### THREAD-001 — A thread owns its own model authority, and names it exactly once
 
@@ -4354,7 +4409,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs` |
-| OUTCOME-001 | `test/openagents/accepted_outcome_test.exs` |
+| OUTCOME-001 | `test/openagents/accepted_outcome_test.exs`, `test/openagents/issues/completion_claims_test.exs`, `test/openagents_web/controllers/issue_completion_claim_controller_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
 | DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |
 | DEPLOYPLANE-003 | `test/openagents/deployments/policy_test.exs`, `test/openagents/deployments_test.exs` |

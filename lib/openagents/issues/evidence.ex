@@ -69,7 +69,7 @@ defmodule OpenAgents.Issues.Evidence do
   alias OpenAgents.Deployments.Run, as: DeploymentRun
   alias OpenAgents.Forge.{Assignment, BuildReceipt, DeployReceipt, PushReceipt}
   alias OpenAgents.Forge.ReceiptRepository
-  alias OpenAgents.Issues.{ClosingReference, EvidenceEntry, Issue}
+  alias OpenAgents.Issues.{ClosingReference, CompletionClaims, EvidenceEntry, Issue}
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
 
@@ -497,10 +497,28 @@ defmodule OpenAgents.Issues.Evidence do
         conflict_target: [:issue_id, :commit_sha, :family, :receipt_id]
       )
       |> case do
-        {:ok, %EvidenceEntry{} = entry} -> [entry]
-        {:error, _changeset} -> []
+        {:ok, %EvidenceEntry{} = entry} ->
+          # A receipt that disagrees with an accepted claim's evidence marks
+          # that claim contradicted. It never reopens the issue and never
+          # fails the receipt that produced it; #150 owns that rule.
+          _ = note_contradiction(entry)
+          [entry]
+
+        {:error, _changeset} ->
+          []
       end
     end
+  end
+
+  defp note_contradiction(%EvidenceEntry{} = entry) do
+    CompletionClaims.note_evidence(entry)
+  rescue
+    error ->
+      Logger.warning(
+        "issue_evidence_contradiction_failed code=#{OpenAgents.OperationalLog.code(error)}"
+      )
+
+      :ok
   end
 
   defp recorded?(attrs) do

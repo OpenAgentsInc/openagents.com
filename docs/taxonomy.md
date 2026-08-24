@@ -117,6 +117,18 @@ and per-criterion evidence. It returns `:accepted`, `:incomplete`,
 `:unauthorized`, `:failed`, or `:not_applicable`. The issue stays the
 canonical work record; the contract only grades a claim about it.
 
+**Completion claim** — the durable record of one graded verdict, stored in
+`issue_completion_claims` by `OpenAgents.Issues.CompletionClaims`, keyed on
+`{issue, attempt, revision}`. The accepted outcome is the grading; the claim is
+what was graded and what happened next. Say "claim" for the record and
+"accepted outcome" for the verdict.
+
+**Verified close** — an issue closed from an accepted claim, attributed to
+`system:accepted-outcome`. It is not a trailer close: a trailer close is a
+person's assertion recorded in `issue_closing_references` with a
+`closed_by_user_id` (`ISSUE-001`, `#130`). Both close an issue; only one names
+a person, and only a verified close can be contradicted by a later receipt.
+
 ### Exports
 
 Two account exports exist and they are not the same document. Say which one.

@@ -474,6 +474,10 @@ defmodule OpenAgentsWeb.Router do
     post "/forum/topics/:topic_id/posts", ForumApiController, :create_post
     post "/repos/:owner/:repo/issues", IssueController, :create
     post "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :create
+
+    post "/repos/:owner/:repo/issues/:issue_number/completion_claim",
+         IssueCompletionClaimController,
+         :create
   end
 
   scope "/api/v3", OpenAgentsWeb do

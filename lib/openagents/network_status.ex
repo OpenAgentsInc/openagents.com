@@ -23,6 +23,13 @@ defmodule OpenAgents.NetworkStatus do
   The fan-out result is cached briefly so page traffic cannot cause an rpc
   storm, and `broadcast/0`/`subscribe/0` push refreshes over PubSub (node
   up/down and the status page's slow tick call `broadcast/0`).
+
+  `"independence"` is `OpenAgents.Forge.Independence`'s disclosure of how far
+  this forge is from operator independence (`EXIT-006`). It belongs in the same
+  projection because a single operator who can read and rewrite everything is a
+  fact about the service's condition, not a footnote in a document. It carries
+  counts, booleans, family names, and issue numbers only, and degrades to `nil`
+  like every other gather.
   """
 
   @schema "openagents.network_status.v1"
@@ -116,6 +123,7 @@ defmodule OpenAgents.NetworkStatus do
       "counts" => counts(),
       "scvs" => scv_projection(),
       "forge" => forge_section(),
+      "independence" => safely(fn -> OpenAgents.Forge.Independence.projection() end),
       "generated_at" => DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end

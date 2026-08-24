@@ -515,6 +515,65 @@ defmodule OpenAgents.DataRights.AccountExportTest do
     end
   end
 
+  # A restore rehearsal on a clean environment can only work if the document
+  # answers on its own. Every record that names another object names it by
+  # something a person can read — a repository path, a topic and board slug, an
+  # issue number, an agent handle — rather than only by a UUID this forge would
+  # have to resolve. Replacing any of those with an id alone turns this red.
+  describe "the document resolves without the forge" do
+    test "every record names its context in readable terms", %{board: board} do
+      user = github_user("account-export-standalone", "export-standalone")
+      repository = OpenAgents.AccountsFixtures.repository_fixture()
+      path = repository.owner <> "/" <> repository.name
+
+      topic = topic_fixture(board, "user:" <> user.id, "Standalone")
+      _post = post_fixture(topic, "user:" <> user.id, "Readable on its own.")
+
+      pull_request = pull_request_fixture(repository, "standalone-branch", user)
+      {:ok, _stack} = Stacks.create(repository, [pull_request], user)
+
+      blocked =
+        OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Standalone blocked"})
+
+      blocker =
+        OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Standalone blocker"})
+
+      :ok = Issues.add_dependencies(blocked, [blocker.number], user)
+
+      Repo.insert!(%PushReceipt{
+        repo: repository.storage_key,
+        wal_seq: 3,
+        principal: "user:" <> user.id,
+        refs: %{"refs/heads/main" => String.duplicate("0", 40)}
+      })
+
+      assert {:ok, export} = AccountExport.build(user)
+
+      assert [exported_post] = export["forum"]["posts"]
+      assert exported_post["topic_slug"] == topic.slug
+      assert exported_post["board_slug"] == "account-export"
+
+      work = export["repository_work"]
+      assert [exported_pull_request] = work["pull_requests"]["records"]
+      assert exported_pull_request["repository"] == path
+      assert is_integer(exported_pull_request["number"])
+
+      assert [exported_stack] = work["stacks"]["records"]
+      assert exported_stack["repository"] == path
+      assert [entry] = exported_stack["entries"]
+      assert is_integer(entry["pull_request_number"])
+
+      assert [dependency] = work["issue_dependencies"]["records"]
+      assert dependency["repository"] == path
+      assert dependency["issue_title"] == "Standalone blocked"
+      assert dependency["blocked_by_issue_title"] == "Standalone blocker"
+
+      assert [receipt] = export["push_receipts"]["records"]
+      assert receipt["repository"] == path
+      assert receipt["wal_seq"] == 3
+    end
+  end
+
   ## ── fixtures ───────────────────────────────────────────────────────────
 
   defp topic_fixture(board, actor_ref, title) do

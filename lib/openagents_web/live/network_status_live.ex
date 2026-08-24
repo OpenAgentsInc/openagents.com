@@ -282,6 +282,24 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
 
   defp mirror_text(_state), do: "off"
 
+  # The independence disclosure renders from whatever the projection carries, so
+  # a node that could not assemble it shows nothing rather than an assertion it
+  # cannot support.
+  defp independence_badge(%{"degraded" => true}), do: :warning
+  defp independence_badge(_disclosure), do: :success
+
+  defp independence_text(%{"degraded" => true}), do: "degraded"
+  defp independence_text(_disclosure), do: "no disclosed gap"
+
+  defp gap_text(%{"family" => family, "status" => status, "issue" => issue})
+       when is_integer(issue),
+       do: "#{family} · #{status} · ##{issue}"
+
+  defp gap_text(%{"family" => family, "status" => status}), do: "#{family} · #{status}"
+
+  defp issue_text(issue) when is_integer(issue), do: " · ##{issue}"
+  defp issue_text(_issue), do: ""
+
   defp deploy_result_variant("live"), do: :success
   defp deploy_result_variant("reverted"), do: :warning
   defp deploy_result_variant("needs_rolling_replace"), do: :warning
@@ -536,6 +554,50 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
                 </li>
               </ul>
             </div>
+          </.card>
+
+          <.card :if={@projection["independence"]} id="status-independence">
+            <h2>Operator independence</h2>
+            <p class="status-forge__intro" id="status-independence-summary">
+              <.badge variant={independence_badge(@projection["independence"])}>
+                {independence_text(@projection["independence"])}
+              </.badge>
+              One operator accepts every push, promotes every deployment, issues every
+              credential, and can read every record. What is provable about that is
+              recorded in <code>{@projection["independence"]["document"]}</code>; what is
+              not is listed here.
+            </p>
+
+            <ul class="status-events" id="status-independence-claims">
+              <li id="status-independence-export">
+                export: {@projection["independence"]["export"]["portable"]} of {@projection[
+                  "independence"
+                ]["export"]["families"]} families portable
+              </li>
+              <li id="status-independence-verification">
+                verification: {@projection["independence"]["verification"]["property"]}
+                <span :if={not @projection["independence"]["verification"]["anchor_published"]}>
+                  · no anchor published{issue_text(
+                    @projection["independence"]["verification"]["issue"]
+                  )}
+                </span>
+              </li>
+              <li id="status-independence-private-data">
+                private data: access controlled, not encrypted{issue_text(
+                  @projection["independence"]["private_data"]["issue"]
+                )}
+              </li>
+            </ul>
+
+            <ul
+              :if={@projection["independence"]["export"]["gaps"] != []}
+              class="status-events"
+              id="status-independence-gaps"
+            >
+              <li :for={gap <- @projection["independence"]["export"]["gaps"]}>
+                {gap_text(gap)}
+              </li>
+            </ul>
           </.card>
 
           <.card id="status-events">

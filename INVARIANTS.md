@@ -3329,6 +3329,54 @@ Evidence: `OpenAgents.Forge.WAL`, `OpenAgents.Forge.Verification`,
 `test/openagents_web/controllers/push_receipt_controller_test.exs`, and
 `docs/2026-08-23-forge-wal-anchoring.md`.
 
+### EXIT-006 — The status surface discloses every gap the ledger records
+
+Status: Current
+
+A forge that records its own limits in a document and reports itself healthy on
+its status page has hidden them. `docs/forge-operator-independence.md` states
+the trust boundary plainly, and `EXIT-001` through `EXIT-005` bind the parts
+that are checkable, but both are read by someone who already went looking.
+`OpenAgents.Forge.Independence` publishes the same statement where a person
+checking whether the service is working will see it, in
+`OpenAgents.NetworkStatus` and therefore on `/status` and `GET /api/status`.
+
+Every claim is derived rather than restated, because a disclosure maintained by
+hand drifts away from the thing it describes, and the drift always runs in the
+flattering direction. The export section is counted from
+`OpenAgents.DataRights.ExportInventory`: a family that regresses to `partial`
+or `blocked` appears on the status page without anyone editing the disclosure,
+and a gap closed elsewhere disappears from it in the same commit. The
+verification section reads the configured anchor source and reports
+`anchor_published` as `false` while none is configured, so the difference
+between `EXIT-005`'s tamper-*evident* chain and a tamper-*proof* log is
+published rather than blurred; issue #168 publishes the anchor. `degraded` is
+the disjunction of the three axes, so nothing waits on a person deciding when
+to say so, and it is expected to be true today.
+
+One claim is stated rather than derived and it says so: no export is encrypted
+to a key the recipient holds and no Ecto column in this repository is encrypted
+at rest, which issue #178 carries. There is no registry of encrypted columns to
+count, and inventing one so a number could appear would be the kind of claim
+this disclosure exists to prevent.
+
+`STATUS-001`'s rule holds here: the section carries counts, booleans, family
+names, issue numbers, and one document path, and the proof asserts that every
+string it publishes is a ledger family name or fixed vocabulary — a repository
+path, an account id, a node name, or a commit sha reaching it turns the proof
+red. The whole section degrades to `nil` like every other gather, so a node
+that cannot assemble it renders the page without it rather than failing.
+
+Four mutations were confirmed to fail the proof and reverted: publishing an
+empty gap list while the ledger records gaps; making `degraded` constant;
+adding the forge's repository name to the projection; and claiming exports are
+encrypted.
+
+Evidence: `OpenAgents.Forge.Independence`, `OpenAgents.NetworkStatus`,
+`OpenAgentsWeb.NetworkStatusLive`,
+`test/openagents/forge/independence_disclosure_test.exs`, and
+`docs/forge-operator-independence.md`.
+
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
 
 Status: Current
@@ -3884,6 +3932,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs` |
+| EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |

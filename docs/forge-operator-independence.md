@@ -270,19 +270,49 @@ worse than five plus a recorded gap.
 | `EXIT-003` | Recovery comes from the WAL; the mirror is strictly lossy and is never an input. |
 | `EXIT-004` | A clone is complete and self-hosting. |
 | `EXIT-005` | Every WAL entry commits to the entry before it, so a rewrite is total. |
+| `EXIT-006` | The status surface discloses every gap the ledger records. |
 | `ADMIN-001` | The operator surface is an enumerated set of reads and writes, and the enumeration is checked against the router. |
 
 Their proofs are `test/openagents/data_rights/export_inventory_test.exs`,
+`test/openagents/data_rights/account_export_test.exs`,
 `test/openagents/forge/independence_test.exs`,
+`test/openagents/forge/independence_disclosure_test.exs`,
 `test/openagents/forge/wal_test.exs`, and
 `test/openagents_web/operator_surface_test.exs`. Every proof was
 mutation-checked:
 each property was broken deliberately, the proof was confirmed to fail, and the
 break was reverted.
 
+## Disclosure
+
+The gaps below are not only recorded here. `OpenAgents.Forge.Independence`
+publishes them in `OpenAgents.NetworkStatus`, so `/status` and
+`GET /api/status` report the forge as independence-degraded while any of them
+stands, under `EXIT-006`. The export counts are read from the ledger rather
+than restated, and the verification section reports `anchor_published` as
+`false` while no anchor is configured, so the difference between a
+tamper-evident log and a tamper-proof one is published rather than blurred.
+
+A forge that records its limits in a document and reports itself healthy on its
+status page has hidden them.
+
+## Rehearsals
+
+`docs/forge-exit-rehearsals.md` defines six rehearsals — restore, receipt
+verification, mirror divergence, key rotation, operator loss, and partial
+export — with what each proves, what it cannot, and whether anyone has run it.
+Five of the six have never been run outside the test suite, and the one that
+was run against the live forge failed: a full clone of this repository aborts
+on a missing object 275 commits behind `main` (#179). `EXIT-004` was green
+throughout, because it runs against a forge the test builds and never against
+the one people clone from.
+
 ## Open gaps
 
 | Gap | Issue |
 | --- | --- |
+| The live forge cannot serve a full clone of its own repository | #179 |
 | No binding from a reputation attestation's subject to an account, so an account cannot identify its own attestations | #171 |
 | No commitment to the WAL is published outside operator storage, so a consistent rewrite still verifies clean | #151 |
+| No export is encrypted to a key the recipient holds, and no column is encrypted at rest | #178 |
+| Five of six exit rehearsals have never been performed | #180 |

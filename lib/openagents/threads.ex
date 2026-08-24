@@ -47,6 +47,18 @@ defmodule OpenAgents.Threads do
      account's admission slot without anyone asking, so an abandoned thread
      cannot lock an account out of its own ceiling.
 
+  ## The audience
+
+  6. **A transcript is private until its owner says otherwise.** A thread
+     carries a transparency tier from the shared `dark/pulse/ledger/glass`
+     vocabulary (`OpenAgents.Transparency`, `docs/taxonomy.md`), defaulting to
+     `dark` — the account that opened it and nobody else. `open/3` accepts a
+     wider tier and records `thread.visibility_set` in the transcript when one
+     is given, so widening is an act with a record rather than a column that
+     drifted. `fetch_readable/2` is the only read that a wider tier reaches;
+     every write stays on `get_for_user/2`, because publishing a transcript for
+     reading is not handing anyone the thread's authority (THREAD-002).
+
   A thread's ceilings are its own: `ceilings/0` reads the `thread_grant_*`
   settings and passes them to `OpenAgents.Inference.mint/1`, which otherwise
   applies the delegation ceilings. A delegation is one probe run the server
@@ -85,6 +97,11 @@ defmodule OpenAgents.Threads do
   slot held by an abandoned thread is released before the count is taken, and
   an account already at `maximum_open_per_account/0` is refused with
   `:thread_quota_reached` rather than given a further grant.
+
+  `:visibility` is the thread's transparency tier and defaults to
+  `OpenAgents.Threads.Thread.default_visibility/0`, owner-only. A wider tier
+  given here is recorded in the transcript as `thread.visibility_set`
+  (THREAD-002).
   """
   @spec open(User.t() | Visitor.t(), String.t(), keyword()) ::
           {:ok, Thread.t()} | {:error, :thread_quota_reached | Ecto.Changeset.t()}
@@ -137,6 +154,7 @@ defmodule OpenAgents.Threads do
     attributes = %{
       objective: objective,
       repository: Keyword.get(options, :repository),
+      visibility: Keyword.get(options, :visibility) || Thread.default_visibility(),
       model: Keyword.get(options, :model) || Models.default_id(),
       reasoning_effort:
         OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
@@ -160,10 +178,32 @@ defmodule OpenAgents.Threads do
     end)
     |> Multi.insert(:thread, Thread.open_changeset(attributes, visitor_id, now))
     |> Multi.run(:opened_event, fn _repo, %{thread: thread} ->
-      insert_event(thread, "thread.opened", %{"objective_bytes" => byte_size(objective)}, now)
+      insert_event(
+        thread,
+        "thread.opened",
+        %{"objective_bytes" => byte_size(objective), "visibility" => thread.visibility},
+        now
+      )
     end)
-    |> Multi.update(:counted, fn %{thread: thread} ->
-      Thread.event_count_changeset(thread, thread.event_count + 1)
+    # Widening is an act, so it leaves a record rather than only a column value
+    # (THREAD-002). The event is written only when the opener asked for a tier
+    # wider than owner-only: a default thread was never widened, and an event
+    # saying so on every open would make the record meaningless.
+    |> Multi.run(:widened_event, fn _repo, %{thread: thread} ->
+      if Thread.wide?(thread) do
+        insert_event(
+          thread,
+          "thread.visibility_set",
+          %{"visibility" => thread.visibility, "from" => Thread.default_visibility()},
+          now
+        )
+      else
+        {:ok, nil}
+      end
+    end)
+    |> Multi.update(:counted, fn %{thread: thread, widened_event: widened} ->
+      appended = if widened, do: 2, else: 1
+      Thread.event_count_changeset(thread, thread.event_count + appended)
     end)
     |> Repo.transaction()
     |> case do
@@ -191,6 +231,48 @@ defmodule OpenAgents.Threads do
   end
 
   def get_for_user(_user, _thread_id), do: nil
+
+  @doc """
+  A thread this account may **read**, and whether it is the account's own.
+
+  Reading is the only thing a transparency tier widens. Every other verb —
+  appending to the transcript, cancelling the thread, re-minting its
+  authority — stays on `get_for_user/2`, because a thread its owner published
+  for reading is not a thread a stranger may write to or spend.
+
+  Returns `{:ok, thread, :owner}` for the account's own thread, `{:ok, thread,
+  :reader}` for somebody else's thread at a tier that admits this reader, and
+  `:error` otherwise. The two cases are distinguished at the query rather than
+  by a second read, so a caller that must withhold the owner's budget from a
+  reader has the fact without asking again.
+
+  The audience of a wide tier is *any signed-in account holding the thread's
+  id*: both surfaces that call this — `GET /api/v3/threads/{thread_id}` and
+  `/threads/:id` — require an authenticated principal, and this function does
+  not invent an anonymous one (THREAD-002).
+  """
+  @spec fetch_readable(User.t(), String.t()) :: {:ok, Thread.t(), :owner | :reader} | :error
+  def fetch_readable(%User{id: user_id}, thread_id) when is_binary(thread_id) do
+    wide = Thread.wide_visibilities()
+
+    with {:ok, id} <- Ecto.UUID.cast(thread_id),
+         {%Thread{} = thread, owner_user_id} <-
+           Repo.one(
+             from(t in Thread,
+               join: v in Visitor,
+               on: v.id == t.owner_visitor_id,
+               where: t.id == ^id,
+               where: v.user_id == ^user_id or t.visibility in ^wide,
+               select: {t, v.user_id}
+             )
+           ) do
+      {:ok, thread, if(owner_user_id == user_id, do: :owner, else: :reader)}
+    else
+      _unreadable -> :error
+    end
+  end
+
+  def fetch_readable(_user, _thread_id), do: :error
 
   @doc """
   The account's threads, newest first, bounded.

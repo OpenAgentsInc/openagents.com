@@ -2107,6 +2107,15 @@ conversation, and a thread is not one.
   every route the router gives that controller and requires a token in the body
   only at the mint. A second route that renders a grant fails there.
 
+  Amended 2026-08-24 (issue #205): "the account that opened the thread" is now
+  the rule for every **write** and for the mint, and the default rule for
+  reads. A thread carries a transparency tier, and a thread its owner opened
+  at a wider tier is readable by the audience that tier names — see
+  THREAD-002, which states what widens and what does not. The token clause is
+  untouched: `fetch_readable/2` returns no grant, the reader's view of a thread
+  carries `"grant": null`, and the mint still resolves through
+  `get_for_user/2`.
+
 Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `OpenAgents.Threads.Event`, `OpenAgents.Inference.mint/1`,
 `OpenAgents.Inference.expire_elapsed_for_owner/1`,
@@ -2118,6 +2127,86 @@ Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `test/openagents/threads_test.exs`,
 `test/openagents_web/controllers/thread_controller_test.exs`, and
 `test/openagents_web/live/thread_show_live_test.exs`.
+
+### THREAD-002 — A thread is private until its owner widens it, and widening is a recorded act
+
+Status: Current
+
+A thread's transcript is the substrate the registry is meant to learn from
+(`docs/2026-08-24-registry-network-strategy.md`, §5). The consent gate lands
+before the collection volume, not after, so a transcript discloses nothing
+until the account that opened it says so.
+
+- **The vocabulary is the one this application already has.** A thread's
+  visibility is a tier of the `dark`/`pulse`/`ledger`/`glass` ladder that
+  `OpenAgents.Transparency` and `OpenAgents.Forge.Visibility` already use
+  (`docs/taxonomy.md`). No parallel `public`/`private` enum is introduced, and
+  `OpenAgents.Threads.VisibilityTest` holds `Thread.visibilities/0` to a subset
+  of `Transparency.tier_atoms/0`, so a fifth word cannot enter through this
+  door.
+- **Only a tier with a read path behind it is offered.** `threads.visibility`
+  admits `dark` and `ledger` and nothing else, by check constraint and by
+  `Thread.open_changeset/3`. `pulse` would need a metadata-only projection of a
+  transcript and `glass` a capability beyond reading one; neither exists, so
+  neither is stored. `POST /api/v3/threads` refuses any other value —
+  a tier of the vocabulary this surface cannot enforce, or a word that is not a
+  tier — with the stable code `thread_visibility_unsupported`, because a client
+  that meant to publish and did not must learn it from the code it branches on
+  rather than from prose.
+- **The default is owner-only.** The column defaults to `dark` in PostgreSQL
+  and in the schema, so a thread opened by a caller that names no tier — and
+  every thread written before the column existed — is readable by its account
+  and nobody else.
+- **Widening is explicit and recorded.** A wider tier reaches a thread only by
+  being named at `open/3`; nothing derives one, and no other caller's action
+  raises it. When one is named, `OpenAgents.Threads.open/3` appends
+  `thread.visibility_set` to the transcript in the same transaction as the
+  insert, carrying the tier and the default it replaced. The consent decision
+  is therefore a fact in the same append-only log as the work it governs, not
+  a column somebody can find changed with no account of when or why.
+- **A tier widens reading and nothing else.** `fetch_readable/2` is the only
+  lookup a tier reaches, and it serves exactly two surfaces: `GET
+  /api/v3/threads/{thread_id}` with its `/events`, and `/threads/:id`. Every
+  write — the transcript append, the cancel, the re-mint — resolves through the
+  owner-scoped `get_for_user/2`, so a published transcript is never a thread a
+  stranger may append to, end, or spend.
+  `OpenAgents.Threads.GrantTokenReachTest` asserts the caller set of each
+  lookup from the compiled import tables, so a write that starts resolving
+  through the tier-scoped lookup fails there.
+- **A tier does not disclose the owner's money.** A reader admitted by the
+  thread's tier is served `"grant": null` by the API and no budget card in the
+  viewer. The ladder is about the transcript; what the account is spending is
+  not on it.
+- **A refused reader learns nothing.** A thread at `dark` answers a stranger
+  with the same plain `not_found` — and the same `PublicNotFoundError` in the
+  browser — that an unknown id gets, so the tier withholds the thread's
+  existence and not merely its contents.
+- **The audience is the one the surface can enforce.** `ledger` admits *any
+  signed-in account holding the thread's id*. Both read surfaces require an
+  authenticated principal — the API route is bearer-authenticated and
+  `/threads/:id` sits in the `:authenticated` live session — so no anonymous
+  audience is claimed. A genuinely public thread would need a route outside
+  that session, and until one exists the tier does not promise one.
+- **The consent record leaves with the data.** `GET /data/export/account`
+  carries each thread's `visibility` beside its objective, its repository, and
+  its events, so a recipient reading the document offline has the terms
+  alongside the transcript rather than only the transcript (DATA-004).
+
+Plugin usage inherits this and adds nothing: a plugin run is recorded as a
+`tool.ran` event on the thread that ran it, so the owning thread's tier already
+governs it through the same read paths. No aggregate over `tool.ran` exists
+today. When the registry's usage counter lands (issue #206), it must aggregate
+by joining `threads.visibility` and counting only rows at a tier that permits
+it; a counter that read `thread_events` without that join would republish, in
+aggregate, transcripts their owners kept `dark`.
+
+Evidence: `OpenAgents.Threads.fetch_readable/2`,
+`OpenAgents.Threads.Thread.visibilities/0`, `OpenAgentsWeb.ThreadController`,
+`OpenAgentsWeb.ThreadShowLive`, `OpenAgents.DataRights.AccountExport`,
+`priv/repo/migrations/20260824210500_add_visibility_to_threads.exs`,
+`test/openagents/threads/visibility_test.exs`,
+`test/openagents_web/thread_visibility_test.exs`, and
+`test/openagents/threads/grant_token_reach_test.exs`.
 
 ## Tenant deployment control plane
 
@@ -4957,6 +5046,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs` |
+| THREAD-002 | `test/openagents/threads/visibility_test.exs`, `test/openagents_web/thread_visibility_test.exs`, `test/openagents/threads/grant_token_reach_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs`, `test/openagents/issues/completion_claims_test.exs`, `test/openagents_web/controllers/issue_completion_claim_controller_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
 | DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |

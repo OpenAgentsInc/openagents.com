@@ -206,6 +206,17 @@ per-field rule about work in progress that the issue tracker's own
 repository-readability gate does not settle. Say "level" for the dial and
 "schedule" for the field rules. Both use the same four tier words.
 
+**Thread visibility** — the third user of those four words, and the only one an
+account sets for itself: `threads.visibility` is the tier that governs who may
+read one thread's transcript (THREAD-002). Say "visibility" for the column and
+"tier" for the value, the way an `ArtifactLink` carries a `tier`. It admits
+`dark` (the default — the account that opened the thread and nobody else) and
+`ledger` (any signed-in reader holding the thread id), and refuses `pulse` and
+`glass`, which no thread read path implements. It is not a *level*: a level is
+operator-owned per-repository configuration, while a thread's visibility is the
+opener's own decision, recorded in the transcript as `thread.visibility_set`
+when it widens.
+
 **Trajectory** — the ATIF schema name for the document (`AtifTrajectory`,
 `trajectory.json`, `trajectory_id`). Use it in schema and code. Product copy
 says trace.

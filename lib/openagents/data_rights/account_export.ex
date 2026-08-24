@@ -405,10 +405,16 @@ defmodule OpenAgents.DataRights.AccountExport do
     }
   end
 
+  # The transparency tier travels with the thread. It is the consent record for
+  # the transcript beneath it — what the account said may be read, and by whom
+  # — so an export that carried the events without it would hand a recipient
+  # the data and drop the terms (THREAD-002).
   defp thread_export(thread, events) do
     %{
       "id" => thread.id,
       "objective" => thread.objective,
+      "repository" => thread.repository,
+      "visibility" => thread.visibility,
       "status" => thread.status,
       "model" => thread.model,
       "reasoning_effort" => thread.reasoning_effort,

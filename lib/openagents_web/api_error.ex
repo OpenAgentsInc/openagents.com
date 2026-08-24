@@ -66,6 +66,15 @@ defmodule OpenAgentsWeb.ApiError do
     # and its own code — never a silent substitution.
     "model_unavailable" => {503, "The model's provider is not configured on this deployment"},
     "thread_terminal" => {422, "This thread is terminal and its transcript is closed"},
+    # Thread disclosure (THREAD-002). Widening a transcript is a consent
+    # decision, so a tier that did not take is its own code rather than a field
+    # message inside the generic 422: a client that meant to publish and did
+    # not should learn that from the code it branches on. It covers both an
+    # unknown word and a tier of the shared vocabulary this surface has no read
+    # path for, because to a caller the effect is identical — the thread stayed
+    # as private as it was.
+    "thread_visibility_unsupported" =>
+      {422, "That transparency tier is not one a thread can be opened at"},
     # A transcript writer meets two refusals that cannot change: a closed
     # thread, and an event the server has called invalid. `thread_terminal`
     # already carries a code; these give the other refusals of the append route

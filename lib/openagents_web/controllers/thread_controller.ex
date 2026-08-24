@@ -17,6 +17,12 @@ defmodule OpenAgentsWeb.ThreadController do
   - **Revocation does not wait to be asked.** `DELETE` revokes immediately, and
     every request first retires the account's elapsed authority, so a grant
     past its expiry stops being live whether or not anyone presents it.
+  - **Disclosure is opt-in and narrow.** A thread opens `dark` — owner-only —
+    unless the caller names a wider transparency tier, and a tier this surface
+    cannot enforce is refused with `thread_visibility_unsupported`. A wider
+    tier reaches `show/2` and `events/2` and nothing else: the writes and the
+    mint stay owner-only, and a reader admitted by the tier is not shown the
+    owner's grant (THREAD-002).
 
   The model is admitted here and nowhere else. A request body sent to the proxy
   still cannot select a model — the proxy pins the grant's — so the one place a
@@ -41,11 +47,13 @@ defmodule OpenAgentsWeb.ThreadController do
   def create(conn, params) do
     with {:ok, objective} <- objective(params),
          {:ok, repository} <- repository(params),
+         {:ok, visibility} <- visibility(params),
          {:ok, options} <- execution_shape(params) do
-      open(conn, objective, options ++ repository)
+      open(conn, objective, options ++ repository ++ visibility)
     else
       {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
       {:unavailable, model_id} -> unavailable_model(conn, model_id)
+      {:unsupported_visibility, value} -> unsupported_visibility(conn, value)
     end
   end
 
@@ -76,7 +84,7 @@ defmodule OpenAgentsWeb.ThreadController do
   reading one thread see one transcript rather than two that have diverged.
   """
   def events(conn, %{"thread_id" => thread_id} = params) do
-    with_thread(conn, thread_id, fn thread ->
+    with_readable_thread(conn, thread_id, fn thread, _relation ->
       events = Threads.list_events(thread, listing_options(params))
 
       conn
@@ -131,8 +139,18 @@ defmodule OpenAgentsWeb.ThreadController do
     end
   end
 
+  @doc """
+  One thread, with the grant it holds.
+
+  This and `events/2` are the two reads a wider transparency tier reaches. The
+  grant is not part of what a tier discloses: it is the owner's money, so a
+  reader admitted by the thread's tier gets `"grant": null` rather than the
+  account's ceilings and spend (THREAD-002).
+  """
   def show(conn, %{"thread_id" => thread_id}) do
-    with_thread(conn, thread_id, fn thread -> render_thread(conn, :ok, thread) end)
+    with_readable_thread(conn, thread_id, fn thread, relation ->
+      render_thread(conn, :ok, thread, relation)
+    end)
   end
 
   def delete(conn, %{"thread_id" => thread_id}) do
@@ -323,6 +341,10 @@ defmodule OpenAgentsWeb.ThreadController do
 
   # Expiry is retired before the lookup, so a read reports what is true now
   # rather than what was true when the grant was minted.
+  #
+  # Owner-only, and deliberately so: this is what every write and every
+  # authority-bearing route resolves through. A thread published for reading is
+  # not a thread a stranger may append to, cancel, or re-mint.
   defp with_thread(conn, thread_id, continue) do
     user = conn.assigns.current_user
     _reaped = Threads.reap_expired(user)
@@ -333,13 +355,27 @@ defmodule OpenAgentsWeb.ThreadController do
     end
   end
 
-  defp render_thread(conn, status, %Thread{} = thread) do
+  # The read half. A thread the account owns, or somebody else's thread at a
+  # tier that admits this reader; anything else is the same plain 404 a
+  # non-owner has always received, so a `dark` thread's existence is still not
+  # confirmed to a stranger.
+  defp with_readable_thread(conn, thread_id, continue) do
+    user = conn.assigns.current_user
+    _reaped = Threads.reap_expired(user)
+
+    case Threads.fetch_readable(user, thread_id) do
+      {:ok, thread, relation} -> continue.(thread, relation)
+      :error -> ApiError.not_found(conn)
+    end
+  end
+
+  defp render_thread(conn, status, %Thread{} = thread, relation \\ :owner) do
     conn
     |> put_extension_header()
     |> put_status(status)
     |> json(%{
       "thread" => thread_view(thread),
-      "grant" => grant_view(Threads.latest_grant(thread))
+      "grant" => grant_view(thread, relation)
     })
   end
 
@@ -493,6 +529,44 @@ defmodule OpenAgentsWeb.ThreadController do
 
   defp repository(_params), do: {:ok, []}
 
+  # The consent gate. Absent means owner-only, because the tier a caller did
+  # not ask for is the narrow one. A value outside the admitted set — a tier
+  # this surface cannot enforce, or a word that is not a tier at all — is
+  # refused with its own code rather than folded into the generic 422: a client
+  # widening a transcript is making a disclosure decision, and it should learn
+  # that the decision did not take, not guess from a field message.
+  defp visibility(%{"visibility" => value}) when is_binary(value) do
+    trimmed = String.trim(value)
+
+    if trimmed in Thread.visibilities() do
+      {:ok, [visibility: trimmed]}
+    else
+      {:unsupported_visibility, trimmed}
+    end
+  end
+
+  defp visibility(%{"visibility" => value}) when not is_nil(value) do
+    {:refused, "visibility", "#{inspect(value)} is not a string."}
+  end
+
+  defp visibility(_params), do: {:ok, []}
+
+  defp unsupported_visibility(conn, value) do
+    sentence =
+      "#{inspect(value)} is not an admitted thread visibility. " <>
+        "Admitted: #{Enum.join(Thread.visibilities(), ", ")}. " <>
+        "A thread's visibility is the transparency tier that governs who may read its " <>
+        "transcript: #{Thread.default_visibility()} keeps it to the account that opened it, " <>
+        "and ledger opens it to any signed-in reader holding the thread id. " <>
+        "The pulse and glass tiers of the shared vocabulary have no thread read path " <>
+        "behind them, so this surface does not offer them."
+
+    ApiError.refuse(conn, "thread_visibility_unsupported",
+      message: sentence,
+      errors: %{"visibility" => [sentence]}
+    )
+  end
+
   defp execution_shape(params) do
     with {:ok, model} <- admitted(params, "model", Models.ids(), Models.default_id()),
          :ok <- serving(model),
@@ -583,6 +657,7 @@ defmodule OpenAgentsWeb.ThreadController do
       "status" => thread.status,
       "objective" => thread.objective,
       "repository" => thread.repository,
+      "visibility" => thread.visibility,
       "reasoning_effort" => thread.reasoning_effort,
       "permission_profile" => thread.permission_profile,
       "generation" => thread.generation,
@@ -606,6 +681,12 @@ defmodule OpenAgentsWeb.ThreadController do
       "limits" => limits(grant)
     }
   end
+
+  # A reader admitted by the thread's tier is not admitted to the owner's
+  # balance. The tier discloses the transcript; the grant is what the account
+  # is spending, and no rung of the ladder names it.
+  defp grant_view(%Thread{}, :reader), do: nil
+  defp grant_view(%Thread{} = thread, :owner), do: grant_view(Threads.latest_grant(thread))
 
   defp grant_view(nil), do: nil
 

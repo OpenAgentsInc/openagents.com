@@ -351,6 +351,19 @@ defmodule OpenAgents.DataRights.ExportInventory do
       note: "The API's own route and extension inventory."
     },
     %{
+      family: :model,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "The typed model catalog a thread is admitted against. It is the " <>
+          "deployment's configuration — which models are served and at what " <>
+          "ceilings — and carries no record an account authors. What an " <>
+          "account did with a model is its threads, which export whole."
+    },
+    %{
       family: :capacity,
       api?: true,
       status: :not_user_data,

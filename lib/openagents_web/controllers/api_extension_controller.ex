@@ -449,6 +449,25 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "match, so a resume picker filters structurally instead of " <>
               "parsing the objective back."
         },
+        "visibility" => %{
+          "endpoint" => "POST /api/v3/threads",
+          "type" => "string",
+          "enum" => OpenAgents.Threads.Thread.visibilities(),
+          "default" => OpenAgents.Threads.Thread.default_visibility(),
+          "description" =>
+            "The transparency tier that governs who may read the thread's " <>
+              "transcript, from the same dark/pulse/ledger/glass vocabulary " <>
+              "the forge uses for disclosure. Optional and owner-only by " <>
+              "default: `dark` keeps the thread to the account that opened " <>
+              "it, and `ledger` opens GET /api/v3/threads/{thread_id} and its " <>
+              "events to any signed-in reader holding the thread id. Widening " <>
+              "is recorded in the transcript as `thread.visibility_set`. The " <>
+              "`pulse` and `glass` tiers have no thread read path behind them " <>
+              "and are refused with `thread_visibility_unsupported`, as is any " <>
+              "value that is not a tier. A wider tier widens reads only: the " <>
+              "transcript append, the cancel, and the re-mint stay owner-only, " <>
+              "and a reader admitted by the tier is served `\"grant\": null`."
+        },
         "model" => %{
           "endpoint" => "POST /api/v3/threads",
           "type" => "string",

@@ -32,10 +32,18 @@ defmodule OpenAgents.Threads.Thread do
   @objective_bytes 32_768
   @repository_bytes 200
 
+  # The disclosure vocabulary is `OpenAgents.Transparency`'s — `dark`, `pulse`,
+  # `ledger`, `glass` (`docs/taxonomy.md`) — and a thread offers the two rungs
+  # this surface can enforce, not a fifth word of its own.
+  # `ThreadVisibilityTest` proves the set stays a subset of that vocabulary.
+  @visibilities ~w(dark ledger)
+  @default_visibility "dark"
+
   schema "threads" do
     belongs_to :owner_visitor, Visitor
     field :objective, :string, redact: true
     field :repository, :string
+    field :visibility, :string, default: "dark"
     field :status, :string, default: "open"
     field :model, :string
     field :reasoning_effort, :string
@@ -59,6 +67,31 @@ defmodule OpenAgents.Threads.Thread do
   def permission_profiles, do: @permission_profiles
   def reasoning_efforts, do: @reasoning_efforts
 
+  @doc """
+  The transparency tiers a thread may be opened at, narrowest first.
+
+  Two rungs of the shared `dark/pulse/ledger/glass` ladder, because two are
+  what a thread read path enforces. `pulse` would need a metadata-only
+  projection of the transcript and `glass` would need a capability beyond
+  reading it; neither exists, so neither is offered (THREAD-002).
+  """
+  def visibilities, do: @visibilities
+
+  @doc "The tier a thread takes when its opener names none: owner-only."
+  def default_visibility, do: @default_visibility
+
+  @doc """
+  The tiers that admit a reader who is not the account that opened the thread.
+
+  Every rung above the default, derived rather than restated, so adding a rung
+  to `visibilities/0` cannot leave the read path enforcing the old set.
+  """
+  def wide_visibilities, do: @visibilities -- [@default_visibility]
+
+  @doc "Whether `thread` is readable by somebody other than its owner."
+  @spec wide?(t()) :: boolean()
+  def wide?(%__MODULE__{visibility: visibility}), do: visibility in wide_visibilities()
+
   @spec open?(t()) :: boolean()
   def open?(%__MODULE__{status: "open"}), do: true
   def open?(%__MODULE__{}), do: false
@@ -72,24 +105,44 @@ defmodule OpenAgents.Threads.Thread do
   repository table: a thread may concern a repository the forge does not host,
   so the field records the opener's `owner/name` string, bounded, with no
   foreign key and no format rule beyond non-blank.
+
+  `visibility` is optional and defaults to `dark`, the owner-only rung. It is
+  the one field here a caller can use to widen who reads the transcript, so it
+  is cast rather than put: naming it is the explicit act, and omitting it
+  leaves the thread private (THREAD-002).
   """
   def open_changeset(attributes, owner_visitor_id, now) do
     %__MODULE__{}
-    |> cast(attributes, [:objective, :model, :reasoning_effort, :permission_profile, :repository])
+    |> cast(attributes, [
+      :objective,
+      :model,
+      :reasoning_effort,
+      :permission_profile,
+      :repository,
+      :visibility
+    ])
     |> put_change(:owner_visitor_id, owner_visitor_id)
     |> put_change(:status, "open")
     |> put_change(:generation, 0)
     |> put_change(:started_at, now)
-    |> validate_required([:objective, :model, :reasoning_effort, :permission_profile])
+    |> validate_required([
+      :objective,
+      :model,
+      :reasoning_effort,
+      :permission_profile,
+      :visibility
+    ])
     |> validate_length(:objective, min: 1, max: @objective_bytes, count: :bytes)
     |> validate_length(:model, min: 1, max: 200)
     |> validate_length(:repository, min: 1, max: @repository_bytes, count: :bytes)
     |> validate_inclusion(:reasoning_effort, @reasoning_efforts)
     |> validate_inclusion(:permission_profile, @permission_profiles)
+    |> validate_inclusion(:visibility, @visibilities)
     |> foreign_key_constraint(:owner_visitor_id)
     |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:objective, name: :threads_objective_bound_check)
     |> check_constraint(:repository, name: :threads_repository_bound_check)
+    |> check_constraint(:visibility, name: :threads_visibility_check)
     |> check_constraint(:reasoning_effort, name: :threads_reasoning_effort_check)
     |> check_constraint(:permission_profile, name: :threads_permission_profile_check)
   end

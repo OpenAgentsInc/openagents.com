@@ -55,6 +55,7 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:ceilings, 1} => :no_thread,
     {:default_permission_profile, 0} => :no_thread,
     {:default_reasoning, 0} => :no_thread,
+    {:fetch_readable, 2} => :scoped_by_tier,
     {:finish, 2} => :thread_struct,
     {:get_for_user, 2} => :scoped_by_owner,
     {:latest_grant, 1} => :thread_struct,
@@ -80,12 +81,20 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
   # One controller, serving one route: the mint.
   @grant_token_holders [OpenAgentsWeb.ThreadController]
 
-  # The one function that resolves a thread from an identifier, and every
-  # module that calls it. It takes the acting account, so another account's
-  # thread id resolves to `nil` (THREAD-001, IDENTITY-002). The web thread
-  # viewer resolves through the same lookup and renders a `nil` as the plain
-  # 404 an absent id gets.
-  @thread_resolver_callers [OpenAgentsWeb.ThreadController, OpenAgentsWeb.ThreadShowLive]
+  # The two functions that resolve a thread from an identifier, and every
+  # module that calls each. Both take the acting account, so neither can be
+  # handed a bare id (THREAD-001, IDENTITY-002), and they differ in exactly one
+  # way: `get_for_user/2` admits the owner and nobody else, while
+  # `fetch_readable/2` also admits a reader the thread's transparency tier
+  # names (THREAD-002).
+  #
+  # The split is the enforcement. Every verb that writes to a thread or mints
+  # its authority resolves through the owner-scoped lookup, so widening a
+  # transcript for reading can never widen what may be done to it. The one
+  # controller serves both, because it serves both the reads and the writes;
+  # the web viewer only reads.
+  @owner_resolver_callers [OpenAgentsWeb.ThreadController]
+  @tier_resolver_callers [OpenAgentsWeb.ThreadController, OpenAgentsWeb.ThreadShowLive]
 
   test "the modules that mint a grant token are exactly the set THREAD-001 accounts for" do
     assert_exact_set(
@@ -130,14 +139,23 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
            """
   end
 
-  test "a thread resolves by identifier only through the owner-scoped lookup" do
-    resolvers = for {key, :scoped_by_owner} <- @threads_api, do: key
-    assert {:get_for_user, 2} in resolvers
+  test "a thread resolves by identifier only through the two account-taking lookups" do
+    owner_scoped = for {key, :scoped_by_owner} <- @threads_api, do: key
+    tier_scoped = for {key, :scoped_by_tier} <- @threads_api, do: key
+
+    assert {:get_for_user, 2} in owner_scoped
+    assert tier_scoped == [{:fetch_readable, 2}]
 
     assert_exact_set(
       callers_of([{OpenAgents.Threads, :get_for_user, 2}]),
-      @thread_resolver_callers,
-      "resolves a thread by identifier"
+      @owner_resolver_callers,
+      "resolves a thread by identifier, owner-scoped"
+    )
+
+    assert_exact_set(
+      callers_of([{OpenAgents.Threads, :fetch_readable, 2}]),
+      @tier_resolver_callers,
+      "resolves a thread by identifier through its transparency tier"
     )
   end
 

@@ -2,10 +2,17 @@ defmodule OpenAgentsWeb.ThreadShowLive do
   @moduledoc """
   One thread's transcript, read-only, live.
 
-  Owner-only: an unknown id and another account's id both raise the plain 404
-  (`OpenAgentsWeb.PublicNotFoundError`), matching how the API's
-  `Threads.get_for_user/2` scopes reads — existence is never confirmed to a
-  non-owner.
+  Private by default: an unknown id and another account's `dark` thread both
+  raise the plain 404 (`OpenAgentsWeb.PublicNotFoundError`), matching how the
+  API scopes the same read — existence is never confirmed to a reader the
+  thread's transparency tier does not admit.
+
+  A thread opened at a wider tier is readable here by any signed-in account
+  holding its id, which is the audience this route can actually enforce: it
+  sits in the `:authenticated` live session, so there is no anonymous reader to
+  admit and none is invented. What the tier does not disclose is the owner's
+  money — the budget card is the account's grant, and it renders for the owner
+  only (THREAD-002).
 
   The snapshot-to-live order follows the projection protocol the issue names:
   subscribe to the thread's topic first, then read the snapshot, then let
@@ -34,23 +41,25 @@ defmodule OpenAgentsWeb.ThreadShowLive do
     user = socket.assigns.current_user
     _reaped = Threads.reap_expired(user)
 
-    case Threads.get_for_user(user, thread_id) do
-      nil ->
+    case Threads.fetch_readable(user, thread_id) do
+      :error ->
         raise OpenAgentsWeb.PublicNotFoundError, message: "thread not found"
 
-      thread ->
+      {:ok, thread, relation} ->
         # Attach the live subscriber before reading the snapshot: an append
         # that lands between the two arrives as a buffered message and is
         # deduped below by id, so the gap cannot lose an event.
         if connected?(socket), do: Threads.subscribe(thread)
 
         events = transcript(thread)
+        owner? = relation == :owner
 
         {:ok,
          socket
          |> assign(:page_title, "Thread · OpenAgents")
          |> assign(:thread, thread)
-         |> assign(:grant, Threads.latest_grant(thread))
+         |> assign(:owner?, owner?)
+         |> assign(:grant, owner? && Threads.latest_grant(thread))
          |> assign(:last_event_id, last_id(events))
          |> assign(:events_empty?, events == [])
          |> stream(:events, events)}
@@ -101,6 +110,10 @@ defmodule OpenAgentsWeb.ThreadShowLive do
             <div class="flex gap-1.5">
               <dt>Permissions</dt>
               <dd>{@thread.permission_profile}</dd>
+            </div>
+            <div class="flex gap-1.5">
+              <dt>Visibility</dt>
+              <dd id="thread-visibility">{visibility_label(@thread.visibility)}</dd>
             </div>
             <div class="flex gap-1.5">
               <dt>Events</dt>
@@ -389,6 +402,12 @@ defmodule OpenAgentsWeb.ThreadShowLive do
   end
 
   defp dollars(microusd), do: "$#{:erlang.float_to_binary(microusd / 1_000_000, decimals: 2)}"
+
+  # The tier word plus what it means for a reader, because "dark" alone tells
+  # the owner nothing about who can see the page they are looking at.
+  defp visibility_label("dark"), do: "dark · only you"
+  defp visibility_label("ledger"), do: "ledger · anyone signed in with the link"
+  defp visibility_label(visibility), do: visibility
 
   defp status_variant("open"), do: :info
   defp status_variant("succeeded"), do: :success

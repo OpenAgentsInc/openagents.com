@@ -4678,10 +4678,10 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
-| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs`, `test/openagents/computer_projection_test.exs` |
+| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs`, `test/openagents/computer_projection_test.exs`, `test/openagents/machines/index_reach_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
 | IDENTITY-010 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_credential_reach_test.exs` |
-| IDENTITY-011 | `test/openagents/machines/pairing_expiry_test.exs` |
+| IDENTITY-011 | `test/openagents/machines/pairing_expiry_test.exs`, `test/openagents/machines/index_reach_test.exs` |
 | IDENTITY-012 | `test/openagents/machines/constraint_reach_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |

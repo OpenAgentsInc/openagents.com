@@ -45,6 +45,26 @@ defmodule OpenAgents.DataRights.AccountExport do
   inside the document — a post to its topic, a tip to its post, an event to its
   thread — resolves inside the document itself.
 
+  ## Repository names
+
+  A repository's current owner and name are the repository's, not the
+  account's. They travel in this document only where
+  `OpenAgents.Repositories.readable_by/2` admits the repository to this
+  account, and every collection that renders `owner/name` applies that one
+  rule: push receipts, deployment requests, deployment approvals, and the
+  four families under `"repository_work"`. A private repository the account
+  was removed from, or one renamed after they left, does not tell them what it
+  is called now.
+
+  What the rule does to the record differs by family, and the difference is
+  stated rather than left to each query. An account-keyed record survives with
+  `"repository": null`: a push receipt is the account's own evidence — the WAL
+  sequence and ref map a clone does not carry — and withholding it would cost
+  the account its own history to protect a name it no longer has. A
+  repository-keyed record under `"repository_work"` is withheld entirely,
+  because a pull request separated from its repository is not a record the
+  account can use.
+
   ## Repository-keyed work
 
   Pull requests, stacks, and issue dependencies key on a repository rather than
@@ -420,13 +440,20 @@ defmodule OpenAgents.DataRights.AccountExport do
   # `forge_pushes.principal` is `user:<account-id>` for a person's push and an
   # operator or assignment string otherwise, so the account's own pushes are an
   # exact match rather than a guess.
+  #
+  # The receipt is the account's own and comes back whatever the repository
+  # says now. The repository's current owner and name are not, so the join
+  # goes through `readable_repositories/1` rather than straight at the table:
+  # a receipt for a repository this account can no longer read arrives with
+  # `"repository": null` and keeps its `storage_key`, `wal_seq`, and refs.
   defp push_receipts_export(user) do
     principal = account_actor_ref(user)
+    readable = readable_repositories(user)
 
     receipts =
       Repo.all(
         from receipt in PushReceipt,
-          left_join: repository in Repository,
+          left_join: repository in subquery(readable),
           on: repository.storage_key == receipt.repo,
           where: receipt.principal == ^principal,
           order_by: [asc: receipt.inserted_at, asc: receipt.id],
@@ -460,11 +487,17 @@ defmodule OpenAgents.DataRights.AccountExport do
 
   ## ── deployments ────────────────────────────────────────────────────────
 
+  # Both reads are keyed on the account — the requester of a deployment and the
+  # approver of one — so both records survive a lost membership. Both join
+  # `readable_repositories/1` for the same reason the push receipts do: the
+  # request is the account's, the repository's current name is not.
   defp deployments_export(user) do
+    readable = readable_repositories(user)
+
     requests =
       Repo.all(
         from request in Request,
-          left_join: repository in Repository,
+          left_join: repository in subquery(readable),
           on: repository.id == request.repository_id,
           where: request.requested_by_user_id == ^user.id,
           order_by: [asc: request.requested_at, asc: request.id],
@@ -475,7 +508,7 @@ defmodule OpenAgents.DataRights.AccountExport do
     approvals =
       Repo.all(
         from approval in Approval,
-          left_join: repository in Repository,
+          left_join: repository in subquery(readable),
           on: repository.id == approval.repository_id,
           where: approval.approver_user_id == ^user.id,
           order_by: [asc: approval.decided_at, asc: approval.id],
@@ -686,10 +719,20 @@ defmodule OpenAgents.DataRights.AccountExport do
   end
 
   # A repository's identity comes back with the predicate rather than beside
-  # it, so a caller cannot name a repository this query did not admit.
+  # it, so a caller cannot name a repository this query did not admit. Every
+  # collection that renders `owner/name` joins this one query — the four
+  # repository-keyed families here, and the account-keyed push receipts and
+  # deployments above — so the module cannot state one disclosure rule and
+  # apply two. `storage_key` rides along because a push receipt names its
+  # repository by that key rather than by `repository_id`.
   defp readable_repositories(user) do
     from repository in Repositories.readable_by(Repository, user),
-      select: %{id: repository.id, owner: repository.owner, name: repository.name}
+      select: %{
+        id: repository.id,
+        owner: repository.owner,
+        name: repository.name,
+        storage_key: repository.storage_key
+      }
   end
 
   defp pull_requests_export(user, readable) do
@@ -921,6 +964,17 @@ defmodule OpenAgents.DataRights.AccountExport do
         "reason" =>
           "Git history leaves through the authenticated Git transport, not this document.",
         "mechanism" => "git clone with an oa_pat_ token",
+        "issue" => nil
+      },
+      %{
+        "family" => "repository_identity",
+        "reason" =>
+          "A repository's current owner and name appear only where the account can still read " <>
+            "the repository. A push receipt, deployment request, or approval for a repository " <>
+            "the account was removed from arrives with a null repository and keeps every field " <>
+            "that is the account's own; a record under repository_work is withheld instead, " <>
+            "because it has no meaning apart from its repository.",
+        "mechanism" => "OpenAgents.Repositories.readable_by/2",
         "issue" => nil
       },
       %{

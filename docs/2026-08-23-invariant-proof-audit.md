@@ -222,9 +222,15 @@ constraint instead, so a fifth role fails until someone says whether it reads.
 
 **What is left.** A listing that applies no predicate at all names no term and
 calls no resolver. `OpenAgents.DataRights.AccountExport`'s push-receipt and
-deployment joins are that shape; each is scoped to the acting account's own
-rows and selects a repository's `owner` and `name` without the predicate the
-same module applies elsewhere. `REPOSITORY-001` records it.
+deployment joins were that shape; each was scoped to the acting account's own
+rows and selected a repository's `owner` and `name` without the predicate the
+same module applies elsewhere. Issue #185 closed that instance: all three joins
+now compose `readable_by/2`, the module states one disclosure rule for every
+collection that renders a path, and
+`test/openagents/data_rights/account_export_test.exs` reddens on each of them
+when the predicate is dropped. The class stays open — a predicate-free listing
+added tomorrow would still name no term and call no resolver — and
+`REPOSITORY-001` records it.
 
 ### `RELEASE-004` — no hosted CI
 

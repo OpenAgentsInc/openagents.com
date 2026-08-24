@@ -13,6 +13,9 @@ defmodule OpenAgents.DataRights.AccountExportTest do
   import Ecto.Query
 
   alias OpenAgents.DataRights.AccountExport
+  alias OpenAgents.Deployments.Approval
+  alias OpenAgents.Deployments.Request
+  alias OpenAgents.DeploymentsFixtures
   alias OpenAgents.Forum
   alias OpenAgents.Forum.{Post, TipDestination, Topic}
   alias OpenAgents.Forum.Forum, as: Board
@@ -22,6 +25,7 @@ defmodule OpenAgents.DataRights.AccountExportTest do
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
+  alias OpenAgents.Repositories.Membership
   alias OpenAgents.Reputation
   alias OpenAgents.Stacks
   alias OpenAgents.Threads
@@ -177,6 +181,95 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       assert [request] = export["deployments"]["requests"]
       assert request["commit_sha"] == OpenAgents.DeploymentsFixtures.commit_sha()
       assert request["repository"] == "export-deploy/shipping"
+    end
+  end
+
+  # The repository's current owner and name are the repository's, not the
+  # account's, and `readable_by/2` is the only thing withholding them here:
+  # each account gets these records back through a column naming it, so no
+  # other gate stands between the export and the path. Replacing the
+  # `readable_repositories/1` subquery with the repositories table turns every
+  # assertion in this block red and nothing else in this file.
+  describe "a repository the account can no longer read" do
+    test "a push receipt keeps every field that is the account's own and loses the path" do
+      user = github_user("account-export-push-gone", "export-push-gone")
+      owner = github_user("account-export-push-owner", "export-push-owner")
+      repository = private_repository_with_member("export-push-private", owner)
+      {:ok, _membership} = Repositories.add_member(repository, user, "contributor")
+
+      refs = %{"refs/heads/main" => String.duplicate("b", 40)}
+
+      Repo.insert!(%PushReceipt{
+        repo: repository.storage_key,
+        wal_seq: 9,
+        principal: "user:" <> user.id,
+        refs: refs,
+        duration_ms: 31
+      })
+
+      # While the account is still a member, the document names the repository.
+      assert {:ok, before_removal} = AccountExport.build(user)
+      assert [named] = before_removal["push_receipts"]["records"]
+      assert named["repository"] == repository.owner <> "/" <> repository.name
+
+      drop_membership!(repository, user)
+      refute Repositories.member?(repository, user)
+
+      assert {:ok, export} = AccountExport.build(user)
+      assert [receipt] = export["push_receipts"]["records"]
+
+      assert receipt["repository"] == nil
+      assert receipt["storage_key"] == repository.storage_key
+      assert receipt["wal_seq"] == 9
+      assert receipt["refs"] == refs
+      assert receipt["duration_ms"] == 31
+    end
+
+    test "a deployment request and an approval keep the record and lose the path" do
+      user = github_user("account-export-deploy-gone", "export-deploy-gone")
+      owner = github_user("account-export-deploy-owner", "export-deploy-owner")
+      repository = private_repository_with_member("export-deploy-private", owner)
+      {:ok, _membership} = Repositories.add_member(repository, user, "maintainer")
+
+      _environment = DeploymentsFixtures.environment_fixture(repository, user)
+      run = DeploymentsFixtures.run_fixture(repository, user)
+      request = Repo.get!(Request, run.deployment_request_id)
+
+      Repo.insert!(%Approval{
+        repository_id: repository.id,
+        deployment_run_id: run.id,
+        approver_user_id: user.id,
+        decision: "approved",
+        rule: "manual",
+        request_digest: request.request_digest,
+        decided_at: DateTime.utc_now()
+      })
+
+      drop_membership!(repository, user)
+      refute Repositories.member?(repository, user)
+
+      assert {:ok, export} = AccountExport.build(user)
+
+      assert [exported_request] = export["deployments"]["requests"]
+      assert exported_request["repository"] == nil
+      assert exported_request["commit_sha"] == DeploymentsFixtures.commit_sha()
+      assert exported_request["request_digest"] == request.request_digest
+
+      assert [exported_approval] = export["deployments"]["approvals"]
+      assert exported_approval["repository"] == nil
+      assert exported_approval["decision"] == "approved"
+      assert exported_approval["request_digest"] == request.request_digest
+    end
+
+    test "the document names the rule it applies to a repository it will not name" do
+      user = github_user("account-export-disclosure", "export-disclosure")
+      assert {:ok, export} = AccountExport.build(user)
+
+      assert gap =
+               Enum.find(export["not_included"], &(&1["family"] == "repository_identity"))
+
+      assert gap["mechanism"] == "OpenAgents.Repositories.readable_by/2"
+      assert gap["reason"] =~ "null repository"
     end
   end
 
@@ -815,6 +908,19 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       auth_method: "test_session",
       approval_receipt_ref: "account-export:#{System.unique_integer([:positive])}"
     }
+  end
+
+  # Membership is what `readable_by/2` reads for a private repository, so the
+  # row goes rather than the repository: the account really did the work and
+  # really cannot read where it landed.
+  defp drop_membership!(repository, user) do
+    {1, nil} =
+      Repo.delete_all(
+        from membership in Membership,
+          where: membership.repository_id == ^repository.id and membership.user_id == ^user.id
+      )
+
+    :ok
   end
 
   defp private_repository_with_member(name, user) do

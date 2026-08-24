@@ -3294,12 +3294,26 @@ role, so removing the filter reddens nothing. The vocabulary is pinned against
 that constraint instead, and a fifth role fails until someone says whether it
 reads.
 
+Amended 2026-08-23 (issue #185): the one instance of that residue is closed.
+`OpenAgents.DataRights.AccountExport`'s push-receipt and deployment joins used
+to select a repository's `owner` and `name` with no predicate at all, so an
+export named the current owner and name of a private repository the account had
+been removed from, or of one renamed after they left. All three now join the
+same `readable_by/2` subquery the module's `repository_work_export/1` composes,
+and the module states one rule for all four collections that render a path: a
+repository's current owner and name travel only where the predicate admits the
+repository to that account. What the rule does to the record differs by family
+and is stated rather than left to each query — an account-keyed record survives
+with a null repository, because a push receipt is the account's own evidence
+under `EXIT-005`, and a repository-keyed record under `repository_work` is
+withheld entirely, because it has no meaning apart from its repository.
+`OpenAgents.DataRights.AccountExportTest` proves both halves for each
+collection.
+
 What is still not enumerated: a listing that applies no predicate at all names
-no term and calls no resolver, so it passes every test above.
-`OpenAgents.DataRights.AccountExport`'s push-receipt and deployment joins are
-that shape — each is scoped to the acting account's own rows, and each selects
-a repository's `owner` and `name` without the predicate, which the same
-module's `repository_work_export/1` explicitly applies.
+no term and calls no resolver, so it passes every test above. Closing the one
+instance does not close the class — a predicate-free listing added tomorrow
+would still pass every test here, and only a reader would catch it.
 `docs/2026-08-23-invariant-proof-audit.md` records the residue.
 
 Reading across repositories obeys the same rule as reading one: the
@@ -3579,6 +3593,20 @@ whose authoring column names the account, in a private repository the account
 is not a member of, is withheld, and another account's records in a repository
 this account can read never appear. Dropping the `readable_by` join turns the
 first red while every other assertion still passes.
+
+Amended 2026-08-23 (issue #185): a repository's current owner and name are the
+repository's rather than the account's, and the export applies one rule to all
+four collections that render a path. `push_receipt`, `deployment` request, and
+`deployment` approval are keyed on the account, so the record comes back
+whatever the repository says now — with `"repository": null` where
+`readable_by/2` no longer admits it, keeping the `storage_key`, `wal_seq`, and
+refs an `EXIT-005` chain link needs. `repository_work` withholds the record
+instead, because a pull request separated from its repository is not a record
+an account can use. Nothing moves off `portable`: an account still gets every
+record it authored, and what it stops getting is a name that was never its
+own. The document says so in its own `not_included` section under the family
+`repository_identity`, so a recipient reading the file offline is not left to
+infer why a receipt names no repository.
 
 Ownership of a migrated forum post is decided, not guessed. Two identities
 resolve to an account and no third: `user:<account-id>`, which every topic and
@@ -4496,7 +4524,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs`, `test/openagents_web/transparency_surface_test.exs` |
-| REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents_web/live/computers_repository_access_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
+| REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents/data_rights/account_export_test.exs`, `test/openagents_web/live/computers_repository_access_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |

@@ -10,6 +10,7 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Agents.Agent
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgents.Transparency.WorkDisclosure
   alias OpenAgentsWeb.ApiError
 
   import OpenAgentsWeb.ControllerHelpers, only: [integer_param!: 1, lookup: 1]
@@ -31,8 +32,8 @@ defmodule OpenAgentsWeb.IssueController do
         dependencies: Issues.dependency_graph(issues),
         progress: Issues.progress_map(issues, reader),
         pull_requests: PullRequests.markers_by_issue_id(issues),
-        work: Assignments.attempts_for_issues(issues),
-        evidence: Evidence.for_issues(issues),
+        work: Assignments.attempts_for_issues(issues, viewer(repository, reader)),
+        evidence: Evidence.for_issues(issues, viewer(repository, reader)),
         completion_claims: CompletionClaims.for_issues(issues),
         pagination: %{
           page: Issues.parse_page(params["page"]),
@@ -156,8 +157,8 @@ defmodule OpenAgentsWeb.IssueController do
           repo: repo,
           dependencies: dependencies(issue),
           progress: progress(issue, actor),
-          work: work(issue),
-          evidence: evidence(issue),
+          work: work(issue, repository, actor),
+          evidence: evidence(issue, repository, actor),
           completion_claims: completion_claims(issue)
         )
 
@@ -218,8 +219,8 @@ defmodule OpenAgentsWeb.IssueController do
         dependencies: dependencies(issue),
         progress: progress(issue, reader),
         pull_requests: PullRequests.markers_by_issue_id([issue]),
-        work: work(issue),
-        evidence: evidence(issue),
+        work: work(issue, repository, reader),
+        evidence: evidence(issue, repository, reader),
         completion_claims: completion_claims(issue)
       )
     else
@@ -253,8 +254,8 @@ defmodule OpenAgentsWeb.IssueController do
             repo: repo,
             dependencies: dependencies(issue),
             progress: progress(issue, user),
-            work: work(issue),
-            evidence: evidence(issue),
+            work: work(issue, repository, user),
+            evidence: evidence(issue, repository, user),
             completion_claims: completion_claims(issue)
           )
 
@@ -273,12 +274,20 @@ defmodule OpenAgentsWeb.IssueController do
 
   # One issue reads through the same page-shaped function the index uses, so
   # the detail response and a row in the list can never disagree.
-  defp work(%Issue{} = issue), do: Assignments.attempts_for_issues([issue])
+  defp work(%Issue{} = issue, repository, reader),
+    do: Assignments.attempts_for_issues([issue], viewer(repository, reader))
 
   # The evidence chain reads through the same page-shaped function as the
   # index, for the same reason: a detail response and a row in the list can
   # never disagree about what shipped an issue.
-  defp evidence(%Issue{} = issue), do: Evidence.for_issues([issue])
+  defp evidence(%Issue{} = issue, repository, reader),
+    do: Evidence.for_issues([issue], viewer(repository, reader))
+
+  # One viewer descriptor, built the same way for every action, so the API and
+  # the issue page cannot disagree about which rung a reader is on. An API
+  # caller authenticating as an agent is not a repository member and lands on
+  # `pulse`, which is the same answer anonymous web traffic gets.
+  defp viewer(repository, reader), do: WorkDisclosure.viewer(repository, reader)
 
   # The claims read through the same page-shaped function as the index, for the
   # same reason: a detail response and a row in the list can never disagree

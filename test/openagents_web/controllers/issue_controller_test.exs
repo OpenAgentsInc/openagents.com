@@ -706,16 +706,54 @@ defmodule OpenAgentsWeb.IssueControllerTest do
 
       assert %{"openagents" => %{"work" => [attempt]}} = json_response(conn, 200)
 
-      assert Enum.sort(Map.keys(attempt)) == [
-               "branch",
-               "commit",
-               "failure_reason",
-               "finished_at",
-               "id",
-               "started_at",
-               "state",
-               "target"
-             ]
+      # The key set comes from the disclosure schedule, renamed the two ways
+      # the API renames, so a column added to `forge_assignments` and put on a
+      # rung shows up here without an edit and a column put nowhere fails
+      # `OpenAgents.Transparency.WorkDisclosureTest` first.
+      renames = %{target_kind: :target, terminal_commit: :commit}
+
+      expected =
+        :attempt
+        |> OpenAgents.Transparency.WorkDisclosure.fields_at(:ledger)
+        |> Enum.map(&to_string(Map.get(renames, &1, &1)))
+        |> Enum.sort()
+
+      assert Enum.sort(Map.keys(attempt)) == expected
+
+      refute Map.has_key?(attempt, "prompt")
+      refute Map.has_key?(attempt, "conversation_id")
+      refute Map.has_key?(attempt, "requesting_principal")
+      refute Map.has_key?(attempt, "credential_delivery_status")
+      refute Map.has_key?(attempt, "machine_id")
+    end
+
+    test "an anonymous reader is told an attempt ran and not what it ran on", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Public work"})
+      record_attempt(issue, "agent/secret-rename", -30, %{state: "completed"})
+
+      # The same request, twice, differing only in who makes it. The member's
+      # token reaches `ledger`; anonymous traffic on the same public repository
+      # reaches `pulse`, and the tier is the only thing between them —
+      # `Repositories.readable_by/2` admits both.
+      member =
+        conn
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+        |> json_response(200)
+
+      anonymous =
+        Phoenix.ConnTest.build_conn()
+        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+        |> json_response(200)
+
+      assert [%{"branch" => "agent/secret-rename"}] = member["openagents"]["work"]
+
+      assert [attempt] = anonymous["openagents"]["work"]
+      assert attempt["state"] == "completed"
+      assert attempt["requester_kind"] == "user"
+      refute Map.has_key?(attempt, "branch")
+      refute Map.has_key?(attempt, "commit")
+      refute Map.has_key?(attempt, "terminal_branch")
+      refute Map.has_key?(attempt, "failure_reason")
     end
 
     test "index carries the attempts for every issue on the page", %{conn: conn} do

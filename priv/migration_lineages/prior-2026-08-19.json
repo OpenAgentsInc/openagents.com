@@ -286,7 +286,8 @@
     20260824031651,
     20260824032138,
     20260824032226,
-    20260824035934
+    20260824035934,
+    20260824040140
   ],
   "required_tables": [
     "users",
@@ -499,7 +500,11 @@
     "forge_fleet_target_status",
     "forge_deploys_result",
     "issue_completion_claims_close_requires_accepted",
-    "issue_completion_claims_state"
+    "issue_completion_claims_state",
+    "artifact_links_artifact_type_check",
+    "artifact_links_artifact_ref_check",
+    "forge_assignments_transparency_tier_check",
+    "issue_evidence_transparency_tier_check"
   ],
   "required_indexes": [
     "users_github_id_index",

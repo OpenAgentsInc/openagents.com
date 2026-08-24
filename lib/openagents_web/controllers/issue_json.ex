@@ -165,32 +165,29 @@ defmodule OpenAgentsWeb.IssueJSON do
     }
   end
 
-  defp evidence_json(entry) do
-    %{
-      id: entry.id,
-      commit: entry.commit,
-      family: entry.family,
-      receipt_id: entry.receipt_id,
-      plane: entry.plane,
-      environment: entry.environment,
-      result: entry.result,
-      source: entry.source,
-      recorded_at: entry.recorded_at
-    }
-  end
+  # The API renames two keys of the attempt projection and none of the
+  # evidence projection, and adds nothing to either. Rendering exactly the keys
+  # the projection returned is what keeps this from becoming a second
+  # disclosure schedule: a tier that withheld `terminal_commit` produces a
+  # response with no `commit` key at all rather than one carrying `null`, and a
+  # field `OpenAgents.Transparency.WorkDisclosure` adds appears here without an
+  # edit. `OpenAgentsWeb.IssueWorkDisclosureTest` reads both key sets from that
+  # schedule, so a rename that loses a field fails.
+  @attempt_key_names %{target_kind: :target, terminal_commit: :commit}
+
+  defp evidence_json(entry), do: entry
 
   defp attempt_json(attempt) do
-    %{
-      id: attempt.id,
-      target: attempt.target_kind,
-      state: attempt.state,
-      branch: attempt.branch,
-      commit: attempt.terminal_commit,
-      failure_reason: attempt.failure_reason,
-      started_at: attempt.started_at || attempt.admitted_at,
-      finished_at: attempt.finished_at
-    }
+    attempt
+    |> Map.drop([:work_job])
+    |> Map.new(fn {key, value} -> {Map.get(@attempt_key_names, key, key), value} end)
+    |> put_attempt_work_job(attempt)
   end
+
+  defp put_attempt_work_job(json, %{work_job: job}) when is_map(job),
+    do: Map.put(json, :work_job, job)
+
+  defp put_attempt_work_job(json, _attempt), do: json
 
   defp total_pages(0, _per_page), do: 1
 

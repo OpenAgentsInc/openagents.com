@@ -2456,7 +2456,12 @@ sentence:
 
 Reading a private forum board and raising a repository's transparency tier to
 `glass` are operator reads that widen with the same allowlist
-(`OpenAgents.Forum`, `OpenAgents.Transparency`).
+(`OpenAgents.Forum`, `OpenAgents.Transparency`). Raising an *unlinked* work
+record to `glass` widens with it (`OpenAgents.Transparency.WorkDisclosure`):
+an attempt an agent requested carries no consent-bearing link and so has no
+owning account to raise, and an operator is the only reader that reaches its
+work job's report. Neither read touches the never list, which withholds the
+prompt, the authority snapshot, and the credential fields from an operator too.
 
 None of these touches an account row, a conversation, a message, or a ban.
 That bound is what remains of the original read-only claim, and it is the part
@@ -3147,16 +3152,79 @@ compiled import tables:
 An anonymous route added under the repository scope fails until this contract
 says which gate it is behind, and a handler that loses its gate fails with it.
 
+**Work in progress is disclosed field by field, not record by record.** The
+tracker surfaces above are readable exactly when the repository is, which
+settles who may open an issue and settles nothing about how much of an attempt,
+a work job, or a deployment receipt that issue then shows. An attempt carries a
+branch and a revision; a work job carries a prompt, a budget, and a report; an
+evidence edge names an environment. Some of that is what public transparency is
+for and some of it restates a private repository in a place the repository's own
+gate does not cover, so the unit of decision is the field.
+
+`OpenAgents.Transparency.WorkDisclosure` is that decision, written down once:
+per family, the tier that first exposes each field, and the columns no tier
+exposes in any form. Three rules hold over it.
+
+- **Every column is classified.** Each column of `forge_assignments`,
+  `work_jobs`, and `issue_evidence` is either the source of exactly one
+  scheduled field or a member of that family's never list, never both and never
+  neither. A new column fails the enumeration until somebody decides, which is
+  what keeps the schedule from falling behind the schema.
+- **The rungs mean the same thing everywhere.** `pulse` says work of a named
+  shape ran and how it came out, and names no ref, revision, receipt, or place;
+  `ledger` adds those, which is exactly where this contract already puts shas,
+  paths, counts, and timings; `glass` adds only the work job's own output — the
+  report, the usage, the model — and reaches only the account the work belongs
+  to and an operator; `dark` removes the record from the projection rather than
+  leaving an empty shell that still says it existed.
+- **The never list is not a fourth rung.** The prompt, the goal, the delegation,
+  the authority snapshot, the owner node, the credential delivery fields, the
+  conversation, and an evidence edge's actor string are withheld from every
+  viewer including an operator, because publishing them would restate a private
+  repository, an internal node name, or a principal's id — each of which the
+  bounds above already refuse.
+
+A reader's rung is their relationship to the repository, not to the record: an
+operator is `glass`, a member is `ledger`, and every other reader who got this
+far is `pulse`. `artifact_links` carries the ceiling and the consent, so
+`Transparency.effective_tier/2` raises the account that requested the attempt to
+`glass` and resolves a revoked link to `dark`; an attempt an agent requested
+names no account and so has no owner to raise. Evidence edges inherit their
+attempt's link, so revoking an attempt takes its receipts with it.
+
+**Repository authority stays stronger than every rung.**
+`Repositories.readable_by/2` runs first and raises, so a tier can only narrow
+what a reader who already passed it sees. A record whose link and column both
+say `glass`, in a repository that went private, is invisible to a non-member —
+the one case no rung of this ladder can reach, and the case the proof exercises.
+Every rung assertion runs on a *public* repository, where `readable_by/2` admits
+everybody and the tier is the only gate; a private repository would have proved
+the tier worked when the repository gate was doing the work.
+
+`ArtifactLink.artifact_types/0` gained `attempt`, `work_job`, `deployment`, and
+`trace`, and PostgreSQL now holds that vocabulary and the ref-kind vocabulary as
+check constraints rather than leaving both to a changeset a direct writer can
+skip. `trace` has no producer: the vocabulary admits one, nothing writes one,
+and the enumeration asserts exactly that.
+
 (Amended 2026-08-23, issue #173: `/<owner>/<repo>/tree/:ref/*path` was already
 served and gated when this contract listed three forge paths, and the tracker
 surfaces were public without the contract saying what governed them. Both are
 now stated.)
 
+(Amended 2026-08-24, issue #149: the tracker rule said which readers reach an
+issue and nothing about how much of the work on it they see. The field-by-field
+schedule above is that missing half.)
+
 Evidence: `OpenAgents.Forge.Visibility`, `OpenAgents.Forge.Browse`, `OpenAgents.Changelog`,
 `OpenAgents.Changelog.Entry`, `OpenAgentsWeb.ChangelogLive`, `OpenAgentsWeb.CodeRepoLive`,
 `OpenAgentsWeb.CodeCommitLive`, `OpenAgentsWeb.CodeTreeLive`, `OpenAgentsWeb.CodeBlobLive`,
-`OpenAgentsWeb.RepositoryAccess`, `OpenAgentsWeb.ChangelogController`, their tests, and the
-surface enumeration in `OpenAgentsWeb.TransparencySurfaceTest`.
+`OpenAgentsWeb.RepositoryAccess`, `OpenAgentsWeb.ChangelogController`, their tests, the
+surface enumeration in `OpenAgentsWeb.TransparencySurfaceTest`,
+`OpenAgents.Transparency.WorkDisclosure`, `OpenAgents.Transparency.ArtifactLink`,
+the `artifact_links` type and ref check constraints, the `transparency_tier` check
+constraints on `forge_assignments` and `issue_evidence`, and the field-by-field
+enumeration in `OpenAgents.Transparency.WorkDisclosureTest`.
 
 ### REPOSITORY-001 — GitHub identity names repositories; OpenAgents owns stored snapshots
 
@@ -4602,7 +4670,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-009 | `test/openagents/forge/deployment_lane_test.exs`, `test/openagents/forge/hot_loader_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
-| TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs`, `test/openagents_web/transparency_surface_test.exs` |
+| TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs`, `test/openagents_web/transparency_surface_test.exs`, `test/openagents/transparency/work_disclosure_test.exs` |
 | REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents/data_rights/account_export_test.exs`, `test/openagents_web/live/computers_repository_access_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |

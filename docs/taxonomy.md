@@ -191,8 +191,20 @@ application's either: repository-side disclosure uses the four levels in
 A trace is not authority: PostgreSQL turns, tool steps, and receipts remain
 the source. A conversation is not a trace until it is exported. Changelog
 rows may carry `trace_ref` and `trace_digest` pointers. Trace visibility
-tiers shipped with issue #70; binding a trace to an issue timeline
-(work-system E6, issue #10) has not.
+tiers shipped with issue #70. `ArtifactLink.artifact_types/0` gained a
+`trace` member with issue #149, and nothing writes one: binding a trace to an
+issue timeline (work-system E6, issue #10) is still unbuilt, and the
+vocabulary admitting the word is not the same as a surface producing it.
+
+**Disclosure schedule** — the field-by-field decision in
+`OpenAgents.Transparency.WorkDisclosure` about which tier first exposes each
+field of an attempt, a work job, or an evidence edge, and which columns no
+tier exposes at all. It is not the *disclosure level*: a level
+(`OpenAgents.Forge.Visibility`, `:l0`-`:l3`) is operator-owned per-repository
+configuration that governs source and history, while a schedule is a
+per-field rule about work in progress that the issue tracker's own
+repository-readability gate does not settle. Say "level" for the dial and
+"schedule" for the field rules. Both use the same four tier words.
 
 **Trajectory** — the ATIF schema name for the document (`AtifTrajectory`,
 `trajectory.json`, `trajectory_id`). Use it in schema and code. Product copy

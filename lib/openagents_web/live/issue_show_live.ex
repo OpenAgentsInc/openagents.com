@@ -52,6 +52,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Notifications
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgents.Transparency.WorkDisclosure
   alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.OG
   alias OpenAgentsWeb.RelativeTime
@@ -530,7 +531,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # failure here would hide the one fact that tells someone what to do next.
   defp refusal(:assignment_issue_claimed, socket) do
     case live_attempt(socket.assigns[:attempts] || []) do
-      %{branch: branch} ->
+      %{branch: branch} when is_binary(branch) ->
         "Work is already running on this issue, on branch #{branch}. " <>
           "One attempt may be live at a time."
 
@@ -583,7 +584,16 @@ defmodule OpenAgentsWeb.IssueShowLive do
     # An issue can become a pull request while the page is open, and the badge
     # that says so was read at mount only.
 
-    attempts = Assignments.attempts_for_issue(issue)
+    # The page reads attempts at the rung this reader is on, from the same
+    # schedule and the same viewer descriptor the API uses. That is what makes
+    # "the same viewer gets the same answer on the page and in the API" a
+    # property of one function rather than of two lists kept in step by hand.
+    attempts =
+      Assignments.attempts_for_issue(
+        issue,
+        WorkDisclosure.viewer(socket.assigns.repository, socket.assigns.current_user)
+      )
+
     references = ClosingReferences.for_issue(issue)
     syncs = TaskReferences.for_issue(issue)
     base = "/#{socket.assigns.owner}/#{socket.assigns.repo}"
@@ -820,7 +830,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
             <h3 class="properties-panel__heading">Agent work</h3>
 
             <p :if={@live_attempt} class="properties-panel__none" id="issue-work-live">
-              Work is running on branch <code>{@live_attempt.branch}</code>. One attempt may be live
+              Work is running{live_attempt_branch(@live_attempt)}. One attempt may be live
               on an issue at a time.
             </p>
 
@@ -1083,7 +1093,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # started and nothing more rather than as a silent gap.
   defp attempt_events(attempts) do
     Enum.flat_map(attempts, fn attempt ->
-      started_at = attempt.started_at || attempt.admitted_at
+      started_at = attempt[:started_at] || attempt[:admitted_at]
 
       start =
         if started_at do
@@ -1103,7 +1113,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
         end
 
       finish =
-        if attempt.finished_at do
+        if attempt[:finished_at] do
           [
             %{
               kind: :event,
@@ -1111,8 +1121,8 @@ defmodule OpenAgentsWeb.IssueShowLive do
               text: attempt_finish_text(attempt),
               icon: attempt_icon(attempt),
               tone: attempt_tone(attempt),
-              at: stamp(attempt.finished_at),
-              sort: attempt.finished_at
+              at: stamp(attempt[:finished_at]),
+              sort: attempt[:finished_at]
             }
           ]
         else
@@ -1123,10 +1133,19 @@ defmodule OpenAgentsWeb.IssueShowLive do
     end)
   end
 
+  # A projection at `pulse` carries no branch and no revision, so every clause
+  # that names one matches on a key that may be absent rather than on a struct
+  # field that is always there. The sentence a reader gets is shorter, never
+  # wrong: an anonymous reader of a public repository is told that work started
+  # and how it ended, and is not told the ref it ran on.
   defp attempt_start_text(%{target_kind: "computer", branch: branch}),
     do: "started work on a computer, on branch #{branch}"
 
   defp attempt_start_text(%{branch: branch}), do: "started work on a box, on branch #{branch}"
+
+  defp attempt_start_text(%{target_kind: "computer"}), do: "started work on a computer"
+
+  defp attempt_start_text(_attempt), do: "started work on a box"
 
   defp attempt_finish_text(%{state: "completed", terminal_commit: commit})
        when is_binary(commit),
@@ -1140,6 +1159,14 @@ defmodule OpenAgentsWeb.IssueShowLive do
     do: "stopped this work: #{reason}"
 
   defp attempt_finish_text(_attempt), do: "stopped this work"
+
+  defp live_attempt_branch(%{branch: branch}) when is_binary(branch),
+    do:
+      Phoenix.HTML.raw(
+        " on branch <code>#{Phoenix.HTML.html_escape(branch) |> Phoenix.HTML.safe_to_string()}</code>"
+      )
+
+  defp live_attempt_branch(_attempt), do: ""
 
   defp attempt_icon(%{state: "completed"}), do: "check-circle"
   defp attempt_icon(_attempt), do: "x-circle-filled"

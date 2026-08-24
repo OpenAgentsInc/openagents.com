@@ -19,9 +19,17 @@ defmodule OpenAgents.Forge.Assignments do
   alias OpenAgents.Repo
   alias OpenAgents.Conversations
   alias OpenAgents.Repositories.Repository
+  alias OpenAgents.Transparency.WorkDisclosure
+  alias OpenAgents.Work.Job
 
   @prefix "oa_assignment_"
   @terminal_states ~w(completed failed cancelled)
+
+  # A caller that names no viewer is an internal caller: the executor, the
+  # janitor, the reconciler. They read the record, not a projection of it, so
+  # nothing is clamped. Every surface a reader reaches passes a real viewer
+  # from `WorkDisclosure.viewer/2`, and the surface enumeration proves it.
+  @unclamped %{account_id: nil, tier: :glass, admin: true}
 
   @doc "Creates an assignment, claims its issue, mints its credential, and starts its run."
   @spec create(map()) :: {:ok, Assignment.t(), String.t()} | {:error, term()}
@@ -139,15 +147,19 @@ defmodule OpenAgents.Forge.Assignments do
   reads the attempts that already exist in `forge_assignments`, so an issue
   with no agent work returns an empty list rather than an absent fact.
   """
-  @spec attempts_for_issue(Issue.t() | integer()) :: [map()]
-  def attempts_for_issue(%Issue{id: id}), do: attempts_for_issue(id)
+  @spec attempts_for_issue(Issue.t() | integer(), map()) :: [map()]
+  def attempts_for_issue(issue_id, viewer \\ @unclamped)
 
-  def attempts_for_issue(issue_id) when is_integer(issue_id) do
+  def attempts_for_issue(%Issue{id: id}, viewer), do: attempts_for_issue(id, viewer)
+
+  def attempts_for_issue(issue_id, viewer) when is_integer(issue_id) do
     Assignment
     |> where([assignment], assignment.issue_id == ^issue_id)
     |> order_by([assignment], asc: assignment.admitted_at, asc: assignment.id)
+    |> preload([:artifact_link, :work_job])
     |> Repo.all()
-    |> Enum.map(&attempt_summary/1)
+    |> Enum.map(&attempt_summary(&1, viewer))
+    |> Enum.reject(&is_nil/1)
   end
 
   @doc """
@@ -157,46 +169,78 @@ defmodule OpenAgents.Forge.Assignments do
   prerequisites, so listing issues does not cost one query per row. Every
   issue in `issues` appears in the result, with `[]` when it has no attempt.
   """
-  @spec attempts_for_issues([Issue.t()]) :: %{integer() => [map()]}
-  def attempts_for_issues(issues) when is_list(issues) do
+  @spec attempts_for_issues([Issue.t()], map()) :: %{integer() => [map()]}
+  def attempts_for_issues(issues, viewer \\ @unclamped) when is_list(issues) do
     ids = Enum.map(issues, & &1.id)
     base = Map.new(ids, &{&1, []})
 
     Assignment
     |> where([assignment], assignment.issue_id in ^ids)
     |> order_by([assignment], asc: assignment.admitted_at, asc: assignment.id)
+    |> preload([:artifact_link, :work_job])
     |> Repo.all()
     |> Enum.reduce(base, fn assignment, acc ->
-      Map.update(acc, assignment.issue_id, [attempt_summary(assignment)], fn existing ->
-        existing ++ [attempt_summary(assignment)]
-      end)
+      case attempt_summary(assignment, viewer) do
+        nil -> acc
+        summary -> Map.update(acc, assignment.issue_id, [summary], &(&1 ++ [summary]))
+      end
     end)
   end
 
   @doc """
-  The bounded projection of one attempt.
+  The bounded projection of one attempt, at the tier `viewer` is admitted to.
 
-  It carries only what the claim and result comments already publish on the
-  issue: the target kind, the branch, the exact commit, the terminal state,
-  and the timestamps. The conversation, the prompt, the credential, and the
-  work job's report stay out, because they belong to the requesting account
-  rather than to everyone who can read the issue.
+  Which field each rung first exposes is decided once, in
+  `OpenAgents.Transparency.WorkDisclosure`, and this function only reads that
+  schedule. It cannot publish a column the schedule has not classified, and it
+  returns `nil` at `dark`, so a revoked link removes the attempt from the
+  timeline rather than leaving an empty shell that still says it existed.
+
+  The attempt's own job is projected beside it as its own family, so the
+  report reaches the account the work belongs to and nobody else, rather than
+  travelling on the attempt's tier.
   """
-  @spec attempt_summary(Assignment.t()) :: map()
-  def attempt_summary(%Assignment{} = assignment) do
-    %{
-      id: assignment.id,
-      target_kind: assignment.target_kind,
-      state: assignment.state,
-      branch: assignment.branch,
-      terminal_branch: assignment.terminal_branch,
-      terminal_commit: assignment.terminal_commit,
-      failure_reason: assignment.failure_reason,
-      admitted_at: assignment.admitted_at,
-      started_at: assignment.started_at,
-      finished_at: assignment.finished_at
-    }
+  @spec attempt_summary(Assignment.t(), map()) :: map() | nil
+  def attempt_summary(assignment, viewer \\ @unclamped)
+
+  def attempt_summary(%Assignment{} = assignment, viewer) do
+    tier = WorkDisclosure.effective_tier(assignment, viewer)
+
+    case WorkDisclosure.project(:attempt, attempt_source(assignment), tier) do
+      nil -> nil
+      projection -> Map.put(projection, :work_job, work_job_summary(assignment, tier))
+    end
   end
+
+  defp attempt_source(%Assignment{} = assignment) do
+    assignment
+    |> Map.from_struct()
+    |> Map.put(:requester_kind, requester_kind(assignment.requesting_principal))
+  end
+
+  # TRANSPARENCY-001 publishes a principal's kind and never its id. The
+  # narration comment `#147` retires published the agent itself; this publishes
+  # that an agent asked, which is the half that contract admits.
+  defp requester_kind(%{"type" => type}) when type in ["user", "agent"], do: type
+  defp requester_kind(_), do: nil
+
+  defp work_job_summary(%Assignment{work_job: %Job{} = job}, tier) do
+    job
+    |> Map.from_struct()
+    |> Map.put(:budget, budget_bounds(job.budget_snapshot))
+    |> then(&WorkDisclosure.project(:work_job, &1, tier))
+  end
+
+  defp work_job_summary(%Assignment{}, _tier), do: nil
+
+  # The bounds, never the snapshot. `maximum_prompt_bytes` is a ceiling on a
+  # prompt no tier publishes, which is why the ceiling is safe and the prompt
+  # is not.
+  defp budget_bounds(snapshot) when is_map(snapshot) do
+    Map.take(snapshot, ["wall_clock_ms", "maximum_report_bytes", "maximum_prompt_bytes"])
+  end
+
+  defp budget_bounds(_snapshot), do: %{}
 
   defp target_kind(attrs) do
     case attrs[:target_kind] || attrs["target_kind"] do
@@ -417,7 +461,16 @@ defmodule OpenAgents.Forge.Assignments do
           admitted_at: now,
           target_kind: target_kind,
           credential_delivery_status: credential_delivery_status,
-          credential_delivery_reason: credential_delivery_reason
+          credential_delivery_reason: credential_delivery_reason,
+          artifact_link_id:
+            case WorkDisclosure.link_for_attempt(repository, principal, %{
+                   "branch" => branch,
+                   "target_kind" => target_kind
+                 }) do
+              {:ok, link} -> link.id
+              :none -> nil
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
         })
         |> Repo.insert()
         |> case do

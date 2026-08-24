@@ -85,6 +85,8 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     OpenAgents.Tools.ConversationExecutionContext => "selects the operator routing policy",
     OpenAgents.Tools.Reach => "satisfies the :operator reach requirement for a tool",
     OpenAgents.Transparency => "widens a repository's visible tier to :glass",
+    OpenAgents.Transparency.WorkDisclosure =>
+      "widens an unlinked work record to :glass, which no owner can be raised to",
     OpenAgentsWeb.AdminAnalyticsLive => "rechecks the operator on mount and on every event",
     OpenAgentsWeb.AdminForgeLive => "rechecks the operator before promoting",
     OpenAgentsWeb.AdminLive => "rechecks the operator on mount and on every event",

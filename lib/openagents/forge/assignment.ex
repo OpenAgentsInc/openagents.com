@@ -32,6 +32,8 @@ defmodule OpenAgents.Forge.Assignment do
     field :admitted_at, :utc_datetime_usec
     field :started_at, :utc_datetime_usec
     field :finished_at, :utc_datetime_usec
+    field :transparency_tier, :string, default: "ledger"
+    belongs_to :artifact_link, OpenAgents.Transparency.ArtifactLink
     timestamps()
   end
 
@@ -59,7 +61,9 @@ defmodule OpenAgents.Forge.Assignment do
       :conversation_id,
       :target_kind,
       :credential_delivery_status,
-      :credential_delivery_reason
+      :credential_delivery_reason,
+      :transparency_tier,
+      :artifact_link_id
     ])
     |> put_programmatic(attrs, :conversation_box_id)
     |> put_programmatic(attrs, :machine_id)
@@ -75,6 +79,7 @@ defmodule OpenAgents.Forge.Assignment do
       :admitted_at
     ])
     |> validate_inclusion(:state, @states)
+    |> validate_inclusion(:transparency_tier, OpenAgents.Transparency.ArtifactLink.tiers())
     |> validate_format(
       :branch,
       ~r/\A(?![.-])(?!.*(?:\.\.|@\{|[ ~^:?*\[\\]))[^\s:]+(?<!\.)(?<!\/)(?<!\.lock)\z/

@@ -72,6 +72,11 @@ defmodule OpenAgents.Issues.Evidence do
   alias OpenAgents.Issues.{ClosingReference, CompletionClaims, EvidenceEntry, Issue}
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
+  alias OpenAgents.Transparency.WorkDisclosure
+
+  # See `OpenAgents.Forge.Assignments`: an internal caller reads the record,
+  # not a projection of it. Every reader-facing surface passes a real viewer.
+  @unclamped %{account_id: nil, tier: :glass, admin: true}
 
   # The forge release plane converges one fleet. Naming it rather than leaving
   # it blank is what lets the environment refusal mean something on both planes.
@@ -140,15 +145,19 @@ defmodule OpenAgents.Issues.Evidence do
   reads edges, so an issue with no evidence returns an empty list rather than
   an absent fact.
   """
-  @spec for_issue(Issue.t() | integer()) :: [map()]
-  def for_issue(%Issue{id: id}), do: for_issue(id)
+  @spec for_issue(Issue.t() | integer(), map()) :: [map()]
+  def for_issue(issue_id, viewer \\ @unclamped)
 
-  def for_issue(issue_id) when is_integer(issue_id) do
+  def for_issue(%Issue{id: id}, viewer), do: for_issue(id, viewer)
+
+  def for_issue(issue_id, viewer) when is_integer(issue_id) do
     EvidenceEntry
     |> where([entry], entry.issue_id == ^issue_id)
     |> order_by([entry], asc: entry.inserted_at, asc: entry.id)
+    |> preload(:artifact_link)
     |> Repo.all()
-    |> Enum.map(&summary/1)
+    |> Enum.map(&summary(&1, viewer))
+    |> Enum.reject(&is_nil/1)
   end
 
   @doc """
@@ -158,41 +167,58 @@ defmodule OpenAgents.Issues.Evidence do
   reads attempts, so listing issues does not cost one query per row. Every issue
   in `issues` appears in the result, with `[]` when it has no evidence.
   """
-  @spec for_issues([Issue.t()]) :: %{integer() => [map()]}
-  def for_issues(issues) when is_list(issues) do
+  @spec for_issues([Issue.t()], map()) :: %{integer() => [map()]}
+  def for_issues(issues, viewer \\ @unclamped) when is_list(issues) do
     ids = Enum.map(issues, & &1.id)
     base = Map.new(ids, &{&1, []})
 
     EvidenceEntry
     |> where([entry], entry.issue_id in ^ids)
     |> order_by([entry], asc: entry.inserted_at, asc: entry.id)
+    |> preload(:artifact_link)
     |> Repo.all()
     |> Enum.reduce(base, fn entry, acc ->
-      Map.update(acc, entry.issue_id, [summary(entry)], &(&1 ++ [summary(entry)]))
+      case summary(entry, viewer) do
+        nil -> acc
+        projection -> Map.update(acc, entry.issue_id, [projection], &(&1 ++ [projection]))
+      end
     end)
   end
 
   @doc """
-  The bounded projection of one evidence edge.
+  The bounded projection of one evidence edge, at the tier `viewer` is
+  admitted to.
 
-  It carries the receipt's identity and its outcome, and nothing about the
-  execution that produced it. The work job's report, the attempt's prompt, and
-  the credential stay out, because they belong to the requesting account rather
-  than to everyone who can read the issue.
+  `pulse` is the acceptance criterion "a public issue can say that restricted
+  evidence exists": the family and the receipt's own verdict, without the
+  revision, the receipt handle, or the environment those bytes reached.
+  `ledger` adds those three. Which field sits on which rung is decided in
+  `OpenAgents.Transparency.WorkDisclosure` and read from there, never restated
+  here.
+
+  Nothing about the execution appears at any rung. The work job's report, the
+  attempt's prompt, and the credential are in that schedule's never list, not
+  on a rung nobody has reached yet.
   """
-  @spec summary(EvidenceEntry.t()) :: map()
-  def summary(%EvidenceEntry{} = entry) do
-    %{
-      id: entry.id,
-      commit: entry.commit_sha,
-      family: entry.family,
-      receipt_id: entry.receipt_id,
-      plane: entry.plane,
-      environment: entry.environment,
-      result: entry.result,
-      source: entry.source,
-      recorded_at: entry.inserted_at
-    }
+  @spec summary(EvidenceEntry.t(), map()) :: map() | nil
+  def summary(entry, viewer \\ @unclamped)
+
+  def summary(%EvidenceEntry{} = entry, viewer) do
+    WorkDisclosure.project(
+      :evidence,
+      %{
+        id: entry.id,
+        commit: entry.commit_sha,
+        family: entry.family,
+        receipt_id: entry.receipt_id,
+        plane: entry.plane,
+        environment: entry.environment,
+        result: entry.result,
+        source: entry.source,
+        recorded_at: entry.inserted_at
+      },
+      WorkDisclosure.effective_tier(entry, viewer)
+    )
   end
 
   # ── receipt-side entry points ───────────────────────────────────────────
@@ -491,7 +517,7 @@ defmodule OpenAgents.Issues.Evidence do
       []
     else
       %EvidenceEntry{}
-      |> EvidenceEntry.changeset(attrs)
+      |> EvidenceEntry.changeset(inherit_link(attrs))
       |> Repo.insert(
         on_conflict: :nothing,
         conflict_target: [:issue_id, :commit_sha, :family, :receipt_id]
@@ -509,6 +535,26 @@ defmodule OpenAgents.Issues.Evidence do
       end
     end
   end
+
+  # An edge an attempt produced consents on the attempt's link, not on one of
+  # its own. The attempt is where a person chose to start work and where a
+  # revocation has to bite: revoking the attempt's link must take its receipts
+  # with it, and a second link per edge would leave them behind.
+  defp inherit_link(%{assignment_id: id} = attrs) when is_binary(id) do
+    case Repo.one(
+           from a in Assignment,
+             where: a.id == ^id,
+             select: {a.artifact_link_id, a.transparency_tier}
+         ) do
+      {link_id, tier} when is_binary(tier) ->
+        attrs |> Map.put(:artifact_link_id, link_id) |> Map.put(:transparency_tier, tier)
+
+      _absent ->
+        attrs
+    end
+  end
+
+  defp inherit_link(attrs), do: attrs
 
   defp note_contradiction(%EvidenceEntry{} = entry) do
     CompletionClaims.note_evidence(entry)

@@ -49,6 +49,8 @@ defmodule OpenAgents.Issues.EvidenceEntry do
     belongs_to :repository, Repository, type: :binary_id
     belongs_to :issue, Issue
     belongs_to :assignment, Assignment, type: :binary_id
+    field :transparency_tier, :string, default: "ledger"
+    belongs_to :artifact_link, OpenAgents.Transparency.ArtifactLink, type: :binary_id
 
     timestamps(updated_at: false)
   end
@@ -79,7 +81,9 @@ defmodule OpenAgents.Issues.EvidenceEntry do
       :environment,
       :result,
       :actor,
-      :source
+      :source,
+      :transparency_tier,
+      :artifact_link_id
     ])
     |> update_change(:commit_sha, &String.downcase/1)
     |> validate_required([
@@ -96,6 +100,10 @@ defmodule OpenAgents.Issues.EvidenceEntry do
     |> validate_inclusion(:family, @families)
     |> validate_inclusion(:plane, @planes)
     |> validate_inclusion(:source, @sources)
+    |> validate_inclusion(
+      :transparency_tier,
+      OpenAgents.Transparency.ArtifactLink.tiers()
+    )
     |> validate_length(:environment, max: 120)
     |> validate_length(:result, max: 64)
     |> validate_length(:actor, max: 200)
@@ -103,5 +111,6 @@ defmodule OpenAgents.Issues.EvidenceEntry do
     |> foreign_key_constraint(:repository_id)
     |> foreign_key_constraint(:issue_id)
     |> foreign_key_constraint(:assignment_id)
+    |> foreign_key_constraint(:artifact_link_id)
   end
 end

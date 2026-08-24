@@ -524,8 +524,20 @@ conversation or user is refused, and no API offers a cross-conversation or
 unscoped fallback. GitHub identity establishes account continuity but does not
 turn conversation evidence into verified facts about a person.
 
-Evidence: `OpenAgents.Memory.RecallSnapshot`, `OpenAgents.Memory.LexicalRecall`, and
-cross-scope tests in `OpenAgents.Memory.LexicalRecallTest`.
+The recall APIs are enumerable rather than remembered. Recall reaches
+PostgreSQL only through the backend `:recall_search_backend` names in
+`config/config.exs`, so the backends are the population, and each backend's
+public API is its own `__info__(:functions)`. Every function in it is named
+here with how its scope is closed — `capture_ref/3` by the conversation it is
+given, `load_snapshot/2`, `search/3,4`, `search_page/3,4`, and `read/3,4` by
+refusing a snapshot from another conversation — and every refusing entry point
+is driven across a conversation boundary. A recall function added beside them
+fails until this contract accounts for it.
+
+Evidence: `OpenAgents.Memory.RecallSnapshot`, `OpenAgents.Memory.LexicalRecall`,
+`OpenAgents.Memory.HybridRecall`, cross-scope tests in
+`OpenAgents.Memory.LexicalRecallTest`, and the entry-point enumeration in
+`OpenAgents.Memory.ScopeBoundaryTest`.
 
 ### MEMORY-002 — Recalled history is classified evidence, not current profile truth
 
@@ -582,9 +594,21 @@ user turn. Searches apply its ordered timestamp/UUID cursor and admit only
 complete user/assistant rows, so streaming or failed assistant text and normal
 later inserts cannot enter the turn's recall view.
 
+The queries are enumerable rather than remembered. Every Ecto query in a
+recall backend rooted at the recall corpus (`messages`, `turn_tool_steps`,
+`voice_tool_steps`) names `conversation_id`, and every query in a
+profile-memory reader rooted at the profile plane names `owner_visitor_id` —
+or, for the owner's own message and conversation reads, `visitor_id`. Both
+populations are read from the modules' own source, so a query added beside the
+enforced ones fails until it carries its scope, and a query rooted at a table
+this contract gives no scope column fails until the column is named. What that
+establishes is that the predicate is written; that it refuses is the behaviour
+the recall and profile-memory tests drive.
+
 Evidence: `OpenAgents.Conversations.begin_inference/5`, the generated `search_vector`
 and partial GIN migration, `OpenAgents.Memory.LexicalRecall`, immutable turn receipt
-triggers, and snapshot/status/index tests in `OpenAgents.Memory.LexicalRecallTest`.
+triggers, snapshot/status/index tests in `OpenAgents.Memory.LexicalRecallTest`, and
+the query enumeration in `OpenAgents.Memory.ScopeBoundaryTest`.
 
 Search is discovery only. `conversation_search.v1` returns bounded excerpts;
 `conversation_read.v1` must reread an exact source and bounded neighborhood
@@ -783,7 +807,7 @@ and `OpenAgents.GraphMemoryTest`.
 Status: Current
 
 Before candidate storage, the host applies the pinned
-`openagents.memory.policy.v1` policy to the claim, provenance/artifact metadata, and
+`sarah.memory.policy.v1` policy to the claim, provenance/artifact metadata, and
 same-owner source content. Credential, API/auth token, wallet/seed/payment,
 encoded-secret, and local-path material rejects the whole candidate. The
 rejected value, a hash of it, or a partially scrubbed shell is never persisted.
@@ -791,13 +815,25 @@ Only owner scope, fixed policy version, bounded reason/category, size bucket,
 and time enter the rejection audit.
 
 Every export or future model/UI projection re-applies
-`openagents.memory.redaction.v1`. A value that fails revalidation is withheld as a
+`sarah.memory.redaction.v1`. A value that fails revalidation is withheld as a
 whole field. Stored policy identities are immutable, so later policy changes
-cannot silently relabel old records or rejection evidence.
+cannot silently relabel old records or rejection evidence, which is why the two
+identifiers above are the strings the code emits rather than tidier ones.
+
+The projections are enumerable rather than remembered. The modules that name a
+profile-memory schema are an exact set, and each is accounted for by what it
+does with a stored claim: `OpenAgents.ProfileMemory` projects claims,
+`OpenAgents.DataRights` erases the owner's plane by id, `OpenAgents.Memory.Portability`
+compares claims for import admission and exports through `OpenAgents.ProfileMemory`,
+and the four memory tools read only the category list. `OpenAgents.ProfileMemory`
+is the one projector, so it is the one place the redaction policy is applied,
+and a module that gains a dependency on the profile plane fails until this
+contract says what it does with a claim.
 
 Evidence: `OpenAgents.Memory.Policy`, `OpenAgents.Memory.Redaction`,
 `profile_memory_policy_events`, immutable policy-version trigger,
-`test/openagents/memory/policy_and_redaction_test.exs`, and `OpenAgents.Memory.PolicyAndRedactionTest`.
+`test/openagents/memory/policy_and_redaction_test.exs`, `OpenAgents.Memory.PolicyAndRedactionTest`,
+and the projection enumeration in `OpenAgents.Memory.ScopeBoundaryTest`.
 
 ## Turn and provider lifecycle
 
@@ -3953,16 +3989,16 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |
-| MEMORY-001 | `test/openagents/memory/lexical_recall_test.exs` |
+| MEMORY-001 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | MEMORY-002 | `test/openagents/memory/evidence_test.exs`, `test/openagents/turn_memory_evidence_journeys_test.exs` |
 | MEMORY-003 | `test/openagents/profile_memory_test.exs` |
-| MEMORY-004 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
+| MEMORY-004 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | MEMORY-005 | `test/openagents/tools/profile_memory_tools_test.exs` |
 | MEMORY-006 | `test/openagents/semantic_recall_test.exs` |
 | MEMORY-007 | `test/openagents/preferences_test.exs` |
 | MEMORY-008 | `test/openagents/experience_memory_test.exs` |
 | MEMORY-009 | `test/openagents/graph_memory_test.exs` |
-| PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs` |
+| PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | TURN-001 | `test/openagents/conversations_test.exs` |
 | TURN-002 | `test/openagents/conversations_test.exs` |
 | TURN-003 | `test/openagents_web/live/chat_live_test.exs` |

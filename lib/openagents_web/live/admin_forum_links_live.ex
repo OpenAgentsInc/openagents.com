@@ -1,37 +1,57 @@
 defmodule OpenAgentsWeb.AdminForumLinksLive do
-  @moduledoc "Operator surface for approving or rejecting legacy identity claims."
+  @moduledoc """
+  Operator surface for approving or rejecting legacy identity claims.
+
+  The claim these two events act on belongs to someone other than the
+  operator clicking the button, so the identifier arrives in the event params
+  and nothing in the socket narrows it. IDENTITY-002 says a LiveView event
+  must not select another user's record on its own authority, and this surface
+  satisfies that in two ways rather than one.
+
+  The authority is the `:operator` live session's `:admin_guard` hook, which
+  re-reads the acting account and rechecks `OpenAgents.Accounts.admin?/1`
+  before every event, so a demoted operator's next click is halted rather than
+  served (ADMIN-001).
+
+  The resolution goes through `OpenAgents.Forum`, never through
+  `OpenAgents.Repo`. A LiveView that builds its own query is a surface where
+  the scope rule is restated from memory; keeping the query in the context
+  keeps it in one place. `OpenAgentsWeb.LiveViewScopeTest` enumerates both
+  properties over every LiveView in the router.
+  """
   use OpenAgentsWeb, :live_view
 
-  import Ecto.Query, warn: false
-
   alias OpenAgents.Forum
-  alias OpenAgents.Repo
 
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, :links, pending_links())}
+    {:ok, assign(socket, :links, Forum.list_pending_actor_links())}
   end
 
   def handle_event("approve", %{"id" => id}, socket) do
-    link = Repo.get!(Forum.ActorLink, id)
-    {:ok, _} = Forum.approve_actor_link(link)
-
-    {:noreply, socket |> assign(:links, pending_links()) |> put_flash(:info, "Claim approved")}
+    {:noreply, decide(socket, id, &Forum.approve_actor_link/1, "Claim approved")}
   end
 
   def handle_event("reject", %{"id" => id}, socket) do
-    link = Repo.get!(Forum.ActorLink, id)
-    {:ok, _} = Forum.reject_actor_link(link)
-
-    {:noreply, socket |> assign(:links, pending_links()) |> put_flash(:info, "Claim rejected")}
+    {:noreply, decide(socket, id, &Forum.reject_actor_link/1, "Claim rejected")}
   end
 
-  defp pending_links do
-    Repo.all(
-      from l in Forum.ActorLink,
-        where: l.status == "pending",
-        order_by: [asc: l.inserted_at]
-    )
+  # A claim that vanished or was already decided is reported, not raised: the
+  # operator is looking at a list another operator may have just acted on.
+  defp decide(socket, id, transition, confirmation) do
+    case Forum.fetch_actor_link(id) do
+      {:ok, %Forum.ActorLink{status: "pending"} = link} ->
+        {:ok, _decided} = transition.(link)
+        socket |> refresh() |> put_flash(:info, confirmation)
+
+      {:ok, %Forum.ActorLink{}} ->
+        socket |> refresh() |> put_flash(:info, "That claim was already decided.")
+
+      {:error, :not_found} ->
+        socket |> refresh() |> put_flash(:error, "That claim no longer exists.")
+    end
   end
+
+  defp refresh(socket), do: assign(socket, :links, Forum.list_pending_actor_links())
 
   def render(assigns) do
     ~H"""

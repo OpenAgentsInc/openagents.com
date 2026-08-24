@@ -57,14 +57,17 @@ that answer.
 | --- | --- |
 | Specific — a named behavior at a named seam | 56 |
 | Universal — the population is closed, so the proof bites | 41 |
-| Universal — the proof did not bite; enumerated here | 9 |
+| Universal — the proof did not bite; enumerated here | 11 |
 | Universal — the proof did not bite; narrowed here | 2 |
-| Universal — the proof does not bite; still open | 10 |
+| Universal — the proof does not bite; still open | 8 |
 
-Two of the nine and one of the two carry a residual clause that is still open,
-so the closing table below lists twelve rows against ten contracts.
+One of the eleven and one of the two carry a residual clause that is still
+open, so the closing table below lists ten rows against eight contracts.
+`IDENTITY-002` and `THREAD-001` were enumerated under issue #174 and moved out
+of that table; `IDENTITY-002` keeps a named residue, recorded in the contract
+rather than here.
 
-**How firm each verdict is.** The nine, the two, and the ten were established
+**How firm each verdict is.** The eleven, the two, and the ten were established
 by reading the named proof and, where the answer was not obvious from it,
 querying the compiled application for the population the claim covers. The 41
 were established from the contract prose and the mechanism it names — a
@@ -146,6 +149,42 @@ session — 40 of them today — and requires each to refuse with a redirect to 
 public root or a `401`. `route_authority_test.exs` already fails a route it
 cannot classify, so the two together close the loop from the router.
 
+### `IDENTITY-002` — a LiveView event must not select another user
+
+**Would have missed:** an event handler resolving a record from its own params
+rather than from the socket's scope. `OpenAgentsWeb.AdminForumLinksLive` did
+that — `Repo.get!(Forum.ActorLink, id)` straight from the event params, with no
+in-body authority check, unlike its six operator siblings. Its route is
+classified `:operator`, so `authenticated_route_gate_test.exs` and
+`operator_surface_test.exs` were both green over it: a route table sees the
+pipeline, not the handler.
+
+**Now:** `OpenAgentsWeb.LiveViewScopeTest` enumerates two mechanisms.
+`OpenAgentsWeb.UserAuth` attaches a `:handle_event` hook in the
+`:ensure_authenticated` and `:ensure_admin` stages, so the acting account is
+re-read before every event; every LiveView route classified
+`:authenticated_browser` or `:operator` must sit in a live session mounting one
+of those stages, and the live sessions are an exact declared set. Separately,
+no LiveView reaches `OpenAgents.Repo` — the view above now resolves through
+`OpenAgents.Forum.fetch_actor_link/1`. A context function that itself takes no
+acting principal still passes both, and `IDENTITY-002` says so.
+
+### `THREAD-001` — no route returns a grant token for a thread the caller did not open
+
+**Would have missed:** a second route that renders a grant.
+`thread_controller_test.exs` proves the property at the three routes that
+exist, which is a proof of those routes rather than of the sentence.
+
+**Now:** a plaintext token comes into existence in one place,
+`OpenAgents.Inference.mint/1`, and leaves `OpenAgents.Threads` through
+`mint_grant/1` and `open_and_mint/2,3`, so
+`OpenAgents.Threads.GrantTokenReachTest` reads the compiled import edges to
+those functions and asserts four exact sets — who mints, who receives, which of
+them the router serves, and `OpenAgents.Threads`'s own export table, so a new
+token-returning function is classified before it has callers. It then
+dispatches every route the router gives that controller and requires a token in
+the body only at the mint.
+
 ### `RELEASE-004` — no hosted CI
 
 **Would have missed:** a `.github/workflows/ci.yml` committed beside the owned
@@ -204,8 +243,8 @@ new member fails until it is accounted for. They are the pattern to copy.
 
 ## What remains
 
-Twelve claims across ten contracts still rest on proofs that cannot fail for
-them, including the residual halves of `IDENTITY-002` and `REPOSITORY-001`.
+Ten claims across eight contracts still rest on proofs that cannot fail for
+them, including the residual half of `REPOSITORY-001`.
 Each is recorded with the violation it would miss. None is a known live defect:
 these are claims whose truth currently depends on review rather than on a
 proof.
@@ -213,7 +252,6 @@ proof.
 | Contract | The claim | A violation the proof would miss | Carried by |
 | --- | --- | --- | --- |
 | `PERSONA-001` | provider adapters contain no independent persona | an adapter that composes its own instruction text | #176 |
-| `IDENTITY-002` | a LiveView event must not select another user | an event handler resolving a record from its own params rather than the socket's scope | #174 |
 | `IDENTITY-010` | the credential is not persisted in a job, journal, prompt, output, environment, Git configuration, or API response | a new sink that writes it | #177 |
 | `MEMORY-001` | no API offers a cross-conversation or unscoped fallback | a new recall entry point without the conversation predicate | #172 |
 | `MEMORY-004` | scope is enforced in every query | a query function added beside the enforced ones | #172 |
@@ -221,7 +259,6 @@ proof.
 | `UI-002` | provider identifiers never enter socket assigns or HTML | an assign carrying a provider call ID | #173 |
 | `STATUS-001` | counts only, never content | a new key in the published projection; the test pattern-matches and tolerates extra keys | #173 |
 | `TRANSPARENCY-001` | bounds that hold at every level | a new public surface below `:l3` | #173 |
-| `THREAD-001` | no route returns a grant token for a thread the caller did not open | a second route that renders a grant | #174 |
 | `REPOSITORY-001` | a visibility join that restates the predicate | a module deciding repository visibility with its own join | #175 |
 | `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly | #151 |
 

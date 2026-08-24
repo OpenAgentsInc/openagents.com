@@ -239,14 +239,39 @@ redirect, which cannot fail for a route nobody added to the list, so
 the public root or a `401`. A route added outside the `:authenticated`
 pipeline fails there until it is reclassified.
 
-The LiveView event half is not enumerated. An event handler that resolves a
-record from its own params rather than from the socket's current scope is
-caught by the surface's own test or not at all, and
-`docs/2026-08-23-invariant-proof-audit.md` records that gap.
+Amended 2026-08-23 (issue #174): the LiveView event half used to rest on
+each surface's own test, which cannot fail for a handler nobody wrote a test
+for. Two mechanisms carry it, and `OpenAgentsWeb.LiveViewScopeTest` enumerates
+both from the router and from compiled import tables.
+
+- **Who is acting is re-resolved before every event.**
+  `OpenAgentsWeb.UserAuth.on_mount/4` attaches a `:handle_event` hook in the
+  `:ensure_authenticated` and `:ensure_admin` stages; each re-reads the account
+  through `OpenAgents.Accounts.get_active_user/1`, and the operator hook
+  rechecks `OpenAgents.Accounts.admin?/1`. A session banned or demoted between
+  mount and click is halted, not served. Every LiveView route
+  `OpenAgentsWeb.RouteAuthority` classifies `:authenticated_browser` or
+  `:operator` must sit in a live session that mounts one of those stages, and
+  the live sessions themselves are an exact declared set, so a new session is
+  classified before it can carry a surface.
+- **What is being resolved goes through a context.** No LiveView reaches
+  `OpenAgents.Repo`. A view that writes its own query is a surface where the
+  scope rule is restated from memory, which is how a handler comes to select a
+  record its caller never had. `OpenAgentsWeb.AdminForumLinksLive` did exactly
+  that — `Repo.get!(Forum.ActorLink, id)` straight from the event params — and
+  now resolves through `OpenAgents.Forum.fetch_actor_link/1`.
+
+What is still not enumerated: a context function that itself takes no acting
+principal, called from a handler with a caller-supplied identifier, passes both
+tests. `OpenAgents.DeviceAuthorizations.get_pending_by_user_code/1` is the
+deliberate instance — the device code is the terminal's own bearer secret, and
+the deciding half (`approve/2`, `deny/2`) binds the acting account.
+`docs/2026-08-23-invariant-proof-audit.md` records the residue.
 
 Evidence: `OpenAgentsWeb.UserAuth`, `OpenAgentsWeb.Router`,
 `OpenAgentsWeb.ChatLive.mount/3`, `OpenAgents.Conversations.get_conversation_for_user/1`,
-`OpenAgentsWeb.AuthGateTest`, and `OpenAgentsWeb.AuthenticatedRouteGateTest`.
+`OpenAgentsWeb.AuthGateTest`, `OpenAgentsWeb.AuthenticatedRouteGateTest`, and
+`OpenAgentsWeb.LiveViewScopeTest`.
 
 ### IDENTITY-003 — Account continuity supersedes browser portability
 
@@ -1623,6 +1648,22 @@ conversation, and a thread is not one.
   thread the caller did not open, and the token is returned exactly once, at
   the mint.
 
+  Amended 2026-08-23 (issue #174): that sentence quantifies over routes, so it
+  is enumerated rather than sampled. A plaintext grant token comes into
+  existence in one place, `OpenAgents.Inference.mint/1`, and leaves
+  `OpenAgents.Threads` through `mint_grant/1` and `open_and_mint/2,3`, so every
+  module that can hold one carries a compiled import edge to one of them.
+  `OpenAgents.Threads.GrantTokenReachTest` reads those edges from each module's
+  BEAM import table and asserts four exact sets: the modules that mint a token
+  (`OpenAgents.Threads`, `OpenAgents.Work.Coding`,
+  `OpenAgents.Work.DelegationServer`, `OpenAgents.Work.Scv`), the modules that
+  receive one from a thread (`OpenAgentsWeb.ThreadController` alone), the
+  routed handlers among them (the same one controller), and
+  `OpenAgents.Threads`'s own export table, so a new function that hands a
+  caller a token is classified before anything can call it. It then dispatches
+  every route the router gives that controller and requires a token in the body
+  only at the mint. A second route that renders a grant fails there.
+
 Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `OpenAgents.Threads.Event`, `OpenAgents.Inference.mint/1`,
 `OpenAgents.Inference.expire_elapsed_for_owner/1`,
@@ -1630,6 +1671,7 @@ Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `priv/repo/migrations/20260823221415_create_threads_and_thread_events.exs`,
 `priv/repo/migrations/20260823221416_allow_thread_scoped_inference_grants.exs`,
 `test/openagents/threads/grant_fence_test.exs`,
+`test/openagents/threads/grant_token_reach_test.exs`,
 `test/openagents/threads_test.exs`, and
 `test/openagents_web/controllers/thread_controller_test.exs`.
 
@@ -3826,7 +3868,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | PROGRAM-002 | `test/openagents/shadow_programs_test.exs` |
 | PROGRAM-003 | `test/openagents/program_lifecycle_test.exs` |
 | IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs` |
-| IDENTITY-002 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs` |
+| IDENTITY-002 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs`, `test/openagents_web/live_view_scope_test.exs` |
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
@@ -3883,7 +3925,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
-| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads_test.exs` |
+| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
 | DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |

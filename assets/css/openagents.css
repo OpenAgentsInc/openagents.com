@@ -3355,11 +3355,11 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* The preview is bounded to exactly three visible lines and scrolls inside
-     that budget; the .DelegationLog hook autoscrolls it to the newest row as
-     activity arrives. */
   .delegation-log {
-    max-height: calc(3 * 1.5em);
+    display: flex;
+    max-height: 40vh;
+    flex-direction: column;
+    gap: 6px;
     overflow-y: auto;
     overscroll-behavior: contain;
     color: var(--text-muted);
@@ -3368,33 +3368,48 @@
     line-height: 1.5;
   }
 
-  /* ── Preview rows ────────────────────────────────────────────────────────── */
-
-  /* Built by the .DelegationLog hook, which frames the plain text stream into
-     one-line rows and mirrors the newest into the activity line. The hook owns
-     the DOM; these are the only rules it relies on. One activity is one line,
-     so long commands and paths clip instead of spending a second line. */
-
-  .deleg-row {
+  /* The log only ever scrolls vertically. Its rows are flex items, which are
+     `min-width: auto` by default, so one long command or path made the whole
+     column as wide as itself and the panel scrolled sideways instead. */
+  .delegation-log > * {
     min-width: 0;
     max-width: 100%;
-    white-space: nowrap;
   }
 
-  .deleg-row--prose,
-  .deleg-row--note {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  /* ── Streamed log rows ───────────────────────────────────────────────────── */
+
+  /* Built by the .DelegationLog hook, which frames the plain text stream into
+     prose, tool cards and notes. The hook owns the DOM; these are the only
+     rules it relies on. */
+
+  .deleg-prose {
+    overflow-wrap: anywhere;
+    /* The stream carries its own line breaks, and they are the shape of what
+       the agent said; the rest wraps to the rail's width. */
+    white-space: pre-wrap;
   }
 
-  .deleg-row--tool {
+  .deleg-tool {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--ink-raised);
+  }
+
+  .deleg-tool__summary {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    padding: 5px 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    list-style: none;
   }
 
-  .deleg-row__dot {
+  .deleg-tool__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .deleg-tool__dot {
     width: 6px;
     height: 6px;
     flex: none;
@@ -3402,46 +3417,67 @@
     background: var(--info);
   }
 
-  .deleg-row[data-status="succeeded"] .deleg-row__dot {
+  .deleg-tool[data-status="succeeded"] .deleg-tool__dot {
     background: var(--success);
   }
 
-  .deleg-row[data-status="failed"] .deleg-row__dot {
+  .deleg-tool[data-status="failed"] .deleg-tool__dot {
     background: var(--danger);
   }
 
-  .deleg-row__label {
+  .deleg-tool__label {
     flex: none;
     color: var(--text-body);
   }
 
-  .deleg-row__cmd {
+  /* The command as a one-line preview beside its label. It is the detail that
+     tells two `Terminal` steps apart, so it is stated on the closed card and
+     truncated rather than wrapped. */
+  .deleg-tool__inline {
     min-width: 0;
     flex: 1;
     overflow: hidden;
     color: var(--text-dim);
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .deleg-row--note[data-tone="warn"] {
+  .deleg-tool__body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 1px solid var(--line);
+    padding: 8px;
+  }
+
+  .deleg-tool__cmd,
+  .deleg-tool__out {
+    max-height: 16rem;
+    overflow: auto;
+    overflow-wrap: anywhere;
+    font: inherit;
+    white-space: pre-wrap;
+  }
+
+  .deleg-tool__cmd {
+    color: var(--text-body);
+  }
+
+  .deleg-tool__out {
+    color: var(--text-muted);
+  }
+
+  .deleg-note {
+    overflow-wrap: anywhere;
+    color: var(--text-dim);
+  }
+
+  .deleg-note[data-tone="warn"] {
     color: var(--warning);
   }
 
-  .deleg-row--note[data-tone="error"] {
+  .deleg-note[data-tone="error"] {
     color: var(--danger);
-  }
-
-  /* The activity the delegation is doing right now, stated directly under the
-     delegate line instead of only wherever the preview happens to be scrolled.
-     The hook mirrors the newest preview row into it. */
-  .delegation-activity {
-    overflow: hidden;
-    color: var(--text-body);
-    font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.75rem;
-    line-height: 1.5;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .delegation-truncated {

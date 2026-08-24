@@ -1114,17 +1114,10 @@ defmodule OpenAgentsWeb.ChatLive do
         // Record/unit separators frame structured tool events inside the plain
         // text stream (see sarah-computer-controller AcpAgent.renderUpdate).
         // A frame is one line beginning with RS whose fields split on US;
-        // everything else is agent prose. This hook renders the stream as the
-        // panel's preview -- one row per thing the delegated agent did -- and
-        // mirrors the newest row into the sibling activity line, so what is
-        // happening right now reads true wherever the preview is scrolled.
-        // Rows and the mirror are text, never HTML.
+        // everything else is agent prose. This hook renders frames as
+        // collapsible tool cards and notes, and prose as text — never HTML.
         const RS = String.fromCharCode(30)
         const US = String.fromCharCode(31)
-
-        // The server caps the stream at 64 KiB; this bounds the element count
-        // too, so pathological tiny chunks cannot pile up rows instead.
-        const MAX_ROWS = 200
 
         const decode64 = (value) => {
           try {
@@ -1138,8 +1131,7 @@ defmodule OpenAgentsWeb.ChatLive do
           mounted() {
             this.buffer = ""
             this.tools = new Map()
-            this.proseRow = null
-            this.activityLine = this.el.parentElement.querySelector("[data-delegation-status]")
+            this.prose = null
             this.handleEvent("delegation:chunk", ({ ref, text }) => {
               if (this.el.dataset.ref !== ref) return
               const follow =
@@ -1168,70 +1160,81 @@ defmodule OpenAgentsWeb.ChatLive do
             }
           },
 
-          // Prose arrives in chunks that can split a line: the open row grows
-          // until a newline or a frame closes it, and each committed line is
-          // one row -- the preview states one thing per line.
           appendProse(text) {
-            const lines = text.split("\n")
-            for (const [index, piece] of lines.entries()) {
-              if (index > 0) this.proseRow = null
-              if (piece === "") continue
-              if (!this.proseRow || this.proseRow.parentNode !== this.el) {
-                this.proseRow = this.addRow("deleg-row deleg-row--prose")
-              }
-              this.setRow(this.proseRow, this.proseRow.textContent + piece)
+            if (text === "") return
+            if (!this.prose || this.prose.parentNode !== this.el || this.el.lastChild !== this.prose) {
+              this.prose = document.createElement("span")
+              this.prose.className = "deleg-prose"
+              this.el.appendChild(this.prose)
             }
+            this.prose.appendChild(document.createTextNode(text))
           },
 
           renderFrame(line) {
-            this.proseRow = null
             const fields = line.split(US)
             if (fields[0] === "T") {
               this.renderTool(fields)
             } else if (fields[0] === "N") {
               this.renderNote(fields)
             }
+            this.prose = null
           },
 
           // T | id | phase(0 start,1 done,2 failed) | kind | b64 title | b64 detail
-          // Start carries the command; completion carries output, which the
-          // durable transcript owns -- here a finished step just recolors its
-          // dot on the same single line.
           renderTool([, id, phase, kind, b64title, b64detail]) {
             const title = decode64(b64title || "")
-            const command = decode64(b64detail || "")
-            let row = this.tools.get(id)
-            if (!row) {
-              row = this.buildToolRow(kind, title, command)
-              this.tools.set(id, row)
+            const detail = decode64(b64detail || "")
+            let card = this.tools.get(id)
+            if (!card) {
+              card = this.buildTool(id, kind, title, detail)
+              this.tools.set(id, card)
+              this.el.appendChild(card.root)
             }
             if (phase === "1" || phase === "2") {
-              row.dataset.status = phase === "1" ? "succeeded" : "failed"
+              card.root.dataset.status = phase === "1" ? "succeeded" : "failed"
+              if (detail !== "") {
+                card.out.textContent = detail
+                card.out.hidden = false
+              }
             }
           },
 
-          buildToolRow(kind, title, command) {
-            const row = document.createElement("div")
-            row.className = "deleg-row deleg-row--tool"
-            row.dataset.status = "running"
+          buildTool(id, kind, title, command) {
+            const root = document.createElement("details")
+            root.className = "deleg-tool"
+            root.dataset.status = "running"
+            root.dataset.kind = kind || "other"
 
+            const summary = document.createElement("summary")
+            summary.className = "deleg-tool__summary"
             const dot = document.createElement("span")
-            dot.className = "deleg-row__dot"
+            dot.className = "deleg-tool__dot"
             const label = document.createElement("span")
-            label.className = "deleg-row__label"
+            label.className = "deleg-tool__label"
             label.textContent = this.kindLabel(kind) || title || "tool"
-            row.appendChild(dot)
-            row.appendChild(label)
+            summary.appendChild(dot)
+            summary.appendChild(label)
             if (command !== "") {
-              const cmd = document.createElement("span")
-              cmd.className = "deleg-row__cmd"
-              cmd.textContent = command
-              row.appendChild(cmd)
+              const inline = document.createElement("code")
+              inline.className = "deleg-tool__inline"
+              inline.textContent = command
+              summary.appendChild(inline)
             }
 
-            this.appendRow(row)
-            this.mirror(label.textContent + (command === "" ? "" : " " + command))
-            return row
+            const body = document.createElement("div")
+            body.className = "deleg-tool__body"
+            const cmd = document.createElement("pre")
+            cmd.className = "deleg-tool__cmd"
+            cmd.textContent = command !== "" ? "$ " + command : title
+            const out = document.createElement("pre")
+            out.className = "deleg-tool__out"
+            out.hidden = true
+            body.appendChild(cmd)
+            body.appendChild(out)
+
+            root.appendChild(summary)
+            root.appendChild(body)
+            return { root, out }
           },
 
           kindLabel(kind) {
@@ -1250,32 +1253,11 @@ defmodule OpenAgentsWeb.ChatLive do
 
           // N | b64 text | tone(info|warn|error)
           renderNote([, b64text, tone]) {
-            const text = decode64(b64text || "")
-            // An empty note states nothing; spending one of the three visible
-            // lines on it would hide real activity.
-            if (text === "") return
-            const row = this.addRow("deleg-row deleg-row--note")
-            row.dataset.tone = tone || "info"
-            this.setRow(row, text)
-          },
-
-          addRow(className) {
-            const row = document.createElement("div")
-            row.className = className
-            this.el.appendChild(row)
-            while (this.el.childElementCount > MAX_ROWS) this.el.firstElementChild.remove()
-            return row
-          },
-
-          setRow(row, text) {
-            row.textContent = text
-            this.mirror(text)
-          },
-
-          mirror(text) {
-            if (!this.activityLine) return
-            this.activityLine.textContent = text
-            this.activityLine.hidden = text === ""
+            const note = document.createElement("div")
+            note.className = "deleg-note"
+            note.dataset.tone = tone || "info"
+            note.textContent = decode64(b64text || "")
+            this.el.appendChild(note)
           }
         }
       </script>
@@ -1515,9 +1497,8 @@ defmodule OpenAgentsWeb.ChatLive do
   # the bounded work list, and the live delegation (issue #85) — and neither is
   # chrome or authority: the transcript's durable event headers remain the
   # record. The rail scrolls on its own so the transcript never moves for it,
-  # and the three-line preview and the activity line under the delegate line
-  # are owned by the .DelegationLog hook (phx-update="ignore"), so chunk text
-  # never rides an assign.
+  # and the rolling log is owned by the .DelegationLog hook
+  # (phx-update="ignore"), so chunk text never rides an assign.
   defp chat_rail(assigns) do
     ~H"""
     <aside
@@ -1589,18 +1570,6 @@ defmodule OpenAgentsWeb.ChatLive do
                 <.icon name="stop" />
               </.button>
             </div>
-            <%!-- The activity the delegation is doing right now, stated directly
-                  under the delegate line. The log hook mirrors the newest
-                  preview row into it; the server only guarantees the mount
-                  point and its placement. --%>
-            <p
-              id={"delegation-activity-rail-#{@delegation.ref}"}
-              class="delegation-activity"
-              data-delegation-status={@delegation.ref}
-              aria-live="polite"
-              hidden
-            >
-            </p>
             <div
               id={"delegation-log-rail-#{@delegation.ref}"}
               class="delegation-log"
@@ -1700,15 +1669,6 @@ defmodule OpenAgentsWeb.ChatLive do
         timestamp={@delegation.started_at}
       >
         <div class="delegation-inline__details">
-          <p
-            :if={@delegation.state == :running}
-            id={"delegation-activity-inline-#{@delegation.ref}"}
-            class="delegation-activity"
-            data-delegation-status={@delegation.ref}
-            aria-live="polite"
-            hidden
-          >
-          </p>
           <div
             :if={@delegation.state == :running}
             id={"delegation-log-inline-#{@delegation.ref}"}

@@ -30,12 +30,7 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
 
     # The chunk rides a push event to the log hooks, never an assign; once it
     # arrives, the start event has necessarily been applied too.
-    assert_push_event(
-      view,
-      "delegation:chunk",
-      %{ref: ref, text: "hello from the machine"},
-      1_000
-    )
+    assert_push_event(view, "delegation:chunk", %{text: "hello from the machine"}, 1_000)
 
     # Desktop rail: the delegation is a section of the work rail beside the
     # transcript, never a block under the composer.
@@ -44,16 +39,8 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     assert has_element?(view, "#delegation-live .delegation-live__computer", "rail-box")
     assert has_element?(view, "#delegation-live .delegation-live__subject", "claude")
     assert has_element?(view, ~s(#cancel-delegation[aria-label="Cancel delegation"]))
-    assert has_element?(view, "#delegation-live time[data-started-at]")
-
-    # The activity line sits directly under the delegate line and ships hidden;
-    # the log hook owns its text client-side, so the server guarantees only the
-    # mount point, its placement, and that it is scoped to this delegation's
-    # ref alongside the preview box it mirrors.
-    assert has_element?(view, "#delegation-activity-rail-#{ref}[hidden]")
-    assert has_element?(view, ".delegation-live__header + .delegation-activity")
-    assert has_element?(view, ~s(#delegation-log-rail-#{ref}[data-ref="#{ref}"]))
     assert has_element?(view, "#delegation-live div.delegation-log[phx-update='ignore']")
+    assert has_element?(view, "#delegation-live time[data-started-at]")
 
     assert has_element?(
              view,
@@ -70,16 +57,8 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
     assert has_element?(view, ~s(#chat-rail[data-collapsed="false"]))
 
     # Narrow-viewport variant: the same projection as an expandable
-    # event-header section at the transcript tail, activity line and live
-    # preview inside.
+    # event-header section at the transcript tail, live log inside.
     assert has_element?(view, "#delegation-inline #delegation-inline-header.event-header")
-    assert has_element?(view, "#delegation-activity-inline-#{ref}[hidden]")
-
-    assert has_element?(
-             view,
-             ".delegation-inline__details > .delegation-activity:first-child"
-           )
-
     assert has_element?(view, "#delegation-inline div.delegation-log")
 
     FakeController.exit(caller.pid, caller.request_id, %{
@@ -146,34 +125,18 @@ defmodule OpenAgentsWeb.ChatDelegationRailTest do
 
     first = start_delegation(first_machine, "claude")
     FakeController.chunk(first.pid, first.request_id, "first delegation working")
-
-    assert_push_event(view, "delegation:chunk", %{
-      ref: first_ref,
-      text: "first delegation working"
-    })
-
+    assert_push_event(view, "delegation:chunk", %{text: "first delegation working"}, 1_000)
     assert has_element?(view, "#delegation-live .delegation-live__computer", "first-box")
 
     second = start_delegation(second_machine, "codex")
     FakeController.chunk(second.pid, second.request_id, "second delegation working")
-
-    assert_push_event(view, "delegation:chunk", %{
-      ref: second_ref,
-      text: "second delegation working"
-    })
+    assert_push_event(view, "delegation:chunk", %{text: "second delegation working"}, 1_000)
 
     # One live panel: the newest delegation owns it; the superseded one is a
     # bounded summary line beneath.
     assert has_element?(view, "#delegation-live .delegation-live__computer", "second-box")
     refute has_element?(view, "#delegation-live .delegation-live__computer", "first-box")
     assert has_element?(view, ".delegation-summary--superseded", "first-box")
-
-    # The activity line and preview are scoped to their delegation's ref, so
-    # superseding remounts them empty rather than inheriting stale text.
-    refute has_element?(view, "#delegation-activity-rail-#{first_ref}")
-    assert has_element?(view, "#delegation-activity-rail-#{second_ref}[hidden]")
-    refute has_element?(view, "#delegation-log-rail-#{first_ref}")
-    assert has_element?(view, "#delegation-log-rail-#{second_ref}")
 
     for caller <- [first, second] do
       FakeController.exit(caller.pid, caller.request_id, %{

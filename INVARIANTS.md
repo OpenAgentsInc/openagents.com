@@ -499,6 +499,51 @@ Evidence: `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 `test/openagents_web/controllers/computer_control_api_test.exs`, and
 `test/openagents/inference/computer_revocation_test.exs`.
 
+### IDENTITY-012 — The computer tables' constraints are unreachable from a request
+
+Status: Current
+
+Five constraints on `machines` and `machine_pairings` have no
+`check_constraint/2` or `unique_constraint/2` beside them, so a violation
+arrives as a `Postgrex.Error` and not an invalid changeset. That is a defect
+where a user-supplied value can reach the constraint: a form should have
+refused the input, and instead the request answers `500`. None of these five
+can be reached that way, so each is recorded rather than mapped. Mapping a
+constraint to a changeset error claims a population, and an empty population is
+a claim nothing tests.
+
+| Constraint | Why a request cannot reach it |
+| --- | --- |
+| `machines_status_check` | `status` is not cast; every writer passes a literal |
+| `machine_pairings_status_check` | the same |
+| `machines_token_expiry_after_creation` | `token_expires_at` is not cast, and its TTL is admitted at boot |
+| `machines_token_digest_index` | 256 bits from `:crypto.strong_rand_bytes/1` |
+| `machine_pairings_code_digest_index` | a code from the same generator |
+
+The last row is the weakest of the five and still holds: the code space is
+`30^8`, rows are never deleted, so a collision is a real event at a scale this
+release will not see, and it costs the caller one `500` and a retry that
+succeeds. It is recorded, not mapped, because the caller supplied nothing to
+correct.
+
+`machines_token_expiry_after_creation` was reported as reachable through a
+non-positive `:machine_token_ttl_seconds`, which would have made every pairing
+approval raise. It is not: `OpenAgents.RuntimeConfig` admits that setting only
+in `300..2_592_000` and `install!/0` raises before the endpoint starts, so the
+node cannot boot into the state that would reach the constraint.
+
+The reason each is unreachable is a property of the code and not a fact about
+it, so it is asserted rather than described. The proof feeds the whole hostile
+parameter set — every guarded column, on both write paths, including the
+unauthenticated one — through both changesets and fails if any guarded field
+becomes castable. It then reaches each constraint directly with raw SQL and
+requires it to refuse, so a constraint that is dropped or weakened fails here
+as well as in CANON-002's ledger.
+
+Evidence: `OpenAgents.Machines.Machine`, `OpenAgents.Machines.Pairing`,
+`OpenAgents.RuntimeConfig`, and
+`test/openagents/machines/constraint_reach_test.exs`.
+
 ### IDENTITY-011 — A pairing window closes on its own clock
 
 Status: Current
@@ -4637,6 +4682,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
 | IDENTITY-010 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_credential_reach_test.exs` |
 | IDENTITY-011 | `test/openagents/machines/pairing_expiry_test.exs` |
+| IDENTITY-012 | `test/openagents/machines/constraint_reach_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |

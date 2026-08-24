@@ -74,6 +74,44 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     }
   }
 
+  @issue_evidence %{
+    "type" => "object",
+    "description" =>
+      "One receipt bound to the exact commit it evaluated, and to the issue " <>
+        "that requested the outcome. The receipt is immutable in the table " <>
+        "its family owns; this is the edge, never a copy and never a second " <>
+        "work record.",
+    "properties" => %{
+      "id" => %{"type" => "string"},
+      "commit" => %{"type" => "string"},
+      "family" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Issues.EvidenceEntry.families()
+      },
+      "receipt_id" => %{"type" => "string"},
+      "plane" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Issues.EvidenceEntry.planes(),
+        "description" =>
+          "Which deployment plane the receipt lives in. An issue in this " <>
+            "repository is evidenced by the forge release lane; an issue in a " <>
+            "tenant repository is evidenced by the deployment control plane. " <>
+            "The two never mix."
+      },
+      "environment" => %{"type" => ["string", "null"]},
+      "result" => %{"type" => ["string", "null"]},
+      "source" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Issues.EvidenceEntry.sources(),
+        "description" =>
+          "How the commit was resolved to this issue: a closing reference a " <>
+            "commit trailer made and a merge confirmed, or an attempt's own " <>
+            "report of the revision it produced."
+      },
+      "recorded_at" => %{"type" => "string"}
+    }
+  }
+
   @promise_record %{
     "type" => "object",
     "description" => "A state-gated promise record stored in a project item.",
@@ -180,6 +218,15 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "only what the attempt already publishes on the issue: target, " <>
               "state, branch, exact commit, and timestamps. Prompts, " <>
               "conversations, reports, and credentials stay out."
+        },
+        "evidence" => %{
+          "type" => "array",
+          "items" => @issue_evidence,
+          "description" =>
+            "Every receipt bound to a commit this issue claims, oldest " <>
+              "first, empty when nothing has evaluated one. A failed build, " <>
+              "a reverted deployment, and a superseded run all stay: the " <>
+              "chain is what happened, not what worked."
         }
       },
       "filters" => %{

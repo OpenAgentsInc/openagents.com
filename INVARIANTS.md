@@ -3476,6 +3476,72 @@ Evidence: `OpenAgents.Issues.TaskList`, `OpenAgents.Issues.TaskReferences`,
 `test/openagents/issues/task_references_test.exs`, and
 `test/openagents_web/live/issue_show_live_test.exs`.
 
+### ISSUE-003 — An issue's evidence is an edge to an exact commit and environment
+
+Status: Current
+
+An issue is the requested outcome. The receipts that evaluated the work are
+immutable rows in the tables their families own. `issue_evidence` joins the two
+and stores nothing else: it has no steps, no report, no budget, no prompt, and
+no output, so it is an edge rather than a second work record.
+
+Every row binds one receipt to one exact commit. `OpenAgents.Issues.Evidence`
+re-reads the receipt before writing, so a caller that names a different commit
+is refused with `:evidence_commit_mismatch` and one that names a different
+environment with `:evidence_environment_mismatch`. A receipt id from one family
+looked up in another family's table is not found, which is why a push receipt
+can never be recorded as a deployment receipt.
+
+**Two sources resolve a commit to an issue, and there is no third.**
+`issue_closing_references` carries the authoritative half — the trailer `#130`
+extracted, verified against the pusher's write authority and against
+reachability from the default branch. `forge_assignments.terminal_commit`
+carries the weaker half, an attempt's own report of the revision it produced.
+A commit claimed by both records once, attributed to the trailer, because a
+merge is a stronger fact than an executor's self-report. No second reader of
+commit prose exists: `OpenAgents.Forge.CommitReferences` is still the only one.
+
+**Written when the receipt is written, in either order.** `Forge.receipts_for/2`
+and the changelog's receipt index scan bounded windows and honestly return
+empty for an older commit, so scanning later would silently lose evidence. The
+edge is appended where the receipt is created, and an attempt that finishes
+after its receipts sweeps `{repo, sha}` through an index for what already
+exists. The two directions meet on the same row.
+
+**Once.** The `{issue_id, commit_sha, family, receipt_id}` unique index is the
+gate, and a read precedes every insert so a duplicate is skipped rather than
+raised inside the transaction that records a close. WAL replay,
+`OpenAgents.Forge.Pushes.reconcile_receipts/1`, and a force push that
+re-presents the same commits all produce no second edge and no second timeline
+entry.
+
+**Nothing is deleted to tidy a timeline.** A failed build, a reverted
+deployment, a cancelled attempt, and a superseded run each keep their edge with
+the receipt's own terminal word in `result`. An issue's history is what
+happened, not what worked.
+
+**The two deployment planes stay distinct.** An issue in this repository is
+evidenced by `forge_deploys` on the `forge` plane, whose one environment is the
+fleet. An issue in a tenant repository is evidenced by `deployment_runs` on the
+`tenant` plane, whose environment is the one the run named. `plane` is on the
+row, so no reader has to infer which store a receipt came from.
+
+**Qualification has one authority here.** `deployment_check_results` is the
+qualification receipt an issue's evidence chain binds, because it is
+repository-scoped and pins both the commit and the artifact digest, so it
+resolves to an issue without a priced claim standing behind it.
+`settlement_verifications` stays authoritative for a settled claim's payout: it
+is keyed on a claim and carries no repository, which is a different question
+with a different authority.
+
+Failing to write an edge never fails the receipt, the close, or the attempt
+that produced it. Missing evidence is a smaller failure than a lost receipt.
+
+Evidence: `OpenAgents.Issues.Evidence`, `OpenAgents.Issues.EvidenceEntry`,
+`OpenAgents.Issues.ClosingReferences`, `OpenAgents.Forge.Assignments`,
+`test/openagents/issues/evidence_test.exs`, and
+`test/openagents_web/controllers/issue_controller_test.exs`.
+
 ### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
 
 Status: Current
@@ -3737,3 +3803,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |
 | ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |
+| ISSUE-003 | `test/openagents/issues/evidence_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |

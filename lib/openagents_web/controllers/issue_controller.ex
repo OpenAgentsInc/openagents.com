@@ -3,6 +3,7 @@ defmodule OpenAgentsWeb.IssueController do
 
   alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
+  alias OpenAgents.Issues.Evidence
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Agents.Agent
   alias OpenAgents.PullRequests
@@ -26,6 +27,7 @@ defmodule OpenAgentsWeb.IssueController do
         progress: Issues.progress_map(issues, reader),
         pull_requests: PullRequests.markers_by_issue_id(issues),
         work: Assignments.attempts_for_issues(issues),
+        evidence: Evidence.for_issues(issues),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -131,7 +133,8 @@ defmodule OpenAgentsWeb.IssueController do
             repo: repo,
             dependencies: dependencies(issue),
             progress: progress(issue, actor),
-            work: work(issue)
+            work: work(issue),
+            evidence: evidence(issue)
           )
 
         {:error, %Ecto.Changeset{} = changeset} ->
@@ -177,7 +180,8 @@ defmodule OpenAgentsWeb.IssueController do
       dependencies: dependencies(issue),
       progress: progress(issue, conn.assigns[:current_user]),
       pull_requests: PullRequests.markers_by_issue_id([issue]),
-      work: work(issue)
+      work: work(issue),
+      evidence: evidence(issue)
     )
   rescue
     Ecto.NoResultsError -> not_found(conn)
@@ -209,7 +213,8 @@ defmodule OpenAgentsWeb.IssueController do
           repo: repo,
           dependencies: dependencies(issue),
           progress: progress(issue, conn.assigns.current_user),
-          work: work(issue)
+          work: work(issue),
+          evidence: evidence(issue)
         )
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -224,6 +229,11 @@ defmodule OpenAgentsWeb.IssueController do
   # One issue reads through the same page-shaped function the index uses, so
   # the detail response and a row in the list can never disagree.
   defp work(%Issue{} = issue), do: Assignments.attempts_for_issues([issue])
+
+  # The evidence chain reads through the same page-shaped function as the
+  # index, for the same reason: a detail response and a row in the list can
+  # never disagree about what shipped an issue.
+  defp evidence(%Issue{} = issue), do: Evidence.for_issues([issue])
 
   # Progress is derived from the boards this reader can open, so an agent
   # authenticating as itself never inherits a private board's column.

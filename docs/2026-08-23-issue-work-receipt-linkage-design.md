@@ -4,7 +4,8 @@
 **Commit measured:** `198f117` on `openagents/main` (the forge), before this
 document's own change
 **Issue:** `#10`, "Connect issues to agent work and release receipts"
-**Status:** design complete; stage 1 shipped in the same change
+**Status:** design complete; stage 1 shipped in the same change, stage 4
+shipped in `#148`
 **Question:** `#10` asks to connect issues to durable agent jobs,
 conversations, commits, tests, releases, and deployments **without creating a
 second work record**. Which of those edges already exist, which exist but are
@@ -376,7 +377,7 @@ with write authority, and stop writing the three Markdown comments now that
 the derived events carry the same facts. Existing comments stay; only new ones
 stop. This is E3.
 
-### Stage 4 — bind receipts to the exact commit
+### Stage 4 — bind receipts to the exact commit (shipped)
 
 **Seam:** a new `issue_evidence` edge table, and `#130`'s extraction.
 **Size:** the largest stage. One table, one idempotent append path, one
@@ -476,6 +477,61 @@ tests, no warnings.
 
 ---
 
+## 7a. What stage 4 shipped
+
+Stage 4 landed in `#148`. It adds one edge table and no work record.
+
+**Storage.** `priv/repo/migrations/20260824011303_create_issue_evidence.exs`
+creates `issue_evidence`: one row per `{issue, commit, family, receipt id}`,
+with `plane`, `environment`, `result`, `actor`, `source`, and a nullable
+`assignment_id`. The unique index is `{issue_id, commit_sha, family,
+receipt_id}` rather than the tuple including the actor, because a receipt id is
+the identity of the evidence and an actor resolved differently on replay would
+otherwise write the edge twice. The migration also indexes `{repo, sha}` on
+`forge_builds` and `forge_deploys`, which nothing indexed before, so neither
+direction of the join needs a window scan. The version is registered in
+`priv/migration_lineages/prior-2026-08-19.json`.
+
+**Write, from the receipt side.** `OpenAgents.Issues.Evidence.record/1` reads
+the receipt row back before writing, so a caller that names another commit or
+another environment is refused. It is reached from every place a receipt is
+created: `ClosingReferences.insert_and_close/6` for the push receipt, in the
+same transaction that records the close; `Forge.Builder` on both build
+outcomes; `Forge.Targets` and `Forge.HotLoader` for the three forge deployment
+receipts; `Deployments.publish_check_result/3` for the qualification receipt;
+and `Deployments.transition/4` for a terminal tenant run.
+
+**Write, from the attempt side.** `Evidence.bind_attempt/1` runs when
+`Assignments.finish/4` records a terminal commit and sweeps `{repo, sha}` for
+receipts that already exist. The two directions meet on the same unique index,
+so ordering does not matter and neither writes twice.
+
+**Resolution.** `Evidence.claimants/2` reads `issue_closing_references` first
+and `forge_assignments.terminal_commit` second, dropping an issue the trailer
+already claimed. There is no second commit-to-issue extractor:
+`OpenAgents.Forge.CommitReferences` remains the only reader of commit prose.
+
+**Read.** `Evidence.for_issue/1` and `for_issues/1`, and the bounded projection
+`summary/1`, which carries the receipt's identity and outcome and nothing about
+the execution that produced it. `issue.openagents.evidence` is an array on
+every issue response, registered with its type and enums at `GET /api/v3`.
+
+**Contract.** `INVARIANTS.md`, `ISSUE-003`.
+
+**Tests.** `test/openagents/issues/evidence_test.exs` covers the empty case,
+both resolution sources and their precedence, the commit and environment
+refusals, a push receipt refused as a deployment receipt, replay through
+`ClosingReferences.apply_commit/5` and through `bind_attempt/1`, failed and
+reverted receipts surviving, both planes, the bounded projection, and the
+absence of any work-record column. The issue controller tests cover the empty
+array, ordering, the exact key set, and the index page.
+
+**What it does not do.** The issue page does not render the chain yet, and no
+transparency tier gates it — that is `#69` and stage 5. The evidence is served
+to a reader who can already read the issue, and to no one else.
+
+---
+
 ## 8. Open questions
 
 - **What happens to `scv_runs.issue_id`?** ~~Open.~~ **Settled by `#152`: the
@@ -526,36 +582,46 @@ tests, no warnings.
   other execution, rather than through a fourth table.
   `docs/scv-codex-app-server-planning.md` records the same decision next to the
   checkpoint that would have to change.
-- **Which qualification record is the one?** `deployment_check_results` and
-  `settlement_verifications` both key a verification to an exact commit, from
-  two lanes that never met (`lib/openagents/deployments/check_result.ex:25`;
-  `lib/openagents/settlement/verification.ex:23`). `#67` needs exactly one to
-  bind a coverage manifest to. Settle it before stage 4 by asking whether a
-  bounty verification and a deployment check are the same event with two
-  policies, or two events.
-- **Do the sha-keyed receipt reads survive a stage-4 backfill?**
-  `Forge.receipts_for/2` and the changelog's `receipt_index/1` scan bounded windows
-  (`lib/openagents/forge.ex:60`, `lib/openagents/changelog.ex:148`), so an old
-  commit returns empty rather than wrong. Stage 4 must write the edge at
-  receipt time. Settle the size of the gap by counting rows older than the
-  window: `SELECT count(*) FROM forge_deploys WHERE inserted_at < now() -
-  interval '30 days'` against production.
-- **Should the receipt tables gain a repository foreign key?**
-  `forge_pushes`, `forge_builds`, and `forge_deploys` all key on `repo` as a
-  string, and `Pushes.receipt_repo_keys/1`
-  (`lib/openagents/forge/pushes.ex:295`) exists to reconcile the logical name
-  against `Repository.storage_key`. Every issue-to-receipt join in stage 4
-  inherits that ambiguity. Settle it by reading whether any two repositories
-  can produce the same `repo` string, which
-  `docs/2026-08-21-repository-storage-architecture-audit.md` should answer.
+- **Which qualification record is the one? Settled: `deployment_check_results`.**
+  Stage 4 binds it and not `settlement_verifications`, for a reason that is
+  structural rather than a preference. A check result is repository-scoped and
+  pins `{repository, name, commit, artifact digest}`
+  (`lib/openagents/deployments/check_result.ex:25`), so it resolves to an issue
+  through the repository the issue lives in. A settlement verification is keyed
+  on a **claim** and carries no repository at all
+  (`lib/openagents/settlement/verification.ex:23`); it exists only when a
+  priced specification is standing behind the work, and its authority is that
+  claim. They are two events, not one event with two policies: a check result
+  says the bytes qualified, a verification says a claimant earned a payout for
+  them. `#67` binds its coverage manifest to the check result, whose artifact
+  digest is exactly the anchor a manifest needs.
+- **Do the sha-keyed receipt reads survive a stage-4 backfill? Settled: stage 4
+  never uses them.** `Forge.receipts_for/2` and the changelog's
+  `receipt_index/1` still scan bounded windows
+  (`lib/openagents/forge.ex:60`, `lib/openagents/changelog.ex:148`) and are
+  untouched. `OpenAgents.Issues.Evidence` writes the edge where each receipt is
+  created, and its one catch-up path — an attempt that finishes after its
+  receipts — queries `{repo, sha}` through indexes stage 4 added to
+  `forge_builds` and `forge_deploys`. A commit's age therefore never changes
+  the answer. Evidence written before this change does not exist, so there is
+  no backfill to size; the earliest edge is the first receipt after deployment.
+- **Should the receipt tables gain a repository foreign key? Still open, and
+  stage 4 refuses rather than guesses.** `forge_pushes`, `forge_builds`, and
+  `forge_deploys` all key on `repo` as a string. `Evidence` resolves that
+  string through `Pushes.receipt_repo_keys/1`
+  (`lib/openagents/forge/pushes.ex:295`) and records an edge only when exactly
+  one repository answers to the name; two candidates record nothing rather than
+  attaching a receipt to the wrong issue. That is safe but lossy, and a
+  repository foreign key on the three receipt tables would remove the case
+  entirely. Settle it with
+  `docs/2026-08-21-repository-storage-architecture-audit.md`.
 - **Does the tenant deployment plane or the forge deployment plane own an
-  issue's deployment evidence?** `docs/taxonomy.md` keeps them strictly
-  separate, and `docs/deployment-control-plane.md` describes the tenant one.
-  An issue in `OpenAgentsInc/openagents.com` is evidenced by `forge_deploys`;
-  an issue in a tenant repository is evidenced by `deployment_runs`. Stage 4
-  needs both, and `#71` needs to know which one a release note describes.
-  Settle it by reading `docs/deployment-control-plane.md` against `#71`'s
-  "binds to the exact candidate and environment".
+  issue's deployment evidence? Settled: both, and the row says which.** Stage 4
+  records `plane` on every edge — `forge` for a `forge_deploys` receipt, whose
+  one environment is the fleet, and `tenant` for a terminal `deployment_runs`
+  row, whose environment is the one the run named. No reader infers the store
+  from the shape of an id, and `#71` reads `plane` to know which deployment a
+  release note describes.
 - **What closes an issue when both `#130` and stage 6 could?** A commit
   trailer asserts; a verified outcome proves. If both fire, the issue should
   record both and close once. Settle the ordering with whoever owns `#130`

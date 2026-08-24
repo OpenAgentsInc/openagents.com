@@ -311,6 +311,55 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   # The attempt record is `forge_assignments`. Writing one directly keeps this
   # test about the projection rather than about the admission path that
   # creates it, which `OpenAgents.Forge.AssignmentTest` already covers.
+  # The evidence chain, built through the same two directions production uses:
+  # #130's closing reference claims the commit, and the receipts bind to it.
+  defp record_evidence(issue, sha) do
+    repository = repository()
+
+    user =
+      Accounts.upsert_github_user(%{
+        github_id: System.unique_integer([:positive]),
+        github_login: "evidence-#{System.unique_integer([:positive])}",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/1?v=4"
+      })
+      |> elem(1)
+
+    %OpenAgents.Issues.ClosingReference{}
+    |> OpenAgents.Issues.ClosingReference.changeset(%{
+      repository_id: repository.id,
+      issue_id: issue.id,
+      commit_sha: sha,
+      principal: "user:#{user.id}",
+      verb: "closes",
+      closed: true
+    })
+    |> Repo.insert!()
+
+    build =
+      %OpenAgents.Forge.BuildReceipt{}
+      |> OpenAgents.Forge.BuildReceipt.start_changeset(%{
+        repo: repository.storage_key,
+        sha: sha,
+        target_id: Ecto.UUID.generate()
+      })
+      |> Ecto.Changeset.put_change(:status, "complete")
+      |> Repo.insert!()
+
+    deploy =
+      %OpenAgents.Forge.DeployReceipt{}
+      |> OpenAgents.Forge.DeployReceipt.changeset(%{
+        repo: repository.storage_key,
+        sha: sha,
+        target_id: Ecto.UUID.generate(),
+        result: "live",
+        deployment_type: "direct_load"
+      })
+      |> Repo.insert!()
+
+    OpenAgents.Issues.Evidence.record_build(build)
+    OpenAgents.Issues.Evidence.record_deploy(deploy)
+  end
+
   defp record_attempt(issue, branch, offset_seconds, overrides) do
     user =
       Accounts.upsert_github_user(%{
@@ -546,6 +595,71 @@ defmodule OpenAgentsWeb.IssueControllerTest do
 
       assert [%{"branch" => "agent/page"}] = by_title["Worked"]
       assert by_title["Idle"] == []
+    end
+  end
+
+  describe "the issue evidence chain" do
+    test "an issue nothing has evaluated reports no evidence, not a missing field", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Unevaluated"})
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"evidence" => []}} = json_response(conn, 200)
+    end
+
+    test "show carries the receipts bound to the commit the issue claims", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Shipped"})
+      sha = String.duplicate("9a", 20)
+      record_evidence(issue, sha)
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"evidence" => [build, deploy]}} = json_response(conn, 200)
+
+      assert build["family"] == "build"
+      assert build["commit"] == sha
+      assert build["plane"] == "forge"
+      assert build["result"] == "complete"
+      assert build["source"] == "closing_reference"
+
+      assert deploy["family"] == "deployment"
+      assert deploy["environment"] == "fleet"
+      assert deploy["result"] == "live"
+    end
+
+    test "an evidence edge never carries the actor or the attempt", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Bounded evidence"})
+      record_evidence(issue, String.duplicate("7b", 20))
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+
+      assert %{"openagents" => %{"evidence" => [entry | _]}} = json_response(conn, 200)
+
+      assert Enum.sort(Map.keys(entry)) == [
+               "commit",
+               "environment",
+               "family",
+               "id",
+               "plane",
+               "receipt_id",
+               "recorded_at",
+               "result",
+               "source"
+             ]
+    end
+
+    test "index carries the evidence for every issue on the page", %{conn: conn} do
+      {:ok, shipped} = Issues.create_issue(repository(), %{title: "Evidenced"})
+      {:ok, _idle} = Issues.create_issue(repository(), %{title: "Unevidenced"})
+      record_evidence(shipped, String.duplicate("4c", 20))
+
+      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+
+      assert %{"issues" => issues} = json_response(conn, 200)
+      by_title = Map.new(issues, &{&1["title"], &1["openagents"]["evidence"]})
+
+      assert [%{"family" => "build"}, %{"family" => "deployment"}] = by_title["Evidenced"]
+      assert by_title["Unevidenced"] == []
     end
   end
 

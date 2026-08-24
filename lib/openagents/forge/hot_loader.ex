@@ -352,6 +352,14 @@ defmodule OpenAgents.Forge.HotLoader do
       push_to_live_ms: push_ms
     })
     |> Repo.insert()
+    |> case do
+      {:ok, receipt} ->
+        _ = OpenAgents.Issues.Evidence.record_deploy(receipt)
+        {:ok, receipt}
+
+      other ->
+        other
+    end
   rescue
     error ->
       Logger.error("forge_deploy_receipt_failed code=#{OpenAgents.OperationalLog.code(error)}")

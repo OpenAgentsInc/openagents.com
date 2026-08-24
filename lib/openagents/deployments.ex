@@ -369,6 +369,10 @@ defmodule OpenAgents.Deployments do
       |> Repo.insert_or_update()
       |> case do
         {:ok, result} ->
+          # The qualification receipt for an issue's evidence chain. It is
+          # repository-scoped and binds the exact commit and artifact, so it
+          # resolves to an issue without a priced claim standing behind it.
+          _ = OpenAgents.Issues.Evidence.record_check_result(result)
           reevaluate_checking_runs(repository, result, principal)
           {:ok, result}
 
@@ -728,6 +732,12 @@ defmodule OpenAgents.Deployments do
       |> case do
         {:ok, %{run: updated, event: event}} ->
           broadcast(updated, event)
+
+          # A terminal run is the tenant plane's deployment receipt. Failed,
+          # cancelled, and superseded runs record their edge exactly as a
+          # succeeded one does; nothing is deleted to tidy a timeline.
+          if finished, do: OpenAgents.Issues.Evidence.record_deployment_run(updated)
+
           {:ok, updated}
 
         {:error, _step, reason, _changes} ->

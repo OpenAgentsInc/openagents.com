@@ -252,6 +252,7 @@ defmodule OpenAgents.Forge.Targets do
 
     with {:ok, %{target: target} = committed} <- result do
       broadcast_status(target)
+      _ = record_deploy_evidence(committed)
       {:ok, committed}
     end
   end
@@ -363,6 +364,7 @@ defmodule OpenAgents.Forge.Targets do
 
     with {:ok, %{target: target} = committed} <- result do
       broadcast_status(target)
+      _ = record_deploy_evidence(committed)
       {:ok, committed}
     end
   end
@@ -586,6 +588,7 @@ defmodule OpenAgents.Forge.Targets do
 
     with {:ok, %{target: target} = committed} <- result do
       broadcast_status(target)
+      _ = record_deploy_evidence(committed)
       {:ok, committed}
     end
   end
@@ -987,4 +990,12 @@ defmodule OpenAgents.Forge.Targets do
        %{repo: target.repo, sha: target.sha, target_id: target.id, status: target.status}}
     )
   end
+
+  # The deployment receipt binds the exact commit it shipped. Recording the
+  # edge here, right after the transaction that made the receipt immutable,
+  # is what keeps an issue's deployment evidence out of a window scan.
+  defp record_deploy_evidence(%{receipt: %DeployReceipt{} = receipt}),
+    do: OpenAgents.Issues.Evidence.record_deploy(receipt)
+
+  defp record_deploy_evidence(_committed), do: []
 end

@@ -91,8 +91,8 @@ the issue and project controllers, which serve the local forge.
 
 **Receipt** — append-only durable evidence that something happened. The word
 spans several families, each tied to its own invariants: turn receipts,
-push receipts, build and deployment receipts, consent receipts, outcome
-receipts. *Checkpoint receipts are proposed and unclaimed; they would record
+push receipts, build and deployment receipts, qualification receipts, consent
+receipts, outcome receipts. *Checkpoint receipts are proposed and unclaimed; they would record
 a thread's save point and its link to a forge commit.* Always say which one
 when it matters. A thread transcript is not stored by pushing a metadata branch
 to GitHub. The forge already hosts the Git; PostgreSQL already hosts the
@@ -101,6 +101,13 @@ evidence. A trace is a projection of that evidence, not a receipt.
 **Outcome receipt** — the `module-outcome:v1:<digest>` reference a tool step
 carries and `OpenAgents.Compensation` attributes against. It is one receipt
 family among several. Do not read it as an accepted outcome.
+
+**Qualification receipt** — a published check result bound to the exact commit
+and artifact digest it examined, in `deployment_check_results`. It is the
+qualification family an issue's evidence chain binds (`INVARIANTS.md`,
+ISSUE-003), because it is repository-scoped and needs no priced claim behind
+it. A settlement verification is a different record with a different authority:
+it grades one claim at one commit and belongs to payout, not to an issue.
 
 **Accepted outcome** — a graded verdict, not a receipt.
 `OpenAgents.AcceptedOutcome` evaluates an agent's completion claim against

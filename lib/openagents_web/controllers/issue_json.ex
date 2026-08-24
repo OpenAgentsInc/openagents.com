@@ -102,6 +102,7 @@ defmodule OpenAgentsWeb.IssueJSON do
       |> put_dependencies(Map.get(assigns, :dependencies), issue)
       |> put_progress(Map.get(assigns, :progress), issue)
       |> put_work(Map.get(assigns, :work), issue)
+      |> put_evidence(Map.get(assigns, :evidence), issue)
 
     if extension == %{}, do: json, else: Map.put(json, :openagents, extension)
   end
@@ -127,6 +128,26 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   defp put_work(extension, attempts, issue) when is_map(attempts) do
     Map.put(extension, :work, attempts |> Map.get(issue.id, []) |> Enum.map(&attempt_json/1))
+  end
+
+  defp put_evidence(extension, nil, _issue), do: extension
+
+  defp put_evidence(extension, evidence, issue) when is_map(evidence) do
+    Map.put(extension, :evidence, evidence |> Map.get(issue.id, []) |> Enum.map(&evidence_json/1))
+  end
+
+  defp evidence_json(entry) do
+    %{
+      id: entry.id,
+      commit: entry.commit,
+      family: entry.family,
+      receipt_id: entry.receipt_id,
+      plane: entry.plane,
+      environment: entry.environment,
+      result: entry.result,
+      source: entry.source,
+      recorded_at: entry.recorded_at
+    }
   end
 
   defp attempt_json(attempt) do

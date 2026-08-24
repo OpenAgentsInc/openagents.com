@@ -15,7 +15,7 @@ defmodule OpenAgents.Forge.Assignments do
   alias OpenAgents.BoxRuns
   alias OpenAgents.Forge.{Assignment, AssignmentCredential, AssignmentCredentialVault}
   alias OpenAgents.Issues
-  alias OpenAgents.Issues.Issue
+  alias OpenAgents.Issues.{Evidence, Issue}
   alias OpenAgents.Repo
   alias OpenAgents.Conversations
   alias OpenAgents.Repositories.Repository
@@ -285,6 +285,11 @@ defmodule OpenAgents.Forge.Assignments do
 
     case result do
       {:ok, {:finished, updated}} ->
+        # The attempt reports the exact revision it produced. Receipts for that
+        # revision may already exist, so bind them now rather than waiting for
+        # a receipt that already landed. Never load-bearing: an attempt that
+        # finished is finished whether or not its evidence could be written.
+        _ = Evidence.bind_attempt(updated)
         _ = report(updated)
         if updated.state in ["failed", "cancelled"], do: _ = report_release(updated)
         {:ok, updated}

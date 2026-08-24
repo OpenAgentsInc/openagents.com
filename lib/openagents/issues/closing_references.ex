@@ -31,7 +31,7 @@ defmodule OpenAgents.Issues.ClosingReferences do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Forge.CommitReferences
   alias OpenAgents.Issues
-  alias OpenAgents.Issues.{ClosingReference, Issue}
+  alias OpenAgents.Issues.{ClosingReference, Evidence, Issue}
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
@@ -135,8 +135,23 @@ defmodule OpenAgents.Issues.ClosingReferences do
         []
       else
         case %ClosingReference{} |> ClosingReference.changeset(attrs) |> Repo.insert() do
-          {:ok, %ClosingReference{} = recorded} -> close(issue, actor, recorded)
-          {:error, changeset} -> Repo.rollback(changeset)
+          {:ok, %ClosingReference{} = recorded} ->
+            # The one moment the issue, the commit, the repository, and the
+            # push receipt are all in hand. Reading them back later would need
+            # a window scan over the receipts; writing the edge here does not.
+            _ =
+              Evidence.record_push(
+                repository,
+                issue,
+                commit_sha,
+                recorded.push_receipt_id,
+                attrs.principal
+              )
+
+            close(issue, actor, recorded)
+
+          {:error, changeset} ->
+            Repo.rollback(changeset)
         end
       end
     end)

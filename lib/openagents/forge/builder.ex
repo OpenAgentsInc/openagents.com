@@ -223,8 +223,12 @@ defmodule OpenAgents.Forge.Builder do
       |> Repo.update!()
     end)
     |> case do
-      {:ok, receipt} -> {:ok, receipt}
-      {:error, reason} -> {:error, reason}
+      {:ok, receipt} ->
+        _ = OpenAgents.Issues.Evidence.record_build(receipt)
+        {:ok, receipt}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -246,6 +250,13 @@ defmodule OpenAgents.Forge.Builder do
         |> Repo.update!()
       end
     end)
+    |> case do
+      # A failed build is evidence too. An issue's history is what happened,
+      # not what worked, so the edge is written for a failure exactly as it is
+      # for a success.
+      {:ok, %BuildReceipt{} = failed} -> OpenAgents.Issues.Evidence.record_build(failed)
+      _not_running -> []
+    end
 
     fail_target(target.id, error.code, error.output)
   end

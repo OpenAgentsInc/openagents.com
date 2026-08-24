@@ -52,24 +52,46 @@ defmodule OpenAgents.Repositories do
     Repo.one!(repository_path_query(owner_key, name_key))
   end
 
-  def get_public_by_path!(owner, name) when is_binary(owner) and is_binary(name) do
-    owner_key = String.downcase(owner)
-    name_key = String.downcase(name)
+  @doc """
+  The repository at `owner/name` an anonymous reader may read, or a raise.
 
-    Repo.one!(
-      from repository in repository_path_query(owner_key, name_key),
-        where: repository.visibility == "public" and repository.lifecycle_state == "ready"
-    )
+  Composes `readable_by/2` with a `nil` reader rather than restating the public
+  half. It used to carry its own copy of the predicate, which is how the copy
+  in `list_visible_repositories/1` came to lose the `ready` half and disagree
+  with the paged read about the same repository (REPOSITORY-001).
+  """
+  def get_public_by_path!(owner, name) when is_binary(owner) and is_binary(name) do
+    get_visible_by_path!(owner, name, nil)
   end
 
-  def get_visible_by_path!(owner, name, user) do
-    owner_key = String.downcase(owner)
-    name_key = String.downcase(name)
+  @doc """
+  The repository at `owner/name` this reader may read, or a raise.
 
-    owner_key
-    |> repository_path_query(name_key)
+  This and `visible_by_path/3` are the two ways a caller-supplied owner and
+  name become a repository row a reader may see. Both compose `readable_by/2`,
+  so the surfaces owing the predicate are the callers of one of them and can be
+  read from compiled import tables
+  (`OpenAgents.Repositories.VisibilityJoinTest`).
+  """
+  def get_visible_by_path!(owner, name, user) do
+    owner
+    |> visible_path_query(name)
     |> readable_by(user)
     |> Repo.one!()
+  end
+
+  @doc """
+  The repository at `owner/name` this reader may read, or `nil`.
+
+  The same decision as `get_visible_by_path!/3` for a caller that answers a
+  missing repository and an unreadable one the same way, so it does not need
+  to restate the join to avoid the raise.
+  """
+  def visible_by_path(owner, name, user) do
+    owner
+    |> visible_path_query(name)
+    |> readable_by(user)
+    |> Repo.one()
   end
 
   @doc """
@@ -1261,6 +1283,12 @@ defmodule OpenAgents.Repositories do
       limit when is_integer(limit) and limit > 0 -> limit
       _invalid -> @repository_namespace_limit
     end
+  end
+
+  # Resolution only: which row the caller-supplied path names, never who may
+  # read it. Every caller composes `readable_by/2` on the result.
+  defp visible_path_query(owner, name) when is_binary(owner) and is_binary(name) do
+    repository_path_query(String.downcase(owner), String.downcase(name))
   end
 
   defp repository_path_query(owner_key, name_key) do

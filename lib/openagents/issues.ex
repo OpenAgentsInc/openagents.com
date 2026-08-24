@@ -247,15 +247,13 @@ defmodule OpenAgents.Issues do
     do: Repo.get_by!(Issue, repository_id: repository_id, number: number)
 
   def get_issue_by_path!(owner, repository_name, number) when is_integer(number) do
-    Repo.one!(
-      from issue in Issue,
-        join: repository in Repository,
-        on: repository.id == issue.repository_id,
-        where:
-          repository.owner_key == ^String.downcase(owner) and
-            repository.name_key == ^String.downcase(repository_name) and
-            repository.visibility == "public" and issue.number == ^number
-    )
+    # The repository is resolved through the one read predicate rather than a
+    # restated join. The copy this replaced omitted `lifecycle_state`, so an
+    # issue in a repository that had not finished provisioning resolved here
+    # and nowhere else (REPOSITORY-001).
+    repository = Repositories.get_public_by_path!(owner, repository_name)
+
+    Repo.get_by!(Issue, repository_id: repository.id, number: number)
   end
 
   def create_issue(%Repository{} = repository, attrs),

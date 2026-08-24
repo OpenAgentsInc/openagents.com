@@ -57,17 +57,17 @@ that answer.
 | --- | --- |
 | Specific — a named behavior at a named seam | 56 |
 | Universal — the population is closed, so the proof bites | 41 |
-| Universal — the proof did not bite; enumerated here | 11 |
-| Universal — the proof did not bite; narrowed here | 2 |
+| Universal — the proof did not bite; enumerated here | 12 |
+| Universal — the proof did not bite; narrowed here | 1 |
 | Universal — the proof does not bite; still open | 8 |
 
-One of the eleven and one of the two carry a residual clause that is still
-open, so the closing table below lists ten rows against eight contracts.
-`IDENTITY-002` and `THREAD-001` were enumerated under issue #174 and moved out
-of that table; `IDENTITY-002` keeps a named residue, recorded in the contract
-rather than here.
+Two of the twelve carry a residual clause that is still open, so the closing
+table below lists nine rows against eight contracts. `IDENTITY-002` and
+`THREAD-001` were enumerated under issue #174 and `REPOSITORY-001` under #175;
+all three moved out of that table. `IDENTITY-002` and `REPOSITORY-001` keep a
+named residue, recorded in each contract rather than here.
 
-**How firm each verdict is.** The eleven, the two, and the ten were established
+**How firm each verdict is.** The twelve, the one, and the ten were established
 by reading the named proof and, where the answer was not obvious from it,
 querying the compiled application for the population the claim covers. The 41
 were established from the contract prose and the mechanism it names — a
@@ -185,6 +185,43 @@ token-returning function is classified before it has callers. It then
 dispatches every route the router gives that controller and requires a token in
 the body only at the mint.
 
+### `REPOSITORY-001` — repository visibility
+
+**Would have missed:** a module deciding repository visibility with its own
+restated join. Issue #166 narrowed the sentence from *every* surface to the
+four that compose `readable_by/2`, because about thirty modules join the
+repositories table and most reach a row by an identifier a caller already
+passed authorization for. Nothing distinguished the two kinds, so a restated
+join failed nothing — and three existed, two of them wrong.
+`OpenAgents.Issues.get_issue_by_path!/3` and
+`OpenAgents.Projects.get_project_by_path!/3` omitted `lifecycle_state`;
+`OpenAgents.SCV.Deployments` admitted any membership row rather than one in a
+reading role.
+
+**Now:** a visibility decision is one that starts from something the caller
+supplied — an owner and a name, or a listing with no prior authorization — and
+an ownership reach is one that follows `repository_id` from an already
+authorized row. `OpenAgents.Repositories.VisibilityJoinTest` closes the first
+kind three ways: `OpenAgents.Repositories`'s own `*_by_path*` exports are an
+exact set classified by the predicate each applies; the callers of the two that
+do not apply the caller's predicate are exact sets read from compiled import
+tables; and every site in `lib/` naming the predicate's own terms is classified
+from a source-tree scan, so a restated join lands in an undeclared file. The
+three restatements above compose the predicate now, and the composer list is
+five modules rather than the four the contract named.
+
+**A mutation that did not bite.** Removing the reading-role filter from
+`readable_by/2` reddened nothing, because every role
+`repository_memberships_role_check` admits is a reading role — the filter
+guards a role nobody has added. The vocabulary is pinned against that
+constraint instead, so a fifth role fails until someone says whether it reads.
+
+**What is left.** A listing that applies no predicate at all names no term and
+calls no resolver. `OpenAgents.DataRights.AccountExport`'s push-receipt and
+deployment joins are that shape; each is scoped to the acting account's own
+rows and selects a repository's `owner` and `name` without the predicate the
+same module applies elsewhere. `REPOSITORY-001` records it.
+
 ### `RELEASE-004` — no hosted CI
 
 **Would have missed:** a `.github/workflows/ci.yml` committed beside the owned
@@ -199,20 +236,6 @@ configures itself from.
 
 Enumeration was impractical or the wider sentence was not true, so the claim
 was reduced to what its proof covers.
-
-### `REPOSITORY-001` — repository visibility
-
-It said "every surface that lists or resolves a repository composes
-`readable_by/2`". Four modules compose it; about thirty join the repositories
-table. Most of those reach a row by an identifier a caller already passed
-authorization for — a milestone's repository, a stack entry's repository — and
-are not making a visibility decision. Nothing distinguishes the two kinds, so
-the wider sentence claimed a property no proof held and no reading of the code
-established.
-
-The claim now names the four surfaces that answer "which repositories may this
-reader see". Separating a visibility join from an ownership join well enough to
-enumerate is real work, and it is left open below rather than faked.
 
 ### `NOTIFY-001` — notification reads
 
@@ -243,8 +266,8 @@ new member fails until it is accounted for. They are the pattern to copy.
 
 ## What remains
 
-Ten claims across eight contracts still rest on proofs that cannot fail for
-them, including the residual half of `REPOSITORY-001`.
+Nine claims across eight contracts still rest on proofs that cannot fail for
+them.
 Each is recorded with the violation it would miss. None is a known live defect:
 these are claims whose truth currently depends on review rather than on a
 proof.
@@ -259,7 +282,6 @@ proof.
 | `UI-002` | provider identifiers never enter socket assigns or HTML | an assign carrying a provider call ID | #173 |
 | `STATUS-001` | counts only, never content | a new key in the published projection; the test pattern-matches and tolerates extra keys | #173 |
 | `TRANSPARENCY-001` | bounds that hold at every level | a new public surface below `:l3` | #173 |
-| `REPOSITORY-001` | a visibility join that restates the predicate | a module deciding repository visibility with its own join | #175 |
 | `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly | #151 |
 
 `EXIT-005` sits in the WAL anchoring work that issue #151 carries, so it is

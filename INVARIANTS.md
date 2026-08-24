@@ -2867,8 +2867,72 @@ authorization for — a milestone's repository, a stack entry's repository, a
 pull request's repository. Those are not visibility decisions and do not
 compose the predicate. Nothing enumerates which joins are which, so a module
 that does make a visibility decision with its own restated join would not fail
-any proof here. `docs/2026-08-23-invariant-proof-audit.md` records that gap
-rather than leaving the wider sentence standing over it.
+any proof here.
+
+Amended 2026-08-23 (issue #175): the two kinds are now separated by the code
+rather than by a reader, and the separation is enumerated by
+`OpenAgents.Repositories.VisibilityJoinTest`.
+
+A **visibility decision** starts from something the caller supplied — an
+`owner` and a `name`, or a listing with no prior authorization — and ends with
+a row. An **ownership reach** starts from a row the caller was already
+authorized for and follows `repository_id`; it decides nothing and owes
+nothing. Every visibility decision either composes `readable_by/2` or is one of
+five sites that states the rule itself for a principal the predicate does not
+model, each named below.
+
+- **Path resolution is five exports and no more.**
+  `OpenAgents.Repositories.get_visible_by_path!/3` and `visible_by_path/3`
+  apply the caller's own predicate; `get_public_by_path!/2` applies it with an
+  anonymous reader; `get_writable_by_path!/3` applies the write predicate; and
+  `get_by_path!/2` applies none. The exports matching `*_by_path*` are an exact
+  set, so a sixth way to turn a caller-supplied path into a row is classified
+  before anything can call it. The callers of the two that do not apply the
+  caller's predicate are exact sets too:
+  `OpenAgentsWeb.DeploymentController` for the unfiltered resolver, whose
+  `:workflow`, `:operator`, and `:system` principals are not users and are
+  gated by `OpenAgents.Deployments.Authority`; and `OpenAgents.Issues`,
+  `OpenAgents.Projects`, `OpenAgentsWeb.CommentController`,
+  `OpenAgentsWeb.IssueController`, and `OpenAgentsWeb.OgImageController` for
+  the anonymous one.
+- **Listing composes the predicate.** The modules that compose `readable_by/2`
+  are `OpenAgents.Repositories`, `OpenAgents.Issues`, `OpenAgents.Projects`,
+  `OpenAgents.Notifications`, and `OpenAgents.DataRights.AccountExport` — five,
+  not the four the amendment above named.
+- **The predicate's terms live in one file, plus four stated exceptions.**
+  Every site in `lib/` naming a repository's `visibility` or `lifecycle_state`
+  against `"public"` or `"ready"` is classified, and the four that decide reach
+  outside `OpenAgents.Repositories` are `OpenAgents.Forge.GitHTTP` (Git
+  transport admits `:operator`, `:machine`, and `:assignment` principals the
+  predicate does not model), `OpenAgents.Deployments.Authority` (the
+  deployment plane's non-user principals), `OpenAgents.Reputation` (the
+  attestation transparency tier, which is disclosure rather than row reach),
+  and `OpenAgentsWeb.RepositoryAccess` (a narrower file-level allowlist
+  layered above row admission it takes from `get_visible_by_path!/3`).
+
+Three restatements were removed rather than declared, and two were wrong.
+`OpenAgents.Issues.get_issue_by_path!/3` and
+`OpenAgents.Projects.get_project_by_path!/3` each carried a copy of the public
+half that omitted `lifecycle_state`, so an issue or project in a repository
+that had not finished provisioning resolved there and nowhere else.
+`OpenAgents.SCV.Deployments` carried a structural clone that admitted any
+membership row rather than one in a reading role, and resolved the path without
+the namespace-alias join a rename leaves behind. All three compose the
+predicate now.
+
+The role filter inside `readable_by/2` is a guard for a role that does not
+exist yet: every role `repository_memberships_role_check` admits is a reading
+role, so removing the filter reddens nothing. The vocabulary is pinned against
+that constraint instead, and a fifth role fails until someone says whether it
+reads.
+
+What is still not enumerated: a listing that applies no predicate at all names
+no term and calls no resolver, so it passes every test above.
+`OpenAgents.DataRights.AccountExport`'s push-receipt and deployment joins are
+that shape — each is scoped to the acting account's own rows, and each selects
+a repository's `owner` and `name` without the predicate, which the same
+module's `repository_work_export/1` explicitly applies.
+`docs/2026-08-23-invariant-proof-audit.md` records the residue.
 
 Reading across repositories obeys the same rule as reading one: the
 workspace-wide lists at `/issues` and `/projects` join their tables to that
@@ -2896,7 +2960,8 @@ Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
 `test/openagents_web/controllers/project_controller_test.exs`,
 `test/openagents/issues_workspace_test.exs`,
 `test/openagents_web/live/issue_workspace_live_test.exs`,
-`test/openagents_web/live/project_workspace_live_test.exs`, and
+`test/openagents_web/live/project_workspace_live_test.exs`,
+`test/openagents/repositories/visibility_join_test.exs`, and
 `test/openagents/forge/git_http_test.exs`.
 
 ### API-001 — Every OpenAgents extension field is published before it is served
@@ -3964,7 +4029,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
-| REPOSITORY-001 | `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
+| REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |

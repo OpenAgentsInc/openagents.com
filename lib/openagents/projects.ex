@@ -116,15 +116,11 @@ defmodule OpenAgents.Projects do
     do: Repo.get_by!(Project, repository_id: repository_id, number: number)
 
   def get_project_by_path!(owner, repository_name, number) when is_integer(number) do
-    Repo.one!(
-      from project in Project,
-        join: repository in Repository,
-        on: repository.id == project.repository_id,
-        where:
-          repository.owner_key == ^String.downcase(owner) and
-            repository.name_key == ^String.downcase(repository_name) and
-            repository.visibility == "public" and project.number == ^number
-    )
+    # Resolved through the one read predicate rather than a restated join, for
+    # the same reason as `OpenAgents.Issues.get_issue_by_path!/3`.
+    repository = Repositories.get_public_by_path!(owner, repository_name)
+
+    Repo.get_by!(Project, repository_id: repository.id, number: number)
   end
 
   def create_project(%Repository{} = repository, attrs),

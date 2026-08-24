@@ -34,7 +34,7 @@ defmodule OpenAgents.SCV.Deployments do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Repo
-  alias OpenAgents.Repositories.Membership
+  alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
   alias OpenAgents.Work
   alias OpenAgents.Work.Job
@@ -157,27 +157,17 @@ defmodule OpenAgents.SCV.Deployments do
   # the operator may actually read. An SCV never reaches a repository through a
   # filesystem path the caller supplied.
   defp repository(user, attributes) do
+    # The read predicate is composed, not restated. The copy this replaced
+    # admitted any membership row rather than one in a reading role, and
+    # resolved the path without the namespace-alias join a rename leaves behind
+    # (REPOSITORY-001).
     with path when is_binary(path) <- Map.get(attributes, :repository),
          [owner, name] <- String.split(String.trim(path), "/", parts: 2),
-         %Repository{lifecycle_state: "ready"} = repository <- readable(user, owner, name) do
+         %Repository{} = repository <- Repositories.visible_by_path(owner, name, user) do
       {:ok, repository}
     else
       _unavailable -> {:error, :scv_repository_not_found}
     end
-  end
-
-  defp readable(%User{id: user_id}, owner, name) do
-    owner_key = String.downcase(owner)
-    name_key = String.downcase(name)
-
-    Repo.one(
-      from repository in Repository,
-        left_join: membership in Membership,
-        on: membership.repository_id == repository.id and membership.user_id == ^user_id,
-        where:
-          repository.owner_key == ^owner_key and repository.name_key == ^name_key and
-            (repository.visibility == "public" or not is_nil(membership.user_id))
-    )
   end
 
   defp revision(%Repository{} = repository) do

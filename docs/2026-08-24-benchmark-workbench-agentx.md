@@ -9,7 +9,9 @@ starting with AgentX — SemiAnalysis's open source (Apache 2.0) multi-turn
 agentic coding inference benchmark from InferenceXv3
 (`github.com/SemiAnalysisAI/InferenceX`, cloned read-only at
 `projects/repos/InferenceX`; announcement article 2026-08-23). Tracked as
-the Benchmark workbench project; first issues filed from section 7.
+[project 14, Benchmark workbench](https://openagents.com/OpenAgentsInc/openagents.com/projects/14):
+the serving replay is `OpenAgentsInc/openagents#33`, the effectiveness
+suite `OpenAgentsInc/openagents#34`, and the trace exporter #218.
 
 ## 1. What AgentX is, and what it is not
 

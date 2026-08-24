@@ -295,7 +295,13 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert conn.status == 502
     body = Jason.decode!(conn.resp_body)
     assert body["error"]["code"] == "provider_failed"
-    # No raw provider detail leaks.
+
+    # The failure class travels with the refusal so a client can say more than
+    # "something went wrong", but it is the reason's atom tag only.
+    assert body["error"]["reason"] == "provider_failed"
+
+    # No raw provider detail leaks. `OperationalLog.code/1` takes the tag and
+    # drops the detail, which is what keeps the line above safe to send.
     refute conn.resp_body =~ "test_failure"
   end
 

@@ -202,8 +202,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         # sees a provider error, never raw provider detail.
         usage = usage_of(events)
         if usage != %{}, do: meter(grant, usage)
-        Logger.warning("inference_proxy_failed code=#{OpenAgents.OperationalLog.code(reason)}")
-        refuse(conn, :provider_failed)
+        class = OpenAgents.OperationalLog.code(reason)
+        Logger.warning("inference_proxy_failed code=#{class}")
+        refuse(conn, {:provider_failed, class})
     end
   end
 
@@ -344,6 +345,16 @@ defmodule OpenAgentsWeb.InferenceProxyController do
        "granted" => granted,
        "served" => Models.ids()
      }}
+  end
+
+  # The failure class travels with the refusal. `OperationalLog.code/1` takes
+  # only the reason's atom tag and bounds it to 64 characters, so it carries no
+  # provider text, no prompt, and no credential — it is the same bounded word
+  # the server logs. Withholding it left the caller with "the model provider
+  # failed" and nothing to act on, which reads as the product being broken
+  # rather than as a call that ran out of context or hit a rate limit.
+  defp error_for({:provider_failed, class}) do
+    {502, %{"code" => "provider_failed", "reason" => class}}
   end
 
   defp error_for(reason) do

@@ -35,7 +35,10 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     :box,
     :computer,
     :agent,
-    :deployment
+    :deployment,
+    :pull_request,
+    :stack,
+    :issue_dependency
   ]
 
   describe "coverage" do
@@ -261,13 +264,75 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     _environment = OpenAgents.DeploymentsFixtures.environment_fixture(repository, owner)
     _run = OpenAgents.DeploymentsFixtures.run_fixture(repository, owner)
 
+    seed_repository_work(owner, repository)
+
     build_conn()
     |> Plug.Test.init_test_session(%{"user_id" => owner.id})
     |> get(~p"/data/export/account")
     |> json_response(200)
   end
 
+  # The three repository-keyed families the account export reads across every
+  # repository. They are seeded in the same private repository the metadata
+  # probes use, so a widened read that lost the readable_by join would still
+  # pass here — that direction is proven in the account export's own test,
+  # where the account is not a member.
+  defp seed_repository_work(owner, repository) do
+    issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "PR exit-inventory"})
+
+    {:ok, pull_request} =
+      %OpenAgents.PullRequests.PullRequest{}
+      |> OpenAgents.PullRequests.PullRequest.changeset(%{
+        repository_id: repository.id,
+        issue_id: issue.id,
+        head_repository_id: repository.id,
+        opened_by_user_id: owner.id,
+        head_ref: "exit-inventory-branch",
+        head_sha: String.duplicate("b", 40),
+        base_ref: "main",
+        base_sha: String.duplicate("c", 40),
+        state: "open"
+      })
+      |> Repo.insert()
+
+    {:ok, _stack} = OpenAgents.Stacks.create(repository, [pull_request], owner)
+
+    blocked = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "exit blocked"})
+    blocker = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "exit blocker"})
+    :ok = Issues.add_dependencies(blocked, [blocker.number], owner)
+
+    :ok
+  end
+
   ## ── probes ─────────────────────────────────────────────────────────────
+
+  defp probe(:pull_request, %{account_export: export}) do
+    if Enum.any?(
+         export["repository_work"]["pull_requests"]["records"],
+         &(&1["head_ref"] == "exit-inventory-branch")
+       ),
+       do: :portable,
+       else: :partial
+  end
+
+  defp probe(:stack, %{account_export: export}) do
+    stack = List.first(export["repository_work"]["stacks"]["records"])
+
+    cond do
+      stack == nil -> :partial
+      Enum.any?(stack["entries"], &(&1["head_ref"] == "exit-inventory-branch")) -> :portable
+      true -> :partial
+    end
+  end
+
+  defp probe(:issue_dependency, %{account_export: export}) do
+    if Enum.any?(
+         export["repository_work"]["issue_dependencies"]["records"],
+         &(&1["blocked_by_issue_title"] == "exit blocker")
+       ),
+       do: :portable,
+       else: :partial
+  end
 
   defp probe(:forum, %{account_export: export}) do
     if Enum.any?(export["forum"]["posts"], &(&1["body_text"] == "The account's own post.")) and

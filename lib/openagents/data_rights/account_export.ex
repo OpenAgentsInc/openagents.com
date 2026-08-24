@@ -45,6 +45,18 @@ defmodule OpenAgents.DataRights.AccountExport do
   inside the document — a post to its topic, a tip to its post, an event to its
   thread — resolves inside the document itself.
 
+  ## Repository-keyed work
+
+  Pull requests, stacks, and issue dependencies key on a repository rather than
+  on an account, so `"repository_work"` is the one section that reads across
+  every repository at once. Enumeration is the easy half. Authorization is the
+  hard half, and it is answered by joining
+  `OpenAgents.Repositories.readable_by/2` — the predicate every per-repository
+  read composes — rather than by a second rule written here. An account that
+  authored a pull request in a repository it was later removed from does not
+  get that record back, and no widening of the query reaches a private
+  repository the account never belonged to.
+
   What the document does not carry is named in `"not_included"` rather than
   left to inference.
   """
@@ -60,9 +72,13 @@ defmodule OpenAgents.DataRights.AccountExport do
   alias OpenAgents.Forge.PushReceipt
   alias OpenAgents.Forum.{ActorLink, Post, TipDestination, TipIntent, TipReceipt, Topic}
   alias OpenAgents.Forum.Forum, as: Board
+  alias OpenAgents.Issues.{Issue, IssueDependency}
   alias OpenAgents.Machines
+  alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
+  alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
+  alias OpenAgents.Stacks.{Stack, StackEntry}
   alias OpenAgents.Threads.{Event, Thread}
 
   @schema "openagents.account_export.v1"
@@ -76,6 +92,10 @@ defmodule OpenAgents.DataRights.AccountExport do
   @maximum_deployments 2_000
   @maximum_box_runs 2_000
   @maximum_box_output_bytes 65_536
+  @maximum_pull_requests 5_000
+  @maximum_stacks 2_000
+  @maximum_stack_entries 10_000
+  @maximum_issue_dependencies 5_000
 
   @doc """
   Builds the account's export document.
@@ -110,6 +130,7 @@ defmodule OpenAgents.DataRights.AccountExport do
        "push_receipts" => push_receipts_export(user),
        "deployments" => deployments_export(user),
        "boxes" => boxes_export(visitor_ids),
+       "repository_work" => repository_work_export(user),
        "computers" => Enum.map(Machines.list_machines(user.id), &ComputerProjection.project/1),
        "agent_links" => agent_links_export(user),
        "not_included" => not_included()
@@ -564,6 +585,203 @@ defmodule OpenAgents.DataRights.AccountExport do
     }
   end
 
+  ## ── repository-keyed work ──────────────────────────────────────────────
+
+  # Pull requests, stacks, and issue dependencies key on a repository rather
+  # than on an account, so reading them per account is a wider query than any
+  # other read on this surface. Authorization is the whole problem: the
+  # authoring column alone would return a record from a repository the account
+  # was removed from, and a repository-shaped query written from memory would
+  # reach a private repository the account never belonged to. Every query here
+  # joins `OpenAgents.Repositories.readable_by/2` — the one predicate every
+  # repository surface composes — so the widened read cannot be looser than the
+  # per-repository reads it replaces.
+  defp repository_work_export(user) do
+    readable = readable_repositories(user)
+
+    %{
+      "authorization" =>
+        "Every record here passes OpenAgents.Repositories.readable_by/2, the predicate the " <>
+          "per-repository API reads compose. A record the account authored in a repository it " <>
+          "can no longer read is not returned, and no record from a repository the account is " <>
+          "not a member of reaches this document.",
+      "pull_requests" => pull_requests_export(user, readable),
+      "stacks" => stacks_export(user, readable),
+      "issue_dependencies" => issue_dependencies_export(user, readable)
+    }
+  end
+
+  # A repository's identity comes back with the predicate rather than beside
+  # it, so a caller cannot name a repository this query did not admit.
+  defp readable_repositories(user) do
+    from repository in Repositories.readable_by(Repository, user),
+      select: %{id: repository.id, owner: repository.owner, name: repository.name}
+  end
+
+  defp pull_requests_export(user, readable) do
+    rows =
+      Repo.all(
+        from pull_request in PullRequest,
+          join: repository in subquery(readable),
+          on: repository.id == pull_request.repository_id,
+          join: issue in Issue,
+          on: issue.id == pull_request.issue_id,
+          left_join: head in subquery(readable),
+          on: head.id == pull_request.head_repository_id,
+          where:
+            pull_request.opened_by_user_id == ^user.id or
+              pull_request.merged_by_user_id == ^user.id,
+          order_by: [asc: pull_request.inserted_at, asc: pull_request.id],
+          limit: ^(@maximum_pull_requests + 1),
+          select:
+            {pull_request, repository.owner, repository.name, issue.number, issue.title,
+             head.owner, head.name}
+      )
+
+    %{
+      "records" =>
+        rows |> Enum.take(@maximum_pull_requests) |> Enum.map(&pull_request_export(&1, user)),
+      "records_truncated" => length(rows) > @maximum_pull_requests
+    }
+  end
+
+  defp pull_request_export(row, user) do
+    {pull_request, owner_login, name, number, title, head_owner, head_name} = row
+
+    %{
+      "id" => pull_request.id,
+      "repository" => repository_path(owner_login, name),
+      "number" => number,
+      "title" => title,
+      "state" => pull_request.state,
+      "draft" => pull_request.draft,
+      "head_ref" => pull_request.head_ref,
+      "head_sha" => pull_request.head_sha,
+      "head_repository" => repository_path(head_owner, head_name),
+      "base_ref" => pull_request.base_ref,
+      "base_sha" => pull_request.base_sha,
+      "opened_by_account" => pull_request.opened_by_user_id == user.id,
+      "merged_by_account" => pull_request.merged_by_user_id == user.id,
+      "merge_commit_sha" => pull_request.merge_commit_sha,
+      "opened_at" => iso8601(pull_request.inserted_at),
+      "merged_at" => iso8601(pull_request.merged_at)
+    }
+  end
+
+  # A stack's boundary commits live under `refs/internal/`, which
+  # `EXIT-004` records as the one namespace a clone does not advertise. The
+  # object ids travel here, so the account keeps the shape of its own stack
+  # even though the refs holding it are not fetchable.
+  defp stacks_export(user, readable) do
+    rows =
+      Repo.all(
+        from stack in Stack,
+          join: repository in subquery(readable),
+          on: repository.id == stack.repository_id,
+          where: stack.created_by_user_id == ^user.id,
+          order_by: [asc: stack.inserted_at, asc: stack.id],
+          limit: ^(@maximum_stacks + 1),
+          select: {stack, repository.owner, repository.name}
+      )
+
+    kept = Enum.take(rows, @maximum_stacks)
+    stack_ids = Enum.map(kept, fn {stack, _owner, _name} -> stack.id end)
+    entries = stack_entries(stack_ids)
+    by_stack = entries |> Enum.take(@maximum_stack_entries) |> Enum.group_by(&elem(&1, 1))
+
+    %{
+      "records" =>
+        Enum.map(kept, fn {stack, owner_login, name} ->
+          stack_export(stack, owner_login, name, Map.get(by_stack, stack.id, []))
+        end),
+      "records_truncated" => length(rows) > @maximum_stacks,
+      "entries_truncated" => length(entries) > @maximum_stack_entries
+    }
+  end
+
+  defp stack_entries([]), do: []
+
+  defp stack_entries(stack_ids) do
+    Repo.all(
+      from entry in StackEntry,
+        join: pull_request in PullRequest,
+        on: pull_request.id == entry.pull_request_id,
+        join: issue in Issue,
+        on: issue.id == pull_request.issue_id,
+        where: entry.stack_id in ^stack_ids,
+        order_by: [asc: entry.stack_id, asc: entry.position, asc: entry.id],
+        limit: ^(@maximum_stack_entries + 1),
+        select: {entry, entry.stack_id, issue.number, pull_request.head_ref}
+    )
+  end
+
+  defp stack_export(stack, owner_login, name, entries) do
+    %{
+      "id" => stack.id,
+      "repository" => repository_path(owner_login, name),
+      "number" => stack.number,
+      "trunk_ref" => stack.trunk_ref,
+      "state" => stack.state,
+      "health" => stack.health,
+      "version" => stack.version,
+      "created_at" => iso8601(stack.inserted_at),
+      "entries" => Enum.map(entries, &stack_entry_export/1),
+      "entries_exported" => length(entries)
+    }
+  end
+
+  defp stack_entry_export({entry, _stack_id, number, head_ref}) do
+    %{
+      "position" => entry.position,
+      "pull_request_number" => number,
+      "head_ref" => head_ref,
+      "boundary_oid" => entry.boundary_oid,
+      "observed_head_oid" => entry.observed_head_oid,
+      "removed_at" => iso8601(entry.removed_at)
+    }
+  end
+
+  defp issue_dependencies_export(user, readable) do
+    rows =
+      Repo.all(
+        from dependency in IssueDependency,
+          join: repository in subquery(readable),
+          on: repository.id == dependency.repository_id,
+          join: issue in Issue,
+          on: issue.id == dependency.issue_id,
+          join: blocker in Issue,
+          on: blocker.id == dependency.blocked_by_issue_id,
+          where: dependency.created_by_user_id == ^user.id,
+          order_by: [asc: dependency.inserted_at, asc: dependency.id],
+          limit: ^(@maximum_issue_dependencies + 1),
+          select:
+            {dependency, repository.owner, repository.name, issue.number, issue.title,
+             blocker.number, blocker.title, blocker.state}
+      )
+
+    %{
+      "records" =>
+        rows |> Enum.take(@maximum_issue_dependencies) |> Enum.map(&issue_dependency_export/1),
+      "records_truncated" => length(rows) > @maximum_issue_dependencies
+    }
+  end
+
+  defp issue_dependency_export(row) do
+    {dependency, owner_login, name, number, title, blocker_number, blocker_title, blocker_state} =
+      row
+
+    %{
+      "id" => dependency.id,
+      "repository" => repository_path(owner_login, name),
+      "issue_number" => number,
+      "issue_title" => title,
+      "blocked_by_issue_number" => blocker_number,
+      "blocked_by_issue_title" => blocker_title,
+      "blocked_by_issue_state" => blocker_state,
+      "recorded_at" => iso8601(dependency.inserted_at)
+    }
+  end
+
   ## ── agents ─────────────────────────────────────────────────────────────
 
   defp agent_links_export(%User{id: user_id}) do
@@ -605,7 +823,11 @@ defmodule OpenAgents.DataRights.AccountExport do
       "push_receipts" => @maximum_push_receipts,
       "deployments" => @maximum_deployments,
       "box_runs" => @maximum_box_runs,
-      "box_run_output_bytes" => @maximum_box_output_bytes
+      "box_run_output_bytes" => @maximum_box_output_bytes,
+      "pull_requests" => @maximum_pull_requests,
+      "stacks" => @maximum_stacks,
+      "stack_entries" => @maximum_stack_entries,
+      "issue_dependencies" => @maximum_issue_dependencies
     }
   end
 
@@ -627,13 +849,14 @@ defmodule OpenAgents.DataRights.AccountExport do
         "issue" => nil
       },
       %{
-        "family" => "pull_request",
+        "family" => "reputation",
         "reason" =>
-          "Pull requests, stacks, issue dependencies, and reputation attestations key on a " <>
-            "repository rather than on an account, and no cross-repository account-scoped read " <>
-            "exists. Enumerating them means walking GET /api/v3/user/repos.",
-        "mechanism" => "GET /api/v3/repos/{owner}/{repo}/pulls",
-        "issue" => 165
+          "A reputation attestation names a subject_id — a solver identity string the issuer " <>
+            "supplies — and nothing on this surface resolves one to an account. The issuer is " <>
+            "the operator's admitted signing key, and no route creates an attestation, so " <>
+            "there is no record here this account authored and no filter that would find one.",
+        "mechanism" => "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/attestations",
+        "issue" => 171
       },
       %{
         "family" => "forum",

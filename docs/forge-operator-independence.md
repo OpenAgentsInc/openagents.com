@@ -141,6 +141,15 @@ What is proven portable today:
   agent links.** `GET /data/export/account`, an account-scoped document
   published alongside the conversation export rather than inside it. Every
   collection states its cap and reports its own truncation.
+- **Pull requests, stacks, and issue dependencies.** The same document's
+  `repository_work` section, which is the one read on this surface that crosses
+  repositories. Enumeration was the easy half: the read filters on the column
+  that names the authoring account and joins
+  `OpenAgents.Repositories.readable_by/2`, the predicate every per-repository
+  read composes, so a record the account authored in a repository it can no
+  longer read is withheld and no private repository the account never belonged
+  to is reached. Stack boundary object ids travel here even though the
+  `refs/internal/` namespace holding them is not advertised to a clone.
 
 Nothing is blocked today, which is a result rather than a default. Issue #142
 opened the private-repository metadata reads and #143 exported the forge-owned
@@ -149,12 +158,15 @@ its own owner and push receipts left through no route at all. The ledger keeps
 the `blocked` status and its shape checks, because the honest move when a
 family becomes unreadable is to record it.
 
-What is reachable but still has no account-scoped read: pull requests, stacks,
-issue dependencies, and reputation attestations. They key on a repository
-rather than on an account, and there is no cross-repository read anywhere —
-every issue and project route is scoped to one repository, and the only
-account-wide list is `GET /api/v3/user/repos` — so enumerating an account's
-work still means walking its repositories. Issue #165 carries that read.
+What is reachable and still has no account-scoped read: reputation
+attestations. This is the one repository-keyed family issue #165 could not
+move, and the reason is not enumeration. An attestation names a `subject_id`
+that the issuer supplies and an `issuer_key_id` that is the operator's; no
+column, and no table on this surface, resolves either to an account, and no
+route creates an attestation. There is no filter that would find an account's
+own attestations, so the export names the gap in `not_included` rather than
+returning an empty list that reads like an answer. Issue #171 carries the
+subject binding that would make the read possible.
 
 Who owns a migrated forum post is the subtle question in the account export,
 and it is answered rather than assumed. Two identities resolve to an account:
@@ -242,12 +254,12 @@ The one omission is the `refs/internal/` namespace, where stack boundary
 commits are retained without being advertised; the proof asserts that this is
 the *only* omission, so withholding a branch would turn it red.
 
-That is exit for source. It is not yet exit for everything: comments and labels
-in private repositories still answer `404` to their owner, and the
-repository-keyed families still have no account-wide read. Those are covered by
-the gaps above rather than by a claim. Saying so is the point. Four green
-invariants that assert less than they appear to would be worse than three plus
-a recorded gap.
+That is exit for source. It is not yet exit for everything: an account cannot
+identify its own reputation attestations, private repository exports are not
+encrypted, and no commitment to the WAL is published outside operator storage.
+Those are covered by the gaps above rather than by a claim. Saying so is the
+point. Five green invariants that assert less than they appear to would be
+worse than five plus a recorded gap.
 
 ## Invariants
 
@@ -272,5 +284,5 @@ break was reverted.
 
 | Gap | Issue |
 | --- | --- |
-| No cross-repository read for repository-keyed work records | #165 |
+| No binding from a reputation attestation's subject to an account, so an account cannot identify its own attestations | #171 |
 | No commitment to the WAL is published outside operator storage, so a consistent rewrite still verifies clean | #151 |

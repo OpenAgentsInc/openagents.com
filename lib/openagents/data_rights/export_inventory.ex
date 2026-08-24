@@ -52,8 +52,8 @@ defmodule OpenAgents.DataRights.ExportInventory do
           note: String.t()
         }
 
-  # No cross-repository account-scoped read for repository-keyed work records.
-  @cross_repository_issue 165
+  # No binding from a reputation subject to an account, #171.
+  @reputation_subject_issue 171
 
   # The account-scoped export of forge-owned and forum-owned records, #143.
   @account_export "GET /data/export/account"
@@ -283,52 +283,59 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "carries the objective, the terminal report, usage, and the transcript, " <>
           "so the export ledger now reaches what the deletion cascade always did."
     },
-
-    # ── reachable per repository, never per account ───────────────────────
     %{
       family: :pull_request,
       api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/pulls",
-      proof: nil,
-      issue: @cross_repository_issue,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
       note:
-        "Widens for a member, unpaged, scoped to one repository. Left out of the " <>
-          "account export deliberately: a pull request keys on a repository, not " <>
-          "on an account, and no cross-repository account-scoped read exists, so " <>
-          "enumeration still walks GET /api/v3/user/repos."
+        "A pull request keys on a repository, so the account export reads across " <>
+          "every repository at once and gates the read on " <>
+          "Repositories.readable_by/2 rather than on the authoring column alone. " <>
+          "Returned for the account that opened it and for the account that " <>
+          "merged it, each said in the record."
     },
     %{
       family: :stack,
       api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/stacks",
-      proof: nil,
-      issue: @cross_repository_issue,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
       note:
-        "Widens for a member. Boundary commits live under the unadvertised " <>
-          "refs/internal/, and like pull requests a stack keys on a repository " <>
-          "rather than on an account."
+        "The stacks the account created, with their entries in order. Boundary " <>
+          "commits live under the unadvertised refs/internal/ that EXIT-004 names, " <>
+          "so the object ids travel in the document even though a clone cannot " <>
+          "fetch the refs holding them."
     },
     %{
       family: :issue_dependency,
       api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
-      proof: nil,
-      issue: @cross_repository_issue,
-      note: "Widens for a member, one issue at a time, and keys on a repository."
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "The prerequisite edges the account recorded, with both issue numbers and " <>
+          "the prerequisite's own state, behind the same readable_by gate."
     },
+
+    # ── reachable, but nothing here names an account ──────────────────────
     %{
       family: :reputation,
       api?: true,
       status: :partial,
       mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/attestations",
       proof: nil,
-      issue: @cross_repository_issue,
+      issue: @reputation_subject_issue,
       note:
-        "Attestations read per issue and per subject, never per account, and the " <>
-          "subject is a solver identity rather than an account id."
+        "The only family #165 could not move. An attestation names a subject_id " <>
+          "the issuer supplies and an issuer_key_id that is the operator's; no " <>
+          "column, and no table on this surface, resolves either to an account. " <>
+          "There is no filter that would find an account's own attestations, so " <>
+          "the export names the gap instead of returning an empty list."
     },
 
     # ── not a record a user authors and takes with them ───────────────────

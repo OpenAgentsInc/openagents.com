@@ -3014,14 +3014,28 @@ this ledger records the change rather than trailing it.
 `GET /data/export/account` is the account-scoped export, and the probes round
 trip it rather than reading its source: one `forum` post and topic, one
 `thread` with a transcript entry, one `push_receipt`, one `box` lease and run,
-one `computer`, one `agent` link, and one `deployment` request are seeded and
-read back through the route in an authenticated session. A family whose record
-stops coming back turns this red, and so does a receipt returned under a
-principal that is not the requesting account. `push_receipt` is probed there
-rather than against the route inventory, because no `/api/v3` route serves
-receipts and none is expected to; what the account gets back is its own
+one `computer`, one `agent` link, one `deployment` request, one
+`pull_request`, one `stack` with its entry, and one `issue_dependency` are
+seeded and read back through the route in an authenticated session. A family
+whose record stops coming back turns this red, and so does a receipt returned
+under a principal that is not the requesting account. `push_receipt` is probed
+there rather than against the route inventory, because no `/api/v3` route
+serves receipts and none is expected to; what the account gets back is its own
 `forge_pushes` rows, matched exactly on the `user:<account-id>` principal a
 person's push records.
+
+`pull_request`, `stack`, and `issue_dependency` key on a repository rather than
+on an account, so the export's `repository_work` section is the one read on
+this surface that crosses repositories, and authorization rather than
+enumeration is what it has to get right. Each query filters on the column
+naming the authoring account *and* joins
+`OpenAgents.Repositories.readable_by/2`, the predicate every per-repository
+read composes, rather than restating a second rule. Both halves are proven
+separately in `test/openagents/data_rights/account_export_test.exs`: a record
+whose authoring column names the account, in a private repository the account
+is not a member of, is withheld, and another account's records in a repository
+this account can read never appear. Dropping the `readable_by` join turns the
+first red while every other assertion still passes.
 
 Ownership of a migrated forum post is decided, not guessed. Two identities
 resolve to an account and no third: `user:<account-id>`, which every topic and
@@ -3034,13 +3048,15 @@ themselves travel in the document at every status, so an account can see what
 it asked for and what the operator decided.
 
 No family is `blocked` today, which is a result rather than a default: #142
-opened the private-repository metadata reads and #143 exported the forge-owned
-and forum-owned families. `pull_request`, `stack`, `issue_dependency`, and
-`reputation` stay `partial`. They key on a repository rather than on an
-account, and no cross-repository account-scoped read exists, so enumerating
-them still means walking `GET /api/v3/user/repos`. Issue #165 carries that
-read. The export names those omissions in its own `not_included` section rather
-than leaving a recipient to infer them.
+opened the private-repository metadata reads, #143 exported the forge-owned and
+forum-owned families, and #165 added the cross-repository read. One family
+stays `partial`, and it is not an enumeration problem. A `reputation`
+attestation names a `subject_id` the issuer supplies and an `issuer_key_id`
+that is the operator's; no column, and no table on this surface, resolves
+either to an account, and no route creates an attestation. There is no filter
+that would find an account's own attestations, so the ledger records the gap
+and issue #171 carries the subject binding. The export names that omission in
+its own `not_included` section rather than leaving a recipient to infer it.
 
 Evidence: `OpenAgents.DataRights.ExportInventory`,
 `OpenAgents.DataRights.AccountExport`, `OpenAgentsWeb.ApiRouteAuthority`,
@@ -3150,13 +3166,16 @@ omission: hiding a branch, or widening the exported set to include internal
 bookkeeping, turns it red.
 
 This is exit for the Git plane. It is not exit for the metadata plane. Forum
-posts, threads, push receipts, deployment requests, Box work, computers, and
-agent links leave through `GET /data/export/account` under `EXIT-001`, and the
-private-repository metadata reads answer their own members now; the
-repository-keyed families with no cross-repository read remain `EXIT-001`'s
-recorded gap rather than a claim here, and issue #165 carries them. A single
-complete invariant plus a recorded gap is worth more than four that assert less
-than they appear to.
+posts, threads, push receipts, deployment requests, Box work, computers, agent
+links, pull requests, stacks, and issue dependencies leave through
+`GET /data/export/account` under `EXIT-001`, and the private-repository
+metadata reads answer their own members now. A stack's boundary object ids
+travel in that document precisely because a clone cannot fetch the refs holding
+them, so the withheld namespace costs the account the refs and not the shape of
+its own work. Reputation attestations remain `EXIT-001`'s recorded gap rather
+than a claim here, and issue #171 carries them. A single complete invariant
+plus a recorded gap is worth more than four that assert less than they appear
+to.
 
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.Repos`,
 `OpenAgents.Forge.GitHTTP`, and

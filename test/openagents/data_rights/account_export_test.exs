@@ -17,9 +17,12 @@ defmodule OpenAgents.DataRights.AccountExportTest do
   alias OpenAgents.Forum.{Post, TipDestination, Topic}
   alias OpenAgents.Forum.Forum, as: Board
   alias OpenAgents.Forge.PushReceipt
+  alias OpenAgents.Issues
   alias OpenAgents.Machines.Machine
+  alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
+  alias OpenAgents.Stacks
   alias OpenAgents.Threads
 
   setup do
@@ -352,7 +355,7 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       end
 
       families = Enum.map(export["not_included"], & &1["family"])
-      assert "pull_request" in families
+      assert "reputation" in families
       assert "repository_content" in families
       assert "conversation" in families
 
@@ -378,6 +381,137 @@ defmodule OpenAgents.DataRights.AccountExportTest do
         |> Repo.update!()
 
       assert {:error, :inactive_account} = AccountExport.build(banned)
+    end
+  end
+
+  describe "repository-keyed work" do
+    test "pull requests, stacks, and issue dependencies come back from every repository" do
+      user = github_user("account-export-work", "export-work")
+      public_repository = OpenAgents.AccountsFixtures.repository_fixture()
+      private_repository = private_repository_with_member("export-work-private", user)
+
+      public_pull_request = pull_request_fixture(public_repository, "public-branch", user)
+      private_pull_request = pull_request_fixture(private_repository, "private-branch", user)
+
+      {:ok, stack} = Stacks.create(private_repository, [private_pull_request], user)
+
+      blocked = OpenAgents.IssuesFixtures.issue_fixture(private_repository, %{title: "Blocked"})
+      blocker = OpenAgents.IssuesFixtures.issue_fixture(private_repository, %{title: "Blocker"})
+      :ok = Issues.add_dependencies(blocked, [blocker.number], user)
+
+      assert {:ok, export} = AccountExport.build(user)
+      work = export["repository_work"]
+
+      numbers = Enum.map(work["pull_requests"]["records"], & &1["id"])
+      assert public_pull_request.id in numbers
+      assert private_pull_request.id in numbers
+      refute work["pull_requests"]["records_truncated"]
+
+      exported_public =
+        Enum.find(work["pull_requests"]["records"], &(&1["id"] == public_pull_request.id))
+
+      assert exported_public["repository"] ==
+               public_repository.owner <> "/" <> public_repository.name
+
+      assert exported_public["head_ref"] == "public-branch"
+      assert exported_public["opened_by_account"]
+      refute exported_public["merged_by_account"]
+
+      assert [exported_stack] = work["stacks"]["records"]
+      assert exported_stack["id"] == stack.id
+      assert exported_stack["number"] == stack.number
+      assert exported_stack["trunk_ref"] == "main"
+
+      assert [entry] = exported_stack["entries"]
+      assert entry["position"] == 1
+      assert entry["pull_request_number"] == private_pull_request.issue_id |> issue_number()
+      assert entry["boundary_oid"] == private_pull_request.base_sha
+      assert entry["observed_head_oid"] == private_pull_request.head_sha
+
+      assert [dependency] = work["issue_dependencies"]["records"]
+      assert dependency["issue_number"] == blocked.number
+      assert dependency["blocked_by_issue_number"] == blocker.number
+      assert dependency["blocked_by_issue_state"] == "open"
+    end
+
+    # The authoring column alone would return this record. It is the
+    # readable_by join that withholds it, so removing that join turns this red
+    # while every other assertion in this file still passes.
+    test "a record the account authored in a repository it cannot read stays behind" do
+      user = github_user("account-export-revoked", "export-revoked")
+      other = github_user("account-export-revoked-owner", "export-revoked-owner")
+      repository = private_repository_with_member("export-revoked-private", other)
+
+      pull_request = pull_request_fixture(repository, "revoked-branch", user)
+      {:ok, _stack} = Stacks.create(repository, [pull_request], user)
+
+      blocked = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Blocked"})
+      blocker = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Blocker"})
+      :ok = Issues.add_dependencies(blocked, [blocker.number], user)
+
+      refute Repositories.member?(repository, user)
+
+      assert {:ok, export} = AccountExport.build(user)
+      work = export["repository_work"]
+
+      assert work["pull_requests"]["records"] == []
+      assert work["stacks"]["records"] == []
+      assert work["issue_dependencies"]["records"] == []
+    end
+
+    test "another account's records in a readable repository never come back" do
+      user = github_user("account-export-work-mine", "export-work-mine")
+      other = github_user("account-export-work-theirs", "export-work-theirs")
+      repository = OpenAgents.AccountsFixtures.repository_fixture()
+
+      theirs = pull_request_fixture(repository, "their-branch", other)
+      {:ok, _stack} = Stacks.create(repository, [theirs], other)
+
+      blocked = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Theirs blocked"})
+      blocker = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "Theirs blocker"})
+      :ok = Issues.add_dependencies(blocked, [blocker.number], other)
+
+      assert {:ok, export} = AccountExport.build(user)
+      work = export["repository_work"]
+
+      assert work["pull_requests"]["records"] == []
+      assert work["stacks"]["records"] == []
+      assert work["issue_dependencies"]["records"] == []
+    end
+
+    test "a merge the account performed on another account's pull request comes back" do
+      user = github_user("account-export-merger", "export-merger")
+      author = github_user("account-export-authored", "export-authored")
+      repository = OpenAgents.AccountsFixtures.repository_fixture()
+
+      pull_request =
+        repository
+        |> pull_request_fixture("merged-branch", author)
+        |> Ecto.Changeset.change(
+          state: "closed",
+          merged_by_user_id: user.id,
+          merged_at: DateTime.utc_now(),
+          merge_commit_sha: String.duplicate("a", 40)
+        )
+        |> Repo.update!()
+
+      assert {:ok, export} = AccountExport.build(user)
+      assert [exported] = export["repository_work"]["pull_requests"]["records"]
+      assert exported["id"] == pull_request.id
+      refute exported["opened_by_account"]
+      assert exported["merged_by_account"]
+      assert exported["merge_commit_sha"] == String.duplicate("a", 40)
+    end
+
+    test "the document says the read is gated on the repository predicate" do
+      user = github_user("account-export-gate", "export-gate")
+      assert {:ok, export} = AccountExport.build(user)
+
+      assert export["repository_work"]["authorization"] =~ "readable_by/2"
+
+      for key <- ~w(pull_requests stacks stack_entries issue_dependencies) do
+        assert is_integer(export["bounds"][key]) and export["bounds"][key] > 0
+      end
     end
   end
 
@@ -412,5 +546,42 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       actor_ref: actor_ref,
       actor_display_name: actor_ref
     })
+  end
+
+  defp private_repository_with_member(name, user) do
+    repository =
+      OpenAgents.AccountsFixtures.repository_fixture(%{name: name, visibility: "private"})
+
+    {:ok, _membership} = Repositories.add_member(repository, user, "owner")
+    repository
+  end
+
+  defp pull_request_fixture(repository, head_ref, user) do
+    issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "PR " <> head_ref})
+
+    {:ok, pull_request} =
+      %PullRequest{}
+      |> PullRequest.changeset(%{
+        repository_id: repository.id,
+        issue_id: issue.id,
+        head_repository_id: repository.id,
+        opened_by_user_id: user.id,
+        head_ref: head_ref,
+        head_sha: sha_for(head_ref),
+        base_ref: "main",
+        base_sha: sha_for("main"),
+        state: "open"
+      })
+      |> Repo.insert()
+
+    pull_request
+  end
+
+  defp sha_for(ref), do: :sha |> :crypto.hash(ref) |> Base.encode16(case: :lower)
+
+  defp issue_number(issue_id) do
+    Repo.one!(
+      from issue in OpenAgents.Issues.Issue, where: issue.id == ^issue_id, select: issue.number
+    )
   end
 end

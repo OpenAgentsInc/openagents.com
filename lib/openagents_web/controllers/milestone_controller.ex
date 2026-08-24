@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.MilestoneController do
   alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
-    repository = Repositories.get_public_by_path!(owner, repo)
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
     milestones = Milestones.list_milestones(repository)
     render(conn, :index, milestones: milestones, owner: owner, repo: repo)
   rescue
@@ -35,10 +35,11 @@ defmodule OpenAgentsWeb.MilestoneController do
         "repo" => repo,
         "milestone_number" => milestone_number
       }) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+
     milestone =
-      Milestones.get_milestone_by_path!(
-        owner,
-        repo,
+      Milestones.get_milestone_by_number!(
+        repository,
         OpenAgentsWeb.ControllerHelpers.integer_param!(milestone_number)
       )
 

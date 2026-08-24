@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.AssigneeController do
   def index(conn, %{"owner" => owner, "repo" => repo}) do
     assignees =
       owner
-      |> Repositories.get_public_by_path!(repo)
+      |> Repositories.get_visible_by_path!(repo, conn.assigns[:current_user])
       |> Repositories.list_assignable_users()
       |> Enum.map(&projection/1)
 
@@ -19,7 +19,7 @@ defmodule OpenAgentsWeb.AssigneeController do
   def show(conn, %{"owner" => owner, "repo" => repo, "assignee" => login}) do
     assignee =
       owner
-      |> Repositories.get_public_by_path!(repo)
+      |> Repositories.get_visible_by_path!(repo, conn.assigns[:current_user])
       |> Repositories.get_assignable_user_by_login!(login)
 
     json(conn, projection(assignee))

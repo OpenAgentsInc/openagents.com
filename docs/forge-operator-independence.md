@@ -126,14 +126,17 @@ What is proven portable today:
 - **Issues, projects, and the repository list.** These resolve through
   `OpenAgents.Repositories`'s visibility predicate, so a member reads them for
   a private repository.
+- **Issue metadata.** Comments, labels, milestones, assignees, issue labels,
+  and issue assignees resolve through the same predicate as of 2026-08-23, so
+  a member reads their own private repository's issue records. Until then a
+  public-only query answered `404` to the repository's own owner, which issue
+  #142 closed.
 - **Conversations, memory, and voice disclosure.** `GET /data/export`,
   `GET /data/export/atif`, and `GET /memory/export`, under `DATA-004`.
 
-What is blocked today, and this is the honest headline: **if you keep your work
-in a private repository, you cannot read your own comments, labels, milestones,
-or assignees through any published route.** Six families resolve the repository
-through a public-only query, so they answer `404` to their own owner and a
-bearer token does not widen them. Issue #142 closes that.
+What is blocked today: **push receipts**. The `forge_pushes` rows are derived
+from the WAL and served by no published route. The pusher holds the same facts
+in their own reflog, so the forge's record of them does not leave.
 
 What is reachable but has no account-scoped export: forum posts, deployments,
 agent links, Box leases, paired computers, pull requests, stacks, and
@@ -223,6 +226,5 @@ break was reverted.
 
 | Gap | Issue |
 | --- | --- |
-| Private-repository metadata reads answer `404` to their owner | #142 |
 | No account-scoped export of forge-owned and forum-owned data | #143 |
 | WAL entries are unsigned and anchored nowhere outside operator storage | #151 |

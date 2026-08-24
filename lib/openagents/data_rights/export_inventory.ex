@@ -50,9 +50,6 @@ defmodule OpenAgents.DataRights.ExportInventory do
           note: String.t()
         }
 
-  # Private-repository metadata reads that answer 404 to their own owner.
-  @private_metadata_issue 142
-
   # No account-scoped export of forge-owned and forum-owned data.
   @account_export_issue 143
 
@@ -87,6 +84,65 @@ defmodule OpenAgents.DataRights.ExportInventory do
       proof: :inventory,
       issue: nil,
       note: "The one account-wide list the API publishes. Cursor paged, so it enumerates."
+    },
+    %{
+      family: :comment,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/comments",
+      proof: :inventory,
+      issue: nil,
+      note:
+        "Resolves through Repositories.get_visible_by_path!/3, so a member reads " <>
+          "the comments on a private repository's issues. Returns the full " <>
+          "thread on one issue, unpaged."
+    },
+    %{
+      family: :label,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v3/repos/{owner}/{repo}/labels",
+      proof: :inventory,
+      issue: nil,
+      note: "Widens for a member the same way issues do; returns the full set unpaged."
+    },
+    %{
+      family: :milestone,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v3/repos/{owner}/{repo}/milestones",
+      proof: :inventory,
+      issue: nil,
+      note: "Widens for a member, with the open and closed issue counts each milestone carries."
+    },
+    %{
+      family: :assignee,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v3/repos/{owner}/{repo}/assignees",
+      proof: :inventory,
+      issue: nil,
+      note:
+        "The accounts a private repository can assign work to, readable by the " <>
+          "members it names. Public identity fields only: login, id, avatar."
+    },
+    %{
+      family: :issue_label,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/labels",
+      proof: :inventory,
+      issue: nil,
+      note: "Widens for a member, one issue at a time."
+    },
+    %{
+      family: :issue_assignee,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/assignees",
+      proof: :inventory,
+      issue: nil,
+      note: "Widens for a member, one issue at a time."
     },
     %{
       family: :chat,
@@ -132,61 +188,6 @@ defmodule OpenAgents.DataRights.ExportInventory do
     },
 
     # ── blocked: the owner cannot read their own records ──────────────────
-    %{
-      family: :comment,
-      api?: true,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @private_metadata_issue,
-      note:
-        "Issues.get_comment_by_path!/3 pins visibility == \"public\"; a token does not widen it."
-    },
-    %{
-      family: :label,
-      api?: true,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @private_metadata_issue,
-      note: "Labels.get_label_by_path!/3 and the index both resolve public-only."
-    },
-    %{
-      family: :milestone,
-      api?: true,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @private_metadata_issue,
-      note: "Milestones.get_milestone_by_path!/3 and the index both resolve public-only."
-    },
-    %{
-      family: :assignee,
-      api?: true,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @private_metadata_issue,
-      note: "Repositories.get_public_by_path!/2 gates the assignable-user list."
-    },
-    %{
-      family: :issue_label,
-      api?: true,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @private_metadata_issue,
-      note: "Reads the issue through the public-only path resolver."
-    },
-    %{
-      family: :issue_assignee,
-      api?: true,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @private_metadata_issue,
-      note: "Reads the issue through the public-only path resolver."
-    },
     %{
       family: :push_receipt,
       api?: false,

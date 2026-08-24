@@ -58,10 +58,25 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/api/computer-agent-jobs/"
   ]
 
+  # Reads that an anonymous caller reaches on a public repository and a bearer
+  # token widens to the private repositories its account may read. The class
+  # stays `:public_read` because anonymous access is unchanged; the principal
+  # is what the token changes, and every one of these routes resolves the
+  # repository through `Repositories.get_visible_by_path!/3`.
   @optional_forge_read_paths [
     "/api/v3/repos/:owner/:repo/issues",
     "/api/v3/repos/:owner/:repo/issues/:issue_number",
     "/api/v3/repos/:owner/:repo/issues/:issue_number/dependencies",
+    "/api/v3/repos/:owner/:repo/issues/:issue_number/comments",
+    "/api/v3/repos/:owner/:repo/issues/comments/:id",
+    "/api/v3/repos/:owner/:repo/issues/:issue_number/labels",
+    "/api/v3/repos/:owner/:repo/issues/:issue_number/assignees",
+    "/api/v3/repos/:owner/:repo/labels",
+    "/api/v3/repos/:owner/:repo/labels/:name",
+    "/api/v3/repos/:owner/:repo/milestones",
+    "/api/v3/repos/:owner/:repo/milestones/:milestone_number",
+    "/api/v3/repos/:owner/:repo/assignees",
+    "/api/v3/repos/:owner/:repo/assignees/:assignee",
     "/api/v3/repos/:owner/:repo/pulls",
     "/api/v3/repos/:owner/:repo/pulls/:pull_number",
     "/api/v3/repos/:owner/:repo/projectsV2",

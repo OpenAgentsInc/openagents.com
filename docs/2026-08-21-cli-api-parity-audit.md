@@ -2,11 +2,11 @@
 
 **Date:** 2026-08-21
 **Commits measured:** `81e4c25eb5b5` (`openagents/main`, the forge) for the API; `5bd0061e4f6e` in the `openagents` monorepo for `packages/openagents-cli` (package version `0.1.7`)
-**Status:** Stage 1 and Stage 7 shipped. The issue portion of Stage 2 shipped;
-ancillary comment, label, assignee, and milestone reads remain public-only.
-Stage 1 added `openagents api` in `@openagentsinc/cli@0.2.1`. Stage 7 added
-repository-scoped Projects V2 routes on 2026-08-22. Historical measurements
-below retain the original findings.
+**Status:** Stages 1, 2, and 7 shipped. Stage 1 added `openagents api` in
+`@openagentsinc/cli@0.2.1`. Stage 7 added repository-scoped Projects V2 routes
+on 2026-08-22. Stage 2 completed on 2026-08-23: the comment, label, milestone,
+assignee, issue-label, and issue-assignee reads now accept an optional bearer.
+Historical measurements below retain the original findings.
 **Question:** Does the CLI only cover repository upload? What of the Issues and Projects API does it reach? Should that coverage be generated from an OpenAPI document instead of hand-written? What is the fastest honest path to managing issues and projects from a terminal?
 **Method:** direct reading of `lib/openagents_web/router.ex`, every controller it routes to under `/api/v3`, the contexts behind them (`lib/openagents/issues.ex`, `labels.ex`, `milestones.ex`, `projects.ex`, `repositories.ex`), the auth plugs, `lib/openagents_web/route_authority.ex`, `priv/api-contracts/repositories-v1.json` and its controller and test, and `docs/openagents-cli/`; plus direct reading of all 21 source files in the `openagents` monorepo at `packages/openagents-cli/src/` and its tests. The CLI lives in a different repository, so every CLI citation names it. Claims that neither repository can settle are in section 7 with the command that would settle them.
 
@@ -383,13 +383,23 @@ returns real-looking JSON describing one hardcoded repository rather than
 yours. A passthrough is faithful by design: it exposes those surfaces exactly
 as they are, including where they are wrong.
 
-### Stage 2 — Let an authenticated caller read their own private issues (this repository only, medium) — PARTIALLY SHIPPED 2026-08-22
+### Stage 2 — Let an authenticated caller read their own private issues (this repository only, medium) — SHIPPED 2026-08-23
 
-Issue list and detail reads now accept an optional bearer and authorize private
-repository members. The comment, label, milestone, and assignee read routes
-remain in the public-read pipeline, so the broader stage is not complete.
+Issue list and detail reads accepted an optional bearer from 2026-08-22. The
+remaining ten routes — comments, one comment, issue labels, issue assignees,
+labels, one label, milestones, one milestone, assignees, and one assignee —
+moved on 2026-08-23. Each resolves the repository through
+`Repositories.get_visible_by_path!/3` and then reads through the
+repository-scoped getter, which is how the issue reads were already written, so
+there is one resolution pattern rather than two. The three public-only path
+resolvers that had no other caller — `Issues.get_comment_by_path!/3`,
+`Labels.get_label_by_path!/3`, and `Milestones.get_milestone_by_path!/3` — were
+removed rather than left beside the predicate that replaced them.
+`OpenAgents.DataRights.ExportInventory` reclassified the six families from
+`:blocked` to `:portable` in the same change, which is what `EXIT-001` exists to
+force.
 
-Move the issue, comment, label, milestone, and assignee read routes (`router.ex:235`–`:246`) from `pipe_through :api` into `pipe_through :optional_forge_api`, and change the resolution calls in `IssueController`, `CommentController`, `IssueLabelController`, `IssueAssigneeController`, `LabelController`, `MilestoneController`, and `AssigneeController` from `Repositories.get_public_by_path!/2` to `Repositories.get_visible_by_path!/3`, threading `conn.assigns.current_user` (which the optional plug sets to `nil` for anonymous callers). The visibility filters inside `Issues.get_issue_by_path!/3` (`issues.ex:159`), `Issues.get_comment_by_path!/3`, `Labels.get_label_by_path!/3`, and `Milestones.get_milestone_by_path!/3` need the same treatment. **Seam:** router pipelines, ten or so controller call sites, four context queries, and the `RouteAuthority` policy at `route_authority.ex:184`, whose `:public_read` classification for these paths becomes wrong. **Size:** medium; mechanical but wide, and every one of these controllers already has a test file to extend. **Effect:** additive and backward-compatible — anonymous callers see exactly what they see today; the change is that a bearer token now widens the result instead of being discarded. Without this, sections 3.1 ranks 1, 2, 8, and 9 only ever work on public repositories, so this gates most of the value of Stage 3.
+The original plan follows. Move the issue, comment, label, milestone, and assignee read routes (`router.ex:235`–`:246`) from `pipe_through :api` into `pipe_through :optional_forge_api`, and change the resolution calls in `IssueController`, `CommentController`, `IssueLabelController`, `IssueAssigneeController`, `LabelController`, `MilestoneController`, and `AssigneeController` from `Repositories.get_public_by_path!/2` to `Repositories.get_visible_by_path!/3`, threading `conn.assigns.current_user` (which the optional plug sets to `nil` for anonymous callers). The visibility filters inside `Issues.get_issue_by_path!/3` (`issues.ex:159`), `Issues.get_comment_by_path!/3`, `Labels.get_label_by_path!/3`, and `Milestones.get_milestone_by_path!/3` need the same treatment. **Seam:** router pipelines, ten or so controller call sites, four context queries, and the `RouteAuthority` policy at `route_authority.ex:184`, whose `:public_read` classification for these paths becomes wrong. **Size:** medium; mechanical but wide, and every one of these controllers already has a test file to extend. **Effect:** additive and backward-compatible — anonymous callers see exactly what they see today; the change is that a bearer token now widens the result instead of being discarded. Without this, sections 3.1 ranks 1, 2, 8, and 9 only ever work on public repositories, so this gates most of the value of Stage 3.
 
 ### Stage 3 — The five commands that carry the traffic (CLI repository only, medium)
 
@@ -418,10 +428,9 @@ Unpin the project surface from `Repositories.initial_repository!()` (`projects.e
 
 ### What makes issue management usable this week versus complete
 
-Stage 1 makes every implemented route reachable. The shipped portion of Stage
-2 makes private issue list and detail reads usable. Completing Stage 2 makes
-the ancillary issue workflow usable for private repositories, and Stage 3
-makes the common workflow concise. Stages 4 through 7 complete more of the
+Stage 1 makes every implemented route reachable. Stage 2 makes the issue
+workflow — issues, comments, labels, milestones, and assignees — usable for
+private repositories, and Stage 3 makes the common workflow concise. Stages 4 through 7 complete more of the
 contract. Stage 5 keeps the server and client descriptions aligned.
 
 ### The cross-repository cost, and how to handle it
@@ -451,9 +460,10 @@ Not everything here needs changing, and two decisions are better than they look:
 ## 7. Open questions
 
 - **Does the published npm package's vendored contract match the deployed server's?** Both measured working copies hash to `5be86539258c…`, but the CLI still verifies only its vendored copy. Compare the packed `@openagentsinc/cli@0.2.1` artifact with the deployed `/api/contracts/repositories-v1.json`, then make the comparison a staging verification failure.
-- **Which ancillary reads should accept an optional bearer?** Repository,
-  issue, and project base reads now authorize private repository members.
-  Comment, label, assignee, and milestone reads remain public-only.
+- ~~**Which ancillary reads should accept an optional bearer?**~~ Settled on
+  2026-08-23: every issue-family read does. Repository, issue, project,
+  comment, label, milestone, assignee, issue-label, and issue-assignee reads
+  all authorize private repository members through the same predicate.
 - **Is `forge:read` in `route_authority.ex:184` an aspiration or a mistake?** If the intent is a read-only token scope, it needs adding to `@allowed_scopes` (`lib/openagents/api_tokens.ex:12`) and a `:forge_read_api` pipeline; if not, the label should say `forge:write`. Settle by asking whether a token that can file an issue should also be able to delete a repository, which is today's answer.
 - **Does anything consume the `{"issues": [...]}` envelope, or could the list endpoints move to bare arrays for GitHub compatibility?** Settle by grepping the `openagents` monorepo and this repository's web layer for consumers before Stage 5 freezes the shape into a generated document.
 - **What is the intended pagination convention across the whole API?** Repositories use opaque cursors and issues are offset-paged internally. Stage 4 has to pick one, and the choice belongs to whoever owns the contract document, not to the first endpoint that needs a page.

@@ -57,21 +57,6 @@ defmodule OpenAgents.Milestones do
     |> Repo.one!()
   end
 
-  def get_milestone_by_path!(owner, repository_name, number) when is_integer(number) do
-    Milestone
-    |> join(:inner, [milestone], repository in Repository,
-      on: repository.id == milestone.repository_id
-    )
-    |> where(
-      [milestone, repository],
-      repository.owner_key == ^String.downcase(owner) and
-        repository.name_key == ^String.downcase(repository_name) and
-        repository.visibility == "public" and milestone.number == ^number
-    )
-    |> with_issue_counts()
-    |> Repo.one!()
-  end
-
   @doc """
   Creates a milestone.
 

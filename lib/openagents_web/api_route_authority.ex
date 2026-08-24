@@ -116,21 +116,6 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
 
   defp inventory do
     %{
-      # pipe_through :api — anonymous reads over public repositories.
-      "get /api/v3/repos/:owner/:repo/issues/:issue_number/comments" =>
-        {:anonymous, :comment, :envelope},
-      "get /api/v3/repos/:owner/:repo/issues/comments/:id" => {:anonymous, :comment, :envelope},
-      "get /api/v3/repos/:owner/:repo/issues/:issue_number/labels" =>
-        {:anonymous, :issue_label, :envelope},
-      "get /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" =>
-        {:anonymous, :issue_assignee, :envelope},
-      "get /api/v3/repos/:owner/:repo/labels" => {:anonymous, :label, :envelope},
-      "get /api/v3/repos/:owner/:repo/labels/:name" => {:anonymous, :label, :envelope},
-      "get /api/v3/repos/:owner/:repo/milestones" => {:anonymous, :milestone, :envelope},
-      "get /api/v3/repos/:owner/:repo/milestones/:milestone_number" =>
-        {:anonymous, :milestone, :envelope},
-      "get /api/v3/repos/:owner/:repo/assignees" => {:anonymous, :assignee, :envelope},
-      "get /api/v3/repos/:owner/:repo/assignees/:assignee" => {:anonymous, :assignee, :envelope},
       # Anonymous by design: the extension index is a public API description.
       "get /api/v3" => {:anonymous, :meta, :legacy},
       # Anonymous by design: device authorization bootstraps credentials.
@@ -139,6 +124,25 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v3/agents/register" => {:anonymous, :agent, :legacy},
       "get /api/v3/agents/:handle" => {:anonymous, :agent, :legacy},
       # pipe_through :optional_forge_api — public reads, bearer-widened.
+      # The ancillary issue metadata reads. Anonymous callers still read public
+      # repositories; a bearer token widens them to the private repositories
+      # its account may read, so an owner can read their own issue's comments.
+      "get /api/v3/repos/:owner/:repo/issues/:issue_number/comments" =>
+        {:optional_bearer, :comment, :envelope},
+      "get /api/v3/repos/:owner/:repo/issues/comments/:id" =>
+        {:optional_bearer, :comment, :envelope},
+      "get /api/v3/repos/:owner/:repo/issues/:issue_number/labels" =>
+        {:optional_bearer, :issue_label, :envelope},
+      "get /api/v3/repos/:owner/:repo/issues/:issue_number/assignees" =>
+        {:optional_bearer, :issue_assignee, :envelope},
+      "get /api/v3/repos/:owner/:repo/labels" => {:optional_bearer, :label, :envelope},
+      "get /api/v3/repos/:owner/:repo/labels/:name" => {:optional_bearer, :label, :envelope},
+      "get /api/v3/repos/:owner/:repo/milestones" => {:optional_bearer, :milestone, :envelope},
+      "get /api/v3/repos/:owner/:repo/milestones/:milestone_number" =>
+        {:optional_bearer, :milestone, :envelope},
+      "get /api/v3/repos/:owner/:repo/assignees" => {:optional_bearer, :assignee, :envelope},
+      "get /api/v3/repos/:owner/:repo/assignees/:assignee" =>
+        {:optional_bearer, :assignee, :envelope},
       "get /api/v3/forum" => {:optional_bearer, :forum, :legacy},
       "get /api/v3/forum/topics" => {:optional_bearer, :forum, :legacy},
       "get /api/v3/forum/topics/:id" => {:optional_bearer, :forum, :legacy},

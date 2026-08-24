@@ -7,7 +7,7 @@ defmodule OpenAgentsWeb.LabelController do
   alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo}) do
-    repository = Repositories.get_public_by_path!(owner, repo)
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
     labels = Labels.list_labels(repository)
     render(conn, :index, labels: labels, owner: owner, repo: repo)
   rescue
@@ -31,7 +31,8 @@ defmodule OpenAgentsWeb.LabelController do
   end
 
   def show(conn, %{"owner" => owner, "repo" => repo, "name" => name}) do
-    label = Labels.get_label_by_path!(owner, repo, name)
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+    label = Labels.get_label_by_name!(repository, name)
     render(conn, :show, label: label, owner: owner, repo: repo)
   rescue
     Ecto.NoResultsError -> ApiError.not_found(conn)

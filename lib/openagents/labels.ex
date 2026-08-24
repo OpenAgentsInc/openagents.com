@@ -81,18 +81,6 @@ defmodule OpenAgents.Labels do
 
   defp generated_color, do: Base.encode16(:crypto.strong_rand_bytes(3), case: :lower)
 
-  def get_label_by_path!(owner, repository_name, name) do
-    Repo.one!(
-      from label in Label,
-        join: repository in Repository,
-        on: repository.id == label.repository_id,
-        where:
-          repository.owner_key == ^String.downcase(owner) and
-            repository.name_key == ^String.downcase(repository_name) and
-            repository.visibility == "public" and label.name == ^URI.decode(name)
-    )
-  end
-
   @doc """
   Creates a label.
 

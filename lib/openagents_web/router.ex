@@ -404,6 +404,15 @@ defmodule OpenAgentsWeb.Router do
 
     post "/device/authorizations", DeviceAuthorizationController, :create
     post "/device/authorizations/token", DeviceAuthorizationController, :token
+  end
+
+  # The ancillary issue metadata reads. They keep their position in the router
+  # so nothing that used to match them matches something else now, and they run
+  # behind the optional bearer so a member of a private repository can read the
+  # comments, labels, milestones, and assignees of their own issues. An
+  # anonymous caller reaches exactly the public repositories it reached before.
+  scope "/api/v3", OpenAgentsWeb do
+    pipe_through :optional_forge_api
 
     get "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :index
     get "/repos/:owner/:repo/issues/comments/:id", CommentController, :show

@@ -764,18 +764,6 @@ defmodule OpenAgents.Issues do
     Repo.get_by!(Comment, id: id, repository_id: repository_id)
   end
 
-  def get_comment_by_path!(owner, repository_name, id) do
-    Repo.one!(
-      from comment in Comment,
-        join: repository in Repository,
-        on: repository.id == comment.repository_id,
-        where:
-          repository.owner_key == ^String.downcase(owner) and
-            repository.name_key == ^String.downcase(repository_name) and
-            repository.visibility == "public" and comment.id == ^id
-    )
-  end
-
   def create_comment(attrs) when is_map(attrs) do
     normalized = to_string_map(attrs)
 

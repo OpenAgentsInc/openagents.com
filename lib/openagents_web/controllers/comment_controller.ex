@@ -12,10 +12,11 @@ defmodule OpenAgentsWeb.CommentController do
         "repo" => repo,
         "issue_number" => issue_number
       }) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+
     issue =
-      Issues.get_issue_by_path!(
-        owner,
-        repo,
+      Issues.get_issue_by_number!(
+        repository,
         OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
       )
 
@@ -76,8 +77,8 @@ defmodule OpenAgentsWeb.CommentController do
     do: ApiError.forbidden(conn, legacy: %{"error" => "forbidden"})
 
   def show(conn, %{"owner" => owner, "repo" => repo, "id" => id}) do
-    comment =
-      Issues.get_comment_by_path!(owner, repo, OpenAgentsWeb.ControllerHelpers.integer_param!(id))
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+    comment = Issues.get_comment!(repository, OpenAgentsWeb.ControllerHelpers.integer_param!(id))
 
     render(conn, :show, comment: comment)
   rescue

@@ -2881,14 +2881,14 @@ updating the ledger turns the proof red. `not_user_data` claims nothing and
 states why.
 
 The probes run against a private repository the account owns, and they check
-both directions: an `issue`, `project`, or `repository` read that stopped
-returning the owner's records fails, and a `comment`, `label`, `milestone`,
-`assignee`, `issue_label`, or `issue_assignee` read that started working fails
-until the ledger says so. Those six are blocked today because they resolve the
-repository through a public-only query and a bearer token does not widen them,
-which is issue #142. `push_receipt` is blocked because no published route
-serves receipts, and it is probed against the route inventory rather than by
-calling a route that does not exist.
+both directions: a read that stopped returning the owner's records fails, and a
+read that started working fails until the ledger says so. The `comment`,
+`label`, `milestone`, `assignee`, `issue_label`, and `issue_assignee` families
+were blocked until they resolved the repository through the same visibility
+predicate every other repository surface composes; they are portable now, and
+this ledger records the change rather than trailing it. `push_receipt` is
+blocked because no published route serves receipts, and it is probed against
+the route inventory rather than by calling a route that does not exist.
 
 Evidence: `OpenAgents.DataRights.ExportInventory`,
 `OpenAgentsWeb.ApiRouteAuthority`,
@@ -2990,11 +2990,11 @@ is that set, and the proof asserts the withheld namespace is the *only*
 omission: hiding a branch, or widening the exported set to include internal
 bookkeeping, turns it red.
 
-This is exit for the Git plane. It is not exit for the metadata plane —
-comments and labels in private repositories, forum posts, and receipts are
-covered by `EXIT-001`'s recorded gaps rather than by a claim here, and issues
-#142 and #143 carry them. A single complete invariant plus a recorded gap is
-worth more than four that assert less than they appear to.
+This is exit for the Git plane. It is not exit for the metadata plane — forum
+posts, receipts, and everything with no account-scoped export are covered by
+`EXIT-001`'s recorded gaps rather than by a claim here, and issue #143 carries
+them. A single complete invariant plus a recorded gap is worth more than four
+that assert less than they appear to.
 
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.Repos`,
 `OpenAgents.Forge.GitHTTP`, and

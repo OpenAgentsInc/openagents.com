@@ -6,10 +6,11 @@ defmodule OpenAgentsWeb.IssueLabelController do
   alias OpenAgentsWeb.ApiError
 
   def index(conn, %{"owner" => owner, "repo" => repo, "issue_number" => issue_number}) do
+    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+
     issue =
-      Issues.get_issue_by_path!(
-        owner,
-        repo,
+      Issues.get_issue_by_number!(
+        repository,
         OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
       )
 

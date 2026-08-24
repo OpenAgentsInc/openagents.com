@@ -51,6 +51,54 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:agent_participation_api]
   end
 
+  # The six ancillary issue families used to sit behind the credential-free
+  # `:api` pipeline, which discarded a bearer token, so a private repository
+  # refused its own owner. They are declared here rather than falling through
+  # the `/api/v3` read catch-all, whose "anonymous" principal is now wrong for
+  # them.
+  test "issue metadata reads accept an optional bearer instead of discarding it" do
+    for path <- [
+          "/api/v3/repos/:owner/:repo/issues/:issue_number/comments",
+          "/api/v3/repos/:owner/:repo/issues/comments/:id",
+          "/api/v3/repos/:owner/:repo/issues/:issue_number/labels",
+          "/api/v3/repos/:owner/:repo/issues/:issue_number/assignees",
+          "/api/v3/repos/:owner/:repo/labels",
+          "/api/v3/repos/:owner/:repo/labels/:name",
+          "/api/v3/repos/:owner/:repo/milestones",
+          "/api/v3/repos/:owner/:repo/milestones/:milestone_number",
+          "/api/v3/repos/:owner/:repo/assignees",
+          "/api/v3/repos/:owner/:repo/assignees/:assignee"
+        ] do
+      route = route!(:get, path)
+
+      assert route.class == :public_read, inspect(route)
+      assert route.principal == "anonymous or first-party bearer token", inspect(route)
+      assert route.scope == "forge:repository:read", inspect(route)
+      refute route.mutation, inspect(route)
+    end
+
+    for path <- [
+          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/1/comments",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/1",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/1/labels",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/1/assignees",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/labels",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/milestones",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/milestones/1",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/assignees",
+          "/api/v3/repos/OpenAgentsInc/openagents.com/assignees/someone"
+        ] do
+      assert Phoenix.Router.route_info(
+               OpenAgentsWeb.Router,
+               "GET",
+               path,
+               "stage.openagents.com"
+             ).pipe_through == [:optional_forge_api],
+             "#{path} no longer runs behind the optional bearer"
+    end
+  end
+
   test "agent credential rotation is an agent-scoped bearer write" do
     route = route!(:post, "/api/v3/agent/credentials")
 

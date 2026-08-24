@@ -2812,11 +2812,14 @@ model identifier, no message, transcript, memory, or recall content, no
 activity timestamp, no typed/spoken split, and no priced cost. The struct is
 the contract: a field added there is published to the internet.
 
-Totals are derived only from the two planes that already hold a merged total,
-`turn_receipts.usage` and `voice_sessions.usage`. Provider steps, voice
-response receipts, tool-step invocation counts, and off-path shadow-program
-runs are excluded, so no account is credited twice and none is credited for
-work it did not drive. Accounts appear only while active, not withheld by
+Totals are derived only from the three planes that already hold a merged
+total: `turn_receipts.usage`, `voice_sessions.usage`, and — for thread-fenced
+grants only — `inference_grants.usage`, joined to the account through the
+thread's owner visitor. Provider steps, voice response receipts, tool-step
+invocation counts, off-path shadow-program runs, and conversation-fenced
+grants (whose chat-lane spend the turn-receipt plane already claims) are
+excluded, so no account is credited twice and none is credited for work it did
+not drive. Accounts appear only while active, not withheld by
 `users.public_leaderboard_opted_out`, and above zero tokens; banned accounts
 and legacy browser-only visitors never appear. Deleting product data under
 DATA-004 removes an account from the board by cascade, without a separate

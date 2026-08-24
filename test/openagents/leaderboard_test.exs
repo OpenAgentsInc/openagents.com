@@ -10,8 +10,10 @@ defmodule OpenAgents.LeaderboardTest do
   alias OpenAgents.Context.Composer
   alias OpenAgents.Conversations
   alias OpenAgents.DataRights
+  alias OpenAgents.Inference
   alias OpenAgents.Leaderboard
   alias OpenAgents.Providers.Request
+  alias OpenAgents.Threads
   alias OpenAgents.Voice
   alias OpenAgents.Voice.Config
   alias OpenAgents.Voice.ProviderEvent
@@ -87,6 +89,84 @@ defmodule OpenAgents.LeaderboardTest do
 
     assert [entry] = Leaderboard.compute_entries()
     assert entry.total_tokens == 12
+  end
+
+  test "counts a thread grant's spend for its owning account" do
+    # A coder session runs on a thread, and its spend lands on the grant's
+    # forward-only usage map rather than on any turn receipt. The board sums it
+    # alongside the chat planes.
+    mixed = account("thread-mixed")
+    coder = account("thread-only")
+
+    complete_typed_turn(mixed, "Typed alongside the coder.", %{
+      "input_tokens" => 100,
+      "output_tokens" => 40,
+      "total_tokens" => 140
+    })
+
+    record_thread_grant_usage(mixed, %{
+      "input_tokens" => 45,
+      "output_tokens" => 15,
+      "total_tokens" => 60
+    })
+
+    record_thread_grant_usage(coder, %{
+      "input_tokens" => 3,
+      "output_tokens" => 2,
+      "total_tokens" => 5
+    })
+
+    assert [first, second] = Leaderboard.compute_entries()
+
+    assert first.rank == 1
+    assert first.github_login == mixed.github_login
+    assert first.total_tokens == 200
+
+    assert second.rank == 2
+    assert second.github_login == coder.github_login
+    assert second.total_tokens == 5
+  end
+
+  test "does not count a conversation-fenced grant's usage" do
+    # A conversation grant backs the chat lane the turn-receipt arm already
+    # claims (THREAD-001 gives a grant exactly one fence). Counting the grant
+    # too would credit the same account twice.
+    user = account("conversation-grant")
+
+    complete_typed_turn(user, "The receipt claims this lane.", %{
+      "input_tokens" => 7,
+      "output_tokens" => 5,
+      "total_tokens" => 12
+    })
+
+    conversation = conversation_for(user)
+
+    {:ok, grant, _token} =
+      Inference.mint(%{
+        owner_visitor_id: conversation.visitor_id,
+        conversation_id: conversation.id,
+        machine_id: nil
+      })
+
+    {:ok, _grant} =
+      Inference.record_usage(grant, %{
+        "input_tokens" => 900,
+        "output_tokens" => 99,
+        "total_tokens" => 999
+      })
+
+    assert [entry] = Leaderboard.compute_entries()
+    assert entry.total_tokens == 12
+  end
+
+  test "omits an account whose only thread grant has spent nothing" do
+    # A freshly minted grant carries an empty usage map. Authority is not
+    # activity, so the mint alone publishes nothing.
+    user = account("thread-idle")
+    {:ok, thread} = Threads.open(user, "Minted and never spent")
+    {:ok, _thread, _grant, _token} = Threads.mint_grant(thread)
+
+    assert Leaderboard.compute_entries() == []
   end
 
   test "omits accounts with no tokens" do
@@ -277,6 +357,13 @@ defmodule OpenAgents.LeaderboardTest do
       Conversations.begin_inference(records.turn, context, request, "test.provider", [])
 
     inference
+  end
+
+  defp record_thread_grant_usage(user, usage) do
+    {:ok, thread} = Threads.open(user, "Coder session")
+    {:ok, _thread, grant, _token} = Threads.mint_grant(thread)
+    {:ok, _grant} = Inference.record_usage(grant, usage)
+    :ok
   end
 
   defp record_voice_usage(user, rtc_id, usage) do

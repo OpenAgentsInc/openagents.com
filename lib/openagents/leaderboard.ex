@@ -3,7 +3,7 @@ defmodule OpenAgents.Leaderboard do
   The public token leaderboard.
 
   PostgreSQL is authoritative (`INVARIANTS.md` DATA-001). This module reads the
-  two tables that hold per-account token truth and publishes the bounded
+  three tables that hold per-account token truth and publishes the bounded
   projection described by LEADERBOARD-001 — nothing else crosses the account
   boundary.
 
@@ -16,6 +16,13 @@ defmodule OpenAgents.Leaderboard do
   tokens. `tool_steps.usage` is an invocation count rather than tokens, and
   shadow-program runs are off-path under PROGRAM-002 and earn no credit. See
   `docs/LEADERBOARD.md`.
+
+  `inference_grants.usage` counts only for thread-fenced grants. A grant names
+  exactly one fence — a thread or a conversation, never both (THREAD-001) — and
+  its usage map is the forward-only merge of every metered call it authorized,
+  so a thread grant is the one place a coder session's spend lands. A
+  conversation-fenced grant backs work inside the chat lane the turn-receipt
+  arm already claims, so counting it here would credit the same account twice.
 
   ## Fan-out
 
@@ -31,9 +38,11 @@ defmodule OpenAgents.Leaderboard do
   alias OpenAgents.Conversations.Turn
   alias OpenAgents.Conversations.TurnReceipt
   alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.Inference.Grant
   alias OpenAgents.Leaderboard.Entry
   alias OpenAgents.Leaderboard.Server
   alias OpenAgents.Repo
+  alias OpenAgents.Threads.Thread
   alias OpenAgents.Voice.Session
 
   @topic "leaderboard"
@@ -124,7 +133,12 @@ defmodule OpenAgents.Leaderboard do
   end
 
   defp account_totals do
-    from(row in subquery(union_all(typed_turn_usage(), ^voice_session_usage())),
+    usage_union =
+      typed_turn_usage()
+      |> union_all(^voice_session_usage())
+      |> union_all(^thread_grant_usage())
+
+    from(row in subquery(usage_union),
       group_by: row.user_id,
       select: %{user_id: row.user_id, tokens: fragment("SUM(?)::bigint", row.tokens)}
     )
@@ -187,6 +201,40 @@ defmodule OpenAgents.Leaderboard do
             session.usage,
             session.usage,
             session.usage
+          )
+      }
+    )
+  end
+
+  # Coder and thread spend. Only thread-fenced grants count: a grant's fence is
+  # exactly one of thread or conversation (THREAD-001), and conversation-fenced
+  # grants back the chat lane whose merged total the turn-receipt arm above
+  # already claims. The inner join on the thread is what enforces the fence —
+  # a grant with a NULL thread_id matches no thread row.
+  defp thread_grant_usage do
+    from(grant in Grant,
+      join: thread in Thread,
+      on: thread.id == grant.thread_id,
+      join: visitor in Visitor,
+      on: visitor.id == thread.owner_visitor_id,
+      where: not is_nil(visitor.user_id),
+      select: %{
+        user_id: visitor.user_id,
+        tokens:
+          fragment(
+            """
+            GREATEST(
+              CASE WHEN ? ->> 'total_tokens' ~ '^[0-9]+$' THEN (? ->> 'total_tokens')::bigint ELSE 0 END,
+              CASE WHEN ? ->> 'input_tokens' ~ '^[0-9]+$' THEN (? ->> 'input_tokens')::bigint ELSE 0 END
+                + CASE WHEN ? ->> 'output_tokens' ~ '^[0-9]+$' THEN (? ->> 'output_tokens')::bigint ELSE 0 END
+            )
+            """,
+            grant.usage,
+            grant.usage,
+            grant.usage,
+            grant.usage,
+            grant.usage,
+            grant.usage
           )
       }
     )

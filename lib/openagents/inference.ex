@@ -221,6 +221,17 @@ defmodule OpenAgents.Inference do
           Repo.rollback(:grant_not_active)
       end
     end)
+    |> case do
+      {:ok, %Grant{thread_id: thread_id} = updated} ->
+        # A thread grant's usage is a leaderboard plane (LEADERBOARD-001), so
+        # this is the one place a thread's token total can change. Conversation
+        # grants are not counted there and stay silent.
+        if is_binary(thread_id), do: :ok = OpenAgents.Leaderboard.invalidate()
+        {:ok, updated}
+
+      {:error, _reason} = error ->
+        error
+    end
   end
 
   @doc "Revoke a grant. Idempotent for already-terminal grants."

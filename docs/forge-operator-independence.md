@@ -161,13 +161,24 @@ are not the contiguous run from zero, a ref the repository serves that the WAL
 never recorded, and an object the WAL says a push introduced that the
 repository cannot produce.
 
-The limit is worth naming as plainly as the capability. WAL entries are not
-signed and the index is anchored nowhere outside the operator's own storage, so
-an operator who rewrites an entry, its key, and the index together produces a
-self-consistent log. Content addressing makes tampering *evident*, not
-*impossible*. It catches a partial rewrite, a lost object, and a ref moved out
-of band; it does not catch a complete and consistent forgery. Closing that gap
-needs a signature or an external anchor, and this forge has neither.
+Each accepted entry also commits to the entry before it. `EXIT-005` chains
+every WAL entry to its predecessor, so a rewritten entry invalidates the link
+of every entry after it and a rewrite can no longer be confined to one place.
+The verifier recomputes the chain, reports a broken or missing link, and
+accepts an anchor — a sequence and link obtained anywhere other than this log —
+against which it reports a disagreement.
+
+The limit is worth naming as plainly as the capability, and the chain moves it
+rather than removing it. Nothing here publishes a link outside the operator's
+own storage yet, so an operator who rewrites an entry, its key, the index, and
+every link after it produces a self-consistent log that verifies clean.
+Content addressing and the chain make tampering *evident*, not *impossible*.
+What the chain buys is that one link remembered elsewhere now covers a whole
+prefix of the log, which is why the next step is publication and not
+cryptography. `docs/2026-08-23-forge-wal-anchoring.md` weighs the options —
+a client-side receipt to the pusher, a periodic external anchor, and signing —
+with their true costs, and stages them. It also states what none of them can
+do: an anchor detects rewriting, never withholding.
 
 ## Mirror recovery
 
@@ -213,10 +224,12 @@ plus a recorded gap.
 | `EXIT-002` | Served state is checkable against the WAL with no database. |
 | `EXIT-003` | Recovery comes from the WAL; the mirror is strictly lossy and is never an input. |
 | `EXIT-004` | A clone is complete and self-hosting. |
+| `EXIT-005` | Every WAL entry commits to the entry before it, so a rewrite is total. |
 | `ADMIN-001` | The operator surface is an enumerated set of reads and writes, and the enumeration is checked against the router. |
 
 Their proofs are `test/openagents/data_rights/export_inventory_test.exs`,
-`test/openagents/forge/independence_test.exs`, and
+`test/openagents/forge/independence_test.exs`,
+`test/openagents/forge/wal_test.exs`, and
 `test/openagents_web/operator_surface_test.exs`. Every proof was
 mutation-checked:
 each property was broken deliberately, the proof was confirmed to fail, and the
@@ -227,4 +240,4 @@ break was reverted.
 | Gap | Issue |
 | --- | --- |
 | No account-scoped export of forge-owned and forum-owned data | #143 |
-| WAL entries are unsigned and anchored nowhere outside operator storage | #151 |
+| No commitment to the WAL is published outside operator storage, so a consistent rewrite still verifies clean | #151 |

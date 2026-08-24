@@ -2922,10 +2922,16 @@ WAL says a push introduced that the repository cannot produce is
 `object_missing`.
 
 What this does not do is stated as plainly as what it does. Entries are not
-signed and the index is anchored nowhere outside the operator's own storage, so
-an operator who rewrites an entry, its key, and the index together produces a
-self-consistent log. Content addressing makes tampering evident, not
-impossible. Issue #151 carries the anchor or signature that would close it.
+signed and no commitment to the log is published outside the operator's own
+storage, so an operator who rewrites an entry, its key, the index, and every
+chain link after it produces a self-consistent log and this reports it clean.
+Content addressing and `EXIT-005`'s chain make tampering evident, not
+impossible. What the chain adds is that a rewrite can no longer be local, which
+is what makes one externally held link enough to check a whole prefix —
+`verify/2`'s `:anchor` option is that check, and supplying the link is the
+caller's job because nothing here publishes one yet.
+`docs/2026-08-23-forge-wal-anchoring.md` stages the publication, and #151
+carries it.
 
 `REPOSITORY-003` proves that an accepted entry re-materializes onto an empty
 cache. This proves that divergence between the WAL and what is served is
@@ -2999,6 +3005,64 @@ that assert less than they appear to.
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.Repos`,
 `OpenAgents.Forge.GitHTTP`, and
 `test/openagents/forge/independence_test.exs`.
+
+### EXIT-005 — Every WAL entry commits to the entry before it
+
+Status: Current
+
+`EXIT-002` compares two things the operator holds, so an operator who edits
+both consistently leaves nothing to disagree with. Closing that needs a
+commitment held somewhere the operator does not solely control, and a chain
+that binds each entry to its predecessor so a rewrite cannot be confined to one
+entry. This is the second half. The first half is not built, and this invariant
+claims only what the second half proves.
+
+Every entry appended to a WAL index carries a `link`: `sha256` over a domain
+tag, the previous entry's link, and a canonical encoding of the entry's own
+fields. The chain is computed in `OpenAgents.Forge.WAL.append_entry/2`, which
+is the one function every writer reaches the log through — pushes, stack ref
+batches, and GitHub imports alike — so the chain has no holes for a writer that
+took a different route. A push that retries after a CAS conflict rebuilds its
+entry against the index it actually lands behind, so the link names its real
+predecessor. The encoding is not JSON: BEAM map order is not part of any
+contract and encoders disagree about it, so keys are sorted and every value
+carries its own length or terminator.
+
+What the chain proves is that a rewrite is total. Changing any accepted entry
+changes the link of every entry after it, so one remembered link checks the
+entire prefix before it. `OpenAgents.Forge.Verification.verify/2` recomputes the
+chain and reports `chain_link_mismatch` for an entry whose recorded link is not
+the one its contents produce, and `chain_link_missing` for an entry that carries
+no link although an earlier one does. It reports the log's `head` and
+`chained_from`, and it accepts an `:anchor` — a `%{seq:, link:}` commitment
+obtained anywhere else — against which it reports `anchor_mismatch` and
+`anchor_unreachable`. The proof performs the rewrite that defeats `EXIT-002`,
+recomputing the entry, its content-addressed key, the index, and every link, and
+asserts both halves: clean with no anchor, reported with one.
+
+No push may fail on this. The link is derived from data already in hand with no
+I/O, by an encoder that is total by construction, and the derivation is wrapped
+so a link that cannot be produced is omitted rather than raised. The entry then
+enters the log unchained and the verifier reports `chain_link_missing`, which is
+something to find out about rather than a reason to refuse a push the forge can
+accept.
+
+Entries written before this contract carry no link and no backfill is possible,
+which is the correct outcome: a link the operator computes over entries the
+operator holds proves nothing. The chain therefore covers a suffix of each log,
+`chained_from` names where it starts, and a missing link is a finding only when
+an earlier entry has one — a chain that stops in the middle is tampering, a
+chain that starts in the middle is history. An operator who strips every link
+and calls the whole log historical is not refuted by anything inside their own
+storage, which is exactly why publication is the missing half.
+
+This detects rewriting, never withholding. An operator who serves nothing,
+serves stale state, or refuses a clone holds every one of those powers still.
+
+Evidence: `OpenAgents.Forge.WAL`, `OpenAgents.Forge.Verification`,
+`test/openagents/forge/wal_test.exs`,
+`test/openagents/forge/independence_test.exs`, and
+`docs/2026-08-23-forge-wal-anchoring.md`.
 
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
 
@@ -3426,6 +3490,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-002 | `test/openagents/forge/independence_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
+| EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |

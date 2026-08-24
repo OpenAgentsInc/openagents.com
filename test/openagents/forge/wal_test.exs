@@ -223,6 +223,124 @@ defmodule OpenAgents.Forge.WALTest do
       end
     end
 
+    test "append_entry/2 chains each entry to the one before it" do
+      refs0 = %{"refs/heads/main" => String.duplicate("0", 40)}
+      refs1 = %{"refs/heads/main" => String.duplicate("1", 40)}
+
+      index = WAL.new_index()
+      index = WAL.append_entry(index, entry(index, refs0))
+      index = WAL.append_entry(index, entry(index, refs1))
+
+      [first, second] = index["entries"]
+
+      assert {:ok, first["link"]} == WAL.chain_link("", Map.delete(first, "link"))
+      assert {:ok, second["link"]} == WAL.chain_link(first["link"], Map.delete(second, "link"))
+      assert WAL.previous_link(index["entries"]) == second["link"]
+    end
+
+    test "chain_link/2 is deterministic, and every field is inside it" do
+      base = %{
+        "seq" => 1,
+        "object" => "entries/00000001-0123456789ab",
+        "refs" => %{"refs/heads/main" => "abc", "refs/heads/topic" => "def"},
+        "principal" => "user:1",
+        "pushed_at" => "2026-08-18T00:00:00Z"
+      }
+
+      assert {:ok, link} = WAL.chain_link("prev", base)
+      assert {:ok, ^link} = WAL.chain_link("prev", base)
+      assert link =~ ~r/^[0-9a-f]{64}$/
+
+      # Reordering a map does not change it; changing any field does.
+      reordered =
+        base
+        |> Map.delete("refs")
+        |> Map.put("refs", %{
+          "refs/heads/topic" => "def",
+          "refs/heads/main" => "abc"
+        })
+
+      assert {:ok, ^link} = WAL.chain_link("prev", reordered)
+
+      for altered <- [
+            Map.put(base, "seq", 2),
+            Map.put(base, "object", "entries/00000001-0123456789ac"),
+            Map.put(base, "principal", "user:2"),
+            Map.put(base, "pushed_at", "2026-08-18T00:00:01Z"),
+            Map.put(base, "refs", %{"refs/heads/main" => "abd", "refs/heads/topic" => "def"}),
+            Map.put(base, "format", "git_bundle"),
+            Map.delete(base, "principal")
+          ] do
+        assert {:ok, other} = WAL.chain_link("prev", altered)
+        refute other == link
+      end
+
+      assert {:ok, moved} = WAL.chain_link("other-prev", base)
+      refute moved == link
+    end
+
+    test "chain_link/2 pins one encoding, so a refactor cannot silently relink a log" do
+      # A golden vector. Every link ever written depends on this encoding, so a
+      # change to it turns every existing log into apparent tampering. Changing
+      # the digest below is a decision, not a fix.
+      entry = %{
+        "seq" => 1,
+        "object" => "entries/00000001-0123456789ab",
+        "format" => "receive_pack",
+        "refs" => %{"refs/heads/main" => "aaaa", "refs/heads/topic" => "bbbb"},
+        "principal" => "user:1",
+        "pushed_at" => "2026-08-18T00:00:00Z",
+        "shallow" => []
+      }
+
+      assert WAL.chain_link("0000", entry) ==
+               {:ok, "d4998407fec7456d6295a9961e95925efa94716291517cf3a4fbfac7eba0d633"}
+    end
+
+    test "chain_link/2 survives the JSON round trip the index actually takes" do
+      # An entry is linked in memory, encoded to JSON, stored, and decoded again
+      # before the verifier recomputes the link. Anything the encoding depends
+      # on that JSON does not preserve would break every stored log.
+      refs =
+        Map.new(1..40, fn i -> {"refs/heads/b#{i}", String.duplicate("#{rem(i, 10)}", 40)} end)
+
+      index =
+        WAL.new_index()
+        |> WAL.append_entry(entry(WAL.new_index(), refs))
+
+      [stored] = index |> Jason.encode!() |> Jason.decode!() |> WAL.entries()
+      [original] = WAL.entries(index)
+
+      assert stored == original
+      assert {:ok, stored["link"]} == WAL.chain_link("", Map.delete(stored, "link"))
+    end
+
+    test "chain_link/2 never raises, so no push can fail on it" do
+      # A push must survive anything that reaches the entry map. The link is
+      # omitted rather than raised, and the gap becomes a verifier finding.
+      for entry <- [
+            %{"seq" => 0, "weird" => {:a, self()}},
+            %{"seq" => 0, "when" => DateTime.utc_now()},
+            %{"seq" => 0, "list" => [1, :two, "three", nil, 4.5, %{"k" => false}]},
+            %{}
+          ] do
+        assert {:ok, link} = WAL.chain_link("", entry)
+        assert link =~ ~r/^[0-9a-f]{64}$/
+      end
+
+      assert :error = WAL.chain_link("", "not a map")
+      assert :error = WAL.chain_link(nil, %{})
+    end
+
+    test "entry_link/1 and previous_link/1 read an unchained log as the chain start" do
+      unchained = %{"seq" => 0, "refs" => %{}}
+
+      assert WAL.entry_link(unchained) == nil
+      assert WAL.previous_link([]) == ""
+      assert WAL.previous_link([unchained]) == ""
+      assert WAL.previous_link([Map.put(unchained, "link", "abc")]) == "abc"
+    end
+
     test "entry_key/2 is deterministic and padded" do
       assert WAL.entry_key(7, "abc") == WAL.entry_key(7, "abc")
       assert WAL.entry_key(7, "abc") =~ ~r/^entries\/00000007-[0-9a-f]{12}$/

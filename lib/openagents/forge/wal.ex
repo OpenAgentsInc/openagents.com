@@ -19,11 +19,18 @@ defmodule OpenAgents.Forge.WAL do
             "object" => "entries/00000000-<sha256 prefix>",
             "refs" => %{"refs/heads/main" => "<sha>"},
             "principal" => "...",
-            "pushed_at" => "2026-08-18T00:00:00Z"
+            "pushed_at" => "2026-08-18T00:00:00Z",
+            "link" => "<sha256 of the previous link and this entry>"
           }
         ],
         "refs" => %{"refs/heads/main" => "<sha>"}
       }
+
+  `"link"` chains each entry to the one before it (`chain_link/2`), so a
+  rewritten entry invalidates every link after it. `EXIT-005` states what that
+  does and does not prove; the chain is not published anywhere outside this
+  storage yet, so it does not by itself detect an operator who recomputes the
+  whole chain.
 
   Adapters implement the storage behaviour. The configured adapter comes from
   `Application.get_env(:openagents, :forge_wal_adapter)` and defaults to
@@ -52,6 +59,9 @@ defmodule OpenAgents.Forge.WAL do
   @callback put_object(repo, object_key :: String.t(), payload :: binary()) ::
               {:ok, String.t()} | {:error, term}
   @callback delete_repo(repo) :: :ok | {:error, term}
+
+  @chain_field "link"
+  @chain_domain "openagents.forge.wal.link.v1"
 
   @repo_pattern ~r/^[a-z0-9](?:[a-z0-9_-]|\.(?=[a-z0-9]))*$/
   @entry_key_pattern ~r/^entries\/[0-9]{8}-[0-9a-f]{12}$/
@@ -191,6 +201,13 @@ defmodule OpenAgents.Forge.WAL do
   `"pushed_at"`. Raises `ArgumentError` if `"seq"` is not the next sequence
   number (`length(entries)`) — an out-of-order append is a caller bug, never
   something to write into the log.
+
+  The appended entry also gains a `"link"` field: `chain_link/2` over the
+  previous entry's link and this entry's own contents. Every writer reaches
+  the log through this function, so the chain covers imports, stack ref
+  batches, and pushes alike, and a push that retries after a CAS conflict
+  links against the predecessor it actually lands behind rather than the one
+  it first read.
   """
   @spec append_entry(index, map()) :: index
   def append_entry(%{"entries" => entries} = index, %{"seq" => seq} = entry)
@@ -207,9 +224,109 @@ defmodule OpenAgents.Forge.WAL do
     end
 
     index
-    |> Map.put("entries", entries ++ [entry])
+    |> Map.put("entries", entries ++ [chain(entries, entry)])
     |> Map.put("refs", entry["refs"])
   end
+
+  @doc """
+  The chain link an entry carries, or `nil` when it carries none.
+  """
+  @spec entry_link(map()) :: String.t() | nil
+  def entry_link(%{@chain_field => link}) when is_binary(link), do: link
+  def entry_link(entry) when is_map(entry), do: nil
+
+  @doc """
+  The link of the last entry in `entries`, or `""` when the list is empty or
+  its last entry carries no link.
+
+  `""` is the chain start. An entry written before this contract existed
+  carries no link, so the first entry that does carry one binds to `""`
+  rather than to a predecessor it cannot name.
+  """
+  @spec previous_link([map()]) :: String.t()
+  def previous_link(entries) when is_list(entries) do
+    case List.last(entries) do
+      nil -> ""
+      entry -> entry_link(entry) || ""
+    end
+  end
+
+  @doc """
+  The chain link for `entry` following `previous_link`.
+
+  The link is `sha256` over a domain tag, the previous link, and a canonical
+  encoding of every field of the entry except the link itself, so an entry
+  commits to its own contents and to the whole prefix of the log before it.
+  Rewriting one accepted entry therefore invalidates the link of every entry
+  after it, which is what makes a rewrite non-local. It does not make a
+  rewrite impossible: an operator who recomputes every link produces a
+  self-consistent chain. See `INVARIANTS.md`, `EXIT-005`.
+
+  Returns `:error` rather than raising, because this runs on the push path
+  and no push may fail on it.
+  """
+  @spec chain_link(String.t(), map()) :: {:ok, String.t()} | :error
+  def chain_link(previous_link, entry) when is_binary(previous_link) and is_map(entry) do
+    payload =
+      @chain_domain <>
+        "\n" <> previous_link <> "\n" <> canonical(Map.delete(entry, @chain_field))
+
+    {:ok, :sha256 |> :crypto.hash(payload) |> Base.encode16(case: :lower)}
+  rescue
+    _uncanonical -> :error
+  catch
+    _kind, _reason -> :error
+  end
+
+  def chain_link(_previous_link, _entry), do: :error
+
+  # Nothing here may fail a push. A link that cannot be derived is omitted,
+  # and the entry is written unchained: `OpenAgents.Forge.Verification`
+  # reports the gap as `chain_link_missing`, which is a thing to find out
+  # about rather than a reason to refuse a push the forge can accept.
+  defp chain(entries, entry) do
+    case chain_link(previous_link(entries), entry) do
+      {:ok, link} -> Map.put(entry, @chain_field, link)
+      :error -> entry
+    end
+  end
+
+  # A deterministic, unambiguous encoding of the JSON values a WAL entry
+  # holds. The link cannot be taken over encoded JSON, because encoders do not
+  # agree on key order and this digest has to survive being written by one
+  # release and recomputed by another. Every value carries its own length or
+  # terminator, so no two distinct entries encode alike, and total by
+  # construction — the last clause accepts anything.
+  #
+  # Sorting the keys is defensive rather than proven: equal maps iterate
+  # identically in this runtime, so no test here can distinguish sorted from
+  # unsorted. Map order is an implementation detail and not a contract, and
+  # every link ever written depends on this encoding, so the encoding is
+  # pinned by a golden vector in `test/openagents/forge/wal_test.exs` instead.
+  defp canonical(nil), do: "n;"
+  defp canonical(true), do: "b1;"
+  defp canonical(false), do: "b0;"
+
+  defp canonical(value) when is_binary(value),
+    do: "s" <> Integer.to_string(byte_size(value)) <> ":" <> value
+
+  defp canonical(value) when is_integer(value), do: "i" <> Integer.to_string(value) <> ";"
+  defp canonical(value) when is_float(value), do: "d" <> Float.to_string(value) <> ";"
+  defp canonical(value) when is_atom(value), do: "a" <> canonical(Atom.to_string(value))
+  defp canonical(value) when is_list(value), do: "l" <> Enum.map_join(value, &canonical/1) <> "e"
+  defp canonical(%_struct{} = value), do: "x" <> canonical(inspect(value))
+
+  defp canonical(value) when is_map(value) do
+    encoded =
+      value
+      |> Enum.map(fn {key, item} -> {canonical(key), canonical(item)} end)
+      |> Enum.sort()
+      |> Enum.map_join(fn {key, item} -> key <> item end)
+
+    "m" <> encoded <> "e"
+  end
+
+  defp canonical(value), do: "x" <> canonical(inspect(value))
 
   @doc """
   The next sequence number to append to `index`.

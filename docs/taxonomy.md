@@ -52,9 +52,12 @@ control. Inside `OpenAgents.Forge` it has two separate planes:
 
 The planes are deliberately separate. **A push never promotes itself.**
 
-**WAL (durable push record)** — every accepted push is recorded durably in
-PostgreSQL, and the site is served from that record. A push is a receipt, not
-a deployment.
+**WAL (durable push record)** — every accepted push is recorded durably in the
+write-ahead log, and the site is served from that record. The WAL is object
+storage, not PostgreSQL: `OpenAgents.Forge.WAL` holds one index document and a
+set of content-addressed, chained entry objects per repository, and it is the
+only ref authority. PostgreSQL holds projections of it — push receipts — never
+refs. A push is a receipt, not a deployment.
 
 **MirrorWatch** — the component that exports accepted `main` commits from the
 forge to GitHub. GitHub is a mirror only; nothing on GitHub can affect what

@@ -25,15 +25,27 @@ defmodule OpenAgents.Forge.Verification do
     push produces this.
   * `object_missing` — the repository cannot produce an object the WAL says a
     push introduced.
+  * `chain_link_mismatch` — an entry's recorded link is not the link its own
+    contents and its predecessor's link produce (`OpenAgents.Forge.WAL.chain_link/2`).
+  * `chain_link_missing` — an entry carries no link although an earlier entry
+    does, so the chain stops in the middle of the log.
+  * `anchor_mismatch` — the caller supplied an anchor and the log carries a
+    different link at that sequence.
+  * `anchor_unreachable` — the caller supplied an anchor for a sequence this
+    log does not have, or for an entry that carries no link.
 
-  What this cannot do is stated as plainly as what it can. WAL entries are not
-  signed and the index is not anchored anywhere outside the operator's own
-  storage, so an operator who rewrites an entry, its key, and the index
-  together produces a self-consistent log. Content addressing makes tampering
-  *evident*, not *impossible*: it catches a partial rewrite, a lost object, and
-  a ref moved out of band, and it does not catch a complete and consistent
-  forgery. Closing that gap needs a signature or an external anchor, and this
-  forge has neither today.
+  What this cannot do is stated as plainly as what it can. Content addressing
+  and the chain make tampering *evident*, not *impossible*. An operator who
+  rewrites an entry, its key, the index, and every link after it produces a
+  self-consistent log, and `verify/2` called with no anchor reports it clean.
+  The chain buys one thing: a rewrite can no longer be local, because every
+  entry after the rewritten one changes. That is what makes a single remembered
+  link enough to check a whole prefix, which is what `verify/2`'s `:anchor`
+  option checks. Supplying an anchor is the caller's job, and nothing in this
+  forge publishes one yet — `docs/2026-08-23-forge-wal-anchoring.md` stages
+  that work. Withholding is out of scope in every case: an operator who serves
+  nothing is not detected here, only an operator who serves something other
+  than what was pushed.
   """
 
   alias OpenAgents.Forge.{Repos, WAL}
@@ -43,8 +55,17 @@ defmodule OpenAgents.Forge.Verification do
   @typedoc "One disagreement between the WAL and what the repository serves."
   @type finding :: %{code: String.t(), detail: map()}
 
+  @typedoc "An independently held commitment to one entry's link."
+  @type anchor :: %{seq: non_neg_integer(), link: String.t()}
+
   @typedoc "The verification outcome for one repository."
-  @type report :: %{repo: String.t(), entries: non_neg_integer(), findings: [finding()]}
+  @type report :: %{
+          repo: String.t(),
+          entries: non_neg_integer(),
+          findings: [finding()],
+          head: anchor() | nil,
+          chained_from: non_neg_integer() | nil
+        }
 
   @doc """
   Verify one repository's served state against its WAL.
@@ -52,9 +73,21 @@ defmodule OpenAgents.Forge.Verification do
   Returns `{:ok, report}` when the two agree and `{:error, report}` when they
   do not. The report always carries the findings list so a caller can render
   every disagreement, not only the first.
+
+  Options:
+
+  * `:anchor` — a `%{seq: sequence, link: link}` commitment the caller obtained
+    somewhere other than this log. The verifier checks the log against it, and
+    a consistent rewrite of anything at or before that sequence is reported.
+    Without one, a consistent rewrite is not detectable here.
+
+  The report also carries `:head`, the last entry's `%{seq:, link:}`, which is
+  what a caller remembers so it can anchor a later verification, and
+  `:chained_from`, the first sequence that carries a link. Entries before that
+  sequence predate the chain and are not covered by it.
   """
-  @spec verify(String.t()) :: {:ok, report()} | {:error, report()}
-  def verify(storage_key) when is_binary(storage_key) do
+  @spec verify(String.t(), keyword()) :: {:ok, report()} | {:error, report()}
+  def verify(storage_key, opts \\ []) when is_binary(storage_key) and is_list(opts) do
     case WAL.read_index(storage_key) do
       {:ok, _generation, index} ->
         entries = WAL.entries(index)
@@ -63,21 +96,47 @@ defmodule OpenAgents.Forge.Verification do
           sequence_findings(entries) ++
             entry_findings(storage_key, entries) ++
             ref_findings(storage_key, index) ++
-            object_findings(storage_key, entries)
+            object_findings(storage_key, entries) ++
+            chain_findings(entries) ++
+            anchor_findings(entries, normalize_anchor(opts[:anchor]))
 
-        report(storage_key, length(entries), findings)
+        report(storage_key, entries, findings)
 
       {:error, reason} ->
-        report(storage_key, 0, [finding("wal_unreadable", %{"reason" => inspect(reason)})])
+        report(storage_key, [], [finding("wal_unreadable", %{"reason" => inspect(reason)})])
     end
   end
 
-  defp report(storage_key, entry_count, []) do
-    {:ok, %{repo: storage_key, entries: entry_count, findings: []}}
+  defp report(storage_key, entries, findings) do
+    report = %{
+      repo: storage_key,
+      entries: length(entries),
+      findings: findings,
+      head: head(entries),
+      chained_from: chained_from(entries)
+    }
+
+    if findings == [], do: {:ok, report}, else: {:error, report}
   end
 
-  defp report(storage_key, entry_count, findings) do
-    {:error, %{repo: storage_key, entries: entry_count, findings: findings}}
+  defp head(entries) do
+    case List.last(entries) do
+      nil ->
+        nil
+
+      entry ->
+        case WAL.entry_link(entry) do
+          nil -> nil
+          link -> %{seq: entry["seq"], link: link}
+        end
+    end
+  end
+
+  defp chained_from(entries) do
+    case Enum.find(entries, &(WAL.entry_link(&1) != nil)) do
+      nil -> nil
+      entry -> entry["seq"]
+    end
   end
 
   defp finding(code, detail), do: %{code: code, detail: detail}
@@ -193,6 +252,83 @@ defmodule OpenAgents.Forge.Verification do
       finding("object_missing", %{"ref" => name, "object" => sha})
     end)
   end
+
+  ## Each entry commits to the entry before it
+
+  defp chain_findings(entries) do
+    {findings, _previous, _chained?} =
+      Enum.reduce(entries, {[], "", false}, &chain_finding/2)
+
+    Enum.reverse(findings)
+  end
+
+  defp chain_finding(entry, {findings, previous, chained?}) do
+    case WAL.entry_link(entry) do
+      nil when chained? ->
+        {[finding("chain_link_missing", %{"seq" => entry["seq"]}) | findings], "", true}
+
+      nil ->
+        {findings, "", false}
+
+      link ->
+        # The next entry chains from the link this one *records*, not from the
+        # one it should have recorded, so a single altered entry reports once
+        # rather than turning every entry after it into a second finding.
+        {chain_link_findings(entry, previous, link) ++ findings, link, true}
+    end
+  end
+
+  defp chain_link_findings(entry, previous, link) do
+    case WAL.chain_link(previous, entry) do
+      {:ok, ^link} ->
+        []
+
+      {:ok, derived} ->
+        [
+          finding("chain_link_mismatch", %{
+            "seq" => entry["seq"],
+            "recorded" => link,
+            "derived" => derived
+          })
+        ]
+
+      :error ->
+        [finding("chain_link_mismatch", %{"seq" => entry["seq"], "recorded" => link})]
+    end
+  end
+
+  ## The log agrees with a commitment the caller holds independently
+
+  defp anchor_findings(_entries, nil), do: []
+
+  defp anchor_findings(entries, %{seq: seq, link: link}) do
+    entry = Enum.find(entries, &(&1["seq"] == seq))
+
+    case entry && WAL.entry_link(entry) do
+      ^link ->
+        []
+
+      nil ->
+        [
+          finding("anchor_unreachable", %{
+            "seq" => seq,
+            "entries" => length(entries),
+            "reason" => if(entry, do: "entry carries no link", else: "no entry at this sequence")
+          })
+        ]
+
+      recorded ->
+        [finding("anchor_mismatch", %{"seq" => seq, "anchored" => link, "recorded" => recorded})]
+    end
+  end
+
+  defp normalize_anchor(%{seq: seq, link: link}) when is_integer(seq) and is_binary(link),
+    do: %{seq: seq, link: link}
+
+  defp normalize_anchor(%{"seq" => seq, "link" => link}) when is_integer(seq) and is_binary(link),
+    do: %{seq: seq, link: link}
+
+  defp normalize_anchor(_absent_or_malformed), do: nil
 
   @doc """
   The refs a clone receives: every recorded ref except the hidden internal

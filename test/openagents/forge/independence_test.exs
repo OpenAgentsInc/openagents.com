@@ -171,6 +171,130 @@ defmodule OpenAgents.Forge.IndependenceTest do
     end
   end
 
+  ## ── EXIT-005: each entry commits to the entry before it ────────────────
+
+  describe "chained entries" do
+    test "every accepted push links to the push before it", context do
+      seed_history!(context)
+
+      assert {:ok, report} = Verification.verify(context.repo)
+      assert report.chained_from == 0
+      assert %{seq: seq, link: link} = report.head
+      assert seq == report.entries - 1
+      assert link =~ ~r/^[0-9a-f]{64}$/
+
+      {:ok, _generation, index} = WAL.read_index(context.repo)
+
+      index
+      |> WAL.entries()
+      |> Enum.reduce("", fn entry, previous ->
+        assert {:ok, derived} = WAL.chain_link(previous, Map.delete(entry, "link"))
+        assert derived == WAL.entry_link(entry)
+        derived
+      end)
+    end
+
+    test "a rewritten entry that leaves the chain alone is reported", context do
+      seed_history!(context)
+      {:ok, generation, index} = WAL.read_index(context.repo)
+      [first | rest] = WAL.entries(index)
+
+      File.rm!(wal_object_path(context, first["object"]))
+      {:ok, key} = WAL.put_entry(context.repo, 0, "a payload the pusher never sent")
+
+      {:ok, _generation} =
+        WAL.cas_index(
+          context.repo,
+          generation,
+          Map.put(index, "entries", [%{first | "object" => key} | rest])
+        )
+
+      assert {:error, %{findings: findings}} = Verification.verify(context.repo)
+      assert %{"seq" => 0} = detail(findings, "chain_link_mismatch")
+    end
+
+    test "a link removed from the middle of the log is reported", context do
+      seed_history!(context)
+      {:ok, generation, index} = WAL.read_index(context.repo)
+      [first | rest] = WAL.entries(index)
+
+      {:ok, _generation} =
+        WAL.cas_index(
+          context.repo,
+          generation,
+          Map.put(index, "entries", [first | Enum.map(rest, &Map.delete(&1, "link"))])
+        )
+
+      assert {:error, %{findings: findings}} = Verification.verify(context.repo)
+      assert %{"seq" => 1} = detail(findings, "chain_link_missing")
+    end
+
+    test "entries written before the chain are a boundary, not a finding", context do
+      seed_history!(context)
+      {:ok, generation, index} = WAL.read_index(context.repo)
+      entries = WAL.entries(index)
+
+      # The production shape on the day this ships: every entry already in the
+      # log carries no link, and the first push after it binds to the chain
+      # start because there is no predecessor link to name.
+      {legacy, [newest]} = Enum.split(entries, length(entries) - 1)
+      {:ok, link} = WAL.chain_link("", Map.delete(newest, "link"))
+
+      relinked = Enum.map(legacy, &Map.delete(&1, "link")) ++ [Map.put(newest, "link", link)]
+
+      {:ok, _generation} =
+        WAL.cas_index(context.repo, generation, Map.put(index, "entries", relinked))
+
+      assert {:ok, report} = Verification.verify(context.repo)
+      assert report.findings == []
+      assert report.chained_from == newest["seq"]
+    end
+
+    test "a push that changes no ref appends nothing and leaves the chain alone", context do
+      seed_history!(context)
+      assert {:ok, %{head: head, entries: count}} = Verification.verify(context.repo)
+
+      sh!(work_dir(context), "git", ["push", "origin", "HEAD:main"])
+
+      assert {:ok, %{head: ^head, entries: ^count}} = Verification.verify(context.repo)
+    end
+
+    test "a consistent rewrite verifies clean, and only an anchor reports it", context do
+      seed_history!(context)
+      assert {:ok, %{findings: [], head: head}} = Verification.verify(context.repo)
+
+      rewrite_first_entry_consistently!(context, "a payload the pusher never sent")
+
+      # This is the limit, stated as a test rather than as a caveat: an
+      # operator who rewrites the entry, its content-addressed key, the index,
+      # and every link after it leaves nothing inside their own storage that
+      # disagrees with anything else inside it.
+      assert {:ok, %{findings: []}} = Verification.verify(context.repo)
+
+      # A link remembered before the rewrite is outside that storage, and it
+      # disagrees. One remembered link covers the whole prefix, because the
+      # chain makes a rewrite non-local.
+      assert {:error, %{findings: findings}} = Verification.verify(context.repo, anchor: head)
+      assert %{"seq" => _seq} = detail(findings, "anchor_mismatch")
+    end
+
+    test "an anchor for a sequence the log does not have is reported", context do
+      seed_history!(context)
+
+      anchor = %{seq: 99, link: String.duplicate("a", 64)}
+
+      assert {:error, %{findings: findings}} = Verification.verify(context.repo, anchor: anchor)
+      assert %{"seq" => 99} = detail(findings, "anchor_unreachable")
+    end
+
+    test "an unreadable anchor is ignored rather than failing verification", context do
+      seed_history!(context)
+
+      assert {:ok, %{findings: []}} = Verification.verify(context.repo, anchor: "nonsense")
+      assert {:ok, %{findings: []}} = Verification.verify(context.repo, anchor: nil)
+    end
+  end
+
   ## ── EXIT-003: recovery from the WAL, never from the mirror ─────────────
 
   describe "recovery" do
@@ -358,6 +482,30 @@ defmodule OpenAgents.Forge.IndependenceTest do
   end
 
   defp work_dir(context), do: Path.join(context.base, "work")
+
+  # What an operator with write access to their own object storage can do:
+  # replace an accepted entry, re-derive its content-addressed key, and
+  # recompute every link after it so the log agrees with itself.
+  defp rewrite_first_entry_consistently!(context, replacement) do
+    {:ok, generation, index} = WAL.read_index(context.repo)
+    [first | rest] = WAL.entries(index)
+
+    File.rm!(wal_object_path(context, first["object"]))
+    {:ok, key} = WAL.put_entry(context.repo, first["seq"], replacement)
+
+    entries =
+      [%{first | "object" => key} | rest]
+      |> Enum.map_reduce("", fn entry, previous ->
+        {:ok, link} = WAL.chain_link(previous, Map.delete(entry, "link"))
+        {Map.put(entry, "link", link), link}
+      end)
+      |> elem(0)
+
+    {:ok, _generation} =
+      WAL.cas_index(context.repo, generation, Map.put(index, "entries", entries))
+
+    :ok
+  end
 
   # Two commits on main and one on a branch, all through the real push path,
   # so the WAL holds three genuine `receive-pack` entries.

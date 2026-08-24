@@ -10,6 +10,20 @@ A change to a listed contract must update this ledger and its named proof in
 the same commit. `ops/ci/docs-check.exs` verifies unique IDs and evidence-file
 paths.
 
+A proof must be capable of failing for the claim it names. `docs/taxonomy.md`
+naming rule 7 says a contract is not true until its proof runs green; this is
+its companion, because a green proof of the wrong population says nothing. A
+contract that quantifies — "no route", "every surface", "nothing", "only" —
+needs a proof that derives the population from something the code cannot lie
+about: the router, `OpenAgentsWeb.RouteAuthority`,
+`OpenAgentsWeb.ApiRouteAuthority`, a compiled BEAM import table, a database
+constraint, a configuration list, or the repository tree. A test of the
+surfaces someone thought of cannot fail on the surface they did not, so it is
+green exactly when it would be most useful. Where enumeration is impractical,
+narrow the claim to what its proof covers: a smaller true statement beats a
+larger unprovable one. `docs/2026-08-23-invariant-proof-audit.md` classifies
+every contract here against that rule and records what remains.
+
 ## OpenAgents identity and canon
 
 ### CANON-001 — Persona sources are immutable and status-labeled
@@ -193,9 +207,17 @@ HTTP-only, same-site, and secure in production.
 Agent credentials use the separate agent identity contract below; they do not
 create rows in `users` or require GitHub.
 
+The first sentence quantifies over routes, so it is proven by enumerating
+them: `OpenAgentsWeb.AuthenticatedRouteGateTest` dispatches every route
+`OpenAgentsWeb.RouteAuthority` classifies `:authenticated_browser` without a
+session and requires each to refuse. The two OAuth entries are in that class
+and refuse the same way — an anonymous request reaches them and leaves with an
+`auth_error` and no session.
+
 Evidence: `OpenAgents.GitHubOAuth`, `OpenAgents.Accounts`, `OpenAgentsWeb.AuthController`,
 `OpenAgentsWeb.Endpoint.session_options/0`, `OpenAgents.GitHubOAuthTest`,
-`OpenAgents.AccountsTest`, and `OpenAgentsWeb.AuthControllerTest`.
+`OpenAgents.AccountsTest`, `OpenAgentsWeb.AuthControllerTest`, and
+`OpenAgentsWeb.AuthenticatedRouteGateTest`.
 
 ### IDENTITY-002 — Conversation lookup never accepts a client database ID
 
@@ -208,9 +230,23 @@ event must not select another user, owner, or conversation. All typed, memory,
 data, voice, and telemetry routes fail before mutation without an active user;
 health endpoints remain public and create no identity state.
 
+The route half of that sentence is enumerated rather than sampled.
+`OpenAgentsWeb.AuthGateTest` asks eleven hand-written paths whether they
+redirect, which cannot fail for a route nobody added to the list, so
+`OpenAgentsWeb.AuthenticatedRouteGateTest` derives the population from
+`OpenAgentsWeb.RouteAuthority` instead: every route it classifies
+`:authenticated_browser` must refuse an anonymous request with a redirect to
+the public root or a `401`. A route added outside the `:authenticated`
+pipeline fails there until it is reclassified.
+
+The LiveView event half is not enumerated. An event handler that resolves a
+record from its own params rather than from the socket's current scope is
+caught by the surface's own test or not at all, and
+`docs/2026-08-23-invariant-proof-audit.md` records that gap.
+
 Evidence: `OpenAgentsWeb.UserAuth`, `OpenAgentsWeb.Router`,
 `OpenAgentsWeb.ChatLive.mount/3`, `OpenAgents.Conversations.get_conversation_for_user/1`,
-and `OpenAgentsWeb.AuthGateTest`.
+`OpenAgentsWeb.AuthGateTest`, and `OpenAgentsWeb.AuthenticatedRouteGateTest`.
 
 ### IDENTITY-003 — Account continuity supersedes browser portability
 
@@ -831,9 +867,17 @@ and raw errors never reach the receipt or browser. Response creation is a
 non-idempotent mutation and the adapter sends it exactly once; continuation is
 an explicit host decision backed by a committed tool outcome.
 
+Replaceability is a claim about every module, so it is proven over every
+module. The adapter is selected by configuration and reached through the
+behaviour, so nothing outside its own namespace holds a compile-time
+dependency on it. `OpenAgents.DependencyBoundaryTest` reads each compiled
+module's import table and fails when one gains that dependency, which is what
+the earlier adapter-behavior tests could not do: they exercised the adapter
+rather than the code that must not know about it.
+
 Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
-`OpenAgents.Providers.OpenAI.StreamDecoderTest`, `OpenAgents.Providers.Test`, and
-`OpenAgents.TurnProviderEventsTest`.
+`OpenAgents.Providers.OpenAI.StreamDecoderTest`, `OpenAgents.Providers.Test`,
+`OpenAgents.TurnProviderEventsTest`, and `OpenAgents.DependencyBoundaryTest`.
 
 ## Tool authority and execution
 
@@ -1236,9 +1280,20 @@ The two are separate identifier spaces and no surface substitutes one for the
 other; a context that cannot name its owning visitor builds the unbound
 context instead.
 
+"Every surface" is proven by enumerating surfaces.
+`OpenAgents.Tools.Selector.reachable/2` narrows nothing when it is given no
+caller, so a new catalog builder that omits `:reach` offers the whole catalog
+and every existing test stays green. `OpenAgents.DependencyBoundaryTest`
+compares the set of modules whose compiled import table names
+`OpenAgents.Tools.Selector` against the two this contract names, and requires
+each of them to name `OpenAgents.Tools.Reach` as well.
+`test/openagents/tools/reach_test.exs` enumerates the other axis, the tools
+and their declared requirements.
+
 Evidence: `OpenAgents.Tools.Reach`, `OpenAgents.Tools.Selector`,
 `OpenAgents.Tools.AdmittedCatalog`, `test/openagents/tools/reach_test.exs`,
-and `test/openagents/chat/open_router/tool_runtime_test.exs`.
+`test/openagents/chat/open_router/tool_runtime_test.exs`, and
+`OpenAgents.DependencyBoundaryTest`.
 
 ### TOOL-006 — The shipped tool catalog is a closed, read-only set
 
@@ -1360,11 +1415,24 @@ behavior except through the receipted pipeline. Concretely:
   together they let an operator reconstruct exactly which code was live
   when, with no step inferred.
 
+"No OpenAgents tool can promote, deploy, or hot-load" quantifies over every
+tool module, not over the six the product ships, so it is proven that way.
+`OpenAgents.DependencyBoundaryTest` reads the compiled import table of every
+module in `lib/openagents/tools/` and fails when one gains a dependency on
+`OpenAgents.Forge.Promotion`, `OpenAgents.Forge.Targets`,
+`OpenAgents.Forge.HotLoader`, `OpenAgents.Forge.Deployment`,
+`OpenAgents.Forge.RelupDeployment`, or `OpenAgents.Forge.RollingReplacement` —
+including a module that is written and tested but not yet admitted, which is
+where the next tool comes from. `sarah.tool.scv_deploy.v1` reaches
+`OpenAgents.SCV.Deployments` rather than any of these; SCV-001 governs it, and
+it starts a coding agent rather than changing what the fleet runs.
+
 Evidence: `OpenAgents.Tools.Repository` (clone confinement, branch discipline,
 typed refusals), `OpenAgents.Work.Coding`, `OpenAgents.Forge.Pushes` /
 `OpenAgents.Forge.Targets` / `OpenAgents.Forge.HotLoader` receipts, ADMIN-001,
-`OpenAgents.CodingJobTest`, and the repository tool tests in
-`test/openagents/tools/repository_mutation_tools_test.exs`.
+`OpenAgents.CodingJobTest`, the repository tool tests in
+`test/openagents/tools/repository_mutation_tools_test.exs`, and
+`OpenAgents.DependencyBoundaryTest`.
 
 ### SCV-001 — An SCV spends our capacity only under operator authority and fixed bounds
 
@@ -1429,10 +1497,20 @@ than assumed.
   the work lane and tools, only with an admitted model slug and bounds, and
   only above the staging gate that admits advanced product features.
 
+The one-entry-point clause quantifies over surfaces, and
+`test/openagents/scv/deployments_test.exs` proves the refusal at the gate
+rather than that every caller passes through it.
+`OpenAgents.Work.start_scv/1` is what an admitted deployment calls to write
+the row and start the worker, and it is public, so a second caller would be an
+SCV that skipped admission. `OpenAgents.DependencyBoundaryTest` compares the
+set of modules whose compiled import table names `start_scv/1` against the one
+this contract names, so that caller fails the proof before it can exist.
+
 Evidence: `OpenAgents.SCV.Deployments`, `OpenAgents.Work.Scv`,
 `OpenAgents.Work.ScvServer`, `OpenAgents.Tools.ScvDeploy`, `OpenAgents.Work.Job`
-(the `scv` kind), `OpenAgents.RuntimeConfig`, and
-`test/openagents/scv/deployments_test.exs`.
+(the `scv` kind), `OpenAgents.RuntimeConfig`,
+`test/openagents/scv/deployments_test.exs`, and
+`OpenAgents.DependencyBoundaryTest`.
 
 ### OUTCOME-001 — An agent-authored claim is accepted only against the accepted-outcome contract
 
@@ -1701,11 +1779,20 @@ Refusals carry the one `/api/v3` envelope, `OpenAgentsWeb.ApiError`, with a
 stable code per refusal reason so a release client can tell "you may not do
 this" from "someone promoted first" from "those bytes are not in the forge".
 
+"One authority path, not two implementations" is a claim about every caller,
+so the callers are the proof. `OpenAgents.DependencyBoundaryTest` asserts two
+exact sets from the compiled import tables: `OpenAgents.Forge.Promotion` is
+the only module that calls `OpenAgents.Forge.Targets.promote/4`, and
+`OpenAgentsWeb.AdminForgeLive` and `OpenAgentsWeb.FleetTargetController` are
+the only modules that call `OpenAgents.Forge.Promotion`. A third surface, or a
+second writer that skips the scope and standing checks, fails there.
+
 Evidence: `OpenAgents.Forge.Promotion`, `OpenAgents.Forge.Targets`,
 `OpenAgentsWeb.Plugs.OperatorApiTokenAuth`,
 `OpenAgentsWeb.FleetTargetController`, `OpenAgentsWeb.AdminForgeLive`,
 `OpenAgents.ApiTokens`, `OpenAgentsWeb.RouteAuthority`,
 `OpenAgentsWeb.ApiRouteAuthority`, `OpenAgentsWeb.ApiError`,
+`OpenAgents.DependencyBoundaryTest`,
 `test/openagents/forge/promotion_test.exs`,
 `test/openagents_web/controllers/fleet_target_controller_test.exs`, and
 `test/openagents_web/route_authority_test.exs`.
@@ -2178,8 +2265,18 @@ operators and non-operators alike. Being an operator tool is not license for pro
 chrome — the anti-references in `docs/architecture.md` still describe what the product
 does not become.
 
+The boundary clause is enumerated rather than sampled. Per-surface LiveView
+tests are what let the operator half of this contract stay green while it was
+wrong, and they would do the same for a new product route added outside the
+`:authenticated` pipeline. `OpenAgentsWeb.AuthenticatedRouteGateTest`
+dispatches every route `OpenAgentsWeb.RouteAuthority` classifies
+`:authenticated_browser` without a session and requires each to refuse, so a
+route that serves an anonymous visitor fails before anyone writes a test for
+it. `OpenAgentsWeb.OperatorSurfaceTest` enumerates the operator half.
+
 Evidence: `OpenAgentsWeb.HomeControllerTest`, the `OpenAgentsWeb.ChatLiveTest` surface
 test, `OpenAgentsWeb.LeaderboardLiveTest`, `OpenAgentsWeb.AdminLiveTest`,
+`OpenAgentsWeb.AuthenticatedRouteGateTest`, `OpenAgentsWeb.OperatorSurfaceTest`,
 `OpenAgentsWeb.Router` browser policy, `docs/architecture.md`, and `docs/component-library.md`.
 
 ### UI-002 — Tool activity is a bounded projection of PostgreSQL truth
@@ -2380,10 +2477,18 @@ emergency override exists only for operator-directed recovery.
 Staging evidence remains a separate later gate. A local receipt does not claim
 that the candidate passed staging or authorize a production release.
 
+The absence clause is checked by reading the repository rather than by
+running the gate. `ops/ci/gate.sh` and `OpenAgents.Forge.GateReceiptTest`
+establish that the owned gate runs and binds its receipt to a candidate SHA;
+neither would notice a `.github/workflows/ci.yml` appearing beside them.
+`OpenAgents.HostedCIAbsenceTest` reads the paths every hosted provider
+configures itself from and fails when one exists.
+
 Evidence: `ops/ci/gate.sh`, `.githooks/pre-push`,
 `OpenAgents.Forge.GateReceipt`, `OpenAgents.Forge.GateReceiptTest`,
-`ops/relup-proof/run.sh`, `ops/relup-proof/version-chain.sh`, and
-`ops/relup-proof/kill-during-install.sh`.
+`ops/relup-proof/run.sh`, `ops/relup-proof/version-chain.sh`,
+`ops/relup-proof/kill-during-install.sh`, and
+`OpenAgents.HostedCIAbsenceTest`.
 
 ### RELEASE-005 — Every code change has a fail-closed deployment class
 
@@ -2656,9 +2761,23 @@ an admitted repository principal, and read-only members cannot push.
 
 Amended 2026-08-21 (workspace-wide issue and project lists): who may read a
 repository is one composable predicate, `OpenAgents.Repositories.readable_by/2`
-— public and `ready`, or a membership in a reading role — and every surface
-that lists or resolves a repository composes it rather than restating the
-join. Reading across repositories obeys the same rule as reading one: the
+— public and `ready`, or a membership in a reading role — and the surfaces
+that answer "which repositories may this reader see" compose it rather than
+restating the join. That is `OpenAgents.Repositories`, `OpenAgents.Issues`,
+`OpenAgents.Projects`, and `OpenAgents.Notifications`.
+
+Amended 2026-08-23 (issue #166): the sentence above used to say *every*
+surface that lists or resolves a repository, which is more than its proof
+covers and more than is true. Roughly thirty modules join the repositories
+table, and most reach a row by an identifier a caller already passed
+authorization for — a milestone's repository, a stack entry's repository, a
+pull request's repository. Those are not visibility decisions and do not
+compose the predicate. Nothing enumerates which joins are which, so a module
+that does make a visibility decision with its own restated join would not fail
+any proof here. `docs/2026-08-23-invariant-proof-audit.md` records that gap
+rather than leaving the wider sentence standing over it.
+
+Reading across repositories obeys the same rule as reading one: the
 workspace-wide lists at `/issues` and `/projects` join their tables to that
 predicate, so no filter, search term, or page number they accept can surface a
 row from a repository the reader could not open directly. The duplicate that
@@ -3342,11 +3461,19 @@ never returns a read record to unread.
 
 A record stores identifiers, a kind, and the actor's login — never a title, a
 body, a label name, a state, or any other repository content. Fan-out refuses a
-recipient who cannot read the repository, and every read composes
-`OpenAgents.Repositories.readable_by/2` again against the reader's current
+recipient who cannot read the repository, and the two reads that return
+records — the inbox page and the unread count — are both built from one
+private `visible_query/2` that joins through
+`OpenAgents.Repositories.readable_by/2` against the reader's current
 membership, so a record that outlives the recipient's access stops rendering
 rather than disclosing a private issue. Marking read is scoped to the addressed
 account.
+
+Naming the two reads is narrower than the earlier "every read", which nothing
+proved: `test/openagents/notifications_test.exs` exercises these two and would
+not fail for a third added beside them. One private query is what keeps the
+count and the page agreeing, so a read that does not use it is the thing to
+notice in review.
 
 Assignment, label and state notifications are derived from the difference
 between the issue before and after an update, inside `Issues.update_issue/3` —
@@ -3429,8 +3556,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DEGRADE-001 | `test/openagents/program_artifacts_test.exs`, `test/openagents/turn_provenance_test.exs` |
 | PROGRAM-002 | `test/openagents/shadow_programs_test.exs` |
 | PROGRAM-003 | `test/openagents/program_lifecycle_test.exs` |
-| IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs` |
-| IDENTITY-002 | `test/openagents_web/auth_gate_test.exs` |
+| IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs` |
+| IDENTITY-002 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs` |
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
@@ -3466,7 +3593,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TURN-004 | `test/openagents/conversations_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
 | TURN-005 | `test/openagents/turn_tool_loop_test.exs` |
 | PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
-| PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs` |
+| PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |
 | COLLECTIVE-001 | `test/openagents/collective_test.exs` |
 | COLLECTIVE-002 | `test/openagents/collective_generalizer_test.exs` |
@@ -3482,11 +3609,11 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TOOL-003 | `test/openagents/tool_step_persistence_test.exs` |
 | TOOL-004 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents_web/tool_activity_test.exs` |
 | DEGRADE-002 | `test/openagents/tools/registry_and_runner_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs` |
-| TOOL-005 | `test/openagents/tools/reach_test.exs`, `test/openagents/chat/open_router/tool_runtime_test.exs`, `test/openagents/chat/account_turns_test.exs` |
+| TOOL-005 | `test/openagents/tools/reach_test.exs`, `test/openagents/chat/open_router/tool_runtime_test.exs`, `test/openagents/chat/account_turns_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | TOOL-006 | `test/openagents/tools/shipped_catalog_test.exs` |
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
-| SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs` |
-| SCV-001 | `test/openagents/scv/deployments_test.exs` |
+| SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
+| SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
@@ -3494,7 +3621,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DEPLOYPLANE-003 | `test/openagents/deployments/policy_test.exs`, `test/openagents/deployments_test.exs` |
 | DEPLOYPLANE-004 | `test/openagents/deployments/lifecycle_test.exs`, `test/openagents/deployments_test.exs` |
 | DEPLOYPLANE-005 | `test/openagents/deployments_test.exs`, `test/openagents/runtime_config_test.exs` |
-| FLEETPROMOTE-001 | `test/openagents/forge/promotion_test.exs`, `test/openagents_web/controllers/fleet_target_controller_test.exs`, `test/openagents_web/route_authority_test.exs` |
+| FLEETPROMOTE-001 | `test/openagents/forge/promotion_test.exs`, `test/openagents_web/controllers/fleet_target_controller_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | VOICE-001 | `test/openagents/voice/config_test.exs` |
 | VOICE-002 | `test/openagents_web/controllers/voice_call_controller_test.exs` |
 | VOICE-003 | `test/openagents/voice_test.exs`, `test/openagents/voice_sessions_test.exs` |
@@ -3509,7 +3636,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | VOICE-012 | `test/openagents/voice/recordings_test.exs`, `test/openagents_web/controllers/voice_recording_controller_test.exs`, `test/openagents_web/operator_surface_test.exs` |
 | ADMIN-001 | `test/openagents_web/operator_surface_test.exs`, `test/openagents_web/controllers/admin_recording_controller_test.exs`, `test/openagents/admin_test.exs`, `test/openagents_web/live/admin_live_test.exs`, `test/openagents_web/live/admin_forge_live_test.exs` |
 | DATA-004 | `test/openagents_web/controllers/data_controller_test.exs`, `test/openagents/data_rights/atif_export_test.exs`, `test/openagents_web/operator_surface_test.exs` |
-| UI-001 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
+| UI-001 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/live/chat_live_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs`, `test/openagents_web/operator_surface_test.exs` |
 | UI-002 | `test/openagents_web/tool_activity_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
 | UI-003 | `test/openagents_web/ui_test.exs`, `test/openagents_web/component_catalog_test.exs` |
 | LEADERBOARD-001 | `test/openagents/leaderboard_test.exs`, `test/openagents_web/live/leaderboard_live_test.exs` |
@@ -3517,7 +3644,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-001 | `ops/ci/release-smoke.sh`, `test/openagents_web/controllers/health_controller_test.exs` |
 | RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
 | RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
-| RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs` |
+| RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs`, `test/openagents/hosted_ci_absence_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | RELEASE-006 | `test/openagents/forge/rolling_boot_convergence_test.exs`, `test/openagents/forge/rolling_replacement_test.exs`, `test/openagents/forge/target_lifecycle_test.exs`, `test/openagents/forge/boot_converge_test.exs` |
 | RELEASE-007 | `test/openagents/release/image_layer_cache_test.exs`, `ops/ci/contracts.sh` |

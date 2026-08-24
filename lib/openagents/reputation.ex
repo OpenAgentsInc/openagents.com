@@ -141,10 +141,31 @@ defmodule OpenAgents.Reputation do
     |> Repo.insert()
   end
 
-  @doc "Retires an issuer key. Attestations it already signed keep verifying."
+  @doc """
+  Retires an issuer key. Attestations it already signed keep verifying.
+
+  That sentence is enforced, not assumed: `active_at?/2`'s window is half-open
+  at `retired_at`, so a backdated retirement would flip every attestation at or
+  after that instant to unverified while its signature stays valid. The
+  changeset refuses a `retired_at` at or before the newest attestation the key
+  signed, earlier than the key's `activated_at` when it signed nothing, or more
+  than `SigningKey.max_future_skew_seconds/0` in the future. There is no
+  override — an operator who wants to disown signed history gets the refusal
+  and files a revocation instead (#191).
+  """
   @spec retire_key(SigningKey.t(), DateTime.t()) :: {:ok, SigningKey.t()} | {:error, term()}
   def retire_key(%SigningKey{} = key, retired_at \\ DateTime.utc_now()) do
-    key |> SigningKey.retire_changeset(retired_at) |> Repo.update()
+    key
+    |> SigningKey.retire_changeset(retired_at, latest_attested_at: latest_attested_at(key))
+    |> Repo.update()
+  end
+
+  defp latest_attested_at(%SigningKey{key_id: key_id}) do
+    Repo.one(
+      from attestation in Attestation,
+        where: attestation.issuer_key_id == ^key_id,
+        select: max(attestation.attested_at)
+    )
   end
 
   @doc "Every admitted issuer key, for independent verification."

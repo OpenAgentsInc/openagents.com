@@ -1385,7 +1385,14 @@ subject, the outcome, and the verifier, a valid attestation presented for
 another issue, revision, verifier, or actor fails its binding. A reversed or
 invalidated outcome produces a linked invalidating attestation, and the revoked
 claim and signature stay readable. Retiring a key never invalidates the history
-it signed, and a private key never enters the database.
+it signed, and that is enforced rather than assumed: because the key's active
+window is half-open at `retired_at`, a retirement at or before the newest
+attestation the key signed is refused with the conflicting attestation time
+named, a key that signed nothing retires no earlier than its `activated_at`,
+and a `retired_at` beyond a small clock-skew allowance in the future is
+refused. There is no override — disowning a signed claim is a linked
+revocation, never a rewrite of the key's validity window. A private key never
+enters the database.
 
 Disclosure follows repository authority: an attestation is `public` only where
 the repository is public or its transparency level admits ledger disclosure
@@ -1411,6 +1418,7 @@ Evidence: `OpenAgents.Reputation`, `OpenAgents.Reputation.Claim`,
 the append-only and uniqueness constraints on `reputation_attestations`, the
 per-kind reference constraint on `reputation_subject_claims`,
 `OpenAgentsWeb.ReputationController`, `test/openagents/reputation_test.exs`,
+`test/openagents/forge/key_rotation_test.exs`,
 `test/openagents/reputation/subject_claim_test.exs`,
 `test/openagents_web/controllers/reputation_subject_claim_controller_test.exs`,
 and `test/openagents_web/controllers/reputation_controller_test.exs`.
@@ -4866,7 +4874,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | COLLECTIVE-002 | `test/openagents/collective_generalizer_test.exs` |
 | COLLECTIVE-003 | `test/openagents/collective_publication_test.exs` |
 | COMPENSATION-001 | `test/openagents/compensation_test.exs` |
-| REPUTATION-001 | `test/openagents/reputation_test.exs`, `test/openagents_web/controllers/reputation_controller_test.exs` |
+| REPUTATION-001 | `test/openagents/reputation_test.exs`, `test/openagents/forge/key_rotation_test.exs`, `test/openagents_web/controllers/reputation_controller_test.exs` |
 | SETTLEMENT-001 | `test/openagents/settlement_test.exs` |
 | MODULE-001 | `test/openagents/modules/registry_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
 | MODULE-002 | `test/openagents/modules/discovery_test.exs`, `test/openagents/modules/lifecycle_test.exs` |

@@ -216,7 +216,16 @@ The forge holds several key-like secrets and they rotate differently:
 - **The reputation issuer key.** `OpenAgents.Reputation.admit_key/1` admits a
   public key with a validity window. Rotation is issuing under a new key;
   attestations signed by the retired key stay verifiable against the admitted
-  public key, which is why the key is admitted rather than assumed.
+  public key, which is why the key is admitted rather than assumed. The
+  ordering rule is enforced rather than assumed: `retire_key/2` refuses a
+  `retired_at` at or before the newest attestation the key signed — the
+  refusal names the conflicting attestation time — refuses one earlier than
+  the key's `activated_at` when it signed nothing, and refuses one beyond a
+  small clock-skew allowance in the future. There is deliberately no
+  override: a backdated retirement is exactly the single-`UPDATE` move that
+  silently unverifies published signatures (#191), and an issuer who must
+  disown a claim publishes a linked revocation instead of rewriting the
+  key's validity window.
 - **The three hand-rolled vaults.** Each takes its key from the operator's own
   environment, so rotation is an operator action with no separation of duties.
   `docs/forge-operator-independence.md` records that plainly.

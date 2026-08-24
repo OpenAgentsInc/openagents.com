@@ -8,17 +8,17 @@ defmodule OpenAgents.Forge.KeyRotationTest do
   rotation performed in the wrong order is refused rather than silently
   invalidating history.
 
-  The first holds everywhere. The second holds in one of the four families,
-  and the two places it does not are pinned here with the issues that carry
-  them, so a fix turns a test red instead of passing unnoticed. A rehearsal
-  that recorded only the half that works would be the kind of claim `EXIT-006`
-  exists to prevent.
+  The first holds everywhere. The second now holds in two of the four
+  families, and the places it does not are pinned here with the issues that
+  carry them, so a fix turns a test red instead of passing unnoticed. A
+  rehearsal that recorded only the half that works would be the kind of claim
+  `EXIT-006` exists to prevent.
 
   | Family | Rotation loses nothing | Wrong order refused |
   | --- | --- | --- |
   | Forge operator token | yes — the principal is a literal, not a derivation | not applicable; there is no order |
   | Account `oa_pat_` tokens | yes — digest-only, no key under them | not applicable |
-  | Reputation issuer key | forward, yes | **no** — #191 |
+  | Reputation issuer key | yes | yes — #191 made the backdate a refusal |
   | GitHub token vault | yes — key id in the envelope, keyring for the old ones | yes |
   | Machine pairing vault | **no** — #192 | no |
   | Voice recording vault | **no** — no key id, no keyring | no |
@@ -41,7 +41,7 @@ defmodule OpenAgents.Forge.KeyRotationTest do
   alias OpenAgents.Forge.{Verification, WAL}
   alias OpenAgents.Machines.TokenVault, as: MachineVault
   alias OpenAgents.Reputation
-  alias OpenAgents.Reputation.Claim
+  alias OpenAgents.Reputation.{Claim, SigningKey}
   alias OpenAgents.Voice.RecordingVault
 
   describe "forge receipts depend on no key, so no rotation can invalidate one" do
@@ -114,22 +114,62 @@ defmodule OpenAgents.Forge.KeyRotationTest do
       assert {:error, :signing_key_retired} = issue(context)
     end
 
-    test "retiring backward silently unverifies what the key already signed (#191)", context do
+    test "retiring backward is refused, naming what it would have unverified (#191)", context do
       assert {:ok, attestation} = issue(context)
       assert Reputation.verify(attestation)["verified"]
 
-      backdated = DateTime.add(attestation.attested_at, -1, :second)
-      assert {:ok, _retired} = Reputation.retire_key(context.key, backdated)
+      # `active_at?/2`'s window is half-open at `retired_at`, so at-or-before
+      # the attestation's own instant is the whole rewriting range: both edges
+      # must be refused, and the refusal names the attestation time so the
+      # operator sees exactly which history the backdate collided with.
+      for retired_at <- [
+            DateTime.add(attestation.attested_at, -1, :second),
+            attestation.attested_at
+          ] do
+        assert {:error, %Ecto.Changeset{} = changeset} =
+                 Reputation.retire_key(context.key, retired_at)
 
+        assert [message] = errors_on(changeset).retired_at
+        assert message =~ "at or before the newest attestation"
+        assert message =~ DateTime.to_iso8601(attestation.attested_at)
+      end
+
+      # A refusal leaves no residue: the key is still active, the attestation
+      # still verified, and the next attestation still issues.
       report = Reputation.verify(attestation)
+      assert report["verified"]
+      assert report["signature"]["key_status"] == "active"
+      assert {:ok, _next} = issue(context)
+    end
 
-      # The signature is still valid over an unaltered claim. Only the window
-      # moved, and it moved because one UPDATE against a row the operator
-      # controls said so. Nothing refused it and nothing recorded it.
-      assert report["digest_match"]
-      assert report["signature"]["valid"]
-      refute report["signature"]["key_active_at_attestation"]
-      refute report["verified"]
+    test "a key that signed nothing is bounded by its own activation", context do
+      before_activation = DateTime.add(context.key.activated_at, -1, :second)
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Reputation.retire_key(context.key, before_activation)
+
+      assert [message] = errors_on(changeset).retired_at
+      assert message =~ "earlier than the key's activation"
+      assert message =~ DateTime.to_iso8601(context.key.activated_at)
+
+      # Retiring at exactly `activated_at` leaves an empty window, which
+      # invalidates nothing because nothing was signed inside it.
+      assert {:ok, retired} = Reputation.retire_key(context.key, context.key.activated_at)
+      assert retired.retired_at == context.key.activated_at
+    end
+
+    test "a future-dated retirement beyond clock skew is refused", context do
+      future =
+        DateTime.add(DateTime.utc_now(), SigningKey.max_future_skew_seconds() + 60, :second)
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Reputation.retire_key(context.key, future)
+
+      assert [message] = errors_on(changeset).retired_at
+      assert message =~ "in the future"
+
+      within_skew = DateTime.add(DateTime.utc_now(), 30, :second)
+      assert {:ok, _retired} = Reputation.retire_key(context.key, within_skew)
     end
 
     test "the forward edge is the one that is guarded", context do

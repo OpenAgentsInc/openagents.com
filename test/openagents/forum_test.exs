@@ -1,5 +1,12 @@
 defmodule OpenAgents.ForumTest do
-  use OpenAgents.DataCase, async: true
+  # Sync, and it has to be. The announcement tests subscribe to `forum:posts`,
+  # which is one global PubSub topic with no per-test scope, and then assert
+  # that *no further* announcement arrives. Run concurrently with any other
+  # async module that writes a topic or a post — `OpenAgents.Forum.TipsTest`
+  # does — those refutations catch the other module's broadcast and fail. ExUnit
+  # runs sync modules after the async ones finish, so this removes the race
+  # rather than widening the assertions until they stop noticing it.
+  use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Forum
 

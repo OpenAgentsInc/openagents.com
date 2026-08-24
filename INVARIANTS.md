@@ -65,8 +65,9 @@ instead, held by the contracts that own each surface.
 A retained name owes a population, and the population must be established from
 something that cannot lie rather than from a reading of the call sites. The
 retired AAD `sarah.machine_token.v1` had none — nothing seals a version-1 blob
-and a sealed pairing token cannot outlive its bounded window — so the token
-vault carries one version and one AAD. The audit actor kind `machine` looked
+and a sealed pairing token cannot outlive its bounded window, which
+IDENTITY-011 now enforces rather than assumes — so the token vault carries one
+version and one AAD. The audit actor kind `machine` looked
 the same and is not: a paired computer authenticating to the Git plane pushes
 under `{:machine, id}`, from a variable that no source scan for a literal
 finds. It stays, and the proof asserts that every principal kind
@@ -493,6 +494,53 @@ Evidence: `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 `priv/repo/migrations/20260824032226_refuse_inference_grants_for_revoked_computers.exs`,
 `test/openagents_web/controllers/computer_control_api_test.exs`, and
 `test/openagents/inference/computer_revocation_test.exs`.
+
+### IDENTITY-011 — A pairing window closes on its own clock
+
+Status: Current
+
+A computer pairing is a bounded window: the CLI registers it, the account owner
+approves it in the browser, and the CLI claims the computer token exactly once.
+`OpenAgents.Machines` seals that token at rest for the claim window alone, and
+`OpenAgents.Machines.TokenVault` carries one version and one AAD on the
+strength of that bound — CANON-002 states it as settled.
+
+Nothing enforced it. `claim_pairing/2` expired an elapsed pairing, and that was
+the only thing that ever did, so the window closed only when someone knocked on
+it. A pairing the CLI stopped polling — killed, disconnected, or abandoned
+after approval — stayed `approved` indefinitely: `token_ciphertext` held a
+sealed, openable `smct_` token long past the window, and the computer the
+approval created stayed `active`, counting against the owner's capacity and
+issuing operator-approval receipts for a computer that never connected.
+`machine_pairings.expires_at` recorded the deadline and nothing read it, which
+is why `machine_pairings_expires_at_index` had no reader.
+
+`OpenAgents.Machines.expire_elapsed_pairings/0` is that reader, and
+`OpenAgents.Machines.PairingExpiry` runs it on the same interval and shape as
+`OpenAgents.Forge.AssignmentExpiry`. It applies `claim_pairing/2`'s own expiry
+rather than a second, weaker one: each row is re-read under `FOR UPDATE`, the
+status moves to `expired`, `token_ciphertext` is nulled, and any computer the
+pairing created is revoked together with the inference grants it holds. That
+last step inherits IDENTITY-008 unchanged, because it is the same call inside
+the same lock. A sweep and a late claim racing the same row therefore have one
+winner, and the loser finds a status it no longer acts on. The revocation is
+announced on the computer's topic, which this path had never done because until
+now nothing ran it without a bearer.
+
+The selection is proved separately from the outcomes, and the split is the
+point. `expire_elapsed_pairing/1` refuses anything terminal or still fresh on
+its own re-read, so widening the outer predicate changes no row and no return
+value — every outcome test stays green while the sweep silently stops using the
+index and starts scanning the table each minute, which is the defect this entry
+closes. `OpenAgents.Machines.elapsed_pairing_query/1` is therefore public and
+asserted twice: on exactly which rows it names, and on `EXPLAIN` of that same
+query naming `machine_pairings_expires_at_index` with sequential scans priced
+out.
+
+Evidence: `OpenAgents.Machines.expire_elapsed_pairings/0`,
+`OpenAgents.Machines.elapsed_pairing_query/1`,
+`OpenAgents.Machines.PairingExpiry`, `OpenAgents.Machines.TokenVault`, and
+`test/openagents/machines/pairing_expiry_test.exs`.
 
 ### IDENTITY-009 — Unified delegation preserves substrate authority
 
@@ -4584,6 +4632,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
 | IDENTITY-010 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_credential_reach_test.exs` |
+| IDENTITY-011 | `test/openagents/machines/pairing_expiry_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |

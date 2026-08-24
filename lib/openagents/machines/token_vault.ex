@@ -8,7 +8,10 @@ defmodule OpenAgents.Machines.TokenVault do
   `OpenAgents.Machines` `@pairing_lifetime_seconds`, and both terminal
   transitions — claim and expiry — null `token_ciphertext` on the way out. A
   compatibility branch with an empty population is a name and a claim that
-  nothing tests. See `INVARIANTS.md`, CANON-002.
+  nothing tests. That bound is enforced by
+  `OpenAgents.Machines.expire_elapsed_pairings/0`; before it existed, expiry
+  ran only when the CLI polled, so an abandoned pairing held its sealed token
+  indefinitely. See `INVARIANTS.md`, CANON-002 and IDENTITY-011.
 
   The `openagents.machine_token.v2` AAD keeps its `machine` spelling for the
   opposite reason: it is bound into ciphertext this release did not write.

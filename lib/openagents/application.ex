@@ -60,7 +60,8 @@ defmodule OpenAgents.Application do
         OpenAgents.BoxRunRecovery,
         OpenAgents.Box.Reconciler,
         OpenAgents.Forge.AssignmentExpiry,
-        OpenAgents.Forge.AssignmentCredentialVault
+        OpenAgents.Forge.AssignmentCredentialVault,
+        OpenAgents.Machines.PairingExpiry
       ] ++ analytics_children() ++ [OpenAgentsWeb.Endpoint]
 
     # See https://elixir.hexdocs.pm/Supervisor.html

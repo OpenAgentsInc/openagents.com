@@ -343,6 +343,72 @@ defmodule OpenAgents.Machines do
     end
   end
 
+  @doc """
+  Expire every pairing whose window has closed, without waiting for a poll.
+
+  `claim_pairing/2` already expires an elapsed pairing, and that was the only
+  thing that ever did. A pairing the CLI stops polling — killed, disconnected,
+  or simply abandoned after the owner approved it — therefore stayed `approved`
+  forever, holding the sealed computer token `TokenVault` promises lives only
+  for the claim window, and leaving the computer it created `active` with a
+  token nobody ever received.
+
+  This is the same transition without a bearer. It reads
+  `machine_pairings.expires_at`, which is what
+  `machine_pairings_expires_at_index` exists for and what nothing read, then
+  applies `claim_pairing/2`'s own expiry to each row under that row's lock: the
+  status moves to `expired`, `token_ciphertext` is nulled, and any computer the
+  pairing created is revoked along with the inference grants it holds
+  (IDENTITY-008, IDENTITY-011).
+  """
+  @spec expire_elapsed_pairings() :: non_neg_integer()
+  def expire_elapsed_pairings do
+    DateTime.utc_now()
+    |> elapsed_pairing_ids()
+    |> Enum.count(&(expire_elapsed_pairing(&1) == :ok))
+  end
+
+  @doc """
+  The rows `expire_elapsed_pairings/0` will act on, as of `now`.
+
+  This is a separate function because it is the only thing in the release that
+  reads `machine_pairings.expires_at`, and therefore the only reader
+  `machine_pairings_expires_at_index` has. `expire_elapsed_pairing/1` re-reads
+  each row under its own lock and refuses anything terminal or still fresh, so
+  a widened predicate here changes no outcome and no result — it only makes the
+  sweep read rows it will not touch, and stops using the index, invisibly. The
+  selection is proved on its own for that reason.
+  """
+  @spec elapsed_pairing_ids(DateTime.t()) :: [Ecto.UUID.t()]
+  def elapsed_pairing_ids(%DateTime{} = now), do: now |> elapsed_pairing_query() |> Repo.all()
+
+  @doc "The selection above, unexecuted, so a proof can read its plan."
+  @spec elapsed_pairing_query(DateTime.t()) :: Ecto.Query.t()
+  def elapsed_pairing_query(%DateTime{} = now) do
+    Pairing
+    |> where([p], p.status in ["pending", "approved"] and p.expires_at <= ^now)
+    |> select([p], p.id)
+  end
+
+  # One transaction per row. The re-read under `FOR UPDATE` is what makes the
+  # sweep safe next to a claim arriving at the same moment: whichever takes the
+  # lock first moves the row, and the other finds a status it no longer acts on.
+  defp expire_elapsed_pairing(pairing_id) do
+    Repo.transaction(fn ->
+      case Repo.one(from(p in Pairing, where: p.id == ^pairing_id, lock: "FOR UPDATE")) do
+        %Pairing{status: status} = pairing when status in ["pending", "approved"] ->
+          if expired?(pairing), do: expire_locked_pairing(pairing), else: :fresh
+
+        _consumed ->
+          :consumed
+      end
+    end)
+    |> case do
+      {:ok, :ok} -> :ok
+      _unchanged -> :unchanged
+    end
+  end
+
   defp verify_capacity(user_id) do
     now = DateTime.utc_now()
 
@@ -414,15 +480,27 @@ defmodule OpenAgents.Machines do
     |> Repo.update!()
 
     if pairing.machine_id do
-      from(machine in Machine,
-        where: machine.id == ^pairing.machine_id and machine.status == "active"
-      )
-      |> Repo.update_all(set: [status: "revoked", revoked_at: now, updated_at: now])
+      {revoked, _returned} =
+        from(machine in Machine,
+          where: machine.id == ^pairing.machine_id and machine.status == "active"
+        )
+        |> Repo.update_all(set: [status: "revoked", revoked_at: now, updated_at: now])
 
       # The other revocation path, and it owes the same thing: this runs inside
       # the claim transaction, after the update has taken the computer row's
       # lock, so an interleaved mint cannot slip a live grant past it.
       _ = OpenAgents.Inference.revoke_active_for_machine(pairing.machine_id)
+
+      # `revoke_machine/2` announces its revocation so the computer's channel
+      # closes and an open /computers stops showing the card as live. This path
+      # revokes too, and until the sweep existed nothing ever ran it headlessly.
+      if revoked > 0 do
+        Phoenix.PubSub.broadcast(
+          OpenAgents.PubSub,
+          "machine:#{pairing.machine_id}",
+          {:machine_revoked, pairing.machine_id}
+        )
+      end
     end
 
     :ok

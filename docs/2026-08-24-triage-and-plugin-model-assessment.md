@@ -2,7 +2,11 @@
 
 Date: 2026-08-24
 
-Status: initial assessment
+Status: initial assessment. The strategy that motivates the plugin model —
+the registry as the network, the centralized cloud as its verification
+substrate, and the coder as the wedge — is recorded separately in
+`docs/2026-08-24-registry-network-strategy.md`, which also resequences the
+priorities in section 6 of this document.
 
 This document records two things done together on 2026-08-24: a triage pass
 over every open issue in `OpenAgentsInc/openagents.com` and

@@ -1487,6 +1487,15 @@ issue priced in sats, claimed, completed, verified, and paid from the
 treasury — end to end, once — then the loop becomes policy instead of
 stunt.
 
+> **Resequencing note (2026-08-24).** The recruitment station below files
+> the plugin/skill registry as the furthest-out surface, gated behind the
+> others. `2026-08-24-registry-network-strategy.md` moves it to the
+> center: its non-monetary half (typed manifests, digest-pinned versions,
+> usage receipts on thread transcripts, capability-gap issue filing)
+> starts now and feeds the coder, the forge, and consent work directly.
+> The settlement doctrine below — royalties only after one bounty settles
+> end to end — is unchanged.
+
 **Recruitment station: the flywheel surface.** Verified outcomes recruit both
 humans and agents when they are visible and portable: public traces under the
 visibility policy, licensable later (228, 215); the leaderboard (260, 270);

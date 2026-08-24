@@ -1,5 +1,12 @@
 defmodule OpenAgents.Machines.Pairing do
-  @moduledoc false
+  @moduledoc """
+  One pairing window.
+
+  The owner is not stored here. `user_id` used to be, written beside
+  `machine_id` in the same approval changeset and read by nothing; the account
+  it named is `machines.user_id`, reachable through the computer the approval
+  created. See issue #184.
+  """
 
   use Ecto.Schema
   import Ecto.Changeset
@@ -17,7 +24,6 @@ defmodule OpenAgents.Machines.Pairing do
     field :agent_version, :string
     field :roots, {:array, :string}, default: []
     field :status, :string, default: "pending"
-    belongs_to :user, OpenAgents.Accounts.User
     belongs_to :machine, OpenAgents.Machines.Machine
     field :token_ciphertext, :binary, redact: true
     field :expires_at, :utc_datetime_usec
@@ -35,7 +41,6 @@ defmodule OpenAgents.Machines.Pairing do
           agent_version: String.t() | nil,
           roots: [String.t()],
           status: String.t(),
-          user_id: Ecto.UUID.t() | nil,
           machine_id: Ecto.UUID.t() | nil,
           token_ciphertext: binary() | nil,
           expires_at: DateTime.t(),

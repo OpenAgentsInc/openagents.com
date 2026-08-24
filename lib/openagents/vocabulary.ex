@@ -39,7 +39,6 @@ defmodule OpenAgents.Vocabulary do
     {"machine_pairings", "machine_pairings_pkey"},
     {"machine_pairings", "machine_pairings_status_check"},
     {"machine_pairings", "machine_pairings_tier_check"},
-    {"machine_pairings", "machine_pairings_user_id_fkey"},
     {"machines", "machines_pkey"},
     {"machines", "machines_status_check"},
     {"machines", "machines_tier_check"},

@@ -139,7 +139,6 @@ defmodule OpenAgents.Machines do
         pairing
         |> Ecto.Changeset.change(
           status: "approved",
-          user_id: user_id,
           machine_id: machine.id,
           token_ciphertext: sealed
         )

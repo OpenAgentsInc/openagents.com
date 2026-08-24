@@ -51,6 +51,45 @@ defmodule OpenAgents.MachinesTest do
     assert DateTime.compare(pairing.expires_at, pairing.inserted_at) == :gt
   end
 
+  # `machine_pairings.user_id` was dropped in #184. It was written beside
+  # `machine_id` in one changeset and read by nothing, and the account it named
+  # is still reachable — through the computer the approval created, which is
+  # where the writer read it from.
+  test "a pairing's owner is reachable through the computer the approval created" do
+    %{pairing: pairing, code: code} = start_pairing()
+    owner = user("owner-reachable")
+
+    assert {:ok, machine} = Machines.approve_pairing(owner, code)
+
+    stored = Repo.get!(Pairing, pairing.id)
+    assert stored.machine_id == machine.id
+    assert Repo.get!(OpenAgents.Machines.Machine, stored.machine_id).user_id == owner.id
+  end
+
+  test "the pairing row no longer carries an owner column" do
+    columns =
+      Repo.query!(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'machine_pairings'
+        """,
+        []
+      ).rows
+      |> Enum.map(&hd/1)
+
+    refute "user_id" in columns
+    assert "machine_id" in columns
+
+    constraints =
+      Repo.query!(
+        "SELECT conname FROM pg_constraint WHERE conrelid = 'machine_pairings'::regclass",
+        []
+      ).rows
+      |> Enum.map(&hd/1)
+
+    refute "machine_pairings_user_id_fkey" in constraints
+  end
+
   test "approve then claim hands the token over exactly once" do
     %{pairing: pairing, code: code, poll_secret: poll_secret} = start_pairing()
     owner = user("claim-once")

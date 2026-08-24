@@ -210,23 +210,24 @@ Each is recorded with the violation it would miss. None is a known live defect:
 these are claims whose truth currently depends on review rather than on a
 proof.
 
-| Contract | The claim | A violation the proof would miss |
-| --- | --- | --- |
-| `PERSONA-001` | provider adapters contain no independent persona | an adapter that composes its own instruction text |
-| `IDENTITY-002` | a LiveView event must not select another user | an event handler resolving a record from its own params rather than the socket's scope |
-| `IDENTITY-010` | the credential is not persisted in a job, journal, prompt, output, environment, Git configuration, or API response | a new sink that writes it |
-| `MEMORY-001` | no API offers a cross-conversation or unscoped fallback | a new recall entry point without the conversation predicate |
-| `MEMORY-004` | scope is enforced in every query | a query function added beside the enforced ones |
-| `PRIVACY-001` | every export or projection re-applies redaction | a new projection that reads stored claims directly |
-| `UI-002` | provider identifiers never enter socket assigns or HTML | an assign carrying a provider call ID |
-| `STATUS-001` | counts only, never content | a new key in the published projection; the test pattern-matches and tolerates extra keys |
-| `TRANSPARENCY-001` | bounds that hold at every level | a new public surface below `:l3` |
-| `THREAD-001` | no route returns a grant token for a thread the caller did not open | a second route that renders a grant |
-| `REPOSITORY-001` | a visibility join that restates the predicate | a module deciding repository visibility with its own join |
-| `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly |
+| Contract | The claim | A violation the proof would miss | Carried by |
+| --- | --- | --- | --- |
+| `PERSONA-001` | provider adapters contain no independent persona | an adapter that composes its own instruction text | #176 |
+| `IDENTITY-002` | a LiveView event must not select another user | an event handler resolving a record from its own params rather than the socket's scope | #174 |
+| `IDENTITY-010` | the credential is not persisted in a job, journal, prompt, output, environment, Git configuration, or API response | a new sink that writes it | #177 |
+| `MEMORY-001` | no API offers a cross-conversation or unscoped fallback | a new recall entry point without the conversation predicate | #172 |
+| `MEMORY-004` | scope is enforced in every query | a query function added beside the enforced ones | #172 |
+| `PRIVACY-001` | every export or projection re-applies redaction | a new projection that reads stored claims directly | #172 |
+| `UI-002` | provider identifiers never enter socket assigns or HTML | an assign carrying a provider call ID | #173 |
+| `STATUS-001` | counts only, never content | a new key in the published projection; the test pattern-matches and tolerates extra keys | #173 |
+| `TRANSPARENCY-001` | bounds that hold at every level | a new public surface below `:l3` | #173 |
+| `THREAD-001` | no route returns a grant token for a thread the caller did not open | a second route that renders a grant | #174 |
+| `REPOSITORY-001` | a visibility join that restates the predicate | a module deciding repository visibility with its own join | #175 |
+| `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly | #151 |
 
 `EXIT-005` sits in the WAL anchoring work that issue #151 carries, so it is
-handed there rather than changed under it.
+handed there rather than changed under it. Issue #166 stays open until every
+row above is settled.
 
 ## How to add one
 

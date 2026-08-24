@@ -59,4 +59,59 @@ defmodule OpenAgents.Providers.OpenAI.RequestPayloadTest do
              "result" => %{"matches" => []}
            }
   end
+
+  test "without a previous response, replays a tool call as its item pair in place" do
+    request = %Request{
+      model_id: "test-model",
+      instructions: "Remain OpenAgents.",
+      input: [
+        %{role: "user", content: "Read the file."},
+        %{
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            %{call_id: "call_read", name: "read_file", arguments: ~s({"path":"a.txt"})}
+          ]
+        },
+        %{role: "user", content: "And then?"}
+      ],
+      tool_outputs: [
+        %ToolOutput{call_id: "call_read", output: %{"content" => "hello"}}
+      ]
+    }
+
+    payload = OpenAI.request_payload(request)
+
+    refute Map.has_key?(payload, :previous_response_id)
+
+    assert [
+             %{role: "user", content: "Read the file."},
+             %{
+               type: "function_call",
+               call_id: "call_read",
+               name: "read_file",
+               arguments: ~s({"path":"a.txt"})
+             },
+             %{type: "function_call_output", call_id: "call_read", output: encoded_output},
+             %{role: "user", content: "And then?"}
+           ] = payload.input
+
+    assert Jason.decode!(encoded_output) == %{"content" => "hello"}
+  end
+
+  test "without a previous response, an output whose call was not replayed still travels" do
+    request = %Request{
+      model_id: "test-model",
+      instructions: "",
+      input: [%{role: "user", content: "Continue."}],
+      tool_outputs: [
+        %ToolOutput{call_id: "call_orphan", output: %{"status" => "succeeded"}}
+      ]
+    }
+
+    assert [
+             %{role: "user", content: "Continue."},
+             %{type: "function_call_output", call_id: "call_orphan", output: _output}
+           ] = OpenAI.request_payload(request).input
+  end
 end

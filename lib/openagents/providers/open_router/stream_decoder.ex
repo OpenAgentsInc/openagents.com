@@ -137,9 +137,10 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
     delta = if is_map(choice["delta"]), do: choice["delta"], else: %{}
     state = if is_binary(choice["finish_reason"]), do: %{state | terminal?: true}, else: state
 
-    with {:ok, text_events} <- text(delta["content"]),
+    with {:ok, reasoning_events} <- reasoning(delta),
+         {:ok, text_events} <- text(delta["content"]),
          {:ok, state} <- tool_calls(state, delta["tool_calls"]) do
-      {:ok, state, text_events}
+      {:ok, state, reasoning_events ++ text_events}
     end
   end
 
@@ -152,6 +153,23 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
     do: {:ok, [{:text_delta, content}]}
 
   defp text(_content), do: {:error, :invalid_provider_event}
+
+  # OpenRouter normalizes a model's thinking stream to `delta.reasoning`;
+  # some upstreams spell it `reasoning_content`. Either becomes the neutral
+  # reasoning event. A non-string value is ignored rather than refused: the
+  # `reasoning_details` object family is provider detail this proxy does not
+  # carry, and dropping it must not kill the text alongside it.
+  defp reasoning(delta) do
+    case delta["reasoning"] || delta["reasoning_content"] do
+      content when is_binary(content) and content != "" ->
+        if byte_size(content) <= @maximum_delta_bytes,
+          do: {:ok, [{:reasoning_delta, content}]},
+          else: {:error, :invalid_provider_event}
+
+      _absent_or_structured ->
+        {:ok, []}
+    end
+  end
 
   # A chat-completions tool call streams as fragments keyed by index: the name
   # arrives once and the arguments arrive as a string built up over chunks, so

@@ -80,6 +80,15 @@ defmodule OpenAgents.Providers.Test do
           1_000 -> {:error, {:provider_failed, "test_observer_timeout"}}
         end
 
+      "[reasoning]" ->
+        on_event.({:response_started, response_id})
+        on_event.({:reasoning_delta, "Considering the request. "})
+        on_event.({:reasoning_delta, "Deciding on a reply."})
+        on_event.({:text_delta, "Here is the reply."})
+        on_event.({:usage, %{"input_tokens" => 4, "output_tokens" => 8}})
+        on_event.({:response_completed, response_id})
+        :ok
+
       "[tool-loop]" ->
         emit_tool_request(
           on_event,

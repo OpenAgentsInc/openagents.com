@@ -30,6 +30,7 @@ defmodule OpenAgents.Providers.ProviderEvent do
   @type t ::
           {:response_started, String.t()}
           | {:text_delta, String.t()}
+          | {:reasoning_delta, String.t()}
           | {:tool_call, ToolCall.t()}
           | {:usage, map()}
           | {:response_completed, String.t()}

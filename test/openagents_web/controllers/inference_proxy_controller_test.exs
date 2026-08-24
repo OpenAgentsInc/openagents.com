@@ -96,6 +96,85 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert metered.usage["estimated_cost_microusd"] > 0
   end
 
+  test "a reasoning stream survives translation as delta.reasoning", %{conn: conn} do
+    %{token: token} = grant("reasoning")
+
+    conn =
+      post_chat(conn, token, %{
+        "messages" => [%{"role" => "user", "content" => "[reasoning]"}]
+      })
+
+    assert conn.status == 200
+
+    decoded =
+      conn.resp_body
+      |> sse_events()
+      |> Enum.filter(&(&1 != "[DONE]"))
+      |> Enum.map(&Jason.decode!/1)
+
+    reasoning =
+      decoded
+      |> Enum.flat_map(fn chunk ->
+        get_in(chunk, ["choices", Access.at(0), "delta", "reasoning"]) |> List.wrap()
+      end)
+      |> Enum.join("")
+
+    assert reasoning == "Considering the request. Deciding on a reply."
+
+    # The reply text still arrives, in its own content deltas.
+    text =
+      decoded
+      |> Enum.flat_map(fn chunk ->
+        get_in(chunk, ["choices", Access.at(0), "delta", "content"]) |> List.wrap()
+      end)
+      |> Enum.join("")
+
+    assert text == "Here is the reply."
+    assert Enum.any?(decoded, &(get_in(&1, ["choices", Access.at(0), "finish_reason"]) == "stop"))
+  end
+
+  test "a provider tool call reaches the caller as a tool_calls delta", %{conn: conn} do
+    %{token: token} = grant("tool-out")
+
+    conn =
+      post_chat(conn, token, %{
+        "messages" => [%{"role" => "user", "content" => "[tool-loop]"}],
+        "tools" => [
+          %{
+            "type" => "function",
+            "function" => %{
+              "name" => "recall_messages",
+              "description" => "Recall messages",
+              "parameters" => %{"type" => "object"}
+            }
+          }
+        ]
+      })
+
+    assert conn.status == 200
+
+    decoded =
+      conn.resp_body
+      |> sse_events()
+      |> Enum.filter(&(&1 != "[DONE]"))
+      |> Enum.map(&Jason.decode!/1)
+
+    [tool_call] =
+      Enum.flat_map(decoded, fn chunk ->
+        get_in(chunk, ["choices", Access.at(0), "delta", "tool_calls"]) || []
+      end)
+
+    assert tool_call["id"] == "call-tool-1"
+    assert tool_call["type"] == "function"
+    assert tool_call["function"]["name"] == "recall_messages"
+    assert Jason.decode!(tool_call["function"]["arguments"]) == %{"query" => "quartz"}
+
+    assert Enum.any?(
+             decoded,
+             &(get_in(&1, ["choices", Access.at(0), "finish_reason"]) == "tool_calls")
+           )
+  end
+
   test "the model is pinned by the grant, not the request body", %{conn: conn} do
     %{grant: grant, token: token} = grant("model-pin")
 
@@ -174,6 +253,63 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
       assert conn.status == 200
       assert_received {:recorded_request, "test.recording_provider", request}
       assert request.model_id == OpenAgents.Chat.OpenRouter.default_model()
+    end
+
+    test "tool declarations, a replayed call, and its output reach the provider intact",
+         %{conn: conn} do
+      %{token: token} = grant("tool-fidelity", model_id: "ox-alpha")
+
+      conn =
+        post_chat(conn, token, %{
+          "messages" => [
+            %{"role" => "user", "content" => "Read the file."},
+            %{
+              "role" => "assistant",
+              "content" => "",
+              "tool_calls" => [
+                %{
+                  "id" => "call_read",
+                  "type" => "function",
+                  "function" => %{
+                    "name" => "read_file",
+                    "arguments" => ~s({"path":"a.txt"})
+                  }
+                }
+              ]
+            },
+            %{"role" => "tool", "tool_call_id" => "call_read", "content" => "hello"}
+          ],
+          "tools" => [
+            %{
+              "type" => "function",
+              "function" => %{
+                "name" => "read_file",
+                "description" => "Read a file",
+                "parameters" => %{"type" => "object"}
+              }
+            }
+          ]
+        })
+
+      assert conn.status == 200
+      assert_received {:recorded_request, "test.recording_provider", request}
+
+      assert [definition] = request.tool_definitions
+      assert definition.name == "read_file"
+      assert definition.input_schema == %{"type" => "object"}
+
+      # The assistant turn that carried only a tool call is not dropped from
+      # the transcript, and its call travels with it.
+      assert [
+               %{role: "user", content: "Read the file."},
+               %{role: "assistant", content: "", tool_calls: [call]}
+             ] = request.input
+
+      assert call == %{call_id: "call_read", name: "read_file", arguments: ~s({"path":"a.txt"})}
+
+      assert [output] = request.tool_outputs
+      assert output.call_id == "call_read"
+      assert output.output == %{"content" => "hello"}
     end
 
     test "a default grant stays on the default lane", %{conn: conn} do

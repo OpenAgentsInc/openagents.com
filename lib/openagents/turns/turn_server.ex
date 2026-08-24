@@ -233,6 +233,12 @@ defmodule OpenAgents.Turns.TurnServer do
     end
   end
 
+  # Reasoning exists for the proxy's streaming callers; this runtime persists
+  # only the reply, so the deltas pass without effect rather than failing the
+  # turn as an unknown event.
+  defp handle_provider_event({:reasoning_delta, delta}, state) when is_binary(delta),
+    do: {:noreply, state}
+
   defp handle_provider_event({:usage, usage}, state) when is_map(usage) do
     if valid_usage?(usage),
       do: {:noreply, %{state | current_usage: usage}},

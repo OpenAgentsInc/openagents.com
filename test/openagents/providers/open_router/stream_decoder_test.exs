@@ -31,6 +31,53 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoderTest do
            ]
   end
 
+  test "decodes reasoning deltas alongside text, in stream order" do
+    stream =
+      frame(%{"id" => "gen-r", "choices" => [%{"delta" => %{"reasoning" => "Consider "}}]}) <>
+        frame(%{
+          "id" => "gen-r",
+          "choices" => [%{"delta" => %{"reasoning" => "the request.", "content" => "Hi"}}]
+        }) <>
+        frame(%{"id" => "gen-r", "choices" => [%{"delta" => %{}, "finish_reason" => "stop"}]}) <>
+        "data: [DONE]\n\n"
+
+    assert {:ok, decoder, events} = feed_in_pieces(stream, 7)
+    assert {:ok, _decoder, final} = StreamDecoder.finish(decoder)
+
+    assert events ++ final == [
+             {:response_started, "gen-r"},
+             {:reasoning_delta, "Consider "},
+             {:reasoning_delta, "the request."},
+             {:text_delta, "Hi"},
+             {:response_completed, "gen-r"}
+           ]
+  end
+
+  test "carries an upstream reasoning_content spelling and ignores structured reasoning" do
+    stream =
+      frame(%{
+        "id" => "gen-rc",
+        "choices" => [%{"delta" => %{"reasoning_content" => "Thinking."}}]
+      }) <>
+        frame(%{
+          "id" => "gen-rc",
+          "choices" => [
+            %{"delta" => %{"reasoning" => %{"detail" => "opaque"}, "content" => "Ok"}}
+          ]
+        }) <>
+        frame(%{"id" => "gen-rc", "choices" => [%{"delta" => %{}, "finish_reason" => "stop"}]})
+
+    assert {:ok, decoder, events} = feed_in_pieces(stream, 9)
+    assert {:ok, _decoder, final} = StreamDecoder.finish(decoder)
+
+    assert events ++ final == [
+             {:response_started, "gen-rc"},
+             {:reasoning_delta, "Thinking."},
+             {:text_delta, "Ok"},
+             {:response_completed, "gen-rc"}
+           ]
+  end
+
   test "accumulates tool-call fragments and emits them whole at the end" do
     stream =
       frame(%{

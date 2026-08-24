@@ -94,11 +94,12 @@ defmodule OpenAgents.Providers.OpenRouter do
     |> maybe_put_tools(request.tool_definitions)
   end
 
-  # The proxy hands over the system text separately from the turns, and a tool
-  # output arrives without the assistant call that asked for it, because the
-  # calling harness flattens its own tool loop before it sends. So an output is
-  # carried as a labelled user message: it keeps the result in the transcript
-  # without claiming a call OpenRouter never saw.
+  # The proxy hands over the system text separately from the turns. A tool
+  # output whose assistant call is in the transcript is carried faithfully as
+  # a `tool` role message right after the assistant turn that called it. An
+  # output without that call — a harness that flattens its own tool loop
+  # before it sends — is carried as a labelled user message instead: it keeps
+  # the result in the transcript without claiming a call OpenRouter never saw.
   defp messages(%Request{} = request) do
     instructions =
       case String.trim(request.instructions || "") do
@@ -106,14 +107,62 @@ defmodule OpenAgents.Providers.OpenRouter do
         text -> [%{role: "system", content: text}]
       end
 
-    turns = Enum.map(request.input, &%{role: role(&1.role), content: &1.content})
-    instructions ++ turns ++ Enum.map(request.tool_outputs, &tool_output/1)
+    declared_call_ids =
+      request.input
+      |> Enum.flat_map(&Map.get(&1, :tool_calls, []))
+      |> MapSet.new(& &1.call_id)
+
+    {matched, orphaned} =
+      Enum.split_with(request.tool_outputs, &MapSet.member?(declared_call_ids, &1.call_id))
+
+    outputs_by_call_id = Map.new(matched, &{&1.call_id, &1})
+
+    turns = Enum.flat_map(request.input, &turn(&1, outputs_by_call_id))
+    instructions ++ turns ++ Enum.map(orphaned, &orphaned_tool_output/1)
   end
+
+  defp turn(%{tool_calls: [_call | _rest] = calls} = message, outputs_by_call_id) do
+    assistant = %{
+      role: "assistant",
+      content: message.content,
+      tool_calls: Enum.map(calls, &assistant_tool_call/1)
+    }
+
+    results =
+      calls
+      |> Enum.flat_map(fn call ->
+        case Map.fetch(outputs_by_call_id, call.call_id) do
+          {:ok, output} -> [tool_result(output)]
+          :error -> []
+        end
+      end)
+
+    [assistant | results]
+  end
+
+  defp turn(message, _outputs_by_call_id),
+    do: [%{role: role(message.role), content: message.content}]
 
   defp role(role) when role in ["system", "user", "assistant"], do: role
   defp role(_role), do: "user"
 
-  defp tool_output(%ToolOutput{} = output) do
+  defp assistant_tool_call(call) do
+    %{
+      id: call.call_id,
+      type: "function",
+      function: %{name: call.name, arguments: call.arguments}
+    }
+  end
+
+  defp tool_result(%ToolOutput{} = output) do
+    %{
+      role: "tool",
+      tool_call_id: output.call_id,
+      content: Jason.encode!(output.output)
+    }
+  end
+
+  defp orphaned_tool_output(%ToolOutput{} = output) do
     %{
       role: "user",
       content: "Tool result for #{output.call_id}: #{Jason.encode!(output.output)}"

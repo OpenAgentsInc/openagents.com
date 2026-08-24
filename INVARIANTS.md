@@ -1157,8 +1157,8 @@ triggers, `OpenAgents.Provenance.Canonical`, and `OpenAgents.TurnProvenanceTest`
 Status: Current
 
 Conversation and web code depend on `OpenAgents.Providers.Provider`, not OpenAI
-event shapes. Adapters emit typed OpenAgents-domain lifecycle, text, tool-call,
-usage, completion, failure, and cancellation events. A response ID is persisted
+event shapes. Adapters emit typed OpenAgents-domain lifecycle, text, reasoning,
+tool-call, usage, completion, failure, and cancellation events. A response ID is persisted
 when announced, and matching explicit completion is required; stream closure
 alone cannot produce a completed turn. Provider-specific events, credentials,
 and raw errors never reach the receipt or browser. Response creation is a

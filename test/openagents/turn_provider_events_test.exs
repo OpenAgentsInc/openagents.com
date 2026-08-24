@@ -28,6 +28,19 @@ defmodule OpenAgents.TurnProviderEventsTest do
     assert assistant_message.content == "Partial provider output."
   end
 
+  test "reasoning deltas pass a conversation turn without effect" do
+    turn = run_turn("reasoning-events-browser", "[reasoning]")
+
+    assert turn.status == "completed"
+
+    assistant_message =
+      OpenAgents.Repo.get!(OpenAgents.Conversations.Message, turn.assistant_message_id)
+
+    # The reply is only the text deltas; the reasoning neither fails the turn
+    # nor leaks into the persisted reply.
+    assert assistant_message.content == "Here is the reply."
+  end
+
   test "provider cancellation becomes a typed durable cancellation" do
     turn = run_turn("cancelled-events-browser", "[provider-cancelled]")
 

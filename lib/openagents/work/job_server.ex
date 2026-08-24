@@ -197,6 +197,12 @@ defmodule OpenAgents.Work.JobServer do
     end
   end
 
+  # Reasoning exists for the proxy's streaming callers; a job persists only
+  # its report, so the deltas pass without effect rather than failing the job
+  # as an unknown event.
+  defp handle_provider_event({:reasoning_delta, delta}, state) when is_binary(delta),
+    do: {:noreply, state}
+
   defp handle_provider_event({:usage, usage}, state) when is_map(usage) do
     {:noreply, %{state | current_usage: usage}}
   end

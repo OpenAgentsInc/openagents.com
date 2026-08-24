@@ -67,6 +67,26 @@ defmodule OpenAgents.Providers.OpenAI.StreamDecoderTest do
            ]
   end
 
+  test "decodes reasoning summary and reasoning text deltas as reasoning events" do
+    stream =
+      frame(%{"type" => "response.created", "response" => %{"id" => "resp_r"}}) <>
+        frame(%{"type" => "response.reasoning_summary_text.delta", "delta" => "Weighing "}) <>
+        frame(%{"type" => "response.reasoning_text.delta", "delta" => "options."}) <>
+        frame(%{"type" => "response.output_text.delta", "delta" => "Done."}) <>
+        frame(%{"type" => "response.completed", "response" => %{"id" => "resp_r"}})
+
+    assert {:ok, decoder, events} = feed_all([stream])
+    assert {:ok, _decoder, final_events} = StreamDecoder.finish(decoder)
+
+    assert events ++ final_events == [
+             {:response_started, "resp_r"},
+             {:reasoning_delta, "Weighing "},
+             {:reasoning_delta, "options."},
+             {:text_delta, "Done."},
+             {:response_completed, "resp_r"}
+           ]
+  end
+
   test "rejects malformed JSON and a completed response with a changed ID" do
     assert {:error, :invalid_provider_event} =
              StreamDecoder.feed(StreamDecoder.new(), "data: {not-json}\n\n")

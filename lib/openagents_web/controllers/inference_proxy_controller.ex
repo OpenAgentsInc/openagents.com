@@ -75,11 +75,33 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   defp input_message(%{"role" => "tool"}), do: []
 
   defp input_message(message) do
-    case content_text(message) do
-      "" -> []
-      text -> [%{role: role(message), content: text}]
+    tool_calls = message_tool_calls(message["tool_calls"])
+
+    case {content_text(message), tool_calls} do
+      {"", []} -> []
+      {text, []} -> [%{role: role(message), content: text}]
+      # An assistant turn that called tools is part of the transcript even
+      # when it carried no prose: dropping it would orphan the tool outputs
+      # that answer it.
+      {text, calls} -> [%{role: role(message), content: text, tool_calls: calls}]
     end
   end
+
+  # The assistant tool calls a caller replays from its own history, in the
+  # chat-completions shape it received them. Arguments stay the raw JSON
+  # string; the proxy never interprets them.
+  defp message_tool_calls(calls) when is_list(calls) do
+    Enum.flat_map(calls, fn
+      %{"id" => id, "function" => %{"name" => name} = function}
+      when is_binary(id) and id != "" and is_binary(name) and name != "" ->
+        [%{call_id: id, name: name, arguments: text(function["arguments"])}]
+
+      _invalid ->
+        []
+    end)
+  end
+
+  defp message_tool_calls(_calls), do: []
 
   defp tool_outputs(turns) do
     turns
@@ -185,6 +207,13 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   defp event_chunks({:text_delta, text}, _index) when text != "" do
     [data(%{"choices" => [%{"index" => 0, "delta" => %{"content" => text}}]})]
+  end
+
+  # Reasoning rides the OpenRouter chat-completions extension field —
+  # `delta.reasoning` alongside `delta.content` — the shape the CLI's
+  # OpenAI-compatible parser already expects from that vendor surface.
+  defp event_chunks({:reasoning_delta, text}, _index) when text != "" do
+    [data(%{"choices" => [%{"index" => 0, "delta" => %{"reasoning" => text}}]})]
   end
 
   defp event_chunks({:tool_call, tool_call}, index) do

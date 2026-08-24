@@ -70,6 +70,50 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
            ]
   end
 
+  test "replays an assistant tool call and its output faithfully" do
+    request = %Request{
+      model_id: "stealth/ox-alpha",
+      instructions: "",
+      input: [
+        %{role: "user", content: "Read the file."},
+        %{
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            %{call_id: "call_read", name: "read_file", arguments: ~s({"path":"a.txt"})}
+          ]
+        },
+        %{role: "user", content: "And then?"}
+      ],
+      tool_outputs: [
+        %ToolOutput{call_id: "call_read", output: %{"content" => "hello"}}
+      ]
+    }
+
+    assert OpenRouter.request_payload(request).messages == [
+             %{role: "user", content: "Read the file."},
+             %{
+               role: "assistant",
+               content: "",
+               tool_calls: [
+                 %{
+                   id: "call_read",
+                   type: "function",
+                   function: %{name: "read_file", arguments: ~s({"path":"a.txt"})}
+                 }
+               ]
+             },
+             # The tool result lands directly after the assistant call it
+             # answers, not at the end of the transcript.
+             %{
+               role: "tool",
+               tool_call_id: "call_read",
+               content: ~s({"content":"hello"})
+             },
+             %{role: "user", content: "And then?"}
+           ]
+  end
+
   test "carries a tool output as a labelled user turn" do
     request = %Request{
       model_id: "stealth/ox-alpha",

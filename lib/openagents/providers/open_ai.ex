@@ -73,22 +73,73 @@ defmodule OpenAgents.Providers.OpenAI do
 
   @doc false
   def request_payload(request) do
-    input =
-      case request.tool_outputs do
-        [] -> request.input
-        outputs -> Enum.map(outputs, &tool_output/1)
-      end
-
     %{
       model: request.model_id,
       instructions: request.instructions,
-      input: input,
+      input: input_items(request),
       tools: Enum.map(request.tool_definitions, &tool_definition/1),
       parallel_tool_calls: false,
       max_output_tokens: 4_096,
       stream: true
     }
     |> maybe_put(:previous_response_id, request.previous_response_id)
+  end
+
+  # A serial continuation names the response it answers, so the outputs are
+  # the whole input: the provider already holds the transcript.
+  defp input_items(%Request{previous_response_id: id} = request) when is_binary(id) do
+    case request.tool_outputs do
+      [] -> Enum.map(request.input, &message_item/1)
+      outputs -> Enum.map(outputs, &tool_output/1)
+    end
+  end
+
+  # Without a previous response the transcript travels in full, so a prior
+  # assistant tool call is replayed as its `function_call` item followed by
+  # the `function_call_output` that answers it — an output without its call
+  # is an item the Responses API refuses. An output whose call the caller
+  # did not replay is appended last rather than dropped.
+  defp input_items(%Request{} = request) do
+    outputs_by_call_id = Map.new(request.tool_outputs, &{&1.call_id, &1})
+
+    replayed_call_ids =
+      request.input
+      |> Enum.flat_map(&Map.get(&1, :tool_calls, []))
+      |> MapSet.new(& &1.call_id)
+
+    orphaned = Enum.reject(request.tool_outputs, &MapSet.member?(replayed_call_ids, &1.call_id))
+
+    items = Enum.flat_map(request.input, &items_for_message(&1, outputs_by_call_id))
+    items ++ Enum.map(orphaned, &tool_output/1)
+  end
+
+  defp items_for_message(%{tool_calls: [_call | _rest] = calls} = message, outputs_by_call_id) do
+    prose = if message.content == "", do: [], else: [message_item(message)]
+
+    calls
+    |> Enum.flat_map(fn call ->
+      output_items =
+        case Map.fetch(outputs_by_call_id, call.call_id) do
+          {:ok, output} -> [tool_output(output)]
+          :error -> []
+        end
+
+      [function_call_item(call) | output_items]
+    end)
+    |> then(&(prose ++ &1))
+  end
+
+  defp items_for_message(message, _outputs_by_call_id), do: [message_item(message)]
+
+  defp message_item(message), do: %{role: message.role, content: message.content}
+
+  defp function_call_item(call) do
+    %{
+      type: "function_call",
+      call_id: call.call_id,
+      name: call.name,
+      arguments: call.arguments
+    }
   end
 
   defp tool_definition(%ToolDefinition{} = definition) do

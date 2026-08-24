@@ -89,6 +89,15 @@ defmodule OpenAgents.Providers.OpenAI.StreamDecoder do
     {:ok, state, [{:text_delta, delta}]}
   end
 
+  # The Responses API streams reasoning as its own event families: the
+  # summary text most models expose, and the raw reasoning text some do.
+  # Both become the one neutral reasoning event.
+  defp decode_json(state, {:ok, %{"type" => type, "delta" => delta}})
+       when type in ["response.reasoning_summary_text.delta", "response.reasoning_text.delta"] and
+              is_binary(delta) and byte_size(delta) <= @maximum_delta_bytes do
+    {:ok, state, [{:reasoning_delta, delta}]}
+  end
+
   defp decode_json(
          state,
          {:ok,

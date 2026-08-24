@@ -57,18 +57,20 @@ that answer.
 | --- | --- |
 | Specific — a named behavior at a named seam | 56 |
 | Universal — the population is closed, so the proof bites | 41 |
-| Universal — the proof did not bite; enumerated here | 15 |
-| Universal — the proof did not bite; narrowed here | 1 |
-| Universal — the proof does not bite; still open | 5 |
+| Universal — the proof did not bite; enumerated here | 17 |
+| Universal — the proof did not bite; narrowed here | 2 |
+| Universal — the proof does not bite; still open | 2 |
 
-Two of the fifteen carry a residual clause that is still open, so the closing
-table below lists six rows against five contracts. `IDENTITY-002` and
-`THREAD-001` were enumerated under issue #174, `REPOSITORY-001` under #175, and
-`MEMORY-001`, `MEMORY-004`, and `PRIVACY-001` under #172; all six moved out of
-that table. `IDENTITY-002` and `REPOSITORY-001` keep a named residue, recorded
-in each contract rather than here.
+Two of the seventeen carry a residual clause that is still open, so the closing
+table below lists three rows against three contracts. `IDENTITY-002` and
+`THREAD-001` were enumerated under issue #174, `REPOSITORY-001` under #175,
+`MEMORY-001`, `MEMORY-004`, and `PRIVACY-001` under #172, and `STATUS-001` and
+`TRANSPARENCY-001` under #173, which also narrowed `UI-002` to the tool-step
+projections its proof can cover. All nine moved out of that table.
+`IDENTITY-002` and `REPOSITORY-001` keep a named residue, recorded in each
+contract rather than here.
 
-**How firm each verdict is.** The fifteen, the one, and the ten were established
+**How firm each verdict is.** The seventeen, the two, and the ten were established
 by reading the named proof and, where the answer was not obvious from it,
 querying the compiled application for the population the claim covers. The 41
 were established from the contract prose and the mechanism it names — a
@@ -267,9 +269,8 @@ new member fails until it is accounted for. They are the pattern to copy.
 
 ## What remains
 
-Six claims across five contracts still rest on proofs that cannot fail for
-them.
-Each is recorded with the violation it would miss. None is a known live defect:
+Three claims across three contracts still rest on proofs that cannot fail for
+them. Each is recorded with the violation it would miss. None is a known live defect:
 these are claims whose truth currently depends on review rather than on a
 proof.
 
@@ -277,9 +278,6 @@ proof.
 | --- | --- | --- | --- |
 | `PERSONA-001` | provider adapters contain no independent persona | an adapter that composes its own instruction text | #176 |
 | `IDENTITY-010` | the credential is not persisted in a job, journal, prompt, output, environment, Git configuration, or API response | a new sink that writes it | #177 |
-| `UI-002` | provider identifiers never enter socket assigns or HTML | an assign carrying a provider call ID | #173 |
-| `STATUS-001` | counts only, never content | a new key in the published projection; the test pattern-matches and tolerates extra keys | #173 |
-| `TRANSPARENCY-001` | bounds that hold at every level | a new public surface below `:l3` | #173 |
 | `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly | #151 |
 
 `EXIT-005` sits in the WAL anchoring work that issue #151 carries, so it is

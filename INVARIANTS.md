@@ -2392,11 +2392,27 @@ durable step outcome remains the record. Computer tokens, argv, env, prompts,
 and paths never enter a live event, and the topic is owner-scoped by
 construction, so only the owner's conversation ever receives it.)
 
+(Narrowed 2026-08-23, issue #173: "never enter socket assigns or HTML" named a
+population nothing closes — the assigns a LiveView sets are not declared
+anywhere the way a struct is. The provider-identifier clause is therefore stated
+over what those assigns are built from, which is enumerable. Every map
+projection of a durable tool-step row anywhere in `lib/` is read from source and
+must select no column of `OpenAgents.Conversations.ToolStep` or
+`OpenAgents.Voice.ToolStep` whose name begins with `provider_`, with the
+forbidden set read from the schemas so a new provider column joins it
+automatically. Seven such projections exist: the four the interface renders,
+recall's two tool-step documents, and the voice response-contract check. Each
+publishes an exact key set, so a key added to any of them fails until this
+contract names it. The recall-content half of the sentence stays a claim about
+the durable already-scrubbed row rather than an enumeration.)
+
 Evidence: `OpenAgents.Conversations.list_tool_step_activity/1`,
 `OpenAgents.Voice.list_tool_step_activity/1`, `OpenAgentsWeb.ToolActivity`,
-`OpenAgents.ComputerActivity`, `OpenAgentsWeb.ChatLive`, and tool activity tests in
+`OpenAgents.ComputerActivity`, `OpenAgentsWeb.ChatLive`, tool activity tests in
 `OpenAgentsWeb.ChatLiveTest`, `OpenAgentsWeb.ToolActivityTest`,
-`OpenAgents.ComputerActivityTest`, and `OpenAgentsWeb.ChatDelegationRailTest`.
+`OpenAgents.ComputerActivityTest` (whose exact live-event key sets pin the
+ephemeral projection), `OpenAgentsWeb.ChatDelegationRailTest`, and the
+projection enumeration in `OpenAgentsWeb.ToolActivityProjectionTest`.
 
 ### UI-003 — Product surfaces render only through the sanctioned component library
 
@@ -2807,9 +2823,25 @@ traffic cannot become an rpc storm. Legacy JSON pollers of `/status` keep the
 old health payload via content negotiation until they migrate to `/health`
 or `/api/status`.
 
+The published key set is exact, not a shape a test pattern-matches. Every key
+path `OpenAgents.NetworkStatus` publishes, nested sections and list elements
+included, is enumerated against a set this contract declares, so a key added
+anywhere in the projection fails until someone decides it may go to an
+anonymous caller — the posture `LEADERBOARD-001` gets from
+`OpenAgents.Leaderboard.Entry`'s field set. Degrading may not introduce a key
+either: a failed read is absent, never an error string.
+
+What the projection carries beside counts is the bounded public SCV activity
+band (`scvs`: a derived public id, a label, a status, a weight, and one
+bounded activity line), the forge deploy lane (short shas, statuses, timings,
+module counts, and the promoter's role), and the independence disclosure
+(`OpenAgents.Forge.Independence`, EXIT-006). No computer names, job goals or
+ids, conversation data, provider identifiers, commit messages, module names,
+operator identities, or internal node names or addresses.
+
 Evidence: `OpenAgents.NetworkStatus`, `OpenAgentsWeb.NetworkStatusLive`,
-`OpenAgentsWeb.Plugs.StatusProbeCompat`, `OpenAgents.NetworkStatusTest`, and
-`OpenAgentsWeb.NetworkStatusLiveTest`.
+`OpenAgentsWeb.Plugs.StatusProbeCompat`, `OpenAgents.NetworkStatusTest` (the
+published key set included), and `OpenAgentsWeb.NetworkStatusLiveTest`.
 
 ### TRANSPARENCY-001 — Public transparency surfaces publish per-repo leveled projections
 
@@ -2817,7 +2849,8 @@ Status: Current
 
 The public transparency surfaces — `/changelog`, `/api/changelog`, and the
 forge web UI (`/<owner>/<repo>`, `/<owner>/<repo>/commit/:sha`,
-`/<owner>/<repo>/blob/:ref/*path` — addressed exactly like the GitHub URLs
+`/<owner>/<repo>/tree/:ref/*path`, `/<owner>/<repo>/blob/:ref/*path` —
+addressed exactly like the GitHub URLs
 they replace, with the owning account as a **literal** route scope rather
 than a wildcard first segment, so no other path on the domain is shadowed)
 — publish bounded projections of the forge
@@ -2864,10 +2897,37 @@ storm (LEADERBOARD-001's amplifier rule). STATUS-001 is unchanged: `/status`
 stays content-free; content publication happens only on these surfaces and
 only per the repo's configured level.
 
+**Which surfaces those are is read from the router, not from this list.** Every
+route `OpenAgentsWeb.RouteAuthority` classifies `:public_read` under the
+repository scope is behind one of two gates, and both memberships are read from
+compiled import tables:
+
+- **Disclosure level.** Repository content — the repo home, a commit, a tree, a
+  blob, and a pull request's diffs — reaches
+  `OpenAgents.Forge.Visibility` through `OpenAgentsWeb.RepositoryAccess`, which is
+  the one composer of the dial for the web surfaces. `OpenAgents.Changelog`,
+  `OpenAgents.Reputation`, and `OpenAgents.Settlement` read the dial for their
+  own published projections; those five modules and `OpenAgentsWeb.ChangelogLive`
+  are its only readers.
+- **Repository readability.** The issue tracker — issues, labels, milestones,
+  projects, and the pull-request index — resolves through
+  `OpenAgents.Repositories.get_visible_by_path!/3` (REPOSITORY-001). Those
+  surfaces are readable exactly when the repository is; the disclosure dial
+  governs source and history, not them.
+
+An anonymous route added under the repository scope fails until this contract
+says which gate it is behind, and a handler that loses its gate fails with it.
+
+(Amended 2026-08-23, issue #173: `/<owner>/<repo>/tree/:ref/*path` was already
+served and gated when this contract listed three forge paths, and the tracker
+surfaces were public without the contract saying what governed them. Both are
+now stated.)
+
 Evidence: `OpenAgents.Forge.Visibility`, `OpenAgents.Forge.Browse`, `OpenAgents.Changelog`,
 `OpenAgents.Changelog.Entry`, `OpenAgentsWeb.ChangelogLive`, `OpenAgentsWeb.CodeRepoLive`,
-`OpenAgentsWeb.CodeCommitLive`, `OpenAgentsWeb.CodeBlobLive`,
-`OpenAgentsWeb.ChangelogController`, and their tests.
+`OpenAgentsWeb.CodeCommitLive`, `OpenAgentsWeb.CodeTreeLive`, `OpenAgentsWeb.CodeBlobLive`,
+`OpenAgentsWeb.RepositoryAccess`, `OpenAgentsWeb.ChangelogController`, their tests, and the
+surface enumeration in `OpenAgentsWeb.TransparencySurfaceTest`.
 
 ### REPOSITORY-001 — GitHub identity names repositories; OpenAgents owns stored snapshots
 
@@ -4049,7 +4109,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | ADMIN-001 | `test/openagents_web/operator_surface_test.exs`, `test/openagents_web/controllers/admin_recording_controller_test.exs`, `test/openagents/admin_test.exs`, `test/openagents_web/live/admin_live_test.exs`, `test/openagents_web/live/admin_forge_live_test.exs` |
 | DATA-004 | `test/openagents_web/controllers/data_controller_test.exs`, `test/openagents/data_rights/atif_export_test.exs`, `test/openagents_web/operator_surface_test.exs` |
 | UI-001 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/live/chat_live_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs`, `test/openagents_web/operator_surface_test.exs` |
-| UI-002 | `test/openagents_web/tool_activity_test.exs`, `test/openagents_web/live/chat_live_test.exs` |
+| UI-002 | `test/openagents_web/tool_activity_test.exs`, `test/openagents_web/live/chat_live_test.exs`, `test/openagents_web/tool_activity_projection_test.exs` |
 | UI-003 | `test/openagents_web/ui_test.exs`, `test/openagents_web/component_catalog_test.exs` |
 | LEADERBOARD-001 | `test/openagents/leaderboard_test.exs`, `test/openagents_web/live/leaderboard_live_test.exs` |
 | OBSERVABILITY-001 | `test/openagents/observability_test.exs` |
@@ -4064,7 +4124,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-009 | `test/openagents/forge/deployment_lane_test.exs`, `test/openagents/forge/hot_loader_test.exs` |
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
-| TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs` |
+| TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs`, `test/openagents_web/transparency_surface_test.exs` |
 | REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |

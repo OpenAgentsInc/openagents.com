@@ -39,6 +39,270 @@ defmodule OpenAgents.NetworkStatusTest do
     assert is_list(projection["scvs"])
   end
 
+  # ── STATUS-001: the exact published key set (#173) ────────────────────────
+  #
+  # STATUS-001 says `/status` and `/api/status` publish counts only, never
+  # content, and the tests above pattern-match a few expected values, which
+  # tolerates every key beside them. A projection is a struct-shaped thing, so
+  # the answer is `LEADERBOARD-001`'s: assert the whole key set, nested sections
+  # included, so a key added anywhere in `OpenAgents.NetworkStatus` fails until
+  # someone decides it may be published to the internet.
+  @published_keys [
+    "cluster",
+    "cluster.beam",
+    "cluster.distributed",
+    "cluster.quorum",
+    "cluster.raft",
+    "counts",
+    "counts.active_jobs",
+    "counts.machines_connected",
+    "forge",
+    "forge.loop",
+    "forge.loop.last_ms",
+    "forge.loop.median_ms",
+    "forge.mirror",
+    "forge.mirror.lagging_minutes",
+    "forge.mirror.repo",
+    "forge.mirror.state",
+    "forge.recent_deploys",
+    "forge.recent_deploys[].at",
+    "forge.recent_deploys[].completed_at",
+    "forge.recent_deploys[].duration_ms",
+    "forge.recent_deploys[].modules",
+    "forge.recent_deploys[].push_to_live_ms",
+    "forge.recent_deploys[].result",
+    "forge.recent_deploys[].sha",
+    "forge.recent_deploys[].type",
+    "forge.recent_targets",
+    "forge.recent_targets[].modules",
+    "forge.recent_targets[].promoted_at",
+    "forge.recent_targets[].promoted_by",
+    "forge.recent_targets[].sha",
+    "forge.recent_targets[].status",
+    "forge.recent_targets[].updated_at",
+    "forge.repo",
+    "forge.state",
+    "forge.target",
+    "forge.target.modules",
+    "forge.target.promoted_at",
+    "forge.target.promoted_by",
+    "forge.target.sha",
+    "forge.target.status",
+    "forge.target.updated_at",
+    "generated_at",
+    "independence",
+    "independence.degraded",
+    "independence.document",
+    "independence.export",
+    "independence.export.blocked",
+    "independence.export.families",
+    "independence.export.gaps",
+    "independence.export.gaps[].family",
+    "independence.export.gaps[].issue",
+    "independence.export.gaps[].status",
+    "independence.export.not_user_data",
+    "independence.export.partial",
+    "independence.export.portable",
+    "independence.operator",
+    "independence.operator.mirror_is_authority",
+    "independence.operator.model",
+    "independence.operator.operator_reads_audited",
+    "independence.operator.separation_of_duties",
+    "independence.private_data",
+    "independence.private_data.access_controlled",
+    "independence.private_data.encrypted_at_rest",
+    "independence.private_data.exports_encrypted",
+    "independence.private_data.issue",
+    "independence.schema",
+    "independence.verification",
+    "independence.verification.anchor_published",
+    "independence.verification.chained",
+    "independence.verification.issue",
+    "independence.verification.property",
+    "nodes",
+    "nodes[].beam_seen",
+    "nodes[].boot",
+    "nodes[].boot.attempts",
+    "nodes[].boot.ready",
+    "nodes[].boot.reason",
+    "nodes[].boot.retry_in_ms",
+    "nodes[].boot.state",
+    "nodes[].deployment",
+    "nodes[].deployment.phase",
+    "nodes[].deployment.ready",
+    "nodes[].deployment.reason",
+    "nodes[].hot_loaded_at",
+    "nodes[].label",
+    "nodes[].marker",
+    "nodes[].raft_seen",
+    "nodes[].reachable",
+    "nodes[].ready",
+    "nodes[].release",
+    "nodes[].revision",
+    "nodes[].uptime_seconds",
+    "revision",
+    "schema",
+    "scvs",
+    "scvs[].id",
+    "scvs[].label",
+    "scvs[].status",
+    "scvs[].text",
+    "scvs[].weight",
+    "status"
+  ]
+
+  test "the projection publishes exactly the keys STATUS-001 enumerates" do
+    seed_every_section!()
+
+    actual = MapSet.new(published_keys(NetworkStatus.projection(refresh: true)))
+    declared = MapSet.new(@published_keys)
+    undeclared = actual |> MapSet.difference(declared) |> MapSet.to_list()
+    stale = declared |> MapSet.difference(actual) |> MapSet.to_list()
+
+    assert undeclared == [],
+           """
+           `OpenAgents.NetworkStatus` publishes keys STATUS-001 does not name:
+           #{inspect(undeclared)}
+
+           `/status` and `/api/status` are anonymous, so a new key is a
+           publication decision. Amend STATUS-001 in INVARIANTS.md, then add it
+           here.
+           """
+
+    assert stale == [],
+           """
+           STATUS-001 names published keys the projection no longer carries:
+           #{inspect(stale)}
+
+           Amend STATUS-001 in INVARIANTS.md, then remove them here.
+           """
+  end
+
+  test "the degraded projection publishes no key the full one does not" do
+    # The page must render during incidents, so every section degrades. What
+    # degrading must never do is introduce a key, such as an error string
+    # carrying the reason a read failed.
+    previous = Application.get_env(:openagents, :forge_repos)
+    Application.put_env(:openagents, :forge_repos, ["nothing-here-yet"])
+    on_exit(fn -> restore_env(:forge_repos, previous) end)
+
+    actual = MapSet.new(published_keys(NetworkStatus.projection(refresh: true)))
+    undeclared = actual |> MapSet.difference(MapSet.new(@published_keys)) |> MapSet.to_list()
+
+    assert undeclared == [],
+           """
+           A degraded read published keys the healthy projection does not:
+           #{inspect(undeclared)}
+           """
+  end
+
+  # Every published key path, with `[]` standing for a list element. Structs
+  # are leaves: a `DateTime` is a value, not a section.
+  defp published_keys(value, prefix \\ "")
+
+  defp published_keys(%_struct{}, _prefix), do: []
+
+  defp published_keys(map, prefix) when is_map(map) do
+    Enum.flat_map(map, fn {key, value} ->
+      path = if prefix == "", do: to_string(key), else: prefix <> "." <> to_string(key)
+      [path | published_keys(value, path)]
+    end)
+  end
+
+  defp published_keys(list, prefix) when is_list(list),
+    do: Enum.flat_map(list, &published_keys(&1, prefix <> "[]"))
+
+  defp published_keys(_leaf, _prefix), do: []
+
+  # Every optional section carries data, so an empty list cannot hide the keys
+  # its elements would publish.
+  defp seed_every_section!() do
+    alias OpenAgents.Forge.{DeployReceipt, Target}
+    alias OpenAgents.SCV.{DriverAccount, Executions}
+
+    sha = String.duplicate("e", 40)
+
+    target =
+      %Target{}
+      |> Target.changeset(%{
+        repo: "openagents.com",
+        sha: sha,
+        promoted_by: "operator:1",
+        status: "promoted"
+      })
+      |> Repo.insert!()
+
+    %DeployReceipt{}
+    |> DeployReceipt.changeset(%{
+      repo: "openagents.com",
+      sha: sha,
+      target_id: target.id,
+      modules: ["Elixir.OpenAgents.Example"],
+      result: "live",
+      deployment_type: "relup",
+      push_to_live_ms: 10,
+      started_at: DateTime.add(DateTime.utc_now(), -10, :second),
+      completed_at: DateTime.utc_now()
+    })
+    |> Repo.insert!()
+
+    {:ok, operator} =
+      OpenAgents.Accounts.upsert_github_user(%{
+        github_id: System.unique_integer([:positive]),
+        github_login: "network-status-keys-#{System.unique_integer([:positive])}",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/1?v=4"
+      })
+
+    account =
+      %DriverAccount{}
+      |> DriverAccount.create_changeset(%{
+        operator_id: operator.id,
+        label: "Published key set",
+        secret_ref: "file:published-keys-#{System.unique_integer([:positive])}"
+      })
+      |> Repo.insert!()
+      |> DriverAccount.ready_changeset(%{
+        credential_version: 1,
+        plan_type: "pro",
+        available_models: ["gpt-5.6-luna"],
+        reasoning_efforts: ["low"],
+        last_verified_at: DateTime.utc_now()
+      })
+      |> Repo.update!()
+
+    {:ok, execution} = Executions.claim(account, String.duplicate("d", 40), "objective")
+
+    :ok =
+      Executions.record_event(execution, %{
+        schema: "openagents.scv.event.v1",
+        run_id: execution.id,
+        type: "tool_started",
+        activity_kind: "searching",
+        tool: "grep",
+        output: "output"
+      })
+
+    # `OpenAgents.Forge.MirrorWatch` publishes its state through a
+    # `:persistent_term` key. A watching mirror carries two keys an "off" one
+    # does not, and both shapes have to be visible to the key-set assertion.
+    mirror_key = {OpenAgents.Forge.MirrorWatch, :state}
+    previous = :persistent_term.get(mirror_key, nil)
+
+    :persistent_term.put(mirror_key, %{
+      "state" => "lagging",
+      "repo" => "openagents.com",
+      "lagging_minutes" => 3
+    })
+
+    on_exit(fn ->
+      if previous,
+        do: :persistent_term.put(mirror_key, previous),
+        else: :persistent_term.erase(mirror_key)
+    end)
+
+    :ok
+  end
+
   test "an unreachable peer degrades to an honest per-node report, not a crash" do
     # A node that is not in the cluster at all — the erpc path must degrade.
     report = NetworkStatus.node_report(:"definitely_not_running@127.0.0.1")

@@ -661,7 +661,7 @@ to a reader who can already read the issue, and to no one else.
   one repository answers to the name; two candidates record nothing rather than
   attaching a receipt to the wrong issue. That is safe but lossy, and a
   repository foreign key on the three receipt tables would remove the case
-  entirely. Settle it with
+  entirely. `#181` carries that work; settle the name question first with
   `docs/2026-08-21-repository-storage-architecture-audit.md`.
 - **Does the tenant deployment plane or the forge deployment plane own an
   issue's deployment evidence? Settled: both, and the row says which.** Stage 4

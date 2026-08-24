@@ -51,11 +51,39 @@ Status: Current
 OpenAgents's core identity, voice, and first-conversation greeting come from one
 versioned artifact admitted by its exact content SHA-256. The artifact and its
 source-manifest identity are validated and installed before the supervision
-tree starts. Every provider request receives instructions composed from that
-installed artifact; provider adapters contain no independent OpenAgents persona.
+tree starts.
+
+Every request built for an OpenAgents inference receives instructions composed
+from that installed artifact. Two requests are outside that clause and are
+named rather than assumed. The delegated-probe inference proxy,
+`OpenAgentsWeb.InferenceProxyController`, relays the probe's own system
+messages: the model in that call answers as the probe, not as OpenAgents, and
+the proxy composes no OpenAgents persona at all. The persona evaluation runner
+composes the candidate artifact under evaluation rather than the installed one.
+
+Provider adapters contain no independent OpenAgents persona. No adapter reaches
+the persona, the composer, the role catalog, or the Blueprint projection, so
+none can obtain or recompose the identity. An adapter that builds a request
+body sends the composed instructions byte for byte and adds no text of its own
+anywhere in that body; an adapter that relays host-composed frames reaches no
+session configuration and names no instruction field; an adapter that never
+leaves the VM reaches no egress at all.
+
+Both populations are derived rather than remembered. The three provider
+behaviours record their implementors in each module's BEAM attribute chunk, and
+every configured provider must be one of them, so an adapter selected by
+configuration that declared no behaviour fails as well. Every module that names
+`OpenAgents.Providers.Request` is read from its atom table and classified by
+where the instructions on that request come from, and every module classified
+as composing the installed artifact must carry a compiled call into the
+composer. The wire probes read the outbound body, not request headers or a
+second request an adapter might make, and the socket adapter is bounded by what
+it can name rather than by a captured frame.
 
 Evidence: `OpenAgents.Persona`, `priv/sarah/persona/sarah.v1.md`,
-`OpenAgents.Context.Composer`, `OpenAgents.Turns.TurnServer`, and `OpenAgents.PersonaTest`.
+`OpenAgents.Context.Composer`, `OpenAgents.Turns.TurnServer`,
+`OpenAgents.PersonaTest`, and
+`test/openagents/providers/persona_boundary_test.exs`.
 
 ### PERSONA-002 — One core OpenAgents identity composes with an admitted role
 
@@ -4020,7 +4048,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | Invariant | Executable proof |
 | --- | --- |
 | CANON-001 | `test/openagents/persona/source_manifest_test.exs` |
-| PERSONA-001 | `test/openagents/persona_test.exs` |
+| PERSONA-001 | `test/openagents/persona_test.exs`, `test/openagents/providers/persona_boundary_test.exs` |
 | PERSONA-002 | `test/openagents/context/composer_test.exs`, `test/openagents/roles_test.exs` |
 | PERSONA-003 | `test/openagents/persona/evaluation_test.exs` |
 | BLUEPRINT-001 | `test/openagents/blueprint_test.exs` |

@@ -57,20 +57,20 @@ that answer.
 | --- | --- |
 | Specific — a named behavior at a named seam | 56 |
 | Universal — the population is closed, so the proof bites | 41 |
-| Universal — the proof did not bite; enumerated here | 17 |
+| Universal — the proof did not bite; enumerated here | 18 |
 | Universal — the proof did not bite; narrowed here | 2 |
-| Universal — the proof does not bite; still open | 2 |
+| Universal — the proof does not bite; still open | 1 |
 
-Two of the seventeen carry a residual clause that is still open, so the closing
-table below lists three rows against three contracts. `IDENTITY-002` and
+Two of the eighteen carry a residual clause that is still open, so the closing
+table below lists two rows against two contracts. `IDENTITY-002` and
 `THREAD-001` were enumerated under issue #174, `REPOSITORY-001` under #175,
-`MEMORY-001`, `MEMORY-004`, and `PRIVACY-001` under #172, and `STATUS-001` and
+`MEMORY-001`, `MEMORY-004`, and `PRIVACY-001` under #172, `STATUS-001` and
 `TRANSPARENCY-001` under #173, which also narrowed `UI-002` to the tool-step
-projections its proof can cover. All nine moved out of that table.
-`IDENTITY-002` and `REPOSITORY-001` keep a named residue, recorded in each
-contract rather than here.
+projections its proof can cover, and `PERSONA-001` under #176. All ten moved
+out of that table. `IDENTITY-002` and `REPOSITORY-001` keep a named residue,
+recorded in each contract rather than here.
 
-**How firm each verdict is.** The seventeen, the two, and the ten were established
+**How firm each verdict is.** The eighteen, the two, and the ten were established
 by reading the named proof and, where the answer was not obvious from it,
 querying the compiled application for the population the claim covers. The 41
 were established from the contract prose and the mechanism it names — a
@@ -235,6 +235,35 @@ says is absent.
 **Now:** `OpenAgents.HostedCIAbsenceTest` reads the paths every hosted provider
 configures itself from.
 
+### `PERSONA-001` — no adapter carries a persona, and every request composes one
+
+**Would have missed:** an adapter that composes its own instruction text
+alongside the installed one. `persona_test.exs` proves the artifact is admitted
+by its content SHA-256 and installed before the supervision tree starts, which
+is a proof of the artifact rather than of either sentence. It would also have
+missed a request built somewhere the contract had not counted — and one exists.
+`OpenAgentsWeb.InferenceProxyController` builds a provider request whose
+instructions are the delegated probe's own system messages, so "every provider
+request receives instructions composed from that installed artifact" has been
+false since the proxy landed. The model in that call answers as the probe
+rather than as OpenAgents, so the sentence was wrong, not the code.
+
+**Now:** `OpenAgents.Providers.PersonaBoundaryTest` derives both populations.
+Three behaviours declare a provider boundary — `OpenAgents.Providers.Provider`,
+`OpenAgents.Voice.CallProvider`, and `OpenAgents.Voice.SidebandProvider` — and
+a module that implements one records it in its BEAM attribute chunk, so the
+implementor set is read back rather than listed and every configured provider
+must be a member. Each adapter is then classified by what it can put in front
+of a model: an adapter that builds a request body is driven against a capturing
+plug and every string in the outbound body must be one the host supplied or one
+of a declared wire vocabulary; a socket adapter must reach no session
+configuration and name no instruction field; an in-process adapter must reach
+no egress at all. Separately, every module whose atom table names
+`OpenAgents.Providers.Request` is classified by where its instructions come
+from, and each one classified as composing the installed artifact must carry a
+compiled call into `OpenAgents.Context.Composer`. The contract now names the
+proxy and the evaluation runner as the two requests outside the composed clause.
+
 ## Universal claims narrowed here
 
 Enumeration was impractical or the wider sentence was not true, so the claim
@@ -269,14 +298,13 @@ new member fails until it is accounted for. They are the pattern to copy.
 
 ## What remains
 
-Three claims across three contracts still rest on proofs that cannot fail for
+Two claims across two contracts still rest on proofs that cannot fail for
 them. Each is recorded with the violation it would miss. None is a known live defect:
 these are claims whose truth currently depends on review rather than on a
 proof.
 
 | Contract | The claim | A violation the proof would miss | Carried by |
 | --- | --- | --- | --- |
-| `PERSONA-001` | provider adapters contain no independent persona | an adapter that composes its own instruction text | #176 |
 | `IDENTITY-010` | the credential is not persisted in a job, journal, prompt, output, environment, Git configuration, or API response | a new sink that writes it | #177 |
 | `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly | #151 |
 

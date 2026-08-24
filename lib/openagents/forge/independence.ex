@@ -28,11 +28,19 @@ defmodule OpenAgents.Forge.Independence do
     the operator serves it and could serve any document, and its value is that
     a third party can cheaply keep a copy, not that anyone has. Issue #151
     carries the witness.
-  * **Private data.** No export is encrypted to a key the recipient holds, and
-    no Ecto column in this repository is encrypted at rest. Issue #178 carries
-    that decision. This one is stated rather than derived, because there is no
-    registry of encrypted columns to count and inventing one to make a number
-    appear would be the kind of claim this disclosure exists to avoid.
+  * **Private data.** Two facts that only mean something together. The account
+    export can be encrypted to a key the recipient holds (#178), and that is
+    derived: `OpenAgentsWeb.DataController`'s compiled import table either
+    reaches `OpenAgents.DataRights.Age` or it does not, so removing the
+    encryption removes the claim in the same commit. Nothing in PostgreSQL is
+    encrypted at rest, and that one is stated, because there is no registry of
+    encrypted columns to count and inventing one to make a number appear would
+    be the kind of claim this disclosure exists to avoid; #193 carries it.
+    `operator_reads_source` is derived from the second fact rather than
+    restated, because it is the same fact: the operator reads the plaintext an
+    export is built from exactly while the store is plaintext. Publishing the
+    encryption without it would let a reader conclude the operator cannot read
+    an export, which is false.
 
   `degraded?` is true while any of the three falls short, so the page does not
   need a human to decide when to say so. It is expected to be true today.
@@ -50,8 +58,11 @@ defmodule OpenAgents.Forge.Independence do
 
   @anchor_issue 168
   @witness_issue 151
-  @encryption_issue 178
+  @at_rest_issue 193
   @document "docs/forge-operator-independence.md"
+  @export_encryption_module OpenAgents.DataRights.Age
+  @export_controller OpenAgentsWeb.DataController
+  @account_export OpenAgents.DataRights.AccountExport
 
   @doc "The disclosure, in the shape `/api/status` publishes it."
   @spec projection() :: map()
@@ -88,7 +99,9 @@ defmodule OpenAgents.Forge.Independence do
   @spec degraded?(map(), map(), map()) :: boolean()
   def degraded?(export, verification, private_data) do
     export["gaps"] != [] or not verification["anchor_published"] or
-      not verification["anchor_witnessed"] or not private_data["exports_encrypted"]
+      not verification["anchor_witnessed"] or
+      not private_data["export_recipient_encryption"] or
+      not private_data["encrypted_at_rest"]
   end
 
   # Counted from the ledger, so this section cannot claim an export gap is
@@ -139,13 +152,45 @@ defmodule OpenAgents.Forge.Independence do
     }
   end
 
+  # `encrypted_at_rest` is the one stated value left here, and everything
+  # around it is read from the code rather than asserted beside it.
   defp private_data_section do
+    encrypted_at_rest? = false
+
     %{
-      "exports_encrypted" => false,
-      "encrypted_at_rest" => false,
-      "access_controlled" => true,
-      "issue" => @encryption_issue
+      "export_recipient_encryption" => export_recipient_encryption?(),
+      "encrypted_at_rest" => encrypted_at_rest?,
+      "operator_reads_source" => not encrypted_at_rest?,
+      "access_controlled" => access_controlled?(),
+      "issue" => @at_rest_issue
     }
+  end
+
+  # The export route encrypts to a recipient-held key exactly while it calls
+  # the module that does it. Reading the compiled import table is the same
+  # technique `EXIT-002` and `EXIT-003` use to keep a structural claim from
+  # decaying into a comment.
+  defp export_recipient_encryption? do
+    safely(fn -> @export_encryption_module in external_calls(@export_controller) end) || false
+  end
+
+  # "Takes the account and nothing else" is the whole access-control claim for
+  # this export, and it is a fact about the function's shape.
+  defp access_controlled? do
+    safely(fn ->
+      Code.ensure_loaded?(@account_export) and
+        function_exported?(@account_export, :build, 1) and
+        not function_exported?(@account_export, :build, 2)
+    end) || false
+  end
+
+  # The same read `EXIT-002`'s and `EXIT-003`'s proofs perform: the callee set
+  # a module was compiled with, which no comment or later refactor can flatter.
+  defp external_calls(module) do
+    case :beam_lib.chunks(:code.which(module), [:imports]) do
+      {:ok, {^module, [imports: imports]}} -> Enum.map(imports, &elem(&1, 0))
+      _unreadable -> []
+    end
   end
 
   defp operator_section do

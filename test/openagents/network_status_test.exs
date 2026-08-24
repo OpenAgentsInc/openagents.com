@@ -113,8 +113,9 @@ defmodule OpenAgents.NetworkStatusTest do
     "independence.private_data",
     "independence.private_data.access_controlled",
     "independence.private_data.encrypted_at_rest",
-    "independence.private_data.exports_encrypted",
+    "independence.private_data.export_recipient_encryption",
     "independence.private_data.issue",
+    "independence.private_data.operator_reads_source",
     "independence.schema",
     "independence.verification",
     # The anchor's address, its publication state, and whether anybody outside

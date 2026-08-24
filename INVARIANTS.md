@@ -4151,11 +4151,34 @@ true today. Two of the axes are constants, so `degraded?/0` would stay true
 even if one were dropped from the disjunction; `degraded?/3` is public for
 exactly that reason and the proof varies one axis at a time through it.
 
-One claim is stated rather than derived and it says so: no export is encrypted
-to a key the recipient holds and no Ecto column in this repository is encrypted
-at rest, which issue #178 carries. There is no registry of encrypted columns to
-count, and inventing one so a number could appear would be the kind of claim
-this disclosure exists to prevent.
+The private-data section is two facts that only mean something together, and
+one of them is now derived. `export_recipient_encryption` reads whether
+`OpenAgentsWeb.DataController` was compiled against `OpenAgents.DataRights.Age`
+— the same compiled-import-table read `EXIT-002` and `EXIT-003` use — so an
+export route that stopped encrypting stops being claimed to, in the same
+commit. `access_controlled` is derived from `AccountExport.build/1` existing at
+arity one and no other, which is the whole access-control claim for this
+document: no parameter can widen it. `operator_reads_source` is derived from
+`encrypted_at_rest`, because it is the same fact stated from the reader's side,
+and publishing the encryption without it would let a reader conclude the
+operator cannot read an export.
+
+`encrypted_at_rest` is the one value still stated rather than derived, and it
+says so: no Ecto column in this repository is encrypted at rest, which issue
+#193 carries. There is no registry of encrypted columns to count, and inventing
+one so a number could appear would be the kind of claim this disclosure exists
+to prevent.
+
+Amended 2026-08-24 (issue #178). The decision that a private export can be
+encrypted to a key the operator does not hold is recorded in
+`docs/2026-08-24-private-export-encryption.md` with its threat model and four
+rejected options. `degraded?` gained the at-rest axis in the same change,
+because closing the export half without it would have let a forge with
+plaintext columns report itself independent the moment an anchor appeared. The
+published key set moved with the claim, as `STATUS-001` requires:
+`independence.private_data.exports_encrypted` was replaced by
+`export_recipient_encryption`, and `operator_reads_source` was added. That is
+the decision being asked for, not an accident.
 
 `STATUS-001`'s rule holds here: the section carries counts, booleans, family
 names, issue numbers, and one document path, and the proof asserts that every
@@ -4164,16 +4187,22 @@ path, an account id, a node name, or a commit sha reaching it turns the proof
 red. The whole section degrades to `nil` like every other gather, so a node
 that cannot assemble it renders the page without it rather than failing.
 
-Four mutations were confirmed to fail the proof and reverted: publishing an
+Six mutations were confirmed to fail the proof and reverted: publishing an
 empty gap list while the ledger records gaps; making `degraded` constant;
-adding the forge's repository name to the projection; and claiming exports are
-encrypted. A fifth was added with the anchor: dropping the witness axis from
-the disjunction, which `degraded?/0` cannot detect and `degraded?/3` does.
+adding the forge's repository name to the projection; claiming exports are
+encrypted; dropping the witness axis from the disjunction, which `degraded?/0`
+cannot detect and `degraded?/3` does; dropping the at-rest axis, which the
+plaintext-store assertion catches once an anchor is configured; and hardcoding
+`export_recipient_encryption` to `true` while removing the encryption from the
+route, which the derivation assertion catches even though the projection does
+not.
 
 Evidence: `OpenAgents.Forge.Independence`, `OpenAgents.NetworkStatus`,
-`OpenAgentsWeb.NetworkStatusLive`,
-`test/openagents/forge/independence_disclosure_test.exs`, and
-`docs/forge-operator-independence.md`.
+`OpenAgentsWeb.NetworkStatusLive`, `OpenAgents.DataRights.Age`,
+`test/openagents/forge/independence_disclosure_test.exs`,
+`test/openagents/data_rights/age_test.exs`,
+`docs/forge-operator-independence.md`, and
+`docs/2026-08-24-private-export-encryption.md`.
 
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
 
@@ -4830,7 +4859,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs`, `test/openagents_web/controllers/forge_anchor_controller_test.exs` |
-| EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs` |
+| EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs`, `test/openagents/data_rights/age_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |

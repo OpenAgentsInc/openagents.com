@@ -10,6 +10,12 @@ defmodule OpenAgents.DataRights.AccountExportTest do
 
   use OpenAgentsWeb.ConnCase, async: false
 
+  # The account export's encryption keypair for these tests. The secret half
+  # exists only here, which is the shape of the claim: the forge holds the
+  # public half and cannot read what it produced.
+  @recipient "age1ja3nzz0wlmuqvsfhrx7w4kq00knnmu3ur32y47734k5javp4cqnqumg72a"
+  @identity "AGE-SECRET-KEY-1XDUAFRZQALRUZ2G4UK6NDASFWPUFRTJ46359KD974PUPZ2UYXK2Q6G8QT3"
+
   import Ecto.Query
 
   alias OpenAgents.DataRights.AccountExport
@@ -416,6 +422,63 @@ defmodule OpenAgents.DataRights.AccountExportTest do
       response = get(conn, ~p"/data/export/account")
       assert response.status == 302
       refute response.resp_body =~ "openagents.account_export.v1"
+    end
+
+    test "a recipient key encrypts the same document to a key the operator does not hold", %{
+      conn: conn,
+      board: board
+    } do
+      # #178. The `recipient` parameter changes who can read the response and
+      # nothing about what it contains: the same post is inside, and the
+      # operator's own decryptor is not required to get it out.
+      user = github_user("account-export-sealed", "export-sealed")
+      topic = topic_fixture(board, "user:" <> user.id, "Sealed")
+      _post = post_fixture(topic, "user:" <> user.id, "Through the sealed route.")
+
+      response =
+        conn
+        |> Plug.Test.init_test_session(%{"user_id" => user.id})
+        |> get(~p"/data/export/account?recipient=#{@recipient}")
+
+      assert response.status == 200
+
+      assert ["attachment; filename=\"openagents-account-data.json.age\""] =
+               Plug.Conn.get_resp_header(response, "content-disposition")
+
+      assert String.starts_with?(response.resp_body, "age-encryption.org/v1\n")
+      refute response.resp_body =~ "Through the sealed route."
+
+      body = Jason.decode!(OpenAgents.Test.AgeDocument.decrypt(response.resp_body, @identity))
+      assert body["account"]["id"] == user.id
+      assert [%{"body_text" => "Through the sealed route."}] = body["forum"]["posts"]
+    end
+
+    test "a recipient that is not an age public key is refused rather than sent in the clear", %{
+      conn: conn
+    } do
+      user = github_user("account-export-bad-key", "export-bad-key")
+
+      for recipient <- ["age1notarealkey", "ssh-ed25519 AAAA", @identity] do
+        response =
+          conn
+          |> Plug.Test.init_test_session(%{"user_id" => user.id})
+          |> get(~p"/data/export/account?recipient=#{recipient}")
+
+        assert response.status == 422
+        refute response.resp_body =~ "openagents.account_export.v1"
+      end
+    end
+
+    test "an empty recipient keeps the plain document rather than failing", %{conn: conn} do
+      user = github_user("account-export-blank-key", "export-blank-key")
+
+      response =
+        conn
+        |> Plug.Test.init_test_session(%{"user_id" => user.id})
+        |> get(~p"/data/export/account?recipient=")
+
+      assert response.status == 200
+      assert Jason.decode!(response.resp_body)["account"]["id"] == user.id
     end
 
     test "the route reads the session, so no parameter reaches another account", %{

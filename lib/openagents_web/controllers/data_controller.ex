@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.DataController do
   use OpenAgentsWeb, :controller
 
-  alias OpenAgents.DataRights.AccountExport
+  alias OpenAgents.DataRights.{AccountExport, Age}
   alias OpenAgents.{Conversations, DataRights}
 
   def show(conn, _params) do
@@ -48,20 +48,51 @@ defmodule OpenAgentsWeb.DataController do
   authenticated account and nothing else, so no parameter can widen it to
   another account's records.
   """
-  def export_account(conn, _params) do
+  # The `recipient` parameter is an `age1…` public key the account generated
+  # itself. Supplying one costs the operator the ability to read the file it
+  # sends; supplying nothing keeps today's plain JSON, because an export
+  # nobody can open is not portability either. Neither branch widens what the
+  # document contains: `AccountExport.build/1` still takes the account and
+  # nothing else (#178, EXIT-001).
+  def export_account(conn, params) do
     with %{status: "active"} = user <- conn.assigns.current_user,
+         {:ok, recipient} <- recipient(params),
          {:ok, export} <- AccountExport.build(user),
-         {:ok, body} <- Jason.encode(export) do
+         {:ok, body} <- Jason.encode(export),
+         {:ok, body, extension, type} <- encrypt(body, recipient) do
       conn
-      |> put_resp_content_type("application/json")
+      |> put_resp_content_type(type)
       |> put_resp_header(
         "content-disposition",
-        ~s(attachment; filename="openagents-account-data.json")
+        ~s(attachment; filename="openagents-account-data.json#{extension}")
       )
       |> put_resp_header("cache-control", "no-store")
       |> send_resp(:ok, body)
     else
-      _unavailable -> send_resp(conn, :not_found, "Account export is unavailable.")
+      {:error, :invalid_recipient} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> text("Supply an age recipient public key, the age1… value age-keygen -y prints.")
+
+      _unavailable ->
+        send_resp(conn, :not_found, "Account export is unavailable.")
+    end
+  end
+
+  defp recipient(%{"recipient" => recipient}) when is_binary(recipient) do
+    case String.trim(recipient) do
+      "" -> {:ok, :none}
+      trimmed -> Age.parse_recipient(trimmed)
+    end
+  end
+
+  defp recipient(_params), do: {:ok, :none}
+
+  defp encrypt(body, :none), do: {:ok, body, "", "application/json"}
+
+  defp encrypt(body, recipient) do
+    with {:ok, sealed} <- Age.encrypt(body, recipient) do
+      {:ok, sealed, ".age", "application/octet-stream"}
     end
   end
 

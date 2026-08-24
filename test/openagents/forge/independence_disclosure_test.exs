@@ -76,6 +76,26 @@ defmodule OpenAgents.Forge.IndependenceDisclosureTest do
       assert Independence.degraded?()
     end
 
+    test "a plaintext store is enough on its own to report degraded" do
+      # #178 closed the export half of the private-data axis. If closing it
+      # had quietly taken that axis out of the disjunction, a forge with
+      # plaintext columns would report itself independent as soon as the
+      # verification axis cleared. Every other axis is handed in clean here,
+      # which `degraded?/3` exists for: the projection alone cannot show that
+      # this axis is load-bearing, because the others are never clean.
+      clean_export = %{"gaps" => []}
+      clean_verification = %{"anchor_published" => true, "anchor_witnessed" => true}
+      private_data = Independence.projection()["private_data"]
+
+      refute Independence.degraded?(clean_export, clean_verification, %{
+               private_data
+               | "encrypted_at_rest" => true,
+                 "operator_reads_source" => false
+             })
+
+      assert Independence.degraded?(clean_export, clean_verification, private_data)
+    end
+
     # The publication state is read from the anchors that exist, not from a
     # flag someone can set, so this test publishes a real one.
     test "publishing an anchor changes the verification claim" do
@@ -104,13 +124,40 @@ defmodule OpenAgents.Forge.IndependenceDisclosureTest do
       assert Independence.degraded?()
     end
 
-    test "an unencrypted private export is disclosed rather than softened" do
+    test "the export encryption and the plaintext store are published together" do
+      # #178 decided that an export can be encrypted to a recipient-held key
+      # and that the columns behind it stay plaintext. Publishing the first
+      # without the second would let a reader conclude the operator cannot
+      # read an export, so the second is what `operator_reads_source` says
+      # and it is derived from the first rather than asserted beside it.
       private_data = Independence.projection()["private_data"]
 
-      refute private_data["exports_encrypted"]
+      assert private_data["export_recipient_encryption"]
       refute private_data["encrypted_at_rest"]
+      assert private_data["operator_reads_source"]
       assert private_data["access_controlled"]
-      assert private_data["issue"] == 178
+      assert private_data["issue"] == 193
+    end
+
+    test "the export encryption claim is read from the route rather than asserted" do
+      # The claim is true exactly while `OpenAgentsWeb.DataController` was
+      # compiled against the module that encrypts. Nothing here restates it,
+      # so removing the encryption removes the claim in the same commit.
+      {:ok, {module, [imports: imports]}} =
+        :beam_lib.chunks(:code.which(OpenAgentsWeb.DataController), [:imports])
+
+      assert module == OpenAgentsWeb.DataController
+
+      assert OpenAgents.DataRights.Age in Enum.map(imports, &elem(&1, 0)),
+             "EXIT-006 derives `export_recipient_encryption` from this call. If the export " <>
+               "route stopped encrypting, the disclosure must stop claiming it."
+    end
+
+    test "the account export still takes the account and nothing else" do
+      # `access_controlled` is derived from this shape, which is the whole
+      # access-control claim for this document: no parameter can widen it.
+      assert function_exported?(OpenAgents.DataRights.AccountExport, :build, 1)
+      refute function_exported?(OpenAgents.DataRights.AccountExport, :build, 2)
     end
   end
 

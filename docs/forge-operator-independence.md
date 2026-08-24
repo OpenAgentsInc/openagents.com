@@ -140,7 +140,9 @@ What is proven portable today:
   deployment requests and approvals, Box leases and runs, paired computers, and
   agent links.** `GET /data/export/account`, an account-scoped document
   published alongside the conversation export rather than inside it. Every
-  collection states its cap and reports its own truncation.
+  collection states its cap and reports its own truncation. Adding
+  `?recipient=age1…` returns the same document encrypted to a key you
+  generated and this forge never sees (#178).
 - **Pull requests, stacks, and issue dependencies.** The same document's
   `repository_work` section, which is the one read on this surface that crosses
   repositories. Enumeration was the easy half: the read filters on the column
@@ -267,12 +269,27 @@ The one omission is the `refs/internal/` namespace, where stack boundary
 commits are retained without being advertised; the proof asserts that this is
 the *only* omission, so withholding a branch would turn it red.
 
-That is exit for source. It is not yet exit for everything: private repository
-exports are not encrypted, and no commitment to the WAL is published outside
-operator storage.
-Those are covered by the gaps above rather than by a claim. Saying so is the
-point. Five green invariants that assert less than they appear to would be
-worse than five plus a recorded gap.
+That is exit for source. It is not yet exit for everything, and the remaining
+gaps are named rather than softened.
+
+The account export can now be encrypted to a key the operator does not hold.
+`GET /data/export/account?recipient=age1…` returns an
+[age v1](https://age-encryption.org/v1) document, decrypted with `age` or any
+other implementation of that specification, from a private key generated on
+your own machine that never reaches this forge. What that protects is the
+file — its copies, whatever the response passes through, any later reading of
+it by anyone who obtains it, the operator included. What it does not protect is
+the contents, because the forge builds the export by reading plaintext
+PostgreSQL and held every record before the encryption ran.
+`docs/2026-08-24-private-export-encryption.md` records that boundary, the
+threat model on both sides of it, and the four options rejected. Both halves
+are published together at `GET /api/status`, so a reader who sees that an
+export can be encrypted also sees that the store behind it is not.
+
+No commitment to the WAL is published outside operator storage, and no column
+is encrypted at rest. Those are covered by the gaps below rather than by a
+claim. Saying so is the point. Five green invariants that assert less than they
+appear to would be worse than five plus a recorded gap.
 
 ## Invariants
 
@@ -327,5 +344,5 @@ the one people clone from.
 | --- | --- |
 | The live forge cannot serve a full clone of its own repository | #179 |
 | The published WAL anchor is served by the operator and witnessed by nobody, so a consistent rewrite is caught only by a reader who kept a copy | #151 |
-| No export is encrypted to a key the recipient holds, and no column is encrypted at rest | #178 |
+| No column is encrypted at rest, so the operator reads the source every export is built from | #193 |
 | Five of six exit rehearsals have never been performed | #180 |

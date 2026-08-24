@@ -309,6 +309,30 @@ defmodule OpenAgentsWeb.MemoryLive do
           <.text_button id="export-account-data" href="/data/export/account" download>
             <.icon name="download" /> Export Forge and Forum Data
           </.text_button>
+          <%!-- Encrypting that document to a key you generated is the one
+          place the operator's reach over an export can actually be removed
+          (#178). It protects the file, not the database it was read from,
+          and losing the key costs you nothing: ask for the export again. --%>
+          <form
+            method="get"
+            action="/data/export/account"
+            id="export-account-data-encrypted"
+            class="flex flex-wrap items-center gap-2"
+          >
+            <.input
+              type="text"
+              name="recipient"
+              id="export-recipient"
+              value=""
+              placeholder="age1… (age-keygen -y)"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="age recipient public key"
+            />
+            <.button type="submit" id="export-account-data-encrypted-submit" data-size="sm">
+              <.icon name="download" /> Export encrypted to my key
+            </.button>
+          </form>
           <.text_button
             id="forget-all-memory"
             tone={:danger}

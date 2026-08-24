@@ -264,6 +264,13 @@ defmodule OpenAgentsWeb.Router do
         {OpenAgentsWeb.UserAuth, :ensure_admin}
       ] do
       live "/chat", ChatConsoleLive, :index
+
+      # The Gym: graded benchmark runs of our agents
+      # (docs/2026-08-24-harbor-terminal-bench-plan.md). Operator-only for
+      # now — the whitelist is the operator allowlist, deliberately, rather
+      # than a second gating mechanism. Widening it is a decision, not a
+      # default.
+      live "/gym", GymLive, :index
     end
   end
 
@@ -498,6 +505,13 @@ defmodule OpenAgentsWeb.Router do
     delete "/agents/:handle/box-control", AgentController, :revoke_box_control
     post "/agents/:handle/computer-control", AgentController, :grant_computer_control
     delete "/agents/:handle/computer-control", AgentController, :revoke_computer_control
+
+    # The Gym's ingest and read: an ordinary forge:write bearer carries the
+    # request, and the controller rechecks live operator standing on every
+    # call — the fleet-promotion shape without a privileged scope, because
+    # recording a benchmark row moves no money and deploys nothing.
+    post "/gym/runs", GymRunController, :create
+    get "/gym/runs", GymRunController, :index
   end
 
   scope "/api/v3", OpenAgentsWeb do

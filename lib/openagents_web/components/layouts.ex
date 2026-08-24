@@ -814,6 +814,17 @@ defmodule OpenAgentsWeb.Layouts do
           icon="folder"
           patchable={false}
         />
+        <%!-- Operator-only: the Gym is a workbench for the people building
+        the agent, not a public leaderboard yet. The operator allowlist IS
+        the whitelist, deliberately, rather than a second gating
+        mechanism. --%>
+        <Layouts.sidebar_link
+          :if={@operator?}
+          path={~p"/gym"}
+          label="Gym"
+          icon="dumbbell"
+          patchable={false}
+        />
         <Layouts.sidebar_link
           path={~p"/artifact-catalog"}
           label="Artifact catalog"

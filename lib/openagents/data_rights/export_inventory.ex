@@ -364,6 +364,18 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "account did with a model is its threads, which export whole."
     },
     %{
+      family: :gym,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "Operator benchmark rows: graded runs of our own agents against " <>
+          "task suites, posted by the bench harness. Aggregate measurement " <>
+          "of the product, carrying no record an account authors."
+    },
+    %{
       family: :capacity,
       api?: true,
       status: :not_user_data,

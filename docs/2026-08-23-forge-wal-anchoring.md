@@ -4,7 +4,7 @@
 **Commit measured:** `7e5f7b1` on `openagents/main`, the forge
 **Question:** `EXIT-002` proves the served repository can be checked against the WAL without trusting the operator's database, and its own conclusion is that the check is tamper-evident and not tamper-proof. What would make a *consistent* rewrite of the log detectable, what does each option really cost, and what can no option here achieve?
 **Method:** direct reading of every writer of a WAL entry (`lib/openagents/forge/pushes.ex`, `lib/openagents/forge/git_plane.ex`, `lib/openagents/repositories/importer.ex`, `lib/openagents/repositories/provisioner.ex`), the log itself (`lib/openagents/forge/wal.ex` and its two adapters), the reader that replays it (`lib/openagents/forge/sync.ex`), the verifier (`lib/openagents/forge/verification.ex`), the derived receipt (`lib/openagents/forge/push_receipt.ex`), and the invariants they are bound to (`INVARIANTS.md`, `REPOSITORY-003`, `EXIT-001` through `EXIT-004`). Claims this repository cannot settle are in section 6 with what would settle them.
-**Status:** Stage 1 shipped in this commit. Stages 2 through 5 are open.
+**Status:** Stages 1 and 4 shipped. Stages 2, 3, and 5 are open.
 
 ---
 
@@ -146,9 +146,9 @@ less than it appears to.
 re-derives every row from the entries after the table is emptied
 (`lib/openagents/forge/pushes.ex:183`). Receipts are a projection, never a
 second authority, and `EXIT-003` proves the direction. They are also in
-PostgreSQL, which the operator holds, so they add nothing to detection today —
-but see stage 4, where a link stored beside the receipt raises the cost of a
-rewrite from one store to two.
+PostgreSQL, which the operator holds, so they add little to detection — but
+stage 4 stores the entry's link beside the receipt, which raises the cost of a
+consistent rewrite from one store to two.
 
 ---
 
@@ -417,17 +417,27 @@ strictly better and is the stage 5 question.
 **Size:** medium, mostly operational. **What it settles:** everything at or
 before the last published head becomes checkable by a stranger.
 
-### Stage 4 — Store the link beside the derived receipt (this repository, small)
+### Stage 4 — Store the link beside the derived receipt (this repository, small) — SHIPPED
 
-**Seam:** `forge_pushes` (`lib/openagents/forge/push_receipt.ex:14`) and
-`reconcile_receipts/1` (`lib/openagents/forge/pushes.ex:183`).
+**Seam:** `forge_pushes` (`lib/openagents/forge/push_receipt.ex`) and
+`reconcile_receipts/1` (`lib/openagents/forge/pushes.ex`).
 
-A migration adding a nullable `link` column, written from the entry. This is
-weak on its own — PostgreSQL is the operator's too — but it raises a consistent
-rewrite from editing one store to editing two, and it makes the link visible in
-the product surfaces that already render receipts. Reconciliation must keep
-deriving the column from the WAL rather than from itself, or the receipt becomes
-a second authority and `EXIT-003` turns red.
+`20260824010826_add_chain_link_to_forge_pushes.exs` adds a nullable `link`
+column. The live push path writes it from the entry the WAL just accepted, and
+`reconcile_receipts/1` re-derives it from the entries, so the column is a
+projection in both directions and never a second opinion about the chain. The
+admin forge panel renders it beside the sequence it belongs to.
+
+This is weak on its own — PostgreSQL is the operator's too — and the honest
+statement of what it buys is that a consistent rewrite now has to edit object
+storage and PostgreSQL together rather than object storage alone. The proof
+rewrites every stored link to a value the log never produced and asserts that
+verification is unmoved, because the verifier recomputes the chain from the WAL
+and reaches no database.
+
+Rows written before the column carry no link and are not repaired in place. A
+row whose entry predates the chain has no link to carry, and writing one over
+entries the operator holds is the backfill section 7 rules out.
 
 **Size:** small, but it is a migration, so `RELEASE-001` applies.
 
@@ -504,4 +514,5 @@ and not a property.
 | `EXIT-002` | Amended. The caveat now names the chain, says what it does and does not add, and points here for the publication that would close it. |
 | `EXIT-005` | New. Every WAL entry commits to the entry before it, and the chain is checkable against an externally held link. Proof: `test/openagents/forge/independence_test.exs` and `test/openagents/forge/wal_test.exs`. |
 | `REPOSITORY-003` | Unchanged, and load-bearing. Replay reads entries one at a time against the ref state each recorded, which is what makes an entry an individually meaningful unit worth chaining. |
-| `EXIT-001` | Untouched here. Stage 2 moves its `push_receipt` row from `blocked`. |
+| `EXIT-003` | Amended by stage 4. The receipt now carries the entry's link, still derived from the WAL in both directions, and the proof shows a rewritten stored link changing no verification outcome. |
+| `EXIT-001` | Untouched by stage 1 or 4. Stage 2 moves its `push_receipt` row from `blocked`. |

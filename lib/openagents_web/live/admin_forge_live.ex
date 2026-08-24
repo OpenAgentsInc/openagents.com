@@ -138,6 +138,9 @@ defmodule OpenAgentsWeb.AdminForgeLive do
                                                                                           change} ->
                 "#{name} → #{short(change["new"])}"
               end)}
+              <span :if={push.link} id={"push-link-#{push.wal_seq}"}>
+                · link {short(push.link)}
+              </span>
             </div>
             <div class="admin-state">
               <button

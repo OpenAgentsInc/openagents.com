@@ -320,6 +320,12 @@ defmodule OpenAgents.Forge.IndependenceTest do
 
       assert Enum.map(recovered, & &1.wal_seq) == Enum.map(entries, & &1["seq"])
       assert Enum.map(recovered, & &1.principal) == Enum.map(entries, & &1["principal"])
+
+      # The chain link comes back with the row, taken from the entry it
+      # derives from rather than from anything the emptied table held.
+      links = Enum.map(entries, &WAL.entry_link/1)
+      refute Enum.any?(links, &is_nil/1)
+      assert Enum.map(recovered, & &1.link) == links
     end
 
     test "the mirror restores source and cannot restore the push record", context do
@@ -379,6 +385,51 @@ defmodule OpenAgents.Forge.IndependenceTest do
                  "#{inspect(module)} reads the mirror through #{function}"
         end
       end
+    end
+  end
+
+  ## ── EXIT-003: the receipt carries the link and decides nothing ─────────
+
+  describe "the derived receipt's chain link" do
+    test "every receipt carries the link of the entry it derives from", context do
+      seed_history!(context)
+      {:ok, _generation, index} = WAL.read_index(context.repo)
+
+      expected =
+        index
+        |> WAL.entries()
+        |> Map.new(fn entry -> {entry["seq"], WAL.entry_link(entry)} end)
+
+      refute expected == %{}
+      refute Enum.any?(expected, fn {_seq, link} -> is_nil(link) end)
+
+      recorded =
+        PushReceipt
+        |> Repo.all()
+        |> Map.new(fn receipt -> {receipt.wal_seq, receipt.link} end)
+
+      assert recorded == expected
+    end
+
+    test "a rewritten receipt link decides nothing, because the verifier reads the WAL",
+         context do
+      seed_history!(context)
+      {:ok, _generation, index} = WAL.read_index(context.repo)
+      head = List.last(WAL.entries(index))
+
+      # The receipt is a projection. Edit every stored link to a value the log
+      # never produced: verification is unmoved, because it recomputes the
+      # chain from the WAL and never asks PostgreSQL what the chain is.
+      {3, _returning} = Repo.update_all(PushReceipt, set: [link: String.duplicate("0", 64)])
+
+      assert {:ok, report} = Verification.verify(context.repo)
+      assert report.findings == []
+      assert report.head == %{seq: head["seq"], link: WAL.entry_link(head)}
+
+      assert {:ok, %{findings: []}} =
+               Verification.verify(context.repo,
+                 anchor: %{seq: head["seq"], link: WAL.entry_link(head)}
+               )
     end
   end
 

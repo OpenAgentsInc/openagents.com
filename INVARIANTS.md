@@ -3185,6 +3185,19 @@ with no evidence of who produced it. The proof asserts both halves by losing
 the WAL and the receipts and then checking what the mirror can and cannot
 give back.
 
+A receipt also carries the `EXIT-005` chain link of the entry it derives from,
+and the direction holds there too: the link is copied from the entry, and
+`reconcile_receipts/1` re-derives it from the entries after the table is
+emptied, so PostgreSQL never becomes a second opinion about the chain. The
+proof rewrites every stored link to a value the log never produced and asserts
+that verification is unmoved, because `OpenAgents.Forge.Verification`
+recomputes the chain from the WAL and reaches no database at all. What the
+column buys is small and stated as such: a consistent rewrite of an accepted
+push now has to edit object storage and PostgreSQL together rather than object
+storage alone. A row written before the column existed carries no link and is
+not repaired in place, because a link the operator writes over their own store
+is not evidence.
+
 Two operational facts bound the claim. `:forge_mirror_urls` is empty in
 `config/config.exs` and set by no environment, so no mirror runs today and
 GitHub holds whatever was last pushed to it directly, which is the trade
@@ -3193,7 +3206,7 @@ configuring a mirror overwrites what direct pushes left there rather than
 merging with it.
 
 Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Pushes`,
-`OpenAgents.Forge.Verification`, and
+`OpenAgents.Forge.PushReceipt`, `OpenAgents.Forge.Verification`, and
 `test/openagents/forge/independence_test.exs`.
 
 ### EXIT-004 — A clone is complete and self-hosting

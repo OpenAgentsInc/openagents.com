@@ -14,6 +14,13 @@ defmodule OpenAgents.Forge.Pushes do
   by WAL sequence — audit A7: receipts are derived from the WAL, never a
   second authority), `forge:pushes` is broadcast, and the GitHub mirror is
   pushed best-effort in the background (never blocking, never load-bearing).
+
+  The receipt carries the entry's `EXIT-005` chain link, copied from the WAL
+  entry the log just accepted and never computed from the row. That does not
+  make PostgreSQL an authority on the chain — `OpenAgents.Forge.Verification`
+  recomputes it from the WAL alone — it makes a consistent rewrite of an
+  accepted push edit object storage and PostgreSQL rather than object storage
+  by itself.
   """
 
   import Ecto.Query
@@ -71,13 +78,13 @@ defmodule OpenAgents.Forge.Pushes do
 
         true ->
           case persist(repo, body, refs_after, principal) do
-            {:ok, seq} ->
+            {:ok, seq, link} ->
               Repos.record_applied_seq!(repo, seq)
               record_repository_activity(repo)
 
               capture_push_received(
                 repo,
-                record_receipt(repo, seq, refs_before, refs_after, principal, started_at),
+                record_receipt(repo, seq, refs_before, refs_after, principal, link, started_at),
                 refs_before,
                 refs_after,
                 started_at
@@ -105,7 +112,7 @@ defmodule OpenAgents.Forge.Pushes do
   end
 
   # Live-push analytics only. Crash-recovery reconciliation reuses
-  # `record_receipt/5` without capturing, so recovered rows never double count.
+  # `record_receipt/7` without capturing, so recovered rows never double count.
   defp capture_push_received(repo, {:ok, _receipt}, refs_before, refs_after, started_at) do
     Analytics.capture("git_push_received", Analytics.system_distinct_id("forge"), %{
       "repo" => repo,
@@ -158,14 +165,26 @@ defmodule OpenAgents.Forge.Pushes do
            "principal" => principal,
            "pushed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
          },
-         {:ok, _generation} <- WAL.cas_index(repo, expected, WAL.append_entry(index, entry)) do
-      {:ok, seq}
+         appended = WAL.append_entry(index, entry),
+         {:ok, _generation} <- WAL.cas_index(repo, expected, appended) do
+      {:ok, seq, appended_link(appended)}
     else
       {:error, reason} ->
         {:error, reason}
     end
   catch
     {:wal_error, reason} -> {:error, reason}
+  end
+
+  # The chain link the WAL gave the entry it just accepted (`EXIT-005`).
+  # `nil` when the link could not be derived, which the WAL omits rather than
+  # raises so no push fails on it; the receipt then records no link and
+  # `Verification.verify/2` reports the gap.
+  defp appended_link(index) do
+    case index |> WAL.entries() |> List.last() do
+      entry when is_map(entry) -> WAL.entry_link(entry)
+      _no_entries -> nil
+    end
   end
 
   # ── derived records (never authority) ───────────────────────────────────
@@ -206,6 +225,7 @@ defmodule OpenAgents.Forge.Pushes do
               refs_before,
               entry["refs"],
               entry["principal"] || "unknown",
+              WAL.entry_link(entry),
               System.monotonic_time(:millisecond)
             )
           )
@@ -216,7 +236,7 @@ defmodule OpenAgents.Forge.Pushes do
     end
   end
 
-  defp record_receipt(repo, seq, refs_before, refs_after, principal, started_at) do
+  defp record_receipt(repo, seq, refs_before, refs_after, principal, link, started_at) do
     changed =
       refs_after
       |> Enum.filter(fn {name, sha} -> refs_before[name] != sha end)
@@ -234,7 +254,8 @@ defmodule OpenAgents.Forge.Pushes do
         wal_seq: seq,
         principal: principal,
         refs: Map.merge(changed, deleted),
-        duration_ms: System.monotonic_time(:millisecond) - started_at
+        duration_ms: System.monotonic_time(:millisecond) - started_at,
+        link: link
       })
       |> Repo.insert(on_conflict: :nothing, conflict_target: [:repo, :wal_seq])
 

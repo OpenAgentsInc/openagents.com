@@ -271,39 +271,54 @@ are cheap now and expensive to retrofit:
 
 Ordered, composing with the strategy doc's priorities. Items 1–6 are the
 first coder release arc ("Coder v1"), with item 6 gated inside it on
-items 2's attribution being honest; the rest follow.
+item 2's attribution being honest; the rest follow. The arc is tracked as
+[project 12, Coder v1](https://openagents.com/OpenAgentsInc/openagents.com/projects/12)
+under epic #132; the plugin lane runs in parallel as
+[project 13, Plugin registry](https://openagents.com/OpenAgentsInc/openagents.com/projects/13).
+Issue references below: unprefixed numbers are this repository;
+`openagents#N` is the monorepo.
 
 1. **Thread persistence and resume in the CLI** — the client writes
-   `turn.user`, `turn.reasoning`, `tool.ran`, `turn.assistant`; `--resume`
-   replays through the cursor. (Unblock monorepo #19 first.)
-2. **Model catalog and house-provider routing** — compute mix lane 1:
-   Gemini, Z.ai, and peer credits behind the proxy, a typed catalog,
-   requested-versus-effective attribution on every turn (#160 and #164
-   close here).
-3. **Foreign-harness delegation** — compute mix lane 3, first form:
-   drive Claude Code and peers from the coder with transcripts captured
-   into threads.
-4. **Web thread viewer** — read-only thread pages over the same
+   `turn.user`, `turn.reasoning`, `tool.ran`, `turn.assistant`
+   (openagents#23); `--resume` replays through the cursor
+   (openagents#24). Unblock openagents#19 first — it gates every CLI
+   delivery in this list.
+2. **Model catalog and house-provider routing** (#199) — compute mix
+   lane 1: Gemini, Z.ai, and peer credits behind the proxy, a typed
+   catalog, requested-versus-effective attribution on every turn (#160
+   and #164 close here).
+3. **Foreign-harness delegation** (openagents#25) — compute mix lane 3,
+   first form: drive Claude Code and peers from the coder with
+   transcripts captured into threads. Fleet state rides the task
+   registry and fleet rendering (openagents#28).
+4. **Web thread viewer** (#201) — read-only thread pages over the same
    projections, with the snapshot-to-live protocol and shell/detail
-   split.
-5. **Plugin contract v1 and pilot** — per the plugin assessment; runs
-   land as receipted thread events feeding the trace viewer and registry.
-6. **Metered inference offering** — compute mix lane 2, once catalog and
-   usage attribution are honest.
-7. **Durable effect outbox and the six milestones** — the thread plane's
-   execution half, prerequisite for honest delegation receipts.
+   split. Thread spend joins the leaderboard (#204).
+5. **Plugin contract v1 and pilot** — the walking skeleton
+   (openagents#26), the capability tool (openagents#27), foreign session
+   resume as the pilot (#198); runs land as receipted thread events. The
+   registry side is #206 with consent tiers in #205.
+6. **Metered inference offering** (#200) — compute mix lane 2, once
+   catalog and usage attribution are honest.
+7. **Durable effect outbox and the six milestones** (#202) — the thread
+   plane's execution half, prerequisite for honest delegation receipts.
 8. **Web steering and approvals** — the composer verbs (send, steer,
    queue, interrupt) and approval decisions from the browser.
-9. **Nested-thread ledger** — server-side spawn/resume/cancel/complete;
-   delegation receipts become real.
+9. **Nested-thread ledger** (#203) — server-side
+   spawn/resume/cancel/complete; delegation receipts become real.
 10. **Cloud computer launcher** — the port plan's final slice behind the
     delegation contract, quota-brokered, with the owner-hosted versus
-    managed-environment authority split explicit.
+    managed-environment authority split explicit (the cloud computer
+    platform project in the monorepo).
 11. **Trace viewer and commit-trailer join** — receipts rendered publicly
     under tiers; any SHA resolves to its thread.
 12. **Mobile controller** — last, on the same projections and outbox
     pattern; T3's mobile teardown is the reference for breadth, our
     authority model for the difference.
+
+Off this list but represented: the settlement proof (#207), the CLI
+wallet and identity (openagents#29), and provider mode (openagents#30)
+live in the Forge participation and settlement project.
 
 ## 8. Relation to other documents
 

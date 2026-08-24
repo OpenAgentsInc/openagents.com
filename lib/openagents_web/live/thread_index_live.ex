@@ -60,6 +60,13 @@ defmodule OpenAgentsWeb.ThreadIndexLive do
             >
               {title(thread.objective)}
             </.link>
+            <p
+              :if={thread.repository}
+              id={"thread-repository-#{thread.id}"}
+              class="mt-0.5 font-mono text-xs text-muted-foreground"
+            >
+              {thread.repository}
+            </p>
           </:col>
           <:col :let={{_id, thread}} label="Status">
             <.badge variant={status_variant(thread.status)}>{thread.status}</.badge>

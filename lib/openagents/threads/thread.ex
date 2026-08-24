@@ -30,10 +30,12 @@ defmodule OpenAgents.Threads.Thread do
   @permission_profiles ~w(read_only workspace_write)
   @reasoning_efforts ~w(none minimal low medium high max)
   @objective_bytes 32_768
+  @repository_bytes 200
 
   schema "threads" do
     belongs_to :owner_visitor, Visitor
     field :objective, :string, redact: true
+    field :repository, :string
     field :status, :string, default: "open"
     field :model, :string
     field :reasoning_effort, :string
@@ -65,10 +67,15 @@ defmodule OpenAgents.Threads.Thread do
   The immutable capture at open time. `owner_visitor_id`, `status`,
   `generation`, and `started_at` are set by the context, never cast from a
   caller.
+
+  `repository` is optional and deliberately unvalidated against the forge's
+  repository table: a thread may concern a repository the forge does not host,
+  so the field records the opener's `owner/name` string, bounded, with no
+  foreign key and no format rule beyond non-blank.
   """
   def open_changeset(attributes, owner_visitor_id, now) do
     %__MODULE__{}
-    |> cast(attributes, [:objective, :model, :reasoning_effort, :permission_profile])
+    |> cast(attributes, [:objective, :model, :reasoning_effort, :permission_profile, :repository])
     |> put_change(:owner_visitor_id, owner_visitor_id)
     |> put_change(:status, "open")
     |> put_change(:generation, 0)
@@ -76,11 +83,13 @@ defmodule OpenAgents.Threads.Thread do
     |> validate_required([:objective, :model, :reasoning_effort, :permission_profile])
     |> validate_length(:objective, min: 1, max: @objective_bytes, count: :bytes)
     |> validate_length(:model, min: 1, max: 200)
+    |> validate_length(:repository, min: 1, max: @repository_bytes, count: :bytes)
     |> validate_inclusion(:reasoning_effort, @reasoning_efforts)
     |> validate_inclusion(:permission_profile, @permission_profiles)
     |> foreign_key_constraint(:owner_visitor_id)
     |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:objective, name: :threads_objective_bound_check)
+    |> check_constraint(:repository, name: :threads_repository_bound_check)
     |> check_constraint(:reasoning_effort, name: :threads_reasoning_effort_check)
     |> check_constraint(:permission_profile, name: :threads_permission_profile_check)
   end

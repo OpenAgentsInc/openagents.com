@@ -76,6 +76,59 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert thread["permission_profile"] == "workspace_write"
     end
 
+    test "records the repository the opener names and returns it", %{conn: conn} do
+      thread =
+        conn
+        |> put_chat_api_token("thread-repository")
+        |> post(~p"/api/v3/threads", %{
+          "objective" => "openagents coder in OpenAgentsInc/openagents.com on main",
+          "repository" => "OpenAgentsInc/openagents.com"
+        })
+        |> json_response(201)
+        |> Map.fetch!("thread")
+
+      assert thread["repository"] == "OpenAgentsInc/openagents.com"
+      # No foreign key and no format rule: a thread may concern a repository
+      # the forge does not host, so the recorded string is the opener's own.
+      assert Repo.get!(OpenAgents.Threads.Thread, thread["id"]).repository ==
+               "OpenAgentsInc/openagents.com"
+    end
+
+    test "a thread without a repository records none and reports null", %{conn: conn} do
+      thread =
+        conn
+        |> put_chat_api_token("thread-no-repository")
+        |> post(~p"/api/v3/threads", %{"objective" => "No repository named."})
+        |> json_response(201)
+        |> Map.fetch!("thread")
+
+      assert Map.fetch!(thread, "repository") == nil
+    end
+
+    test "a blank repository is refused rather than recorded as noise", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-blank-repository")
+        |> post(~p"/api/v3/threads", %{"objective" => "Blank it.", "repository" => "   "})
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert Map.has_key?(body["errors"], "repository")
+    end
+
+    test "a repository over the bound is refused", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-long-repository")
+        |> post(~p"/api/v3/threads", %{
+          "objective" => "Bound it.",
+          "repository" => String.duplicate("a", 201)
+        })
+        |> json_response(422)
+
+      assert Map.has_key?(body["errors"], "repository")
+    end
+
     test "a caller may open a thread on another routed model", %{conn: conn} do
       body =
         conn
@@ -836,6 +889,37 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       # A client that outlives its process needs a way back to the work it was
       # doing, and the account is the only place that knows.
       assert Enum.map(body["threads"], & &1["objective"]) == ["newer", "older"]
+    end
+
+    test "?repository= narrows the listing to that repository, exactly", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-repository-filter")
+
+      for {objective, repository} <- [
+            {"here", "OpenAgentsInc/openagents.com"},
+            {"elsewhere", "OpenAgentsInc/openagents"},
+            {"nowhere", nil}
+          ] do
+        authenticated
+        |> post(
+          ~p"/api/v3/threads",
+          %{"objective" => objective}
+          |> Map.merge(if repository, do: %{"repository" => repository}, else: %{})
+        )
+        |> json_response(201)
+      end
+
+      body =
+        authenticated
+        |> get(~p"/api/v3/threads?repository=OpenAgentsInc/openagents.com")
+        |> json_response(200)
+
+      # An exact match on the recorded field, so a resume picker filters
+      # structurally instead of parsing the objective sentence back.
+      assert Enum.map(body["threads"], & &1["objective"]) == ["here"]
+      assert Enum.map(body["threads"], & &1["repository"]) == ["OpenAgentsInc/openagents.com"]
+
+      unfiltered = authenticated |> get(~p"/api/v3/threads") |> json_response(200)
+      assert length(unfiltered["threads"]) == 3
     end
 
     test "does not list another account's threads", %{conn: conn} do

@@ -32,6 +32,22 @@ defmodule OpenAgentsWeb.ThreadIndexLiveTest do
     assert view |> element("#threads-#{thread.id}") |> render() =~ ">2<"
   end
 
+  test "a row names its repository when the thread records one", %{conn: conn} do
+    owner = github_user("thread-index-repository")
+
+    {:ok, named} =
+      Threads.open(owner, "Coder session", repository: "OpenAgentsInc/openagents.com")
+
+    {:ok, bare} = Threads.open(owner, "No repository")
+
+    {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads")
+
+    assert view |> element("#thread-repository-#{named.id}") |> render() =~
+             "OpenAgentsInc/openagents.com"
+
+    refute has_element?(view, "#thread-repository-#{bare.id}")
+  end
+
   test "an account with no threads sees the empty state", %{conn: conn} do
     owner = github_user("thread-index-empty")
 

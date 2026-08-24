@@ -40,8 +40,9 @@ defmodule OpenAgentsWeb.ThreadController do
 
   def create(conn, params) do
     with {:ok, objective} <- objective(params),
+         {:ok, repository} <- repository(params),
          {:ok, options} <- execution_shape(params) do
-      open(conn, objective, options)
+      open(conn, objective, options ++ repository)
     else
       {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
       {:unavailable, model_id} -> unavailable_model(conn, model_id)
@@ -59,7 +60,8 @@ defmodule OpenAgentsWeb.ThreadController do
     user = conn.assigns.current_user
     _reaped = Threads.reap_expired(user)
 
-    threads = Threads.list_for_user(user, listing_options(params))
+    threads =
+      Threads.list_for_user(user, params |> listing_options() |> repository_filter(params))
 
     conn
     |> put_extension_header()
@@ -366,6 +368,23 @@ defmodule OpenAgentsWeb.ThreadController do
     end
   end
 
+  # An exact match on the recorded string, so `?repository=` narrows the
+  # listing to the threads opened against that repository. A blank filter is
+  # no filter: nothing records a blank repository, and an empty listing would
+  # read as an account with no threads.
+  defp repository_filter(options, params) do
+    case Map.get(params, "repository") do
+      value when is_binary(value) ->
+        case String.trim(value) do
+          "" -> options
+          repository -> Keyword.put(options, :repository, repository)
+        end
+
+      _absent ->
+        options
+    end
+  end
+
   defp event_parameters(params) do
     with {:ok, event_type} <- event_type(params),
          {:ok, payload} <- payload(params) do
@@ -452,6 +471,27 @@ defmodule OpenAgentsWeb.ThreadController do
   defp objective(_params) do
     {:refused, "objective", "A thread requires an objective: what this body of work is for."}
   end
+
+  # Optional, trimmed, non-blank when present. No format rule and no lookup
+  # against the forge's repository table: a thread may concern a repository the
+  # forge does not host, so the field records the opener's `owner/name` string
+  # as given. The bound is the changeset's (issue #210).
+  defp repository(%{"repository" => repository}) when is_binary(repository) do
+    case String.trim(repository) do
+      "" ->
+        {:refused, "repository",
+         "The repository names where the work runs and cannot be blank. Omit it instead."}
+
+      trimmed ->
+        {:ok, [repository: trimmed]}
+    end
+  end
+
+  defp repository(%{"repository" => repository}) do
+    {:refused, "repository", "#{inspect(repository)} is not a string."}
+  end
+
+  defp repository(_params), do: {:ok, []}
 
   defp execution_shape(params) do
     with {:ok, model} <- admitted(params, "model", Models.ids(), Models.default_id()),
@@ -542,6 +582,7 @@ defmodule OpenAgentsWeb.ThreadController do
       "id" => thread.id,
       "status" => thread.status,
       "objective" => thread.objective,
+      "repository" => thread.repository,
       "reasoning_effort" => thread.reasoning_effort,
       "permission_profile" => thread.permission_profile,
       "generation" => thread.generation,

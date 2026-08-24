@@ -436,6 +436,19 @@ defmodule OpenAgentsWeb.ApiExtensionController do
             "What this body of work is for. Required, non-blank, and capped " <>
               "at 32 KB."
         },
+        "repository" => %{
+          "endpoint" => "POST /api/v3/threads",
+          "type" => "string",
+          "description" =>
+            "The repository the work concerns, as the opener names it " <>
+              "(owner/name). Optional, trimmed, non-blank when present, and " <>
+              "capped at 200 bytes; not validated against the forge's " <>
+              "repositories, because a thread may concern a repository the " <>
+              "forge does not host. Returned in every thread view, and " <>
+              "GET /api/v3/threads?repository= filters the listing by exact " <>
+              "match, so a resume picker filters structurally instead of " <>
+              "parsing the objective back."
+        },
         "model" => %{
           "endpoint" => "POST /api/v3/threads",
           "type" => "string",

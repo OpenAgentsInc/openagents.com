@@ -136,6 +136,7 @@ defmodule OpenAgents.Threads do
 
     attributes = %{
       objective: objective,
+      repository: Keyword.get(options, :repository),
       model: Keyword.get(options, :model) || Models.default_id(),
       reasoning_effort:
         OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
@@ -191,7 +192,13 @@ defmodule OpenAgents.Threads do
 
   def get_for_user(_user, _thread_id), do: nil
 
-  @doc "The account's threads, newest first, bounded."
+  @doc """
+  The account's threads, newest first, bounded.
+
+  `:repository` narrows the listing to threads recorded against exactly that
+  repository string — an exact match on a bounded field the opener wrote, not a
+  search. A resume picker filters here rather than parsing objectives.
+  """
   @spec list_for_user(User.t(), keyword()) :: [Thread.t()]
   def list_for_user(%User{id: user_id}, options \\ []) do
     limit = options |> Keyword.get(:limit, @maximum_listed) |> min(@maximum_listed) |> max(1)
@@ -203,8 +210,14 @@ defmodule OpenAgents.Threads do
       order_by: [desc: t.inserted_at, desc: t.id],
       limit: ^limit
     )
+    |> in_repository(Keyword.get(options, :repository))
     |> Repo.all()
   end
+
+  defp in_repository(query, repository) when is_binary(repository),
+    do: from(t in query, where: t.repository == ^repository)
+
+  defp in_repository(query, _absent), do: query
 
   @doc """
   The thread's transcript, oldest first, bounded.

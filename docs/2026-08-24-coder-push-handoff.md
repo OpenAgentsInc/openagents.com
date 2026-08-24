@@ -57,6 +57,29 @@ concurrent session):
 - `openagents trace` discovers, summarizes, and redacts local traces; upload
   refuses honestly until the server route exists (#14).
 
+### Landed after this document was first written
+
+- Consent tiers on threads (#205): a thread's visibility is a proven subset
+  of the existing `dark/pulse/ledger/glass` ladder, only the two rungs the
+  code can enforce are offered, a tier widens reads only, and the account
+  export carries the consent record with the data it governs.
+  `THREAD-002` records what #206's usage counter must join.
+- A durable effect outbox (#202): the `effects` table, leased delivery,
+  handler registry, and one converted call site, under `EFFECT-001` and
+  `EFFECT-002`. Its inventory of what still loses work on a crash is the
+  most useful part — read the issue's closing comment before converting
+  anything else.
+- Chat-to-issue capture (#77): implementation is on main but the issue
+  stays open, because the tool needs an `external_confirmation` receipt
+  that nothing mints yet. It is inert in production until the chat surface
+  grows the preview-and-consent step.
+- Foreign-session discovery as a plugin (#198, discovery half): answers the
+  issue's Rust-versus-TypeScript question with working code — a sandboxed
+  guest over two read-only mounts, plus one new host capability
+  (`openagents.list_dir`). Resume and import remain open.
+- Operator deployment commands (`openagents#12`) and the `openagents trace`
+  namespace (`openagents#14`, local half; ingest is #217).
+
 ## 3. Where to pick up
 
 In order. The first three are the Coder v1 critical path.

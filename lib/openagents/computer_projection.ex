@@ -1,5 +1,17 @@
 defmodule OpenAgents.ComputerProjection do
-  @moduledoc "Safe projection of a paired computer for API and product surfaces."
+  @moduledoc """
+  Safe projection of a paired computer for API and product surfaces.
+
+  Everything here is the owner's own record of their own computer. What stays
+  out is what IDENTITY-008 keeps out: the computer token, its digest, and the
+  raw probe document.
+
+  `revoked_at` is included because `status` alone answers half the question.
+  Every other credential in this release publishes both — `api_tokens`,
+  `inference_grants`, `agent_tokens`, `forge_assignment_credentials` — and this
+  was the one terminal stamp the database held and nothing read, so an account
+  export could tell you a computer was revoked and never when.
+  """
 
   alias OpenAgents.Computer
   alias OpenAgents.Machines.Machine
@@ -11,6 +23,7 @@ defmodule OpenAgents.ComputerProjection do
       "name" => machine.name,
       "tier" => machine.tier,
       "status" => machine.status,
+      "revoked_at" => iso8601(machine.revoked_at),
       "scoped_forge_credentials_enabled" => machine.scoped_forge_credentials_enabled,
       "online" => machine.status == "active" and Computer.online?(machine.id),
       "platform" => machine.platform,

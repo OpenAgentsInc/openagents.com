@@ -438,7 +438,11 @@ Computer grant. The local computer controller remains authoritative over
 declared roots, presence, probe-reported ACP agents, prompt bounds, and
 execution; the API cannot widen a tier, add a root, or request an unadvertised
 capability. Computer projections never expose a computer token, token digest, or
-raw probe document.
+raw probe document. They do expose `revoked_at`: `machines.revoked_at` was
+written by both revocation paths and read by nothing, so the computers API and
+the account export could say a computer was revoked and never when, alone among
+this release's credentials. It is the owner's own record of their own computer
+and is published with `status`.
 
 Amended 2026-08-24 (issue #183): revoking a computer ends the inference
 authority it holds, and cannot be raced.
@@ -4629,7 +4633,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
-| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs` |
+| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs`, `test/openagents/computer_projection_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
 | IDENTITY-010 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_credential_reach_test.exs` |
 | IDENTITY-011 | `test/openagents/machines/pairing_expiry_test.exs` |

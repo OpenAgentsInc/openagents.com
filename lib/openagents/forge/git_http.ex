@@ -379,9 +379,21 @@ defmodule OpenAgents.Forge.GitHTTP do
     end
   end
 
+  # The principal kinds a Git-plane audit event can name. Every one of them has
+  # to be an actor kind `OpenAgents.Audit` accepts, or a push by that principal
+  # raises after the pack has already been written. `OpenAgents.AuditTest`
+  # proves the containment from this list rather than from a reading of the
+  # call sites, because the actor here is a variable and a source scan for
+  # `{:machine, …}` finds nothing. CANON-002.
+  @audit_actor_kinds [:user, :machine, :operator]
+
+  @doc false
+  @spec audit_actor_kinds() :: [atom()]
+  def audit_actor_kinds, do: @audit_actor_kinds
+
   defp audit_actor(conn) do
     case conn.assigns[:forge_principal] do
-      %{kind: kind, id: id} when kind in [:user, :machine, :operator] -> {kind, id}
+      %{kind: kind, id: id} when kind in @audit_actor_kinds -> {kind, id}
       _principal -> :system
     end
   end

@@ -41,7 +41,7 @@ defmodule OpenAgents.Tools.ComputerProbe do
       policy_facets: %{
         "privacy" => "signed_browser_owner",
         "residency" => "operator_machine",
-        "consent" => "machine_pairing"
+        "consent" => "computer_pairing"
       },
       module_metadata:
         Metadata.first_party("computer.control", "browser_conversation",

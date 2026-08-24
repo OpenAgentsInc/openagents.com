@@ -5,6 +5,19 @@ defmodule OpenAgents.Audit do
 
   @maximum_metadata_bytes 8_192
 
+  # The actor kinds this application writes. `machine` is one of them: a paired
+  # computer that authenticates to the Git plane pushes and fetches under
+  # `{:machine, id}` (`OpenAgentsWeb.Plugs.ForgeGitAuth.principal_for/1` into
+  # `OpenAgents.Forge.GitHTTP.audit_actor/1`), so the stored value is real and
+  # keeps its spelling under CANON-002. `OpenAgents.Forge.GitHTTP.audit_actor_kinds/0`
+  # is the list that must stay inside this one, and `OpenAgents.AuditTest`
+  # asserts the containment rather than trusting a reading of the call sites.
+  @actor_kinds [:user, :agent, :machine, :operator, :system]
+
+  @doc "The actor kinds `record!/5` accepts, as strings."
+  @spec actor_kinds() :: [String.t()]
+  def actor_kinds, do: Enum.map(@actor_kinds, &Atom.to_string/1)
+
   def record!(event_type, actor, subject_type, subject_id, options \\ []) do
     metadata = Keyword.get(options, :metadata, %{})
 
@@ -25,10 +38,7 @@ defmodule OpenAgents.Audit do
     end
   end
 
-  defp actor_type({type, _id}) when type in ~w(user agent machine operator system), do: type
-
-  defp actor_type({type, _id}) when type in [:user, :agent, :machine, :operator, :system],
-    do: to_string(type)
+  defp actor_type({type, _id}) when type in @actor_kinds, do: Atom.to_string(type)
 
   defp actor_type(:system), do: "system"
 

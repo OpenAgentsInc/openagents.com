@@ -453,36 +453,104 @@ current code word. `OpenAgents.Computer` owns live control,
 `OpenAgents.ComputerActivity` owns the streamed live projection, and
 `OpenAgents.ComputerProjection` owns the safe read. `OpenAgents.Machines` still
 owns what it always owned: the pairing flow and the credential record behind a
-computer. A rename pass is closing the remaining gap, so write new code as
-`computer`.
+computer. Write new code as `computer`.
 
-These `machine` surfaces stay, because renaming one breaks a client or a
-database rather than a name:
+**Where `machine` stays, and why** — issue #134 settled this, and the answer
+is a split with one rule:
+
+> A `machine` name stays where something outside this release can observe or
+> replay it. Everywhere else it becomes `computer`.
+
+"Outside this release" has four concrete forms, and every retained `machine`
+name is one of them:
+
+1. **Rows an earlier release wrote.** Table, column, constraint, and index
+   names; stored enum values; stored JSONB keys; stored receipt refs, incident
+   codes, and policy ids. Renaming one is a migration and a backfill, and a
+   partial backfill fails the constraint that reads it.
+2. **A client this repository does not ship.** The controller CLI reads the
+   protocol `openagents.computer.v1`; stored tool steps replay against the
+   `.v1` tool schemas; anonymous callers read `/api/status`; deployment secrets
+   carry `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS`.
+3. **Another node during a hot upgrade.** PubSub topics, Horde registry keys,
+   and cluster messages cross a version boundary mid-release, so a rename needs
+   a dual-publish release before it needs an edit.
+4. **A sealed ciphertext.** The AAD is bound into bytes already at rest.
+
+A name that is none of those exists only in this release's source and process
+memory. It moves. `GET /controller/status` declared the scope
+`machine:status` while its siblings declared `computer:pairing:create`; no
+token carries it and no published contract names it, so it is now
+`computer:status`. The same reasoning removed the retired
+`sarah.machine_token.v1` AAD: it looked like form 4, but nothing seals a
+version-1 blob and a sealed pairing token lives at most ten minutes, so its
+population was empty and a compatibility branch with no population is a claim
+nothing tests.
+
+The durable half of the exemption is a ledger, not a paragraph.
+`OpenAgents.Vocabulary` enumerates every `machine`-named table, column,
+constraint, and index, and `OpenAgents.VocabularyTest` derives the live set
+from `information_schema` and `pg_catalog`. A migration cannot add a
+`machine`-named durable surface without someone recording it and saying why.
+`INVARIANTS.md`, CANON-002.
+
+The wire half has no query to enumerate it, so it is listed here and held by
+its own contracts:
 
 - `/machines`, a permanent redirect to `/computers`.
-- The `machines` and `machine_pairings` tables.
-- The `machine:{id}` PubSub topic and the matching `machine:{id}` receipt ref.
-- The `controller_socket:{machine_id}` socket id.
+- The `machine:{id}` PubSub topic, the `{:machine, id}` Horde registry key,
+  the `{:machine_updated, …}` / `{:machine_revoked, …}` /
+  `{:machine_token_expired, …}` cluster messages, and the
+  `controller_socket:{machine_id}` socket id.
+- The `machine:{id}` receipt ref that tool steps carry and
+  `OpenAgents.Compensation` attributes against.
 - The channel refusals `machine_unavailable`, `machine_mismatch`, and
   `machine_reconnecting`, and the reply key `machine` in the controller
   protocol `openagents.computer.v1`, which a separately released CLI reads.
 - The `machine_id` and `machine_name` properties of the `.v1` tool schemas
   (`computer_run.v1`, `computer_agent.v1`, and their siblings), because stored
-  tool steps still replay against them.
-- The `work_jobs` JSONB keys `delegation->>'machine_id'` and
-  `authority_snapshot->>'machine_tier'`, which a check constraint and two
-  triggers cross-check against the `machines` row.
-- The `Machines.TokenVault` AAD `openagents.machine_token.v2`. Changing it
-  makes every sealed pending pairing token undecryptable, so it can only gain
-  a legacy entry, never a new name.
+  tool steps still replay against them, and the `machines` array key of
+  `computer_list.v1`.
+- The response keys `machine_id` and `machine_name` on
+  `GET /api/v3/computer-agent-jobs/{id}`, the assignment projection, and
+  `GET /controller/pairings/{id}`; and `counts.machines_connected` in
+  `GET /api/status`, which `STATUS-001` pins as an exact published key.
+- The `work_jobs` JSONB keys `delegation->>'machine_id'`,
+  `delegation->>'machine_name'`, `authority_snapshot->>'machine_tier'`, and
+  `authority_snapshot->>'machine_name'`, which the check constraint
+  `work_jobs_delegation_identity` and the trigger function
+  `enforce_work_job_scope` cross-check against each other and the `machines`
+  row.
+- The persisted incident codes `machine_offline`, `machine_not_found`,
+  `ambiguous_machine`, `machine_disconnected`, `machine_timeout`, and
+  `machine_revoked`, which `OpenAgents.Incidents.Triage` classifies from stored
+  rows: a rename would reclassify every historical row as `anomalous`.
+- The stored `staging_disposable_resources.kind` value `machine`, and the
+  audit action `repository.machine_grant.updated` with subject
+  `machine_grant`.
+- The module residency `operator_machine`, the consent `machine_pairing`, and
+  the routing-policy id `sarah.routing.policy.paired-machine.v1`. All three sit
+  inside the digest that `module_route_receipts` stores, so renaming one makes
+  historical receipts fail to reproduce.
+- The `Machines.TokenVault` AAD `openagents.machine_token.v2`, bound into
+  ciphertext at rest.
+- `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS` and the setting key
+  `:machine_token_ttl_seconds`, which live in staging and production secrets.
 
-That list is the current partial answer, not a policy. #134 settles whether
-the persistence and wire surfaces are renamed, kept, or split, and this entry
-follows whatever it decides.
+`audit_events.actor_type` used to permit `machine` and nothing ever wrote one.
+The application no longer accepts it; the database constraint still does,
+because narrowing a constraint over rows this release did not write is a
+migration, not an edit.
+
+**`machine` also means machine-readable** — and that sense is correct, not
+residue. `GET /api/v3` publishes `contribution.machine`, and `/agents.json`
+publishes `representations.machine`, each paired with `human` and each naming a
+format rather than a device. Do not sweep these into a computer rename; they
+are not about computers at all.
 
 The channel topic is already `computer:{machine_id}` and the wire protocol is
-already `openagents.computer.v1`. Check which list a `machine` string is on
-before you rename it.
+already `openagents.computer.v1`. Check which side of the rule a `machine`
+string is on before you rename it.
 
 ### Issues and projects
 
@@ -633,8 +701,12 @@ is exactly one component system; adding a second is forbidden.
 3. **GitHub-shaped is not GitHub.** Say "the `/api/v3` surface" or "GitHub"
    depending on which server answers.
 4. **Computer, not machine.** Product copy and new code both say `computer`.
-   The `machine` names that remain are wire, table, and route identity, and
-   renaming one breaks a client.
+   A `machine` name stays only where something outside this release can observe
+   or replay it — a stored row, a client this repository does not ship, another
+   node mid-upgrade, or a sealed ciphertext. The durable half is enumerated in
+   `OpenAgents.Vocabulary` (CANON-002); the wire half is listed under
+   **Where `machine` stays, and why**. `machine` in `contribution.machine`
+   means machine-readable and is a different word.
 5. **Name the receipt.** Turn, push, build, deployment, consent, outcome.
    When checkpoints exist, they are a receipt family, not a Git branch.
 6. **Module means two things.** Elixir module or module artifact — say which.

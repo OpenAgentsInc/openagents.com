@@ -2035,6 +2035,14 @@ conversation, and a thread is not one.
   caller leaves nothing behind. Because a thread has at most one live grant,
   capping open threads caps the account's concurrent thread-scoped authority by
   the same number.
+
+  Amended 2026-08-24 (issue #195): the cap holds under concurrency. The count
+  is taken under the owner visitor row's `FOR UPDATE` lock, inside the
+  transaction that inserts the thread, so two simultaneous opens at the
+  boundary serialize and admit one thread, not two. The cap is what bounds the
+  account's joint credit exposure (below), so a cap that a race could pass
+  would make that bound a fiction.
+  `test/openagents/threads/credit_race_test.exs` races the boundary.
 - **A thread's budget is its own, and its money is the account's.**
   `OpenAgents.Threads.ceilings/0` reads the `thread_grant_*` settings and
   passes them to `OpenAgents.Inference.mint/1`, which otherwise applies the
@@ -2047,6 +2055,25 @@ conversation, and a thread is not one.
   nothing left is refused `:credit_exhausted` rather than minted a grant it
   cannot spend. `GET /api/v3` publishes both allowances, because a client that
   read a fixed per-thread cost cap would be reading a budget nobody is given.
+
+  Amended 2026-08-24 (issue #195): the remainder is metered spend, and mints
+  serialize. `OpenAgents.Threads.mint_grant/1` locks the owner visitor row
+  (after the thread row, always in that order) before reading
+  `Credit.remaining/1` and minting, so concurrent mints for one account each
+  read the remainder at their own serialization point rather than from a
+  shared snapshot. What the remainder deliberately does not subtract is a live
+  grant's unspent ceiling: a parent thread holds the whole remaining balance
+  as its ceiling, and a delegated child thread opened while it runs must still
+  be granted usable authority, so reserving headroom would refuse every such
+  child with `:credit_exhausted` and break delegation. Overlapping live
+  threads can therefore each be ceiled at the same remainder — concurrently or
+  in sequence, the schedules mint identical figures — and the account's joint
+  exposure is bounded by the admission cap times the remainder, which is why
+  the cap above is serialized. Actual spend stays honest where money moves:
+  every call is metered into the remainder, and an exhausted account cannot
+  mint at all. `test/openagents/threads/credit_race_test.exs` proves the
+  serialized figures, the exhausted refusal under race, and the unchanged
+  serial ceilings.
 - **Expiry revokes without being asked.** `OpenAgents.Threads.reap_expired/1`
   runs at admission and on every read of a thread: an active grant past
   `expires_at` becomes `expired`, and an open thread that has minted authority
@@ -4889,7 +4916,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
-| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs` |
+| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs`, `test/openagents/issues/completion_claims_test.exs`, `test/openagents_web/controllers/issue_completion_claim_controller_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
 | DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |

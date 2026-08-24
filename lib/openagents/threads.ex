@@ -35,7 +35,11 @@ defmodule OpenAgents.Threads do
      `maximum_active_boxes_per_owner`. A token that can open one thread could
      otherwise open unbounded threads and spend without a ceiling. Because a
      thread has at most one live grant, capping open threads caps the account's
-     concurrent thread-scoped authority by the same number.
+     concurrent thread-scoped authority by the same number. The count is taken
+     under the owner visitor row's `FOR UPDATE` lock, inside the transaction
+     that inserts, so two simultaneous opens at the boundary admit one thread,
+     not two — the cap is what makes the account's joint credit exposure a
+     bounded figure, so it has to hold under concurrency (issue #195).
   5. **The ceiling is self-clearing.** `reap_expired/1` runs at admission and
      on every read: an active grant whose clock has run out becomes `expired`,
      and the open thread it fenced becomes `failed` with `authority_expired`.
@@ -92,12 +96,7 @@ defmodule OpenAgents.Threads do
 
   def open(%Visitor{id: visitor_id} = owner, objective, options) when is_binary(objective) do
     _reaped = reap_expired(owner)
-
-    if open_count(visitor_id) >= maximum_open_per_account() do
-      {:error, :thread_quota_reached}
-    else
-      insert_thread(visitor_id, objective, options)
-    end
+    insert_thread(visitor_id, objective, options)
   end
 
   @doc """
@@ -144,6 +143,20 @@ defmodule OpenAgents.Threads do
     }
 
     Multi.new()
+    |> Multi.run(:admission, fn repo, _changes ->
+      # The cap is checked under the owner row's lock, inside the transaction
+      # that inserts, so two simultaneous opens serialize here: the second
+      # waits, counts the first's committed row, and is refused. A count read
+      # outside the transaction could pass twice at the boundary and leave
+      # nine open threads behind an eight-thread promise (issue #195).
+      _serialized = lock_owner(repo, visitor_id)
+
+      if open_count(visitor_id) >= maximum_open_per_account() do
+        {:error, :thread_quota_reached}
+      else
+        {:ok, :admitted}
+      end
+    end)
     |> Multi.insert(:thread, Thread.open_changeset(attributes, visitor_id, now))
     |> Multi.run(:opened_event, fn _repo, %{thread: thread} ->
       insert_event(thread, "thread.opened", %{"objective_bytes" => byte_size(objective)}, now)
@@ -154,6 +167,7 @@ defmodule OpenAgents.Threads do
     |> Repo.transaction()
     |> case do
       {:ok, %{counted: thread}} -> {:ok, thread}
+      {:error, :admission, :thread_quota_reached, _changes} -> {:error, :thread_quota_reached}
       {:error, _step, %Ecto.Changeset{} = changeset, _changes} -> {:error, changeset}
     end
   end
@@ -358,6 +372,12 @@ defmodule OpenAgents.Threads do
     Repo.transaction(fn ->
       case locked(thread.id) do
         %Thread{status: "open"} = current ->
+          # Concurrent mints for one account serialize on the owner row
+          # (locked after the thread row, always in that order), so each mint
+          # reads the metered remainder at its own turn rather than from a
+          # shared snapshot (issue #195). What the remainder deliberately does
+          # not subtract is a live grant's unspent ceiling — see `ceilings/1`.
+          _serialized = lock_owner(Repo, current.owner_visitor_id)
           _revoked = Inference.revoke_active_for_thread(current.id)
 
           with {:ok, fenced} <- current |> Thread.generation_changeset() |> Repo.update(),
@@ -449,6 +469,17 @@ defmodule OpenAgents.Threads do
   says is left — a signed-in account's whole balance is available to one thread
   if that is what the work needs. An account with nothing left is refused
   `:credit_exhausted` instead of being minted a grant it cannot spend.
+
+  The remainder is metered spend, not minted ceilings: a live grant's unspent
+  headroom is deliberately not subtracted, because a parent thread holds its
+  whole remaining balance as ceiling and a delegated child thread opened while
+  it runs must still be granted usable authority — reserving headroom would
+  refuse every such child with `:credit_exhausted`. Two overlapping threads can
+  therefore each be ceiled at the same remainder, whether opened concurrently
+  or in sequence; `mint_grant/1` serializes concurrent mints on the owner row
+  so each reads the remainder at its own turn, and the admission cap — itself
+  serialized — bounds how many such ceilings can be live at once (issue #195,
+  THREAD-001).
   """
   @spec ceilings(String.t()) :: {:ok, Inference.ceilings()} | {:error, :credit_exhausted}
   def ceilings(visitor_id) when is_binary(visitor_id) do
@@ -581,6 +612,13 @@ defmodule OpenAgents.Threads do
 
   defp locked(thread_id) do
     Repo.one(from t in Thread, where: t.id == ^thread_id, lock: "FOR UPDATE")
+  end
+
+  # The serialization point for one account's admissions and mints. Lock order
+  # is thread row first, owner row second, everywhere a transaction takes both,
+  # so two writers cannot deadlock across the pair.
+  defp lock_owner(repo, visitor_id) do
+    repo.one(from v in Visitor, where: v.id == ^visitor_id, lock: "FOR UPDATE")
   end
 
   defp insert_event(%Thread{id: thread_id}, event_type, payload, now) do

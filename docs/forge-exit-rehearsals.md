@@ -15,6 +15,14 @@ This document defines six rehearsals. Each one says what it proves, what it
 cannot prove, and whether it has been performed. **Performed** means someone
 ran it and recorded the result here. Anything else says so.
 
+`test/openagents/forge/exit_rehearsal_runbook_test.exs` checks every
+`OpenAgents` module and function this document names against the compiled
+code. Rehearsal 3's step 3 once named `OpenAgents.Forge.Sync.rebuild/1`
+before that function existed (#189), and no invariant could notice, because
+invariants read compiled modules and the step was a string in this file. A
+renamed or removed function now turns a test red instead of leaving a step
+that reads as executable.
+
 ## Rehearsal status
 
 | Rehearsal | Executable proof | Performed against the live forge |

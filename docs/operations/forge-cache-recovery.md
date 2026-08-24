@@ -68,7 +68,13 @@ false `404` responses from the damaged node.
 4. Move the affected bare repository cache aside. Do not delete or modify WAL
    indexes or WAL objects. Keep the moved cache until verification finishes.
 5. Trigger repository synchronization or restart the application so boot
-   convergence replays the WAL into a new local cache.
+   convergence replays the WAL into a new local cache. To force a discard and
+   replay in one call, run
+   `bin/openagents rpc 'OpenAgents.Forge.Sync.rebuild("{storage_key}")'`. It
+   rebuilds the projection from sequence zero in a sibling directory, verifies
+   every authoritative ref, and swaps the result in atomically. On success it
+   deletes the previous cache, so complete step 4 first when you want to keep
+   the old cache until verification finishes.
 6. Verify the applied WAL sequence, every authoritative ref, the reported blob,
    Git ref advertisement, and `/health` on that node.
 7. Restore load-balancer admission only after `forge_cache_ready` and the

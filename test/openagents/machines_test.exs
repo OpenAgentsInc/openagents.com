@@ -41,6 +41,16 @@ defmodule OpenAgents.MachinesTest do
     assert pairing.status == "pending"
   end
 
+  # The window a sealed pairing token can live in. `TokenVault` keeps exactly
+  # one AAD because of this bound: a version-1 blob would have to survive a
+  # release change, and no row holds ciphertext longer than this. CANON-002.
+  test "a pairing window is bounded, so sealed ciphertext cannot outlive a release" do
+    %{pairing: pairing} = start_pairing()
+
+    assert DateTime.diff(pairing.expires_at, pairing.inserted_at, :second) <= 600
+    assert DateTime.compare(pairing.expires_at, pairing.inserted_at) == :gt
+  end
+
   test "approve then claim hands the token over exactly once" do
     %{pairing: pairing, code: code, poll_secret: poll_secret} = start_pairing()
     owner = user("claim-once")

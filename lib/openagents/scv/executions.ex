@@ -33,7 +33,6 @@ defmodule OpenAgents.SCV.Executions do
 
         attributes = %{
           driver_account_id: account.id,
-          issue_id: Keyword.get(options, :issue_id),
           principal: "scv:codex_app_server:#{account.id}",
           repository_revision: repository_revision,
           objective: objective,

@@ -86,6 +86,36 @@ the staging procedure in
 [Qualify an SCV in staging](operations/scv-staging-qualification.md) before you
 call the driver qualified.
 
+### How an SCV binds to an issue
+
+An `scv_runs` row records one execution. It does not record which issue that
+execution was attempting, and it must not: `forge_assignments` is the single
+attempt record that binds one issue to one repository, one branch, one target,
+and one requesting principal
+(`lib/openagents/forge/assignment.ex`). `#10` forbids a second
+work record, and `#152` settled the one that had arrived by accident.
+
+`scv_runs` carried a nullable `issue_id` from the day the table was created.
+No production path set it. One reader depended on it —
+`OpenAgents.TokenProductivity`, behind the `/admin/tokens` operator surface,
+graded tokens as merged work or a closed issue through that column, and both
+buckets were therefore permanently zero. Issue `#152` dropped the column and
+its `[:issue_id, :inserted_at]` index and re-pointed those buckets at a work
+job reached through `forge_assignments.work_job_id`, which is written by a
+path that runs. An SCV run keeps the verified-receipt bucket, which needs only
+its own terminal receipt. The reasoning is recorded in
+`docs/2026-08-23-issue-work-receipt-linkage-design.md`, section 8.
+
+What makes the Codex lane issue-bound is therefore not a column on
+`scv_runs`. It is the same thing that made a Box one and then a connected
+Computer one: a `forge_assignments` target kind. When `OpenAgents.SCV.CodexRuns`
+gains a production caller, that caller creates the assignment, the assignment
+names the issue, and `scv_runs` keeps only what it is good at — the fenced
+lease, the account generation, the bounded event log, the terminal report and
+its digest, and a `repository_revision` constrained to an exact 40-hex commit,
+which is stronger than anything `forge_assignments.terminal_commit` guarantees.
+An assignment would point at the run the way it already points at a Box run.
+
 ## Research basis
 
 This plan uses two current sources:

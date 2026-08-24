@@ -367,9 +367,10 @@ rg -n 'CodexRuns' lib/ | grep -v 'lib/openagents/scv/'
 
 returns nothing. Its only callers are `test/openagents/scv/codex_runs_test.exs`.
 The lane is also feature-flagged off by default (`config/config.exs:62`).
-`scv_runs.issue_id` (line 12) is nullable, indexed, cast at
-`lib/openagents/scv/execution.ex:54`, and set by no caller at all — issue #152
-is open against exactly that, and this audit confirms it.
+`scv_runs.issue_id` (line 12) was nullable, indexed, cast, and set by no
+caller at all. This audit confirmed it, and #152 then dropped the column and
+its index; `forge_assignments` is the one record that binds an issue to an
+attempt.
 
 **What a `threads` table should borrow.** The generation fence, the lease, the
 `owner_node` column, the terminal report plus digest, the bounded-objective
@@ -846,10 +847,11 @@ threads, as EXIT-001 requires for repositories.
   today (2.2), and `work_jobs` has no concurrency index. The Box lane's
   per-owner cap of four is the only precedent. Settle it by choosing a number
   in `config/config.exs` before stage 2 exposes the route.
-- **Does `scv_runs` become an executor behind a thread, or does it go?** Issue
-  #152 asks the narrower version of this about `scv_runs.issue_id`. If a thread
-  can name an executor, the Codex lane becomes one and the column question
-  answers itself. Settle it with #152 before stage 1.
+- **Does `scv_runs` become an executor behind a thread, or does it go?** #152
+  settled the narrower half: `scv_runs.issue_id` is dropped, and the Codex lane
+  becomes issue-bound through a `forge_assignments` target kind whenever it
+  gains a production caller. Whether a thread may also name that executor is
+  still open.
 - **Which invariant identifier does a thread take?** `THREAD-001` is free.
   Confirm with `grep -n "^### THREAD" INVARIANTS.md`, which returns nothing
   today.

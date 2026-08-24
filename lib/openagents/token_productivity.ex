@@ -9,12 +9,28 @@ defmodule OpenAgents.TokenProductivity do
   that the work landed. Three buckets, strongest evidence first, each usage
   row counted at most once:
 
-    * **Merged work** — an SCV run whose issue carries a merged pull request.
-    * **Closed issues** — an SCV run whose issue closed without a merged pull
-      request.
+    * **Merged work** — a work job whose assignment's issue carries a merged
+      pull request.
+    * **Closed issues** — a work job whose assignment's issue closed without a
+      merged pull request.
     * **Verified receipts** — an SCV run that succeeded with a digest-verified
       terminal receipt, or a work job that completed with its bounded report,
       where no stronger outcome evidence exists.
+
+  ## Which record says a token produced an outcome
+
+  A `forge_assignments` row is the one record binding an issue to work, and
+  `forge_assignments.work_job_id` is the typed edge from that attempt to the
+  execution that ran it. Outcome evidence is therefore read through the
+  assignment, never through a second issue reference on the execution: `#152`
+  dropped the one that existed, an `scv_runs.issue_id` no caller ever set,
+  which held the two strongest buckets permanently at zero.
+
+  An SCV run reaches the verified-receipt bucket on its own terminal receipt.
+  It reaches no stronger bucket until the Codex lane becomes an assignment
+  target the way a Box and a connected Computer already are, at which point it
+  is graded through the same assignment as every other attempt rather than
+  through a table of its own.
 
   Typed and spoken conversation tokens count toward raw volume only: a chat
   turn has no durable outcome record to attribute it to.
@@ -46,6 +62,7 @@ defmodule OpenAgents.TokenProductivity do
 
   alias OpenAgents.Conversations.ProviderStep
   alias OpenAgents.Conversations.TurnReceipt
+  alias OpenAgents.Forge.Assignment
   alias OpenAgents.Issues.Issue
   alias OpenAgents.PullRequests.PullRequest
   alias OpenAgents.Repo
@@ -256,48 +273,60 @@ defmodule OpenAgents.TokenProductivity do
     |> Map.new(fn {key, value} -> {key, integer(value)} end)
   end
 
-  # A run's issue with a merged pull request is the strongest outcome evidence.
-  defp merged_work_query do
-    from(run in Execution,
-      as: :usage_row,
+  # The work jobs an assignment bound to an issue that carries a merged pull
+  # request. Read as a set of ids rather than a join, so a job an assignment
+  # names twice, or an issue with two merged pull requests, still counts its
+  # usage once.
+  defp merged_job_ids do
+    from(assignment in Assignment,
       join: pull_request in PullRequest,
-      on: pull_request.issue_id == run.issue_id,
-      where: not is_nil(pull_request.merged_at)
+      on: pull_request.issue_id == assignment.issue_id,
+      where: not is_nil(assignment.work_job_id),
+      where: not is_nil(pull_request.merged_at),
+      select: assignment.work_job_id
     )
+  end
+
+  # The work jobs an assignment bound to an issue that has closed.
+  defp closed_issue_job_ids do
+    from(assignment in Assignment,
+      join: issue in Issue,
+      on: issue.id == assignment.issue_id,
+      where: not is_nil(assignment.work_job_id),
+      where: issue.state == "closed",
+      select: assignment.work_job_id
+    )
+  end
+
+  # A merged pull request on the attempt's issue is the strongest evidence.
+  defp merged_work_query do
+    from(job in Job, as: :usage_row, where: job.id in subquery(merged_job_ids()))
   end
 
   # Closed without a merged pull request: the issue itself was the outcome.
   defp closed_issues_query do
-    from(run in Execution,
+    from(job in Job,
       as: :usage_row,
-      join: issue in Issue,
-      on: issue.id == run.issue_id,
-      left_join: pull_request in PullRequest,
-      on: pull_request.issue_id == run.issue_id,
-      where: issue.state == "closed",
-      where: is_nil(pull_request.id) or is_nil(pull_request.merged_at)
+      where: job.id in subquery(closed_issue_job_ids()),
+      where: job.id not in subquery(merged_job_ids())
     )
   end
 
-  # Succeeded runs carry a digest-verified terminal receipt; count the ones no
-  # stronger bucket already counted.
+  # Succeeded runs carry a digest-verified terminal receipt. No assignment
+  # names an SCV run yet, so no stronger bucket can already hold one.
   defp receipt_runs_query do
-    from(run in Execution,
-      as: :usage_row,
-      left_join: issue in Issue,
-      on: issue.id == run.issue_id,
-      left_join: pull_request in PullRequest,
-      on: pull_request.issue_id == run.issue_id,
-      where: run.status == "succeeded",
-      where: is_nil(issue.id) or issue.state != "closed",
-      where: is_nil(pull_request.id) or is_nil(pull_request.merged_at)
-    )
+    from(run in Execution, as: :usage_row, where: run.status == "succeeded")
   end
 
   # A completed work job's terminal row must carry its bounded report — that
-  # report is the receipt.
+  # report is the receipt. Count the ones no stronger bucket already counted.
   defp completed_jobs_query do
-    from(job in Job, as: :usage_row, where: job.status == "completed")
+    from(job in Job,
+      as: :usage_row,
+      where: job.status == "completed",
+      where: job.id not in subquery(merged_job_ids()),
+      where: job.id not in subquery(closed_issue_job_ids())
+    )
   end
 
   defp merge_totals(left, right) do

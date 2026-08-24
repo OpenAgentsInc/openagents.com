@@ -14,6 +14,7 @@ defmodule OpenAgents.TokenProductivityTest do
   alias OpenAgents.Context.Composer
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.ProviderStep
+  alias OpenAgents.Forge.Assignment
   alias OpenAgents.Issues
   alias OpenAgents.Providers.Request
   alias OpenAgents.PullRequests.PullRequest
@@ -52,7 +53,7 @@ defmodule OpenAgents.TokenProductivityTest do
 
     account = driver_account("raw-sources-driver")
 
-    insert_run(account, 1, "failed", nil, %{
+    insert_run(account, 1, "failed", %{
       "input_tokens" => 8,
       "output_tokens" => 2,
       "total_tokens" => 10
@@ -72,37 +73,48 @@ defmodule OpenAgents.TokenProductivityTest do
   test "buckets productive tokens by strongest outcome evidence, each row once" do
     repository = repository_fixture()
     account = driver_account("productive-driver")
+    conversation = conversation_for(account("productive-jobs"))
 
-    # Merged work: the run's issue carries a merged pull request.
+    # Merged work: the job's assignment names an issue with a merged pull
+    # request. The assignment is the only record that binds the two.
     merged_issue = issue_fixture(repository, %{title: "merged work"})
     insert_merged_pull_request(repository, merged_issue)
 
-    insert_run(account, 1, "succeeded", merged_issue.id, %{
-      "input_tokens" => 70,
-      "output_tokens" => 30,
-      "total_tokens" => 100
-    })
+    merged_job =
+      insert_job(conversation, "completed", %{
+        "input_tokens" => 70,
+        "output_tokens" => 30,
+        "total_tokens" => 100
+      })
+
+    insert_assignment(repository, merged_issue, merged_job)
 
     # Closed issue: closed without a merged pull request.
     closed_issue = issue_fixture(repository, %{title: "closed issue"})
     {:ok, _closed} = Issues.update_issue(closed_issue, %{"state" => "closed"})
 
-    insert_run(account, 2, "succeeded", closed_issue.id, %{
-      "input_tokens" => 14,
-      "output_tokens" => 6,
-      "total_tokens" => 20
-    })
+    closed_job =
+      insert_job(conversation, "completed", %{
+        "input_tokens" => 14,
+        "output_tokens" => 6,
+        "total_tokens" => 20
+      })
 
-    # Verified receipt: succeeded with its terminal receipt, no stronger
-    # evidence.
-    insert_run(account, 3, "succeeded", nil, %{
+    insert_assignment(repository, closed_issue, closed_job)
+
+    # A second assignment against the same merged issue must not count the
+    # same job's usage twice.
+    insert_assignment(repository, merged_issue, merged_job)
+
+    # Verified receipt: an SCV run that succeeded with its terminal receipt.
+    insert_run(account, 3, "succeeded", %{
       "input_tokens" => 7,
       "output_tokens" => 3,
       "total_tokens" => 10
     })
 
     # A failed run is raw volume only.
-    insert_run(account, 4, "failed", nil, %{
+    insert_run(account, 4, "failed", %{
       "input_tokens" => 300,
       "output_tokens" => 100,
       "total_tokens" => 400
@@ -110,7 +122,6 @@ defmodule OpenAgents.TokenProductivityTest do
 
     # Completed work jobs carry their bounded report; failed ones count as raw
     # volume only.
-    conversation = conversation_for(account("productive-jobs"))
     insert_job(conversation, "completed", %{"input_tokens" => 4, "output_tokens" => 1})
     insert_job(conversation, "failed", %{"input_tokens" => 900, "output_tokens" => 100})
 
@@ -122,6 +133,25 @@ defmodule OpenAgents.TokenProductivityTest do
     assert report.productive.total_tokens == 135
     assert report.raw.total_tokens == 1535
     assert_in_delta report.productive.share, 135 / 1535, 0.000001
+  end
+
+  test "an unassigned job is a verified receipt, never merged work" do
+    repository = repository_fixture()
+    conversation = conversation_for(account("unassigned-jobs"))
+
+    issue = issue_fixture(repository, %{title: "merged but unattempted"})
+    insert_merged_pull_request(repository, issue)
+
+    insert_job(conversation, "completed", %{
+      "input_tokens" => 40,
+      "output_tokens" => 10,
+      "total_tokens" => 50
+    })
+
+    report = TokenProductivity.report()
+
+    assert report.productive.merged_work.total_tokens == 0
+    assert report.productive.verified_receipts.total_tokens == 50
   end
 
   test "cache hit rate spans inclusive and exclusive cached-token spellings" do
@@ -138,7 +168,7 @@ defmodule OpenAgents.TokenProductivityTest do
     # OpenCode-style usage counts cache reads outside input_tokens.
     account = driver_account("cache-rate-driver")
 
-    insert_run(account, 1, "succeeded", nil, %{
+    insert_run(account, 1, "succeeded", %{
       "input_tokens" => 10,
       "output_tokens" => 5,
       "total_tokens" => 15,
@@ -256,13 +286,12 @@ defmodule OpenAgents.TokenProductivityTest do
     |> Repo.insert!()
   end
 
-  defp insert_run(%DriverAccount{} = account, generation, status, issue_id, usage) do
+  defp insert_run(%DriverAccount{} = account, generation, status, usage) do
     now = DateTime.utc_now()
     report = "Run receipt for generation #{generation}."
 
     Repo.insert!(%Execution{
       driver_account_id: account.id,
-      issue_id: issue_id,
       driver: "codex_app_server",
       principal: "scv:codex_app_server:#{account.id}",
       repository_revision: String.duplicate("a", 40),
@@ -279,6 +308,24 @@ defmodule OpenAgents.TokenProductivityTest do
       usage: usage,
       started_at: now,
       completed_at: now
+    })
+  end
+
+  defp insert_assignment(repository, issue, %Job{} = job) do
+    now = DateTime.utc_now()
+
+    Repo.insert!(%Assignment{
+      repository_id: repository.id,
+      issue_id: issue.id,
+      work_job_id: job.id,
+      conversation_id: job.conversation_id,
+      target_kind: "computer",
+      requesting_principal: %{"kind" => "test"},
+      branch: "work/#{issue.number}-#{System.unique_integer([:positive])}",
+      state: "completed",
+      deadline_at: DateTime.add(now, 3600, :second),
+      admitted_at: now,
+      finished_at: now
     })
   end
 

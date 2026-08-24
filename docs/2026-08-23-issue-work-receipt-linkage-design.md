@@ -54,16 +54,15 @@ asked.
 
 Four findings shape the staging:
 
-1. **A fourth, dormant issue-to-work record already exists.** `scv_runs`
-   carries `belongs_to :issue, Issue, type: :id`
-   (`lib/openagents/scv/execution.ex:18`) with an `[:issue_id, :inserted_at]`
-   index (`priv/repo/migrations/20260821082652_create_scv_runs.exs:38`). It is
-   set only through `Executions.claim/4`
-   (`lib/openagents/scv/executions.ex:36`), reached only from
-   `SCV.CodexRuns.start/5` (`lib/openagents/scv/codex_runs.ex:13`), which has
-   no caller anywhere in `lib/`. It is reachable from tests alone. This is the
+1. **A fourth, dormant issue-to-work record existed, and is gone.**
+   `scv_runs` carried `belongs_to :issue, Issue, type: :id` with an
+   `[:issue_id, :inserted_at]` index. It was set only through
+   `Executions.claim/4` (`lib/openagents/scv/executions.ex`), reached only
+   from `SCV.CodexRuns.start/5` (`lib/openagents/scv/codex_runs.ex`), which
+   has no caller anywhere in `lib/`, and no test set it either. That was the
    exact shape of the second work record `#10` forbids, and it arrived by
-   accident. Section 8 names the decision it needs.
+   accident. `#152` dropped the column and the index. Section 8 records the
+   reasoning and what would make the Codex lane issue-bound instead.
 2. **The issue timeline is prose today.** There is no `issue_events` table.
    `OpenAgentsWeb.IssueShowLive` derives its feed from the columns the issue
    does store and says so in its own moduledoc
@@ -479,14 +478,54 @@ tests, no warnings.
 
 ## 8. Open questions
 
-- **What happens to `scv_runs.issue_id`?** It is a second issue-to-work record
-  that no production path reaches (`lib/openagents/scv/execution.ex:18`;
-  `SCV.CodexRuns.start/5` at `lib/openagents/scv/codex_runs.ex:13` has no
-  caller in `lib/`). Either the Codex lane becomes an assignment target like a
-  Box and a Computer, or the column goes. Settle it by running
-  `rg -n 'CodexRuns' lib/ test/` and asking whoever owns the Codex app-server
-  work in `docs/scv-codex-app-server-planning.md` which of the two they
-  intend.
+- **What happens to `scv_runs.issue_id`?** ~~Open.~~ **Settled by `#152`: the
+  column is dropped, and its one reader now reads the assignment.**
+
+  Three facts decided it. Nothing wrote the column: `Executions.claim/4` read
+  an `:issue_id` option that no caller passed, and `SCV.CodexRuns.start/5` has
+  no caller in `lib/` at all, so the edge was unreachable in production.
+  Section 2 of this design already names `forge_assignments` as the one row
+  allowed to bind an issue to an attempt, so a second binding could only ever
+  disagree with it. And `docs/2026-08-23-thread-primitive-audit.md` had
+  independently ruled that `scv_runs` cannot be the primary agent record, which
+  is why `threads` shipped borrowing its column shape rather than extending it.
+
+  **One reader did exist, and it is the reason this mattered.**
+  `OpenAgents.TokenProductivity` — the `/admin/tokens` operator surface —
+  graded tokens by outcome through `scv_runs.issue_id`: merged work was "an SCV
+  run whose issue carries a merged pull request", and closed issues was the
+  same run whose issue closed. Because nothing ever wrote the column, both of
+  those buckets were structurally zero and always would be. A column nobody
+  writes is cheap; a metric anchored to it is not, because it reports a real
+  number that can never move.
+
+  `#152` re-pointed those two buckets at the record that does carry the edge: a
+  work job reached through `forge_assignments.work_job_id`, graded on
+  `forge_assignments.issue_id`. That edge is written by the `#108` and `#127`
+  paths, so the buckets can now be non-zero, and the ids are read as sets so an
+  issue with two merged pull requests, or a job two assignments name, still
+  counts its usage once. An SCV run keeps the verified-receipt bucket, which
+  needs only its own terminal receipt.
+
+  Folding the column in was the other real option, and it was rejected on
+  timing rather than on principle. Making a Codex run an assignment target the
+  way `#127` made a connected Computer one is the right shape, but there is
+  nothing yet to assign: the lane has no dispatcher caller, and wiring an
+  attempt record to a dispatcher nothing reaches would add a second unexercised
+  path instead of removing one. Keeping the column with a note was rejected
+  too — a nullable column nobody can explain is how the fourth record appeared
+  in the first place.
+
+  **What would make it live.** A production caller for
+  `SCV.CodexRuns.start/5`. When one exists, that caller creates a
+  `forge_assignments` row with a Codex target kind, the way `#108` did for a
+  Box and `#127` did for a connected Computer, and the assignment points at the
+  run. The issue timeline then reads the Codex lane through the same projection
+  as every other attempt — `Assignments.attempts_for_issue/1` — and
+  `OpenAgents.TokenProductivity` grades it through the same assignment as every
+  other execution, rather than through a fourth table.
+  `docs/scv-codex-app-server-planning.md` records the same decision next to the
+  checkpoint that would have to change.
 - **Which qualification record is the one?** `deployment_check_results` and
   `settlement_verifications` both key a verification to an exact commit, from
   two lanes that never met (`lib/openagents/deployments/check_result.ex:25`;

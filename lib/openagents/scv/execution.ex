@@ -4,7 +4,6 @@ defmodule OpenAgents.SCV.Execution do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias OpenAgents.Issues.Issue
   alias OpenAgents.SCV.DriverAccount
   alias OpenAgents.SCV.ExecutionEvent
 
@@ -15,7 +14,6 @@ defmodule OpenAgents.SCV.Execution do
 
   schema "scv_runs" do
     belongs_to :driver_account, DriverAccount
-    belongs_to :issue, Issue, type: :id
     field :driver, :string, default: "codex_app_server"
     field :principal, :string
     field :repository_revision, :string
@@ -51,7 +49,6 @@ defmodule OpenAgents.SCV.Execution do
     |> cast(attributes, [
       :id,
       :driver_account_id,
-      :issue_id,
       :principal,
       :repository_revision,
       :objective,
@@ -79,7 +76,6 @@ defmodule OpenAgents.SCV.Execution do
     |> put_change(:model, "gpt-5.6-luna")
     |> put_change(:status, "running")
     |> foreign_key_constraint(:driver_account_id)
-    |> foreign_key_constraint(:issue_id)
     |> unique_constraint(:driver_account_id, name: :scv_runs_one_active_account_index)
     |> unique_constraint([:driver_account_id, :generation])
     |> check_constraint(:driver, name: :scv_runs_driver_check)

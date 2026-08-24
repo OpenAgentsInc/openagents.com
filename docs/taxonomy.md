@@ -528,19 +528,25 @@ its own contracts:
 - The stored `staging_disposable_resources.kind` value `machine`, and the
   audit action `repository.machine_grant.updated` with subject
   `machine_grant`.
-- The module residency `operator_machine`, the consent `machine_pairing`, and
-  the routing-policy id `sarah.routing.policy.paired-machine.v1`. All three sit
-  inside the digest that `module_route_receipts` stores, so renaming one makes
-  historical receipts fail to reproduce.
+- The `audit_events.actor_type` value `machine`. A paired computer that
+  authenticates to the Git plane with its `smct_` token pushes and fetches
+  under `{:machine, id}`, so the value is written, not vestigial.
+  `OpenAgents.Forge.GitHTTP.audit_actor_kinds/0` names the principal kinds that
+  can reach it, and `OpenAgents.AuditTest` asserts every one of them is an
+  actor kind `OpenAgents.Audit` accepts — a containment a reading of the call
+  sites cannot establish, because the actor there is a variable.
+- The module residency `operator_machine` and the routing-policy id
+  `sarah.routing.policy.paired-machine.v1`. The residency reaches
+  `artifact.facets` and so the `artifact_digest` and `registry_digest` a route
+  receipt stores; the policy id and the `allowed_residencies` that admit it are
+  both inside `policy_digest`. Renaming either makes a stored
+  `module_route_receipts` row fail to reproduce. The neighbouring
+  `policy_facets` consent, by contrast, is shape-checked and never digested,
+  which is why it is now `computer_pairing`.
 - The `Machines.TokenVault` AAD `openagents.machine_token.v2`, bound into
   ciphertext at rest.
 - `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS` and the setting key
   `:machine_token_ttl_seconds`, which live in staging and production secrets.
-
-`audit_events.actor_type` used to permit `machine` and nothing ever wrote one.
-The application no longer accepts it; the database constraint still does,
-because narrowing a constraint over rows this release did not write is a
-migration, not an edit.
 
 **`machine` also means machine-readable** — and that sense is correct, not
 residue. `GET /api/v3` publishes `contribution.machine`, and `/agents.json`

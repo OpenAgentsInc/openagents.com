@@ -44,6 +44,42 @@ Evidence: `OpenAgents.Persona.SourceManifest`,
 `priv/sarah/persona/sarah.v1.sources.json`, and
 `OpenAgents.Persona.SourceManifestTest`.
 
+### CANON-002 — Retained `machine` names are enumerated, not assumed
+
+Status: Current
+
+The product says computer. A `machine` name is retained only where something
+outside this release can observe or replay it: a row an earlier release wrote,
+a client this repository does not ship, another node during a hot upgrade, or a
+sealed ciphertext. Everywhere else the name is `computer`.
+
+The durable half of that exemption is enumerated, not described.
+`OpenAgents.Vocabulary` lists every `machine`-named table, column, constraint,
+and index, and the proof derives the live population from `information_schema`
+and `pg_catalog` rather than from a list maintained beside it, so a migration
+that adds a `machine`-named durable surface fails until someone records it and
+says why, and a ledger entry the database does not have fails as well. The wire
+half has no query that enumerates it and is listed in `docs/taxonomy.md`
+instead, held by the contracts that own each surface.
+
+A retained name owes a population, and the population must be established from
+something that cannot lie rather than from a reading of the call sites. The
+retired AAD `sarah.machine_token.v1` had none — nothing seals a version-1 blob
+and a sealed pairing token cannot outlive its bounded window — so the token
+vault carries one version and one AAD. The audit actor kind `machine` looked
+the same and is not: a paired computer authenticating to the Git plane pushes
+under `{:machine, id}`, from a variable that no source scan for a literal
+finds. It stays, and the proof asserts that every principal kind
+`OpenAgents.Forge.GitHTTP.audit_actor_kinds/0` admits is an actor kind
+`OpenAgents.Audit` accepts, so narrowing one without the other fails here
+instead of raising after a pack is already written.
+
+Evidence: `OpenAgents.Vocabulary`, `OpenAgents.Audit`,
+`OpenAgents.Forge.GitHTTP`, `OpenAgents.Machines.TokenVault`,
+`test/openagents/vocabulary_test.exs`, `test/openagents/audit_test.exs`,
+`test/openagents/machines/token_vault_test.exs`, and
+`test/openagents/machines_test.exs`.
+
 ### PERSONA-001 — Each inference uses one immutable persona artifact
 
 Status: Current
@@ -4114,6 +4150,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | Invariant | Executable proof |
 | --- | --- |
 | CANON-001 | `test/openagents/persona/source_manifest_test.exs` |
+| CANON-002 | `test/openagents/vocabulary_test.exs`, `test/openagents/audit_test.exs`, `test/openagents/machines/token_vault_test.exs` |
 | PERSONA-001 | `test/openagents/persona_test.exs`, `test/openagents/providers/persona_boundary_test.exs` |
 | PERSONA-002 | `test/openagents/context/composer_test.exs`, `test/openagents/roles_test.exs` |
 | PERSONA-003 | `test/openagents/persona/evaluation_test.exs` |

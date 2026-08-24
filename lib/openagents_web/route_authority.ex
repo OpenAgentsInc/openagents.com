@@ -50,6 +50,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
     # The inbox addresses exactly one account, so it has nothing to show a
     # visitor who has not identified themselves.
     "/notifications",
+    # Thread transcripts. The list is the account's own, and a thread the
+    # reader may not read answers 404 rather than 403, so the prefix is
+    # authenticated even where a thread's own tier widens who may read it
+    # (THREAD-002): the wider audience is still signed in.
+    "/threads",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",

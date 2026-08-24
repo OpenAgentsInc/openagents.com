@@ -156,36 +156,63 @@ Measured against four real coder sessions from the same afternoon:
 | `17-08-32` | 4 | 5 | 4 | 9 | 8,418 B |
 | `17-24-37` | 6 | 0 | 6 | 6 | 0 B |
 
-The payload cap is not the binding constraint: the largest tool result observed
-was 8.4 KB, and the transcript already bounds a result to 4,000 characters
-before it reaches a model, so the same bound applied to an event keeps every one
-of them comfortably inside 16 KB. A 30 KB shell output would not fit, which is
-why the bound is applied rather than assumed.
+For tool results the payload cap is not the binding constraint: the largest
+observed was 8.4 KB, and the transcript already bounds a result to 4,000
+characters before it reaches a model, so the same bound applied to an event
+keeps every one of them comfortably inside 16 KB. A 30 KB shell output would not
+fit, which is why the bound is applied rather than assumed. Reasoning is the
+exception, and it has its own section below.
 
 **The listing cap was the binding constraint.** Turn-level persistence fits
 inside fifty with room to spare; tool-level passes it on an ordinary working
-session. So `list_events/2` now takes an `:after` cursor and the route publishes
+session, and recording reasoning in parts pushes it further still. So `list_events/2` now takes an `:after` cursor and the route publishes
 each event's id, because a history that cannot be read back is not persistence.
 That is the one server change this section required, and it is done.
 
 ### What to record
 
+Everything a full ATIF export needs, because that is the bar: a thread's
+transcript should be able to reproduce the session, and an export that has to
+reach outside the server for part of it is not a record of anything.
+
 Recorded, in the order they happen:
 
 - `turn.user` — what the reader asked.
+- `turn.reasoning` — what the model thought, in order, before it answered.
 - `tool.ran` — one event per call, carrying the tool, its arguments, and its
   bounded result. Call and result are one event rather than two: they are one
   fact, and splitting them doubles the count against the cap for nothing.
 - `turn.assistant` — the answer, with the turn's token usage and call count.
 
-Not recorded: text deltas, reasoning deltas, and the interface's own notices.
-Deltas are how a reply arrives, not what it is, and a transcript that stores the
-arrival cannot be read back as the thing. Reasoning is display-only for the same
-reason it is not on the model transcript. Notices never reached a model.
+**Reasoning is recorded, and it is not optional.** An earlier draft of this
+document left it out and called that a saving, on the grounds that it is not
+sent back to a model. That was wrong twice over. It is sent back now — a model
+that cannot see how it reached its last answer reasons its way there again — and
+it is the largest single part of what a session produces: 150,322 characters
+against 8,232 characters of answer in one measured session. A transcript without
+it is a summary with the working removed, and the working is what makes a
+trajectory worth keeping for training, for review, or for understanding what a
+run actually did.
 
-That is roughly ATIF's step shape, which is not a coincidence: `/export` already
-writes a session in exactly this granularity, and the two should not disagree
-about what a session was.
+Not recorded: text and reasoning **deltas**, and the interface's own notices.
+A delta is how a reply arrived rather than what it is, and a transcript that
+stores the arrival cannot be read back as the thing. Notices never reached a
+model. That is the whole of what is dropped.
+
+### Reasoning does not fit in one event
+
+The payload cap is 16,384 bytes and the largest single reasoning block measured
+is **38,791 characters**. So reasoning is the one thing here that a single event
+cannot hold, and the cap is not the wrong size — a bounded event is the point of
+an append-only evidence table.
+
+It is stored in ordered parts: `turn.reasoning` events carrying `part`, `of`,
+and a slice bounded well inside the cap, reassembled in order on read. The
+alternative is raising the constraint, which trades a bound that holds for every
+event against one case, and the case is the one that will keep growing.
+
+This also means the event count per turn is no longer fixed, which the cursor
+already handles.
 
 ### Resume
 
@@ -202,12 +229,13 @@ follows:
 `GET /api/v3/threads` is the picker's list and `GET /api/v3/threads/{id}/events`
 is the transcript it replays. Neither needs anything new.
 
-The one open question is what a resumed session sends to the model. The
-transcript is evidence of what happened, not a chat history in a provider's
-shape, so replaying it verbatim is not obviously right — and a long thread would
-reintroduce exactly the context-size problem that bounding tool results just
-solved. My instinct is that a resumed session replays the turns and the tool
-results, not the deltas, and bounds them the same way a live session does.
+The one open question is what a resumed session **loads**, which is separate
+from what it stores and should be decided separately. Everything is recorded;
+that is settled. Whether a long thread is replayed whole, or condensed, or
+replayed from some point forward, is a question about context budgets and about
+what a model needs to carry on — and it is answerable only because the whole
+record is there to choose from. A decision to store less would have foreclosed
+it.
 
 ## What I would do first
 

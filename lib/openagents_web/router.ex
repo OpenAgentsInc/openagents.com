@@ -425,6 +425,12 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/milestones/:milestone_number", MilestoneController, :show
     get "/repos/:owner/:repo/assignees", AssigneeController, :index
     get "/repos/:owner/:repo/assignees/:assignee", AssigneeController, :show
+
+    # The push receipts the WAL recorded, so a pusher can re-read the chain
+    # link `git push` printed to them. Read-only, and served from the WAL
+    # rather than the derived rows, so this publishes what the verifier reads.
+    get "/repos/:owner/:repo/pushes", PushReceiptController, :index
+    get "/repos/:owner/:repo/pushes/:wal_seq", PushReceiptController, :show
   end
 
   scope "/api/v3", OpenAgentsWeb do

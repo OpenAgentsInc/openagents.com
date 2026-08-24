@@ -58,7 +58,12 @@ defmodule OpenAgentsWeb.ApiError do
     # Thread admission (THREAD-001). Holding too many threads open is not a
     # malformed request and not a forbidden one: the same call succeeds once
     # the caller revokes one, so it is the rate-limit status and its own code.
-    "thread_quota_reached" => {429, "This account holds the maximum number of open threads"}
+    "thread_quota_reached" => {429, "This account holds the maximum number of open threads"},
+    # Push receipts are read from the WAL, not from PostgreSQL, so a storage
+    # that will not answer is a temporary unreadability rather than an absence.
+    # Reporting it as `not_found` would tell a pusher their push is not on
+    # record, which is a different and much worse claim.
+    "push_record_unreadable" => {503, "The push record is temporarily unreadable"}
   }
 
   @doc """

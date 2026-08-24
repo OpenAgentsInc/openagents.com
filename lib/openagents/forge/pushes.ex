@@ -47,8 +47,14 @@ defmodule OpenAgents.Forge.Pushes do
   def subscribe, do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, @pushes_topic)
 
   @doc """
-  Handle one `git-receive-pack` request body. Returns `{:ok, response_body}`
-  only after WAL persist; `{:error, :wal_persist_failed}` after rollback.
+  Handle one `git-receive-pack` request body. Returns
+  `{:ok, response_body, receipt}` only after WAL persist;
+  `{:error, :wal_persist_failed}` after rollback.
+
+  `receipt` is `%{seq: sequence, link: link}` for a push the WAL accepted, and
+  `nil` when the request changed no ref and nothing was persisted. The caller
+  returns it to the pusher (`OpenAgents.Forge.GitHTTP`); it is derived, so it
+  is `nil` rather than an error whenever it cannot be produced.
   """
   def handle_receive_pack(repo, body, principal, git_protocol) do
     Sync.with_repo_lock(repo, fn ->
@@ -73,8 +79,9 @@ defmodule OpenAgents.Forge.Pushes do
 
         refs_after == refs_before ->
           # Nothing changed (up to date, or all commands rejected by git);
-          # the client's report-status in `output` says why. Nothing to persist.
-          {:ok, output}
+          # the client's report-status in `output` says why. Nothing to persist,
+          # so there is no receipt to hand back.
+          {:ok, output, nil}
 
         true ->
           case persist(repo, body, refs_after, principal) do
@@ -92,7 +99,7 @@ defmodule OpenAgents.Forge.Pushes do
 
               broadcast(repo, seq, refs_after)
               mirror_async(repo)
-              {:ok, output}
+              {:ok, output, %{seq: seq, link: link}}
 
             {:error, :cas_conflict} when not retried? ->
               with :ok <- Sync.ensure_fresh(repo) do

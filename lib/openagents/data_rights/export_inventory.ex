@@ -195,16 +195,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
     },
     %{
       family: :push_receipt,
-      api?: false,
+      api?: true,
       status: :portable,
       mechanism: @account_export,
       proof: @account_export_proof,
       issue: nil,
       note:
-        "forge_pushes rows are derived from the WAL and still reach no /api/v3 " <>
-          "route, but forge_pushes.principal is user:<account-id> for a person's " <>
-          "push, so the account export returns exactly the account's own rows " <>
-          "with the WAL sequence and ref map a clone does not carry."
+        "forge_pushes.principal is user:<account-id> for a person's push, so " <>
+          "the account export returns exactly the account's own rows with the " <>
+          "WAL sequence and ref map a clone does not carry. A repository-scoped " <>
+          "read is published too, GET /api/v3/repos/{owner}/{repo}/pushes, " <>
+          "proven by " <>
+          "test/openagents_web/controllers/push_receipt_controller_test.exs. It " <>
+          "serves the WAL's own entries rather than the derived rows, so it " <>
+          "carries the EXIT-005 chain link git push printed to the pusher."
     },
     %{
       family: :forum,

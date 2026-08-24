@@ -3070,10 +3070,13 @@ one `computer`, one `agent` link, one `deployment` request, one
 seeded and read back through the route in an authenticated session. A family
 whose record stops coming back turns this red, and so does a receipt returned
 under a principal that is not the requesting account. `push_receipt` is probed
-there rather than against the route inventory, because no `/api/v3` route
-serves receipts and none is expected to; what the account gets back is its own
-`forge_pushes` rows, matched exactly on the `user:<account-id>` principal a
-person's push records.
+there rather than against the route inventory: what the account gets back is
+its own `forge_pushes` rows, matched exactly on the `user:<account-id>`
+principal a person's push records. A repository-scoped read is published beside
+it — `GET /api/v3/repos/{owner}/{repo}/pushes` (#167), which serves the WAL's
+own entries and the `EXIT-005` chain link `git push` printed to the pusher —
+and it is proven by its own test rather than by this probe, because the
+question here is what an *account* gets back.
 
 `pull_request`, `stack`, and `issue_dependency` key on a repository rather than
 on an account, so the export's `repository_work` section is the one read on
@@ -3148,10 +3151,10 @@ chain link after it produces a self-consistent log and this reports it clean.
 Content addressing and `EXIT-005`'s chain make tampering evident, not
 impossible. What the chain adds is that a rewrite can no longer be local, which
 is what makes one externally held link enough to check a whole prefix —
-`verify/2`'s `:anchor` option is that check, and supplying the link is the
-caller's job because nothing here publishes one yet.
-`docs/2026-08-23-forge-wal-anchoring.md` stages the publication, and #151
-carries it.
+`verify/2`'s `:anchor` option is that check. `EXIT-005` returns that link to
+the pusher at acknowledgment, so the party who pushed can hold one; nothing is
+published to a stranger yet. `docs/2026-08-23-forge-wal-anchoring.md` stages
+the publication, and #151 carries it.
 
 `REPOSITORY-003` proves that an accepted entry re-materializes onto an empty
 cache. This proves that divergence between the WAL and what is served is
@@ -3279,12 +3282,32 @@ obtained anywhere else — against which it reports `anchor_mismatch` and
 recomputing the entry, its content-addressed key, the index, and every link, and
 asserts both halves: clean with no anchor, reported with one.
 
+The link leaves the forge at acknowledgment. `OpenAgents.Forge.GitHTTP` appends
+one side-band band-2 message to the `receive-pack` response, so an ordinary
+`git push` prints `remote: openagents wal-receipt seq=<n> link=<sha256>` and the
+pusher can keep it; `GET /api/v3/repos/{owner}/{repo}/pushes` serves the same
+values from the WAL afterwards. A pusher who keeps that line holds a value the
+operator cannot retroactively change, and `verify/2` with it as `:anchor`
+reports `anchor_mismatch` against a log rewritten at or before that sequence.
+
+What that is worth is bounded and the bounds are the point. It covers one
+repository's log, up to one sequence, for the one party who wrote it down. It
+is not publication: nobody else can check it, a pusher who keeps nothing holds
+nothing, and re-fetching the link returns the forge's current answer rather than
+independent evidence. The route is a convenience for a lost terminal, not a
+second source.
+
 No push may fail on this. The link is derived from data already in hand with no
 I/O, by an encoder that is total by construction, and the derivation is wrapped
 so a link that cannot be produced is omitted rather than raised. The entry then
 enters the log unchained and the verifier reports `chain_link_missing`, which is
 something to find out about rather than a reason to refuse a push the forge can
-accept.
+accept. The side-band line inherits the same discipline: it is formatted after
+the acknowledgment barrier, inside `rescue` and `catch`, it performs no I/O, and
+it is appended only to a response that already parses as a side-band-framed
+pkt-line stream ending in a flush — `git` treats an unparseable report-status as
+a failed push, so a response it cannot safely annotate is returned exactly as
+`git` produced it.
 
 Entries written before this contract carry no link and no backfill is possible,
 which is the correct outcome: a link the operator computes over entries the
@@ -3299,8 +3322,11 @@ This detects rewriting, never withholding. An operator who serves nothing,
 serves stale state, or refuses a clone holds every one of those powers still.
 
 Evidence: `OpenAgents.Forge.WAL`, `OpenAgents.Forge.Verification`,
+`OpenAgents.Forge.GitHTTP`, `OpenAgentsWeb.PushReceiptController`,
 `test/openagents/forge/wal_test.exs`,
-`test/openagents/forge/independence_test.exs`, and
+`test/openagents/forge/git_http_test.exs`,
+`test/openagents/forge/independence_test.exs`,
+`test/openagents_web/controllers/push_receipt_controller_test.exs`, and
 `docs/2026-08-23-forge-wal-anchoring.md`.
 
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
@@ -3811,7 +3837,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-002 | `test/openagents/forge/independence_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
-| EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs` |
+| EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs` |
 | STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |

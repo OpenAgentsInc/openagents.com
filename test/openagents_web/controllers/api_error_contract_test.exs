@@ -94,6 +94,7 @@ defmodule OpenAgentsWeb.ApiErrorContractTest do
       |> String.replace(":id", "1")
       |> String.replace(":name", "bug")
       |> String.replace(":assignee", "someone")
+      |> String.replace(":wal_seq", "1")
 
     dispatch(build_conn(), @endpoint, String.to_atom(verb), resolved)
   end

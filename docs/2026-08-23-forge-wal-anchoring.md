@@ -4,7 +4,7 @@
 **Commit measured:** `7e5f7b1` on `openagents/main`, the forge
 **Question:** `EXIT-002` proves the served repository can be checked against the WAL without trusting the operator's database, and its own conclusion is that the check is tamper-evident and not tamper-proof. What would make a *consistent* rewrite of the log detectable, what does each option really cost, and what can no option here achieve?
 **Method:** direct reading of every writer of a WAL entry (`lib/openagents/forge/pushes.ex`, `lib/openagents/forge/git_plane.ex`, `lib/openagents/repositories/importer.ex`, `lib/openagents/repositories/provisioner.ex`), the log itself (`lib/openagents/forge/wal.ex` and its two adapters), the reader that replays it (`lib/openagents/forge/sync.ex`), the verifier (`lib/openagents/forge/verification.ex`), the derived receipt (`lib/openagents/forge/push_receipt.ex`), and the invariants they are bound to (`INVARIANTS.md`, `REPOSITORY-003`, `EXIT-001` through `EXIT-004`). Claims this repository cannot settle are in section 6 with what would settle them.
-**Status:** Stages 1 and 4 shipped. Stages 2, 3, and 5 are open.
+**Status:** Stages 1, 2, and 4 shipped. Stages 3 and 5 are open.
 
 ---
 
@@ -34,9 +34,12 @@ this log — and reports `anchor_mismatch` against it
 
 What that buys, precisely: **a rewrite can no longer be local.** Changing any
 accepted entry changes the link of every entry after it, so one remembered link
-is enough to check the entire prefix of the log before it. Nothing in this forge
-publishes such a link yet, so today the anchor is something a caller supplies.
-The chain is the substrate that makes publishing one worth anything.
+is enough to check the entire prefix of the log before it. Stage 2 hands that
+link to the one party already holding independent evidence of what they pushed:
+`git push` prints `remote: openagents wal-receipt seq=<n> link=<sha256>`, and a
+pusher who keeps the line holds a commitment the operator cannot retroactively
+change. Nothing is published to a stranger yet — that is stage 3 — so a third
+party still supplies their own anchor or has none.
 
 What it does not buy, stated as plainly: an operator who rewrites an entry, its
 content-addressed key, the index, and every link after it produces a
@@ -304,7 +307,7 @@ rather than propagated. That is the `4651b3a` pattern again.
 `:anchor`, which exists now.
 
 **Verdict.** The highest value per line of code after the chain itself, and it
-depends on the chain. Staged as 2.
+depends on the chain. Shipped as stage 2.
 
 ### 3.5 Summary table
 
@@ -384,23 +387,45 @@ raised (`:287`). An entry then goes into the log unchained and the verifier
 reports `chain_link_missing`, which is a thing to find out about rather than a
 reason to refuse a push the forge is able to accept.
 
-### Stage 2 — Return the link to the pusher (this repository, small)
+### Stage 2 — Return the link to the pusher (this repository, small) — SHIPPED
 
-**Seam:** the report-status assembly in `OpenAgents.Forge.GitHTTP`
-(`lib/openagents/forge/git_http.ex:444`) and the acknowledgment path in
-`Pushes.do_handle/5` (`lib/openagents/forge/pushes.ex:52`), strictly after the
-WAL barrier, inside `rescue` and `catch`.
+**Seam:** the report-status assembly in `OpenAgents.Forge.GitHTTP` and the
+acknowledgment path in `Pushes.do_handle/5`
+(`lib/openagents/forge/pushes.ex`), strictly after the WAL barrier, inside
+`rescue` and `catch`.
 
-Emit one side-band informational line carrying the repository, the sequence, and
-the link. Publish a receipts route so a pusher can fetch it later; `EXIT-001`
-currently records `push_receipt` as `blocked` because no published route serves
-receipts, so this stage moves that ledger row as a side effect. The invariant to
-amend is `EXIT-001`, and the ledger probe makes the change fail closed if the
-row is not updated.
+`Pushes.handle_receive_pack/4` now returns the accepted entry's `%{seq:, link:}`
+beside the response body, and `GitHTTP` appends one side-band band-2 message
+before the final flush. An ordinary `git push` prints:
 
-**Size:** small. **Risk:** the side-band format — it must be exercised against
-the real `git` client, which `test/openagents/forge/independence_test.exs`
-already does.
+```text
+remote: openagents wal-receipt seq=41 link=8cb69e7f… (GET /api/v3/repos/OpenAgentsInc/openagents.com/pushes/41)
+```
+
+The line is appended only to a response that already parses as a side-band
+framed pkt-line stream ending in a flush, because `git` treats an unparseable
+report-status as a failed push; anything else is returned exactly as `git`
+produced it. Band 2 is progress output, delivered after the report-status the
+client parses, so nothing about the push's outcome depends on it. Formatting
+runs after the acknowledgment barrier inside `rescue` and `catch`, performs no
+I/O, and drops the line rather than raising.
+
+`GET /api/v3/repos/{owner}/{repo}/pushes` and
+`GET /api/v3/repos/{owner}/{repo}/pushes/{wal_seq}` serve the same values
+afterwards, read from the WAL rather than the derived rows, so what is
+published is what the verifier reads. That moved `EXIT-001`'s `push_receipt`
+row from `blocked` to `portable`, and its probe now calls the route instead of
+asking the route inventory.
+
+The limit is worth restating because a receipt is easy to over-read: the
+evidence is the link the pusher **kept**, not the one this route returns. An
+operator who rewrote the log would serve the rewritten link here too. The route
+is a convenience for a lost terminal.
+
+**Size:** small. **Risk:** the side-band format — exercised against the real
+`git` client in `test/openagents/forge/independence_test.exs`, including a
+rejected push, plus direct unit tests of the shapes the annotator must refuse
+to touch in `test/openagents/forge/git_http_test.exs`.
 
 ### Stage 3 — Publish the head where the operator does not solely control it (this repository, medium)
 
@@ -512,7 +537,7 @@ and not a property.
 | Invariant | Change |
 | --- | --- |
 | `EXIT-002` | Amended. The caveat now names the chain, says what it does and does not add, and points here for the publication that would close it. |
-| `EXIT-005` | New. Every WAL entry commits to the entry before it, and the chain is checkable against an externally held link. Proof: `test/openagents/forge/independence_test.exs` and `test/openagents/forge/wal_test.exs`. |
+| `EXIT-005` | New in stage 1, amended by stage 2. Every WAL entry commits to the entry before it, the chain is checkable against an externally held link, and the link now leaves the forge at acknowledgment for the pusher to hold. |
 | `REPOSITORY-003` | Unchanged, and load-bearing. Replay reads entries one at a time against the ref state each recorded, which is what makes an entry an individually meaningful unit worth chaining. |
 | `EXIT-003` | Amended by stage 4. The receipt now carries the entry's link, still derived from the WAL in both directions, and the proof shows a rewritten stored link changing no verification outcome. |
-| `EXIT-001` | Untouched by stage 1 or 4. Stage 2 moves its `push_receipt` row from `blocked`. |
+| `EXIT-001` | Amended by stage 2. `push_receipt` moves from `blocked` to `portable`, and its probe calls the published route rather than the route inventory. |

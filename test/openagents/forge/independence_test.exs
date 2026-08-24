@@ -295,6 +295,71 @@ defmodule OpenAgents.Forge.IndependenceTest do
     end
   end
 
+  ## ── EXIT-005: the receipt returned to the pusher ───────────────────────
+
+  describe "the link git push hands back" do
+    test "a push prints the sequence and link it produced", context do
+      seed_history!(context)
+      output = commit_and_push!(work_dir(context), "three.txt", "three\n", "three")
+
+      # What a person sees, verbatim: git prefixes a side-band band-2 message
+      # with `remote: `, so the receipt arrives in the push's own output.
+      assert output =~ ~r/remote: *openagents wal-receipt seq=\d+ link=[0-9a-f]{64}/
+
+      {seq, link} = wal_receipt!(output)
+
+      {:ok, _generation, index} = WAL.read_index(context.repo)
+      head = List.last(WAL.entries(index))
+
+      assert seq == head["seq"]
+      assert link == WAL.entry_link(head)
+
+      # And where to read it again, so the line is self-describing.
+      assert output =~ "/api/v3/repos/exit-owner/demo/pushes/#{seq}"
+    end
+
+    test "the link the pusher kept reports a rewrite the log agrees with", context do
+      seed_history!(context)
+      output = commit_and_push!(work_dir(context), "four.txt", "four\n", "four")
+      {seq, link} = wal_receipt!(output)
+
+      rewrite_first_entry_consistently!(context, "a payload the pusher never sent")
+
+      # Nothing inside the operator's storage disagrees with anything else in
+      # it, and the value the pusher wrote down does.
+      assert {:ok, %{findings: []}} = Verification.verify(context.repo)
+
+      assert {:error, %{findings: findings}} =
+               Verification.verify(context.repo, anchor: %{seq: seq, link: link})
+
+      assert %{"seq" => ^seq} = detail(findings, "anchor_mismatch")
+    end
+
+    test "a rejected push stays a rejected push and carries no receipt", context do
+      seed_history!(context)
+      work = work_dir(context)
+
+      # Rewrite history behind the remote, so `receive-pack` refuses the
+      # update. The report-status the client parses has to survive whatever
+      # this change does to the stream, and there is no accepted entry to
+      # hand back.
+      sh!(work, "git", ["reset", "--hard", "HEAD~1"])
+      File.write!(Path.join(work, "divergent.txt"), "divergent\n")
+      sh!(work, "git", ["add", "."])
+      sh!(work, "git", ["commit", "-m", "divergent"])
+
+      {output, status} =
+        System.cmd("git", ["-c", "credential.helper=", "push", "origin", "HEAD:main"],
+          cd: work,
+          stderr_to_stdout: true
+        )
+
+      assert status != 0, "the non-fast-forward push was accepted:\n#{output}"
+      assert output =~ "rejected"
+      refute output =~ "wal-receipt"
+    end
+  end
+
   ## ── EXIT-003: recovery from the WAL, never from the mirror ─────────────
 
   describe "recovery" do
@@ -507,6 +572,14 @@ defmodule OpenAgents.Forge.IndependenceTest do
   end
 
   ## ── helpers ────────────────────────────────────────────────────────────
+
+  # The one line a pusher keeps. Parsed the way a pusher would grep for it.
+  defp wal_receipt!(output) do
+    case Regex.run(~r/openagents wal-receipt seq=(\d+) link=([0-9a-f]{64})/, output) do
+      [_line, seq, link] -> {String.to_integer(seq), link}
+      nil -> flunk("git push printed no WAL receipt line:\n#{output}")
+    end
+  end
 
   defp detail(findings, code) do
     Enum.find_value(findings, fn

@@ -494,4 +494,56 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert {:ok, _generation, index} = WAL.read_index(repository.storage_key)
     assert length(WAL.entries(index)) == 1
   end
+
+  # The side-band line #167 returns to the pusher. `git` treats an
+  # unparseable report-status as a failed push, so the shapes this function
+  # must refuse to touch are asserted directly. Every client in the tests
+  # above negotiates `side-band-64k`, so a bare report-status never reaches
+  # the function through them and would otherwise go unproven.
+  describe "the WAL receipt side-band line" do
+    alias OpenAgents.Forge.GitHTTP
+
+    @report_status GitHTTP.pkt_line("unpack ok\n") <>
+                     GitHTTP.pkt_line("ok refs/heads/main\n") <> "0000"
+
+    test "a bare report-status is returned byte for byte" do
+      assert GitHTTP.append_side_band(@report_status, "openagents wal-receipt seq=1") ==
+               @report_status
+    end
+
+    test "a side-band stream gains one band-2 packet before the final flush" do
+      framed = GitHTTP.pkt_line(<<1>> <> @report_status) <> "0000"
+
+      annotated = GitHTTP.append_side_band(framed, "openagents wal-receipt seq=1 link=abc")
+
+      assert annotated ==
+               GitHTTP.pkt_line(<<1>> <> @report_status) <>
+                 GitHTTP.pkt_line(<<2>> <> "openagents wal-receipt seq=1 link=abc\n") <> "0000"
+
+      # The report-status the client parses is untouched.
+      assert String.starts_with?(annotated, GitHTTP.pkt_line(<<1>> <> @report_status))
+    end
+
+    test "a stream that is not a pkt-line stream, or does not end in a flush, is untouched" do
+      for output <- ["", "0000", "not a packet stream", GitHTTP.pkt_line(<<1>> <> "ok\n")] do
+        assert GitHTTP.append_side_band(output, "openagents wal-receipt seq=1") == output
+      end
+    end
+
+    test "a message with control characters becomes one printable line" do
+      framed = GitHTTP.pkt_line(<<1>> <> @report_status) <> "0000"
+
+      annotated = GitHTTP.append_side_band(framed, "seq=1\nlink=abc\r\n\tmore")
+
+      assert annotated =~ "seq=1 link=abc   more"
+      refute String.contains?(annotated, "\r")
+
+      # One packet, one trailing newline: the message cannot smuggle a second
+      # line into the stream.
+      assert annotated
+             |> String.split(<<2>>)
+             |> List.last()
+             |> String.trim_trailing("0000") =~ ~r/\A[^\n]+\n\z/
+    end
+  end
 end

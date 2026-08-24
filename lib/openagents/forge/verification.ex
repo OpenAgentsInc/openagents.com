@@ -41,11 +41,13 @@ defmodule OpenAgents.Forge.Verification do
   The chain buys one thing: a rewrite can no longer be local, because every
   entry after the rewritten one changes. That is what makes a single remembered
   link enough to check a whole prefix, which is what `verify/2`'s `:anchor`
-  option checks. Supplying an anchor is the caller's job, and nothing in this
-  forge publishes one yet — `docs/2026-08-23-forge-wal-anchoring.md` stages
-  that work. Withholding is out of scope in every case: an operator who serves
-  nothing is not detected here, only an operator who serves something other
-  than what was pushed.
+  option checks. Supplying an anchor is the caller's job. A pusher gets one for
+  free: `OpenAgents.Forge.GitHTTP` returns the sequence and link of an accepted
+  push in the `git receive-pack` side band, so `git push` prints it and the
+  pusher can keep it. Nothing is published to a stranger yet —
+  `docs/2026-08-23-forge-wal-anchoring.md` stages that work. Withholding is out
+  of scope in every case: an operator who serves nothing is not detected here,
+  only an operator who serves something other than what was pushed.
   """
 
   alias OpenAgents.Forge.{Repos, WAL}

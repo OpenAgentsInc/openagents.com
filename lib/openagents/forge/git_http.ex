@@ -24,6 +24,8 @@ defmodule OpenAgents.Forge.GitHTTP do
   import Ecto.Query
   import Plug.Conn
 
+  require Logger
+
   alias OpenAgents.{Audit, Repositories}
   alias OpenAgents.Forge.{Pushes, Repos, Sync}
 
@@ -109,7 +111,7 @@ defmodule OpenAgents.Forge.GitHTTP do
              principal(conn),
              git_protocol(conn)
            ) do
-        {:ok, output} ->
+        {:ok, output, receipt} ->
           Audit.record!(
             "repository.git.write",
             audit_actor(conn),
@@ -122,7 +124,7 @@ defmodule OpenAgents.Forge.GitHTTP do
           conn
           |> put_resp_content_type("application/x-git-receive-pack-result")
           |> put_resp_header("cache-control", "no-cache")
-          |> send_resp(200, output)
+          |> send_resp(200, with_wal_receipt(output, repository, receipt))
           |> halt()
 
         {:error, :wal_persist_failed} ->
@@ -427,6 +429,93 @@ defmodule OpenAgents.Forge.GitHTTP do
     :zlib.gunzip(body)
   rescue
     _ -> body
+  end
+
+  # ── the WAL receipt returned to the pusher (#167) ────────────────────────
+
+  # Nothing here may fail a push. The WAL has already accepted the entry and
+  # the client is about to be told so; a receipt that cannot be formatted is
+  # dropped, exactly as `4651b3a` dropped a closing reference that could not be
+  # applied. Refusing now would ask a client to retry a push the forge has
+  # taken.
+  defp with_wal_receipt(output, repository, %{seq: seq, link: link})
+       when is_integer(seq) and is_binary(link) do
+    append_side_band(
+      output,
+      "openagents wal-receipt seq=#{seq} link=#{link}" <>
+        " (GET /api/v3/repos/#{repository.owner}/#{repository.name}/pushes/#{seq})"
+    )
+  rescue
+    error ->
+      Logger.warning(
+        "forge_push_receipt_line_failed code=#{OpenAgents.OperationalLog.code(error)}"
+      )
+
+      output
+  catch
+    kind, reason ->
+      Logger.warning(
+        "forge_push_receipt_line_failed code=#{OpenAgents.OperationalLog.code({kind, reason})}"
+      )
+
+      output
+  end
+
+  defp with_wal_receipt(output, _repository, _no_receipt), do: output
+
+  @doc """
+  Append one informational message to a side-band-framed `receive-pack`
+  response, so `git push` prints it to the pusher as a `remote:` line.
+
+  The stream is only touched when it is demonstrably safe to touch: the
+  response must parse as a pkt-line stream whose first packet carries a
+  side-band designator, and it must end in a flush packet. `git` treats an
+  unparseable report-status as a failed push, so a response that is not
+  side-band framed — an old client, or one that did not ask for
+  `side-band-64k` — is returned exactly as `git` produced it and the pusher
+  gets no line rather than a broken push.
+
+  The message rides band 2, which is progress output. It is delivered after
+  the report-status the client parses, so nothing about the push's success or
+  failure depends on it.
+  """
+  @spec append_side_band(binary(), String.t()) :: binary()
+  def append_side_band(output, message) when is_binary(output) and is_binary(message) do
+    text = sanitize_side_band(message)
+
+    if text != "" and side_band_framed?(output) and String.ends_with?(output, "0000") do
+      body = binary_part(output, 0, byte_size(output) - 4)
+      body <> pkt_line(<<2>> <> text <> "\n") <> "0000"
+    else
+      output
+    end
+  end
+
+  # A side-band-framed response begins with a complete pkt-line whose first
+  # payload byte is a band designator. A response that begins with a flush, or
+  # with `unpack ok`, is a bare report-status and must not be touched.
+  defp side_band_framed?(<<hex::binary-size(4), rest::binary>>) do
+    case Integer.parse(hex, 16) do
+      {length, ""} when length > 4 ->
+        case rest do
+          <<band, _remainder::binary>> when band in 1..3 -> byte_size(rest) >= length - 4
+          _short -> false
+        end
+
+      _unparseable ->
+        false
+    end
+  end
+
+  defp side_band_framed?(_output), do: false
+
+  # One line, printable, and short enough that the packet cannot exceed the
+  # side-band-64k ceiling with room to spare.
+  defp sanitize_side_band(message) do
+    message
+    |> String.replace(~r/[[:cntrl:]]/u, " ")
+    |> String.trim()
+    |> String.slice(0, 512)
   end
 
   @doc false

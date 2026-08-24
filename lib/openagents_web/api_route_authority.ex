@@ -143,6 +143,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v3/repos/:owner/:repo/assignees" => {:optional_bearer, :assignee, :envelope},
       "get /api/v3/repos/:owner/:repo/assignees/:assignee" =>
         {:optional_bearer, :assignee, :envelope},
+      "get /api/v3/repos/:owner/:repo/pushes" => {:optional_bearer, :push_receipt, :envelope},
+      "get /api/v3/repos/:owner/:repo/pushes/:wal_seq" =>
+        {:optional_bearer, :push_receipt, :envelope},
       "get /api/v3/forum" => {:optional_bearer, :forum, :legacy},
       "get /api/v3/forum/topics" => {:optional_bearer, :forum, :legacy},
       "get /api/v3/forum/topics/:id" => {:optional_bearer, :forum, :legacy},

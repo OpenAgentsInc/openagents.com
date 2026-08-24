@@ -57,20 +57,21 @@ that answer.
 | --- | --- |
 | Specific — a named behavior at a named seam | 56 |
 | Universal — the population is closed, so the proof bites | 41 |
-| Universal — the proof did not bite; enumerated here | 18 |
+| Universal — the proof did not bite; enumerated here | 19 |
 | Universal — the proof did not bite; narrowed here | 2 |
 | Universal — the proof does not bite; still open | 1 |
 
-Two of the eighteen carry a residual clause that is still open, so the closing
-table below lists two rows against two contracts. `IDENTITY-002` and
+Two of the nineteen carry a residual clause that is still open, so the closing
+table below lists one row against one contract. `IDENTITY-002` and
 `THREAD-001` were enumerated under issue #174, `REPOSITORY-001` under #175,
 `MEMORY-001`, `MEMORY-004`, and `PRIVACY-001` under #172, `STATUS-001` and
 `TRANSPARENCY-001` under #173, which also narrowed `UI-002` to the tool-step
-projections its proof can cover, and `PERSONA-001` under #176. All ten moved
-out of that table. `IDENTITY-002` and `REPOSITORY-001` keep a named residue,
-recorded in each contract rather than here.
+projections its proof can cover, `PERSONA-001` under #176, and `IDENTITY-010`
+under #177. All eleven moved out of that table. `IDENTITY-002` and
+`REPOSITORY-001` keep a named residue, recorded in each contract rather than
+here.
 
-**How firm each verdict is.** The eighteen, the two, and the ten were established
+**How firm each verdict is.** The nineteen, the two, and the ten were established
 by reading the named proof and, where the answer was not obvious from it,
 querying the compiled application for the population the claim covers. The 41
 were established from the contract prose and the mechanism it names — a
@@ -264,6 +265,40 @@ from, and each one classified as composing the installed artifact must carry a
 compiled call into `OpenAgents.Context.Composer`. The contract now names the
 proxy and the evaluation runner as the two requests outside the composed clause.
 
+### `IDENTITY-010` — the sinks the assignment credential must stay out of
+
+**Would have missed:** a sink added after the list was written. The contract
+names seven — a job, a journal, a prompt, an output, a shell environment, a
+global Git configuration, an API response — and
+`computer_control_api_test.exs` checks two of them, the create response and one
+job's report column. A new projection, a new activity row, or a new log line
+was outside what any proof here examined, and the credential leaking is exactly
+the failure the list exists to prevent.
+
+**Now:** `OpenAgents.Forge.AssignmentCredentialReachTest` enumerates the sinks
+instead of the absences. A delegation runs end to end with a real minted
+credential, and every base table PostgreSQL's own catalog reports is asked
+whether any row of it renders the plaintext, before and after the delegation
+finishes. The catalog cannot forget a table or a column, so a row shape added
+tomorrow is scanned the day it lands; a positive control asserts the scanner
+finds a value that *is* persisted, so a scan that silently matched nothing
+would fail rather than pass. The same run requires the credential to appear
+under exactly one key of the `agent` frame and in no log record at any level,
+and the modules that can hold a plaintext credential — the receivers of
+`create/1`, the vault's writer, and the vault's reader — are exact sets read
+from compiled import tables.
+
+**A mutation that did not bite.** Adding the plaintext to the parameter map
+handed to `OpenAgents.ComputerAgentJobs.start/4` reddened nothing, because that
+function builds its durable `delegation` map from named keys and drops
+everything else, so the sink never opened. The mutation was testing the caller
+rather than the property. Re-run against a sink that does write — the
+assignment row's own column — it reddened and named the table. A second
+mutation, an `info`-level log line carrying the credential, also failed to bite
+at first: `config/test.exs` sets the primary log level to `:warning`, so the
+record never reached the capture handler. The test now lowers the level for its
+own duration, and both `info` and `debug` lines redden it.
+
 ## Universal claims narrowed here
 
 Enumeration was impractical or the wider sentence was not true, so the claim
@@ -298,14 +333,12 @@ new member fails until it is accounted for. They are the pattern to copy.
 
 ## What remains
 
-Two claims across two contracts still rest on proofs that cannot fail for
-them. Each is recorded with the violation it would miss. None is a known live defect:
-these are claims whose truth currently depends on review rather than on a
-proof.
+One claim still rests on a proof that cannot fail for it. It is recorded with
+the violation it would miss. It is not a known live defect: it is a claim whose
+truth currently depends on review rather than on a proof.
 
 | Contract | The claim | A violation the proof would miss | Carried by |
 | --- | --- | --- | --- |
-| `IDENTITY-010` | the credential is not persisted in a job, journal, prompt, output, environment, Git configuration, or API response | a new sink that writes it | #177 |
 | `EXIT-005` | `append_entry/2` is the one function every writer reaches the log through | a writer appending to an index directly | #151 |
 
 `EXIT-005` sits in the WAL anchoring work that issue #151 carries, so it is

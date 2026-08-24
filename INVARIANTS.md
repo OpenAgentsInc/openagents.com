@@ -434,17 +434,42 @@ An issue assignment has one target in the shared assignment ledger. A Computer
 target receives its repository-and-branch-scoped forge credential only when its
 owner explicitly enables scoped forge credentials for that Computer. The
 plaintext credential exists only in memory while the delegation starts and is
-delivered in the server-to-controller `agent` frame for injection into that
-delegated process environment. It is not persisted in a job, journal, prompt,
-output, shell environment, global Git configuration, or API response. The
-credential expires with the assignment and is revoked when the assignment
+delivered in the server-to-controller `agent` frame, under the
+`assignment_credential` key and under no other key in that frame, for injection
+into that delegated process environment.
+
+It reaches no durable row, no log line, and no API response. That is proven by
+scanning rather than by listing: a delegation runs end to end with a real
+minted credential, and every base table PostgreSQL's own catalog reports is
+asked whether any row of it renders the plaintext, both while the delegation is
+running and once it finishes. The catalog cannot forget a table or a column, so
+a job, a journal, an activity row, or a projection added later is scanned the
+day it lands rather than the day someone remembers it. The same run captures
+every log record the delegation emits, at every level, and reads the created
+assignment's own response.
+
+The modules that can hold a plaintext credential are derived from compiled
+import tables rather than named from memory. The plaintext comes into existence
+in one place and leaves `OpenAgents.Forge.Assignments` through `create/1` and
+through `OpenAgents.Forge.AssignmentCredentialVault`, so the modules that
+receive one, the modules that write the vault, and the modules that read it are
+exact sets, and a new holder fails until this contract accounts for it.
+
+The shell environment and the global Git configuration this credential must
+stay out of are on the delegated Computer, past this application's boundary.
+What is proven here is that the server puts the credential in one frame field
+and nowhere else; local controller refusal remains authoritative for what
+happens after that.
+
+The credential expires with the assignment and is revoked when the assignment
 completes, is cancelled, expires, or loses its computer or controller.
 Computer validation and local controller refusal remain authoritative.
 
 Evidence: `OpenAgents.Forge.Assignments`,
 `OpenAgents.Forge.AssignmentCredentialVault`,
 `OpenAgents.ComputerAgentJobs`, `OpenAgents.Work.DelegationServer`,
-`test/openagents/forge/assignment_test.exs`, and
+`test/openagents/forge/assignment_test.exs`,
+`test/openagents/forge/assignment_credential_reach_test.exs`, and
 `test/openagents_web/controllers/computer_control_api_test.exs`.
 
 ### CAPACITY-002 — Box fan-out admission is bounded and durable
@@ -4106,7 +4131,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
 | IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
-| IDENTITY-010 | `test/openagents/forge/assignment_test.exs` |
+| IDENTITY-010 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_credential_reach_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |
 | CAPACITY-003 | `test/openagents/box_reconciler_test.exs` |
 | WORK-002 | `test/openagents/box_runs_test.exs` |

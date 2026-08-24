@@ -25,7 +25,10 @@ defmodule OpenAgents.Inference.Models do
 
   @doc "Every model a grant may pin, in the order a client should offer them."
   @spec all() :: [t()]
-  def all, do: [default(), ox_alpha()]
+  def all do
+    [default(), ox_alpha()]
+    |> Enum.uniq_by(& &1.id)
+  end
 
   @doc "The model ids a grant may pin."
   @spec ids() :: [String.t()]

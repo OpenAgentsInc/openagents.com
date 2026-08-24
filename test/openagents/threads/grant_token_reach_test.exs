@@ -62,6 +62,7 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:list_events, 2} => :thread_struct,
     {:list_for_user, 1} => :scoped_by_owner,
     {:list_for_user, 2} => :scoped_by_owner,
+    {:maximum_event_batch, 0} => :no_thread,
     {:maximum_open_per_account, 0} => :no_thread,
     {:mint_grant, 1} => :returns_plaintext_token,
     {:open, 2} => :scoped_by_owner,
@@ -71,6 +72,7 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:open_count, 1} => :scoped_by_owner,
     {:reap_expired, 1} => :scoped_by_owner,
     {:record_event, 3} => :thread_struct,
+    {:record_events, 2} => :thread_struct,
     {:subscribe, 1} => :thread_struct
   }
 

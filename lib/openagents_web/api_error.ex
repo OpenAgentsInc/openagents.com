@@ -66,6 +66,12 @@ defmodule OpenAgentsWeb.ApiError do
     # and its own code — never a silent substitution.
     "model_unavailable" => {503, "The model's provider is not configured on this deployment"},
     "thread_terminal" => {422, "This thread is terminal and its transcript is closed"},
+    # A transcript writer meets two refusals that cannot change: a closed
+    # thread, and an event the server has called invalid. `thread_terminal`
+    # already carries a code; these give the other refusals of the append route
+    # the same property, so a client drops or splits without parsing prose.
+    "event_invalid" => {422, "The event could not be recorded"},
+    "event_batch_too_large" => {422, "The batch carries more events than the maximum"},
     # Spending the account's inference credit is not a rate limit: no amount of
     # waiting or revoking makes the same call succeed, so it is the payment
     # status and its own code.
@@ -144,7 +150,19 @@ defmodule OpenAgentsWeb.ApiError do
   """
   @spec changeset(Plug.Conn.t(), Changeset.t(), keyword()) :: Plug.Conn.t()
   def changeset(conn, %Changeset{} = changeset, opts \\ []) do
-    validation_failed(conn, Changeset.traverse_errors(changeset, &translate/1), opts)
+    validation_failed(conn, changeset_errors(changeset), opts)
+  end
+
+  @doc """
+  A changeset's errors as the envelope's field-to-messages map.
+
+  For a route that refuses a changeset under its own code rather than the
+  generic `validation_failed`: translate here, then pass the map to `refuse/3`
+  as `:errors`.
+  """
+  @spec changeset_errors(Changeset.t()) :: map()
+  def changeset_errors(%Changeset{} = changeset) do
+    Changeset.traverse_errors(changeset, &translate/1)
   end
 
   @doc """

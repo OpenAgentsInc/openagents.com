@@ -241,15 +241,46 @@ defmodule OpenAgents.Threads do
           {:ok, Thread.t()} | {:error, :thread_terminal | Ecto.Changeset.t()}
   def record_event(%Thread{} = thread, event_type, payload)
       when is_binary(event_type) and is_map(payload) do
+    case record_events(thread, [%{event_type: event_type, payload: payload}]) do
+      {:ok, updated, _events} -> {:ok, updated}
+      {:error, {_index, %Ecto.Changeset{} = changeset}} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Append a batch of events to a thread's transcript, all or nothing.
+
+  One transaction, insertion order preserved: either every entry lands, in the
+  order given, or nothing does. A transcript with a hole in the middle
+  describes a session that never happened, so one invalid entry rolls the whole
+  batch back and the refusal names its position as `{index, changeset}`.
+
+  The terminal refusal covers the whole batch for the same reason
+  `record_event/3` refuses at all, and each committed event is broadcast as
+  `{:thread_event, event}` in order after the transaction, exactly as a single
+  append is, so a subscriber cannot tell a batch from the same events posted
+  one at a time.
+
+  The batch's size is the caller's to bound (`maximum_event_batch/0` is what
+  the public route enforces); this function bounds only its shape.
+  """
+  @spec record_events(Thread.t(), [%{event_type: String.t(), payload: map()}]) ::
+          {:ok, Thread.t(), [Event.t()]}
+          | {:error,
+             :thread_terminal | Ecto.Changeset.t() | {non_neg_integer(), Ecto.Changeset.t()}}
+  def record_events(%Thread{} = thread, entries) when is_list(entries) and entries != [] do
     now = DateTime.utc_now()
 
     Repo.transaction(fn ->
       case locked(thread.id) do
         %Thread{status: "open"} = current ->
-          with {:ok, event} <- insert_event(current, event_type, payload, now),
+          with {:ok, events} <- insert_events(current, entries, now),
                {:ok, updated} <-
-                 current |> Thread.event_count_changeset(current.event_count + 1) |> Repo.update() do
-            {updated, event}
+                 current
+                 |> Thread.event_count_changeset(current.event_count + length(events))
+                 |> Repo.update() do
+            {updated, events}
           else
             {:error, reason} -> Repo.rollback(reason)
           end
@@ -259,12 +290,34 @@ defmodule OpenAgents.Threads do
       end
     end)
     |> case do
-      {:ok, {updated, event}} ->
-        Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(updated.id), {:thread_event, event})
-        {:ok, updated}
+      {:ok, {updated, events}} ->
+        for event <- events do
+          Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(updated.id), {:thread_event, event})
+        end
+
+        {:ok, updated, events}
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc "How many events one batch append may carry."
+  @spec maximum_event_batch() :: pos_integer()
+  def maximum_event_batch, do: setting(:maximum_thread_event_batch, 100)
+
+  defp insert_events(thread, entries, now) do
+    entries
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {entry, index}, {:ok, inserted} ->
+      case insert_event(thread, entry.event_type, entry.payload, now) do
+        {:ok, event} -> {:cont, {:ok, [event | inserted]}}
+        {:error, changeset} -> {:halt, {:error, {index, changeset}}}
+      end
+    end)
+    |> case do
+      {:ok, inserted} -> {:ok, Enum.reverse(inserted)}
+      {:error, reason} -> {:error, reason}
     end
   end
 

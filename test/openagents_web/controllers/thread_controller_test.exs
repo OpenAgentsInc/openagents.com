@@ -636,12 +636,36 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["thread"]["event_count"] > 0
     end
 
+    test "returns the created event, whose id is the cursor", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "event_type" => "turn.user",
+          "payload" => %{"text" => "echo me back"}
+        })
+        |> json_response(201)
+
+      # A writer that never learns its event's id cannot continue from it or
+      # dedup its own append against a later read, so the 201 carries the event
+      # rather than only the thread it landed on.
+      assert is_integer(body["event"]["id"])
+      assert body["event"]["event_type"] == "turn.user"
+      assert body["event"]["payload"] == %{"text" => "echo me back"}
+      assert is_binary(body["event"]["inserted_at"])
+
+      read = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+      assert List.last(read["events"])["id"] == body["event"]["id"]
+    end
+
     test "refuses an event with no type", %{authenticated: conn, id: id} do
       body =
         conn
         |> post(~p"/api/v3/threads/#{id}/events", %{"payload" => %{"text" => "x"}})
         |> json_response(422)
 
+      # The code is the machine's half of the refusal, symmetric with
+      # `thread_terminal`: a client drops the event without parsing prose.
+      assert body["code"] == "event_invalid"
       assert body["errors"]["event_type"] != nil
     end
 
@@ -655,6 +679,134 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       # A transcript that keeps growing after the report was written is not the
       # transcript the report describes.
+      assert body["code"] == "thread_terminal"
+    end
+
+    test "appends a batch in order and returns the created events", %{
+      authenticated: conn,
+      id: id
+    } do
+      before = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "events" => [
+            %{"event_type" => "turn.user", "payload" => %{"text" => "first"}},
+            %{"event_type" => "tool.ran", "payload" => %{"tool" => "bash"}},
+            %{"event_type" => "turn.assistant", "payload" => %{"text" => "third"}}
+          ]
+        })
+        |> json_response(201)
+
+      # A tool-heavy turn no longer costs one round trip per event, and the
+      # created events come back in the order they landed so the writer learns
+      # every id it just wrote.
+      assert Enum.map(body["events"], & &1["event_type"]) ==
+               ["turn.user", "tool.ran", "turn.assistant"]
+
+      ids = Enum.map(body["events"], & &1["id"])
+      assert ids == Enum.sort(ids)
+      assert Enum.all?(body["events"], &is_binary(&1["inserted_at"]))
+      assert body["thread"]["event_count"] == before["thread"]["event_count"] + 3
+
+      read = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+      assert Enum.take(read["events"], -3) |> Enum.map(& &1["id"]) == ids
+    end
+
+    test "a batch with one invalid event records nothing", %{authenticated: conn, id: id} do
+      before = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+
+      # The second entry passes the route's parse — its type is non-blank — and
+      # is refused by the database's 80-character ceiling, so the refusal
+      # proves the transaction rolled the first entry back with it.
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "events" => [
+            %{"event_type" => "turn.user", "payload" => %{"text" => "landed?"}},
+            %{"event_type" => String.duplicate("x", 81), "payload" => %{}}
+          ]
+        })
+        |> json_response(422)
+
+      assert body["code"] == "event_invalid"
+      assert body["errors"]["events[1].event_type"] != nil
+
+      after_refusal = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+      assert after_refusal["thread"]["event_count"] == before["thread"]["event_count"]
+    end
+
+    test "a batch entry with no type is refused naming its position", %{
+      authenticated: conn,
+      id: id
+    } do
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "events" => [
+            %{"event_type" => "turn.user"},
+            %{"payload" => %{"text" => "no type"}}
+          ]
+        })
+        |> json_response(422)
+
+      assert body["code"] == "event_invalid"
+      assert body["errors"]["events[1].event_type"] != nil
+    end
+
+    test "an empty batch is refused rather than answered created", %{
+      authenticated: conn,
+      id: id
+    } do
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{"events" => []})
+        |> json_response(422)
+
+      assert body["code"] == "event_invalid"
+      assert body["errors"]["events"] != nil
+    end
+
+    test "a batch over the cap is refused with its own code", %{authenticated: conn, id: id} do
+      previous = Application.get_env(:openagents, :maximum_thread_event_batch)
+      Application.put_env(:openagents, :maximum_thread_event_batch, 2)
+
+      on_exit(fn ->
+        Application.put_env(:openagents, :maximum_thread_event_batch, previous)
+      end)
+
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "events" =>
+            for index <- 1..3 do
+              %{"event_type" => "turn.user", "payload" => %{"index" => index}}
+            end
+        })
+        |> json_response(422)
+
+      # Over the cap is not an invalid event — every entry may be well formed —
+      # so it carries its own code, and the sentence names the split.
+      assert body["code"] == "event_batch_too_large"
+      assert body["message"] =~ "2"
+      assert [sentence] = body["errors"]["events"]
+      assert sentence =~ "3 events"
+    end
+
+    test "refuses a batch to a revoked thread as one refusal", %{authenticated: conn, id: id} do
+      conn |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "events" => [
+            %{"event_type" => "turn.user", "payload" => %{"text" => "late"}},
+            %{"event_type" => "turn.assistant", "payload" => %{"text" => "later"}}
+          ]
+        })
+        |> json_response(422)
+
       assert body["code"] == "thread_terminal"
     end
 

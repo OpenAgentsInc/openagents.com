@@ -88,19 +88,45 @@ defmodule OpenAgentsWeb.ThreadController do
   end
 
   @doc """
-  Append one event to a thread's transcript.
+  Append to a thread's transcript: one event, or a batch of them.
 
   Append-only and bounded: the payload is capped by the database, and a
   terminal thread refuses, because a transcript that keeps growing after the
   report was written is not the transcript the report describes.
+
+  One route serves both shapes — `{"event_type": ..., "payload": ...}` appends
+  one event, `{"events": [...]}` appends a batch — because there is one door to
+  a transcript and the batch is the same act performed fewer round trips at a
+  time. A batch lands all-or-nothing in one transaction, in order, capped at
+  `OpenAgents.Threads.maximum_event_batch/0`, and the created events come back
+  in order so a client learns every id it just wrote.
+
+  A refused event carries the stable code `event_invalid` beside the field
+  errors, symmetric with `thread_terminal`, so a client tells a drop-only
+  refusal from a retry-safe one without parsing prose.
   """
   def record(conn, %{"thread_id" => thread_id} = params) do
     with_thread(conn, thread_id, fn thread ->
-      case event_parameters(params) do
-        {:ok, event_type, payload} -> append(conn, thread, event_type, payload)
-        {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
+      case Map.fetch(params, "events") do
+        {:ok, events} -> record_batch(conn, thread, events)
+        :error -> record_single(conn, thread, params)
       end
     end)
+  end
+
+  defp record_single(conn, thread, params) do
+    case event_parameters(params) do
+      {:ok, event_type, payload} -> append(conn, thread, event_type, payload)
+      {:refused, field, message} -> event_invalid(conn, %{field => [message]})
+    end
+  end
+
+  defp record_batch(conn, thread, events) do
+    case batch_parameters(events) do
+      {:ok, entries} -> append_batch(conn, thread, entries)
+      {:refused, field, message} -> event_invalid(conn, %{field => [message]})
+      {:oversized, count, cap} -> batch_too_large(conn, count, cap)
+    end
   end
 
   def show(conn, %{"thread_id" => thread_id}) do
@@ -158,27 +184,76 @@ defmodule OpenAgentsWeb.ThreadController do
     end)
   end
 
+  # The created event is the point of the 201: its id is the cursor a client
+  # continues from, and a writer that never learns it cannot dedup its own
+  # append against a later read. The thread rides along for the count.
   defp append(conn, thread, event_type, payload) do
-    case Threads.record_event(thread, event_type, payload) do
-      {:ok, updated} ->
+    case Threads.record_events(thread, [%{event_type: event_type, payload: payload}]) do
+      {:ok, updated, [event]} ->
         conn
         |> put_extension_header()
         |> put_status(:created)
-        |> json(%{"thread" => thread_view(updated)})
+        |> json(%{"event" => event_view(event), "thread" => thread_view(updated)})
 
       {:error, :thread_terminal} ->
-        sentence =
-          "This thread is #{thread.status} and its transcript is closed. " <>
-            "Open another thread to record more work."
+        thread_terminal(conn, thread)
 
-        ApiError.refuse(conn, "thread_terminal",
-          message: sentence,
-          errors: %{"thread" => [sentence]}
-        )
+      {:error, {_index, changeset}} ->
+        event_invalid(conn, ApiError.changeset_errors(changeset))
 
-      {:error, changeset} ->
-        ApiError.changeset(conn, changeset)
+      {:error, %Ecto.Changeset{} = changeset} ->
+        event_invalid(conn, ApiError.changeset_errors(changeset))
     end
+  end
+
+  defp append_batch(conn, thread, entries) do
+    case Threads.record_events(thread, entries) do
+      {:ok, updated, events} ->
+        conn
+        |> put_extension_header()
+        |> put_status(:created)
+        |> json(%{"events" => Enum.map(events, &event_view/1), "thread" => thread_view(updated)})
+
+      {:error, :thread_terminal} ->
+        thread_terminal(conn, thread)
+
+      {:error, {index, changeset}} ->
+        errors =
+          changeset
+          |> ApiError.changeset_errors()
+          |> Map.new(fn {field, messages} -> {"events[#{index}].#{field}", messages} end)
+
+        event_invalid(conn, errors)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        event_invalid(conn, ApiError.changeset_errors(changeset))
+    end
+  end
+
+  defp thread_terminal(conn, thread) do
+    sentence =
+      "This thread is #{thread.status} and its transcript is closed. " <>
+        "Open another thread to record more work."
+
+    ApiError.refuse(conn, "thread_terminal",
+      message: sentence,
+      errors: %{"thread" => [sentence]}
+    )
+  end
+
+  defp event_invalid(conn, errors) do
+    ApiError.refuse(conn, "event_invalid", errors: errors)
+  end
+
+  defp batch_too_large(conn, count, cap) do
+    sentence =
+      "This batch carries #{count} events and the maximum is #{cap}. " <>
+        "Split it and post the parts in order."
+
+    ApiError.refuse(conn, "event_batch_too_large",
+      message: sentence,
+      errors: %{"events" => [sentence]}
+    )
   end
 
   # ── admission ───────────────────────────────────────────────────────────
@@ -298,6 +373,54 @@ defmodule OpenAgentsWeb.ThreadController do
     end
   end
 
+  # The whole batch is parsed before anything is appended, so a refusal names
+  # the entry by its position and leaves nothing behind. An empty batch is
+  # refused rather than answered 201: a client that posted nothing and read
+  # "created" would believe something landed.
+  defp batch_parameters(events) when is_list(events) do
+    cap = Threads.maximum_event_batch()
+
+    cond do
+      events == [] ->
+        {:refused, "events", "A batch appends at least one event."}
+
+      length(events) > cap ->
+        {:oversized, length(events), cap}
+
+      true ->
+        events
+        |> Enum.with_index()
+        |> Enum.reduce_while({:ok, []}, fn {event, index}, {:ok, entries} ->
+          case batch_entry(event, index) do
+            {:ok, entry} -> {:cont, {:ok, [entry | entries]}}
+            {:refused, _field, _message} = refusal -> {:halt, refusal}
+          end
+        end)
+        |> case do
+          {:ok, entries} -> {:ok, Enum.reverse(entries)}
+          {:refused, _field, _message} = refusal -> refusal
+        end
+    end
+  end
+
+  defp batch_parameters(_events) do
+    {:refused, "events", "The events key carries an array of events."}
+  end
+
+  defp batch_entry(event, index) when is_map(event) do
+    case event_parameters(event) do
+      {:ok, event_type, payload} ->
+        {:ok, %{event_type: event_type, payload: payload}}
+
+      {:refused, field, message} ->
+        {:refused, "events[#{index}].#{field}", message}
+    end
+  end
+
+  defp batch_entry(event, index) do
+    {:refused, "events[#{index}]", "#{inspect(event)} is not an object."}
+  end
+
   defp event_type(%{"event_type" => event_type}) when is_binary(event_type) do
     if String.trim(event_type) == "" do
       {:refused, "event_type", "The event type names what happened and cannot be blank."}
@@ -409,7 +532,8 @@ defmodule OpenAgentsWeb.ThreadController do
       "schema" => event.schema,
       "event_type" => event.event_type,
       "payload" => event.payload,
-      "emitted_at" => stamp(event.emitted_at)
+      "emitted_at" => stamp(event.emitted_at),
+      "inserted_at" => stamp(event.inserted_at)
     }
   end
 

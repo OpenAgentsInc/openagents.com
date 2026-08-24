@@ -30,6 +30,48 @@ defmodule OpenAgents.Threads.EventBroadcastTest do
     refute_receive {:thread_event, _event}
   end
 
+  test "a committed batch broadcasts each event once, in order" do
+    user = github_user("thread-broadcast-batch")
+    {:ok, thread} = Threads.open(user, "Broadcast the batch")
+
+    :ok = Threads.subscribe(thread)
+
+    {:ok, _updated, events} =
+      Threads.record_events(thread, [
+        %{event_type: "turn.user", payload: %{"text" => "first"}},
+        %{event_type: "tool.ran", payload: %{"tool" => "bash"}},
+        %{event_type: "turn.assistant", payload: %{"text" => "third"}}
+      ])
+
+    # A subscriber cannot tell a batch from the same events posted one at a
+    # time: one message per event, in the order they landed, none repeated.
+    for event <- events do
+      assert_receive {:thread_event, %Event{} = received}
+      assert received.id == event.id
+      assert received.event_type == event.event_type
+    end
+
+    refute_receive {:thread_event, _event}
+  end
+
+  test "a batch that rolls back broadcasts nothing" do
+    user = github_user("thread-broadcast-rollback")
+    {:ok, thread} = Threads.open(user, "Rolled back batches stay silent")
+
+    :ok = Threads.subscribe(thread)
+
+    assert {:error, {1, %Ecto.Changeset{}}} =
+             Threads.record_events(thread, [
+               %{event_type: "turn.user", payload: %{"text" => "valid"}},
+               %{event_type: String.duplicate("x", 81), payload: %{}}
+             ])
+
+    # The first entry was inserted and then rolled back with the second, so a
+    # subscriber must never have heard about it.
+    refute_receive {:thread_event, _event}
+    assert Threads.list_events(thread) |> Enum.map(& &1.event_type) == ["thread.opened"]
+  end
+
   test "another thread's subscriber hears nothing" do
     user = github_user("thread-broadcast-scope")
     {:ok, mine} = Threads.open(user, "Mine")

@@ -3229,6 +3229,55 @@ model, each named below.
   and `OpenAgentsWeb.RepositoryAccess` (a narrower file-level allowlist
   layered above row admission it takes from `get_visible_by_path!/3`).
 
+Amended 2026-08-24 (issue #182): the `:machine` principal the Git transport
+admits is now reachable.
+
+`repository_machine_grants` was a complete, enforced authorization input with
+no writer. `OpenAgentsWeb.Plugs.ForgeGitAuth` accepted a paired computer's
+`smct_` token and assigned `%{kind: :machine, id: machine.id}`,
+`OpenAgents.Forge.GitHTTP` routed that principal to
+`OpenAgents.Repositories.machine_access?/3` for both read and write, and that
+predicate required a `repository_machine_grants` row that no controller,
+LiveView, route, or API could create. So every Git request a paired computer
+made answered `404 unknown repository`, indistinguishable from an unauthorized
+one, and the tests passed because they inserted the row themselves.
+
+The mechanism is kept and given its surface rather than removed. IDENTITY-010's
+assignment credential is repository-and-branch scoped and lives as long as one
+assignment; a computer that clones or fetches outside an assignment has no
+other path, and narrowing the principal set would have taken that away.
+
+`OpenAgents.Repositories.grant_machine_access/4` and
+`revoke_machine_access/3` are the write and the withdrawal, and
+`OpenAgentsWeb.ComputersLive` is the surface, on the `/computers` page the
+owner already uses to approve and revoke a computer. No route is added: the
+authority is in the handler, which is where a route table cannot see it, so
+neither identifier the event carries selects anything on its own. The computer
+resolves through `OpenAgents.Machines.get_machine/2` against the acting
+account, and the repository through that account's own `owner` or `maintainer`
+membership, so a foreign computer, a repository this account does not
+administer, and an identifier that names nothing are one refusal (IDENTITY-002).
+`grant_machine/4` is private behind that entry point, so there is no way to
+reach the write without passing an acting account for both halves. The
+LiveView reaches no `OpenAgents.Repo`.
+
+The grant is standing authority, so it owes a withdrawal, and there was none:
+`revoke_machine_access/3` deletes the row and audits it as
+`repository.machine_grant.revoked` beside the existing
+`repository.machine_grant.updated`. The audit carries the account that created
+the grant, which is otherwise lost with the row. Revoking the computer itself
+still ends every grant's effect without deleting any — `machine_access?/3`
+joins the computer's status and token expiry — and that remains the all-or-
+nothing path.
+
+Evidence for this clause: `OpenAgents.Repositories.grant_machine_access/4`,
+`OpenAgents.Repositories.revoke_machine_access/3`,
+`OpenAgentsWeb.ComputersLive`,
+`test/openagents_web/live/computers_repository_access_test.exs`, and
+`OpenAgents.Forge.GitHTTPTest`, which obtains its grant through that entry
+point and then clones and pushes with the computer's own credential over real
+HTTP.
+
 Three restatements were removed rather than declared, and two were wrong.
 `OpenAgents.Issues.get_issue_by_path!/3` and
 `OpenAgents.Projects.get_project_by_path!/3` each carried a copy of the public
@@ -4447,7 +4496,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | STATUS-001 | `test/openagents/network_status_test.exs`, `test/openagents_web/live/network_status_live_test.exs` |
 | CAPACITY-001 | `test/openagents/capacity_test.exs` |
 | TRANSPARENCY-001 | `test/openagents/forge/visibility_test.exs`, `test/openagents/forge/browse_test.exs`, `test/openagents_web/live/code_live_test.exs`, `test/openagents_web/transparency_surface_test.exs` |
-| REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
+| REPOSITORY-001 | `test/openagents/repositories/visibility_join_test.exs`, `test/openagents_web/live/computers_repository_access_test.exs`, `test/openagents/repository_lifecycle_test.exs`, `test/openagents/repositories/provisioner_test.exs`, `test/openagents_web/controllers/repository_controller_test.exs`, `test/openagents/issues_workspace_test.exs`, `test/openagents_web/live/issue_workspace_live_test.exs`, `test/openagents_web/live/project_workspace_live_test.exs`, `test/openagents/forge/git_http_test.exs` |
 | API-001 | `test/openagents_web/controllers/api_extension_governance_test.exs`, `test/openagents/issue_progress_test.exs` |
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |

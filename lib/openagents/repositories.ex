@@ -22,6 +22,9 @@ defmodule OpenAgents.Repositories do
 
   @writable_roles ~w(owner maintainer contributor)
   @all_roles ~w(owner maintainer contributor viewer)
+  # A computer grant hands a long-lived `smct_` token standing access to a
+  # repository, so it takes the two roles that already administer one.
+  @machine_grant_roles ~w(owner maintainer)
   @repository_namespace_limit 100
 
   # GitHub's default label set. Every created or imported repository starts
@@ -758,10 +761,155 @@ defmodule OpenAgents.Repositories do
     )
   end
 
-  def grant_machine(%Repository{} = repository, %User{} = actor, %Machine{} = machine, operations)
-      when is_list(operations) do
+  @doc """
+  Repositories this account administers, and can therefore hand to one of its
+  computers.
+
+  This is a membership question, not a visibility one: it starts from the
+  actor's own `repository_memberships` rows in the two roles that may
+  administer a repository, so it neither composes nor restates
+  `readable_by/2` (REPOSITORY-001).
+  """
+  @spec list_grantable_repositories(User.t() | nil) :: [Repository.t()]
+  def list_grantable_repositories(%User{id: user_id}) do
+    Repo.all(
+      from repository in Repository,
+        join: membership in Membership,
+        on: membership.repository_id == repository.id,
+        where: membership.user_id == ^user_id and membership.role in @machine_grant_roles,
+        order_by: [asc: repository.owner, asc: repository.name]
+    )
+  end
+
+  def list_grantable_repositories(_actor), do: []
+
+  @doc """
+  The repository grants one of this account's computers holds.
+
+  A computer this account does not own is indistinguishable from one that holds
+  nothing.
+  """
+  @spec list_machine_grants(User.t(), String.t()) :: [MachineGrant.t()]
+  def list_machine_grants(%User{} = actor, machine_id) when is_binary(machine_id) do
+    case owned_machine(actor, machine_id) do
+      {:ok, machine} ->
+        Repo.all(
+          from grant in MachineGrant,
+            join: repository in Repository,
+            on: repository.id == grant.repository_id,
+            where: grant.machine_id == ^machine.id,
+            order_by: [asc: repository.owner, asc: repository.name],
+            preload: [repository: repository]
+        )
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  def list_machine_grants(_actor, _machine_id), do: []
+
+  @doc """
+  Grant one of this account's computers access to one repository it
+  administers.
+
+  This is the entry point the `/computers` surface calls, and the only one:
+  `grant_machine/4` below is private, so a caller cannot reach the write
+  without passing an acting account for both halves. The grant was previously
+  unreachable — the table was read by `OpenAgents.Forge.GitHTTP` on every
+  request a paired computer made and written by nothing outside tests, so every
+  such request answered `404 unknown repository`.
+
+  Both halves are resolved from the acting account rather than from the
+  caller's identifiers: a computer another account owns, a repository this
+  account does not administer, and an identifier that names nothing are all the
+  same refusal.
+  """
+  @spec grant_machine_access(User.t(), String.t(), String.t(), [String.t()]) ::
+          {:ok, MachineGrant.t()} | {:error, atom() | Ecto.Changeset.t()}
+  def grant_machine_access(%User{} = actor, machine_id, repository_id, operations)
+      when is_binary(machine_id) and is_binary(repository_id) and is_list(operations) do
+    with {:ok, machine} <- owned_machine(actor, machine_id),
+         {:ok, repository} <- administered_repository(actor, repository_id) do
+      grant_machine(repository, actor, machine, operations)
+    end
+  end
+
+  def grant_machine_access(_actor, _machine_id, _repository_id, _operations),
+    do: {:error, :machine_not_owned}
+
+  @doc """
+  Withdraw a computer's access to one repository.
+
+  A grant outlives the delegation that needed it, so the surface that creates
+  one owes a way to take it back. Revoking the computer itself already ends the
+  grant's effect — `machine_access?/3` joins the computer's status and token
+  expiry — but that is all or nothing, and this is not.
+
+  The audit record carries the account that created the grant, which is the
+  only place that survives the row.
+  """
+  @spec revoke_machine_access(User.t(), String.t(), String.t()) ::
+          {:ok, MachineGrant.t()} | {:error, atom()}
+  def revoke_machine_access(%User{} = actor, machine_id, repository_id)
+      when is_binary(machine_id) and is_binary(repository_id) do
+    with {:ok, machine} <- owned_machine(actor, machine_id),
+         {:ok, repository} <- administered_repository(actor, repository_id),
+         %MachineGrant{} = grant <-
+           Repo.get_by(MachineGrant, repository_id: repository.id, machine_id: machine.id) do
+      Repo.transaction(fn ->
+        Repo.delete!(grant)
+
+        Audit.record!(
+          "repository.machine_grant.revoked",
+          {:user, actor.id},
+          "machine_grant",
+          grant.id,
+          repository_id: repository.id,
+          metadata: %{
+            "machine_id" => machine.id,
+            "operations" => grant.operations,
+            "granted_by_user_id" => grant.created_by_user_id
+          }
+        )
+
+        grant
+      end)
+    else
+      nil -> {:error, :grant_not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def revoke_machine_access(_actor, _machine_id, _repository_id),
+    do: {:error, :machine_not_owned}
+
+  defp owned_machine(%User{id: user_id}, machine_id) do
+    case OpenAgents.Machines.get_machine(user_id, machine_id) do
+      {:ok, machine} -> {:ok, machine}
+      {:error, _reason} -> {:error, :machine_not_owned}
+    end
+  end
+
+  defp administered_repository(%User{} = actor, repository_id) do
+    with {:ok, id} <- Ecto.UUID.cast(repository_id),
+         %Repository{} = repository <- Repo.get(Repository, id),
+         role when role in @machine_grant_roles <- membership_role(repository, actor) do
+      {:ok, repository}
+    else
+      _absent_or_foreign -> {:error, :repository_not_allowed}
+    end
+  end
+
+  defp grant_machine(
+         %Repository{} = repository,
+         %User{} = actor,
+         %Machine{} = machine,
+         operations
+       )
+       when is_list(operations) do
     with true <- machine.user_id == actor.id or {:error, :machine_not_owned},
-         role when role in ~w(owner maintainer) <- membership_role(repository, actor) do
+         role when role in @machine_grant_roles <- membership_role(repository, actor) do
       Repo.transaction(fn ->
         grant =
           %MachineGrant{}

@@ -432,7 +432,11 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert ungranted_status != 0
     assert ungranted_output =~ "404" or ungranted_output =~ "not found"
 
-    assert {:ok, _grant} = Repositories.grant_machine(repository, user, machine, ["read"])
+    # Through the surface the owner actually has, not through the context
+    # function that used to have no caller in `lib/` (#182).
+    assert {:ok, _grant} =
+             Repositories.grant_machine_access(user, machine.id, repository.id, ["read"])
+
     machine_clone = seed_clone!(base, machine_url)
     File.write!(Path.join(machine_clone, "machine.txt"), "machine\n")
     sh!(machine_clone, "git", ["add", "machine.txt"])
@@ -447,7 +451,7 @@ defmodule OpenAgents.Forge.GitHTTPTest do
     assert read_only_status != 0
 
     assert {:ok, _grant} =
-             Repositories.grant_machine(repository, user, machine, ["read", "write"])
+             Repositories.grant_machine_access(user, machine.id, repository.id, ["read", "write"])
 
     sh!(machine_clone, "git", ["push", "origin", "HEAD:main"])
   end

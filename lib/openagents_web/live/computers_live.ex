@@ -8,6 +8,7 @@ defmodule OpenAgentsWeb.ComputersLive do
   alias OpenAgents.Computer
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Machine
+  alias OpenAgents.Repositories
 
   @presence_refresh_ms 15_000
 
@@ -24,6 +25,9 @@ defmodule OpenAgentsWeb.ComputersLive do
       |> assign(:subscribed_computer_ids, MapSet.new())
       |> assign(:presence, %{})
       |> assign(:computer_count, 0)
+      |> assign(:grant_form, to_form(%{}, as: :grant))
+      |> assign(:grantable_repositories, [])
+      |> assign(:repository_grants, %{})
       |> load_computers()
 
     if connected?(socket), do: schedule_presence_refresh()
@@ -99,6 +103,78 @@ defmodule OpenAgentsWeb.ComputersLive do
          socket
          |> assign(:operation_success, nil)
          |> assign(:pairing_error, "Computer not found.")}
+    end
+  end
+
+  # Repository access for a computer. `repository_machine_grants` is the only
+  # thing `OpenAgents.Forge.GitHTTP` consults for a `{:machine, id}` principal,
+  # and until this event existed nothing wrote a row, so every Git request a
+  # paired computer made answered `404 unknown repository` (#182).
+  #
+  # Neither identifier selects anything on its own: `OpenAgents.Repositories`
+  # resolves the computer through the acting account and the repository through
+  # that account's administering membership, so a foreign computer, a
+  # repository this account does not administer, and an identifier that names
+  # nothing are one refusal (IDENTITY-002).
+  def handle_event(
+        "grant_repository_access",
+        %{"grant" => %{"machine_id" => machine_id, "repository_id" => repository_id} = params},
+        socket
+      ) do
+    operations = if params["operations"] == "write", do: ~w(read write), else: ~w(read)
+
+    case Repositories.grant_machine_access(
+           socket.assigns.current_user,
+           machine_id,
+           repository_id,
+           operations
+         ) do
+      {:ok, grant} ->
+        {:noreply,
+         socket
+         |> assign(:pairing_error, nil)
+         |> assign(:operation_success, %{
+           id: "repository-grant-success",
+           label: "REPOSITORY GRANTED",
+           message:
+             "The computer can now #{Enum.join(grant.operations, " and ")} that repository over Git."
+         })
+         |> load_computers()}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> assign(:operation_success, nil)
+         |> assign(:pairing_error, grant_error(reason))}
+    end
+  end
+
+  def handle_event(
+        "revoke_repository_access",
+        %{"id" => machine_id, "repository-id" => repository_id},
+        socket
+      ) do
+    case Repositories.revoke_machine_access(
+           socket.assigns.current_user,
+           machine_id,
+           repository_id
+         ) do
+      {:ok, _grant} ->
+        {:noreply,
+         socket
+         |> assign(:pairing_error, nil)
+         |> assign(:operation_success, %{
+           id: "repository-grant-revoked",
+           label: "REPOSITORY WITHDRAWN",
+           message: "That computer can no longer reach the repository over Git."
+         })
+         |> load_computers()}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> assign(:operation_success, nil)
+         |> assign(:pairing_error, grant_error(reason))}
     end
   end
 
@@ -178,7 +254,8 @@ defmodule OpenAgentsWeb.ComputersLive do
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp load_computers(socket) do
-    machines = Machines.list_machines(socket.assigns.current_user.id)
+    user = socket.assigns.current_user
+    machines = Machines.list_machines(user.id)
     socket = subscribe_to_computers(socket, machines)
 
     presence =
@@ -186,9 +263,16 @@ defmodule OpenAgentsWeb.ComputersLive do
         {machine.id, machine.status == "active" and Computer.online?(machine.id)}
       end)
 
+    # The grants render inside the stream, so they are reloaded and the stream
+    # is reset together — an assign that changes streamed content and is not
+    # re-streamed with it goes stale on the client.
+    grants = Map.new(machines, &{&1.id, Repositories.list_machine_grants(user, &1.id)})
+
     socket
     |> assign(:presence, presence)
     |> assign(:computer_count, length(machines))
+    |> assign(:grantable_repositories, Repositories.list_grantable_repositories(user))
+    |> assign(:repository_grants, grants)
     |> stream(:computers, machines, reset: true)
   end
 
@@ -216,6 +300,17 @@ defmodule OpenAgentsWeb.ComputersLive do
   defp pairing_error(:pairing_consumed), do: "That pairing code was already used."
   defp pairing_error(:too_many_machines), do: "Computer limit reached. Revoke one to free a slot."
   defp pairing_error(_reason), do: "Pairing failed."
+
+  defp grant_error(:machine_not_owned), do: "Computer not found."
+  defp grant_error(:repository_not_allowed), do: "You do not administer that repository."
+  defp grant_error(:grant_not_found), do: "That computer has no access to that repository."
+  defp grant_error(_reason), do: "Repository access could not be changed."
+
+  defp grants_for(grants, machine), do: Map.get(grants, machine.id, [])
+
+  defp operations_label(operations) do
+    if "write" in operations, do: "Read and write", else: "Read only"
+  end
 
   defp online?(machine, presence) do
     machine.status == "active" and Map.get(presence, machine.id, false)
@@ -413,6 +508,91 @@ defmodule OpenAgentsWeb.ComputersLive do
                       </dd>
                     </div>
                   </dl>
+
+                  <section
+                    :if={machine.status == "active"}
+                    id={"repository-access-#{machine.id}"}
+                    class="computer-card__repositories"
+                    aria-label={"Repository access for #{machine.name}"}
+                  >
+                    <h4>Repository access</h4>
+                    <p>
+                      A computer reaches the forge over Git with its own credential. It can read
+                      or write only the repositories granted here.
+                    </p>
+
+                    <ul
+                      :if={grants_for(@repository_grants, machine) != []}
+                      class="computer-card__grants"
+                    >
+                      <li
+                        :for={grant <- grants_for(@repository_grants, machine)}
+                        id={"grant-#{machine.id}-#{grant.repository_id}"}
+                      >
+                        <span class="computer-card__grant-name">
+                          {grant.repository.owner}/{grant.repository.name}
+                        </span>
+                        <.badge variant={:dim}>{operations_label(grant.operations)}</.badge>
+                        <.text_button
+                          id={"revoke-grant-#{machine.id}-#{grant.repository_id}"}
+                          tone={:danger}
+                          phx-click="revoke_repository_access"
+                          phx-value-id={machine.id}
+                          phx-value-repository-id={grant.repository_id}
+                          phx-disable-with="Withdrawing…"
+                        >
+                          Withdraw
+                        </.text_button>
+                      </li>
+                    </ul>
+
+                    <p
+                      :if={grants_for(@repository_grants, machine) == []}
+                      class="computer-card__grants-empty"
+                    >
+                      No repositories granted. Git requests from this computer are refused.
+                    </p>
+
+                    <.form
+                      :if={@grantable_repositories != []}
+                      for={@grant_form}
+                      id={"repository-grant-form-#{machine.id}"}
+                      class="computer-card__grant-form"
+                      phx-submit="grant_repository_access"
+                    >
+                      <input type="hidden" name="grant[machine_id]" value={machine.id} />
+                      <.input
+                        id={"grant-repository-#{machine.id}"}
+                        name="grant[repository_id]"
+                        value=""
+                        type="select"
+                        label="Repository"
+                        prompt="Choose a repository"
+                        options={
+                          Enum.map(
+                            @grantable_repositories,
+                            &{"#{&1.owner}/#{&1.name}", &1.id}
+                          )
+                        }
+                        required
+                      />
+                      <.input
+                        id={"grant-operations-#{machine.id}"}
+                        name="grant[operations]"
+                        value="read"
+                        type="select"
+                        label="Access"
+                        options={[{"Read only", "read"}, {"Read and write", "write"}]}
+                      />
+                      <.button
+                        id={"grant-repository-submit-#{machine.id}"}
+                        type="submit"
+                        phx-disable-with="Granting…"
+                      >
+                        Grant access
+                      </.button>
+                    </.form>
+                  </section>
 
                   <footer :if={machine.status == "active"} class="computer-card__actions">
                     <p>Revoking closes its connection and can stop work currently running there.</p>

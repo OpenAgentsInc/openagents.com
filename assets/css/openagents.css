@@ -484,6 +484,69 @@
     margin: 0;
   }
 
+  .computer-card__repositories {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line-faint);
+    border-radius: var(--radius-sm);
+    background: var(--wash-hover);
+  }
+
+  .computer-card__repositories h4 {
+    margin: 0;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .computer-card__repositories p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+
+  .computer-card__grants {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .computer-card__grants li {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .computer-card__grant-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .computer-card__grant-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 10px;
+  }
+
+  @media (max-width: 720px) {
+    .computer-card__grant-form {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   .computer-card__facts > div {
     display: grid;
     min-width: 0;

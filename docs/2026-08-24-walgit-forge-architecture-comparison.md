@@ -1,9 +1,17 @@
 # walgit and the forge: two implementations of one architecture
 
 **Date:** 2026-08-24
+
 **Subject:** `walgit` at commit `8e3ece5` ("walgit: initial public release", 68,231 lines of Rust across eight crates) compared with `OpenAgents.Forge` at commit `b5eb4ee` (15,519 lines of Elixir across 55 modules in `lib/openagents/forge/`).
+
 **Question:** Both systems put a write-ahead log in object storage, make it the only ref authority, and treat every node's disk as a cache. What did each build on top of that, what does the other's shape reveal, and where does walgit's design expose a weakness in ours?
-**Method:** direct reading of both implementations. On our side: `lib/openagents/forge/` — chiefly `wal.ex`, `wal/gcs.ex`, `wal/local.ex`, `sync.ex`, `pushes.ex`, `git_http.ex`, `git_plane.ex`, `verification.ex`, `independence.ex`, `janitor.ex`, `receipt_repository.ex`, `anchor.ex` — plus `INVARIANTS.md` (`REPOSITORY-002`, `REPOSITORY-003`, `EXIT-001` through `EXIT-006`) the disclosure in `docs/forge-operator-independence.md` and `docs/forge-exit-rehearsals.md`, and the audits in `docs/2026-08-21-repository-storage-architecture-audit.md`, `docs/2026-08-23-forge-wal-anchoring.md`, and `docs/2026-08-23-invariant-proof-audit.md`. On walgit's side: its Rust crates, protobuf schema, and simulation tests, with its `README.md`, `AGENTS.md`, `GOAL.md`, and `docs/` read second so that intent never stood in for implementation.
+
+**Method:** direct reading of both implementations.
+
+On our side: `lib/openagents/forge/` — chiefly `wal.ex`, `wal/gcs.ex`, `wal/local.ex`, `sync.ex`, `pushes.ex`, `git_http.ex`, `git_plane.ex`, `verification.ex`, `independence.ex`, `janitor.ex`, `receipt_repository.ex`, `anchor.ex` — plus `INVARIANTS.md` (`REPOSITORY-002`, `REPOSITORY-003`, `EXIT-001` through `EXIT-006`), the disclosure in `docs/forge-operator-independence.md` and `docs/forge-exit-rehearsals.md`, and the audits in `docs/2026-08-21-repository-storage-architecture-audit.md`, `docs/2026-08-23-forge-wal-anchoring.md`, and `docs/2026-08-23-invariant-proof-audit.md`.
+
+On walgit's side: its Rust crates, protobuf schema, and simulation tests, with its `README.md`, `AGENTS.md`, `GOAL.md`, and `docs/` read second so that intent never stood in for implementation.
+
 **Status:** Comparison only. No implementation changed. Follow-ups in section 7 are proposals, not decisions.
 
 ---

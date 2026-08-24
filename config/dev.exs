@@ -42,6 +42,13 @@ config :openagents,
 config :openagents, :github_token_encryption_key_id, "development-2026-08"
 config :openagents, :github_token_decryption_keys, %{}
 
+# The machine pairing vault's own key, distinct from the GitHub vault's so
+# development exercises the key independence VAULT-001 requires.
+config :openagents,
+       :machine_token_encryption_key,
+       System.get_env("MACHINE_TOKEN_ENCRYPTION_KEY") ||
+         Base.encode64("openagents-dev-machine-vault-key")
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

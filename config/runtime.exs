@@ -629,6 +629,40 @@ if runtime_role == :web do
       github_token_encryption_key_id: token_encryption_key_id,
       github_token_decryption_keys: token_decryption_keys
   end
+
+  # The machine pairing vault's own key (#192, VAULT-001). A set-but-invalid
+  # value fails startup; an unset value bridges to the GitHub vault's active
+  # key so the deploy that introduces this variable boots unattended, before
+  # the operator provisions the secret. The bridge is this expression and
+  # nothing else — `OpenAgents.Machines.TokenVault` refuses to read the GitHub
+  # key itself — and it ends the moment `MACHINE_TOKEN_ENCRYPTION_KEY` is set.
+  # While the bridge is active, a GitHub key rotation moves the pairing
+  # vault's key too; the vault's decrypt-side GitHub-keyring fallback is what
+  # keeps the at-most-ten-minute pairing population readable across that.
+  machine_token_encryption_key = optional_text.("MACHINE_TOKEN_ENCRYPTION_KEY")
+
+  valid_machine_token_key? =
+    is_binary(machine_token_encryption_key) and
+      match?(
+        {:ok, key} when byte_size(key) == 32,
+        Base.decode64(machine_token_encryption_key)
+      )
+
+  if config_env() == :prod and machine_token_encryption_key != nil and
+       not valid_machine_token_key? do
+    raise "environment variable MACHINE_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key"
+  end
+
+  cond do
+    valid_machine_token_key? ->
+      config :openagents, machine_token_encryption_key: machine_token_encryption_key
+
+    valid_token_key? ->
+      config :openagents, machine_token_encryption_key: token_encryption_key
+
+    true ->
+      :ok
+  end
 end
 
 if parse_optional_boolean.("PHX_SERVER") do

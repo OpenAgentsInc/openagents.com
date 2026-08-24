@@ -277,6 +277,7 @@ defmodule OpenAgents.RuntimeConfig do
     token_key = Map.get(settings, :github_token_encryption_key)
     token_key_id = Map.get(settings, :github_token_encryption_key_id)
     decryption_keys = Map.get(settings, :github_token_decryption_keys)
+    machine_token_key = Map.get(settings, :machine_token_encryption_key)
 
     with :ok <- ensure(present?(client_id), :github_oauth_client_id, "is required"),
          :ok <- ensure(present?(client_secret), :github_oauth_client_secret, "is required"),
@@ -304,6 +305,16 @@ defmodule OpenAgents.RuntimeConfig do
              decryption_keyring?(decryption_keys, token_key_id, environment),
              :github_token_decryption_keys,
              "must contain only bounded identifiers and base64-encoded 32-byte keys"
+           ),
+         # The machine pairing vault's own key, validated beside the keyring
+         # it historically borrowed from. `config/runtime.exs` bridges an
+         # unset `MACHINE_TOKEN_ENCRYPTION_KEY` to the GitHub key, so an
+         # absent value here means both are missing (VAULT-001, #192).
+         :ok <-
+           ensure(
+             encryption_key?(machine_token_key),
+             :machine_token_encryption_key,
+             "must be a base64-encoded 32-byte key"
            ) do
       :ok
     end

@@ -97,6 +97,15 @@ Rotate without losing access to existing ciphertext:
 4. Verify `users.github_token_key_id` contains no prior ID, retain the rotation
    receipt/count, and remove the prior key in the following deploy.
 
+This procedure rotates only the GitHub vault. The machine pairing vault seals
+under its own `MACHINE_TOKEN_ENCRYPTION_KEY` and its records survive this
+rotation unread and unmoved (`INVARIANTS.md`, VAULT-001; #192 records the
+release where that was not true). Keep step 2's prior key in
+`GITHUB_TOKEN_DECRYPTION_KEYS_JSON` until one pairing lifetime after the
+rotation deploy: the pairing vault's decrypt fallback reads that keyring for
+any pairing sealed while `config/runtime.exs` still bridged its key to the
+GitHub key.
+
 The rewrap is one database transaction and reports only a count. Any
 unsealable row rolls the transaction back and emits no credential material.
 

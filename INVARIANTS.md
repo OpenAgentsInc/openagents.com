@@ -2965,6 +2965,46 @@ Evidence: `OpenAgents.GitHubOAuth.RuntimeConfig`,
 `.dockerignore`, the `openagents-oauth-callback-requests` logging exclusion, and
 `ops/ci/release-smoke.sh`.
 
+### VAULT-001 — Each vault seals under its own key, so rotating one never unreads another
+
+Status: Current
+
+The application holds three hand-rolled encryption vaults —
+`OpenAgents.Accounts.TokenVault` for GitHub access tokens,
+`OpenAgents.Machines.TokenVault` for computer tokens awaiting pairing claim,
+and `OpenAgents.Voice.RecordingVault` for call audio — and each seals under
+its own configured key. Rotating one vault's key never makes another vault's
+records unreadable or unverifiable, because no vault reads another vault's
+key to seal. A vault whose own key is absent fails with a typed configuration
+error at its boundary rather than silently borrowing key material that
+rotates on someone else's schedule; that silent borrow is exactly what #192
+found, where the pairing vault read the GitHub vault's active key and the
+documented GitHub rotation would have unread every outstanding pairing.
+
+Decrypt-side compatibility is narrower than sealing and stays explicit: the
+pairing vault opens with its dedicated key first and falls back to the GitHub
+keyring — active key plus `:github_token_decryption_keys` — because that is
+the only key material its historical records were sealed under, and because
+`config/runtime.exs` deliberately bridges an unset
+`MACHINE_TOKEN_ENCRYPTION_KEY` to the GitHub key until the operator
+provisions the dedicated secret. The fallback never rewraps: the only reader
+nulls `token_ciphertext` in the same transaction as a successful open
+(IDENTITY-011), so no record survives a read, and every fallback-sealed
+record is claimed or expired within one ten-minute pairing lifetime.
+
+Rotation posture per vault, as rehearsal 4 of `docs/forge-exit-rehearsals.md`
+requires: the GitHub vault rotates losslessly through its keyed envelope and
+keyring rewrap; the pairing vault's own rotation loses at most one ten-minute
+window of unclaimed pairings, which retry; the recording vault has no keyring,
+so rotating its key strands prior recordings — a bounded, recorded loss, not a
+silent one.
+
+Evidence: `OpenAgents.Machines.TokenVault`, `OpenAgents.Accounts.TokenVault`,
+`OpenAgents.Voice.RecordingVault`, `OpenAgents.RuntimeConfig.validate/1`,
+`config/runtime.exs`, `test/openagents/machines/token_vault_test.exs`,
+`test/openagents/accounts/token_vault_test.exs`, and
+`test/openagents/runtime_config_test.exs`.
+
 ### RELEASE-003 — Every published hostname can establish LiveView
 
 Status: Current
@@ -4945,6 +4985,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | OBSERVABILITY-001 | `test/openagents/observability_test.exs` |
 | RELEASE-001 | `ops/ci/release-smoke.sh`, `test/openagents_web/controllers/health_controller_test.exs` |
 | RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
+| VAULT-001 | `test/openagents/machines/token_vault_test.exs`, `test/openagents/runtime_config_test.exs` |
 | RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs`, `test/openagents/hosted_ci_absence_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |

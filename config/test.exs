@@ -43,6 +43,12 @@ config :openagents,
 config :openagents, :github_token_encryption_key_id, "test-2026-08"
 config :openagents, :github_token_decryption_keys, %{}
 
+# Distinct from the GitHub vault key above so the suite catches any vault
+# that quietly borrows another vault's key (VAULT-001).
+config :openagents,
+       :machine_token_encryption_key,
+       Base.encode64("openagents-test-machine-vault-32")
+
 # Test fakes for providers and voice sideband so the suite never reaches the network.
 config :openagents, :provider, OpenAgents.Providers.Test
 config :openagents, :openrouter_provider, OpenAgents.Providers.Test

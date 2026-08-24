@@ -248,6 +248,13 @@ defmodule OpenAgents.RuntimeConfigTest do
              |> RuntimeConfig.validate()
   end
 
+  test "the machine pairing vault key is required and named on its own" do
+    settings = staging_settings() |> Map.put(:machine_token_encryption_key, nil)
+
+    assert {:error, %{setting: :machine_token_encryption_key}} =
+             RuntimeConfig.validate(settings)
+  end
+
   test "forge mirror remotes refuse credential-bearing URLs" do
     for url <- [
           "https://operator:secret@mirror.example/openagents.com.git",

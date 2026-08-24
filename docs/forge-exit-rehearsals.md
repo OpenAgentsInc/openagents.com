@@ -228,7 +228,24 @@ The forge holds several key-like secrets and they rotate differently:
   key's validity window.
 - **The three hand-rolled vaults.** Each takes its key from the operator's own
   environment, so rotation is an operator action with no separation of duties.
-  `docs/forge-operator-independence.md` records that plainly.
+  `docs/forge-operator-independence.md` records that plainly. Each vault seals
+  under its own key (`INVARIANTS.md`, VAULT-001), and their rotation outcomes
+  differ:
+  - `OpenAgents.Accounts.TokenVault` (GitHub tokens) rotates without loss:
+    the envelope names its key, the retired key joins
+    `GITHUB_TOKEN_DECRYPTION_KEYS_JSON`, and `rotate_github_tokens!/0` rewraps
+    every row under the active key.
+  - `OpenAgents.Machines.TokenVault` (pairing tokens,
+    `MACHINE_TOKEN_ENCRYPTION_KEY`) rotates with bounded loss: at most one
+    ten-minute window of unclaimed pairings becomes unreadable, and a person
+    retries the pairing. There is no keyring because no record outlives the
+    window. Rotating the GitHub key no longer touches this vault; #192
+    records that it once did, silently.
+  - `OpenAgents.Voice.RecordingVault` (call audio,
+    `VOICE_RECORDING_ENCRYPTION_KEY`) rotates with permanent loss: one key,
+    no key id, no keyring, so recordings sealed under the retired key never
+    open again. Rotate it only when stranding prior recordings is the intent
+    or an acceptable cost of suspected exposure.
 
 **What a rehearsal must establish:** that a rotation of each of these leaves
 every already-issued receipt verifiable, and that a rotation performed in the

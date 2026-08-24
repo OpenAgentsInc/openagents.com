@@ -447,8 +447,18 @@ defmodule OpenAgents.Forge.IndependenceTest do
 
     test "each axis of the disclosure decides degraded on its own", _context do
       clean_export = %{"gaps" => []}
-      encrypted = %{"exports_encrypted" => true}
-      unencrypted = %{"exports_encrypted" => false}
+
+      # #178 split the private-data axis in two: an export encrypted to a
+      # recipient-held key, and a store that is still plaintext. Both have to
+      # be clean before the axis is, so the "private" side of this table
+      # varies each of them.
+      private_clean = %{
+        "export_recipient_encryption" => true,
+        "encrypted_at_rest" => true
+      }
+
+      unencrypted_export = %{private_clean | "export_recipient_encryption" => false}
+      plaintext_store = %{private_clean | "encrypted_at_rest" => false}
       published_unwitnessed = %{"anchor_published" => true, "anchor_witnessed" => false}
       witnessed = %{"anchor_published" => true, "anchor_witnessed" => true}
       unpublished = %{"anchor_published" => false, "anchor_witnessed" => false}
@@ -456,11 +466,12 @@ defmodule OpenAgents.Forge.IndependenceTest do
       # Publishing the anchor is not witnessing it, and the disclosure has to
       # keep reporting degraded on the second. Every other axis is clean here,
       # so this asserts the witness disjunct rather than riding on a constant.
-      assert Independence.degraded?(clean_export, published_unwitnessed, encrypted)
-      assert Independence.degraded?(clean_export, unpublished, encrypted)
-      assert Independence.degraded?(clean_export, witnessed, unencrypted)
-      assert Independence.degraded?(%{"gaps" => [%{}]}, witnessed, encrypted)
-      refute Independence.degraded?(clean_export, witnessed, encrypted)
+      assert Independence.degraded?(clean_export, published_unwitnessed, private_clean)
+      assert Independence.degraded?(clean_export, unpublished, private_clean)
+      assert Independence.degraded?(clean_export, witnessed, unencrypted_export)
+      assert Independence.degraded?(clean_export, witnessed, plaintext_store)
+      assert Independence.degraded?(%{"gaps" => [%{}]}, witnessed, private_clean)
+      refute Independence.degraded?(clean_export, witnessed, private_clean)
     end
   end
 

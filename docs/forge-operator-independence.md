@@ -132,18 +132,50 @@ What is proven portable today:
   public-only query answered `404` to the repository's own owner, which issue
   #142 closed.
 - **Conversations, memory, and voice disclosure.** `GET /data/export`,
-  `GET /data/export/atif`, and `GET /memory/export`, under `DATA-004`.
+  `GET /data/export/atif`, and `GET /memory/export`, under `DATA-004`. That
+  export is scoped to the account's one conversation with the agent, and it
+  carries the account chat backend's runs and event stream alongside messages,
+  memory, voice, and tool steps.
+- **Forum posts and topics, threads and their transcripts, push receipts,
+  deployment requests and approvals, Box leases and runs, paired computers, and
+  agent links.** `GET /data/export/account`, an account-scoped document
+  published alongside the conversation export rather than inside it. Every
+  collection states its cap and reports its own truncation.
 
-What is blocked today: **push receipts**. The `forge_pushes` rows are derived
-from the WAL and served by no published route. The pusher holds the same facts
-in their own reflog, so the forge's record of them does not leave.
+Nothing is blocked today, which is a result rather than a default. Issue #142
+opened the private-repository metadata reads and #143 exported the forge-owned
+and forum-owned families; before those, a private repository answered `404` to
+its own owner and push receipts left through no route at all. The ledger keeps
+the `blocked` status and its shape checks, because the honest move when a
+family becomes unreadable is to record it.
 
-What is reachable but has no account-scoped export: forum posts, deployments,
-agent links, Box leases, paired computers, pull requests, stacks, and
-reputation attestations. There is also no cross-repository read anywhere —
+What is reachable but still has no account-scoped read: pull requests, stacks,
+issue dependencies, and reputation attestations. They key on a repository
+rather than on an account, and there is no cross-repository read anywhere —
 every issue and project route is scoped to one repository, and the only
-account-wide list is `GET /api/v3/user/repos`. Push receipts have no published
-route at all. Issue #143 covers the account-scoped export.
+account-wide list is `GET /api/v3/user/repos` — so enumerating an account's
+work still means walking its repositories. Issue #165 carries that read.
+
+Who owns a migrated forum post is the subtle question in the account export,
+and it is answered rather than assumed. Two identities resolve to an account:
+`user:<account-id>`, which every topic and post written on this surface
+carries, and any `actor_ref` the account holds a `linked` claim on. A post
+written under a legacy identity nobody has claimed, or whose claim is still
+pending or was rejected, is **not** exported — the display name may make the
+authorship obvious to a reader, but nothing has established it, and an export
+that guessed wider would hand one account another account's writing. The claims
+travel in the document at every status, so an account can see which identities
+it asked for and what the operator decided.
+
+What a recipient can do with the file is part of the claim. It is one JSON
+object. Post and topic bodies are the markdown source as written, so they
+re-publish anywhere that renders CommonMark without passing back through this
+forge. Push receipts carry the WAL sequence and ref map a clone does not, so
+they re-attach a history to who pushed it and when. Identifiers are this
+forge's UUIDs, but every cross-reference inside the document — a post to its
+topic, a tip to its post, an event to its thread — resolves inside the document
+itself. What the file does not carry is listed in its own `not_included`
+section rather than left to inference.
 
 ## Independent verification
 
@@ -210,11 +242,12 @@ The one omission is the `refs/internal/` namespace, where stack boundary
 commits are retained without being advertised; the proof asserts that this is
 the *only* omission, so withholding a branch would turn it red.
 
-That is exit for source. It is not yet exit for everything: the metadata plane
-— comments and labels in private repositories, forum posts, receipts — is
-covered by the gaps above rather than by a claim. Saying so is the point. Four
-green invariants that assert less than they appear to would be worse than three
-plus a recorded gap.
+That is exit for source. It is not yet exit for everything: comments and labels
+in private repositories still answer `404` to their owner, and the
+repository-keyed families still have no account-wide read. Those are covered by
+the gaps above rather than by a claim. Saying so is the point. Four green
+invariants that assert less than they appear to would be worse than three plus
+a recorded gap.
 
 ## Invariants
 
@@ -239,5 +272,5 @@ break was reverted.
 
 | Gap | Issue |
 | --- | --- |
-| No account-scoped export of forge-owned and forum-owned data | #143 |
+| No cross-repository read for repository-keyed work records | #165 |
 | No commitment to the WAL is published outside operator storage, so a consistent rewrite still verifies clean | #151 |

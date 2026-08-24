@@ -21,6 +21,8 @@ defmodule OpenAgents.DataRights do
   @maximum_export_messages 10_000
   @maximum_export_voice_sessions 2_000
   @maximum_export_tool_steps 10_000
+  @maximum_export_chat_runs 5_000
+  @maximum_export_chat_events 20_000
 
   @doc """
   Whether the one-click full reset control is enabled.
@@ -65,6 +67,7 @@ defmodule OpenAgents.DataRights do
         )
 
       tool_steps = tool_steps(conversation)
+      chat_runs = chat_runs(conversation)
 
       {:ok,
        %{
@@ -82,7 +85,10 @@ defmodule OpenAgents.DataRights do
          "voice_sessions_truncated" => length(sessions) > @maximum_export_voice_sessions,
          "tool_steps" =>
            tool_steps |> Enum.take(@maximum_export_tool_steps) |> Enum.map(&tool_step_export/1),
-         "tool_steps_truncated" => length(tool_steps) > @maximum_export_tool_steps
+         "tool_steps_truncated" => length(tool_steps) > @maximum_export_tool_steps,
+         "chat_runs" => chat_runs.records,
+         "chat_runs_truncated" => chat_runs.records_truncated,
+         "chat_run_events_truncated" => chat_runs.events_truncated
        }}
     end
   end
@@ -182,6 +188,67 @@ defmodule OpenAgents.DataRights do
 
       :deleted
     end)
+  end
+
+  # The account chat backend records its own runs and their event stream, keyed
+  # on the same conversation. They are the account's requests and the answers
+  # it received, so the conversation export carries them rather than leaving
+  # the `chat` family's portability claim resting on messages alone.
+  defp chat_runs(conversation) do
+    runs =
+      Repo.all(
+        from(run in OpenAgents.Chat.AccountRun,
+          where: run.conversation_id == ^conversation.id,
+          order_by: [asc: run.inserted_at, asc: run.id],
+          limit: ^(@maximum_export_chat_runs + 1)
+        )
+      )
+
+    kept = Enum.take(runs, @maximum_export_chat_runs)
+    run_ids = Enum.map(kept, & &1.id)
+
+    events =
+      Repo.all(
+        from(event in OpenAgents.Chat.AccountEvent,
+          where: event.run_id in ^run_ids,
+          order_by: [asc: event.run_id, asc: event.sequence],
+          limit: ^(@maximum_export_chat_events + 1)
+        )
+      )
+
+    by_run = events |> Enum.take(@maximum_export_chat_events) |> Enum.group_by(& &1.run_id)
+
+    %{
+      records: Enum.map(kept, &chat_run_export(&1, Map.get(by_run, &1.id, []))),
+      records_truncated: length(runs) > @maximum_export_chat_runs,
+      events_truncated: length(events) > @maximum_export_chat_events
+    }
+  end
+
+  defp chat_run_export(run, events) do
+    %{
+      "id" => run.id,
+      "status" => run.status,
+      "backend" => run.backend,
+      "reasoning_effort" => run.reasoning_effort,
+      "user_content" => run.user_content,
+      "assistant_content" => run.assistant_content,
+      "usage" => run.usage,
+      "error" => run.error,
+      "error_code" => run.error_code,
+      "latency_ms" => run.latency_ms,
+      "started_at" => iso8601(run.started_at),
+      "completed_at" => iso8601(run.completed_at),
+      "events" =>
+        Enum.map(events, fn event ->
+          %{
+            "sequence" => event.sequence,
+            "kind" => event.kind,
+            "payload" => event.payload,
+            "observed_at" => iso8601(event.observed_at)
+          }
+        end)
+    }
   end
 
   # Tool steps carry the raw model arguments as user-owned conversation

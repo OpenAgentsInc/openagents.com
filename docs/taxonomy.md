@@ -110,6 +110,30 @@ and per-criterion evidence. It returns `:accepted`, `:incomplete`,
 `:unauthorized`, `:failed`, or `:not_applicable`. The issue stays the
 canonical work record; the contract only grades a claim about it.
 
+### Exports
+
+Two account exports exist and they are not the same document. Say which one.
+
+**Conversation export** — `sarah.account_data_export.v1`, served by
+`GET /data/export` and built by `OpenAgents.DataRights.export/3`. Scoped to one
+conversation: messages, profile memory, voice summaries, tool steps, and the
+account chat backend's runs and events. `GET /data/export/atif` is the same
+graph projected as one ATIF trajectory. Both are `DATA-004`.
+
+**Account export** — `openagents.account_export.v1`, served by
+`GET /data/export/account` and built by
+`OpenAgents.DataRights.AccountExport.build/1`. Scoped to the account rather
+than to a conversation: forum topics and posts, threads and their transcripts,
+push receipts, deployment requests and approvals, Box leases and runs, paired
+computers, and agent links. It is `EXIT-001`, and it names its own omissions in
+a `not_included` section.
+
+**Export ledger** — `OpenAgents.DataRights.ExportInventory`, the family-by-family
+record of what leaves and what does not. A family is `portable` only with a
+named mechanism and a named proof; `partial` and `blocked` each owe an open
+issue. `EXIT-001` enforces it against the surface in both directions, so a
+ledger entry is a claim under test rather than documentation.
+
 ### Traces
 
 **ATIF** — Agent Trajectory Interchange Format, pinned at `ATIF-v1.7`. The

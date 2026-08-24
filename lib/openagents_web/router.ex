@@ -235,6 +235,7 @@ defmodule OpenAgentsWeb.Router do
 
     get "/data/export", DataController, :show
     get "/data/export/atif", DataController, :export_atif
+    get "/data/export/account", DataController, :export_account
     delete "/data", DataController, :delete
     delete "/data/reset", DataController, :reset
 

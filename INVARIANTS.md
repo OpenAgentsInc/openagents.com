@@ -2102,8 +2102,11 @@ Status: Current
 
 The server resolves export and deletion only from the active local user in the
 encrypted session and verifies that user owns the internal storage root.
-Export provides canonical messages, profile memory, voice summaries, and
-tool-step evidence (raw arguments plus digests) with explicit bounds. Exact confirmation deletes the visitor root only while text
+Export provides canonical messages, profile memory, voice summaries,
+tool-step evidence (raw arguments plus digests), and the account chat backend's
+own runs and event stream, with explicit bounds. That export is scoped to one
+conversation; what an account authors outside it leaves through
+`GET /data/export/account` under `EXIT-001`. Exact confirmation deletes the visitor root only while text
 and voice are inactive; database cascades remove
 conversation, memory, receipt, module, collective, and voice records — call
 audio included, through `voice_recordings`' cascade to the session. The export
@@ -2869,7 +2872,8 @@ directions, so a family reaching `/api/v3` without someone deciding whether a
 user can export it fails the build, and a family the API drops leaves no stale
 claim behind. Families that leave through routes outside `/api/v3` — Git
 transport for repository content, the `DATA-004` exports for conversations and
-memory — are listed alongside them.
+memory, and `GET /data/export/account` for the forge-owned and forum-owned
+records an account authors — are listed alongside them.
 
 The ledger is deliberately pessimistic, because an unproven portability claim
 is the kind of claim this repository does not make. `portable` requires a named
@@ -2886,13 +2890,43 @@ read that started working fails until the ledger says so. The `comment`,
 `label`, `milestone`, `assignee`, `issue_label`, and `issue_assignee` families
 were blocked until they resolved the repository through the same visibility
 predicate every other repository surface composes; they are portable now, and
-this ledger records the change rather than trailing it. `push_receipt` is
-blocked because no published route serves receipts, and it is probed against
-the route inventory rather than by calling a route that does not exist.
+this ledger records the change rather than trailing it.
+
+`GET /data/export/account` is the account-scoped export, and the probes round
+trip it rather than reading its source: one `forum` post and topic, one
+`thread` with a transcript entry, one `push_receipt`, one `box` lease and run,
+one `computer`, one `agent` link, and one `deployment` request are seeded and
+read back through the route in an authenticated session. A family whose record
+stops coming back turns this red, and so does a receipt returned under a
+principal that is not the requesting account. `push_receipt` is probed there
+rather than against the route inventory, because no `/api/v3` route serves
+receipts and none is expected to; what the account gets back is its own
+`forge_pushes` rows, matched exactly on the `user:<account-id>` principal a
+person's push records.
+
+Ownership of a migrated forum post is decided, not guessed. Two identities
+resolve to an account and no third: `user:<account-id>`, which every topic and
+post written on this surface carries, and any `actor_ref` the account holds a
+`linked` claim on in `forum_actor_links`. A post under an unclaimed, pending,
+or rejected legacy identity is not exported, because nothing has established it
+is that account's writing, and `forum_actor_links`' unique index on `actor_ref`
+means two accounts cannot both resolve one legacy identity. The claims
+themselves travel in the document at every status, so an account can see what
+it asked for and what the operator decided.
+
+No family is `blocked` today, which is a result rather than a default: #142
+opened the private-repository metadata reads and #143 exported the forge-owned
+and forum-owned families. `pull_request`, `stack`, `issue_dependency`, and
+`reputation` stay `partial`. They key on a repository rather than on an
+account, and no cross-repository account-scoped read exists, so enumerating
+them still means walking `GET /api/v3/user/repos`. Issue #165 carries that
+read. The export names those omissions in its own `not_included` section rather
+than leaving a recipient to infer them.
 
 Evidence: `OpenAgents.DataRights.ExportInventory`,
-`OpenAgentsWeb.ApiRouteAuthority`,
-`test/openagents/data_rights/export_inventory_test.exs`, and
+`OpenAgents.DataRights.AccountExport`, `OpenAgentsWeb.ApiRouteAuthority`,
+`test/openagents/data_rights/export_inventory_test.exs`,
+`test/openagents/data_rights/account_export_test.exs`, and
 `docs/forge-operator-independence.md`.
 
 ### EXIT-002 — Served state is checkable against the WAL with no database
@@ -2996,11 +3030,14 @@ is that set, and the proof asserts the withheld namespace is the *only*
 omission: hiding a branch, or widening the exported set to include internal
 bookkeeping, turns it red.
 
-This is exit for the Git plane. It is not exit for the metadata plane — forum
-posts, receipts, and everything with no account-scoped export are covered by
-`EXIT-001`'s recorded gaps rather than by a claim here, and issue #143 carries
-them. A single complete invariant plus a recorded gap is worth more than four
-that assert less than they appear to.
+This is exit for the Git plane. It is not exit for the metadata plane. Forum
+posts, threads, push receipts, deployment requests, Box work, computers, and
+agent links leave through `GET /data/export/account` under `EXIT-001`, and the
+private-repository metadata reads answer their own members now; the
+repository-keyed families with no cross-repository read remain `EXIT-001`'s
+recorded gap rather than a claim here, and issue #165 carries them. A single
+complete invariant plus a recorded gap is worth more than four that assert less
+than they appear to.
 
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.Repos`,
 `OpenAgents.Forge.GitHTTP`, and
@@ -3493,7 +3530,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | CONTRIBUTION-001 | `test/openagents_web/contribution_contract_test.exs` |
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs` |
-| EXIT-001 | `test/openagents/data_rights/export_inventory_test.exs` |
+| EXIT-001 | `test/openagents/data_rights/export_inventory_test.exs`, `test/openagents/data_rights/account_export_test.exs` |
 | EXIT-002 | `test/openagents/forge/independence_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |

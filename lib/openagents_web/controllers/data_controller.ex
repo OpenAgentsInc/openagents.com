@@ -1,6 +1,7 @@
 defmodule OpenAgentsWeb.DataController do
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.DataRights.AccountExport
   alias OpenAgents.{Conversations, DataRights}
 
   def show(conn, _params) do
@@ -36,6 +37,31 @@ defmodule OpenAgentsWeb.DataController do
       |> send_resp(:ok, body)
     else
       _unavailable -> send_resp(conn, :not_found, "Trajectory export is unavailable.")
+    end
+  end
+
+  @doc """
+  The account-scoped export of forge-owned and forum-owned records.
+
+  Scoped to the account rather than to a conversation, so it answers for an
+  account that has never opened chat. `AccountExport.build/1` takes the
+  authenticated account and nothing else, so no parameter can widen it to
+  another account's records.
+  """
+  def export_account(conn, _params) do
+    with %{status: "active"} = user <- conn.assigns.current_user,
+         {:ok, export} <- AccountExport.build(user),
+         {:ok, body} <- Jason.encode(export) do
+      conn
+      |> put_resp_content_type("application/json")
+      |> put_resp_header(
+        "content-disposition",
+        ~s(attachment; filename="openagents-account-data.json")
+      )
+      |> put_resp_header("cache-control", "no-store")
+      |> send_resp(:ok, body)
+    else
+      _unavailable -> send_resp(conn, :not_found, "Account export is unavailable.")
     end
   end
 

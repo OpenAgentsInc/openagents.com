@@ -14,6 +14,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
   alias OpenAgents.ApiTokens
   alias OpenAgents.DataRights.ExportInventory
   alias OpenAgents.Issues
+  alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.ApiRouteAuthority
 
@@ -28,7 +29,13 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     :assignee,
     :issue_label,
     :issue_assignee,
-    :push_receipt
+    :push_receipt,
+    :forum,
+    :thread,
+    :box,
+    :computer,
+    :agent,
+    :deployment
   ]
 
   describe "coverage" do
@@ -54,11 +61,13 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
       end
     end
 
+    # The ledger records no blocked family today: #142 opened the
+    # private-repository metadata reads and #143 exported the forge-owned and
+    # forum-owned families. The shape check stays rather than being deleted,
+    # because the honest move when a family becomes unreadable is to record it
+    # blocked, and this is what that record has to look like when it appears.
     test "a blocked family is probed here, not asserted from prose" do
-      blocked = ExportInventory.with_status(:blocked)
-      assert blocked != []
-
-      for entry <- blocked do
+      for entry <- ExportInventory.with_status(:blocked) do
         assert entry.proof == :inventory, "#{entry.family} is blocked without a probe"
         assert entry.mechanism == nil, "#{entry.family} is blocked and still names a mechanism"
         assert is_integer(entry.issue) and entry.issue > 0
@@ -119,7 +128,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
       repository =
         repository
         |> Ecto.Changeset.change(lifecycle_state: "ready", ready_at: DateTime.utc_now())
-        |> OpenAgents.Repo.update!()
+        |> Repo.update!()
 
       issue = OpenAgents.IssuesFixtures.issue_fixture(repository, %{title: "exportable"})
       {:ok, _comment} = Issues.create_comment(issue, %{body: "a comment of mine"}, owner)
@@ -130,11 +139,14 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
       {:ok, _credential, token} =
         ApiTokens.create(owner, %{name: "export inventory probe", scopes: ["forge:write"]})
 
+      account_export = seed_and_export(owner, repository)
+
       %{
         conn: put_req_header(conn, "authorization", "Bearer " <> token),
         owner: owner,
         repository: repository,
-        issue: issue
+        issue: issue,
+        account_export: account_export
       }
     end
 
@@ -161,7 +173,141 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     end
   end
 
+  ## ── the account-scoped export ──────────────────────────────────────────
+
+  # Every family the ledger records as portable through GET /data/export/account
+  # is probed by seeding one record and reading it back through the route, so a
+  # portability claim here is a round trip and not a reading of the source.
+  defp seed_and_export(owner, repository) do
+    board =
+      Repo.insert!(%OpenAgents.Forum.Forum{
+        slug: "exit-inventory",
+        title: "Exit inventory",
+        visibility: "public"
+      })
+
+    topic =
+      Repo.insert!(%OpenAgents.Forum.Topic{
+        forum_id: board.id,
+        idempotency_key: "exit-inventory-topic",
+        slug: "exit-inventory-topic",
+        title: "Mine",
+        actor_ref: "user:" <> owner.id,
+        actor_display_name: "exit-owner",
+        post_count: 1
+      })
+
+    Repo.insert!(%OpenAgents.Forum.Post{
+      topic_id: topic.id,
+      idempotency_key: "exit-inventory-post",
+      post_number: 1,
+      body_text: "The account's own post.",
+      actor_ref: "user:" <> owner.id,
+      actor_display_name: "exit-owner"
+    })
+
+    {:ok, thread} = OpenAgents.Threads.open(owner, "Prove the export reaches a thread.")
+    {:ok, _thread} = OpenAgents.Threads.record_event(thread, "thread.probe", %{"probe" => true})
+
+    Repo.insert!(%OpenAgents.Forge.PushReceipt{
+      repo: repository.storage_key,
+      wal_seq: 0,
+      principal: "user:" <> owner.id,
+      refs: %{"refs/heads/main" => String.duplicate("0", 40)}
+    })
+
+    Repo.insert!(%OpenAgents.Machines.Machine{
+      user_id: owner.id,
+      name: "exit-inventory-computer",
+      token_digest: :crypto.hash(:sha256, "exit-inventory"),
+      token_expires_at: DateTime.add(DateTime.utc_now(), 3600, :second)
+    })
+
+    agent =
+      Repo.insert!(%OpenAgents.Agents.Agent{
+        handle: "exit-inventory-agent",
+        display_name: "Exit inventory",
+        registration_ip_digest: :crypto.hash(:sha256, "exit-inventory-agent")
+      })
+
+    Repo.insert!(%OpenAgents.Agents.AgentUserLink{agent_id: agent.id, user_id: owner.id})
+
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(owner)
+
+    box =
+      Repo.insert!(%OpenAgents.Box.ConversationBox{
+        conversation_id: conversation.id,
+        box_id: "box_exit_inventory",
+        label: "exit-inventory",
+        state: "ready"
+      })
+
+    now = DateTime.utc_now()
+
+    Repo.insert!(%OpenAgents.Box.Run{
+      conversation_id: conversation.id,
+      conversation_box_id: box.id,
+      requesting_principal: %{"kind" => "user", "id" => owner.id},
+      idempotency_key: "exit-inventory-run",
+      run_directory: "/tmp/exit-inventory-run",
+      command: "echo exit",
+      state: "completed",
+      exit_status: 0,
+      output: "exit\n",
+      admitted_at: now,
+      deadline_at: DateTime.add(now, 600, :second)
+    })
+
+    _environment = OpenAgents.DeploymentsFixtures.environment_fixture(repository, owner)
+    _run = OpenAgents.DeploymentsFixtures.run_fixture(repository, owner)
+
+    build_conn()
+    |> Plug.Test.init_test_session(%{"user_id" => owner.id})
+    |> get(~p"/data/export/account")
+    |> json_response(200)
+  end
+
   ## ── probes ─────────────────────────────────────────────────────────────
+
+  defp probe(:forum, %{account_export: export}) do
+    if Enum.any?(export["forum"]["posts"], &(&1["body_text"] == "The account's own post.")) and
+         Enum.any?(export["forum"]["topics"], &(&1["title"] == "Mine")),
+       do: :portable,
+       else: :partial
+  end
+
+  defp probe(:thread, %{account_export: export}) do
+    thread = Enum.find(export["threads"]["records"], &(&1["objective"] =~ "Prove the export"))
+
+    cond do
+      thread == nil -> :partial
+      Enum.any?(thread["events"], &(&1["event_type"] == "thread.probe")) -> :portable
+      true -> :partial
+    end
+  end
+
+  defp probe(:box, %{account_export: export}) do
+    if Enum.any?(export["boxes"]["leases"], &(&1["box_id"] == "box_exit_inventory")) and
+         Enum.any?(export["boxes"]["runs"], &(&1["command"] == "echo exit")),
+       do: :portable,
+       else: :partial
+  end
+
+  defp probe(:computer, %{account_export: export}) do
+    if Enum.any?(export["computers"], &(&1["name"] == "exit-inventory-computer")),
+      do: :portable,
+      else: :partial
+  end
+
+  defp probe(:agent, %{account_export: export}) do
+    if Enum.any?(export["agent_links"], &(&1["agent"]["handle"] == "exit-inventory-agent")),
+      do: :portable,
+      else: :partial
+  end
+
+  defp probe(:deployment, %{account_export: export}) do
+    if export["deployments"]["requests"] != [], do: :portable, else: :partial
+  end
 
   defp probe(:issue, %{conn: conn, issue: issue}) do
     case get(conn, ~p"/api/v3/repos/exit-owner/private-work/issues") do
@@ -229,18 +375,18 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
     read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/issues/#{issue.number}/assignees")
   end
 
-  # A receipt family cannot be probed by calling a route, because the point is
-  # that no route exists. Ask the published inventory instead: a read route
-  # that serves push receipts would have to be classified there first.
-  defp probe(:push_receipt, _context) do
-    serves_receipts? =
-      ApiRouteAuthority.inventory_entries()
-      |> Enum.reject(& &1["mutation"])
-      |> Enum.any?(fn route ->
-        route["family"] == "push_receipt" or String.contains?(route["path"], "/receipts")
-      end)
+  # No /api/v3 route serves receipts and none is expected to; the claim is that
+  # the account export returns the account's own rows, so that is what is
+  # probed. A receipt whose principal is not this account must not appear.
+  defp probe(:push_receipt, %{account_export: export, owner: owner}) do
+    records = export["push_receipts"]["records"]
+    principals = records |> Enum.map(& &1["principal"]) |> Enum.uniq()
 
-    if serves_receipts?, do: :portable, else: :blocked
+    cond do
+      records == [] -> :blocked
+      principals != ["user:" <> owner.id] -> :partial
+      true -> :portable
+    end
   end
 
   defp read_probe(conn, path) do

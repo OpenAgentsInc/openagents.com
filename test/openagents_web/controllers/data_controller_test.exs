@@ -35,6 +35,46 @@ defmodule OpenAgentsWeb.DataControllerTest do
     :ok
   end
 
+  test "the conversation export carries the account chat backend's runs and events", %{conn: conn} do
+    user = github_user("data-export-chat-runs-credential-0000000000")
+    {:ok, conversation} = Conversations.ensure_conversation(user)
+
+    run =
+      Repo.insert!(%OpenAgents.Chat.AccountRun{
+        conversation_id: conversation.id,
+        status: "completed",
+        backend: "responses",
+        reasoning_effort: "medium",
+        started_at: DateTime.utc_now(),
+        user_content: "What did I ask for?",
+        assistant_content: "This.",
+        usage: %{"input_tokens" => 3}
+      })
+
+    Repo.insert!(%OpenAgents.Chat.AccountEvent{
+      run_id: run.id,
+      sequence: 1,
+      kind: "response.completed",
+      payload: %{"ok" => true},
+      observed_at: DateTime.utc_now()
+    })
+
+    export =
+      conn
+      |> Plug.Test.init_test_session(%{"user_id" => user.id})
+      |> get(~p"/data/export")
+      |> response(200)
+      |> Jason.decode!()
+
+    assert [exported] = export["chat_runs"]
+    assert exported["user_content"] == "What did I ask for?"
+    assert exported["assistant_content"] == "This."
+    assert [event] = exported["events"]
+    assert event["kind"] == "response.completed"
+    refute export["chat_runs_truncated"]
+    refute export["chat_run_events_truncated"]
+  end
+
   test "account owner can export conversation, memory, and voice disclosure", %{conn: conn} do
     token = "data-export-browser-credential-00000000000000000"
     user = github_user(token)

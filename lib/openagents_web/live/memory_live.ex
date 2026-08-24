@@ -302,6 +302,13 @@ defmodule OpenAgentsWeb.MemoryLive do
           <.text_button id="export-memory" href="/memory/export" download>
             <.icon name="download" /> Export Memory ONLY
           </.text_button>
+          <%!-- The two exports above are scoped to Sarah's one conversation.
+          Forum posts, threads, push receipts, deployments, Box work,
+          computers, and agent links key on the account instead, so they leave
+          through their own document (EXIT-001). --%>
+          <.text_button id="export-account-data" href="/data/export/account" download>
+            <.icon name="download" /> Export Forge and Forum Data
+          </.text_button>
           <.text_button
             id="forget-all-memory"
             tone={:danger}

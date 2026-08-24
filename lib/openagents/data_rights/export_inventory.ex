@@ -15,7 +15,9 @@ defmodule OpenAgents.DataRights.ExportInventory do
   new resource family cannot reach the API without someone deciding whether a
   user can export it. The rest of the ledger names the families that leave
   through routes outside `/api/v3` — Git transport for repository content, the
-  data-rights exports for conversations and memory.
+  data-rights exports for conversations and memory, and `GET
+  /data/export/account` for the forge-owned and forum-owned records an account
+  authors.
 
   Statuses:
 
@@ -50,8 +52,12 @@ defmodule OpenAgents.DataRights.ExportInventory do
           note: String.t()
         }
 
-  # No account-scoped export of forge-owned and forum-owned data.
-  @account_export_issue 143
+  # No cross-repository account-scoped read for repository-keyed work records.
+  @cross_repository_issue 165
+
+  # The account-scoped export of forge-owned and forum-owned records, #143.
+  @account_export "GET /data/export/account"
+  @account_export_proof {:test, "test/openagents/data_rights/account_export_test.exs"}
 
   @entries [
     # ── proven portable ──────────────────────────────────────────────────
@@ -153,8 +159,9 @@ defmodule OpenAgents.DataRights.ExportInventory do
       issue: nil,
       note:
         "The durable records behind the chat family are conversation messages, " <>
-          "turns, and tool steps, which leave through the DATA-004 export rather " <>
-          "than through /api/v3."
+          "turns, tool steps, and the account chat backend's own runs and event " <>
+          "stream, all of which leave through the DATA-004 export rather than " <>
+          "through /api/v3."
     },
     %{
       family: :repository_content,
@@ -186,30 +193,110 @@ defmodule OpenAgents.DataRights.ExportInventory do
       issue: nil,
       note: "Also carried inside the account data export."
     },
-
-    # ── blocked: the owner cannot read their own records ──────────────────
     %{
       family: :push_receipt,
       api?: false,
-      status: :blocked,
-      mechanism: nil,
-      proof: :inventory,
-      issue: @account_export_issue,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
       note:
-        "forge_pushes rows are derived from the WAL and served by no published " <>
-          "route. The pusher holds the same facts in their own reflog; the " <>
-          "forge's record of them does not leave."
+        "forge_pushes rows are derived from the WAL and still reach no /api/v3 " <>
+          "route, but forge_pushes.principal is user:<account-id> for a person's " <>
+          "push, so the account export returns exactly the account's own rows " <>
+          "with the WAL sequence and ref map a clone does not carry."
+    },
+    %{
+      family: :forum,
+      api?: true,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "The public reads still take no author filter; the account export " <>
+          "returns the topics, posts, claims, tip destinations, and tips that " <>
+          "belong to user:<account-id> and to every actor_ref the account holds " <>
+          "a linked claim on. A migrated post under an unclaimed or still-pending " <>
+          "legacy identity is deliberately not exported: only a linked claim " <>
+          "establishes whose it is."
+    },
+    %{
+      family: :deployment,
+      api?: true,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "The API read stays operator-scoped and per repository. What an account " <>
+          "authored is its deployment requests and its approval decisions, keyed " <>
+          "by requested_by_user_id and approver_user_id, and those export. Runs, " <>
+          "events, and node results are the operator's record of the fleet."
+    },
+    %{
+      family: :agent,
+      api?: true,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "An agent is not owned by one account, so what exports is the account's " <>
+          "own links — every status, not only linked — with the handle, display " <>
+          "name, and status of the agent each one names."
+    },
+    %{
+      family: :box,
+      api?: true,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "Leases and runs key on a conversation, whose visitor keys on the " <>
+          "account, so both export. Run output has no schema ceiling and is " <>
+          "capped per run at 64 KB with the cap reported alongside the full " <>
+          "byte size, rather than truncated silently."
+    },
+    %{
+      family: :computer,
+      api?: true,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "The same ComputerProjection the account-scoped API list renders, " <>
+          "carried into the export document so it leaves with everything else."
+    },
+    %{
+      family: :thread,
+      api?: true,
+      status: :portable,
+      mechanism: @account_export,
+      proof: @account_export_proof,
+      issue: nil,
+      note:
+        "Still no route lists an account's threads and none serves thread_events. " <>
+          "The account export joins threads through their owner visitor and " <>
+          "carries the objective, the terminal report, usage, and the transcript, " <>
+          "so the export ledger now reaches what the deletion cascade always did."
     },
 
-    # ── reachable, not proven portable, no account-scoped export ──────────
+    # ── reachable per repository, never per account ───────────────────────
     %{
       family: :pull_request,
       api?: true,
       status: :partial,
       mechanism: "GET /api/v3/repos/{owner}/{repo}/pulls",
       proof: nil,
-      issue: @account_export_issue,
-      note: "Widens for a member, unpaged, scoped to one repository. No proof here yet."
+      issue: @cross_repository_issue,
+      note:
+        "Widens for a member, unpaged, scoped to one repository. Left out of the " <>
+          "account export deliberately: a pull request keys on a repository, not " <>
+          "on an account, and no cross-repository account-scoped read exists, so " <>
+          "enumeration still walks GET /api/v3/user/repos."
     },
     %{
       family: :stack,
@@ -217,8 +304,11 @@ defmodule OpenAgents.DataRights.ExportInventory do
       status: :partial,
       mechanism: "GET /api/v3/repos/{owner}/{repo}/stacks",
       proof: nil,
-      issue: @account_export_issue,
-      note: "Widens for a member. Boundary commits live under the unadvertised refs/internal/."
+      issue: @cross_repository_issue,
+      note:
+        "Widens for a member. Boundary commits live under the unadvertised " <>
+          "refs/internal/, and like pull requests a stack keys on a repository " <>
+          "rather than on an account."
     },
     %{
       family: :issue_dependency,
@@ -226,69 +316,8 @@ defmodule OpenAgents.DataRights.ExportInventory do
       status: :partial,
       mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
       proof: nil,
-      issue: @account_export_issue,
-      note: "Widens for a member, one issue at a time."
-    },
-    %{
-      family: :forum,
-      api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/forum/topics",
-      proof: nil,
-      issue: @account_export_issue,
-      note:
-        "Topics and posts read publicly with no author filter, so recovering an " <>
-          "account's own posts means walking the whole corpus."
-    },
-    %{
-      family: :deployment,
-      api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/deployments",
-      proof: nil,
-      issue: @account_export_issue,
-      note: "Cursor paged per repository, never per account."
-    },
-    %{
-      family: :agent,
-      api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/agents/links",
-      proof: nil,
-      issue: @account_export_issue,
-      note: "The account's agent links read back; the agent records themselves do not export."
-    },
-    %{
-      family: :box,
-      api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/conversations/{conversation_id}/boxes",
-      proof: nil,
-      issue: @account_export_issue,
-      note: "Leases and runs read per conversation. No export artifact."
-    },
-    %{
-      family: :computer,
-      api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/computers",
-      proof: nil,
-      issue: @account_export_issue,
-      note: "The account's paired computers list. No export artifact."
-    },
-    %{
-      family: :thread,
-      api?: true,
-      status: :partial,
-      mechanism: "GET /api/v3/threads/{thread_id}",
-      proof: nil,
-      issue: @account_export_issue,
-      note:
-        "A thread reads back only to a caller that already holds its id: there " <>
-          "is no route that lists an account's threads, the transcript in " <>
-          "thread_events leaves through no route at all, and the DATA-004 " <>
-          "export names no thread. Deletion still reaches them through the " <>
-          "visitor cascade; the export ledger does not."
+      issue: @cross_repository_issue,
+      note: "Widens for a member, one issue at a time, and keys on a repository."
     },
     %{
       family: :reputation,
@@ -296,8 +325,10 @@ defmodule OpenAgents.DataRights.ExportInventory do
       status: :partial,
       mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/attestations",
       proof: nil,
-      issue: @account_export_issue,
-      note: "Attestations read per issue and per subject, never per account."
+      issue: @cross_repository_issue,
+      note:
+        "Attestations read per issue and per subject, never per account, and the " <>
+          "subject is a solver identity rather than an account id."
     },
 
     # ── not a record a user authors and takes with them ───────────────────

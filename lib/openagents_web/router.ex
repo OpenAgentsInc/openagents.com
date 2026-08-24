@@ -212,6 +212,8 @@ defmodule OpenAgentsWeb.Router do
       live "/artifact-catalog", ArtifactCatalogLive, :index
       live "/notifications", NotificationsLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
+      live "/threads", ThreadIndexLive, :index
+      live "/threads/:id", ThreadShowLive, :show
       live "/device", DeviceAuthorizationLive, :show
       live "/repositories", RepositoryIndexLive, :index
       live "/repositories/new", RepositoryNewLive, :new

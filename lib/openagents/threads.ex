@@ -232,6 +232,10 @@ defmodule OpenAgents.Threads do
 
   Refused on a terminal thread: a transcript that keeps growing after the
   report was written is not the transcript the report describes.
+
+  A committed append is broadcast as `{:thread_event, event}` on the thread's
+  topic (`subscribe/1`), after the transaction, so a subscriber never sees an
+  event that rolled back.
   """
   @spec record_event(Thread.t(), String.t(), map()) ::
           {:ok, Thread.t()} | {:error, :thread_terminal | Ecto.Changeset.t()}
@@ -242,10 +246,10 @@ defmodule OpenAgents.Threads do
     Repo.transaction(fn ->
       case locked(thread.id) do
         %Thread{status: "open"} = current ->
-          with {:ok, _event} <- insert_event(current, event_type, payload, now),
+          with {:ok, event} <- insert_event(current, event_type, payload, now),
                {:ok, updated} <-
                  current |> Thread.event_count_changeset(current.event_count + 1) |> Repo.update() do
-            updated
+            {updated, event}
           else
             {:error, reason} -> Repo.rollback(reason)
           end
@@ -254,7 +258,31 @@ defmodule OpenAgents.Threads do
           Repo.rollback(:thread_terminal)
       end
     end)
+    |> case do
+      {:ok, {updated, event}} ->
+        Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(updated.id), {:thread_event, event})
+        {:ok, updated}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
+
+  @doc """
+  Subscribe to a thread's transcript appends.
+
+  Delivers `{:thread_event, %OpenAgents.Threads.Event{}}` for each committed
+  append. Subscribe before reading the snapshot and dedup by the event id,
+  which is monotonic per thread.
+  """
+  @spec subscribe(Thread.t() | String.t()) :: :ok | {:error, term()}
+  def subscribe(%Thread{id: thread_id}), do: subscribe(thread_id)
+
+  def subscribe(thread_id) when is_binary(thread_id) do
+    Phoenix.PubSub.subscribe(OpenAgents.PubSub, topic(thread_id))
+  end
+
+  defp topic(thread_id), do: "thread:" <> thread_id
 
   @doc """
   Mint model authority for a thread.

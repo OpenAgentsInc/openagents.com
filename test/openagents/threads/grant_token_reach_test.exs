@@ -70,7 +70,8 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:open_and_mint, 3} => :returns_plaintext_token,
     {:open_count, 1} => :scoped_by_owner,
     {:reap_expired, 1} => :scoped_by_owner,
-    {:record_event, 3} => :thread_struct
+    {:record_event, 3} => :thread_struct,
+    {:subscribe, 1} => :thread_struct
   }
 
   # Every module that reaches a token-returning `OpenAgents.Threads` export.
@@ -79,8 +80,10 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
 
   # The one function that resolves a thread from an identifier, and every
   # module that calls it. It takes the acting account, so another account's
-  # thread id resolves to `nil` (THREAD-001, IDENTITY-002).
-  @thread_resolver_callers [OpenAgentsWeb.ThreadController]
+  # thread id resolves to `nil` (THREAD-001, IDENTITY-002). The web thread
+  # viewer resolves through the same lookup and renders a `nil` as the plain
+  # 404 an absent id gets.
+  @thread_resolver_callers [OpenAgentsWeb.ThreadController, OpenAgentsWeb.ThreadShowLive]
 
   test "the modules that mint a grant token are exactly the set THREAD-001 accounts for" do
     assert_exact_set(

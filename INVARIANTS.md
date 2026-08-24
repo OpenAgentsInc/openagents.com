@@ -2009,9 +2009,13 @@ conversation, and a thread is not one.
 - **Authority reaches only the account that opened the thread.**
   `OpenAgents.Threads.get_for_user/2` joins through the owner visitor, so
   another account's thread id resolves to `nil` and the route refuses it with
-  the same `not_found` an absent id gets. No route returns a grant token for a
-  thread the caller did not open, and the token is returned exactly once, at
-  the mint.
+  the same `not_found` an absent id gets. The web thread viewer
+  (`OpenAgentsWeb.ThreadShowLive`) resolves through the same lookup and
+  renders `nil` as the same plain 404 an unknown id gets, so the browser
+  confirms no more existence than the API, and it reads the transcript and the
+  grant meter without ever holding a plaintext token. No route returns a grant
+  token for a thread the caller did not open, and the token is returned
+  exactly once, at the mint.
 
   Amended 2026-08-23 (issue #174): that sentence quantifies over routes, so it
   is enumerated rather than sampled. A plaintext grant token comes into
@@ -2037,8 +2041,9 @@ Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `priv/repo/migrations/20260823221416_allow_thread_scoped_inference_grants.exs`,
 `test/openagents/threads/grant_fence_test.exs`,
 `test/openagents/threads/grant_token_reach_test.exs`,
-`test/openagents/threads_test.exs`, and
-`test/openagents_web/controllers/thread_controller_test.exs`.
+`test/openagents/threads_test.exs`,
+`test/openagents_web/controllers/thread_controller_test.exs`, and
+`test/openagents_web/live/thread_show_live_test.exs`.
 
 ## Tenant deployment control plane
 

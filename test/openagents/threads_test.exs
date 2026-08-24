@@ -230,41 +230,61 @@ defmodule OpenAgents.ThreadsTest do
   end
 
   describe "reap_expired/1" do
-    test "elapsed authority is expired and the thread it fenced is closed" do
-      user = owner("reaped")
-      {:ok, live} = Threads.open(user, "Still working")
-      {:ok, live, _live_grant, _live_token} = Threads.mint_grant(live)
+    test "a thread's authority has no clock, so waiting does not end it" do
+      # The behaviour this replaces: an hour passed, the grant expired, the
+      # open thread it fenced was closed as `authority_expired`, and a coding
+      # session that was mid-sentence was told to start a new one.
+      user = owner("no-clock")
+      {:ok, thread} = Threads.open(user, "Still working")
+      {:ok, thread, grant, token} = Threads.mint_grant(thread)
 
+      assert is_nil(Repo.get!(Grant, grant.id).expires_at)
+
+      # However long the reaper is run, and whenever.
+      assert {0, 0} = Threads.reap_expired(user)
+      assert {0, 0} = Threads.reap_expired(user)
+
+      assert Repo.get!(Grant, grant.id).status == "active"
+      assert Repo.get!(Thread, thread.id).status == "open"
+      assert {:ok, _resolved} = Inference.resolve(token)
+    end
+
+    test "a grant that does carry a deadline is still retired when it passes" do
+      # Not every grant is a thread's. A computer-bound delegation keeps its
+      # clock, where the deadline is a security bound rather than a
+      # convenience, and this is the reader that enforces it.
+      user = owner("reaped")
       elapsed_ttl()
-      {:ok, lapsed} = Threads.open(user, "Abandoned")
-      {:ok, lapsed, lapsed_grant, lapsed_token} = Threads.mint_grant(lapsed)
+      {:ok, thread} = Threads.open(user, "Deadline")
+      {:ok, _thread, grant, token} = Threads.mint_grant(thread)
+
+      assert {1, 1} = Threads.reap_expired(user)
+      assert Repo.get!(Grant, grant.id).status == "expired"
+      assert {:error, :grant_expired} = Inference.resolve(token)
+    end
+
+    test "a thread left holding no authority is closed as spent, never as expired" do
+      # The slot has to come back: nothing is coming to renew a grant, and an
+      # open thread that can never work again would hold the ceiling forever.
+      # What changed is the reason it is closed for — the budget ran out, which
+      # is true, rather than a clock, which no longer exists.
+      user = owner("left-open")
+      elapsed_ttl()
+      {:ok, thread} = Threads.open(user, "Deadline")
+      {:ok, thread, _grant, _token} = Threads.mint_grant(thread)
 
       assert {1, 1} = Threads.reap_expired(user)
 
-      assert Repo.get!(Grant, lapsed_grant.id).status == "expired"
-      assert {:error, :grant_expired} = Inference.resolve(lapsed_token)
-
-      reaped = Repo.get!(Thread, lapsed.id)
+      reaped = Repo.get!(Thread, thread.id)
       assert reaped.status == "failed"
-      assert reaped.error_code == "authority_expired"
-      assert reaped.report_digest =~ ~r/\Asha256:[0-9a-f]{64}\z/
-
-      # A thread whose clock has not run out is untouched.
-      assert Repo.get!(Thread, live.id).status == "open"
-    end
-
-    test "a thread that has never minted authority is not reaped" do
-      user = owner("never-minted")
-      {:ok, thread} = Threads.open(user, "No authority yet")
-
-      assert {0, 0} = Threads.reap_expired(user)
-      assert Repo.get!(Thread, thread.id).status == "open"
+      assert reaped.error_code == "authority_spent"
+      refute reaped.report =~ "expired"
     end
 
     test "reaping is idempotent" do
       user = owner("reap-twice")
       elapsed_ttl()
-      {:ok, thread} = Threads.open(user, "Abandoned")
+      {:ok, thread} = Threads.open(user, "Deadline")
       {:ok, _thread, _grant, _token} = Threads.mint_grant(thread)
 
       assert {1, 1} = Threads.reap_expired(user)

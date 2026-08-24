@@ -40,9 +40,10 @@ defmodule OpenAgents.Threads do
      that inserts, so two simultaneous opens at the boundary admit one thread,
      not two — the cap is what makes the account's joint credit exposure a
      bounded figure, so it has to hold under concurrency (issue #195).
-  5. **The ceiling is self-clearing.** `reap_expired/1` runs at admission and
-     on every read: an active grant whose clock has run out becomes `expired`,
-     and the open thread it fenced becomes `failed` with `authority_expired`.
+  5. **The ceiling is self-clearing, but not on a clock.** `reap_expired/1`
+     runs at admission and on every read: a thread that has minted authority
+     and holds none becomes `failed` with `authority_spent`. A thread's grant
+     carries no deadline, so waiting alone never reaches it.
      Expiry therefore releases both the thread's active-grant slot and the
      account's admission slot without anyone asking, so an abandoned thread
      cannot lock an account out of its own ceiling.
@@ -552,7 +553,9 @@ defmodule OpenAgents.Threads do
       max_total_tokens: setting(:thread_grant_max_total_tokens, 1_000_000),
       max_calls: setting(:thread_grant_max_calls, 256),
       max_cost_microusd: setting(:thread_grant_max_cost_microusd, 2_000_000),
-      ttl_seconds: setting(:thread_grant_ttl_seconds, 3_600)
+      # No clock. A thread is bounded by the three ceilings above and by
+      # revocation; how long the reader has been working is not a bound.
+      ttl_seconds: setting(:thread_grant_ttl_seconds, nil)
     }
   end
 
@@ -602,13 +605,21 @@ defmodule OpenAgents.Threads do
   end
 
   @doc """
-  Retire the account's elapsed authority, and the threads it fenced.
+  Retire authority that has ended, and the threads left holding none.
 
-  Expiry is a fact about a clock, not a request: a grant past `expires_at` is
-  no longer authority whether or not anyone presents it. This transitions those
-  grants to `expired`, and closes every open thread that has minted authority
-  and no longer holds any, with `authority_expired`. Returns
-  `{expired_grants, closed_threads}`.
+  Two halves, and only one of them used to be about a clock.
+
+  A grant that carries a deadline and is past it is retired. A thread's grant
+  carries no deadline — time is not one of a thread's bounds — so this half
+  reaches only the grants that still set one.
+
+  A thread that has minted authority and holds none is finished whether or not
+  anyone says so: the only route that mints for a caller mints once, at open,
+  so nothing is coming to renew it, and leaving it open holds a slot against
+  the account's ceiling forever. It is closed as `authority_spent`, which is
+  what has actually happened — the budget ran out, or the grant was revoked.
+
+  Returns `{retired_grants, closed_threads}`.
   """
   @spec reap_expired(User.t() | Visitor.t()) :: {non_neg_integer(), non_neg_integer()}
   def reap_expired(%User{} = user),
@@ -621,7 +632,7 @@ defmodule OpenAgents.Threads do
       visitor_id
       |> abandoned_thread_ids()
       |> Enum.count(fn thread_id ->
-        match?({:ok, _closed}, terminate(%Thread{id: thread_id}, expired_attributes()))
+        match?({:ok, _closed}, terminate(%Thread{id: thread_id}, spent_attributes()))
       end)
 
     {expired, closed}
@@ -671,19 +682,7 @@ defmodule OpenAgents.Threads do
     end)
   end
 
-  defp expired_attributes do
-    report = "The thread's model authority expired before it reported."
-
-    %{
-      status: "failed",
-      report: report,
-      report_digest: digest(report),
-      error_code: "authority_expired",
-      completed_at: DateTime.utc_now()
-    }
-  end
-
-  # An open thread that has minted authority and holds none is abandoned: the
+  # An open thread that has minted authority and holds none is finished: the
   # only route that mints for a caller mints once, at open, so nothing is
   # coming to renew it.
   defp abandoned_thread_ids(visitor_id) do
@@ -701,6 +700,18 @@ defmodule OpenAgents.Threads do
         where: not exists(live),
         select: t.id
     )
+  end
+
+  defp spent_attributes do
+    report = "The thread's model authority was spent before it reported."
+
+    %{
+      status: "failed",
+      report: report,
+      report_digest: digest(report),
+      error_code: "authority_spent",
+      completed_at: DateTime.utc_now()
+    }
   end
 
   defp setting(key, default), do: Application.get_env(:openagents, key, default)

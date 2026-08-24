@@ -323,7 +323,11 @@ config :openagents,
   thread_grant_max_total_tokens: 1_000_000,
   thread_grant_max_calls: 256,
   thread_grant_max_cost_microusd: 2_000_000,
-  thread_grant_ttl_seconds: 3_600,
+  # No clock on a thread's authority. It expiring on a wall clock ended a
+  # coding session mid-sentence and told the reader to start a new one, when
+  # nothing had gone wrong except that an hour had passed. Budget and
+  # revocation bound a thread; time does not.
+  thread_grant_ttl_seconds: nil,
   # The inference credit an account draws its threads against. Signing in is
   # what raises it: a visitor holding only a browser key gets the same figure a
   # single thread used to get, and an account with a user behind it gets $100 to

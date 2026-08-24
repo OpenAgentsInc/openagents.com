@@ -382,7 +382,37 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert Map.drop(theirs, ["request_id"]) == Map.drop(absent, ["request_id"])
     end
 
-    test "an expired grant is reported as expired without anyone revoking it", %{conn: conn} do
+    test "a thread's authority carries no deadline, so time alone does not end it", %{
+      conn: conn
+    } do
+      # What this replaces: the grant expired on a wall clock, the thread was
+      # closed as `authority_expired`, and a coding session that was mid-work
+      # was told to start a new one because an hour had passed.
+      authenticated = put_chat_api_token(conn, "thread-no-clock")
+
+      created =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "Outlive me."})
+        |> json_response(201)
+
+      body =
+        authenticated
+        |> get(~p"/api/v3/threads/#{created["thread"]["id"]}")
+        |> json_response(200)
+
+      assert body["grant"]["status"] == "active"
+      assert body["thread"]["status"] == "open"
+      assert is_nil(body["thread"]["error_code"])
+      assert {:ok, _resolved} = Inference.resolve(created["grant"]["token"])
+    end
+
+    test "a thread left holding no authority reports it as spent, never as expired", %{
+      conn: conn
+    } do
+      # The slot still has to come back — an open thread that can never work
+      # again would hold the account's ceiling forever. What a reader is told
+      # is that the authority was spent, which is true, rather than that it
+      # expired, which is a concept this no longer has.
       authenticated = put_chat_api_token(conn, "thread-expiry-read")
       elapsed_ttl()
 
@@ -398,17 +428,14 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       assert body["grant"]["status"] == "expired"
       assert body["thread"]["status"] == "failed"
-      assert body["thread"]["error_code"] == "authority_expired"
-      assert {:error, :grant_expired} = Inference.resolve(created["grant"]["token"])
+      assert body["thread"]["error_code"] == "authority_spent"
+      refute body["thread"]["report"] =~ "expired"
     end
 
-    test "an expired thread releases the slot the cap counts", %{conn: conn} do
+    test "the slot is released by revoking, not by waiting", %{conn: conn} do
       cap(1)
-      restore_ttl = elapsed_ttl()
       authenticated = put_chat_api_token(conn, "thread-expiry-cap")
 
-      # This thread's authority has already elapsed, but the row is open and
-      # nobody has said anything about it.
       first =
         authenticated
         |> post(~p"/api/v3/threads", %{"objective" => "First."})
@@ -416,29 +443,22 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       assert Threads.open_count(github_user("api-token-thread-expiry-cap")) == 1
 
-      restore_ttl.()
+      # Waiting does not free it. There is no clock to wait out.
+      refused =
+        authenticated
+        |> post(~p"/api/v3/threads", %{"objective" => "Second."})
+        |> json_response(429)
+
+      assert refused["code"] == "thread_quota_reached"
+
+      # Saying so does.
+      _deleted = authenticated |> delete(~p"/api/v3/threads/#{first["thread"]["id"]}")
 
       second =
         authenticated
         |> post(~p"/api/v3/threads", %{"objective" => "Second."})
         |> json_response(201)
 
-      retired =
-        authenticated
-        |> get(~p"/api/v3/threads/#{first["thread"]["id"]}")
-        |> json_response(200)
-
-      assert retired["thread"]["status"] == "failed"
-      assert retired["thread"]["error_code"] == "authority_expired"
-
-      # The second thread's authority has not elapsed, so it still holds the
-      # only slot and the cap still bites.
-      refused =
-        authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Third."})
-        |> json_response(429)
-
-      assert refused["code"] == "thread_quota_reached"
       assert second["grant"]["token"] != first["grant"]["token"]
     end
   end

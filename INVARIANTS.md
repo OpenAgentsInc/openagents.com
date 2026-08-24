@@ -2202,12 +2202,21 @@ conversation, and a thread is not one.
   mint at all. `test/openagents/threads/credit_race_test.exs` proves the
   serialized figures, the exhausted refusal under race, and the unchanged
   serial ceilings.
-- **Expiry revokes without being asked.** `OpenAgents.Threads.reap_expired/1`
-  runs at admission and on every read of a thread: an active grant past
-  `expires_at` becomes `expired`, and an open thread that has minted authority
-  and holds none becomes `failed` with `authority_expired`. An abandoned thread
-  therefore cannot hold an account's admission slot, and a lapsed token is not
-  merely refused on presentation — it stops being live in the ledger.
+- **A thread's authority has no clock, and spent authority releases the slot
+  without being asked.** `inference_grants.expires_at` is nullable and a
+  thread's grant is minted without one: a thread is bounded by its budget
+  (calls, tokens, cost) and by revocation, and by nothing else. It used to
+  carry `thread_grant_ttl_seconds`, and the reaper closed the open thread it
+  fenced as `authority_expired` — which ended a coding session mid-work
+  because an hour had passed, with nothing wrong and nothing finished. The
+  ceiling still clears itself: `OpenAgents.Threads.reap_expired/1` runs at
+  admission and on every read of a thread, and an open thread that has minted
+  authority and holds none — its budget spent, or its grant revoked — becomes
+  `failed` with `authority_spent`, so it cannot hold an account's admission
+  slot forever. A grant that *does* carry a deadline, where the deadline is a
+  security bound rather than a convenience, is still retired past it, and a
+  lapsed token stops being live in the ledger rather than merely being refused
+  on presentation.
 - **Authority reaches only the account that opened the thread.**
   `OpenAgents.Threads.get_for_user/2` joins through the owner visitor, so
   another account's thread id resolves to `nil` and the route refuses it with

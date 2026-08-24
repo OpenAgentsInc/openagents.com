@@ -26,7 +26,9 @@ defmodule OpenAgents.Inference do
           required(:max_total_tokens) => pos_integer(),
           required(:max_calls) => pos_integer(),
           required(:max_cost_microusd) => pos_integer(),
-          required(:ttl_seconds) => pos_integer()
+          # nil is a grant with no clock: budget and revocation bound it, time
+          # does not.
+          required(:ttl_seconds) => pos_integer() | nil
         }
 
   @type mint_input :: %{
@@ -84,7 +86,7 @@ defmodule OpenAgents.Inference do
       max_total_tokens: ceilings.max_total_tokens,
       max_calls: ceilings.max_calls,
       max_cost_microusd: ceilings.max_cost_microusd,
-      expires_at: DateTime.add(now(), ceilings.ttl_seconds, :second)
+      expires_at: deadline(ceilings)
     }
 
     changeset = Grant.mint_changeset(attrs)
@@ -173,7 +175,9 @@ defmodule OpenAgents.Inference do
 
       %Grant{status: "active"} = grant ->
         cond do
-          DateTime.compare(now(), grant.expires_at) != :lt ->
+          # A grant with no clock cannot elapse. `DateTime.compare/2` would
+          # raise on nil rather than answer, so the absence is read first.
+          not is_nil(grant.expires_at) and DateTime.compare(now(), grant.expires_at) != :lt ->
             _ = expire(grant)
             {:error, :grant_expired}
 
@@ -304,7 +308,7 @@ defmodule OpenAgents.Inference do
 
     Grant
     |> where([g], g.owner_visitor_id == ^owner_visitor_id)
-    |> where([g], g.status == "active" and g.expires_at <= ^stamp)
+    |> where([g], g.status == "active" and not is_nil(g.expires_at) and g.expires_at <= ^stamp)
     |> Repo.update_all(set: [status: "expired", exhausted_at: stamp, updated_at: stamp])
   end
 
@@ -462,6 +466,10 @@ defmodule OpenAgents.Inference do
     do: Application.get_env(:openagents, :inference_grant_max_cost_microusd, 5_000_000)
 
   defp grant_ttl_seconds, do: Application.get_env(:openagents, :inference_grant_ttl_seconds, 900)
+
+  # nil ttl means no deadline at all, rather than one computed from nil.
+  defp deadline(%{ttl_seconds: nil}), do: nil
+  defp deadline(%{ttl_seconds: seconds}), do: DateTime.add(now(), seconds, :second)
 
   defp input_price_microusd,
     do: Application.get_env(:openagents, :inference_input_price_microusd_per_ktoken, 1_250)

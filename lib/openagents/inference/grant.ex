@@ -66,14 +66,17 @@ defmodule OpenAgents.Inference.Grant do
     ])
     # machine_id is nil for Sarah-internal grants (a coding job metering its
     # own runtime, #122); computer-bound probe delegations always set it.
+    # `expires_at` is cast but not required: nil is a grant with no clock. A
+    # thread's authority is bounded by budget and revocation, not by how long
+    # the reader has been working. A computer-bound delegation still sets one,
+    # where the deadline is a security bound rather than a convenience.
     |> validate_required([
       :owner_visitor_id,
       :model_id,
       :token_digest,
       :max_total_tokens,
       :max_calls,
-      :max_cost_microusd,
-      :expires_at
+      :max_cost_microusd
     ])
     |> validate_number(:max_total_tokens, greater_than: 0)
     |> validate_number(:max_calls, greater_than: 0)

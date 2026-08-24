@@ -64,3 +64,12 @@
 # Persona-specific recording layout and source-manifest vocabulary.
 ^(assets|lib|test)/.*:[0-9]+:.*mic_left_sarah_right
 ^(assets|lib|test)/.*:[0-9]+:.*(sarah_authored_speech|(final|prepared)_sarah_script|sarah-(corpus|runbook|contracts|knowledge))
+
+# Production infrastructure still carries pre-rename names: the fleet instances
+# behind openagents.com are sarah-fleet-1..3, the WAL bucket is sarah-forge-wal,
+# and the Cloud SQL instance is sarah-postgres. The exit rehearsals record where
+# the WAL actually lives and which host each command ran on, because "a second
+# operator obtains nothing" is a claim about a named bucket in a named project
+# rather than a general sentiment. Renaming the infrastructure is a separate
+# operator action; naming it accurately here is not optional.
+^docs/forge-exit-rehearsals\.md:[0-9]+:.*sarah-(fleet-[0-9]|forge-wal|postgres)

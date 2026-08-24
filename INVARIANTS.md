@@ -3874,8 +3874,17 @@ cache. This proves that divergence between the WAL and what is served is
 detectable. The first is about replay; the second is about detection, and
 neither substitutes for the other.
 
+A receipt also depends on no key, which is what makes it survive every key
+rotation this forge can perform. The chain link is unkeyed `sha256` and the
+verifier was compiled against no vault, no `OpenAgents.ApiTokens`, and no
+`OpenAgents.Reputation`; `test/openagents/forge/key_rotation_test.exs` asserts
+both, so a receipt cannot quietly acquire a key dependency. That proof is
+rehearsal 4 of `docs/forge-exit-rehearsals.md`, which had no executable proof
+before #180.
+
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.WAL`,
-`OpenAgents.Forge.Repos`, and `test/openagents/forge/independence_test.exs`.
+`OpenAgents.Forge.Repos`, `test/openagents/forge/independence_test.exs`, and
+`test/openagents/forge/key_rotation_test.exs`.
 
 ### EXIT-003 — Recovery comes from the WAL, and the mirror is strictly lossy
 
@@ -3922,12 +3931,19 @@ key only PostgreSQL could produce would not survive `reconcile_receipts/1`,
 which rebuilds this table from the WAL alone. The absence is the invariant
 holding, not an omission.
 
-Two operational facts bound the claim. `:forge_mirror_urls` is empty in
-`config/config.exs` and set by no environment, so no mirror runs today and
-GitHub holds whatever was last pushed to it directly, which is the trade
-`REPOSITORY-002` records. And `mirror_now/1` is a force push of every ref, so
-configuring a mirror overwrites what direct pushes left there rather than
-merging with it.
+Two operational facts bound the claim, and the first was stated wrongly here
+until #180's rehearsal 3 checked it against production. `:forge_mirror_urls` is
+empty in `config/config.exs`, but `config/runtime.exs` reads
+`OPENAGENTS_FORGE_MIRROR_URLS_JSON` and that variable is set in production: the
+live node reports one configured mirror, and `/status` publishes its freshness.
+A mirror runs. And `mirror_now/1` is a force push of every ref, so the
+configured mirror overwrites what direct pushes left there rather than merging
+with it, which matters more now than it did while the claim was that none ran.
+#188 carries both, together with the finding that the mirror currently holds
+307 commits of this repository's history the WAL never held — so for the
+pre-seed history the mirror is strictly *richer* rather than strictly lossy,
+which this invariant does not watch for and cannot detect, because nothing was
+added to the recovery path.
 
 Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Pushes`,
 `OpenAgents.Forge.PushReceipt`, `OpenAgents.Forge.Verification`, and
@@ -4855,7 +4871,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs`, `test/openagents/forge/independence_test.exs` |
 | EXIT-001 | `test/openagents/data_rights/export_inventory_test.exs`, `test/openagents/data_rights/account_export_test.exs` |
-| EXIT-002 | `test/openagents/forge/independence_test.exs` |
+| EXIT-002 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/key_rotation_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs`, `test/openagents_web/controllers/forge_anchor_controller_test.exs` |

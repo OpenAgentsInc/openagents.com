@@ -68,7 +68,10 @@ every other.
   hand-rolled vaults seal three specific fields — GitHub access tokens, machine
   pairing tokens, and voice recording chunks — and each takes its key from the
   application environment, which is the operator's environment. They defend
-  against a stolen database dump, not against the operator.
+  against a stolen database dump, not against the operator. Only one of the
+  three can be rotated without losing what it sealed (#192). #193 carries the
+  at-rest question, and #178 decided the export path separately because losing
+  an export key costs nothing while losing a storage key would be permanent.
 - **Every repository's contents.** Git objects live unencrypted in the node's
   bare repositories and in the WAL. Whatever protection exists is disk-level
   and object-storage-level, which is to say transparent to whoever runs the
@@ -332,17 +335,34 @@ status page has hidden them.
 `docs/forge-exit-rehearsals.md` defines six rehearsals — restore, receipt
 verification, mirror divergence, key rotation, operator loss, and partial
 export — with what each proves, what it cannot, and whether anyone has run it.
-Five of the six have never been run outside the test suite, and the one that
-was run against the live forge failed: a full clone of this repository aborts
-on a missing object 275 commits behind `main` (#179). `EXIT-004` was green
-throughout, because it runs against a forge the test builds and never against
-the one people clone from.
+
+All six have now been run against the live forge (#180, 2026-08-24). Five found
+something. The restore rehearsal found that a full clone of this repository
+aborts on a missing object (#179); the receipt rehearsal found that the
+verifier reports zero findings on that same repository at the same hour, and
+that no entry in the live log carries the chain link `EXIT-005` describes; the
+mirror rehearsal found a configured mirror two contracts said did not exist,
+and 307 commits that live only on it (#188); the rotation rehearsal found two
+key families that lose data or history when rotated (#191, #192); and the
+export rehearsal found that `GET /data/export/account` answers `404` on the
+live forge (#187). The operator-loss rehearsal cannot be completed from inside
+this repository at all, and says so.
+
+Every one of `EXIT-001` through `EXIT-006` was green throughout. Each runs
+against a forge the test process builds; a rehearsal runs against the forge
+people use, and that is the entire difference.
 
 ## Open gaps
 
 | Gap | Issue |
 | --- | --- |
 | The live forge cannot serve a full clone of its own repository | #179 |
+| The exit surfaces are proven on `main` and absent from the deployed forge | #187 |
 | The published WAL anchor is served by the operator and witnessed by nobody, so a consistent rewrite is caught only by a reader who kept a copy | #151 |
 | No column is encrypted at rest, so the operator reads the source every export is built from | #193 |
-| Five of six exit rehearsals have never been performed | #180 |
+| A mirror is configured while two contracts say none is, and it holds 307 commits the forge cannot serve | #188 |
+| The documented WAL rebuild command does not exist | #189 |
+| `verify/1` cannot be reached from the repository name the configuration admits | #190 |
+| A backdated issuer-key retirement silently unverifies attestations | #191 |
+| The machine pairing vault cannot survive a GitHub key rotation | #192 |
+| No WAL copy exists outside storage the operator solely controls, so operator loss is unrehearsable | #151, #168 |

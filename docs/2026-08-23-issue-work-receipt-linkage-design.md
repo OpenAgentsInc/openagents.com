@@ -5,7 +5,7 @@
 document's own change
 **Issue:** `#10`, "Connect issues to agent work and release receipts"
 **Status:** design complete; stage 1 shipped in the same change, stage 4
-shipped in `#148`
+shipped in `#148`, stage 2 shipped in `#145`
 **Question:** `#10` asks to connect issues to durable agent jobs,
 conversations, commits, tests, releases, and deployments **without creating a
 second work record**. Which of those edges already exist, which exist but are
@@ -353,7 +353,7 @@ timeline source. Roughly 400 lines including tests.
 Promote the JSONB pointer to a typed indexed column, read attempts through
 it, and render them. Details in section 7. This is E1.
 
-### Stage 2 — start bounded agent work from an issue
+### Stage 2 — start bounded agent work from an issue (shipped)
 
 **Seam:** `AssignmentController` and the issue page.
 **Size:** medium. One authorized write path, one form, one refusal vocabulary.
@@ -474,6 +474,54 @@ API extension tests cover the empty array, ordering, the exact key set, and
 the index page. The LiveView tests cover both attempt events and the unworked
 issue. `POOL_SIZE=8 MIX_TEST_PARTITION=lane10 mix precommit` passes: 3,165
 tests, no warnings.
+
+---
+
+## 7b. What stage 2 shipped
+
+Stage 2 landed in `#145`. It adds one authorized write path and no storage.
+
+**The seam.** `OpenAgentsWeb.IssueShowLive` reaches
+`OpenAgents.Forge.Assignments.create/1` directly. The API route stays as it
+was: `OpenAgentsWeb.AssignmentController` authenticates a bearer token through
+`AssignmentControlAuth` and has no session path, so a signed-in page could not
+have used it without minting a token. Both surfaces enter the same admission,
+which is what stops a second executor from appearing.
+
+**What the control offers.** Connected Computers only. A Box target needs a
+conversation-scoped box and `OpenAgents.Box.list_boxes/1` refreshes provider
+state per box, which is a network call per row on a page render; the Computer
+path from `#127` needs neither. A computer is offered only when it is active,
+online, has at least one allowed root, and published at least one ACP agent,
+because a computer failing any of the four produces a refusal nobody can act
+on.
+
+**What comes from where.** The objective is built from the issue's number,
+title, and body. The branch defaults to `agent/issue-{number}` and is never the
+default or a protected branch. The working directory and the agent are chosen
+from the computer's own `roots` and probed `acp_agents`, so a crafted event
+cannot widen the scope the computer published. The deadline is the assignment
+TTL, which is the budget the attempt is bounded by.
+
+**One bug fixed on the way.** `Assignments.persist_assignment/7` used
+`Repo.insert!`, so `forge_assignments_one_active_issue_index` raised
+`Ecto.InvalidChangesetError` instead of returning `:assignment_issue_claimed`.
+`claim_error/1` had been written for exactly that case and was unreachable for
+it, and no test covered the refusal. The insert now returns its changeset and
+rolls back, so an issue with a live attempt is refused by name and the page can
+say which branch holds it.
+
+**Contract.** `INVARIANTS.md`, `ISSUE-004`.
+
+**Tests.** `test/openagents_web/live/issue_start_work_live_test.exs` covers who
+is offered the control, an anonymous and a signed-in reader refused at the
+event rather than only hidden, the attempt reaching the timeline without a
+reload, the objective coming from the issue, a protected branch refused by
+name, a crafted working directory replaced rather than forwarded, and the live
+attempt naming its branch.
+
+**What it does not do.** The page does not subscribe to the running attempt, so
+progress and a cancel control still need a reload — that is stage 3.
 
 ---
 

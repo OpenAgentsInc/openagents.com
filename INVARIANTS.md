@@ -3581,6 +3581,52 @@ Evidence: `OpenAgents.Issues.Evidence`, `OpenAgents.Issues.EvidenceEntry`,
 `test/openagents/issues/evidence_test.exs`, and
 `test/openagents_web/controllers/issue_controller_test.exs`.
 
+### ISSUE-004 — Agent work on an issue starts through one admission
+
+Status: Current
+
+An issue page can start the work it describes, and it does so by reaching
+`OpenAgents.Forge.Assignments.create/1` — the same admission the API route
+uses. There is no second executor, no queue, and no second work record: the
+button produces one `forge_assignments` row, which is the attempt, and one
+`work_jobs` row, which is the execution.
+
+**Authority is re-checked, not only hidden.** The control renders for a viewer
+with write authority on the repository. Hiding it is a courtesy; the refusal is
+the contract. `IssueShowLive` re-reads the repository and the membership on
+every write, and `Assignments.create/1` refuses again with
+`:repository_not_writable`, so a crafted event from a reader starts nothing.
+
+**The objective is read from the issue.** The prompt is built from the issue's
+number, title, and body rather than typed beside it, so what the agent was
+asked to do and what the issue asked for cannot drift. The body is clamped well
+inside the 8,000-byte prompt bound rather than refused for being long.
+
+**The target's own declarations decide, never the request.** The working
+directory is chosen from the computer's `roots` and the agent from its probed
+`acp_agents`; a value outside either is replaced by one the computer declared
+rather than forwarded. A crafted event therefore cannot widen the scope the
+computer published, and `ComputerAgentJobs`' `:cwd_not_allowed` and
+`:agent_not_available` remain as the second refusal for a computer whose
+declarations changed between the render and the admission.
+
+**The branch is never the default or a protected one.** `Assignments` already
+refused both; the suggestion is `agent/issue-{number}`, and the credential the
+attempt mints can write that branch and nothing else (IDENTITY-006).
+
+**One attempt may be live per issue.** `forge_assignments_one_active_issue_index`
+is a partial unique index over `admitted` and `running`, so terminal attempts
+all stay and one is live at a time. That refusal is now typed:
+`persist_assignment/7` returns `:assignment_issue_claimed` rather than raising
+on the constraint, which is what lets the page name the branch the live attempt
+is running on instead of failing opaquely. Every other refusal the admission
+returns — an offline or revoked computer, a busy target, a protected branch, a
+disabled controller — is shown as itself.
+
+Evidence: `OpenAgentsWeb.IssueShowLive`, `OpenAgents.Forge.Assignments`,
+`OpenAgents.ComputerAgentJobs`, and
+`test/openagents_web/live/issue_start_work_live_test.exs`.
+
 ### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
 
 Status: Current
@@ -3843,3 +3889,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |
 | ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |
 | ISSUE-003 | `test/openagents/issues/evidence_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
+| ISSUE-004 | `test/openagents_web/live/issue_start_work_live_test.exs` |

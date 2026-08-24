@@ -27,9 +27,18 @@ defmodule OpenAgentsWeb.IssueShowLive do
   Agent work is derived the same way, from the durable assignments that bound
   an attempt to this issue. The issue remains the requested outcome; the page
   reads the attempt records rather than storing a second copy of them.
+
+  Starting that work is the one write here that leaves this application. It
+  reaches `OpenAgents.Forge.Assignments.create/1` — the same admission the API
+  route uses — so there is no second executor, no queue, and no second work
+  record. The objective is read from the issue rather than typed again, and
+  every refusal the context returns is shown as itself rather than as a
+  generic failure.
   """
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Computer
+  alias OpenAgents.Conversations
   alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
   alias OpenAgents.Issues.ClosingReferences
@@ -37,6 +46,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Issues.TaskReferences
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Labels
+  alias OpenAgents.Machines
   alias OpenAgents.Markdown
   alias OpenAgents.Milestones
   alias OpenAgents.Notifications
@@ -92,7 +102,8 @@ defmodule OpenAgentsWeb.IssueShowLive do
        :og,
        OG.meta(OG.issue(repository.namespace.slug, repository.name, issue))
      )
-     |> load(issue)}
+     |> load(issue)
+     |> assign_work_options()}
   end
 
   def handle_event("toggle_subscription", _params, socket) do
@@ -160,6 +171,19 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   def handle_event("set_state", %{"state" => "closed"} = params, socket),
     do: with_edit_authority(socket, &set_state(&1, "closed", params["reason"] || "completed"))
+
+  # The computer decides which working directories and which agents are on
+  # offer, so choosing one re-reads both rather than leaving a stale list the
+  # admission would refuse a moment later.
+  def handle_event("preview_work", %{"work" => params}, socket) do
+    {:noreply, assign(socket, :work_form, to_form(work_params(socket, params), as: :work))}
+  end
+
+  def handle_event("start_work", %{"work" => params}, socket) do
+    with_authority(socket, :can_write, "You can no longer start work on this issue.", fn socket ->
+      {:noreply, start_work(socket, params)}
+    end)
+  end
 
   def handle_event("toggle_label", %{"name" => name}, socket) do
     with_authority(
@@ -325,6 +349,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
     |> assign(:can_edit, can_edit)
     |> assign(:editing, socket.assigns.editing and can_edit)
     |> assign_repository_options()
+    |> assign_work_options()
   end
 
   # The pickers the editor offers. They were read at mount and never again, so
@@ -347,6 +372,210 @@ defmodule OpenAgentsWeb.IssueShowLive do
     )
   end
 
+  defp agent_options(computers, computer_id) do
+    computers |> Enum.find(&(&1.id == computer_id)) |> acp_agents() |> Enum.map(&{&1, &1})
+  end
+
+  defp root_options(computers, computer_id) do
+    case Enum.find(computers, &(&1.id == computer_id)) do
+      %{roots: roots} when is_list(roots) -> Enum.map(roots, &{&1, &1})
+      _absent -> []
+    end
+  end
+
+  # ── starting bounded agent work ─────────────────────────────────────────
+
+  # Everything the start control offers, read beside the authority that
+  # decides whether to offer it at all. A viewer without write access is
+  # offered nothing, and a computer that went offline between renders is not
+  # in the list — and would still be refused by name if it were.
+  defp assign_work_options(socket, params \\ %{}) do
+    computers = eligible_computers(socket.assigns)
+
+    socket
+    |> assign(:work_computers, computers)
+    |> assign(
+      :work_form,
+      to_form(work_params(computers, socket.assigns.issue, params), as: :work)
+    )
+  end
+
+  defp eligible_computers(%{can_write: true, current_user: %{id: user_id}}) do
+    user_id
+    |> Machines.list_machines()
+    |> Enum.filter(&startable?/1)
+  end
+
+  defp eligible_computers(_assigns), do: []
+
+  # A computer can take this work only if it is connected, has somewhere it is
+  # allowed to work, and runs an agent that can be named. Offering one that
+  # fails any of the three would produce a refusal a person cannot act on.
+  defp startable?(machine) do
+    machine.status == "active" and Computer.online?(machine.id) and
+      machine.roots not in [nil, []] and acp_agents(machine) != []
+  end
+
+  defp acp_agents(%{last_probe: %{"acp_agents" => agents}}) when is_list(agents) do
+    for agent <- agents, is_map(agent), is_binary(agent["id"]), agent["id"] != "", do: agent["id"]
+  end
+
+  defp acp_agents(_machine), do: []
+
+  defp work_params(socket_or_computers, params_or_issue, params \\ nil)
+
+  defp work_params(%Phoenix.LiveView.Socket{} = socket, params, nil),
+    do: work_params(socket.assigns.work_computers, socket.assigns.issue, params)
+
+  defp work_params(computers, issue, params) do
+    params = params || %{}
+    computer = chosen_computer(computers, params["computer_id"])
+
+    %{
+      "computer_id" => computer && computer.id,
+      "agent_id" => chosen(acp_agents(computer), params["agent_id"]),
+      "cwd" => chosen(computer && computer.roots, params["cwd"]),
+      "branch" => branch_or_default(params["branch"], issue)
+    }
+  end
+
+  defp chosen_computer(computers, id) do
+    Enum.find(computers, &(&1.id == id)) || List.first(computers)
+  end
+
+  defp chosen(nil, _requested), do: nil
+  defp chosen([], _requested), do: nil
+  defp chosen(values, requested), do: if(requested in values, do: requested, else: hd(values))
+
+  # The branch is never the default or a protected one — `Assignments` refuses
+  # both — so the suggestion names the issue it is for.
+  defp branch_or_default(branch, _issue) when is_binary(branch) and branch != "", do: branch
+  defp branch_or_default(_branch, issue), do: "agent/issue-#{issue.number}"
+
+  # The one attempt that may be live per issue, per
+  # `forge_assignments_one_active_issue_index`. Naming it is what turns a
+  # 409 into something a person can read.
+  defp live_attempt(attempts) do
+    Enum.find(attempts, &(&1.state in ["admitted", "running"]))
+  end
+
+  defp start_work(socket, params) do
+    %{issue: issue, repository: repository, current_user: user} = socket.assigns
+    params = work_params(socket, params)
+
+    with {:ok, computer} <- chosen_or_refuse(socket.assigns.work_computers, params["computer_id"]),
+         {:ok, conversation} <- Conversations.ensure_conversation(user) do
+      attrs = %{
+        "target_kind" => "computer",
+        "machine_id" => computer.id,
+        "conversation_id" => conversation.id,
+        "repository_id" => repository.id,
+        "issue_number" => issue.number,
+        "branch" => params["branch"],
+        "agent_id" => params["agent_id"],
+        "cwd" => params["cwd"],
+        "prompt" => objective(issue, params["branch"]),
+        "requesting_user" => user,
+        "requesting_principal" => user
+      }
+
+      case Assignments.create(attrs) do
+        {:ok, _assignment, _credential} ->
+          socket
+          |> put_flash(:info, "Work started on #{computer.name}, on branch #{params["branch"]}.")
+          |> assign_work_options()
+          |> load(Issues.get_issue!(repository, issue.id))
+
+        {:error, reason} ->
+          socket
+          |> put_flash(:error, refusal(reason, socket))
+          |> assign_work_options(params)
+      end
+    else
+      {:error, reason} ->
+        socket
+        |> put_flash(:error, refusal(reason, socket))
+        |> assign_work_options(params)
+    end
+  end
+
+  defp chosen_or_refuse(computers, id) do
+    case Enum.find(computers, &(&1.id == id)) do
+      nil -> {:error, :machine_offline}
+      computer -> {:ok, computer}
+    end
+  end
+
+  # The objective comes from the issue, not from free text typed beside it, so
+  # what the agent was asked to do and what the issue asked for cannot drift.
+  # `ComputerAgentJobs` bounds a prompt at 8,000 bytes, so the body is clamped
+  # well inside that rather than refused for being long.
+  defp objective(issue, branch) do
+    body = issue.body || ""
+    body = if byte_size(body) > 6_000, do: binary_part(body, 0, 6_000), else: body
+
+    """
+    Do the work issue ##{issue.number} describes, and nothing beyond it.
+
+    Title: #{issue.title}
+
+    #{body}
+
+    Commit your work on the branch `#{branch}`, which is the only branch you     are authorized to write. Push it when the work is done.
+    """
+    |> String.trim()
+  end
+
+  # Every refusal the admission already returns, said as itself. A generic
+  # failure here would hide the one fact that tells someone what to do next.
+  defp refusal(:assignment_issue_claimed, socket) do
+    case live_attempt(socket.assigns[:attempts] || []) do
+      %{branch: branch} ->
+        "Work is already running on this issue, on branch #{branch}. " <>
+          "One attempt may be live at a time."
+
+      _none ->
+        "Work is already running on this issue. One attempt may be live at a time."
+    end
+  end
+
+  defp refusal(:assignment_box_busy, _socket), do: "That computer is already running work."
+  defp refusal(:assignment_machine_busy, _socket), do: "That computer is already running work."
+
+  defp refusal(:machine_offline, _socket),
+    do: "That computer is not connected. Connect it and try again."
+
+  defp refusal(:machine_revoked, _socket), do: "That computer's access was revoked."
+  defp refusal(:machine_not_found, _socket), do: "That computer is no longer paired."
+
+  defp refusal(:protected_branch, _socket),
+    do: "That branch is protected. Agent work needs a branch of its own."
+
+  defp refusal(:invalid_assignment_branch, _socket), do: "That is not a usable branch name."
+
+  defp refusal(:repository_not_writable, _socket),
+    do: "You can no longer start work on this repository."
+
+  defp refusal(:agent_not_available, _socket),
+    do: "That computer is not running the agent you chose."
+
+  defp refusal(:cwd_not_allowed, _socket),
+    do: "That working directory is outside what the computer allows."
+
+  defp refusal(:computer_controller_disabled, _socket),
+    do: "Starting work on a computer is turned off on this deployment."
+
+  defp refusal(:invalid_delegation_request, _socket),
+    do: "This issue does not describe enough to work on. Add a description first."
+
+  defp refusal(:conversation_not_found, _socket),
+    do: "Your account has no conversation to run this work in."
+
+  defp refusal(reason, _socket) when is_atom(reason),
+    do: "Work was refused: #{reason |> Atom.to_string() |> String.replace("_", " ")}."
+
+  defp refusal(_reason, _socket), do: "Work was refused."
+
   # One place rebuilds everything derived from the issue, so a write cannot
   # leave the timeline describing the previous version of the page.
   defp load(socket, issue) do
@@ -362,6 +591,8 @@ defmodule OpenAgentsWeb.IssueShowLive do
     socket
     |> assign(:issue, issue)
     |> assign(:comments, comments)
+    |> assign(:attempts, attempts)
+    |> assign(:live_attempt, live_attempt(attempts))
     |> assign(:pull_request_state, pull_request_state(issue))
     |> assign(:form, to_form(Issues.change_issue(issue)))
     |> assign(:events, timeline(issue, comments, attempts, references, syncs, base))
@@ -579,6 +810,64 @@ defmodule OpenAgentsWeb.IssueShowLive do
               </Circle.field_menu>
             </:group>
           </Circle.properties_panel>
+
+          <%!-- Outside the properties panel too, and for the opposite
+          reason: everything in that panel edits the issue record, and this
+          starts an execution somewhere else. It needs write authority, which
+          is what `Assignments.create/1` re-checks server-side, so the control
+          is hidden and the event is refused rather than only hidden. --%>
+          <section :if={@can_write} id="issue-work" class="properties-panel__group">
+            <h3 class="properties-panel__heading">Agent work</h3>
+
+            <p :if={@live_attempt} class="properties-panel__none" id="issue-work-live">
+              Work is running on branch <code>{@live_attempt.branch}</code>. One attempt may be live
+              on an issue at a time.
+            </p>
+
+            <p
+              :if={is_nil(@live_attempt) and @work_computers == []}
+              class="properties-panel__none"
+              id="issue-work-unavailable"
+            >
+              No connected computer can take this work. Pair one, keep it online, and give it a
+              working directory and an agent.
+            </p>
+
+            <.form
+              :if={is_nil(@live_attempt) and @work_computers != []}
+              for={@work_form}
+              id="issue-work-form"
+              phx-change="preview_work"
+              phx-submit="start_work"
+            >
+              <.input
+                field={@work_form[:computer_id]}
+                type="select"
+                label="Computer"
+                options={Enum.map(@work_computers, &{&1.name, &1.id})}
+              />
+              <.input
+                field={@work_form[:agent_id]}
+                type="select"
+                label="Agent"
+                options={agent_options(@work_computers, @work_form[:computer_id].value)}
+              />
+              <.input
+                field={@work_form[:cwd]}
+                type="select"
+                label="Working directory"
+                options={root_options(@work_computers, @work_form[:computer_id].value)}
+              />
+              <.input field={@work_form[:branch]} type="text" label="Branch" />
+              <p class="properties-panel__none">
+                The objective is read from this issue. The agent may write only this branch, and
+                its credential expires with the attempt.
+              </p>
+              <.button id="issue-work-start" variant={:primary} size={:sm} type="submit">
+                Start work
+              </.button>
+            </.form>
+          </section>
 
           <%!-- Outside the properties panel on purpose. Everything in that
           panel changes the issue and needs a writable membership; following an

@@ -398,6 +398,11 @@ defmodule OpenAgents.Forge.Assignments do
       {credential_delivery_status, credential_delivery_reason} =
         credential_delivery(target_kind, target)
 
+      # `forge_assignments_one_active_issue_index` is a real refusal, not a
+      # crash: an issue that already has a live attempt must come back as
+      # `:assignment_issue_claimed` so a caller can say which attempt holds it.
+      # `Repo.insert!` raised on that constraint instead, which left
+      # `claim_error/1` unreachable for the case it was written for.
       assignment =
         %Assignment{id: id}
         |> Assignment.changeset(%{
@@ -414,7 +419,11 @@ defmodule OpenAgents.Forge.Assignments do
           credential_delivery_status: credential_delivery_status,
           credential_delivery_reason: credential_delivery_reason
         })
-        |> Repo.insert!()
+        |> Repo.insert()
+        |> case do
+          {:ok, inserted} -> inserted
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
 
       %AssignmentCredential{}
       |> AssignmentCredential.changeset(%{

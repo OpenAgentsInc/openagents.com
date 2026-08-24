@@ -1,4 +1,4 @@
-# Harbor and Terminal-Bench: the effectiveness engine
+# Harbor and Terminal-Bench: the Gym
 
 Date: 2026-08-24
 
@@ -6,6 +6,40 @@ Status: plan. Companion to `docs/2026-08-24-benchmark-workbench-agentx.md`,
 whose effectiveness axis (axis 2) this document re-bases on Harbor. Read
 from the clone at `projects/repos/harbor` (v0.16.x, Apache-style OSS from
 the Terminal-Bench creators).
+
+## 0. The Gym framing
+
+This is not only measurement. Harbor and Terminal-Bench are the **Gym**:
+the training ground where the coder's capability work proves itself
+against graded tasks, the way a model proves itself against an RL
+environment. Concretely, three loops run through the same suites:
+
+1. **Extend the coder.** A new capability lands with a Gym delta: the
+   suite score before and after, on the same recipe. A capability that
+   moves no score is questioned; a graded task class the coder cannot
+   pass yet is a capability backlog item.
+2. **Test multi-model swapping.** The same suite per compute-mix lane —
+   each catalog model through the proxy, and Fable through the
+   foreign-harness delegation lane beside the stock claude-code adapter —
+   turns "which lane should this task class route to" into an
+   evidence-backed policy instead of a vibe, and eventually feeds the
+   routing policy itself.
+3. **Test plugins.** The same suite with and without a plugin loaded;
+   provenance-stamped `tool.ran` steps in the ATIF make the delta
+   attributable to the exact plugin digest. A plugin's Gym delta is the
+   registry's first honest quality signal.
+
+RewardKit closes the far end of the loop: the same trials become RL
+rollouts when optimization work begins — candidates, never
+auto-promotions, per the standing law.
+
+**The surface** shipped with this plan (`310dac1`): `gym_runs` records
+graded runs idempotently by recipe digest, the bench harness posts them
+through `POST /api/v3/gym/runs`, and `/gym` — a sidebar entry under
+Projects — renders the scoreboard. Operator-only on every path for now:
+the operator allowlist is the whitelist, deliberately, rather than a
+second gating mechanism; widening it later is a decision, not a default.
+The Gym project (project 14) tracks the lane.
 
 ## 1. What Harbor is
 

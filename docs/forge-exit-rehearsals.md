@@ -96,6 +96,16 @@ is absent rather than corrupt, and no rebuild from the WAL can produce it,
 because the WAL never held it either. Everything pushed since the seed —
 282 commits — is present and intact.
 
+`main` is not the only ref this reached, and one object found by hand was not
+the only one. Probing every advertised ref by clone depth: five branches —
+`codex/admin-posthog-analytics`, `codex/github-backed-repositories`,
+`codex/posthog-integration`, `components-gallery`, and `repos-ui` — fail at
+depth 2, so each holds its seeded tip and not that tip's parent. `main` and
+the other seventeen serve to depth 25 and share `main`'s boundary. That is six
+absent objects at six boundaries, one mechanism rather than six losses: the
+`--depth=1` seed copied one commit per ref, and a ref keeps that boundary
+until something pushes across it.
+
 What broke the clone is the missing graft rather than the missing history. A
 `shallow` file naming the seed commit stops the walk at the boundary, and a
 clone then succeeds and reports honestly that history ends there; without it

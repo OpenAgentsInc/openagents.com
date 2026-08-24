@@ -1968,11 +1968,18 @@ conversation, and a thread is not one.
   thread's active grants inside the transaction that writes the terminal row,
   and `mint_grant/1` refuses a thread that is not open. Deleting a thread — or
   the account, under the DATA-004 cascade — deletes its grants with it.
-- **A thread is bounded.** The objective is capped at 32 KB and the terminal
-  report at 32 KB, both by check constraint; every transcript entry is pinned
-  to `openagents.thread.event.v1` with a 16 KB payload ceiling and no
-  `updated_at`; and a thread is open with no report or terminal with one,
-  never both and never neither.
+- **A thread is bounded where a bound means something.** The objective is
+  capped at 32 KB and the terminal report at 32 KB, both by check constraint;
+  every transcript entry is pinned to `openagents.thread.event.v1` with no
+  `updated_at`; and a thread is open with no report or terminal with one, never
+  both and never neither. A transcript entry carries no size ceiling, only the
+  requirement that it says something (`thread_events_payload_present_check`).
+  The 16 KB ceiling it used to carry was inherited from `scv_run_events`, whose
+  payloads are a deliberately minimal projection of work stored elsewhere; this
+  table is the work, and has to reproduce a session as a full ATIF trajectory. A
+  single observed reasoning block is 38,791 characters, so the ceiling bought
+  chunking and reassembly on every read rather than any real bound. What a
+  client sends to a model is bounded by the client.
 
 - **Authority is capped at admission.** `OpenAgents.Threads.open/3` refuses an
   account already holding `maximum_open_threads_per_account` open threads with

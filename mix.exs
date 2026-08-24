@@ -152,18 +152,10 @@ defmodule OpenAgents.MixProject do
         "esbuild openagents --minify",
         "phx.digest"
       ],
-      precommit: [
-        "cmd sh ops/dev/install-push-guard.sh --ensure",
-        "hex.audit",
-        "deps.audit",
-        "compile --warnings-as-errors",
-        "deps.unlock --check-unused",
-        "format",
-        "cmd ops/ci/reference-check.sh",
-        "cmd elixir ops/ci/docs-check.exs",
-        "assets.test",
-        "test --warnings-as-errors"
-      ]
+      # Scaled to what changed: a prose-only change runs the checks that read
+      # prose, and everything else runs the whole gate. The rules live in the
+      # script because an alias cannot branch. See `ops/dev/precommit.sh`.
+      precommit: ["cmd sh ops/dev/precommit.sh"]
     ]
   end
 end

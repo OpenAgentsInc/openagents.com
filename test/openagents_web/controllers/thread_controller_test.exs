@@ -571,6 +571,44 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert Enum.map(rest["events"], & &1["payload"]["text"]) |> List.last() == "three"
     end
 
+    test "records a payload far larger than the old ceiling", %{authenticated: conn, id: id} do
+      # A single reasoning block observed in a live session is 38,791
+      # characters. Under the inherited 16 KB ceiling the only way to record one
+      # was to split it and reassemble it on every read.
+      reasoning = String.duplicate("thinking about the problem. ", 2_000)
+      assert byte_size(reasoning) > 16_384
+
+      conn
+      |> post(~p"/api/v3/threads/#{id}/events", %{
+        "event_type" => "turn.reasoning",
+        "payload" => %{"text" => reasoning}
+      })
+      |> json_response(201)
+
+      body = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+
+      stored =
+        body["events"]
+        |> Enum.find(&(&1["event_type"] == "turn.reasoning"))
+        |> get_in(["payload", "text"])
+
+      # Stored whole, so the transcript reproduces the session rather than a
+      # summary of it.
+      assert stored == reasoning
+    end
+
+    test "accepts an event whose type is the whole of it", %{authenticated: conn, id: id} do
+      # Some events carry nothing but their type, and the route defaults an
+      # absent payload to an empty object. The remaining floor is that the
+      # column holds valid JSON, not that the JSON is interesting.
+      body =
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{"event_type" => "turn.started"})
+        |> json_response(201)
+
+      assert body["thread"]["event_count"] > 0
+    end
+
     test "refuses an event with no type", %{authenticated: conn, id: id} do
       body =
         conn

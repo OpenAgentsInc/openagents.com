@@ -3,9 +3,16 @@ defmodule OpenAgents.Threads.Event do
   One bounded, append-only entry in a thread's transcript
   (`openagents.thread.event.v1`).
 
-  The shape follows `OpenAgents.SCV.ExecutionEvent`: the schema string is
-  pinned by the database, the payload is capped at 16 KB, and there is no
-  `updated_at`, so a recorded event is evidence rather than state.
+  The schema string is pinned by the database and there is no `updated_at`, so a
+  recorded event is evidence rather than state.
+
+  Unlike `OpenAgents.SCV.ExecutionEvent`, whose payloads are a deliberately
+  minimal projection of work that lives elsewhere, this table is the work: a
+  thread's transcript has to reproduce the session as a full ATIF trajectory.
+  So the payload carries what happened rather than a summary of it, and the only
+  floor is that it is a JSON object — an event whose type is the whole of it
+  satisfies that. What a client sends to a model is bounded by the client; what
+  the record holds is what happened.
   """
 
   use Ecto.Schema
@@ -39,6 +46,6 @@ defmodule OpenAgents.Threads.Event do
     |> validate_inclusion(:schema, [@schema_version])
     |> foreign_key_constraint(:thread_id)
     |> check_constraint(:schema, name: :thread_events_schema_check)
-    |> check_constraint(:payload, name: :thread_events_payload_bound_check)
+    |> check_constraint(:payload, name: :thread_events_payload_present_check)
   end
 end

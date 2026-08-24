@@ -87,16 +87,26 @@ defmodule OpenAgents.ThreadsTest do
                thread |> Threads.list_events() |> Enum.map(& &1.event_type)
     end
 
-    test "a payload past the ceiling is refused by the database" do
+    test "a payload larger than a projection would allow is recorded whole" do
       user = owner("event-bound")
       {:ok, thread} = Threads.open(user, "Record something large")
 
-      assert {:error, changeset} =
-               Threads.record_event(thread, "thread.turn.started", %{
-                 "blob" => String.duplicate("a", 16_400)
-               })
+      # Past the 16 KB ceiling this table inherited from `scv_run_events`, whose
+      # payloads are a minimal projection of work stored elsewhere. This table
+      # is the work: a single reasoning block observed in a live session is
+      # 38,791 characters, and a transcript that cannot hold it cannot
+      # reproduce the session.
+      blob = String.duplicate("a", 40_000)
 
-      assert %{payload: _} = errors_on(changeset)
+      assert {:ok, _updated} =
+               Threads.record_event(thread, "thread.turn.started", %{"blob" => blob})
+
+      stored =
+        thread
+        |> Threads.list_events()
+        |> Enum.find(&(&1.payload["blob"] != nil))
+
+      assert stored.payload["blob"] == blob
     end
 
     test "a terminal thread accepts no further transcript" do

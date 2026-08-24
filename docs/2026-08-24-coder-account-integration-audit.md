@@ -141,11 +141,13 @@ about taste.
 
 ### The two limits
 
-**A payload is 2 to 16,384 bytes**, enforced by
-`thread_events_payload_bound_check` on `octet_length(payload::text)`.
+**A payload had a 16,384 byte ceiling**, enforced by
+`thread_events_payload_bound_check`. It was inherited from tables that carry no
+content and has been removed; the section below says why.
 
 **A listing returns at most 50 events**, `@maximum_listed` in
-`OpenAgents.Threads`.
+`OpenAgents.Threads`. This one is a pagination bound rather than a storage
+bound, and the cursor added alongside it is the answer.
 
 Measured against four real coder sessions from the same afternoon:
 
@@ -156,16 +158,15 @@ Measured against four real coder sessions from the same afternoon:
 | `17-08-32` | 4 | 5 | 4 | 9 | 8,418 B |
 | `17-24-37` | 6 | 0 | 6 | 6 | 0 B |
 
-For tool results the payload cap is not the binding constraint: the largest
-observed was 8.4 KB, and the transcript already bounds a result to 4,000
-characters before it reaches a model, so the same bound applied to an event
-keeps every one of them comfortably inside 16 KB. A 30 KB shell output would not
-fit, which is why the bound is applied rather than assumed. Reasoning is the
-exception, and it has its own section below.
+The payload ceiling turned out to be inherited rather than reasoned, and is
+gone; see below. What remains true of the measurements is that tool results are
+small — the largest observed was 8.4 KB — and that reasoning is not: a single
+block reached 38,791 characters, which is what exposed the ceiling as the wrong
+rule for this table.
 
 **The listing cap was the binding constraint.** Turn-level persistence fits
 inside fifty with room to spare; tool-level passes it on an ordinary working
-session, and recording reasoning in parts pushes it further still. So `list_events/2` now takes an `:after` cursor and the route publishes
+session. So `list_events/2` now takes an `:after` cursor and the route publishes
 each event's id, because a history that cannot be read back is not persistence.
 That is the one server change this section required, and it is done.
 
@@ -184,8 +185,8 @@ Recorded, in the order they happen:
   fact, and splitting them doubles the count against the cap for nothing.
 - `turn.assistant` — the answer, with the turn's token usage and call count.
 
-**Reasoning is recorded, and it is not optional.** An earlier draft of this
-document left it out and called that a saving, on the grounds that it is not
+**Reasoning is recorded whole, and it is not optional.** An earlier draft of
+this document left it out and called that a saving, on the grounds that it is not
 sent back to a model. That was wrong twice over. It is sent back now — a model
 that cannot see how it reached its last answer reasons its way there again — and
 it is the largest single part of what a session produces: 150,322 characters
@@ -199,20 +200,47 @@ A delta is how a reply arrived rather than what it is, and a transcript that
 stores the arrival cannot be read back as the thing. Notices never reached a
 model. That is the whole of what is dropped.
 
-### Reasoning does not fit in one event
+### The payload ceiling was inherited, and is gone
 
-The payload cap is 16,384 bytes and the largest single reasoning block measured
-is **38,791 characters**. So reasoning is the one thing here that a single event
-cannot hold, and the cap is not the wrong size — a bounded event is the point of
-an append-only evidence table.
+An earlier draft of this section proposed splitting reasoning across events,
+because the largest single block measured is 38,791 characters against a 16,384
+byte payload ceiling. That was fitting the wrong constraint, and the reasoning
+given for it — that a bounded event is the point of an append-only evidence
+table — does not survive reading where the bound came from.
 
-It is stored in ordered parts: `turn.reasoning` events carrying `part`, `of`,
-and a slice bounded well inside the cap, reassembled in order on read. The
-alternative is raising the constraint, which trades a bound that holds for every
-event against one case, and the case is the one that will keep growing.
+The same `octet_length(payload::text) <= 16384` appears on `voice_events`,
+`scv_run_events`, program receipts, and `ComputerActivity`. `thread_events`
+copied it: the schema said so outright. Where that bound is actually justified,
+it is justified by those tables carrying **no content** —
+`2026-08-21-sarah-computers-and-scv-architecture-audit.md` records that an SCV
+event payload is reduced to a fixed key allowlist and that "no file paths, tool
+arguments, tool output, or report prose reach an event row", and that
+`ComputerActivity` events are "a projection and never the authority".
 
-This also means the event count per turn is no longer fixed, which the cursor
-already handles.
+`thread_events` is the authority, and the bar set above is a full ATIF
+trajectory. A ceiling designed to keep content out of a projection is the wrong
+rule for the table that holds the content. It is dropped
+(`20260824184030_relax_thread_event_payload_ceiling`), the floor stays at "is a
+JSON object", and `INVARIANTS.md` moves with it.
+
+### Storing and sending are different questions
+
+Removing the ceiling does not mean a client sends everything to a model on every
+round. Those are separate decisions and the confusion between them is what
+produced the chunking proposal:
+
+- **The record holds what happened.** Every turn, all of the reasoning, every
+  tool call with its whole result. Unbounded, because a truncated record cannot
+  reproduce the session and a session that cannot be reproduced is not evidence
+  of anything.
+- **The wire is bounded by the client.** The model transcript already bounds a
+  tool result to 4,000 characters, and that bound belongs there — it is a
+  context-budget decision made against a model's window, not a property of what
+  happened.
+
+A client that needs to page a large payload over the wire can do that when it
+needs to. It is a transport concern, and solving it in the store cost every
+future reader a reassembly step for nothing.
 
 ### Resume
 

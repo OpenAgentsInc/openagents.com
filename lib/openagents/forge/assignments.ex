@@ -14,7 +14,6 @@ defmodule OpenAgents.Forge.Assignments do
   alias OpenAgents.Box.ConversationBox
   alias OpenAgents.BoxRuns
   alias OpenAgents.Forge.{Assignment, AssignmentCredential, AssignmentCredentialVault}
-  alias OpenAgents.Issues
   alias OpenAgents.Issues.{Evidence, Issue}
   alias OpenAgents.Repo
   alias OpenAgents.Conversations
@@ -51,14 +50,8 @@ defmodule OpenAgents.Forge.Assignments do
            ),
          {:ok, assignment, plaintext} <-
            persist_assignment(target_kind, target, repository, issue, branch, principal, attrs) do
-      case report_claim(assignment) do
-        {:ok, _comment} ->
-          start_target(assignment, target, target_kind, plaintext, attrs, owner, conversation)
-
-        {:error, reason} ->
-          _ = finish(assignment, "failed", nil, "claim_event_failed")
-          {:error, reason}
-      end
+      _ = announce(assignment)
+      start_target(assignment, target, target_kind, plaintext, attrs, owner, conversation)
     end
   end
 
@@ -87,6 +80,7 @@ defmodule OpenAgents.Forge.Assignments do
               |> Repo.update!()
           end
 
+        _ = announce(assignment)
         {:ok, assignment, plaintext}
 
       {:error, reason} ->
@@ -103,6 +97,8 @@ defmodule OpenAgents.Forge.Assignments do
       assignment
       |> Assignment.changeset(%{state: "running", started_at: DateTime.utc_now()})
       |> Repo.update!()
+
+    _ = announce(assignment)
 
     params = %{
       "prompt" => attrs[:prompt] || attrs["prompt"] || "",
@@ -334,8 +330,7 @@ defmodule OpenAgents.Forge.Assignments do
         # a receipt that already landed. Never load-bearing: an attempt that
         # finished is finished whether or not its evidence could be written.
         _ = Evidence.bind_attempt(updated)
-        _ = report(updated)
-        if updated.state in ["failed", "cancelled"], do: _ = report_release(updated)
+        _ = announce(updated)
         {:ok, updated}
 
       {:ok, {:already_finished, current}} ->
@@ -378,57 +373,86 @@ defmodule OpenAgents.Forge.Assignments do
     :ok
   end
 
+  @doc """
+  Subscribes the caller to the attempts on one issue.
+
+  The topic carries announcements, not rows. A subscriber is told that the
+  attempts on an issue moved and re-reads them through its own authorized
+  read, so a message can never hand anybody an attempt their repository
+  membership — or their transparency tier — would have withheld.
+  """
+  @spec subscribe_attempts(integer()) :: :ok | {:error, term()}
+  def subscribe_attempts(issue_id) when is_integer(issue_id),
+    do: Phoenix.PubSub.subscribe(OpenAgents.PubSub, attempts_topic(issue_id))
+
+  @doc "Unsubscribes the caller from the attempts on one issue."
+  @spec unsubscribe_attempts(integer()) :: :ok
+  def unsubscribe_attempts(issue_id) when is_integer(issue_id),
+    do: Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, attempts_topic(issue_id))
+
+  @doc """
+  Announces that the attempts on an issue moved.
+
+  The message is `{:attempts_changed, issue_id}` and carries nothing else. Not
+  the state, not the branch, not the attempt: every one of those is disclosed
+  at a rung, and a message carrying one would carry it past the gate that
+  decides the rung.
+  """
+  @spec announce(Assignment.t()) :: :ok
+  def announce(%Assignment{issue_id: issue_id}) when is_integer(issue_id),
+    do:
+      Phoenix.PubSub.broadcast(
+        OpenAgents.PubSub,
+        attempts_topic(issue_id),
+        {:attempts_changed, issue_id}
+      )
+
+  def announce(%Assignment{}), do: :ok
+
+  defp attempts_topic(issue_id), do: "issue_attempts:#{issue_id}"
+
+  @doc """
+  Cancels a live attempt on behalf of a viewer with write authority.
+
+  The authority is read from the attempt's own repository rather than from
+  whatever the caller believes about itself, so a stale socket assign cannot
+  cancel anybody's work. It reaches `finish/1` — the one terminal path — so a
+  cancelled attempt revokes its credential, releases its issue claim, and binds
+  its evidence exactly as a failure does.
+  """
+  @spec cancel(String.t(), OpenAgents.Accounts.User.t() | nil) ::
+          {:ok, Assignment.t()} | {:error, atom()}
+  def cancel(assignment_id, user) when is_binary(assignment_id) do
+    case Repo.get(Assignment, assignment_id) do
+      nil ->
+        {:error, :assignment_not_found}
+
+      %Assignment{} = assignment ->
+        cond do
+          Assignment.terminal?(assignment) ->
+            {:error, :assignment_not_live}
+
+          not writable_by?(assignment, user) ->
+            {:error, :repository_not_writable}
+
+          true ->
+            finish(assignment, "cancelled", nil, "cancelled_by_viewer")
+        end
+    end
+  end
+
+  def cancel(_assignment_id, _user), do: {:error, :assignment_not_found}
+
+  defp writable_by?(%Assignment{repository_id: repository_id}, user) do
+    case Repo.get(Repository, repository_id) do
+      %Repository{} = repository -> OpenAgents.Repositories.writable?(repository, user)
+      nil -> false
+    end
+  end
+
   @doc "Returns the assignment credential metadata without exposing its secret."
   def credential(%Assignment{id: id}) do
     Repo.one(from c in AssignmentCredential, where: c.assignment_id == ^id)
-  end
-
-  @doc "Reports the terminal result once on the issue timeline."
-  def report(%Assignment{} = assignment) do
-    issue = Repo.get!(Issue, assignment.issue_id)
-
-    body =
-      [
-        "#{target_label(assignment)} assignment finished.",
-        "Branch: `#{assignment.terminal_branch || assignment.branch}`.",
-        "Commit: `#{assignment.terminal_commit || "none reported"}`.",
-        "Result: `#{assignment.state}`.",
-        if(assignment.failure_reason, do: "Reason: `#{assignment.failure_reason}`.", else: nil)
-      ]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.join("\n")
-
-    Issues.create_comment(issue, %{body: body}, author(assignment.requesting_principal))
-  end
-
-  @doc "Reports the release of a failed or cancelled issue claim."
-  def report_release(%Assignment{} = assignment) do
-    issue = Repo.get!(Issue, assignment.issue_id)
-
-    body =
-      [
-        "#{target_label(assignment)} assignment claim released.",
-        "Branch: `#{assignment.branch}`.",
-        "Assignment: `#{assignment.id}`."
-      ]
-      |> Enum.join("\n")
-
-    Issues.create_comment(issue, %{body: body}, author(assignment.requesting_principal))
-  end
-
-  @doc "Reports the claim before the Box run starts."
-  def report_claim(%Assignment{} = assignment) do
-    issue = Repo.get!(Issue, assignment.issue_id)
-
-    body =
-      [
-        "#{target_label(assignment)} assignment claimed.",
-        "Branch: `#{assignment.branch}`.",
-        "Assignment: `#{assignment.id}`."
-      ]
-      |> Enum.join("\n")
-
-    Issues.create_comment(issue, %{body: body}, author(assignment.requesting_principal))
   end
 
   defp persist_assignment(target_kind, target, repository, issue, branch, principal, attrs) do
@@ -732,9 +756,5 @@ defmodule OpenAgents.Forge.Assignments do
 
   defp usable?(_), do: false
 
-  defp author(%{"actor_type" => "agent", "actor_id" => id}), do: Repo.get!(Agent, id)
-  defp author(_), do: nil
-  defp target_label(%Assignment{target_kind: "computer"}), do: "Computer"
-  defp target_label(_), do: "Box"
   defp digest(value), do: :crypto.hash(:sha256, value)
 end

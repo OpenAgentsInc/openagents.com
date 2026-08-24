@@ -255,8 +255,11 @@ defmodule OpenAgentsWeb.BoxControllerTest do
     assert assignment.requesting_principal["type"] == "agent"
     assert assignment.requesting_principal["id"] == agent.id
     assert Agents.box_control_owner(agent).id == owner.id
-    assert %Comment{author_agent_id: agent_id} = Repo.get_by(Comment, issue_id: issue.id)
-    assert agent_id == agent.id
+
+    # The agent that asked is on the attempt, which is where it belongs. It
+    # used to be read from the author of a narration comment; that comment is
+    # retired (#147) and the issue carries none.
+    assert is_nil(Repo.get_by(Comment, issue_id: issue.id))
   end
 
   test "a foreign box returns 404 without an outbound provider request", %{conn: conn} do

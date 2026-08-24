@@ -4493,9 +4493,59 @@ is running on instead of failing opaquely. Every other refusal the admission
 returns — an offline or revoked computer, a busy target, a protected branch, a
 disabled controller — is shown as itself.
 
+**A live attempt is shown, not narrated.** `Assignments.report_claim/1`,
+`report/1`, and `report_release/1` wrote the claim, the result, and the release
+as Markdown comments on the issue. Every fact in them is a column of
+`forge_assignments`, so the timeline derives them and the write path writes
+nothing. Comments already written stay and still render; only new ones stop.
+
+That prose was a surface asserting things nothing could contradict. "Assignment
+claim released" described the credential revocation, which lives in
+`forge_assignment_credentials.revoked_at` and which `finish/1` sets in the same
+transaction that makes an attempt terminal — for *every* terminal state, while
+the comment fired for `failed` and `cancelled` only. Nothing compared the
+sentence to the row. `report_claim/1` was also load-bearing: `create/1` failed
+the whole assignment as `claim_event_failed` when the comment could not be
+written, so a failure of the comment table could fail agent work. Both are gone.
+
+One thing the prose carried that no record holds is now published as a kind
+rather than an id: the comments were authored by the requesting agent, so an
+agent-requested attempt named the agent and a person's own attempt named
+nobody at all. The attempt's `requester_kind` — `user` or `agent`, at `pulse`
+— replaces it under TRANSPARENCY-001's rule that a principal's kind is
+published and its id is not. The specific agent's identity is deliberately not
+restored.
+
+**The page moves when the attempt moves, and re-reads to find out how.**
+`IssueShowLive` subscribes to `issue_attempts:{issue_id}` at mount.
+`Assignments.announce/1` broadcasts `{:attempts_changed, issue_id}` and nothing
+else — not the state, not the branch, not the row, because each of those is
+disclosed at a rung and a message carrying one would carry it past the gate
+that decides the rung. The subscriber marks the panel stale and re-reads
+through `refresh_panel/2`, which re-resolves the repository with
+`Repositories.get_visible_repository/2` and rebuilds the attempts at this
+viewer's own `WorkDisclosure.viewer/2` rung, so a viewer whose membership was
+removed while the socket was open loses the branch on the next announcement.
+Elapsed time is a clock and not a poll: a one-second timer, armed only while an
+attempt is live, that re-reads nothing and recomputes from the attempt's own
+start.
+
+**Cancelling reaches the same terminal path.** A viewer with write authority
+cancels from the issue; `Assignments.cancel/2` reads that authority from the
+attempt's own repository rather than from the socket, and reaches `finish/1`,
+so a cancelled attempt revokes its credential, releases its issue claim, and
+binds its evidence exactly as a failure does. A reader is offered no control
+and a crafted event cancels nothing. An attempt that started and never finished
+renders as started and nothing more: the timeline invents no terminal event.
+
 Evidence: `OpenAgentsWeb.IssueShowLive`, `OpenAgents.Forge.Assignments`,
-`OpenAgents.ComputerAgentJobs`, and
-`test/openagents_web/live/issue_start_work_live_test.exs`.
+`OpenAgents.ComputerAgentJobs`,
+`test/openagents_web/live/issue_start_work_live_test.exs`,
+`test/openagents_web/live/issue_live_work_test.exs`, and
+`test/openagents/forge/assignment_test.exs`.
+
+(Amended 2026-08-24, issue #147: an attempt was narrated in prose and shown
+without moving. It is now shown, live, and narrated nowhere.)
 
 ### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
 
@@ -4786,4 +4836,4 @@ contract; the invariant prose above defines the assertion, not the filename.
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |
 | ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |
 | ISSUE-003 | `test/openagents/issues/evidence_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
-| ISSUE-004 | `test/openagents_web/live/issue_start_work_live_test.exs` |
+| ISSUE-004 | `test/openagents_web/live/issue_live_work_test.exs`, `test/openagents_web/live/issue_start_work_live_test.exs` |

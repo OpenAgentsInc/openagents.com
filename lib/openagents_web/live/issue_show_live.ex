@@ -78,6 +78,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
     # move as well.
     if connected?(socket) do
       Repositories.subscribe_issues(repository.id)
+      Assignments.subscribe_attempts(issue.id)
       Labels.subscribe_labels(repository.id)
       Milestones.subscribe_milestones(repository.id)
     end
@@ -186,6 +187,12 @@ defmodule OpenAgentsWeb.IssueShowLive do
     end)
   end
 
+  def handle_event("cancel_work", _params, socket) do
+    with_authority(socket, :can_write, "You cannot cancel work on this issue.", fn socket ->
+      {:noreply, cancel_work(socket)}
+    end)
+  end
+
   def handle_event("toggle_label", %{"name" => name}, socket) do
     with_authority(
       socket,
@@ -282,6 +289,27 @@ defmodule OpenAgentsWeb.IssueShowLive do
   def handle_info({message, _other_repository}, socket)
       when message in [:labels_changed, :milestones_changed],
       do: {:noreply, socket}
+
+  # An attempt moved. The message carries the issue id and nothing else, so
+  # this re-reads through `refresh_panel/2` — which re-resolves the repository
+  # for this viewer and rebuilds the attempts at this viewer's rung — rather
+  # than assigning anything the announcement handed it.
+  def handle_info({:attempts_changed, issue_id}, socket)
+      when issue_id == socket.assigns.issue.id,
+      do: {:noreply, LiveRefresh.mark_stale(socket, :issue, &refresh_panel/2)}
+
+  def handle_info({:attempts_changed, _other_issue}, socket), do: {:noreply, socket}
+
+  # The clock, not a poll. It re-reads nothing: elapsed time is `now` minus the
+  # attempt's own start, and the attempt itself moves only when its topic says
+  # so. The timer stops itself when the attempt ends.
+  def handle_info(:attempt_tick, socket) do
+    if socket.assigns[:live_attempt] do
+      {:noreply, socket |> assign(:now, DateTime.utc_now()) |> schedule_tick()}
+    else
+      {:noreply, assign(socket, :ticking?, false)}
+    end
+  end
 
   def handle_info(:live_refresh, socket),
     do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
@@ -577,6 +605,59 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   defp refusal(_reason, _socket), do: "Work was refused."
 
+  # The control is hidden without write authority and the event is refused
+  # without it too: `Assignments.cancel/2` reads the authority from the
+  # attempt's own repository, so a socket that kept a stale `can_write` cannot
+  # end anybody's work.
+  defp cancel_work(socket) do
+    case live_attempt(socket.assigns[:attempts] || []) do
+      %{id: id} ->
+        case Assignments.cancel(id, socket.assigns.current_user) do
+          {:ok, _assignment} ->
+            socket
+            |> put_flash(:info, "Work cancelled.")
+            |> load(socket.assigns.issue)
+
+          {:error, reason} ->
+            put_flash(socket, :error, cancel_refusal(reason))
+        end
+
+      nil ->
+        put_flash(socket, :error, "No work is running on this issue.")
+    end
+  end
+
+  defp cancel_refusal(:assignment_not_live), do: "That work already finished."
+  defp cancel_refusal(:assignment_not_found), do: "That work no longer exists."
+
+  defp cancel_refusal(:repository_not_writable),
+    do: "You cannot cancel work on this repository."
+
+  defp cancel_refusal(_reason), do: "Work could not be cancelled."
+
+  defp schedule_tick(socket) do
+    Process.send_after(self(), :attempt_tick, 1_000)
+    socket
+  end
+
+  # How long the live attempt has been running, from the fields `pulse`
+  # already publishes. A reader who cannot see the branch can still see this.
+  defp elapsed(%{} = attempt, %DateTime{} = now) do
+    case attempt[:started_at] || attempt[:admitted_at] do
+      %DateTime{} = start -> humanize_seconds(max(DateTime.diff(now, start, :second), 0))
+      _unknown -> nil
+    end
+  end
+
+  defp elapsed(_attempt, _now), do: nil
+
+  defp humanize_seconds(seconds) when seconds < 60, do: "#{seconds}s"
+
+  defp humanize_seconds(seconds) when seconds < 3_600,
+    do: "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
+
+  defp humanize_seconds(seconds), do: "#{div(seconds, 3_600)}h #{div(rem(seconds, 3_600), 60)}m"
+
   # One place rebuilds everything derived from the issue, so a write cannot
   # leave the timeline describing the previous version of the page.
   defp load(socket, issue) do
@@ -607,6 +688,27 @@ defmodule OpenAgentsWeb.IssueShowLive do
     |> assign(:form, to_form(Issues.change_issue(issue)))
     |> assign(:events, timeline(issue, comments, attempts, references, syncs, base))
     |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))
+    |> assign(:now, DateTime.utc_now())
+    |> arm_tick()
+  end
+
+  # The clock is armed only while an attempt is live, so an issue nobody is
+  # working on costs no timer at all, and only on the transition into a live
+  # attempt, so a re-read cannot stack timers.
+  defp arm_tick(socket) do
+    live? = not is_nil(socket.assigns[:live_attempt])
+    ticking? = socket.assigns[:ticking?] == true
+
+    cond do
+      live? and not ticking? and connected?(socket) ->
+        socket |> assign(:ticking?, true) |> schedule_tick()
+
+      not live? ->
+        assign(socket, :ticking?, false)
+
+      true ->
+        socket
+    end
   end
 
   defp subscribed?(_issue, nil), do: false
@@ -823,19 +925,36 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
           <%!-- Outside the properties panel too, and for the opposite
           reason: everything in that panel edits the issue record, and this
-          starts an execution somewhere else. It needs write authority, which
-          is what `Assignments.create/1` re-checks server-side, so the control
-          is hidden and the event is refused rather than only hidden. --%>
-          <section :if={@can_write} id="issue-work" class="properties-panel__group">
+          starts an execution somewhere else. Starting and cancelling need
+          write authority, which `Assignments.create/1` and
+          `Assignments.cancel/2` re-check server-side, so each control is
+          hidden and its event is refused rather than only hidden. That a live
+          attempt exists, and how long it has run, is not a write and is shown
+          to any reader who reached the issue. --%>
+          <section :if={@can_write or @live_attempt} id="issue-work" class="properties-panel__group">
             <h3 class="properties-panel__heading">Agent work</h3>
 
-            <p :if={@live_attempt} class="properties-panel__none" id="issue-work-live">
-              Work is running{live_attempt_branch(@live_attempt)}. One attempt may be live
-              on an issue at a time.
-            </p>
+            <div :if={@live_attempt} id="issue-work-live">
+              <p class="properties-panel__none">
+                Work is <span id="issue-work-state">{@live_attempt.state}</span>{live_attempt_branch(
+                  @live_attempt
+                )}, for <span id="issue-work-elapsed">{elapsed(@live_attempt, @now)}</span>.
+                One attempt may be live on an issue at a time.
+              </p>
+              <.button
+                :if={@can_write}
+                id="issue-work-cancel"
+                variant={:ghost}
+                size={:sm}
+                data-tone="danger"
+                phx-click="cancel_work"
+              >
+                Cancel work
+              </.button>
+            </div>
 
             <p
-              :if={is_nil(@live_attempt) and @work_computers == []}
+              :if={@can_write and is_nil(@live_attempt) and @work_computers == []}
               class="properties-panel__none"
               id="issue-work-unavailable"
             >
@@ -844,7 +963,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
             </p>
 
             <.form
-              :if={is_nil(@live_attempt) and @work_computers != []}
+              :if={@can_write and is_nil(@live_attempt) and @work_computers != []}
               for={@work_form}
               id="issue-work-form"
               phx-change="preview_work"

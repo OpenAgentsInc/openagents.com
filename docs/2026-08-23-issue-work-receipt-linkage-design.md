@@ -69,8 +69,8 @@ Four findings shape the staging:
    does store and says so in its own moduledoc
    (`lib/openagents_web/live/issue_show_live.ex:22`). Agent activity reaches
    the issue as Markdown comments written by `Assignments.report_claim/1`,
-   `report/1`, and `report_release/1` (`assignments.ex:371`, `:338`, `:356`).
-   That is precisely what `#69` refuses: "link work jobs and commits through
+   `report/1`, and `report_release/1` (`assignments.ex:371`, `:338`, `:356`)
+   — all three retired in stage 3. That is precisely what `#69` refuses: "link work jobs and commits through
    stable identifiers, not free-form commit messages alone".
 3. **The commit-to-receipt chain is complete and already joined — by sha, not
    by issue.** `changelog_entries` carries `push_receipt_id`,
@@ -210,11 +210,12 @@ a different fact from an issue whose attempts were not asked for — the same
 distinction `IssueJSON` already draws for the dependency graph
 (`lib/openagents_web/controllers/issue_json.ex:2`).
 
-One duplication is now visible and is deliberate for stage 1: the same
-attempt appears both as a derived timeline event and as the Markdown comment
-`Assignments.report/1` writes. Stage 3 retires the comment in favor of the
-derived event. Doing it in stage 1 would delete history from issues that
-already carry those comments, which is a migration, not a read.
+One duplication was visible and deliberate for stage 1: the same attempt
+appeared both as a derived timeline event and as the Markdown comment
+`Assignments.report/1` wrote. Stage 3 retired the three comments in favor of
+the derived events. Doing it in stage 1 would have deleted history from issues
+that already carry those comments, which is a migration, not a read — so the
+write path stopped and the existing comments stayed.
 
 ---
 
@@ -397,7 +398,7 @@ policy, a budget, and an executor chosen from the issue rather than from a
 conversation. Nothing new stores work; the button reaches the same admission.
 This is E2, and `#10`'s "start bounded agent work from an issue".
 
-### Stage 3 — live activity, and retiring the narration
+### Stage 3 — live activity, and retiring the narration (shipped)
 
 **Seam:** `IssueShowLive` and `Assignments.report*/1`.
 **Size:** small, plus one backfill decision.
@@ -407,6 +408,19 @@ updates without a reload, show elapsed time and a cancel control to a viewer
 with write authority, and stop writing the three Markdown comments now that
 the derived events carry the same facts. Existing comments stay; only new ones
 stop. This is E3.
+
+What shipped, and the one thing the prose carried that no record held. The
+three comments restated columns of `forge_assignments`, with two exceptions.
+"Assignment claim released" described `forge_assignment_credentials.revoked_at`
+— a real record in a different table — and fired for `failed` and `cancelled`
+while `finish/1` revokes for every terminal state, so the sentence was narrower
+than the fact and nothing compared them. And the comments were authored by the
+requesting agent, so an agent-requested attempt named the agent while a
+person's own attempt named nobody; the attempt now publishes `requester_kind`
+at `pulse` instead, which is the kind TRANSPARENCY-001 admits and not the id it
+does not. `report_claim/1` was additionally load-bearing — `create/1` failed the
+assignment as `claim_event_failed` when the comment could not be written — and
+that coupling is gone with it. See `INVARIANTS.md`, ISSUE-004.
 
 ### Stage 4 — bind receipts to the exact commit (shipped)
 
@@ -427,7 +441,7 @@ honest bound: `receipts_for/2` scans a window and a sha older than it returns
 empty, so the edge must be written when the receipt is written rather than
 scanned for later. This is E4 and E5.
 
-### Stage 5 — tiers over work and receipts
+### Stage 5 — tiers over work and receipts (shipped)
 
 **Seam:** `ArtifactLink.artifact_types/0` and every issue-timeline read.
 **Size:** small storage change, wide read change.
@@ -437,6 +451,18 @@ list and its check constraint, attach a link to each edge stage 4 records, and
 route every timeline and API read through `Transparency.allows?/3`. The
 acceptance property is `#70`'s: the same viewer gets the same answer on the
 web page, the API, and an export. This is E6.
+
+What shipped: `OpenAgents.Transparency.WorkDisclosure`, a field-by-field
+schedule rather than a per-record verdict, because an attempt's branch, a work
+job's report, and an evidence edge's environment are not one decision. Every
+column of the three tables is either the source of exactly one scheduled field
+or a member of that family's never list. There was no artifact-type check
+constraint to add the members to — `#70` constrained the tier only — so the
+type and ref-kind vocabularies are constraints now too. `trace` is in the
+vocabulary with no producer, and the enumeration says so. There is no separate
+issue export, so the acceptance property is proved over the two surfaces that
+exist and stated over the projection function, which a future export inherits.
+See `INVARIANTS.md`, TRANSPARENCY-001.
 
 ### Stage 6 — close from verified outcomes
 

@@ -146,7 +146,7 @@ defmodule OpenAgents.Forge.AssignmentTest do
              GitReceivePack.refs(pkt_line("malformed\n") <> "0000")
   end
 
-  test "assignment claim and release are visible on the issue timeline" do
+  test "an attempt narrates nothing, and its terminal record carries what the prose did" do
     user = repository_user_fixture("assignment-timeline")
 
     {:ok, repository} =
@@ -189,21 +189,41 @@ defmodule OpenAgents.Forge.AssignmentTest do
       })
       |> Repo.insert!()
 
-    assert {:ok, _comment} = OpenAgents.Forge.Assignments.report_claim(assignment)
+    %AssignmentCredential{}
+    |> AssignmentCredential.changeset(%{
+      assignment_id: assignment.id,
+      token_digest: :crypto.hash(:sha256, "oa_assignment_timeline"),
+      last_four: "abcd",
+      repository_id: repository.id,
+      branch: "agent/timeline",
+      expires_at: DateTime.add(now, 60, :second)
+    })
+    |> Repo.insert!()
 
-    assert {:ok, _finished} =
+    assert {:ok, finished} =
              OpenAgents.Forge.Assignments.finish(assignment, "failed", nil, "test")
 
-    bodies =
-      Repo.all(
-        from comment in Comment,
-          where: comment.issue_id == ^issue.id,
-          order_by: [asc: comment.created_at],
-          select: comment.body
-      )
+    # The claim, the result, and the release were three Markdown comments the
+    # attempt wrote about itself. Every fact in them is in this row, so the
+    # timeline derives them and the write path writes nothing.
+    assert Repo.all(from comment in Comment, where: comment.issue_id == ^issue.id) == []
 
-    assert Enum.any?(bodies, &String.contains?(&1, "Box assignment claimed."))
-    assert Enum.any?(bodies, &String.contains?(&1, "claim released."))
+    assert finished.state == "failed"
+    assert finished.failure_reason == "test"
+    assert finished.finished_at
+    assert finished.terminal_branch == "agent/timeline"
+
+    # "Claim released" described the credential revocation, and this is the
+    # record it described. `finish/1` revokes in the same transaction that
+    # makes the attempt terminal, for every terminal state — the comment fired
+    # for only two of the three, and nothing compared the two.
+    assert [%{revoked_at: revoked_at}] =
+             Repo.all(
+               from credential in AssignmentCredential,
+                 where: credential.assignment_id == ^assignment.id
+             )
+
+    assert revoked_at
     assert Repo.get!(OpenAgents.Issues.Issue, issue.id).state == "open"
   end
 

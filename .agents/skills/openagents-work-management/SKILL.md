@@ -9,7 +9,17 @@ allowed-tools:
 
 Use this skill when the user asks you to manage OpenAgents issues, projects, comments, labels, assignees, milestones, or Projects V2 boards from the command line. Do not use the `pro-work-management` skill or the Pro Linear/MCP surface. This skill targets the OpenAgents `/api/v3` surface through the `@openagentsinc/cli` package.
 
-The OpenAgents CLI does not provide named `issue`, `project`, `label`, `milestone`, or `assignee` commands. For all work system operations, use `openagents api` and construct the route path manually. The Projects V2 routes must be done manually.
+The CLI has named commands for most of this work: `openagents issue`
+(`list`, `view`, `create`, `close`, `reopen`, `comment`, `label`, `assign`,
+`unassign`, `deps`) and `openagents project` (`list`, `view`, `create`,
+`fields`, `items`, `item-add`, `item-set`, `item-move`, `item-remove`). Reach
+for those first, and run `openagents <command> --help` for a flag you do not
+know. Read their plain output; add `--json` only when you need one field out of
+one record, because a JSON list carries every issue's whole body.
+
+Use `openagents api` with a hand-built route only where no named command covers
+what you need. Milestones and some Projects V2 routes are still in that
+position, and the examples below show them.
 
 ## Before you start
 

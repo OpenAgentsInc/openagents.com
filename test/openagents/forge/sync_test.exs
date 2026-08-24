@@ -205,10 +205,10 @@ defmodule OpenAgents.Forge.SyncTest do
              )
   end
 
-  test "rebuild re-materializes the projection from sequence zero and preserves the head", %{
+  test "rebuild is the operator's from-sequence-zero recovery entry point", %{
     root: root
   } do
-    {index, sha} = put_bundle_entry!(root, "rebuild-repo", "trunk")
+    {index, _sha} = put_bundle_entry!(root, "rebuild-repo", "trunk")
     assert :ok = Sync.ensure_fresh("rebuild-repo", "trunk")
 
     # Append a second commit so the WAL holds more than the trivial first
@@ -236,27 +236,29 @@ defmodule OpenAgents.Forge.SyncTest do
 
     {:ok, generation, _} = WAL.read_index("rebuild-repo")
     {:ok, _} = WAL.cas_index("rebuild-repo", generation, WAL.append_entry(index, entry))
-    assert :ok = Sync.ensure_fresh("rebuild-repo", "trunk")
 
     bare_path = Repos.bare_path("rebuild-repo")
-    assert String.trim(git_bare!(bare_path, ["rev-parse", "trunk"])) == sha2
 
-    # Rebuild is the operator recovery for a *wrong* projection: discard and
-    # re-materialize from sequence zero. It must land on the same head.
+    # Discard the local projection entirely. The operator recovery the
+    # runbooks name is `OpenAgents.Forge.Sync.rebuild/1`: re-materialize the
+    # repository from the WAL, from sequence zero, with no mirror input.
+    File.rm_rf!(bare_path)
+
     assert :ok = Sync.rebuild("rebuild-repo", "trunk")
 
     assert String.trim(git_bare!(bare_path, ["rev-parse", "trunk"])) == sha2
     assert Repos.refs("rebuild-repo") == refs
+    assert String.trim(git_bare!(bare_path, ["show", "trunk:README.md"])) == "durable import"
     assert String.trim(git_bare!(bare_path, ["show", "trunk:second.md"])) == "second commit"
+    assert String.trim(git_bare!(bare_path, ["symbolic-ref", "HEAD"])) == "refs/heads/trunk"
 
-    # The one-argument form the runbooks name resolves the default branch the
-    # same way ensure_fresh/1 does, so `Sync.rebuild("{storage_key}")` runs.
+    # The one-argument form the runbooks name uses the "main" default the same
+    # way ensure_fresh/1 does, so `Sync.rebuild("{storage_key}")` runs.
     assert :ok = Sync.rebuild("rebuild-repo")
     assert String.trim(git_bare!(bare_path, ["rev-parse", "trunk"])) == sha2
-    assert String.trim(git_bare!(bare_path, ["symbolic-ref", "HEAD"])) == "refs/heads/trunk"
   end
 
-
+  defp git!(directory, args) do
     {output, 0} = System.cmd("git", args, cd: directory, stderr_to_stdout: true)
     output
   end

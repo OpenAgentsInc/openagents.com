@@ -182,8 +182,13 @@ reported rather than reconciled silently.
    bin/openagents rpc 'OpenAgents.Forge.Sync.rebuild("{storage_key}")'
    ```
 
-   The rebuild path takes no mirror input. `EXIT-003` turns red if one is
-   added.
+   `rebuild/1` discards the local bare-repository projection and
+   re-materializes it from the WAL, from sequence zero, with no mirror input.
+   That is the recovery a wrong or damaged projection needs, unlike
+   `ensure_fresh/1` and `replay_missing/3`, which trust the projection's
+   applied-sequence marker and only replay what it has not yet applied. It
+   returns `:ok` on success and a typed error when the WAL cannot produce a
+   servable projection. `EXIT-003` turns red if a mirror input is added.
 
 ## 4. Key rotation
 

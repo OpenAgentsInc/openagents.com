@@ -192,7 +192,14 @@ defmodule OpenAgents.Threads do
     |> Repo.all()
   end
 
-  @doc "The thread's transcript, oldest first, bounded."
+  @doc """
+  The thread's transcript, oldest first, bounded.
+
+  `:after` continues from an event id already read. Without it a transcript
+  longer than the cap could not be read back at all, and a session's history is
+  exactly the thing that outgrows a cap: a working session records a turn and
+  every tool it ran, which passes fifty inside an hour.
+  """
   @spec list_events(Thread.t(), keyword()) :: [Event.t()]
   def list_events(%Thread{id: thread_id}, options \\ []) do
     limit = options |> Keyword.get(:limit, @maximum_listed) |> min(@maximum_listed) |> max(1)
@@ -202,8 +209,23 @@ defmodule OpenAgents.Threads do
       order_by: [asc: e.id],
       limit: ^limit
     )
+    |> after_event(Keyword.get(options, :after))
     |> Repo.all()
   end
+
+  defp after_event(query, nil), do: query
+
+  defp after_event(query, after_id) when is_integer(after_id),
+    do: from(e in query, where: e.id > ^after_id)
+
+  defp after_event(query, after_id) when is_binary(after_id) do
+    case Integer.parse(after_id) do
+      {id, ""} -> after_event(query, id)
+      _unparsed -> query
+    end
+  end
+
+  defp after_event(query, _other), do: query
 
   @doc """
   Append one bounded event to a thread's transcript and advance its counter.

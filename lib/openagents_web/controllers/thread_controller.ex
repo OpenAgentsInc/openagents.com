@@ -242,6 +242,14 @@ defmodule OpenAgentsWeb.ThreadController do
       _absent ->
         []
     end
+    |> continue_from(params)
+  end
+
+  defp continue_from(options, params) do
+    case Map.get(params, "after") do
+      value when is_binary(value) -> Keyword.put(options, :after, value)
+      _absent -> options
+    end
   end
 
   defp event_parameters(params) do
@@ -326,8 +334,11 @@ defmodule OpenAgentsWeb.ThreadController do
   # the grant's is published: it is the one the request will actually use, and
   # printing the same name twice invites a reader to think they can differ.
 
+  # The id is published because it is the cursor: a client continues from the
+  # last one it read rather than counting.
   defp event_view(event) do
     %{
+      "id" => event.id,
       "schema" => event.schema,
       "event_type" => event.event_type,
       "payload" => event.payload,

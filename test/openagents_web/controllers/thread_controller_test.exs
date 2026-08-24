@@ -548,6 +548,29 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert Enum.all?(body["events"], &(&1["schema"] == "openagents.thread.event.v1"))
     end
 
+    test "continues from an event already read", %{authenticated: conn, id: id} do
+      for text <- ["one", "two", "three"] do
+        conn
+        |> post(~p"/api/v3/threads/#{id}/events", %{
+          "event_type" => "turn.user",
+          "payload" => %{"text" => text}
+        })
+        |> json_response(201)
+      end
+
+      first = conn |> get(~p"/api/v3/threads/#{id}/events?limit=2") |> json_response(200)
+      cursor = List.last(first["events"])["id"]
+
+      rest = conn |> get(~p"/api/v3/threads/#{id}/events?after=#{cursor}") |> json_response(200)
+
+      # A working session records a turn and every tool it ran, which passes
+      # the listing cap inside an hour. Without a cursor its history could not
+      # be read back at all.
+      assert length(first["events"]) == 2
+      assert Enum.all?(rest["events"], &(&1["id"] > cursor))
+      assert Enum.map(rest["events"], & &1["payload"]["text"]) |> List.last() == "three"
+    end
+
     test "refuses an event with no type", %{authenticated: conn, id: id} do
       body =
         conn

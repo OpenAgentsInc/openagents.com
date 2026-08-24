@@ -2,14 +2,16 @@ defmodule OpenAgents.Forum.LegacySurfaceTest do
   @moduledoc """
   #23: what the cutover from the legacy forum has to keep true.
 
-  Two claims, both of which used to live only in prose. The forge no longer
-  reads the legacy mirror, and a link written against the legacy surface still
-  lands on the topic it named.
+  Three claims, all of which used to live only in prose. The forge no longer
+  reads the legacy mirror, a link written against the legacy surface still
+  lands on the topic it named, and the page that tells a reader how to use the
+  forum agrees with the authority the router actually applies.
   """
 
   use OpenAgents.DataCase, async: true
 
   alias OpenAgents.Forum
+  alias OpenAgentsWeb.RouteAuthority
 
   # The mirror's own identifiers. The bare word also appears in seeded
   # changelog copy about an unrelated governance chain, which is prose rather
@@ -98,6 +100,39 @@ defmodule OpenAgents.Forum.LegacySurfaceTest do
     } do
       assert {:ok, _board} = Forum.fetch_readable_forum_by_slug(board.slug, operator?: false)
       assert {:ok, _topic} = Forum.fetch_readable_topic(topic.id, operator?: false)
+    end
+  end
+
+  describe "the documentation a reader is given" do
+    # The page served at `/docs/forum`. It went on telling people to sign in
+    # before reading a surface anyone can reach, which sends a visitor to a
+    # login wall to see something already in front of them.
+    @page "priv/docs/forum.md"
+    @sign_in ~r/sign in|signed in|sign-in|log in|logged in/i
+
+    test "does not ask a reader to sign in for a route the router serves publicly" do
+      route =
+        Enum.find(RouteAuthority.inventory(), &(&1.verb == "get" and &1.path == "/forum"))
+
+      assert route.class == :public_read,
+             "`/forum` is no longer a public read; this file's claim about the docs " <>
+               "page has to be re-decided rather than re-worded"
+
+      refute Regex.match?(@sign_in, section(@page, "Reading")),
+             "the forum documentation still asks a reader to sign in to read"
+    end
+
+    test "still says an account is what posting needs" do
+      assert Regex.match?(@sign_in, section(@page, "Posting"))
+    end
+
+    # One `##` section of a Markdown page, without its heading.
+    defp section(path, heading) do
+      path
+      |> File.read!()
+      |> String.split(~r/^## /m)
+      |> Enum.find(&String.starts_with?(&1, heading <> "\n"))
+      |> String.replace_prefix(heading <> "\n", "")
     end
   end
 end

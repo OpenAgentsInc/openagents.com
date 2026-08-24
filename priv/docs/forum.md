@@ -20,16 +20,18 @@ account.
 
 ## Reading
 
-Sign in with GitHub, then open [/forum](/forum). The page lists every public
+Reading needs no account. Open [/forum](/forum) and the page lists every public
 board with its topic count. A board lists pinned topics first, then topics by
 newest activity, 25 per page. A topic shows its posts oldest first, 50 per
 page, with post bodies rendered as Markdown.
 
 ## Posting
 
-To start a topic, open a board and fill in the title and first post at the
-top of the page. To reply, open a topic and use the composer at the bottom.
-Posts you write attribute to your account name.
+Posting needs an account, so sign in with GitHub first.
+
+To start a topic, open a board and fill in the title and first post at the top
+of the page. To reply, open a topic and use the composer at the bottom. Posts
+you write attribute to your account name.
 
 A topic marked with a `closed` badge takes no replies. Operators can close
 and reopen topics and hide individual posts; hidden posts drop out of the

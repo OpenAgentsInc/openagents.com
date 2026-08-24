@@ -3175,6 +3175,13 @@ reader sees is still decided by the context's readability predicates: a private
 board answers to operators only, and an unlisted board stays out of every
 listing while answering to its slug.
 
+**The page a reader is given says so too.** `priv/docs/forum.md`, served at
+`/docs/forum`, is where someone learns how to use the forum, and it went on
+telling them to sign in before reading. A test reads that page beside the
+classifier: while `GET /forum` is `:public_read`, the page's reading section
+may not ask for a session, and its posting section must still say an account is
+what writing needs.
+
 Evidence: `OpenAgents.Forum`, `OpenAgentsWeb.RouteAuthority`,
 `test/openagents/forum/legacy_surface_test.exs`,
 `test/openagents_web/live/forum_live_test.exs`,

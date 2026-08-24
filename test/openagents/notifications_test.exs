@@ -639,7 +639,12 @@ defmodule OpenAgents.NotificationsTest do
 
       {:ok, issue} = Issues.create_issue(repository, %{title: "internal"}, owner)
 
-      assert_raise Ecto.NoResultsError, fn ->
+      # `OpenAgents.Issues.UnknownReference` rather than `Ecto.NoResultsError`:
+      # a login this repository cannot assign is a rejected field, and the API
+      # answers `422` naming it rather than the `404` a repository the caller
+      # cannot see answers with. The refusal is what matters here, and it still
+      # happens before anything is announced.
+      assert_raise OpenAgents.Issues.UnknownReference, fn ->
         Issues.update_issue(
           issue,
           %{"assignees" => [%{"login" => outsider.github_login}]},

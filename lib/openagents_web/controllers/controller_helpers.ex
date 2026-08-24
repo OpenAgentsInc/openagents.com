@@ -19,4 +19,32 @@ defmodule OpenAgentsWeb.ControllerHelpers do
   end
 
   def integer_param!(value) when is_integer(value), do: value
+
+  @doc """
+  Runs one lookup that may not resolve, and tags the outcome.
+
+  Every bang lookup raises `Ecto.NoResultsError`, so a `rescue` wrapped around a
+  whole controller action catches all of them at once: the repository the caller
+  may not see, and, further in, a label a request body named. Two unrelated
+  failures then leave by the same `404` — and because `404` is the answer the
+  API gives deliberately for a repository a caller cannot see, the second
+  failure is not just mislabelled, it is unreadable. A caller cannot tell a
+  privacy decision from a typo.
+
+  Wrapping one lookup keeps the rescue the width of the thing it was written
+  for, so an `Ecto.NoResultsError` raised anywhere else keeps its own meaning
+  rather than silently joining this one.
+
+      with {:ok, repository} <- lookup(fn -> Repositories.get_visible_by_path!(owner, repo, reader) end) do
+        ...
+      else
+        {:error, :not_found} -> ApiError.not_found(conn)
+      end
+  """
+  @spec lookup((-> term())) :: {:ok, term()} | {:error, :not_found}
+  def lookup(fun) when is_function(fun, 0) do
+    {:ok, fun.()}
+  rescue
+    Ecto.NoResultsError -> {:error, :not_found}
+  end
 end

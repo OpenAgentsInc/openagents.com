@@ -4393,6 +4393,26 @@ Non-disclosure is preserved by construction rather than by care: a private
 resource and an absent one both refuse with `not_found`, and no code in the
 table distinguishes them.
 
+Amended 2026-08-23 (issue #186): that ambiguity is load-bearing, so nothing
+else may hide behind it. A `rescue Ecto.NoResultsError` wrapped around a whole
+controller action caught every bang lookup the action reached, not only the
+repository one it was written for, so `POST /api/v3/repos/{owner}/{repo}/issues`
+answered `404` for a label the request body named that the repository does not
+have — the same `404` a repository the caller cannot see answers with, which
+made the honest error unreachable and sent one reporter to the router and the
+token before the label. A lookup that may not resolve is now wrapped one at a
+time by `OpenAgentsWeb.ControllerHelpers.lookup/1`; neither
+`OpenAgentsWeb.IssueController` nor `OpenAgentsWeb.CommentController` names
+`Ecto.NoResultsError` at all, and a proof reads both files for it, so a lookup
+added later cannot rejoin the repository's `404` without someone deciding to.
+A label, assignee, or milestone the repository does not have raises
+`OpenAgents.Issues.UnknownReference` and answers `422` with `validation_failed`
+and the request-body field naming the value that did not resolve, the way
+GitHub answers. The privacy `404` is unchanged and proven beside it: a `POST`
+to a private repository the caller is not a member of still answers
+`not_found`, with `errors` empty and a body that names neither the repository
+nor the label.
+
 The published route inventory at `GET /api/v3` is derived from
 `OpenAgentsWeb.Router.__routes__/0` through `OpenAgentsWeb.ApiRouteAuthority`,
 never maintained beside it. Each route carries three mandatory classifications
@@ -4403,6 +4423,9 @@ answering with the envelope that answers with something else fails the build.
 Evidence: `lib/openagents_web/api_error.ex`,
 `lib/openagents_web/api_route_authority.ex`,
 `lib/openagents_web/controllers/api_extension_controller.ex`,
+`lib/openagents_web/controllers/controller_helpers.ex`,
+`lib/openagents/issues/unknown_reference.ex`,
+`test/openagents_web/controllers/issue_controller_test.exs`,
 `test/openagents_web/api_error_test.exs`,
 `test/openagents_web/api_route_authority_test.exs`,
 `test/openagents_web/controllers/api_error_contract_test.exs`, and
@@ -4444,7 +4467,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |
 | NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
 
-| FORGEAPI-001 | `test/openagents_web/controllers/api_error_contract_test.exs`, `test/openagents_web/controllers/api_extension_controller_test.exs`, `test/openagents_web/api_error_test.exs` |
+| FORGEAPI-001 | `test/openagents_web/controllers/api_error_contract_test.exs`, `test/openagents_web/controllers/api_extension_controller_test.exs`, `test/openagents_web/api_error_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |

@@ -4,6 +4,7 @@ defmodule OpenAgents.IssuesTest do
   alias OpenAgents.Issues
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Issues.UnknownReference
 
   defmodule AnalyticsSink do
     def capture(event, distinct_id, properties) do
@@ -241,10 +242,19 @@ defmodule OpenAgents.IssuesTest do
              ]
     end
 
+    # Not `Ecto.NoResultsError`: that is what resolving the repository raises,
+    # and the API turns it into the `404` a repository the caller cannot see
+    # answers with. A label the repository does not have is a rejected field,
+    # and it says which field and which value.
     test "rejects a label outside the repository label set" do
-      assert_raise Ecto.NoResultsError, fn ->
-        Issues.create_issue(repository(), %{title: "labelled", labels: ["nope"]})
-      end
+      error =
+        assert_raise UnknownReference, fn ->
+          Issues.create_issue(repository(), %{title: "labelled", labels: ["nope"]})
+        end
+
+      assert error.field == :labels
+      assert error.value == "nope"
+      assert Exception.message(error) =~ "nope"
     end
 
     test "canonicalizes label maps from the repository row" do
@@ -301,9 +311,23 @@ defmodule OpenAgents.IssuesTest do
     end
 
     test "raises for an unknown milestone number" do
-      assert_raise Ecto.NoResultsError, fn ->
-        Issues.create_issue(repository(), %{title: "planned", milestone: 404})
-      end
+      error =
+        assert_raise UnknownReference, fn ->
+          Issues.create_issue(repository(), %{title: "planned", milestone: 404})
+        end
+
+      assert error.field == :milestone
+      assert error.value == 404
+    end
+
+    test "raises for a login that is not assignable in this repository" do
+      error =
+        assert_raise UnknownReference, fn ->
+          Issues.create_issue(repository(), %{title: "assigned", assignees: ["nobody"]})
+        end
+
+      assert error.field == :assignees
+      assert error.value == "nobody"
     end
 
     test "accepts an explicit nil milestone" do

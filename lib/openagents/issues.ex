@@ -16,7 +16,7 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Agents.Agent
   alias OpenAgents.Analytics
-  alias OpenAgents.Issues.{Comment, Issue, IssueDependency, TaskReferences}
+  alias OpenAgents.Issues.{Comment, Issue, IssueDependency, TaskReferences, UnknownReference}
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
   alias OpenAgents.Milestones
@@ -879,6 +879,19 @@ defmodule OpenAgents.Issues do
     result
   end
 
+  # A name in a request body that this repository does not have is a rejected
+  # field, not a missing resource. The bang lookups raise `Ecto.NoResultsError`,
+  # which is also what resolving the repository raises, so leaving it unchanged
+  # sent a typo out of the API through the same `404` a private repository
+  # answers with. The rescue wraps one lookup and translates one failure, so a
+  # different `Ecto.NoResultsError` raised deeper in this module keeps its own
+  # meaning.
+  defp resolve!(field, value, lookup) do
+    lookup.()
+  rescue
+    Ecto.NoResultsError -> UnknownReference.raise!(field, value)
+  end
+
   defp prepare_collections(attrs, repository) do
     attrs
     |> maybe_convert_milestone(repository)
@@ -892,7 +905,10 @@ defmodule OpenAgents.Issues do
 
   defp maybe_convert_milestone(%{"milestone" => number} = attrs, repository)
        when is_integer(number) do
-    milestone = Milestones.get_milestone_by_number!(repository, number)
+    milestone =
+      resolve!(:milestone, number, fn ->
+        Milestones.get_milestone_by_number!(repository, number)
+      end)
 
     attrs
     |> Map.put("milestone", milestone_json(milestone))
@@ -911,7 +927,9 @@ defmodule OpenAgents.Issues do
     snapshots =
       Enum.map(labels, fn label ->
         name = if is_binary(label), do: label, else: label["name"] || label[:name]
-        repository |> Labels.get_label_by_name!(name) |> label_json()
+
+        resolve!(:labels, name, fn -> Labels.get_label_by_name!(repository, name) end)
+        |> label_json()
       end)
 
     Map.put(attrs, "labels", Enum.uniq_by(snapshots, & &1["name"]))
@@ -924,7 +942,11 @@ defmodule OpenAgents.Issues do
     snapshots =
       Enum.map(assignees, fn assignee ->
         login = if is_binary(assignee), do: assignee, else: assignee["login"] || assignee[:login]
-        repository |> Repositories.get_assignable_user_by_login!(login) |> assignee_json()
+
+        resolve!(:assignees, login, fn ->
+          Repositories.get_assignable_user_by_login!(repository, login)
+        end)
+        |> assignee_json()
       end)
 
     Map.put(attrs, "assignees", Enum.uniq_by(snapshots, & &1["login"]))

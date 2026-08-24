@@ -264,6 +264,141 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
   end
 
+  # A `404` here means one thing on purpose: this caller does not get to know
+  # whether the repository exists. Anything else that answered `404` borrowed
+  # that ambiguity and became unreadable — a caller could not tell a privacy
+  # decision from a typo, so the honest error was unreachable. These tests hold
+  # the two apart in both directions.
+  describe "a name the repository does not have" do
+    test "POST with an unknown label answers 422 and names the label", %{conn: conn} do
+      conn =
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+          title: "Labelled",
+          labels: ["area:data-rights"]
+        })
+
+      body = json_response(conn, 422)
+
+      assert body["code"] == "validation_failed"
+      assert [message] = body["errors"]["labels"]
+      assert message =~ "area:data-rights"
+      refute Map.has_key?(body["errors"], "repository")
+    end
+
+    test "POST with an unknown assignee answers 422 and names the login", %{conn: conn} do
+      conn =
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+          title: "Assigned",
+          assignees: ["not-a-member"]
+        })
+
+      body = json_response(conn, 422)
+
+      assert body["code"] == "validation_failed"
+      assert [message] = body["errors"]["assignees"]
+      assert message =~ "not-a-member"
+    end
+
+    test "POST with an unknown milestone answers 422 and names the number", %{conn: conn} do
+      conn =
+        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+          title: "Planned",
+          milestone: 4004
+        })
+
+      body = json_response(conn, 422)
+
+      assert body["code"] == "validation_failed"
+      assert [message] = body["errors"]["milestone"]
+      assert message =~ "4004"
+    end
+
+    test "PATCH with an unknown label answers 422 too", %{conn: conn} do
+      {:ok, issue} = Issues.create_issue(repository(), %{title: "Relabel me"})
+
+      conn =
+        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
+          labels: ["area:data-rights"]
+        })
+
+      body = json_response(conn, 422)
+
+      assert body["code"] == "validation_failed"
+      assert [message] = body["errors"]["labels"]
+      assert message =~ "area:data-rights"
+    end
+
+    test "a repository the caller cannot see still answers 404 and discloses nothing" do
+      private_repository = repository_fixture(%{visibility: "private"})
+      conn = put_forge_api_token(build_conn(), "issue-create-nonmember")
+
+      conn =
+        post(
+          conn,
+          "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues",
+          %{title: "Filed blind", labels: ["area:data-rights"]}
+        )
+
+      body = json_response(conn, 404)
+
+      assert body["code"] == "not_found"
+      assert body["message"] == "Not Found"
+      assert body["errors"] == %{}
+
+      # The label in the body is real to this request and absent from the
+      # repository, and the answer says neither. Nothing here separates a
+      # private repository from one that was never created.
+      encoded = Jason.encode!(body)
+      refute encoded =~ private_repository.name
+      refute encoded =~ private_repository.owner
+      refute encoded =~ "area:data-rights"
+      refute encoded =~ "label"
+    end
+
+    # The width of a rescue is the thing to hold, not just today's outcome. The
+    # rescue lives in `OpenAgentsWeb.ControllerHelpers.lookup/1` and wraps one
+    # lookup; writing `rescue Ecto.NoResultsError` back into an action would
+    # cover the write again, and the next bang lookup added inside it would
+    # rejoin the repository's `404` without anyone deciding to. Neither of the
+    # two controllers behind the `:agent_participation_api` issue and comment
+    # writes names the exception at all.
+    test "neither issue nor comment writes rescue Ecto.NoResultsError across an action" do
+      for file <- [
+            "lib/openagents_web/controllers/issue_controller.ex",
+            "lib/openagents_web/controllers/comment_controller.ex"
+          ] do
+        refute File.read!(file) =~ "Ecto.NoResultsError",
+               "#{file} rescues Ecto.NoResultsError itself. Wrap the one lookup in " <>
+                 "OpenAgentsWeb.ControllerHelpers.lookup/1 instead, so a lookup added " <>
+                 "later cannot leave by the repository's 404."
+      end
+    end
+
+    test "the two answers are different responses, not one" do
+      private_repository = repository_fixture(%{visibility: "private"})
+
+      unknown_label =
+        post(
+          put_forge_api_token(build_conn(), "issue-create-typo", repository()),
+          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues",
+          %{title: "Typo", labels: ["area:data-rights"]}
+        )
+
+      unreadable_repository =
+        post(
+          put_forge_api_token(build_conn(), "issue-create-blind"),
+          "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues",
+          %{title: "Blind", labels: ["area:data-rights"]}
+        )
+
+      assert unknown_label.status == 422
+      assert unreadable_repository.status == 404
+
+      assert json_response(unknown_label, 422)["code"] !=
+               json_response(unreadable_repository, 404)["code"]
+    end
+  end
+
   describe "update" do
     test "PATCH /api/v3/repos/:owner/:repo/issues/:issue_number closes an issue", %{
       conn: conn

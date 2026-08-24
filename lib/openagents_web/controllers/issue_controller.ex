@@ -6,18 +6,22 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Issues.CompletionClaims
   alias OpenAgents.Issues.Evidence
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Issues.UnknownReference
   alias OpenAgents.Agents.Agent
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.ApiError
 
+  import OpenAgentsWeb.ControllerHelpers, only: [integer_param!: 1, lookup: 1]
+
   def index(conn, %{"owner" => owner, "repo" => repo} = params) do
     reader = conn.assigns[:current_user]
-    repository = Repositories.get_visible_by_path!(owner, repo, reader)
 
-    with :ok <- validate_index_params(params),
-         {issues, total} <-
-           Issues.list_issues_page(repository, index_options(params, reader)) do
+    with {:ok, repository} <-
+           lookup(fn -> Repositories.get_visible_by_path!(owner, repo, reader) end),
+         :ok <- validate_index_params(params) do
+      {issues, total} = Issues.list_issues_page(repository, index_options(params, reader))
+
       conn
       |> put_extensions_header()
       |> render(:index,
@@ -37,11 +41,12 @@ defmodule OpenAgentsWeb.IssueController do
         }
       )
     else
+      {:error, :not_found} ->
+        not_found(conn)
+
       {:error, field, message} ->
         ApiError.validation_failed(conn, %{field => [message]})
     end
-  rescue
-    Ecto.NoResultsError -> not_found(conn)
   end
 
   @valid_states ~w(open closed all)
@@ -117,37 +122,67 @@ defmodule OpenAgentsWeb.IssueController do
   def create(conn, %{"owner" => owner, "repo" => repo} = params) do
     actor = conn.assigns[:current_agent] || conn.assigns[:current_user]
 
-    repository =
-      case actor do
-        %Agent{} -> Repositories.get_public_by_path!(owner, repo)
-        _ -> Repositories.get_writable_by_path!(owner, repo, actor)
-      end
+    case lookup(fn -> write_repository(owner, repo, actor) end) do
+      {:error, :not_found} ->
+        not_found(conn)
 
-    if Repositories.issue_participant?(repository, actor) do
-      case Issues.create_issue(repository, params, actor) do
-        {:ok, %Issue{} = issue} ->
-          conn
-          |> put_status(:created)
-          |> put_extensions_header()
-          |> render(:show,
-            issue: issue,
-            owner: owner,
-            repo: repo,
-            dependencies: dependencies(issue),
-            progress: progress(issue, actor),
-            work: work(issue),
-            evidence: evidence(issue),
-            completion_claims: completion_claims(issue)
-          )
-
-        {:error, %Ecto.Changeset{} = changeset} ->
-          ApiError.changeset(conn, changeset)
-      end
-    else
-      participation_forbidden(conn, actor)
+      {:ok, repository} ->
+        if Repositories.issue_participant?(repository, actor) do
+          create_issue(conn, repository, params, actor, owner, repo)
+        else
+          participation_forbidden(conn, actor)
+        end
     end
+  end
+
+  # An agent reaches a public repository it is not a member of; a person needs
+  # write access. Either way this is the repository lookup, and it is the only
+  # thing `lookup/1` wraps: whatever it refuses is a `404` that discloses
+  # nothing about whether the repository exists.
+  defp write_repository(owner, repo, %Agent{}), do: Repositories.get_public_by_path!(owner, repo)
+
+  defp write_repository(owner, repo, actor),
+    do: Repositories.get_writable_by_path!(owner, repo, actor)
+
+  defp create_issue(conn, repository, params, actor, owner, repo) do
+    case write_issue(fn -> Issues.create_issue(repository, params, actor) end) do
+      {:ok, %Issue{} = issue} ->
+        conn
+        |> put_status(:created)
+        |> put_extensions_header()
+        |> render(:show,
+          issue: issue,
+          owner: owner,
+          repo: repo,
+          dependencies: dependencies(issue),
+          progress: progress(issue, actor),
+          work: work(issue),
+          evidence: evidence(issue),
+          completion_claims: completion_claims(issue)
+        )
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        ApiError.changeset(conn, changeset)
+
+      {:error, %UnknownReference{} = unresolved} ->
+        unknown_reference(conn, unresolved)
+    end
+  end
+
+  # Writing an issue resolves a label, an assignee, and a milestone by name, and
+  # a name this repository does not have is a rejected field rather than a
+  # missing resource. It is caught here rather than beside the repository
+  # lookup, so the two failures leave by different doors.
+  defp write_issue(write) do
+    write.()
   rescue
-    Ecto.NoResultsError -> not_found(conn)
+    error in UnknownReference -> {:error, error}
+  end
+
+  # GitHub names the offending field, and so does this: the envelope's `errors`
+  # map carries the request-body key and the value that did not resolve.
+  defp unknown_reference(conn, %UnknownReference{} = error) do
+    ApiError.validation_failed(conn, %{error.field => [Exception.message(error)]})
   end
 
   # The `error` key predates the envelope and a published agent client reads
@@ -166,29 +201,30 @@ defmodule OpenAgentsWeb.IssueController do
         "repo" => repo,
         "issue_number" => issue_number
       }) do
-    repository = Repositories.get_visible_by_path!(owner, repo, conn.assigns[:current_user])
+    reader = conn.assigns[:current_user]
 
-    issue =
-      Issues.get_issue_by_number!(
-        repository,
-        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
+    with {:ok, repository} <-
+           lookup(fn -> Repositories.get_visible_by_path!(owner, repo, reader) end),
+         {:ok, issue} <-
+           lookup(fn ->
+             Issues.get_issue_by_number!(repository, integer_param!(issue_number))
+           end) do
+      conn
+      |> put_extensions_header()
+      |> render(:show,
+        issue: issue,
+        owner: owner,
+        repo: repo,
+        dependencies: dependencies(issue),
+        progress: progress(issue, reader),
+        pull_requests: PullRequests.markers_by_issue_id([issue]),
+        work: work(issue),
+        evidence: evidence(issue),
+        completion_claims: completion_claims(issue)
       )
-
-    conn
-    |> put_extensions_header()
-    |> render(:show,
-      issue: issue,
-      owner: owner,
-      repo: repo,
-      dependencies: dependencies(issue),
-      progress: progress(issue, conn.assigns[:current_user]),
-      pull_requests: PullRequests.markers_by_issue_id([issue]),
-      work: work(issue),
-      evidence: evidence(issue),
-      completion_claims: completion_claims(issue)
-    )
-  rescue
-    Ecto.NoResultsError -> not_found(conn)
+    else
+      {:error, :not_found} -> not_found(conn)
+    end
   end
 
   def update(
@@ -199,34 +235,38 @@ defmodule OpenAgentsWeb.IssueController do
           "issue_number" => issue_number
         } = params
       ) do
-    repository = Repositories.get_writable_by_path!(owner, repo, conn.assigns.current_user)
+    user = conn.assigns.current_user
 
-    issue =
-      Issues.get_issue_by_number!(
-        repository,
-        OpenAgentsWeb.ControllerHelpers.integer_param!(issue_number)
-      )
+    with {:ok, repository} <-
+           lookup(fn -> Repositories.get_writable_by_path!(owner, repo, user) end),
+         {:ok, issue} <-
+           lookup(fn ->
+             Issues.get_issue_by_number!(repository, integer_param!(issue_number))
+           end) do
+      case write_issue(fn -> Issues.update_issue(issue, params, user) end) do
+        {:ok, %Issue{} = issue} ->
+          conn
+          |> put_extensions_header()
+          |> render(:show,
+            issue: issue,
+            owner: owner,
+            repo: repo,
+            dependencies: dependencies(issue),
+            progress: progress(issue, user),
+            work: work(issue),
+            evidence: evidence(issue),
+            completion_claims: completion_claims(issue)
+          )
 
-    case Issues.update_issue(issue, params, conn.assigns.current_user) do
-      {:ok, %Issue{} = issue} ->
-        conn
-        |> put_extensions_header()
-        |> render(:show,
-          issue: issue,
-          owner: owner,
-          repo: repo,
-          dependencies: dependencies(issue),
-          progress: progress(issue, conn.assigns.current_user),
-          work: work(issue),
-          evidence: evidence(issue),
-          completion_claims: completion_claims(issue)
-        )
+        {:error, %Ecto.Changeset{} = changeset} ->
+          ApiError.changeset(conn, changeset)
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        ApiError.changeset(conn, changeset)
+        {:error, %UnknownReference{} = unresolved} ->
+          unknown_reference(conn, unresolved)
+      end
+    else
+      {:error, :not_found} -> not_found(conn)
     end
-  rescue
-    Ecto.NoResultsError -> not_found(conn)
   end
 
   defp dependencies(%Issue{} = issue), do: Issues.dependency_graph([issue])

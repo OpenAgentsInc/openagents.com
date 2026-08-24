@@ -44,6 +44,7 @@ defmodule OpenAgents.RuntimeSupervisor do
         # provider already did. It deploys nothing on its own.
         OpenAgents.Deployments.Providers.Fake
       ] ++
+        maybe_effect_worker() ++
         maybe_scv_execution_reaper() ++
         maybe_forge() ++
         maybe_semantic_worker() ++
@@ -55,6 +56,25 @@ defmodule OpenAgents.RuntimeSupervisor do
         maybe_ra_bootstrap()
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  # The durable effect outbox's drain loop (EFFECT-001). The table is written
+  # wherever an intent commits; this is what claims and dispatches, so it is
+  # gated the same way the deployment worker is — a host that should not
+  # execute effects must not take a lease on one.
+  defp maybe_effect_worker do
+    effects = Application.get_env(:openagents, :effects, [])
+
+    if Keyword.get(effects, :worker_enabled, false) do
+      [
+        {OpenAgents.Effects.Worker,
+         interval: Keyword.get(effects, :interval_ms, 1_000),
+         limit: Keyword.get(effects, :batch_limit, 20),
+         lease_seconds: Keyword.get(effects, :lease_seconds, 120)}
+      ]
+    else
+      []
+    end
   end
 
   defp maybe_scv_execution_reaper do

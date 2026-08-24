@@ -58,6 +58,17 @@ config :openagents,
   ],
   work_workers_enabled: false,
   work: [enabled: false],
+  # The durable effect outbox (EFFECT-001). The table is always written; the
+  # worker that drains it is what this gates, because a host that should not
+  # execute effects must not claim one.
+  effects: [
+    worker_enabled: false,
+    interval_ms: 1_000,
+    batch_limit: 20,
+    lease_seconds: 120,
+    backoff_base_ms: 1_000,
+    backoff_ceiling_ms: 300_000
+  ],
   scv_codex: [
     enabled: false,
     execution_reaper_enabled: false,

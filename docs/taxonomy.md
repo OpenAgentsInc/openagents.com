@@ -450,6 +450,13 @@ an older target, and it promotes nothing.
 work job is not automatically a `deep_work.v1` job. A Computer delegation is a
 `work_jobs` row of kind `delegation`.
 
+**Effect (`effects`)** — one thing a committed intent asked the system to do
+outside its own transaction, recorded by `OpenAgents.Effects` in the same
+transaction as the intent and delivered later under a lease. It is the durable
+outbox, not a message and not a broadcast: a broadcast that nobody receives is
+gone, while an effect that nobody ran is still owed. An effect's `claimed`
+status means a worker said it would try; only `done` means it ran (EFFECT-002).
+
 ### Delegation targets
 
 **Delegation** — one unit of work this application hands to a substrate it

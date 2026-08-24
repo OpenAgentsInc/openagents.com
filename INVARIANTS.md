@@ -1226,6 +1226,107 @@ Evidence: `OpenAgents.Inference.Models`, `OpenAgentsWeb.ModelCatalogController`,
 `OpenAgentsWeb.InferenceProxyControllerTest`, and
 `OpenAgentsWeb.ThreadControllerTest`.
 
+## Durable effects
+
+### EFFECT-001 — An effect commits with the intent that asked for it, and is delivered under lease
+
+Status: Current
+
+An intent that asks for something outside its own transaction — launch a
+worker, call a provider, start a delegation — records the asking in `effects`
+inside the transaction that writes the intent. `OpenAgents.Effects.enqueue/2`
+performs one insert and participates in the caller's ambient transaction, so a
+rollback takes the effect with it. Either the intent and its effect are both
+durable or neither is; there is no window in which the system has promised work
+it holds no record of owing.
+
+This closes a specific failure, not a hypothetical one. `OpenAgents.Work` used
+to commit the `work_jobs` row and then ask Horde for a worker, from the same
+process on the same node. A crash between those two steps left a committed
+`queued` job that nothing was executing, and nothing noticed:
+`OpenAgents.Work.recover_interrupted_jobs/0` sweeps at boot and never after, so
+the job sat until that node restarted. The teardown corpus names this class —
+"best-effort live reactor" loss of committed work — in
+`docs/2026-08-24-coder-first-cloud-complements.md` section 3.
+
+- **Delivery is leased, and a lease is a pair.** `claim_batch/2` takes
+  candidates and updates them conditionally, so two workers racing over one
+  batch take disjoint sets and no effect is handed to two workers to run twice.
+  `effects_lease_pair_check` refuses an owner without an expiry and an expiry
+  without an owner, so there is no lease nobody can reclaim.
+- **A dead worker loses nothing.** `reclaim_expired/1` returns every effect
+  whose lease ran out to `pending`, on this node or any other. The attempt it
+  spent is not refunded, so a handler that reliably kills its worker still
+  reaches `maximum_attempts` and stops rather than looping forever.
+- **Redelivery is safe by construction.** The idempotency key is derived from
+  the effect's kind and its source, not its payload, so it is the same string
+  on every retry, every node, and after every restart; a unique index on it
+  makes a repeated enqueue one row. `complete/1` is idempotent, so the worker
+  whose lease expired mid-flight reports success without writing a second
+  completion or contradicting the record.
+- **A reused key with different content is refused.** `payload_digest`
+  fingerprints the content separately from the key that identifies the effect.
+  Enqueuing a known key with a different payload returns `:payload_conflict`
+  rather than silently answering the second caller with the first caller's
+  effect — the fix `docs/2026-08-24-coder-first-cloud-complements.md` section 3
+  names as the one T3 skipped.
+- **An unknown kind is a refusal, not a no-op.** `OpenAgents.Effects.Registry`
+  is the admitted map of kind to handler; the claim query offers only kinds in
+  it, and dispatching an unregistered kind fails the effect. Nothing turns a
+  payload string into a module or an atom at runtime. An outbox that quietly
+  drops what it does not recognize is the behaviour this table replaces.
+
+The converted call site is the work-job launch: `OpenAgents.Work.start_job/1`
+and its `delegation`, `scv`, and `continual_learning` siblings commit the job
+row and its `work.launch_worker` effect in one transaction, then try the launch
+inline and retire their own effect on success. A launch that did not happen is
+delivered by `OpenAgents.Effects.Handlers.WorkLaunch`, which is idempotent three
+times over: the worker is a Horde cluster singleton, a terminal job needs no
+worker, and a job that no longer exists owes nothing. Other post-commit effects
+on this plane — turn starts, account-run provider launches, thread event
+broadcasts, terminal workspace cleanup — are not yet on the outbox and remain
+best-effort.
+
+Evidence: `OpenAgents.Effects`, `OpenAgents.Effects.Effect`,
+`OpenAgents.Effects.Worker`, `OpenAgents.Effects.Registry`,
+`OpenAgents.Effects.Handlers.WorkLaunch`, `OpenAgents.Work`,
+`priv/repo/migrations/20260824204740_create_effects.exs`,
+`test/openagents/effects_test.exs`, and
+`test/openagents/effects/work_launch_test.exs`.
+
+### EFFECT-002 — Six acknowledgment milestones stay distinct
+
+Status: Current
+
+A single sequence number never stands for more than one of these facts:
+
+1. **Command admitted** — the caller's intent passed admission.
+2. **Event committed** — the intent row is durable, and any effect it asked for
+   is durable with it.
+3. **Effect claimed** — a worker holds a lease and said it would try.
+4. **Effect completed** — the handler returned successfully.
+5. **Turn quiesced** — the work the effect started has stopped.
+6. **Work verified** — someone accepted the result.
+
+A `thread_events` sequence is a transcript position. It is not an execution
+claim and it is not a completion claim, and nothing reads it as either. The
+`effects` table keeps milestones three and four apart in the schema rather than
+by convention: `effects_status_shape_check` requires a `claimed` row to hold a
+lease and an owner with no `completed_at`, and a terminal row to hold a
+`completed_at` and no lease, so "a worker took this" and "this ran" cannot
+collapse into one column. `source_sequence` records the transcript position the
+effect came from, beside the status and never in place of it.
+
+Milestones one, five, and six are owned elsewhere and are named here so that
+nothing later borrows an effect status to mean them: admission belongs to each
+intent's own path, quiescence to the thread and turn plane
+(`OpenAgents.Conversations` terminal turn state), and verification to receipts.
+
+Evidence: `OpenAgents.Effects`,
+`priv/repo/migrations/20260824204740_create_effects.exs`,
+`test/openagents/effects_test.exs`, and
+`test/openagents/effects/work_launch_test.exs`.
+
 ## Tool authority and execution
 
 ### TOOL-001 — A turn uses one immutable tool catalog
@@ -5052,6 +5153,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
 | PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | PROVIDER-002 | `test/openagents/inference/models_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
+| EFFECT-001 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
+| EFFECT-002 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |
 | COLLECTIVE-001 | `test/openagents/collective_test.exs` |
 | COLLECTIVE-002 | `test/openagents/collective_generalizer_test.exs` |

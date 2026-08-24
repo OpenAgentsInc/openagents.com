@@ -32,16 +32,7 @@ defmodule OpenAgents.Work do
   a job reference while the work continues server-side.
   """
   def start_job(attributes) when is_map(attributes) do
-    with {:ok, job} <- create_job(attributes) do
-      case start_worker(OpenAgents.Work.JobServer, job.id) do
-        {:ok, _pid} ->
-          {:ok, job}
-
-        {:error, reason} ->
-          _failure = finish_job(job.id, "failed", error_code: "worker_start_failed")
-          {:error, reason}
-      end
-    end
+    admit_and_launch(attributes, "job")
   end
 
   @doc """
@@ -89,16 +80,9 @@ defmodule OpenAgents.Work do
   the live rail and reporting back when done.
   """
   def start_delegation(attributes) when is_map(attributes) do
-    with {:ok, job} <- create_job(Map.put(attributes, :kind, "delegation")) do
-      case start_worker(OpenAgents.Work.DelegationServer, job.id) do
-        {:ok, _pid} ->
-          {:ok, job}
-
-        {:error, reason} ->
-          _failure = finish_job(job.id, "failed", error_code: "worker_start_failed")
-          {:error, reason}
-      end
-    end
+    attributes
+    |> Map.put(:kind, "delegation")
+    |> admit_and_launch("delegation")
   end
 
   @doc """
@@ -120,16 +104,9 @@ defmodule OpenAgents.Work do
   the row and starts the worker.
   """
   def start_scv(attributes) when is_map(attributes) do
-    with {:ok, job} <- create_job(Map.put(attributes, :kind, "scv")) do
-      case start_worker(OpenAgents.Work.ScvServer, job.id) do
-        {:ok, _pid} ->
-          {:ok, job}
-
-        {:error, reason} ->
-          _failure = finish_job(job.id, "failed", error_code: "worker_start_failed")
-          {:error, reason}
-      end
-    end
+    attributes
+    |> Map.put(:kind, "scv")
+    |> admit_and_launch("scv")
   end
 
   @doc """
@@ -142,17 +119,84 @@ defmodule OpenAgents.Work do
   the row and starts the worker.
   """
   def start_continual_learning(attributes) when is_map(attributes) do
-    with {:ok, job} <- create_job(Map.put(attributes, :kind, "continual_learning")) do
-      case start_worker(OpenAgents.Work.ContinualLearningServer, job.id) do
+    attributes
+    |> Map.put(:kind, "continual_learning")
+    |> admit_and_launch("continual_learning")
+  end
+
+  # Commit the job and the launch it is owed in one transaction, then try the
+  # launch inline (EFFECT-001).
+  #
+  # The transaction is the point. Before the outbox, the job row committed and
+  # the Horde child was started afterwards, from the same process, on the same
+  # node; a crash in that gap left a committed `queued` job that nothing was
+  # executing and nothing would notice until that node booted again, because
+  # `recover_interrupted_jobs/0` runs at boot and never after. Now the effect
+  # row commits with the job, so any node's outbox worker can start what this
+  # one promised.
+  #
+  # The inline launch stays because it is fast and almost always succeeds; the
+  # outbox is what makes it safe for it to fail. On success the effect is
+  # completed here, so the ordinary path writes exactly one extra row and
+  # retires it. On failure the effect stays pending and the outbox retries it,
+  # which is why the job is no longer failed with `worker_start_failed` on the
+  # spot: a transient placement error is not a dead job any more.
+  defp admit_and_launch(attributes, worker_name) do
+    {:ok, server} = OpenAgents.Effects.Handlers.WorkLaunch.worker(worker_name)
+
+    with {:ok, %{job: job, effect: effect}} <- commit_job_with_launch(attributes, worker_name) do
+      broadcast_job(job)
+
+      case start_worker(server, job.id) do
         {:ok, _pid} ->
+          {:ok, _completed} = OpenAgents.Effects.complete(effect)
           {:ok, job}
 
         {:error, reason} ->
-          _failure = finish_job(job.id, "failed", error_code: "worker_start_failed")
+          Logger.warning(
+            "work_launch_deferred job=#{job.id} worker=#{worker_name} " <>
+              "code=#{OpenAgents.Effects.error_code(reason)}"
+          )
+
           {:error, reason}
       end
     end
   end
+
+  defp commit_job_with_launch(attributes, worker_name) do
+    result =
+      Repo.transaction(fn ->
+        with {:ok, job} <- insert_job(attributes),
+             {:ok, effect} <- enqueue_launch(job, worker_name) do
+          %{job: job, effect: effect}
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, admitted} -> {:ok, admitted}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp enqueue_launch(%Job{id: job_id}, worker_name) do
+    OpenAgents.Effects.enqueue("work.launch_worker", %{
+      payload: %{"job_id" => job_id, "worker" => worker_name},
+      source_kind: "work_job",
+      source_id: job_id
+    })
+  end
+
+  @doc """
+  Start a job's worker, reporting an already-running singleton as success.
+
+  Public because the effect outbox's `OpenAgents.Effects.Handlers.WorkLaunch`
+  calls it to deliver a launch this node did not complete inline.
+  """
+  @spec ensure_worker(module(), String.t()) :: {:ok, pid() | :ignore} | {:error, term()}
+  def ensure_worker(server, job_id) when is_atom(server) and is_binary(job_id),
+    do: start_worker(server, job_id)
 
   # Start a job's worker as a cluster-wide singleton under Horde. Horde routes
   # the child to whichever member `choose_node` picks and relocates it to a
@@ -174,12 +218,7 @@ defmodule OpenAgents.Work do
 
   @doc false
   def create_job(attributes) when is_map(attributes) do
-    result =
-      %Job{}
-      |> Job.create_changeset(attributes)
-      |> Repo.insert()
-
-    case result do
+    case insert_job(attributes) do
       {:ok, job} ->
         broadcast_job(job)
         {:ok, job}
@@ -187,6 +226,15 @@ defmodule OpenAgents.Work do
       {:error, changeset} ->
         {:error, changeset}
     end
+  end
+
+  # The insert alone. `admit_and_launch/2` needs it without the broadcast,
+  # because a broadcast inside the admitting transaction would announce a job
+  # a rollback could still take away.
+  defp insert_job(attributes) do
+    %Job{}
+    |> Job.create_changeset(attributes)
+    |> Repo.insert()
   end
 
   def get_job!(job_id), do: Repo.get!(Job, job_id)

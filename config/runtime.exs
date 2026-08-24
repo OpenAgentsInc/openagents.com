@@ -444,6 +444,14 @@ if config_env() == :prod and runtime_role == :web do
     voice_retention_enabled: voice_retention_enabled,
     work: work,
     work_workers_enabled: work_enabled,
+    # The outbox drains wherever work workers run: the effects it carries today
+    # are the launches those workers are owed.
+    effects:
+      Keyword.put(
+        Application.fetch_env!(:openagents, :effects),
+        :worker_enabled,
+        work_enabled
+      ),
     scv_codex: scv_codex,
     scv_deploy: scv_deploy,
     semantic_index: semantic_index,

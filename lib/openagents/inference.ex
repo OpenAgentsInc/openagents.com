@@ -17,6 +17,7 @@ defmodule OpenAgents.Inference do
 
   import Ecto.Query
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Machines.Machine
   alias OpenAgents.Repo
 
   @token_prefix "sig_"
@@ -50,8 +51,13 @@ defmodule OpenAgents.Inference do
   A thread's budget is a different question — the caller asked for it, and it
   lives as long as someone is working — so `OpenAgents.Threads` passes
   `OpenAgents.Threads.ceilings/0` rather than borrowing these numbers.
+
+  A grant that names a computer is minted only while that computer is active,
+  and only inside the transaction that established it (IDENTITY-008). A revoked
+  computer answers `{:error, :machine_revoked}`.
   """
-  @spec mint(mint_input()) :: {:ok, Grant.t(), String.t()} | {:error, Ecto.Changeset.t()}
+  @spec mint(mint_input()) ::
+          {:ok, Grant.t(), String.t()} | {:error, Ecto.Changeset.t() | :machine_revoked}
   def mint(%{} = input) do
     token = @token_prefix <> Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
     ceilings = Map.get(input, :ceilings) || delegation_ceilings()
@@ -69,9 +75,58 @@ defmodule OpenAgents.Inference do
       expires_at: DateTime.add(now(), ceilings.ttl_seconds, :second)
     }
 
-    case attrs |> Grant.mint_changeset() |> Repo.insert() do
+    changeset = Grant.mint_changeset(attrs)
+
+    case Map.get(input, :machine_id) do
+      nil ->
+        case Repo.insert(changeset) do
+          {:ok, grant} -> {:ok, grant, token}
+          {:error, changeset} -> {:error, changeset}
+        end
+
+      machine_id ->
+        mint_for_computer(changeset, machine_id, token)
+    end
+  end
+
+  # A computer-bound grant is minted inside the transaction that reads its
+  # computer's row under `FOR SHARE`. `OpenAgents.Machines.revoke_machine/2`
+  # takes a conflicting lock on that row before it sweeps the computer's active
+  # grants, so a mint and a revocation cannot interleave: a mint that gets there
+  # first is found by the sweep, and one that gets there second reads `revoked`
+  # and is refused. The same read runs in `inference_grants_refuse_revoked_computer`
+  # for every other writer, because a source scan finds call sites and not
+  # values.
+  defp mint_for_computer(changeset, machine_id, token) do
+    Repo.transaction(fn ->
+      case computer_status(machine_id) do
+        "active" ->
+          case Repo.insert(changeset) do
+            {:ok, grant} -> grant
+            {:error, invalid} -> Repo.rollback(invalid)
+          end
+
+        _absent_or_terminal ->
+          Repo.rollback(:machine_revoked)
+      end
+    end)
+    |> case do
       {:ok, grant} -> {:ok, grant, token}
-      {:error, changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp computer_status(machine_id) do
+    case Ecto.UUID.cast(machine_id) do
+      {:ok, id} ->
+        Machine
+        |> where([m], m.id == ^id)
+        |> lock("FOR SHARE")
+        |> select([m], m.status)
+        |> Repo.one()
+
+      :error ->
+        nil
     end
   end
 
@@ -183,6 +238,32 @@ defmodule OpenAgents.Inference do
   end
 
   def revoke_active_for_thread(_), do: {0, nil}
+
+  @doc """
+  Revoke every active grant minted for a computer.
+
+  A grant's plaintext token is on the computer from the moment it is minted, so
+  closing the computer's channel and finishing its assignments does not stop it
+  spending — `OpenAgentsWeb.InferenceProxyController` authenticates the token
+  and nothing else. This is the transition that does, and
+  `OpenAgents.Machines.revoke_machine/2` runs it inside the transaction that
+  writes the revoked computer row (IDENTITY-008).
+
+  It moves `status` and the terminal stamp and nothing else. A grant's fences —
+  `conversation_id`, `thread_id`, and `machine_id` — stay immutable under the
+  `inference_grants` update trigger, so revoking a computer cannot become a way
+  to acquire, exchange, or shed the fence THREAD-001 requires.
+  """
+  @spec revoke_active_for_machine(String.t()) :: {non_neg_integer(), nil}
+  def revoke_active_for_machine(machine_id) when is_binary(machine_id) do
+    stamp = now()
+
+    Grant
+    |> where([g], g.machine_id == ^machine_id and g.status == "active")
+    |> Repo.update_all(set: [status: "revoked", revoked_at: stamp, updated_at: stamp])
+  end
+
+  def revoke_active_for_machine(_), do: {0, nil}
 
   @doc """
   Expire every one of an owner's active grants whose clock has run out.

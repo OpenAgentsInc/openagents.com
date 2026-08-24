@@ -293,12 +293,38 @@ defmodule OpenAgents.Machines do
 
   def store_probe(_machine, _report), do: {:error, :invalid_probe_report}
 
+  @doc """
+  Revoke a computer: close its channel, finish its assignments, and end the
+  inference authority it is still holding.
+
+  The last of those used to be missing. A revoked computer kept every
+  `inference_grants` row minted for it, each carrying a plaintext token already
+  delivered to that computer and each good at the inference proxy — which
+  authenticates the token and never the computer — until its own budget or
+  `expires_at` closed it. `OpenAgents.Inference.revoke_active_for_machine/1`
+  now runs in the same transaction as the revoked row, and a grant minted while
+  that transaction is open is refused rather than left behind (IDENTITY-008).
+  """
   @spec revoke_machine(User.t(), String.t()) :: {:ok, Machine.t()} | {:error, atom()}
   def revoke_machine(%User{id: user_id}, machine_id) do
     with {:ok, machine} <- get_machine(user_id, machine_id) do
-      machine
-      |> Ecto.Changeset.change(status: "revoked", revoked_at: DateTime.utc_now())
-      |> Repo.update()
+      # One transaction, and the computer row is locked before the sweep, so a
+      # concurrent mint either lands before it and is swept, or blocks on the
+      # lock, re-reads `revoked`, and is refused.
+      Repo.transaction(fn ->
+        locked = Repo.get_for_update!(Machine, machine.id)
+
+        case locked
+             |> Ecto.Changeset.change(status: "revoked", revoked_at: DateTime.utc_now())
+             |> Repo.update() do
+          {:ok, revoked} ->
+            _ = OpenAgents.Inference.revoke_active_for_machine(revoked.id)
+            revoked
+
+          {:error, _changeset} ->
+            Repo.rollback(:machine_not_found)
+        end
+      end)
       |> case do
         {:ok, revoked} ->
           _ = OpenAgents.Forge.Assignments.finish_for_machine(machine.id)
@@ -311,7 +337,7 @@ defmodule OpenAgents.Machines do
 
           {:ok, revoked}
 
-        {:error, _changeset} ->
+        {:error, _reason} ->
           {:error, :machine_not_found}
       end
     end
@@ -392,6 +418,11 @@ defmodule OpenAgents.Machines do
         where: machine.id == ^pairing.machine_id and machine.status == "active"
       )
       |> Repo.update_all(set: [status: "revoked", revoked_at: now, updated_at: now])
+
+      # The other revocation path, and it owes the same thing: this runs inside
+      # the claim transaction, after the update has taken the computer row's
+      # lock, so an interleaved mint cannot slip a live grant past it.
+      _ = OpenAgents.Inference.revoke_active_for_machine(pairing.machine_id)
     end
 
     :ok

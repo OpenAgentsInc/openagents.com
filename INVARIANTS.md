@@ -439,9 +439,60 @@ execution; the API cannot widen a tier, add a root, or request an unadvertised
 capability. Computer projections never expose a computer token, token digest, or
 raw probe document.
 
+Amended 2026-08-24 (issue #183): revoking a computer ends the inference
+authority it holds, and cannot be raced.
+
+An `inference_grants` row names the computer it was minted for. A grant is not
+a provider credential, but it is authority to spend the owner's account at
+`OpenAgentsWeb.InferenceProxyController`, and that controller authenticates the
+grant token alone — it never asks which computer presented it, and the
+plaintext was delivered to the computer at delegation start. So revoking the
+computer used to close its channel and finish its assignments while every grant
+it held stayed `active` until its own budget or `expires_at` closed it, up to
+`inference_grant_ttl_seconds` later. `machine_id` was written by
+`OpenAgents.Work.DelegationServer` and read by nothing; the absence was the
+gap.
+
+`OpenAgents.Inference.revoke_active_for_machine/1` now runs inside the same
+transaction that writes the revoked computer row, on both paths that revoke one
+— `OpenAgents.Machines.revoke_machine/2` and the pairing-expiry branch of
+`OpenAgents.Machines.claim_pairing/2`. It moves `status` and the terminal stamp
+and nothing else, so revocation is not a way to acquire, exchange, or shed the
+fence THREAD-001 requires; `sarah_guard_inference_grant_update` refuses that
+independently.
+
+The window between the decision and its commit is closed in PostgreSQL rather
+than at the call site. `inference_grants_refuse_revoked_computer` fires before every
+insert that names a computer, reads that computer's row `FOR SHARE`, and
+refuses unless it is active. `FOR SHARE` conflicts with the `FOR NO KEY UPDATE`
+an ordinary `UPDATE machines SET status = 'revoked'` takes, so a mint and a
+revocation cannot overlap on that row: either the mint commits first and the
+sweep finds its grant, or the revocation commits first and the mint re-reads
+`revoked` and raises. The foreign key's own `FOR KEY SHARE` does not conflict
+with an ordinary update and would not have served.
+`OpenAgents.Inference.mint/1` performs the same read first so an ordinary
+caller gets `{:error, :machine_revoked}` rather than a `Postgrex.Error`, and a
+mint failure degrades a delegation to a grant-less one rather than blocking it.
+
+The guard is in the database because a source scan finds call sites and not
+values: `machine_id` reaches `mint/1` from a variable, and a future writer that
+never appears in a grep is fenced the day it lands. What the proof does not
+show is contention across two connections — the sandbox holds a test in one
+transaction — so the tests establish the refusal inside the revocation's open
+window at both layers, and assert the lock itself from `pg_get_functiondef` in
+the live database.
+
+A computer's token expiry is a separate clock and is left alone: an active
+computer whose `token_expires_at` has passed can no longer authenticate, and
+its grants close on their own `expires_at`.
+
 Evidence: `OpenAgentsWeb.Plugs.AssignmentControlAuth`,
 `OpenAgents.ComputerAgentJobs`, `OpenAgentsWeb.ComputersController`,
-and `test/openagents_web/controllers/computer_control_api_test.exs`.
+`OpenAgents.Machines.revoke_machine/2`,
+`OpenAgents.Inference.revoke_active_for_machine/1`,
+`priv/repo/migrations/20260824032226_refuse_inference_grants_for_revoked_computers.exs`,
+`test/openagents_web/controllers/computer_control_api_test.exs`, and
+`test/openagents/inference/computer_revocation_test.exs`.
 
 ### IDENTITY-009 — Unified delegation preserves substrate authority
 
@@ -4219,7 +4270,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
 | IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
-| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs` |
+| IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |
 | IDENTITY-010 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_credential_reach_test.exs` |
 | CAPACITY-002 | `test/openagents/box_fanout_test.exs` |

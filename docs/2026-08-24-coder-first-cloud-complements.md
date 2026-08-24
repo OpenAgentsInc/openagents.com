@@ -38,6 +38,12 @@ mechanism).
   first and a steering surface second; make cloud computers a second
   launcher behind the one delegation contract; and render traces from
   receipts, never from Git-branch transcripts.
+- The first release runs on a three-lane compute mix behind one grant
+  and one thread model: house provider credits (Gemini, Z.ai, and
+  peers), a metered inference offering booted behind the coder, and user
+  compute — first as foreign-harness delegation (drive Claude Code from
+  the coder with transcripts landing in threads), later as provider-mode
+  supply (section 5).
 
 ## 2. The competitive read
 
@@ -188,7 +194,56 @@ digest and a loss report, never a skill prompt masquerading as lossless
 resume, and it never activates foreign credentials or authority. As a
 plugin, it is also the first proof of the registry.
 
-## 5. Trust posture: the differentiators to ship early
+## 5. The compute mix
+
+The first coder release runs on three compute lanes behind one grant and
+one thread model. Whichever lane executes a turn, the transcript, usage,
+and receipts land identically on the thread — that is the point of the
+center.
+
+**Lane 1: house compute.** The server holds provider credits — Gemini,
+Z.ai, and other credited services — behind `POST /api/inference/proxy`.
+The coder ships with a typed model catalog served by the API: model id,
+provider, context and output ceilings, and availability, so the CLI never
+guesses. Per-turn model selection is honored and attributed — requested
+versus effective model on every turn, which makes #160 (silent model
+substitution) a release blocker, not a cleanup item. No user keys, no
+client-side provider credentials.
+
+**Lane 2: the metered inference offering.** The OpenCode-Zen-shaped move:
+sell metered model access behind the coding agent. Grants meter against
+account credits, pricing is per-model and visible before spend, and usage
+truth precedes any bill — the Cursor pricing-crisis lesson applied in
+advance. This deliberately reopens a slice of the deferred payments lane,
+the same way the settlement proof does: as a bounded, named exception.
+The offering launches only after lane 1's catalog and usage attribution
+are honest, because a metered business on top of untrustworthy usage
+numbers is the exact failure being positioned against.
+
+**Lane 3: user compute.** Two forms, in order:
+
+1. **Foreign-harness delegation.** The coder delegates a turn or a child
+   task to a harness the user already pays for — Claude Code (for Fable)
+   first, then Codex and peers — running on the user's machine under the
+   user's own account, with the transcript captured into forge threads
+   through a typed adapter. The near-term goal is concrete: the owner
+   talks to Fable through `openagents coder`, which drives the Claude
+   Code harness underneath, and every turn lands in the cloud as thread
+   events. The laws carry over from the Khala era: own-capacity-only, no
+   resale, and the adapter never takes custody of the foreign
+   credential — it drives the harness, it does not impersonate it. The
+   grok-build lesson applies to transcripts too: capture is a typed,
+   loss-accounted adapter per harness, not a scrape.
+2. **Provider mode.** Later, the same CLI turns idle user machines into
+   supply — the Pylon revival under the pay-for-verified-work laws
+   (`docs/2026-08-24-registry-network-strategy.md` section 9).
+
+The three lanes are also the demand story in miniature: house credits
+bootstrap usage, the metered offering is the revenue lane, and user
+compute is what makes the coder the front door to every harness rather
+than a competitor to one.
+
+## 6. Trust posture: the differentiators to ship early
 
 From the synthesis's refusal list and Cursor's trust drops, the ones that
 are cheap now and expensive to retrofit:
@@ -212,36 +267,45 @@ are cheap now and expensive to retrofit:
    the coder's task registry and the web fleet view are the two renderers
    over one canonical graph.
 
-## 6. Sequence
+## 7. Sequence
 
-Ordered, composing with the strategy doc's priorities (its items 1–2
-are this list's items 1 and 3):
+Ordered, composing with the strategy doc's priorities. Items 1–6 are the
+first coder release arc ("Coder v1"), with item 6 gated inside it on
+items 2's attribution being honest; the rest follow.
 
 1. **Thread persistence and resume in the CLI** — the client writes
    `turn.user`, `turn.reasoning`, `tool.ran`, `turn.assistant`; `--resume`
    replays through the cursor. (Unblock monorepo #19 first.)
-2. **Web thread viewer** — read-only thread pages over the same
+2. **Model catalog and house-provider routing** — compute mix lane 1:
+   Gemini, Z.ai, and peer credits behind the proxy, a typed catalog,
+   requested-versus-effective attribution on every turn (#160 and #164
+   close here).
+3. **Foreign-harness delegation** — compute mix lane 3, first form:
+   drive Claude Code and peers from the coder with transcripts captured
+   into threads.
+4. **Web thread viewer** — read-only thread pages over the same
    projections, with the snapshot-to-live protocol and shell/detail
-   split. Fixes #164's class of gap (reasoning and tools visible) on the
-   web at the same time.
-3. **Plugin contract v1 and pilot** — per the plugin assessment; runs
+   split.
+5. **Plugin contract v1 and pilot** — per the plugin assessment; runs
    land as receipted thread events feeding the trace viewer and registry.
-4. **Durable effect outbox and the six milestones** — the thread plane's
+6. **Metered inference offering** — compute mix lane 2, once catalog and
+   usage attribution are honest.
+7. **Durable effect outbox and the six milestones** — the thread plane's
    execution half, prerequisite for honest delegation receipts.
-5. **Web steering and approvals** — the composer verbs (send, steer,
+8. **Web steering and approvals** — the composer verbs (send, steer,
    queue, interrupt) and approval decisions from the browser.
-6. **Nested-thread ledger** — server-side spawn/resume/cancel/complete;
+9. **Nested-thread ledger** — server-side spawn/resume/cancel/complete;
    delegation receipts become real.
-7. **Cloud computer launcher** — the port plan's final slice behind the
-   delegation contract, quota-brokered, with the owner-hosted versus
-   managed-environment authority split explicit.
-8. **Trace viewer and commit-trailer join** — receipts rendered publicly
-   under tiers; any SHA resolves to its thread.
-9. **Mobile controller** — last, on the same projections and outbox
-   pattern; T3's mobile teardown is the reference for breadth, our
-   authority model for the difference.
+10. **Cloud computer launcher** — the port plan's final slice behind the
+    delegation contract, quota-brokered, with the owner-hosted versus
+    managed-environment authority split explicit.
+11. **Trace viewer and commit-trailer join** — receipts rendered publicly
+    under tiers; any SHA resolves to its thread.
+12. **Mobile controller** — last, on the same projections and outbox
+    pattern; T3's mobile teardown is the reference for breadth, our
+    authority model for the difference.
 
-## 7. Relation to other documents
+## 8. Relation to other documents
 
 - `docs/2026-08-24-registry-network-strategy.md` — why the centralized
   cloud and the registry are the strategic center this product plan feeds.

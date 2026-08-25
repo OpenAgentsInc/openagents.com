@@ -98,11 +98,60 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+# A stage's inputs, as paths. A stage is re-run when any of them changes and
+# reused when none of them has, so a test-only edit stops rebuilding releases
+# and re-running the asset suite. Everything depends on the lockfile and the
+# configuration, so those are added to every stage rather than listed here.
+#
+# The rule for editing this list is one-directional: adding a path is always
+# safe, and removing one can make the gate reuse a stage that should have run.
+# A stage whose inputs are not listed gets the whole worktree and therefore
+# never reuses, which is the safe default rather than an oversight.
+stage_inputs() {
+  case $1 in
+    compile | production_compile) echo "lib" ;;
+    precommit) echo "lib test priv assets ops" ;;
+    enumeration_proofs) echo "lib test ops" ;;
+    cluster | direct_transaction | relup_topology | rolling_replacement) echo "lib test" ;;
+    javascript) echo "assets" ;;
+    relup | version_chain | interrupted_install) echo "lib priv assets ops" ;;
+    contracts) echo "lib priv ops" ;;
+    staging_infra) echo "ops" ;;
+    release_smoke) echo "lib priv assets ops" ;;
+    *) echo "." ;;
+  esac
+}
+
+# The identity of a stage's inputs: Git's own tree hashes, so a path that has
+# not changed hashes the same however it got there, and an uncommitted edit
+# hashes differently from the commit it sits on. The gate already refuses a
+# dirty worktree, so HEAD is the whole truth here.
+stage_key() {
+  stage_name=$1
+  {
+    echo "$stage_name"
+    for input_path in $(stage_inputs "$stage_name") mix.exs mix.lock config; do
+      git -C "$repo_root" rev-parse "HEAD:$input_path" 2>/dev/null ||
+        echo "absent:$input_path"
+    done
+  } | shasum -a 256 | cut -d" " -f1
+}
+
+stage_cache_root="$git_common_dir/openagents/release-gate-stages"
+
 run_stage() {
   stage_name=$1
   shift
   stage_log="$run_root/$stage_name.log"
   stage_started=$(date +%s)
+
+  cache_entry="$stage_cache_root/$stage_name.$(stage_key "$stage_name")"
+
+  if [ "$mode" != "--force" ] && [ -f "$cache_entry" ]; then
+    echo "Reusing $stage_name (inputs unchanged since it last passed)"
+    eval "${stage_name}_duration_seconds=$(cat "$cache_entry")"
+    return 0
+  fi
 
   echo "Running $stage_name"
 
@@ -120,6 +169,10 @@ run_stage() {
 
   stage_finished=$(date +%s)
   eval "${stage_name}_duration_seconds=$((stage_finished - stage_started))"
+
+  # Recorded only after it passed, so a failure is never reused.
+  mkdir -p "$stage_cache_root"
+  eval "echo \$${stage_name}_duration_seconds" >"$cache_entry"
 }
 
 cd "$repo_root"

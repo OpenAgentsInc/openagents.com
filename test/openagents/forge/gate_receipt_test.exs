@@ -40,6 +40,27 @@ defmodule OpenAgents.Forge.GateReceiptTest do
              GateReceipt.verify(String.duplicate("b", 40), repo_root: root)
   end
 
+  test "accepts a git common dir override" do
+    root = temporary_root()
+    common_dir = Path.join(root, "repo.git")
+    File.mkdir_p!(common_dir)
+    path = GateReceipt.path(@sha, git_common_dir: common_dir)
+    File.mkdir_p!(Path.dirname(path))
+
+    receipt = %{
+      "schema" => "openagents.release-gate.v1",
+      "git_sha" => @sha,
+      "status" => "passed",
+      "stages" => Map.new(@stages, &{&1, %{"status" => "passed"}})
+    }
+
+    File.write!(path, Jason.encode!(receipt))
+    assert {:ok, ^receipt} = GateReceipt.verify(@sha, git_common_dir: common_dir)
+
+    assert {:error, :missing_gate_receipt} =
+             GateReceipt.verify(String.duplicate("b", 40), git_common_dir: common_dir)
+  end
+
   test "rejects an incomplete receipt" do
     root = temporary_root()
     path = GateReceipt.path(@sha, repo_root: root)

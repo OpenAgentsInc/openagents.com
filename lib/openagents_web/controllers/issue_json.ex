@@ -42,6 +42,15 @@ defmodule OpenAgentsWeb.IssueJSON do
     issue_json(issue, assigns)
   end
 
+  def render("activity.json", %{activity: activity} = assigns) do
+    url_base = url_base(assigns)
+
+    %{
+      threads: Enum.map(activity.threads, &thread_json(&1, url_base)),
+      receipts: Enum.map(activity.receipts, &receipt_json/1)
+    }
+  end
+
   defp issue_json(issue, assigns) do
     owner = Map.get(assigns, :owner, "OpenAgents")
     repo = Map.get(assigns, :repo, "openagents")
@@ -200,6 +209,21 @@ defmodule OpenAgentsWeb.IssueJSON do
   @attempt_key_names %{target_kind: :target, terminal_commit: :commit}
 
   defp evidence_json(entry), do: entry
+
+  defp receipt_json(%{family: family, sha: sha, receipt: receipt}) do
+    base =
+      if is_struct(receipt) do
+        receipt
+        |> Map.from_struct()
+        |> Map.delete(:__meta__)
+      else
+        receipt
+      end
+
+    base
+    |> Map.put(:family, family)
+    |> Map.put(:sha, sha)
+  end
 
   defp attempt_json(attempt) do
     attempt

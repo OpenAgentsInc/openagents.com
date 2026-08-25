@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Forge.Assignments
   alias OpenAgents.Issues
+  alias OpenAgents.Issues.Activity
   alias OpenAgents.Issues.Capture
   alias OpenAgents.Issues.CompletionClaims
   alias OpenAgents.Issues.Evidence
@@ -385,6 +386,33 @@ defmodule OpenAgentsWeb.IssueController do
   end
 
   defp threads_by_issue(_issues, _reader), do: %{}
+
+  def activity(conn, %{
+        "owner" => owner,
+        "repo" => repo,
+        "issue_number" => issue_number
+      }) do
+    reader = conn.assigns[:current_user]
+
+    with {:ok, repository} <-
+           lookup(fn -> Repositories.get_visible_by_path!(owner, repo, reader) end),
+         {:ok, issue} <-
+           lookup(fn ->
+             Issues.get_issue_by_number!(repository, integer_param!(issue_number))
+           end) do
+      conn
+      |> put_status(:ok)
+      |> put_extensions_header()
+      |> render(:activity,
+        owner: owner,
+        repo: repo,
+        issue: issue,
+        activity: Activity.for_issue(issue, reader)
+      )
+    else
+      {:error, :not_found} -> not_found(conn)
+    end
+  end
 
   # The extension namespace is discoverable from the response itself, so a
   # client never has to infer which OpenAgents fields this deployment sends.

@@ -672,6 +672,10 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/issues", IssueController, :index
     get "/repos/:owner/:repo/issues/:issue_number", IssueController, :show
 
+    get "/repos/:owner/:repo/issues/:issue_number/activity",
+        IssueController,
+        :activity
+
     get "/repos/:owner/:repo/issues/:issue_number/dependencies",
         IssueDependencyController,
         :index

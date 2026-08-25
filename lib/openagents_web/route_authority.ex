@@ -72,6 +72,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   @optional_forge_read_paths [
     "/api/v1/repos/:owner/:repo/issues",
     "/api/v1/repos/:owner/:repo/issues/:issue_number",
+    "/api/v1/repos/:owner/:repo/issues/:issue_number/activity",
     "/api/v1/repos/:owner/:repo/issues/:issue_number/dependencies",
     "/api/v1/repos/:owner/:repo/issues/:issue_number/comments",
     "/api/v1/repos/:owner/:repo/issues/comments/:id",

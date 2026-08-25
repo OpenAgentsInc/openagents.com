@@ -87,6 +87,15 @@ defmodule OpenAgents.Forge do
     }
   end
 
+  def gate_receipts_for(repo, sha, opts \\ []) when is_binary(repo) and is_binary(sha) do
+    git_common_dir = Keyword.get(opts, :git_common_dir, OpenAgents.Forge.Repos.bare_path(repo))
+
+    case OpenAgents.Forge.GateReceipt.verify(sha, git_common_dir: git_common_dir) do
+      {:ok, receipt} -> %{gates: [receipt]}
+      _ -> %{gates: []}
+    end
+  end
+
   @doc "Prefix-match two shas in either direction (short vs full), ≥7 chars."
   def sha_match?(a, b) when is_binary(a) and is_binary(b) do
     min(byte_size(a), byte_size(b)) >= 7 and

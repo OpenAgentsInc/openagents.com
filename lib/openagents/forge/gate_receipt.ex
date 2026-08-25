@@ -51,8 +51,14 @@ defmodule OpenAgents.Forge.GateReceipt do
 
   @doc "Return the default receipt path for an exact Git SHA."
   def path(sha, opts \\ []) do
-    root = Keyword.get_lazy(opts, :repo_root, &repo_root!/0)
-    Path.join([root, ".git", "openagents", "release-gate-receipts", "#{sha}.json"])
+    case Keyword.fetch(opts, :git_common_dir) do
+      {:ok, git_common_dir} ->
+        Path.join([git_common_dir, "openagents", "release-gate-receipts", "#{sha}.json"])
+
+      :error ->
+        root = Keyword.get_lazy(opts, :repo_root, &repo_root!/0)
+        Path.join([root, ".git", "openagents", "release-gate-receipts", "#{sha}.json"])
+    end
   end
 
   defp verify_receipt(sha, opts) do

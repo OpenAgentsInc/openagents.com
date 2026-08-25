@@ -156,6 +156,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v1/repos/:owner/:repo/issues" => {:optional_bearer, :issue, :envelope},
       "get /api/v1/repos/:owner/:repo/issues/:issue_number" =>
         {:optional_bearer, :issue, :envelope},
+      "get /api/v1/repos/:owner/:repo/issues/:issue_number/activity" =>
+        {:optional_bearer, :issue_activity, :envelope},
       "get /api/v1/repos/:owner/:repo/issues/:issue_number/dependencies" =>
         {:optional_bearer, :issue_dependency, :envelope},
       "get /api/v1/repos/:owner/:repo/pulls" => {:optional_bearer, :pull_request, :legacy},

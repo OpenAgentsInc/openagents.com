@@ -207,6 +207,14 @@ defmodule OpenAgentsWeb.GymRunLive do
     end
   end
 
+  # Whether the selected trial is still running, for the threadless
+  # placeholder: a running trial's thread is expected momentarily (the
+  # harness links it as soon as the coder announces), while a finished
+  # threadless trial ran on a lane that leaves no transcript.
+  defp selected_trial_running?(trials, selected_trial_id) do
+    Enum.any?(trials, &(&1.id == selected_trial_id and &1.state == "running"))
+  end
+
   defp upsert_trial(trials, trial) do
     trials
     |> Enum.reject(&(&1.id == trial.id or &1.task == trial.task))
@@ -356,9 +364,16 @@ defmodule OpenAgentsWeb.GymRunLive do
                   Select a trial to read its transcript.
                 </.empty>
               <% :no_thread -> %>
-                <.empty id="gym-transcript-no-thread" title="No transcript">
-                  This trial's lane left no transcript.
-                </.empty>
+                <%= if selected_trial_running?(@trials, @selected_trial_id) do %>
+                  <.empty id="gym-transcript-no-thread" title="Waiting for the thread">
+                    The trial is running and its coder has not announced a
+                    thread yet. The transcript attaches the moment it does.
+                  </.empty>
+                <% else %>
+                  <.empty id="gym-transcript-no-thread" title="No transcript">
+                    This trial's lane left no transcript.
+                  </.empty>
+                <% end %>
               <% :unavailable -> %>
                 <.empty id="gym-transcript-unavailable" title="Transcript unavailable">
                   The linked thread no longer exists.

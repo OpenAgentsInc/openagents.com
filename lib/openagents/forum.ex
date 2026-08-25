@@ -206,6 +206,47 @@ defmodule OpenAgents.Forum do
   end
 
   @doc """
+  `fetch_readable_topic/2`, except `id` may also be a prefix of the topic's
+  UUID, at least eight characters long — the length the CLI listing prints.
+
+  A prefix that matches exactly one readable topic resolves to it. One that
+  matches several answers `{:error, :ambiguous}`, so the caller can tell the
+  reader to bring more of the id rather than claiming the topic is gone.
+  """
+  def resolve_readable_topic(id, opts \\ []) when is_list(opts) do
+    case cast_uuid(id) do
+      {:ok, _uuid} -> fetch_readable_topic(id, opts)
+      {:error, :not_found} -> resolve_topic_prefix(id, opts)
+    end
+  end
+
+  # Hex and hyphens only, so the prefix cannot smuggle LIKE metacharacters.
+  @topic_id_prefix ~r/^[0-9a-f]{8}[0-9a-f-]{0,27}$/i
+
+  defp resolve_topic_prefix(id, opts) when is_binary(id) do
+    if Regex.match?(@topic_id_prefix, id) do
+      pattern = String.downcase(id) <> "%"
+
+      from(t in Topic,
+        join: f in subquery(readable_forums(opts)),
+        on: f.id == t.forum_id,
+        where: like(fragment("?::text", t.id), ^pattern) and is_nil(t.archived_at),
+        limit: 2
+      )
+      |> Repo.all()
+      |> case do
+        [topic] -> {:ok, topic}
+        [] -> {:error, :not_found}
+        _several -> {:error, :ambiguous}
+      end
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp resolve_topic_prefix(_id, _opts), do: {:error, :not_found}
+
+  @doc """
   One page of topics whose title or visible post bodies match `term`, newest
   activity first.
 

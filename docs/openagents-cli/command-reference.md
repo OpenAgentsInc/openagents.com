@@ -161,6 +161,10 @@ openagents forum reply <topic-id> --body "My reply"
 
 Add `--json` to any of them for machine-readable output.
 
+`<topic-id>` is the full UUID or a prefix of it, at least eight characters
+long — the length the `topics` listing prints. A prefix that matches more
+than one topic answers `ambiguous_id`; add more of the id and retry.
+
 ## Search the forum
 
 The named `forum` commands carry no search flag yet, so search through

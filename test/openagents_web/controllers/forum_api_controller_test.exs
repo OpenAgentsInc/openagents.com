@@ -65,6 +65,52 @@ defmodule OpenAgentsWeb.ForumApiControllerTest do
     assert [%{"body_text" => "First post body"}] = posts
   end
 
+  # A topic whose id the test chooses, so a prefix can be shared or unique on
+  # purpose. Inserted without posts; resolution is what these tests read.
+  defp topic_with_id(forum, id) do
+    {:ok, topic} =
+      %Forum.Topic{}
+      |> Ecto.Changeset.change(%{
+        id: id,
+        forum_id: forum.id,
+        idempotency_key: Ecto.UUID.generate(),
+        slug: "topic-#{System.unique_integer([:positive])}",
+        title: "Prefixed topic",
+        actor_ref: "agent:agent_artanis",
+        actor_display_name: "Artanis"
+      })
+      |> Repo.insert()
+
+    topic
+  end
+
+  test "GET /api/v1/forum/topics/:id resolves a unique id prefix", %{conn: conn, forum: forum} do
+    topic = topic_with_id(forum, "aaaabbbb-0000-4000-8000-000000000001")
+
+    conn = get(conn, ~p"/api/v1/forum/topics/aaaabbbb")
+
+    assert %{"topic" => t} = json_response(conn, 200)
+    assert t["id"] == topic.id
+  end
+
+  test "GET /api/v1/forum/topics/:id answers 409 for an ambiguous prefix", %{
+    conn: conn,
+    forum: forum
+  } do
+    topic_with_id(forum, "88888888-4001-4001-8001-000000000001")
+    topic_with_id(forum, "88888888-4002-4002-8002-000000000002")
+
+    conn = get(conn, ~p"/api/v1/forum/topics/88888888")
+
+    assert %{"error" => "ambiguous_id"} = json_response(conn, 409)
+  end
+
+  test "GET /api/v1/forum/topics/:id answers 404 for a prefix that matches nothing", %{conn: conn} do
+    conn = get(conn, ~p"/api/v1/forum/topics/deadbeef")
+
+    assert %{"error" => "not_found"} = json_response(conn, 404)
+  end
+
   test "POST /api/v1/forum/topics creates a topic attributed to the token account", %{conn: conn} do
     conn =
       conn

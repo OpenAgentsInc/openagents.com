@@ -32,8 +32,9 @@ defmodule OpenAgentsWeb.ForumApiController do
   end
 
   def show_topic(conn, %{"id" => id} = params) do
-    case Forum.fetch_readable_topic(id, scope(conn)) do
+    case Forum.resolve_readable_topic(id, scope(conn)) do
       {:ok, topic} -> render_topic(conn, topic, params["page"])
+      {:error, :ambiguous} -> conflict(conn, "ambiguous_id")
       {:error, :not_found} -> not_found(conn)
     end
   end
@@ -71,11 +72,12 @@ defmodule OpenAgentsWeb.ForumApiController do
 
   def create_post(conn, %{"topic_id" => topic_id, "body_text" => body_text} = params) do
     if valid_text?(body_text) do
-      with {:ok, topic} <- Forum.fetch_readable_topic(topic_id, scope(conn)),
+      with {:ok, topic} <- Forum.resolve_readable_topic(topic_id, scope(conn)),
            {:ok, post} <- Forum.create_post(topic, post_attrs(conn, params)) do
         conn |> put_status(:created) |> render(:post, post: post)
       else
         {:error, :not_found} -> not_found(conn)
+        {:error, :ambiguous} -> conflict(conn, "ambiguous_id")
         _closed -> conflict(conn, "topic_closed")
       end
     else

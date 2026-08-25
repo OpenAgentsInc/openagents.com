@@ -4,6 +4,11 @@ set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "rg is required for the reference check" >&2
+  exit 1
+fi
+
 allowlist="ops/ci/allowed-sarah-references.txt"
 matches=$(mktemp /tmp/openagents-reference-matches.XXXXXX)
 patterns=$(mktemp /tmp/openagents-reference-patterns.XXXXXX)

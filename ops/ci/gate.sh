@@ -68,7 +68,7 @@ if [ -z "${OPENAGENTS_RELEASE_SMOKE_DATABASE_URL:-}" ]; then
   exit 1
 fi
 
-for command_name in jq mix npm; do
+for command_name in jq mix npm rg; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "$command_name is required for the release gate" >&2
     exit 1

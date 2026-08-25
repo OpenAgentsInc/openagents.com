@@ -4644,7 +4644,7 @@ operations see the change.
 
 Evidence: `OpenAgents.Stacks`, `OpenAgents.Stacks.Stack`,
 `OpenAgents.Stacks.StackEntry`, `OpenAgents.Stacks.OID`,
-`ops/ci/stack-contracts.sh`, and `test/openagents/stacks_test.exs`.
+and `test/openagents/stacks_test.exs`.
 
 ### ISSUE-001 — A commit closes an issue only from the default branch
 
@@ -5273,7 +5273,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs`, `test/openagents_web/controllers/forge_anchor_controller_test.exs` |
 | EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs`, `test/openagents/data_rights/age_test.exs` |
-| STACK-001 | `ops/ci/stack-contracts.sh`, `test/openagents/stacks_test.exs` |
+| STACK-001 | `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |
 | ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |

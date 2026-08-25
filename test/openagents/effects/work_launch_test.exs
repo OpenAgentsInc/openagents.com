@@ -138,6 +138,48 @@ defmodule OpenAgents.Effects.WorkLaunchTest do
     end
   end
 
+  describe "crash boundary" do
+    test "the launch effect survives a failed inline placement" do
+      remove_horde_supervisor()
+      on_exit(fn -> restore_horde_supervisor() end)
+
+      _fake =
+        start_supervised!({OpenAgents.Effects.WorkLaunchTest.CrashingHorde, []})
+
+      recording_launch_handler()
+
+      {:ok, conversation} =
+        Conversations.ensure_conversation("effect-launch-failed-placement")
+
+      owner = Conversations.get_conversation_owner!(conversation)
+
+      assert {:error, :worker_start_failed} =
+               Work.start_job(%{
+                 conversation_id: conversation.id,
+                 owner_visitor_id: owner.id,
+                 surface: "text",
+                 goal: "a job whose worker could not be placed"
+               })
+
+      assert [job] = Work.recent_jobs(conversation, 1)
+      assert job.status == "queued"
+      job_id = job.id
+
+      assert [effect] = Effects.for_source("work_job", job_id)
+      assert effect.kind == "work.launch_worker"
+      assert effect.payload == %{"job_id" => job_id, "worker" => "job"}
+      assert effect.source_kind == "work_job"
+      assert effect.source_id == job_id
+      assert effect.status == "pending"
+
+      assert %{claimed: 1, completed: 1} =
+               Worker.run_once(identity: "worker-outbox")
+
+      assert_received {:launch_requested, OpenAgents.Work.JobServer, ^job_id}
+      assert Effects.get(effect.id).status == "done"
+    end
+  end
+
   # The ordinary path, run to a terminal job so no worker outlives the test.
   defp start_job(browser_key) do
     {:ok, conversation} = Conversations.ensure_conversation(browser_key)
@@ -207,5 +249,65 @@ defmodule OpenAgents.Effects.WorkLaunchTest do
       Application.delete_env(:openagents, :effects)
       Application.delete_env(:openagents, :effects_launch_observer)
     end)
+  end
+
+  defp remove_horde_supervisor do
+    remove_horde_supervisor(5)
+  end
+
+  defp remove_horde_supervisor(0) do
+    :ok
+  end
+
+  defp remove_horde_supervisor(retries) do
+    case Supervisor.terminate_child(OpenAgents.RuntimeSupervisor, OpenAgents.HordeSupervisor) do
+      :ok ->
+        case Supervisor.delete_child(OpenAgents.RuntimeSupervisor, OpenAgents.HordeSupervisor) do
+          :ok ->
+            :ok
+
+          {:error, :running} ->
+            remove_horde_supervisor(retries - 1)
+
+          _ ->
+            :ok
+        end
+
+      {:error, :not_found} ->
+        :ok
+    end
+  end
+
+  defp restore_horde_supervisor do
+    _ = Supervisor.terminate_child(OpenAgents.RuntimeSupervisor, OpenAgents.HordeSupervisor)
+    _ = Supervisor.delete_child(OpenAgents.RuntimeSupervisor, OpenAgents.HordeSupervisor)
+
+    horde_spec = {
+      Horde.DynamicSupervisor,
+      name: OpenAgents.HordeSupervisor,
+      strategy: :one_for_one,
+      members: :auto,
+      process_redistribution: :passive,
+      delta_crdt_options: [sync_interval: 150]
+    }
+
+    case Supervisor.restart_child(OpenAgents.RuntimeSupervisor, OpenAgents.HordeSupervisor) do
+      {:ok, _pid} ->
+        :ok
+
+      {:ok, _pid, _info} ->
+        :ok
+
+      {:error, :not_found} ->
+        case Supervisor.start_child(OpenAgents.RuntimeSupervisor, horde_spec) do
+          {:ok, _pid} -> :ok
+          {:ok, _pid, _info} -> :ok
+          {:error, :already_started} -> :ok
+          _ -> :ok
+        end
+
+      _ ->
+        :ok
+    end
   end
 end

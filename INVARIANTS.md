@@ -1567,8 +1567,8 @@ claimant or buyer reference, an operator identity, an approval reference, or a
 gateway reference. The claimant can export the full receipt, including their own
 destination, without a hosted wallet.
 
-Evidence: `OpenAgents.Settlement`, `OpenAgents.Settlement.PaymentGateway`, its
-seven append-only schemas with their uniqueness and partial-uniqueness
+Evidence: `OpenAgents.Settlement`, `OpenAgents.Settlement.PaymentGateway`, the
+settlement schemas and tables, with their uniqueness and partial-uniqueness
 constraints, and the pricing, claim, verification, duplicate, stale-commit,
 approval, budget, retry, reconciliation, expiry, dispute, refund, privacy, and
 receipt-export cases in `test/openagents/settlement_test.exs`.

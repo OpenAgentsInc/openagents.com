@@ -210,7 +210,7 @@ defmodule OpenAgents.Inference do
 
       case grant do
         %Grant{status: "active"} = grant ->
-          merged = merge_usage(grant.usage, provider_usage)
+          merged = merge_usage(grant.usage, provider_usage, grant.model_id)
           would_exhaust = would_exhaust?(grant, merged)
           next_status = if would_exhaust, do: "exhausted", else: "active"
 
@@ -378,7 +378,7 @@ defmodule OpenAgents.Inference do
                   cache_read_input_tokens cache_write_input_tokens)
 
   @doc false
-  def merge_usage(existing, provider_usage) do
+  def merge_usage(existing, provider_usage, model_id) do
     normalized = normalize_usage(provider_usage)
 
     merged =
@@ -400,7 +400,7 @@ defmodule OpenAgents.Inference do
 
     merged
     |> Map.put("total_tokens", derived_total(existing, merged))
-    |> put_cost(existing)
+    |> put_cost(model_id)
     |> Map.put("schema", @usage_schema)
   end
 
@@ -414,12 +414,28 @@ defmodule OpenAgents.Inference do
     end
   end
 
-  defp put_cost(merged, _existing) do
-    cost =
-      integer(merged["input_tokens"]) * input_price_microusd() +
-        integer(merged["output_tokens"]) * output_price_microusd()
+  defp put_cost(merged, model_id) do
+    case Models.fetch(model_id) do
+      {:ok, %{pricing: %{input_per_million_tokens: i, output_per_million_tokens: o} = pricing}} ->
+        input = integer(merged["input_tokens"])
+        output = integer(merged["output_tokens"])
+        cache_read = integer(merged["cache_read_input_tokens"])
+        cache_write = integer(merged["cache_write_input_tokens"])
+        cached_rate = Map.get(pricing, :cached_input_per_million_tokens, i)
 
-    Map.put(merged, "estimated_cost_microusd", div(cost, 1_000))
+        # Cached read tokens are split from the rest of the input and priced at
+        # the cached rate where one is declared. Cache write tokens are charged
+        # as regular input because they are not a cached read.
+        uncached = max(0, input - cache_read) + cache_write
+
+        cost =
+          uncached * i + cache_read * cached_rate + output * o
+
+        Map.put(merged, "estimated_cost_microusd", div(cost, 1_000_000))
+
+      _ ->
+        merged
+    end
   end
 
   defp normalize_usage(usage) do
@@ -499,12 +515,6 @@ defmodule OpenAgents.Inference do
   # nil ttl means no deadline at all, rather than one computed from nil.
   defp deadline(%{ttl_seconds: nil}), do: nil
   defp deadline(%{ttl_seconds: seconds}), do: DateTime.add(now(), seconds, :second)
-
-  defp input_price_microusd,
-    do: Application.get_env(:openagents, :inference_input_price_microusd_per_ktoken, 1_250)
-
-  defp output_price_microusd,
-    do: Application.get_env(:openagents, :inference_output_price_microusd_per_ktoken, 10_000)
 
   defp default_proxy_url do
     endpoint = OpenAgentsWeb.Endpoint.url()

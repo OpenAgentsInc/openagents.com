@@ -186,6 +186,40 @@ defmodule OpenAgents.InferenceTest do
       {:ok, revoked} = Inference.revoke(grant)
       assert {:error, :grant_not_active} = Inference.record_usage(revoked, %{"input_tokens" => 1})
     end
+
+    test "prices cost from the model's declared rates, with cached reads at the cached rate" do
+      {:ok, grant, _token} = Inference.mint(scope("usage-priced"))
+
+      input = 100
+      output = 40
+      cache_read = 20
+
+      {:ok, metered} =
+        Inference.record_usage(grant, %{
+          "input_tokens" => input,
+          "output_tokens" => output,
+          "cache_read_input_tokens" => cache_read
+        })
+
+      expected =
+        ((input - cache_read) * 1_250_000 + cache_read * 100_000 + output * 10_000_000)
+        |> div(1_000_000)
+
+      assert metered.usage["estimated_cost_microusd"] == expected
+    end
+
+    test "an unpriced model records no estimated cost" do
+      luna_id = Application.fetch_env!(:openagents, :openai_model)
+      {:ok, grant, _token} = Inference.mint(Map.put(scope("usage-unpriced"), :model_id, luna_id))
+
+      {:ok, metered} =
+        Inference.record_usage(grant, %{
+          "input_tokens" => 100,
+          "output_tokens" => 40
+        })
+
+      refute Map.has_key?(metered.usage, "estimated_cost_microusd")
+    end
   end
 
   describe "fences" do

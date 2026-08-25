@@ -22,14 +22,26 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
     assert Enum.map(body["models"], & &1["id"]) == Models.ids()
 
     for entry <- body["models"] do
-      assert Enum.sort(Map.keys(entry)) ==
-               ~w(availability context_window default id max_output provider)
+      assert Enum.all?(
+               ~w(availability context_window default id max_output provider),
+               &(&1 in Map.keys(entry))
+             )
 
       assert is_binary(entry["provider"]) and entry["provider"] != ""
       assert is_integer(entry["context_window"]) and entry["context_window"] > 0
       assert is_integer(entry["max_output"]) and entry["max_output"] > 0
       # Every test lane's adapter reports a configured credential.
       assert entry["availability"] == "available"
+
+      if entry["pricing"] do
+        assert Enum.all?(
+                 ~w(input_per_million_tokens output_per_million_tokens),
+                 &(&1 in Map.keys(entry["pricing"]))
+               )
+
+        assert is_integer(entry["pricing"]["input_per_million_tokens"])
+        assert is_integer(entry["pricing"]["output_per_million_tokens"])
+      end
     end
 
     assert [default_entry] = Enum.filter(body["models"], & &1["default"])
@@ -74,5 +86,38 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
       |> json_response(401)
 
     assert body["code"] == "unauthenticated"
+  end
+
+  describe "pricing in the published catalog" do
+    test "a priced model exposes its per-million-token rates", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("model-catalog-priced")
+        |> get(~p"/api/v1/models")
+        |> json_response(200)
+
+      gemini = Enum.find(body["models"], &(&1["id"] == "gemini-3.7-flash"))
+
+      assert %{
+               "pricing" => %{
+                 "input_per_million_tokens" => 1_250_000,
+                 "output_per_million_tokens" => 10_000_000,
+                 "cached_input_per_million_tokens" => 100_000
+               }
+             } = gemini
+    end
+
+    test "an unpriced model has no pricing key", %{conn: conn} do
+      luna_id = Application.fetch_env!(:openagents, :openai_model)
+
+      body =
+        conn
+        |> put_chat_api_token("model-catalog-unpriced")
+        |> get(~p"/api/v1/models")
+        |> json_response(200)
+
+      luna = Enum.find(body["models"], &(&1["id"] == luna_id))
+      refute Map.has_key?(luna, "pricing")
+    end
   end
 end

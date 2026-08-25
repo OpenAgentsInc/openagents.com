@@ -44,13 +44,20 @@ defmodule OpenAgents.Inference.Models do
     vercel_gateway: :vercel_gateway_provider
   }
 
+  @type pricing :: %{
+          required(:input_per_million_tokens) => pos_integer(),
+          required(:output_per_million_tokens) => pos_integer(),
+          optional(:cached_input_per_million_tokens) => pos_integer()
+        }
+
   @type t :: %{
           id: String.t(),
           provider: atom(),
           adapter: module(),
           provider_model: String.t(),
           context_window: pos_integer(),
-          max_output: pos_integer()
+          max_output: pos_integer(),
+          pricing: pricing() | nil
         }
 
   @doc "Every model in the catalog, in the order a client should offer them."
@@ -163,14 +170,16 @@ defmodule OpenAgents.Inference.Models do
 
   No adapter module and no credential state beyond the availability word: a
   client learns what it can select and what each selection can carry, nothing
-  about how the server is wired.
+  about how the server is wired. Pricing is exposed only when the deployment
+  has declared rates for a model; an unpriced model has no `pricing` key so it
+  is not read as zero before spend.
   """
   @spec catalog() :: [map()]
   def catalog do
     default_id = default_id()
 
     Enum.map(all(), fn model ->
-      %{
+      base = %{
         "id" => model.id,
         "provider" => Atom.to_string(model.provider),
         "context_window" => model.context_window,
@@ -178,7 +187,27 @@ defmodule OpenAgents.Inference.Models do
         "availability" => availability(model),
         "default" => model.id == default_id
       }
+
+      case model.pricing do
+        nil ->
+          base
+
+        %{} = pricing ->
+          Map.put(base, "pricing", public_pricing(pricing))
+      end
     end)
+  end
+
+  defp public_pricing(pricing) do
+    base = %{
+      "input_per_million_tokens" => pricing.input_per_million_tokens,
+      "output_per_million_tokens" => pricing.output_per_million_tokens
+    }
+
+    case Map.fetch(pricing, :cached_input_per_million_tokens) do
+      {:ok, value} -> Map.put(base, "cached_input_per_million_tokens", value)
+      :error -> base
+    end
   end
 
   @doc "The ids currently available to serve, for a refusal that names what is."
@@ -194,7 +223,8 @@ defmodule OpenAgents.Inference.Models do
       adapter: Application.fetch_env!(:openagents, Map.fetch!(@provider_lanes, entry.provider)),
       provider_model: value(entry.provider_model),
       context_window: entry.context_window,
-      max_output: entry.max_output
+      max_output: entry.max_output,
+      pricing: Map.get(entry, :pricing)
     }
   end
 

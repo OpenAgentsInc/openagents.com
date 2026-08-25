@@ -65,11 +65,23 @@ defmodule OpenAgents.Inference.ModelsTest do
     assert Enum.map(catalog, & &1["id"]) == Models.ids()
 
     for entry <- catalog do
-      assert Enum.sort(Map.keys(entry)) ==
-               ~w(availability context_window default id max_output provider)
+      assert Enum.all?(
+               ~w(availability context_window default id max_output provider),
+               &(&1 in Map.keys(entry))
+             )
 
       assert entry["availability"] in ["available", "unavailable"]
       refute entry["provider"] =~ "Elixir."
+
+      if entry["pricing"] do
+        assert Enum.all?(
+                 ~w(input_per_million_tokens output_per_million_tokens),
+                 &(&1 in Map.keys(entry["pricing"]))
+               )
+
+        assert is_integer(entry["pricing"]["input_per_million_tokens"])
+        assert is_integer(entry["pricing"]["output_per_million_tokens"])
+      end
     end
 
     assert Enum.count(catalog, & &1["default"]) == 1
@@ -113,6 +125,31 @@ defmodule OpenAgents.Inference.ModelsTest do
 
       assert gemini.provider == :vercel_gateway
       assert gemini.provider_model == "google/gemini-3.7-flash"
+    end
+  end
+
+  describe "pricing" do
+    test "a priced model publishes its per-million-token rates in the public catalog" do
+      gemini = Enum.find(Models.catalog(), &(&1["id"] == "gemini-3.7-flash"))
+
+      assert %{"pricing" => pricing} = gemini
+      assert pricing["input_per_million_tokens"] == 1_250_000
+      assert pricing["output_per_million_tokens"] == 10_000_000
+      assert pricing["cached_input_per_million_tokens"] == 100_000
+    end
+
+    test "an unpriced model has no pricing key in the public catalog" do
+      luna_id = Application.fetch_env!(:openagents, :openai_model)
+      luna = Enum.find(Models.catalog(), &(&1["id"] == luna_id))
+
+      refute Map.has_key?(luna, "pricing")
+    end
+
+    test "the resolved model carries pricing, or nil when none is declared" do
+      assert %{pricing: %{input_per_million_tokens: 1_250_000}} = Models.default()
+
+      luna_id = Application.fetch_env!(:openagents, :openai_model)
+      assert {:ok, %{pricing: nil}} = Models.fetch(luna_id)
     end
   end
 end

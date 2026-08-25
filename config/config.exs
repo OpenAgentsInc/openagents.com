@@ -126,6 +126,12 @@ config :openagents,
   # per-call output cap the proxy's adapters send for that model, and
   # `context_window` is the ceiling this deployment publishes for the lane.
   #
+  # A model may declare a `pricing` map with `input_per_million_tokens`,
+  # `output_per_million_tokens`, and optionally `cached_input_per_million_tokens`.
+  # The values below are placeholders that make the existing test suite pass;
+  # the operator must replace them with real provider rates before accepting
+  # any spend. A model with no `pricing` key records no estimated cost.
+  #
   # Gemini 3.7 Flash leads, so it is what a caller that names none gets: fast,
   # a million tokens of context, and steady enough to hold a conversation.
   #
@@ -147,7 +153,15 @@ config :openagents,
       provider: :vercel_gateway,
       provider_model: "google/gemini-3.7-flash",
       context_window: 1_048_576,
-      max_output: 65_536
+      max_output: 65_536,
+      # Placeholder: the operator must set real provider rates before accepting
+      # any spend. The cached-input rate is optional and should be omitted if
+      # the provider does not offer one.
+      pricing: %{
+        input_per_million_tokens: 1_250_000,
+        output_per_million_tokens: 10_000_000,
+        cached_input_per_million_tokens: 100_000
+      }
     },
     %{
       id: "ox-alpha",
@@ -160,7 +174,13 @@ config :openagents,
       # allowance before a single word of the answer is. At 4,096 a child agent
       # with a real task spent the whole budget reasoning and returned an empty
       # 200 after three minutes, which read as the proxy having failed.
-      max_output: 64_000
+      max_output: 64_000,
+      # Placeholder: the operator must set real provider rates before accepting
+      # any spend. This entry does not declare a cached-input rate.
+      pricing: %{
+        input_per_million_tokens: 500_000,
+        output_per_million_tokens: 2_000_000
+      }
     },
     %{
       id: {:config, :openai_model},
@@ -168,6 +188,8 @@ config :openagents,
       provider_model: {:config, :openai_model},
       context_window: 272_000,
       max_output: 4_096
+      # This entry deliberately omits `pricing`, so a grant pinned to it records
+      # no estimated cost rather than a made-up zero.
     }
   ],
   gemini_api_key: nil,

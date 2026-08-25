@@ -926,7 +926,7 @@ defmodule OpenAgentsWeb.ChatLive do
                       renders inline at the transcript tail on the event-header
                       expansion pattern, instead of as a rail. One projection,
                       two placements; the stylesheet shows exactly one. --%>
-                <.delegation_inline :if={@delegation} delegation={@delegation} />
+                <.delegation_inline :if={false and @delegation} delegation={@delegation} />
               </.conversation_content>
             </.conversation>
           </div>
@@ -975,7 +975,7 @@ defmodule OpenAgentsWeb.ChatLive do
               rail is gone and the same two projections render in the navigation
               sidebar and at the transcript tail. --%>
         <.chat_rail
-          :if={@recent_jobs != [] or @delegation != nil or @delegation_summaries != []}
+          :if={false and (@recent_jobs != [] or @delegation != nil or @delegation_summaries != [])}
           recent_jobs={@recent_jobs}
           delegation={@delegation}
           summaries={@delegation_summaries}
@@ -1326,7 +1326,7 @@ defmodule OpenAgentsWeb.ChatLive do
       the work rail beside the transcript states it instead, so the stylesheet
       hides this one; one projection, two placements, exactly one shown. --%>
       <section
-        :if={@recent_jobs != []}
+        :if={false and @recent_jobs != []}
         id="sidebar-work"
         class="sidebar-section chat-sidebar-work"
         aria-label="Work"
@@ -1812,11 +1812,11 @@ defmodule OpenAgentsWeb.ChatLive do
       |> assign(:report?, assigns.rollup != nil and written?)
       |> assign(
         :prose?,
-        assigns.rollup == nil and written? and not paced? and markdown?(assigns.message)
+        written? and not paced? and markdown?(assigns.message)
       )
       |> assign(
         :plain?,
-        assigns.rollup == nil and written? and not paced? and not markdown?(assigns.message)
+        written? and not paced? and not markdown?(assigns.message)
       )
       |> assign(:streaming?, assigns.message.status == "streaming")
 
@@ -1891,7 +1891,7 @@ defmodule OpenAgentsWeb.ChatLive do
       <%!-- A deep-work report renders as a rollup header: how long the job
             worked and how its steps ended, expanding to the report itself. --%>
       <.event_header
-        :if={@rollup}
+        :if={false and @rollup}
         id={"job-rollup-#{@id}"}
         status={rollup_status(@rollup)}
         title={rollup_title(@rollup)}

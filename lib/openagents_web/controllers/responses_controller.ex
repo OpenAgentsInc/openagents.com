@@ -31,7 +31,7 @@ defmodule OpenAgentsWeb.ResponsesController do
   use OpenAgentsWeb, :controller
 
   alias OpenAgents.Inference.Models
-  alias OpenAgents.Providers.Request
+  alias OpenAgents.Providers.{Request, ToolDefinition, ToolOutput}
   alias OpenAgentsWeb.ApiError
 
   @default_model "gemini-3.7-flash"
@@ -65,10 +65,10 @@ defmodule OpenAgentsWeb.ResponsesController do
   defp input_of(params) do
     case params["input"] do
       input when is_binary(input) and input != "" ->
-        {:ok, [%{role: "user", content: input}]}
+        {:ok, {[%{role: "user", content: input}], []}}
 
       [_ | _] = items ->
-        {:ok, Enum.flat_map(items, &item_message/1)}
+        {:ok, {Enum.flat_map(items, &item_message/1), Enum.flat_map(items, &item_output/1)}}
 
       _missing ->
         {:error, :input_missing}
@@ -76,8 +76,31 @@ defmodule OpenAgentsWeb.ResponsesController do
   end
 
   # One OpenResponses input item as a provider message. Text rides in
-  # `content` as a string or as `input_text`/`output_text` blocks; anything
+  # `content` as a string or as `input_text`/`output_text` blocks; a replayed
+  # `function_call` item becomes the assistant turn that asked for it, its
+  # arguments the raw string the model produced, never interpreted. Anything
   # else contributes nothing rather than failing the request.
+  defp item_message(%{"type" => "function_call"} = item) do
+    call_id = string_or(item["call_id"], "")
+    name = string_or(item["name"], "")
+
+    if call_id == "" or name == "" do
+      []
+    else
+      [
+        %{
+          role: "assistant",
+          content: item_text(item["content"]),
+          tool_calls: [
+            %{call_id: call_id, name: name, arguments: string_or(item["arguments"], "{}")}
+          ]
+        }
+      ]
+    end
+  end
+
+  defp item_message(%{"type" => "function_call_output"}), do: []
+
   defp item_message(%{"role" => role} = item) when role in ["user", "assistant", "system"] do
     case item_text(item["content"]) do
       "" -> []
@@ -86,6 +109,55 @@ defmodule OpenAgentsWeb.ResponsesController do
   end
 
   defp item_message(_item), do: []
+
+  # A `function_call_output` item answers a replayed call; the provider takes
+  # it as a tool output keyed by the call id.
+  defp item_output(%{"type" => "function_call_output"} = item) do
+    call_id = string_or(item["call_id"], "")
+
+    if call_id == "" do
+      []
+    else
+      [%ToolOutput{call_id: call_id, output: %{"content" => item_text(item["output"])}}]
+    end
+  end
+
+  defp item_output(_item), do: []
+
+  defp string_or(value, _fallback) when is_binary(value) and value != "", do: value
+  defp string_or(_value, fallback), do: fallback
+
+  # OpenResponses function tools are flat (`{type, name, description,
+  # parameters}`); the chat-completions nesting is accepted too, because the
+  # first client of this surface converted from that shape.
+  defp declared_tools(tools) when is_list(tools) do
+    Enum.flat_map(tools, fn
+      %{"name" => name} = tool when is_binary(name) and name != "" ->
+        [
+          %ToolDefinition{
+            name: name,
+            description: string_or(tool["description"], ""),
+            input_schema: Map.get(tool, "parameters") || %{},
+            strict: false
+          }
+        ]
+
+      %{"function" => %{"name" => name} = function} when is_binary(name) ->
+        [
+          %ToolDefinition{
+            name: name,
+            description: string_or(function["description"], ""),
+            input_schema: Map.get(function, "parameters") || %{},
+            strict: false
+          }
+        ]
+
+      _other ->
+        []
+    end)
+  end
+
+  defp declared_tools(_tools), do: []
 
   defp item_text(content) when is_binary(content), do: content
 
@@ -124,8 +196,8 @@ defmodule OpenAgentsWeb.ResponsesController do
     if Models.available?(model), do: :ok, else: {:error, :model_unavailable}
   end
 
-  defp build_request(model, input, params) do
-    {system, turns} = Enum.split_with(input, &(&1.role == "system"))
+  defp build_request(model, {messages, tool_outputs}, params) do
+    {system, turns} = Enum.split_with(messages, &(&1.role == "system"))
 
     instructions =
       case params["instructions"] do
@@ -143,6 +215,8 @@ defmodule OpenAgentsWeb.ResponsesController do
       model_id: model.provider_model,
       instructions: instructions,
       input: turns,
+      tool_definitions: declared_tools(params["tools"]),
+      tool_outputs: tool_outputs,
       max_output: max_output
     }
   end
@@ -176,6 +250,7 @@ defmodule OpenAgentsWeb.ResponsesController do
     Process.put(:responses_seq, 0)
     Process.put(:responses_text, [])
     Process.put(:responses_usage, %{})
+    Process.put(:responses_calls, [])
     # The conn rides the process dictionary too: `chunk/2` returns the conn
     # that carries what has been sent — on the test adapter, literally the
     # accumulated body — and a closure cannot rebind the outer variable.
@@ -221,18 +296,42 @@ defmodule OpenAgentsWeb.ResponsesController do
           Process.put(:responses_usage, usage)
           :ok
 
+        # A tool call the model asked for: one function_call item, whole,
+        # because the provider hands the call assembled rather than in
+        # fragments. The item's own done-events follow immediately.
+        {:tool_call, call} ->
+          calls = Process.get(:responses_calls)
+          Process.put(:responses_calls, calls ++ [call])
+          index = length(calls) + 1
+          item = function_call_item(call, "completed")
+
+          emit.("response.output_item.added", %{
+            "output_index" => index,
+            "item" => %{item | "status" => "in_progress"}
+          })
+
+          emit.("response.function_call_arguments.done", %{
+            "item_id" => item["id"],
+            "output_index" => index,
+            "arguments" => item["arguments"]
+          })
+
+          emit.("response.output_item.done", %{"output_index" => index, "item" => item})
+
         _other ->
           :ok
       end)
 
     text = IO.iodata_to_binary(Process.get(:responses_text))
     usage = Process.get(:responses_usage)
+    calls = Process.get(:responses_calls)
 
     case result do
       :ok ->
         completed =
           shell(response_id, model_name(model), "completed", [
             message(message_id, "completed", [text_part(text)])
+            | Enum.map(calls, &function_call_item(&1, "completed"))
           ])
           |> Map.put("usage", usage_view(usage))
 
@@ -285,6 +384,12 @@ defmodule OpenAgentsWeb.ResponsesController do
         _other -> nil
       end)
 
+    calls =
+      Enum.flat_map(events, fn
+        {:tool_call, call} -> [call]
+        _other -> []
+      end)
+
     case result do
       :ok ->
         response_id = "resp_" <> identifier()
@@ -294,6 +399,7 @@ defmodule OpenAgentsWeb.ResponsesController do
           conn,
           shell(response_id, model_name(model), "completed", [
             message(message_id, "completed", [text_part(text)])
+            | Enum.map(calls, &function_call_item(&1, "completed"))
           ])
           |> Map.put("usage", usage_view(usage))
         )
@@ -340,6 +446,20 @@ defmodule OpenAgentsWeb.ResponsesController do
       "role" => "assistant",
       "status" => status,
       "content" => content
+    }
+  end
+
+  # One function_call output item, in the specification's shape. The
+  # arguments are the raw JSON string the model produced; this surface
+  # replays, never interprets.
+  defp function_call_item(call, status) do
+    %{
+      "type" => "function_call",
+      "id" => "fc_" <> identifier(),
+      "call_id" => call.call_id,
+      "name" => call.name,
+      "arguments" => call.raw_arguments,
+      "status" => status
     }
   end
 

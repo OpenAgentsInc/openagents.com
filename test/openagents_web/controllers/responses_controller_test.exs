@@ -4,6 +4,7 @@ defmodule OpenAgentsWeb.ResponsesControllerTest do
   alias OpenAgents.Providers.{
     FailingTestProvider,
     RecordingTestProvider,
+    ToolCallingTestProvider,
     UnconfiguredTestProvider
   }
 
@@ -147,6 +148,66 @@ defmodule OpenAgentsWeb.ResponsesControllerTest do
 
       body = json_response(conn, 503)
       assert body["code"] == "model_unavailable"
+    end
+  end
+
+  describe "tools through the surface" do
+    setup do
+      swap_lane(ToolCallingTestProvider)
+      :ok
+    end
+
+    @tools [
+      %{
+        type: "function",
+        name: "read_conversation",
+        description: "Read a conversation back.",
+        parameters: %{type: "object", properties: %{}}
+      }
+    ]
+
+    test "a declared tool comes back as a function_call output item", %{conn: conn} do
+      conn = post(conn, ~p"/api/v1/responses", %{input: "read it", tools: @tools})
+
+      assert %{"output" => [_message, call]} = json_response(conn, 200)
+
+      assert %{
+               "type" => "function_call",
+               "call_id" => "call_1",
+               "name" => "read_conversation",
+               "arguments" => ~s({"max_turns":4}),
+               "status" => "completed"
+             } = call
+    end
+
+    test "streams the function_call item with its own events", %{conn: conn} do
+      conn = post(conn, ~p"/api/v1/responses", %{input: "read it", tools: @tools, stream: true})
+      body = response(conn, 200)
+
+      assert body =~ "event: response.function_call_arguments.done"
+      assert body =~ ~s("name":"read_conversation")
+      assert body =~ ~s("output_index":1)
+      assert body =~ "event: response.completed"
+    end
+
+    test "replayed calls and outputs reach the provider, and it answers from them", %{conn: conn} do
+      conn =
+        post(conn, ~p"/api/v1/responses", %{
+          input: [
+            %{role: "user", content: "read it"},
+            %{
+              type: "function_call",
+              call_id: "call_1",
+              name: "read_conversation",
+              arguments: ~s({"max_turns":4})
+            },
+            %{type: "function_call_output", call_id: "call_1", output: "four turns of text"}
+          ],
+          tools: @tools
+        })
+
+      assert %{"output" => [message]} = json_response(conn, 200)
+      assert %{"content" => [%{"text" => "The tool said: four turns of text"}]} = message
     end
   end
 end

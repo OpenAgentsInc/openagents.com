@@ -381,7 +381,7 @@ nodes, each at head sequence 426 with an identical chain link. The projection
 is node-local while the log is shared (#251), so a node applies a new entry on
 its own schedule: two nodes had applied 426 immediately, and the third sat at
 425 for several minutes with its boundaries still open. It converged when
-`Sync.ensure_fresh/2` ran, which is what `OpenAgents.Forge.GitHttp` calls
+`Sync.ensure_fresh/2` ran, which is what `OpenAgents.Forge.GitHTTP` calls
 before serving any git request — so a clone routed to a lagging node converges
 it before it is answered rather than being served a grafted history. The
 fallback that made this an attended operation, a rebuild from sequence zero,

@@ -439,7 +439,7 @@ Two things this exercised that the rehearsal had listed as unknown. The
 projection is node-local while the log is shared (#251): two nodes applied the
 entry immediately and the third sat at 425 with its boundaries still open for
 several minutes, converging only when `Sync.ensure_fresh/2` ran. That is the
-call `OpenAgents.Forge.GitHttp` makes before serving any git request, so a
+call `OpenAgents.Forge.GitHTTP` makes before serving any git request, so a
 clone routed to a lagging node converges it before being answered rather than
 receiving a grafted history. And the failure mode that made this attended — a
 fleet-wide rebuild from sequence zero — was not reached on any node, so it

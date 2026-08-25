@@ -442,6 +442,15 @@ scoped to a conversation and optional paired computer, expires, is
 generation-fenced and revocable, and has call, token, and cost ceilings. It is
 not an OpenAI credential and cannot select a model outside the grant.
 
+A cost ceiling only bounds spend the deployment can price. Read
+`pricing_basis` on each entry of `GET /api/v1/models` before you spend:
+`declared` is billable, `provisional` is a working figure, and `unpriced`
+means no cost is reported for that lane at all. On a thread,
+`spend.cost.microusd` and `grant.remaining.cost_microusd` are `null` whenever
+an unpriced lane contributed, and `spend.cost.unpriced_models` names the lanes
+that made them null. A client must handle the `null` rather than render a zero
+it was never given (METER-001).
+
 `OpenAgentsWeb.RouteAuthority.inventory/0` is the executable inventory for
 HTTP routes and endpoint sockets. The test gate fails when a new route does not
 resolve to one of the admitted authority classes with a principal and scope.

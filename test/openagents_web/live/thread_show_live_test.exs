@@ -112,4 +112,52 @@ defmodule OpenAgentsWeb.ThreadShowLiveTest do
       live(signed_in(conn, viewer), ~p"/threads/not-a-uuid")
     end
   end
+
+  # METER-001. This cell used to read "$0.00 / $100.00" for a session on the
+  # lane the coder actually runs on, which is the most confident wrong number
+  # the product could show.
+  describe "the budget card's cost cell" do
+    test "an unpriced lane shows the word, never a dollar figure", %{conn: conn} do
+      owner = github_user("thread-show-unpriced")
+      luna = Application.fetch_env!(:openagents, :openai_model)
+
+      {:ok, thread} = Threads.open(owner, "Run the unpriced lane", model: luna)
+      {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
+
+      {:ok, _metered} =
+        OpenAgents.Inference.record_usage(grant, %{"input_tokens" => 900, "output_tokens" => 80})
+
+      {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads/#{thread.id}")
+
+      cost = view |> element("#thread-budget-cost") |> render()
+
+      assert cost =~ "Unpriced"
+      refute cost =~ "$0.00"
+      assert view |> element("#thread-budget-cost-note") |> render() =~ "unknown rather than zero"
+    end
+
+    test "a priced lane shows the figure and says the rates are provisional", %{conn: conn} do
+      owner = github_user("thread-show-priced")
+
+      {:ok, thread} = Threads.open(owner, "Run a lane with rates")
+      {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
+      {:ok, _metered} = OpenAgents.Inference.record_usage(grant, %{"input_tokens" => 1_000_000})
+
+      {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads/#{thread.id}")
+
+      assert view |> element("#thread-budget-cost") |> render() =~ "$1.25"
+      assert view |> element("#thread-budget-cost-note") |> render() =~ "not a bill"
+    end
+
+    test "an unbounded ceiling reads as unbounded rather than blank", %{conn: conn} do
+      owner = github_user("thread-show-unbounded")
+
+      {:ok, thread} = Threads.open(owner, "No ceilings but the account's")
+      {:ok, _fenced, _grant, _token} = Threads.mint_grant(thread)
+
+      {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads/#{thread.id}")
+
+      assert view |> element("#thread-budget") |> render() =~ "\u221e"
+    end
+  end
 end

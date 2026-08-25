@@ -28,6 +28,7 @@ defmodule OpenAgents.Inference.Credit do
 
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.Pricing
   alias OpenAgents.Repo
 
   @doc """
@@ -50,7 +51,14 @@ defmodule OpenAgents.Inference.Credit do
   @spec visitor_allowance() :: non_neg_integer()
   def visitor_allowance, do: setting(:visitor_credit_microusd, 2_000_000)
 
-  @doc "What every grant this account has held has metered, in microUSD."
+  @doc """
+  What every grant this account has held has metered, in microUSD.
+
+  Only priced calls contribute, so this is a floor rather than a total whenever
+  `unpriced_calls/1` is above zero. It stays a bare integer because the grant
+  ceiling has to be a number — a ceiling of `nil` would admit unbounded
+  spend — and the reader that wants the honest picture asks `balance/1`.
+  """
   @spec spent(String.t()) :: non_neg_integer()
   def spent(visitor_id) when is_binary(visitor_id) do
     Repo.one(
@@ -69,10 +77,66 @@ defmodule OpenAgents.Inference.Credit do
     )
   end
 
-  @doc "What is left of this account's credit, in microUSD. Never negative."
+  @doc """
+  What is left of this account's credit, in microUSD. Never negative.
+
+  This is a ceiling rather than a balance, and the difference matters while any
+  lane is unpriced. A call on a model with no declared rates writes no cost, so
+  it draws nothing down here: the remainder is what the account may still be
+  *ceiled* at, not what it has left to spend in the world. `unpriced_calls/1`
+  is how much of the account's real spend this figure cannot see (METER-001).
+  """
   @spec remaining(String.t()) :: non_neg_integer()
   def remaining(visitor_id) when is_binary(visitor_id) do
     max(allowance(visitor_id) - spent(visitor_id), 0)
+  end
+
+  @doc """
+  How many of this account's metered calls carry no price.
+
+  `spent/1` is a floor while this is above zero, and saying so is the whole
+  reason this function exists. A surface that showed a balance without it would
+  be reporting an account as barely touched while its coder ran all day on a
+  lane nobody entered rates for.
+  """
+  @spec unpriced_calls(String.t()) :: non_neg_integer()
+  def unpriced_calls(visitor_id) when is_binary(visitor_id) do
+    Repo.all(
+      from grant in Grant,
+        where: grant.owner_visitor_id == ^visitor_id and grant.call_count > 0,
+        select: {grant.model_id, grant.usage, grant.call_count}
+    )
+    |> Enum.filter(fn {_model, usage, _calls} ->
+      Pricing.usage_basis(usage) == Pricing.unpriced()
+    end)
+    |> Enum.map(fn {_model, _usage, calls} -> calls end)
+    |> Enum.sum()
+  end
+
+  @doc """
+  The account's credit as one readable fact, including what it cannot see.
+
+  `complete?` is false whenever an unpriced call has been metered, which is the
+  signal a caller needs before it renders `spent_microusd` as though it were
+  the account's whole spend.
+  """
+  @spec balance(String.t()) :: %{
+          allowance_microusd: non_neg_integer(),
+          spent_microusd: non_neg_integer(),
+          remaining_microusd: non_neg_integer(),
+          unpriced_calls: non_neg_integer(),
+          complete?: boolean()
+        }
+  def balance(visitor_id) when is_binary(visitor_id) do
+    unpriced = unpriced_calls(visitor_id)
+
+    %{
+      allowance_microusd: allowance(visitor_id),
+      spent_microusd: spent(visitor_id),
+      remaining_microusd: remaining(visitor_id),
+      unpriced_calls: unpriced,
+      complete?: unpriced == 0
+    }
   end
 
   defp signed_in?(visitor_id) do

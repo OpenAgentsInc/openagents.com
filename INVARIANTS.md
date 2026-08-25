@@ -1258,6 +1258,61 @@ Evidence: `OpenAgents.Inference.Models`, `OpenAgentsWeb.ModelCatalogController`,
 `OpenAgentsWeb.InferenceProxyControllerTest`, and
 `OpenAgentsWeb.ThreadControllerTest`.
 
+### METER-001 — A cost is reported only where a price exists, and never as zero
+
+Status: Current
+
+Metering that prices some lanes at zero is worse than no metering: it reports a
+number, and the number is wrong. `gpt-5.6-luna` is the lane the coder actually
+runs on and this deployment has never been given its rates, so a surface that
+read a missing cost as zero would have shown `$0.00` beside the account's
+largest real spend — in the same typeface as a figure somebody measured.
+
+So every metered usage record says on whose authority it was priced.
+`OpenAgents.Inference.Pricing` stamps `pricing_id` on every record
+`OpenAgents.Inference.record_usage/2` writes, and the id resolves to one of
+three bases:
+
+- `declared` — the operator entered the provider's published rates. This is the
+  only basis anything may bill from (`Pricing.billable?/1`).
+- `provisional` — the deployment carries rates that were written to make the
+  system run, or rates whose table it can no longer dereference. A cost is
+  computed and labelled; nothing may bill from it.
+- `unpriced` — no rates at all. No `estimated_cost_microusd` is written,
+  `Pricing.cost/1` answers `nil`, and no reader substitutes a zero.
+
+Concretely:
+
+- `GET /api/v1/models` publishes `pricing_basis` on every entry beside
+  `availability`, so a caller reads what a lane will cost and whether that
+  figure can be trusted **before** it spends. An unpriced model publishes no
+  `pricing` block at all.
+- `OpenAgents.Threads.spend/1` refuses to total a session that touched an
+  unpriced lane: `cost.microusd` is `nil`, `cost.unpriced_models` names the
+  lanes that made it `nil`, and `cost.priced_microusd` still reports what was
+  measured so nothing is discarded. `GET /api/v1/threads/{id}` publishes the
+  same shape, nulls included.
+- The thread page shows the word `Unpriced` rather than a dollar figure, and
+  labels a provisional figure as a working number rather than a bill.
+- `OpenAgents.Inference.Credit.spent/1` is a floor, not a total, while
+  `unpriced_calls/1` is above zero; `balance/1` publishes `complete?` so no
+  reader shows a balance as whole when it is not.
+
+An unpriced lane is not a free lane and not an error. It is the deployment
+saying it does not know what a call cost, which is a different fact from the
+call having cost nothing, and the distinction survives to every read surface.
+A `max_cost_microusd` ceiling therefore cannot bound an unpriced grant — it can
+only stop spend it can measure — so such a grant is bounded by its call and
+token ceilings, by the account's admission cap, and by revocation. Turning an
+unpriced lane into a number is an owner action: enter the provider's real rates
+in `config :openagents, :model_catalog` and set `source: :declared` in the same
+edit. No code here may guess one.
+
+Evidence: `OpenAgents.Inference.Pricing`, `OpenAgents.Inference.PricingTest`,
+`OpenAgents.Inference.CreditTest`, `OpenAgents.ThreadsTest`,
+`OpenAgentsWeb.ModelCatalogControllerTest`,
+`OpenAgentsWeb.ThreadControllerTest`, and `OpenAgentsWeb.ThreadShowLiveTest`.
+
 ## Durable effects
 
 ### EFFECT-001 — An effect commits with the intent that asked for it, and is delivered under lease
@@ -5405,6 +5460,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
 | PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | PROVIDER-002 | `test/openagents/inference/models_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
+| METER-001 | `test/openagents/inference/pricing_test.exs`, `test/openagents/inference/credit_test.exs`, `test/openagents/threads_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs`, `test/openagents_web/live/thread_show_live_test.exs` |
 | EFFECT-001 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | EFFECT-002 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |

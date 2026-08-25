@@ -540,7 +540,107 @@ defmodule OpenAgents.ThreadsTest do
       user = owner("spend-none")
       {:ok, thread} = Threads.open(user, "Never spent")
 
-      assert Threads.spend(thread) == %{calls: 0, grants: 0, usage: %{}}
+      assert %{calls: 0, grants: 0, usage: %{}, cost: cost} = Threads.spend(thread)
+
+      # Nothing was bought, so there is nothing to price. `absent` is not
+      # `unpriced`: one says no calls were made, the other says calls were made
+      # and this deployment cannot say what they cost.
+      assert cost.basis == "absent"
+      assert cost.microusd == nil
+      assert cost.unpriced_calls == 0
+      assert cost.unpriced_models == []
+    end
+  end
+
+  # METER-001. Every assertion here is about the same wrong number: a session
+  # on a lane with no declared rates reporting `$0.00`, which reads as a
+  # measurement rather than as the absence of one.
+  describe "what a thread spent, when the deployment has no price for it" do
+    test "a thread on an unpriced model reports an unknown cost, never a zero" do
+      luna = Application.fetch_env!(:openagents, :openai_model)
+      user = owner("spend-unpriced")
+      {:ok, thread} = Threads.open(user, "Run the coder's own lane", model: luna)
+      {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
+
+      {:ok, metered} =
+        Inference.record_usage(grant, %{"input_tokens" => 40_000, "output_tokens" => 9_000})
+
+      # The grant itself refuses to invent the figure.
+      refute Map.has_key?(metered.usage, "estimated_cost_microusd")
+      assert metered.usage["pricing_id"] == "unpriced"
+
+      spend = Threads.spend(thread)
+
+      assert spend.calls == 1
+      assert spend.usage["input_tokens"] == 40_000
+      # The one that matters: not zero.
+      refute spend.cost.microusd == 0
+      assert spend.cost.microusd == nil
+      assert spend.cost.basis == "unpriced"
+      assert spend.cost.unpriced_calls == 1
+      assert spend.cost.unpriced_models == [luna]
+    end
+
+    test "a thread on a priced model reports a total, labelled by its basis" do
+      user = owner("spend-priced")
+      {:ok, thread, grant, _token} = Threads.open_and_mint(user, "Priced lane")
+      {:ok, _} = Inference.record_usage(grant, %{"input_tokens" => 1_000_000})
+
+      spend = Threads.spend(thread)
+
+      assert spend.cost.microusd == 1_250_000
+      assert spend.cost.priced_microusd == 1_250_000
+      assert spend.cost.basis == "provisional"
+      assert spend.cost.unpriced_models == []
+    end
+
+    test "one unpriced grant makes the whole session's total unknown, and names why" do
+      luna = Application.fetch_env!(:openagents, :openai_model)
+      user = owner("spend-mixed")
+      {:ok, thread, first, _token} = Threads.open_and_mint(user, "Start priced")
+      {:ok, _} = Inference.record_usage(first, %{"input_tokens" => 1_000_000})
+
+      # A thread re-mints on resume, and a grant pins its own model, so a
+      # session whose grants ran on different lanes is exactly the case a total
+      # has to survive honestly.
+      {:ok, _revoked} = Inference.revoke(first)
+      {:ok, second, _token} = unpriced_grant_for(thread, luna)
+      {:ok, _} = Inference.record_usage(second, %{"input_tokens" => 50_000})
+
+      spend = Threads.spend(thread)
+
+      assert spend.cost.microusd == nil
+      # Nothing measured is thrown away — the priced half is still reported,
+      # just not as the answer to "what did this cost".
+      assert spend.cost.priced_microusd == 1_250_000
+      assert spend.cost.basis == "unpriced"
+      assert spend.cost.unpriced_models == [luna]
+    end
+
+    test "a grant that was minted and never called does not make the total unknown" do
+      luna = Application.fetch_env!(:openagents, :openai_model)
+      user = owner("spend-idle-unpriced")
+      {:ok, thread, first, _token} = Threads.open_and_mint(user, "Priced work")
+      {:ok, _} = Inference.record_usage(first, %{"input_tokens" => 1_000_000})
+
+      {:ok, _revoked} = Inference.revoke(first)
+      {:ok, _idle, _token} = unpriced_grant_for(thread, luna)
+
+      spend = Threads.spend(thread)
+
+      assert spend.grants == 2
+      assert spend.cost.microusd == 1_250_000
+      assert spend.cost.unpriced_calls == 0
+    end
+
+    # A thread holds at most one active grant, so a second lane is reached the
+    # way a resume reaches it: revoke, then mint again against the same fence.
+    defp unpriced_grant_for(thread, model_id) do
+      Inference.mint(%{
+        owner_visitor_id: thread.owner_visitor_id,
+        thread_id: thread.id,
+        model_id: model_id
+      })
     end
   end
 end

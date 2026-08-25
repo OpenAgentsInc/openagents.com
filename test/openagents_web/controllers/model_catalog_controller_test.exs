@@ -119,5 +119,30 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
       luna = Enum.find(body["models"], &(&1["id"] == luna_id))
       refute Map.has_key?(luna, "pricing")
     end
+
+    test "every entry says in one word whether its price can be trusted", %{conn: conn} do
+      luna_id = Application.fetch_env!(:openagents, :openai_model)
+
+      body =
+        conn
+        |> put_chat_api_token("model-catalog-basis")
+        |> get(~p"/api/v1/models")
+        |> json_response(200)
+
+      # A client that forgets to check for a missing `pricing` key would read
+      # an unknown price as no price. This word is the positive signal, and it
+      # is present on every entry rather than only the awkward ones (METER-001).
+      assert Enum.all?(
+               body["models"],
+               &(&1["pricing_basis"] in ~w(declared provisional unpriced))
+             )
+
+      assert Enum.find(body["models"], &(&1["id"] == luna_id))["pricing_basis"] == "unpriced"
+
+      gemini = Enum.find(body["models"], &(&1["id"] == "gemini-3.7-flash"))
+      assert gemini["pricing_basis"] == "provisional"
+      assert gemini["pricing"]["basis"] == "provisional"
+      assert gemini["pricing"]["id"] == "placeholder.gemini-3.7-flash.v1"
+    end
   end
 end

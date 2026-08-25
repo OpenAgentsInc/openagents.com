@@ -589,7 +589,15 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "anonymous visitor against `visitor_microusd`, for the life of the " <>
           "account rather than per thread. A thread's grant is minted for the " <>
           "remainder, so `grant.max_cost_microusd` in the mint response is " <>
-          "what is left rather than a fixed cap."
+          "what is left rather than a fixed cap.",
+      "unpriced_lanes" =>
+        "A model this deployment has declared no rates for records no cost, " <>
+          "so its calls draw nothing down and its spend is reported as " <>
+          "unknown rather than as zero. Read `pricing_basis` on each entry of " <>
+          "`GET /api/v1/models` before you spend: `declared` is billable, " <>
+          "`provisional` is a working figure, and `unpriced` means a cost " <>
+          "will not be reported at all. On a thread, `spend.cost.microusd` is " <>
+          "null whenever `spend.cost.unpriced_models` is non-empty."
     }
   end
 

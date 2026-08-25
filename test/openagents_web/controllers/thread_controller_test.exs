@@ -1236,4 +1236,71 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert Repo.get!(OpenAgents.Threads.Thread, body["thread"]["id"]).lane == "thread"
     end
   end
+
+  # METER-001. The thread read is where a client learns what a session cost,
+  # so it is where an unpriced lane has to stop looking like a free one.
+  describe "reporting cost the deployment cannot price" do
+    test "a thread on an unpriced model reports a null cost, not a zero", %{conn: conn} do
+      luna = Application.fetch_env!(:openagents, :openai_model)
+      authenticated = put_chat_api_token(conn, "thread-cost-unpriced")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Run the coder's own lane.",
+          "model" => luna
+        })
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+      grant = Repo.get_by!(Grant, thread_id: id)
+
+      {:ok, _spent} =
+        Inference.record_usage(grant, %{"input_tokens" => 900, "output_tokens" => 80})
+
+      body = authenticated |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
+
+      # The key exists and is null. A client that renders it has to handle the
+      # null rather than print a zero it was never given.
+      assert Map.has_key?(body["thread"]["spend"]["cost"], "microusd")
+      assert is_nil(body["thread"]["spend"]["cost"]["microusd"])
+      assert body["thread"]["spend"]["cost"]["basis"] == "unpriced"
+      assert body["thread"]["spend"]["cost"]["unpriced_calls"] == 1
+      assert body["thread"]["spend"]["cost"]["unpriced_models"] == [luna]
+
+      # And the same refusal on the grant: no cost spent, no cost remainder.
+      assert body["grant"]["pricing"]["basis"] == "unpriced"
+      assert body["grant"]["pricing"]["id"] == "unpriced"
+      assert body["grant"]["pricing"]["billable"] == false
+      assert is_nil(body["grant"]["spent"]["cost_microusd"])
+      assert is_nil(body["grant"]["remaining"]["cost_microusd"])
+
+      # Tokens were still measured, so the call is evidenced even unpriced.
+      assert body["grant"]["spent"]["total_tokens"] == 980
+    end
+
+    test "a priced thread reports its cost, labelled by the basis of its rates", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-cost-priced")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{"objective" => "A lane with rates."})
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+      grant = Repo.get_by!(Grant, thread_id: id)
+      {:ok, _spent} = Inference.record_usage(grant, %{"input_tokens" => 1_000_000})
+
+      body = authenticated |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
+
+      assert body["thread"]["spend"]["cost"]["microusd"] == 1_250_000
+      assert body["thread"]["spend"]["cost"]["basis"] == "provisional"
+      assert body["thread"]["spend"]["cost"]["unpriced_models"] == []
+
+      # Priced is not the same as billable: these are placeholder rates.
+      assert body["grant"]["pricing"]["basis"] == "provisional"
+      assert body["grant"]["pricing"]["billable"] == false
+      assert body["grant"]["spent"]["cost_microusd"] == 1_250_000
+    end
+  end
 end

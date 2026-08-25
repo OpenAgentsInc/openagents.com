@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.ThreadController do
 
   alias OpenAgents.Conversations
   alias OpenAgents.Inference
-  alias OpenAgents.Inference.{Credit, Grant, Models}
+  alias OpenAgents.Inference.{Credit, Grant, Models, Pricing}
   alias OpenAgents.Threads
   alias OpenAgents.Threads.Thread
   alias OpenAgentsWeb.ApiError
@@ -792,7 +792,22 @@ defmodule OpenAgentsWeb.ThreadController do
 
   defp spend_view(%Thread{} = thread) do
     spend = Threads.spend(thread)
-    %{"calls" => spend.calls, "grants" => spend.grants, "usage" => spend.usage}
+
+    %{
+      "calls" => spend.calls,
+      "grants" => spend.grants,
+      "usage" => spend.usage,
+      # `cost.microusd` is null when any lane this session used has no declared
+      # rates. A client that renders it as a currency has to handle the null
+      # rather than print a zero it was never given (METER-001).
+      "cost" => %{
+        "microusd" => spend.cost.microusd,
+        "priced_microusd" => spend.cost.priced_microusd,
+        "basis" => spend.cost.basis,
+        "unpriced_calls" => spend.cost.unpriced_calls,
+        "unpriced_models" => spend.cost.unpriced_models
+      }
+    }
   end
 
   # The plaintext token exists exactly once, here. Everything else in this map
@@ -824,13 +839,36 @@ defmodule OpenAgentsWeb.ThreadController do
       "call_count" => grant.call_count,
       "usage" => grant.usage,
       "limits" => limits(grant),
+      # What this grant was priced against, so the figures below can be
+      # dereferenced rather than trusted. `unpriced` means the deployment has
+      # no rates for this model: `spent_cost_microusd` is null, the cost
+      # remainder is null, and neither is a zero (METER-001).
+      "pricing" => %{
+        "id" => Pricing.pricing_id_for(grant.model_id),
+        "basis" => Pricing.basis(grant.model_id),
+        "billable" => Pricing.billable?(grant.usage)
+      },
+      "spent" => %{
+        "calls" => grant.call_count,
+        "total_tokens" => spent(grant, "total_tokens"),
+        "cost_microusd" => Pricing.cost(grant.usage)
+      },
       "remaining" => %{
         "calls" => remaining(grant.max_calls, grant.call_count),
         "total_tokens" => remaining(grant.max_total_tokens, spent(grant, "total_tokens")),
-        "cost_microusd" =>
-          remaining(grant.max_cost_microusd, spent(grant, "estimated_cost_microusd"))
+        # An unpriced grant has no cost remainder to report. Subtracting a zero
+        # from the ceiling would publish the whole ceiling as headroom on a
+        # grant that has been spending all along.
+        "cost_microusd" => cost_remaining(grant)
       }
     }
+  end
+
+  defp cost_remaining(%Grant{} = grant) do
+    case Pricing.cost(grant.usage) do
+      nil -> nil
+      cost -> remaining(grant.max_cost_microusd, cost)
+    end
   end
 
   defp limits(%Grant{} = grant) do

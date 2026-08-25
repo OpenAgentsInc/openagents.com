@@ -111,4 +111,57 @@ defmodule OpenAgents.Inference.CreditTest do
 
     assert Threads.ceilings(visitor_id) == {:error, :credit_exhausted}
   end
+
+  # METER-001. A cost ceiling can only stop spend it can measure, so a lane
+  # with no declared rates draws nothing down. That is a consequence of not
+  # knowing the rates, and the account's read has to say so rather than report
+  # a balance that looks untouched.
+  describe "spend the deployment has no price for" do
+    test "an unpriced call draws nothing down, and the balance says so" do
+      owner = account("credit-unpriced")
+      luna = Application.fetch_env!(:openagents, :openai_model)
+
+      {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Run the unpriced lane", model: luna)
+      {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
+      {:ok, _metered} = Inference.record_usage(grant, %{"output_tokens" => 500_000})
+
+      # `spent/1` is a floor, not a total, and the floor here is zero.
+      assert Credit.spent(owner.id) == 0
+      assert Credit.remaining(owner.id) == Credit.allowance(owner.id)
+
+      # What stops that reading as "this account has spent nothing".
+      assert Credit.unpriced_calls(owner.id) == 1
+
+      balance = Credit.balance(owner.id)
+      assert balance.spent_microusd == 0
+      assert balance.unpriced_calls == 1
+      refute balance.complete?
+    end
+
+    test "an account whose every call was priced reports a complete balance" do
+      owner = account("credit-complete")
+
+      {:ok, _metered} =
+        Inference.record_usage(minted(owner.id), %{
+          "output_tokens" => output_tokens_costing(100_000)
+        })
+
+      balance = Credit.balance(owner.id)
+
+      assert balance.spent_microusd == 100_000
+      assert balance.unpriced_calls == 0
+      assert balance.complete?
+    end
+
+    test "a grant that never bought anything is not counted as unpriced spend" do
+      owner = account("credit-idle")
+      luna = Application.fetch_env!(:openagents, :openai_model)
+
+      {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Mint and stop", model: luna)
+      {:ok, _fenced, _grant, _token} = Threads.mint_grant(thread)
+
+      assert Credit.unpriced_calls(owner.id) == 0
+      assert Credit.balance(owner.id).complete?
+    end
+  end
 end

@@ -75,7 +75,7 @@ defmodule OpenAgents.Threads do
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference
-  alias OpenAgents.Inference.{Credit, Grant, Models}
+  alias OpenAgents.Inference.{Credit, Grant, Models, Pricing}
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
   alias OpenAgents.Threads.Event
@@ -750,11 +750,26 @@ defmodule OpenAgents.Threads do
   Absent stays absent. A dimension no provider reported is not summed into
   existence as a zero, because a zero reads as a measurement and this is the
   absence of one (#220).
+
+  `:cost` is the same rule applied to money, and it is stricter than the sum in
+  `:usage` because money is what somebody eventually pays. A session that
+  touched a lane this deployment has no rates for cannot be totalled honestly,
+  so `cost.microusd` is `nil` and `cost.unpriced_models` names the lanes that
+  made it `nil`. What was priced is still reported, as `cost.priced_microusd`,
+  so nothing is thrown away — but a reader that wants "the cost" has to notice
+  it does not have one (METER-001).
   """
   @spec spend(Thread.t() | String.t()) :: %{
           calls: non_neg_integer(),
           grants: non_neg_integer(),
-          usage: map()
+          usage: map(),
+          cost: %{
+            microusd: non_neg_integer() | nil,
+            priced_microusd: non_neg_integer(),
+            basis: String.t(),
+            unpriced_calls: non_neg_integer(),
+            unpriced_models: [String.t()]
+          }
         }
   def spend(%Thread{id: thread_id}), do: spend(thread_id)
 
@@ -762,12 +777,12 @@ defmodule OpenAgents.Threads do
     grants =
       from(grant in Grant,
         where: grant.thread_id == ^thread_id,
-        select: {grant.call_count, grant.usage}
+        select: {grant.call_count, grant.usage, grant.model_id}
       )
       |> Repo.all()
 
     usage =
-      Enum.reduce(grants, %{}, fn {_calls, usage}, acc ->
+      Enum.reduce(grants, %{}, fn {_calls, usage, _model}, acc ->
         Enum.reduce(usage || %{}, acc, fn
           {key, value}, inner when is_integer(value) ->
             Map.update(inner, key, value, &(&1 + value))
@@ -778,10 +793,61 @@ defmodule OpenAgents.Threads do
       end)
 
     %{
-      calls: Enum.sum(Enum.map(grants, fn {calls, _usage} -> calls || 0 end)),
+      calls: Enum.sum(Enum.map(grants, fn {calls, _usage, _model} -> calls || 0 end)),
       grants: length(grants),
-      usage: usage
+      usage: usage,
+      cost: cost_view(grants)
     }
+  end
+
+  # One grant contributes to the cost only if it bought something. A grant that
+  # was minted and never called says nothing about pricing either way, so an
+  # unpriced grant with no calls does not make a session's total unknown.
+  defp cost_view(grants) do
+    metered = Enum.filter(grants, fn {calls, _usage, _model} -> (calls || 0) > 0 end)
+
+    priced_microusd =
+      metered
+      |> Enum.map(fn {_calls, usage, _model} -> Pricing.cost(usage) || 0 end)
+      |> Enum.sum()
+
+    unpriced =
+      Enum.filter(metered, fn {_calls, usage, _model} ->
+        Pricing.usage_basis(usage) == Pricing.unpriced()
+      end)
+
+    unpriced_calls = Enum.sum(Enum.map(unpriced, fn {calls, _usage, _model} -> calls end))
+
+    unpriced_models =
+      unpriced
+      |> Enum.map(fn {_calls, _usage, model_id} -> model_id end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    bases =
+      metered
+      |> Enum.map(fn {_calls, usage, _model} -> Pricing.usage_basis(usage) end)
+      |> Enum.uniq()
+
+    %{
+      microusd: if(unpriced == [] and metered != [], do: priced_microusd),
+      priced_microusd: priced_microusd,
+      basis: basis_word(metered, bases, unpriced),
+      unpriced_calls: unpriced_calls,
+      unpriced_models: unpriced_models
+    }
+  end
+
+  # `absent` is not `unpriced`: nothing was bought, so there is nothing to
+  # price. `unpriced` wins over the rest because it is the one word that says
+  # the figure beside it is incomplete, and `provisional` wins over `declared`
+  # because a total is only as billable as its least trustworthy part.
+  defp basis_word([], _bases, _unpriced), do: "absent"
+  defp basis_word(_metered, _bases, [_ | _]), do: "unpriced"
+
+  defp basis_word(_metered, bases, []) do
+    if "provisional" in bases, do: "provisional", else: "declared"
   end
 
   @doc "How many threads one account may hold open at once, or `nil` for no limit."

@@ -16,7 +16,7 @@ defmodule OpenAgents.Inference do
   """
 
   import Ecto.Query
-  alias OpenAgents.Inference.{Grant, Models}
+  alias OpenAgents.Inference.{Grant, Models, Pricing}
   alias OpenAgents.Machines.Machine
   alias OpenAgents.Repo
 
@@ -346,6 +346,14 @@ defmodule OpenAgents.Inference do
 
   # ── budget ──────────────────────────────────────────────────────────────
 
+  # A cost ceiling can only stop spend it can measure. An unpriced model writes
+  # no `estimated_cost_microusd`, so `max_cost_microusd` never fires for it and
+  # such a grant is bounded by its call and token ceilings, by the account's
+  # admission cap, and by revocation — not by money. That is a consequence of
+  # not knowing the rates rather than a decision to let the lane run free, and
+  # it is why `Threads.spend/1` and `Credit.unpriced_calls/1` publish the
+  # unpriced calls instead of folding them into a total (METER-001).
+
   @doc false
   def over_budget?(%Grant{} = grant) do
     tokens = integer(grant.usage["total_tokens"])
@@ -400,7 +408,7 @@ defmodule OpenAgents.Inference do
 
     merged
     |> Map.put("total_tokens", derived_total(existing, merged))
-    |> put_cost(model_id)
+    |> Pricing.price(model_id)
     |> Map.put("schema", @usage_schema)
   end
 
@@ -411,30 +419,6 @@ defmodule OpenAgents.Inference do
       explicit
     else
       integer(merged["input_tokens"]) + integer(merged["output_tokens"])
-    end
-  end
-
-  defp put_cost(merged, model_id) do
-    case Models.fetch(model_id) do
-      {:ok, %{pricing: %{input_per_million_tokens: i, output_per_million_tokens: o} = pricing}} ->
-        input = integer(merged["input_tokens"])
-        output = integer(merged["output_tokens"])
-        cache_read = integer(merged["cache_read_input_tokens"])
-        cache_write = integer(merged["cache_write_input_tokens"])
-        cached_rate = Map.get(pricing, :cached_input_per_million_tokens, i)
-
-        # Cached read tokens are split from the rest of the input and priced at
-        # the cached rate where one is declared. Cache write tokens are charged
-        # as regular input because they are not a cached read.
-        uncached = max(0, input - cache_read) + cache_write
-
-        cost =
-          uncached * i + cache_read * cached_rate + output * o
-
-        Map.put(merged, "estimated_cost_microusd", div(cost, 1_000_000))
-
-      _ ->
-        merged
     end
   end
 

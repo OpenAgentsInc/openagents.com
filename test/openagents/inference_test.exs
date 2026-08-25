@@ -206,9 +206,12 @@ defmodule OpenAgents.InferenceTest do
         |> div(1_000_000)
 
       assert metered.usage["estimated_cost_microusd"] == expected
+      # The record names the table it was priced against, so the figure can be
+      # dereferenced rather than trusted (METER-001).
+      assert metered.usage["pricing_id"] == "placeholder.gemini-3.7-flash.v1"
     end
 
-    test "an unpriced model records no estimated cost" do
+    test "an unpriced model records no estimated cost — and no zero" do
       luna_id = Application.fetch_env!(:openagents, :openai_model)
       {:ok, grant, _token} = Inference.mint(Map.put(scope("usage-unpriced"), :model_id, luna_id))
 
@@ -219,6 +222,13 @@ defmodule OpenAgents.InferenceTest do
         })
 
       refute Map.has_key?(metered.usage, "estimated_cost_microusd")
+      refute metered.usage["estimated_cost_microusd"] == 0
+      # The record says why there is no cost rather than leaving a reader to
+      # infer it from a missing key.
+      assert metered.usage["pricing_id"] == "unpriced"
+      # Tokens are still measured. Unpriced is not unmetered: the call is
+      # evidenced, only its price is unknown.
+      assert metered.usage["total_tokens"] == 140
     end
   end
 

@@ -343,6 +343,23 @@ without paying for it (THREAD-001, issue #243). The CLI that stops writing to
 the conversation is still to come; see the audit in
 `docs/2026-08-23-thread-primitive-audit.md`.
 
+**Pricing basis** — one word saying whether a reported cost can be trusted, on
+every catalog entry and every metered usage record (METER-001). `declared`
+means the operator entered the provider's published rates and the figure is
+billable. `provisional` means the deployment carries rates that were written to
+make the system run, or rates whose table it can no longer dereference; the
+figure is a working number and nothing bills from it. `unpriced` means there
+are no rates at all. The authority is `OpenAgents.Inference.Pricing`, and every
+record names its rate table in `pricing_id`.
+
+**Unpriced** — the deployment does not know what a call cost. It is not the
+same word as free, and it is never rendered as `$0.00`: an unpriced record
+carries no `estimated_cost_microusd`, `OpenAgents.Threads.spend/1` reports a
+null total and names the lanes that made it null, and the thread page shows the
+word. `gpt-5.6-luna` is unpriced today, which is why the distinction is load
+bearing rather than pedantic — it is the lane the coder runs on. Giving a lane
+rates is an owner action, never an inference.
+
 **Thread transcript** — the prompts, responses, tool activity, code changes,
 and metadata that explain what happened in a thread. Authoritative copies live
 in PostgreSQL (messages, tool steps, receipts), not on a Git branch. The

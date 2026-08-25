@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.ThreadShowLive do
 
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Inference.Pricing
   alias OpenAgents.Markdown
   alias OpenAgents.Threads
 
@@ -138,20 +139,25 @@ defmodule OpenAgentsWeb.ThreadShowLive do
             </div>
             <div>
               <div class="text-xs text-muted-foreground">Calls</div>
-              <div class="tabular-nums">{@grant.call_count} / {@grant.max_calls}</div>
+              <div class="tabular-nums">{@grant.call_count} / {ceiling(@grant.max_calls)}</div>
             </div>
             <div>
               <div class="text-xs text-muted-foreground">Tokens</div>
               <div class="tabular-nums">
-                {grant_spent(@grant, "total_tokens")} / {@grant.max_total_tokens}
+                {grant_spent(@grant, "total_tokens")} / {ceiling(@grant.max_total_tokens)}
               </div>
             </div>
             <div>
               <div class="text-xs text-muted-foreground">Cost</div>
-              <div class="tabular-nums">
-                {dollars(grant_spent(@grant, "estimated_cost_microusd"))} / {dollars(
-                  @grant.max_cost_microusd
-                )}
+              <div id="thread-budget-cost" class="tabular-nums" data-basis={cost_basis(@grant)}>
+                {cost_spent(@grant)} / {dollars(@grant.max_cost_microusd)}
+              </div>
+              <div
+                :if={cost_basis(@grant) != "declared"}
+                id="thread-budget-cost-note"
+                class="text-xs text-muted-foreground"
+              >
+                {cost_note(cost_basis(@grant))}
               </div>
             </div>
             <div :if={@grant.expires_at}>
@@ -401,7 +407,33 @@ defmodule OpenAgentsWeb.ThreadShowLive do
     end
   end
 
+  # A null ceiling is unbounded, not zero and not missing. Rendering nil left
+  # the denominator blank, which read as a rendering fault rather than as the
+  # thread's actual authority.
+  defp ceiling(nil), do: "∞"
+  defp ceiling(value), do: value
+
+  defp dollars(nil), do: "∞"
   defp dollars(microusd), do: "$#{:erlang.float_to_binary(microusd / 1_000_000, decimals: 2)}"
+
+  # What this grant has spent, or the word for not knowing. `$0.00` is what
+  # this cell used to show for a lane with no declared rates, and it was the
+  # most confident wrong number on the page: the coder runs on that lane
+  # (METER-001).
+  defp cost_spent(grant) do
+    case Pricing.cost(grant.usage) do
+      nil -> "Unpriced"
+      microusd -> dollars(microusd)
+    end
+  end
+
+  defp cost_basis(grant), do: Pricing.usage_basis(grant.usage)
+
+  defp cost_note("unpriced"),
+    do: "No rates declared for this model, so this session's cost is unknown rather than zero."
+
+  defp cost_note(_provisional),
+    do: "Provisional rates. This is a working figure, not a bill."
 
   # The tier word plus what it means for a reader, because "dark" alone tells
   # the owner nothing about who can see the page they are looking at.

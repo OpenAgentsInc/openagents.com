@@ -128,9 +128,22 @@ config :openagents,
   #
   # A model may declare a `pricing` map with `input_per_million_tokens`,
   # `output_per_million_tokens`, and optionally `cached_input_per_million_tokens`.
-  # The values below are placeholders that make the existing test suite pass;
-  # the operator must replace them with real provider rates before accepting
-  # any spend. A model with no `pricing` key records no estimated cost.
+  # A pricing map also names itself: `id` is the rate table every usage record
+  # priced against it stamps as `pricing_id`, and `source` is where the rates
+  # came from — `:declared` for a provider's published rates, anything else
+  # (including omitting it) for a working figure. `OpenAgents.Inference.Pricing`
+  # reads that word, and only `:declared` is billable (METER-001).
+  #
+  # Every rate below is a placeholder written to make the system run. None of
+  # them was read off a provider's price page, so all of them say `:placeholder`
+  # and nothing may bill from a cost they produced. Replacing them is an owner
+  # action: enter the provider's real rates and set `source: :declared` in the
+  # same edit.
+  #
+  # A model with no `pricing` key records no estimated cost at all — not a
+  # zero. `gpt-5.6-luna` is that model and it is the lane the coder runs on, so
+  # the account's metered spend is a floor rather than a total until it has
+  # rates. Every read surface says `unpriced` rather than `$0.00`.
   #
   # Gemini 3.7 Flash leads, so it is what a caller that names none gets: fast,
   # a million tokens of context, and steady enough to hold a conversation.
@@ -154,10 +167,12 @@ config :openagents,
       provider_model: "google/gemini-3.7-flash",
       context_window: 1_048_576,
       max_output: 65_536,
-      # Placeholder: the operator must set real provider rates before accepting
-      # any spend. The cached-input rate is optional and should be omitted if
-      # the provider does not offer one.
+      # Placeholder: the operator must set real provider rates and flip `source`
+      # to `:declared` before anything bills from this. The cached-input rate is
+      # optional and should be omitted if the provider does not offer one.
       pricing: %{
+        id: "placeholder.gemini-3.7-flash.v1",
+        source: :placeholder,
         input_per_million_tokens: 1_250_000,
         output_per_million_tokens: 10_000_000,
         cached_input_per_million_tokens: 100_000
@@ -175,9 +190,12 @@ config :openagents,
       # with a real task spent the whole budget reasoning and returned an empty
       # 200 after three minutes, which read as the proxy having failed.
       max_output: 64_000,
-      # Placeholder: the operator must set real provider rates before accepting
-      # any spend. This entry does not declare a cached-input rate.
+      # Placeholder: the operator must set real provider rates and flip `source`
+      # to `:declared` before anything bills from this. This entry does not
+      # declare a cached-input rate.
       pricing: %{
+        id: "placeholder.ox-alpha.v1",
+        source: :placeholder,
         input_per_million_tokens: 500_000,
         output_per_million_tokens: 2_000_000
       }
@@ -189,7 +207,11 @@ config :openagents,
       context_window: 272_000,
       max_output: 4_096
       # This entry deliberately omits `pricing`, so a grant pinned to it records
-      # no estimated cost rather than a made-up zero.
+      # no estimated cost rather than a made-up zero. Its usage records stamp
+      # `pricing_id: "unpriced"`, `Threads.spend/1` refuses to total a session
+      # that touched it, and the thread page shows the word instead of a
+      # figure. Giving this lane real rates is the single highest-value edit in
+      # this file: it is where the coder's spend actually goes.
     }
   ],
   gemini_api_key: nil,

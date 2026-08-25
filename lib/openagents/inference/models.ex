@@ -1,5 +1,6 @@
 defmodule OpenAgents.Inference.Models do
   alias OpenAgents.Inference.Health
+  alias OpenAgents.Inference.Pricing
 
   @moduledoc """
   The typed model catalog: every model this deployment serves, and the
@@ -173,6 +174,14 @@ defmodule OpenAgents.Inference.Models do
   about how the server is wired. Pricing is exposed only when the deployment
   has declared rates for a model; an unpriced model has no `pricing` key so it
   is not read as zero before spend.
+
+  Absence is a weak signal, though — a client that forgets to check for the key
+  reads a missing price as no price rather than as an unknown one. So every
+  entry also carries `pricing_basis`, one word alongside `availability`:
+  `declared` where the operator entered the provider's published rates,
+  `provisional` where the rates are a working figure nothing may bill from, and
+  `unpriced` where there are none. A caller can read what a lane will cost, and
+  whether that figure can be trusted, before it spends anything (METER-001).
   """
   @spec catalog() :: [map()]
   def catalog do
@@ -185,6 +194,7 @@ defmodule OpenAgents.Inference.Models do
         "context_window" => model.context_window,
         "max_output" => model.max_output,
         "availability" => availability(model),
+        "pricing_basis" => Pricing.basis_of(model.pricing),
         "default" => model.id == default_id
       }
 
@@ -200,6 +210,8 @@ defmodule OpenAgents.Inference.Models do
 
   defp public_pricing(pricing) do
     base = %{
+      "id" => Pricing.pricing_id(pricing),
+      "basis" => Pricing.basis_of(pricing),
       "input_per_million_tokens" => pricing.input_per_million_tokens,
       "output_per_million_tokens" => pricing.output_per_million_tokens
     }

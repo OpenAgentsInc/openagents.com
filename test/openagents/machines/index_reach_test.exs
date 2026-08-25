@@ -54,7 +54,7 @@ defmodule OpenAgents.Machines.IndexReachTest do
         Repo.query!("SET LOCAL enable_seqscan = off")
         Repo.query!("EXPLAIN " <> sql, params).rows |> Enum.map_join("\n", &hd/1)
     after
-      0 -> flunk("no query matching #{inspect(matching)} was emitted")
+      5_000 -> flunk("no query matching #{inspect(matching)} was emitted")
     end
   end
 

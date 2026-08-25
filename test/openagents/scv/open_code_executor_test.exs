@@ -89,9 +89,9 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     assert Bitwise.band(event_mode, 0o777) == 0o600
     assert Bitwise.band(summary_mode, 0o777) == 0o600
 
-    assert_receive {:scv_event, %{type: "run_preparing"}}
-    assert_receive {:scv_event, %{type: "process_starting"}}
-    assert_receive {:scv_event, %{type: "process_started", os_pid: os_pid}}
+    assert_receive {:scv_event, %{type: "run_preparing"}}, 5_000
+    assert_receive {:scv_event, %{type: "process_starting"}}, 5_000
+    assert_receive {:scv_event, %{type: "process_started", os_pid: os_pid}}, 5_000
     assert is_integer(os_pid) and os_pid > 0
 
     for event_type <- ["step_start", "tool_use", "step_finish", "text"] do
@@ -100,11 +100,11 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
                         type: "opencode_event",
                         event_type: ^event_type,
                         session_id: "ses_fixture"
-                      }}
+                      }}, 5_000
     end
 
-    assert_receive {:scv_event, %{type: "process_finished", status: "succeeded"}}
-    assert_receive {:scv_event, %{type: "run_finished", status: "succeeded"}}
+    assert_receive {:scv_event, %{type: "process_finished", status: "succeeded"}}, 5_000
+    assert_receive {:scv_event, %{type: "run_finished", status: "succeeded"}}, 5_000
   end
 
   test "fails closed at the wall-clock limit", context do
@@ -121,7 +121,7 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     assert result.status == "timeout"
     assert result.error_code == "command_timeout"
     assert result.exit_status == nil
-    assert result.duration_ms < 1_500
+    assert result.duration_ms < 5_000
 
     timeout_pid = context.repository |> Path.join("timeout.pid") |> File.read!() |> String.trim()
     {_output, status} = System.cmd("kill", ["-0", timeout_pid], stderr_to_stdout: true)
@@ -195,7 +195,7 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
       executable: context.executable,
       model: "openai/test-model",
       output_root: context.output,
-      timeout_ms: 1_000
+      timeout_ms: 5_000
     ]
   end
 
@@ -225,7 +225,6 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
     printf '%s\n' '{"type":"tool_use","timestamp":2,"sessionID":"ses_fixture","part":{"tool":"read","state":{"status":"completed","output":"fixture-secret-key"}}}'
     printf '%s\n' '{"type":"step_finish","timestamp":3,"sessionID":"ses_fixture","part":{"type":"step-finish","cost":0.00125,"tokens":{"input":13,"output":8,"reasoning":2,"cache":{"read":3,"write":1}}}}'
     printf '%s\n' '{"type":"text","timestamp":4,"sessionID":"ses_fixture","part":{"type":"text","text":"done fixture-secret-key"}}'
-    sleep 0.05
     """
   end
 

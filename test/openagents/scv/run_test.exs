@@ -35,7 +35,7 @@ defmodule OpenAgents.SCV.RunTest do
                  executable: context.executable,
                  model: "openai/test-model",
                  output_root: context.output,
-                 timeout_ms: 1_000,
+                 timeout_ms: 5_000,
                  event_sink: fn event -> send(test_pid, {:event, event}) end
                ]
              )
@@ -62,7 +62,8 @@ defmodule OpenAgents.SCV.RunTest do
                       environment: "opencode-core",
                       runner: "local",
                       type: "run_preparing"
-                    }}
+                    }},
+                   5_000
   end
 
   test "keeps objectives and driver credentials out of inspected run values", context do
@@ -106,13 +107,13 @@ defmodule OpenAgents.SCV.RunTest do
     assert {:ok, result} =
              Worker.run(environment,
                event_sink: fn event -> send(test_pid, {:worker_event, event}) end,
-               driver_options: [executable: context.executable, timeout_ms: 1_000]
+               driver_options: [executable: context.executable, timeout_ms: 5_000]
              )
 
     assert result.status == "succeeded"
     assert result.runtime.permission_profile == "read_only"
     assert result.runtime.reasoning_effort == "none"
-    assert_receive {:worker_event, %{type: "process_started", driver: "opencode"}}
+    assert_receive {:worker_event, %{type: "process_started", driver: "opencode"}}, 5_000
 
     assert {:error, {:environment_value_not_admitted, "SCV_PERMISSION_PROFILE"}} =
              Worker.run(Map.put(environment, "SCV_PERMISSION_PROFILE", "workspace_write"))

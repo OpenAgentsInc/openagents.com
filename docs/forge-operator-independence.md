@@ -254,20 +254,123 @@ from the WAL re-derives all of it; recovery from the mirror derives none of it,
 and `EXIT-003` proves both halves.
 
 Two operational facts belong here rather than in a footnote. First,
-`:forge_mirror_urls` is empty in `config/config.exs` and set by no environment,
-so no mirror runs today and GitHub holds whatever was last pushed to it
-directly — `REPOSITORY-002` states that trade. Second, `mirror_now/1` is a
-force push of every ref, so configuring a mirror overwrites whatever direct
-pushes left there rather than merging with them.
+`:forge_mirror_urls` is empty in `config/config.exs` but `config/runtime.exs`
+reads `OPENAGENTS_FORGE_MIRROR_URLS_JSON`, and production sets it for
+`openagents.com`, so a mirror does run and GitHub holds what the forge last
+pushed there — `REPOSITORY-002` states that trade, and a direct push to GitHub
+is overwritten rather than merged. Second, `mirror_now/1` is a force push of
+every ref, which is the destructive half of that: it overwrites whatever the
+mirror held rather than reconciling with it. Both statements were false here
+until #188 measured the deployment against them.
+
+### The mirror is lossy about evidence and richer about pre-seed objects
+
+"The mirror is strictly lossy" is true of one thing and false of another, and
+collapsing the two is what #188 found. The relation has two halves and a
+boundary between them, and the boundary is the seed commit `eda094c6`.
+
+**Everything the WAL records — the whole log, from the seed forward.** The
+mirror is strictly lossy and is never an input to recovery. It carries objects
+and refs and no evidence, so a forge restored from it serves the same source
+with no record of who produced it. That is `EXIT-003`, and it is the half that
+is load-bearing: the recovery path must not be able to consult GitHub, or
+GitHub becomes authority by accident.
+
+**Everything before the seed — 307 commits.** The relation is inverted. This
+repository's log was seeded from a `--depth=1` fetch (#179), so the WAL holds
+one commit per ref and no ancestry, and no rebuild can produce what the log
+never held. Those commits are objects with no evidence attached anywhere: no
+WAL entry, no sequence, no principal, no receipt. The mirror is the only copy
+of them, which is exactly the input this document said was never an input.
+
+Measured on 2026-08-25, both sides cloned fresh:
+
+| Source | `main` commits | `git fsck` | Root of `main` | Holds `c91327d6` |
+| --- | --- | --- | --- | --- |
+| The forge | 461 | clean | `eda094c6`, the seed | no |
+| GitHub mirror | 767 | clean | `a352f78e` | yes |
+
+The counts are taken at different tips, because the forge was ahead of the
+mirror when they were read; the gap itself is stable. `git rev-list --count
+eda094c6` on the mirror is 308 — the seed and its 307 ancestors — and the forge
+holds the seed alone.
+
+The forge's clone is not broken by this and `EXIT-004` is not violated by it.
+The clone succeeds, passes `git fsck`, and writes a `shallow` file naming five
+reconciled boundaries, which is `EXIT-004`'s stated outcome after #179: history
+that says where it stops is servable, and history that dangles is not. What is
+true is narrower and worth saying without softening it — **the forge is
+canonical for its own history only from the seed forward**, and a reader who
+wants this repository's first 307 commits has to get them from the mirror.
+
+### The decision about the 307 commits
+
+Decided 2026-08-25 (#188): **import the objects, and do not manufacture the
+evidence.** Three shapes were weighed.
+
+**Import the objects and a push record for them.** Rejected, because it invents
+evidence. A WAL entry carries a sequence, a principal, and a time, and
+`OpenAgents.Forge.Pushes.reconcile_receipts/1` derives a receipt from every
+entry. Writing entries that claim 307 pushes nobody made would publish receipts
+for pushes that did not happen, in a log whose entire value is that a receipt
+derives from the WAL and never from a second authority. Synthesizing the record
+to make the count come out right destroys the thing the count was measuring,
+and it is the defect class this tracker keeps finding.
+
+**Record that the forge is canonical only from the seed forward, and stop.**
+That is true, it is what this document now says about the present, and it is
+not enough as an end state. It leaves the forge's own authority holding less
+than its mirror does, so "GitHub is a mirror and never authority" reads as a
+statement about the whole repository while being true only about evidence and
+false about half the objects. It also leaves the only copy of this
+repository's first year on an account the operator does not control, which is
+the dependency this document exists to remove.
+
+**Import the objects and keep the push record starting at the seed.** Chosen.
+The objects and the evidence are different claims, and only one of them is
+missing. The log gains the bytes; it gains no assertion about who pushed them.
+
+`OpenAgents.Forge.Backfill.import_history/3` is that operation and it is
+already written and proven — `test/openagents/forge/backfill_test.exs`, six
+tests, including one that rebuilds from sequence zero afterwards and gets the
+whole history back. It appends the bundle as an ordinary `git_bundle` entry
+carrying the ref map unchanged, an empty shallow set, and a principal that
+records who authorized the import rather than who authored the commits. It
+proves the bundle against a throwaway repository sharing the projection's
+objects and refuses to touch the log unless every boundary's recorded parents
+resolve and the union walks the way `git upload-pack` walks it, because an
+append-only log cannot retract a bad entry.
+
+This does not weaken `EXIT-003`. The bytes arrive by an operator's hand on one
+occasion, not by a code path reaching for GitHub: no module on the recovery
+path gains a mirror call, and the proof that fails on one is untouched. What
+changes afterwards is that the mirror stops being the only copy of anything.
+
+**Not yet executed.** The bundle is built and verified — 7.2 MB, `git bundle
+verify` reports a complete history, and it closes all five recorded boundaries
+— and the recipe is in rehearsal 3 of `docs/forge-exit-rehearsals.md`. What is
+left is a production write that cannot be undone: a WAL append is permanent by
+design, `EXIT-005` makes removing an entry a rewrite of the whole suffix, and
+if a node fails to materialize the new entry `OpenAgents.Forge.Sync` falls back
+to a full rebuild from sequence zero, which rehearsal 3 records as never having
+been run against the live projection. That is an attended operation on a forge
+people are pushing to, not an unattended one, and it is tracked separately
+rather than being described here as done.
 
 ## Exit
 
 `EXIT-004` is the narrow claim that actually holds: a clone taken through the
 published Git transport carries every advertised ref, every object behind those
-refs, and re-serves the same history from somewhere else with the forge deleted.
-The one omission is the `refs/internal/` namespace, where stack boundary
-commits are retained without being advertised; the proof asserts that this is
-the *only* omission, so withholding a branch would turn it red.
+refs that the WAL holds, and re-serves the same history from somewhere else
+with the forge deleted. The one withheld namespace is `refs/internal/`, where
+stack boundary commits are retained without being advertised; the proof asserts
+that this is the *only* withholding, so hiding a branch would turn it red.
+
+Where a ref's history reaches back past what the WAL holds, the clone is
+grafted rather than truncated: a `shallow` file names the boundary, and the
+copy is complete with respect to what the forge has and honest about where that
+stops. `EXIT-004`'s #179 amendment states that outcome. The pre-seed section
+above says what is on the other side of the boundary and where it lives.
 
 That is exit for source. It is not yet exit for everything, and the remaining
 gaps are named rather than softened.

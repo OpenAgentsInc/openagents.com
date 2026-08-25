@@ -346,6 +346,52 @@ reported rather than reconciled silently.
    returns `:ok` on success and a typed error when the WAL cannot produce a
    servable projection. `EXIT-003` turns red if a mirror input is added.
 
+4. Measure history rather than ref maps. Identical ref maps are not identical
+   history, and this is the step that finds a seeded repository whose log holds
+   less than its mirror does:
+
+   ```sh
+   git clone https://openagents.com/{owner}/{repo}.git forge && \
+     git -C forge rev-list --count refs/heads/main && \
+     cat forge/.git/shallow
+   git clone https://github.com/{owner}/{repo}.git mirror && \
+     git -C mirror rev-list --count refs/heads/main
+   ```
+
+   A `shallow` file on the forge side names the boundaries. Each boundary's
+   parents are what the log does not hold, and the mirror is where they are.
+
+5. Where the forge is behind, close it with the objects and not with invented
+   evidence. `OpenAgents.Forge.Backfill.import_history/3` appends a bundle to
+   the log as a `git_bundle` entry that leaves the ref map alone and claims no
+   push. Build the bundle from the mirror, one branch per boundary parent:
+
+   ```sh
+   git -C mirror branch --force preseed-1 <parent-of-boundary-1>
+   # ... one per boundary ...
+   git -C mirror bundle create pre-seed.bundle preseed-1 preseed-2 ...
+   git -C mirror bundle verify ../pre-seed.bundle
+   ```
+
+   Put the bundle on the node, inside the container, and import it:
+
+   ```sh
+   bin/openagents rpc 'OpenAgents.Forge.Backfill.open_boundaries("{storage_key}")'
+   bin/openagents rpc 'OpenAgents.Forge.Backfill.import_history("{storage_key}", "/tmp/pre-seed.bundle", "operator:{who}")'
+   ```
+
+   `import_history/3` proves the bundle against a throwaway repository that
+   borrows the projection's objects and refuses to write unless every
+   boundary's recorded parents resolve and the union walks, because an
+   append-only log cannot retract a bad entry. `{storage_key}` is the
+   repository's storage key, not its name — `OpenAgents.Forge.RepoRef` is the
+   only translator, and #190 is the defect that made the difference matter.
+
+   This is a permanent write on a forge people are pushing to. Watch every node
+   converge afterwards: a node that cannot materialize the entry falls back to
+   a full rebuild from sequence zero, which step 3 records as unexercised
+   against the live projection.
+
 ### Result, 2026-08-25
 
 **Steps 1 and 2 pass against the live forge.** Both remotes advertise the same
@@ -367,6 +413,25 @@ behavior was exercised locally instead, by three tests in
 `test/openagents/forge/independence_test.exs`. Whether it succeeds against the
 live 423-commit projection is untested.
 `docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` records both halves.
+
+**Step 4 re-measured later the same day, and step 5 is prepared but not run.**
+A fresh clone of each side: the forge serves 461 commits on `main`, `git fsck`
+clean, grafted at five `shallow` boundaries rooted at `eda094c6`; the mirror
+serves 767, `git fsck` clean, rooted at `a352f78e`, and `git rev-list --count
+eda094c6` there is 308 — the seed and its 307 ancestors. The counts are at
+different tips because the forge was ahead; the gap is unchanged.
+
+The mirror holds all five boundaries and each one's parent, so a single bundle
+closes every boundary at once. Built from the mirror by the recipe in step 5
+over `fdd00d4c`, `e0e61fb1`, `0fcbbbb8`, `f8a7822a`, and `c91327d6`, it is
+7.2 MB and `git bundle verify` reports a complete history.
+
+The import itself was not performed. It is a permanent append to a shared
+production log, its failure mode is the fleet-wide rebuild step 3 has never
+exercised live, and both belong to an attended operation rather than to a
+read-only rehearsal. #188 records the decision — import the objects, keep the
+push record starting at the seed — and
+`docs/forge-operator-independence.md` carries the reasoning.
 
 ## 4. Key rotation
 

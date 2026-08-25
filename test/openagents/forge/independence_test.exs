@@ -518,11 +518,16 @@ defmodule OpenAgents.Forge.IndependenceTest do
     # every ref, that made both documents promise the destructive thing was
     # switched off while it was switched on. Neither claim can return while
     # runtime still reads that variable.
+    #
+    # `docs/forge-operator-independence.md` joined the guarded set with #188:
+    # it is where the mirror contract is written in prose, it carried the same
+    # sentence, and the first pass corrected the two files a test named while
+    # leaving the third to be found by hand a second time.
     test "does not claim a mirror is unconfigured while runtime configures one" do
       assert File.read!("config/runtime.exs") =~ "OPENAGENTS_FORGE_MIRROR_URLS_JSON",
              "the guard below is only meaningful while runtime reads this variable"
 
-      for path <- ["INVARIANTS.md", "CLAUDE.md"] do
+      for path <- ["INVARIANTS.md", "CLAUDE.md", "docs/forge-operator-independence.md"] do
         text = File.read!(path)
 
         for claim <- [

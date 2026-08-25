@@ -4782,8 +4782,25 @@ what the forge last pushed there, which is the trade `REPOSITORY-002` records.
 And `mirror_now/1` is a force push of every ref, so the mirror overwrites what a
 direct push left there rather than merging with it.
 
+Amended 2026-08-25 (issue #188). "Strictly lossy" is a claim about evidence,
+and it was being read as a claim about objects. Where a repository's log was
+seeded from a shallow fetch, the mirror holds ancestors the WAL never held and
+no rebuild can produce — 307 commits for this repository, measured on both
+sides — so before the seed the mirror is strictly *richer* and is the only
+copy. The invariant is unchanged and the direction still holds: the recovery
+path consults no mirror, and a receipt still derives from the WAL alone.
+`OpenAgents.Forge.Backfill.import_history/3` closes such a gap the only way an
+append-only log can, by appending the missing objects as a `git_bundle` entry
+that leaves the ref map unchanged and asserts no push. It takes a file an
+operator supplies rather than reaching for a mirror, so it adds no call this
+invariant's proof would fail on, and it writes no principal, sequence, or time
+that would turn borrowed bytes into evidence of a push.
+`docs/forge-operator-independence.md` records which half of the relation
+applies to what.
+
 Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Pushes`,
-`OpenAgents.Forge.PushReceipt`, `OpenAgents.Forge.Verification`, and
+`OpenAgents.Forge.PushReceipt`, `OpenAgents.Forge.Verification`,
+`OpenAgents.Forge.Backfill`, `test/openagents/forge/backfill_test.exs`, and
 `test/openagents/forge/independence_test.exs`.
 
 ### EXIT-004 — A clone is complete and self-hosting

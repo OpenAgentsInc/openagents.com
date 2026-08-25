@@ -45,7 +45,7 @@ rpc_file() {
   gcloud compute scp "$script" "$instance:/tmp/rpc.exs" --zone="$zone" \
     --project="$project" >/dev/null
   on_node "$instance" "$zone" \
-    "docker cp /tmp/rpc.exs openagents:/tmp/rpc.exs && docker exec openagents /app/bin/openagents rpc 'Code.eval_file(\"/tmp/rpc.exs\")'"
+    "chmod 644 /tmp/rpc.exs && docker cp /tmp/rpc.exs openagents:/tmp/rpc.exs && docker exec openagents /app/bin/openagents rpc 'Code.eval_file(\"/tmp/rpc.exs\")'"
 }
 
 health_of() {
@@ -73,14 +73,31 @@ echo "image digest: $digest"
 echo "==> promote"
 promote=$(mktemp)
 cat > "$promote" <<ELIXIR
-{:ok, target} =
-  OpenAgents.Forge.Targets.promote("openagents.com", %{
+live = OpenAgents.Forge.Targets.live("openagents.com")
+previous_sha = (live && live.sha) || "$sha"
+previous_image_digest = (live && live.details["image_digest"]) || "$digest"
+expected_nodes = Enum.sort(["openagents@10.128.0.4", "openagents@10.128.0.110", "openagents@10.128.0.111"])
+
+target =
+  case OpenAgents.Forge.Targets.current("openagents.com") do
+    %{sha: "$sha", status: status} = t when status in ["promoted", "building", "built", "needs_rolling_replace"] ->
+      t
+    _ ->
+      {:ok, t} = OpenAgents.Forge.Targets.promote("openagents.com", "$sha", "operator:14167547", details: %{"source" => "operator_console"})
+      t
+  end
+
+{:ok, authorized} =
+  OpenAgents.Forge.Targets.authorize_rolling_replacement(target.id, %{
     "sha" => "$sha",
-    "source" => "operator_console",
-    "promoted_by" => "operator:14167547"
+    "image_digest" => "$digest",
+    "previous_sha" => previous_sha,
+    "previous_image_digest" => previous_image_digest,
+    "expected_nodes" => expected_nodes,
+    "authorized_by" => "operator:14167547"
   })
 
-IO.puts("target=#{target.id} status=#{target.status}")
+IO.puts("target=#{authorized.id} status=#{authorized.status}")
 ELIXIR
 rpc_file sarah-fleet-1 us-central1-a "$promote"
 rm -f "$promote"
@@ -125,7 +142,8 @@ cat > "$settle" <<ELIXIR
 target = OpenAgents.Forge.Targets.current("openagents.com")
 sha = "$sha"
 image_digest = "$digest"
-expected = OpenAgents.Forge.Targets.rolling_authority(OpenAgents.Repo)["expected_nodes"]
+authority = OpenAgents.Forge.Targets.rolling_authority("openagents.com")
+expected = authority["expected_nodes"]
 
 # Ask each node what it is running. Recording an assumed identity would make
 # the log say something nobody checked, which is the one thing settlement
@@ -151,10 +169,10 @@ else
   result = %{
     schema: "openagents.rolling-replacement.v1",
     sha: sha,
-    previous_sha: OpenAgents.Forge.Targets.rolling_authority(OpenAgents.Repo)["previous_sha"],
+    previous_sha: authority["previous_sha"],
     image_digest: image_digest,
-    previous_image_digest:
-      OpenAgents.Forge.Targets.rolling_authority(OpenAgents.Repo)["previous_image_digest"],
+    previous_image_digest: authority["previous_image_digest"],
+    expected_nodes: expected,
     status: "live",
     node_results: Map.new(expected, &{&1, "ready"})
   }

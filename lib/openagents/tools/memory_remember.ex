@@ -68,36 +68,41 @@ defmodule OpenAgents.Tools.MemoryRemember do
   defp store(owner, message, context_consent, %{"category" => category, "claim" => claim})
        when is_binary(category) and is_binary(claim) do
     category = MemoryContract.normalize_category(category)
-    consent = consent_evidence(message, claim, context_consent)
 
-    case ProfileMemory.remember_explicit(owner, %{
-           category: category,
-           claim: claim,
-           creator: "user_explicit",
-           provenance: %{
-             "consent_kind" => consent.kind,
-             "operation" => "remember",
-             "source_ref" => "message:#{message.id}"
-           },
-           sources: [
-             %{
-               source_ref: "message:#{message.id}",
-               kind:
-                 if(consent.kind in ["current_message", "conversation_context"],
-                   do: "owner_statement",
-                   else: "owner_confirmation"
-                 )
-             }
-           ]
-         }) do
-      {:ok, remembered} ->
-        {:ok, Map.put(remembered, :category, category)}
+    case consent_evidence(message, claim, context_consent) do
+      {:ok, consent} ->
+        case ProfileMemory.remember_explicit(owner, %{
+               category: category,
+               claim: claim,
+               creator: "user_explicit",
+               provenance: %{
+                 "consent_kind" => consent.kind,
+                 "operation" => "remember",
+                 "source_ref" => "message:#{message.id}"
+               },
+               sources: [
+                 %{
+                   source_ref: "message:#{message.id}",
+                   kind:
+                     if(consent.kind == "current_message",
+                       do: "owner_statement",
+                       else: "owner_confirmation"
+                     )
+                 }
+               ]
+             }) do
+          {:ok, remembered} ->
+            {:ok, Map.put(remembered, :category, category)}
 
-      {:error, reason} when is_atom(reason) ->
+          {:error, reason} when is_atom(reason) ->
+            {:error, category, reason}
+
+          {:error, _bounded_reason} ->
+            {:error, category, :memory_policy_refused}
+        end
+
+      {:error, reason} ->
         {:error, category, reason}
-
-      {:error, _bounded_reason} ->
-        {:error, category, :memory_policy_refused}
     end
   end
 
@@ -128,10 +133,7 @@ defmodule OpenAgents.Tools.MemoryRemember do
   end
 
   defp consent_evidence(message, claim, context_consent) do
-    case Consent.remember(message.content, claim, context_consent) do
-      {:ok, consent} -> consent
-      {:error, _no_explicit_request} -> %{kind: "conversation_context"}
-    end
+    Consent.remember(message.content, claim, context_consent)
   end
 
   defp input_schema do

@@ -141,7 +141,7 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
     assert {:ok, []} = ProfileMemory.list_current(scope.owner)
   end
 
-  test "remember is durable and idempotent for explicit and plain statements", %{
+  test "remember is durable and idempotent for explicit statements", %{
     snapshot: snapshot
   } do
     scope = browser("memory-explicit")
@@ -164,7 +164,7 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
     assert {:ok, repeated} = Runner.run(snapshot, %{request | call_id: "call-repeat"}, context)
     assert repeated["result"]["receipt"]["disposition"] == "already_active"
 
-    plain = user_message(scope.conversation, "I like detailed answers.")
+    plain = user_message(scope.conversation, "Remember that I like detailed answers.")
 
     assert {:ok, automatic} =
              Runner.run(
@@ -182,13 +182,13 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
     assert {:ok, [_first, _second]} = ProfileMemory.list_current(scope.owner)
   end
 
-  test "a single call stores several facts across categories with one receipt", %{
+  test "a single call with multiple unauthorized claims is refused", %{
     snapshot: snapshot
   } do
     scope = browser("memory-batch")
     message = user_message(scope.conversation, "I'm Chris, I run OpenAgents, and I like Elixir.")
 
-    assert {:ok, batch} =
+    assert {:ok, refused} =
              Runner.run(
                snapshot,
                call("memory_remember", %{
@@ -201,49 +201,43 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
                context(scope, message)
              )
 
-    assert batch["status"] == "succeeded"
-    assert batch["result"]["receipt"]["disposition"] == "stored"
-    assert length(batch["result"]["receipt"]["record_refs"]) == 3
-
-    assert Enum.map(batch["result"]["results"], & &1["disposition"]) ==
-             ["stored", "stored", "stored"]
-
-    assert {:ok, records} = ProfileMemory.list_current(scope.owner)
-    assert Enum.sort(Enum.map(records, & &1.category)) == ["name", "preference", "role"]
+    assert refused["status"] == "refused"
+    assert refused["error"]["code"] == "memory_consent_required"
+    assert {:ok, []} = ProfileMemory.list_current(scope.owner)
   end
 
-  test "an unrecognized category is coerced to other instead of refusing the batch", %{
+  test "an unrecognized category is coerced to other when the claim is explicitly authorized", %{
     snapshot: snapshot
   } do
     scope = browser("memory-coerced-category")
-    message = user_message(scope.conversation, "I use a split keyboard and live in Austin.")
+    message = user_message(scope.conversation, "Remember that I use a split keyboard.")
 
     assert {:ok, stored} =
              Runner.run(
                snapshot,
                call("memory_remember", %{
                  "memories" => [
-                   %{"category" => "Equipment", "claim" => "Uses a split keyboard"},
-                   %{"category" => "location", "claim" => "Lives in Austin"}
+                   %{"category" => "Equipment", "claim" => "I use a split keyboard"}
                  ]
                }),
                context(scope, message)
              )
 
     assert stored["status"] == "succeeded"
-    assert Enum.map(stored["result"]["results"], & &1["disposition"]) == ["stored", "stored"]
-    assert Enum.map(stored["result"]["results"], & &1["category"]) == ["other", "other"]
-    assert {:ok, records} = ProfileMemory.list_current(scope.owner)
-    assert Enum.all?(records, &(&1.category == "other"))
+    assert [entry] = stored["result"]["results"]
+    assert entry["disposition"] == "stored"
+    assert entry["category"] == "other"
+    assert {:ok, [record]} = ProfileMemory.list_current(scope.owner)
+    assert record.category == "other"
   end
 
-  test "automatic storage keeps the current message as its owner-scoped source", %{
+  test "a paraphrased claim without exact current or host consent is refused", %{
     snapshot: snapshot
   } do
     scope = browser("memory-automatic")
     statement = user_message(scope.conversation, "I'm mostly working on the One repo lately.")
 
-    assert {:ok, stored} =
+    assert {:ok, refused} =
              Runner.run(
                snapshot,
                call("memory_remember", %{
@@ -254,14 +248,12 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
                context(scope, statement)
              )
 
-    assert stored["status"] == "succeeded"
-    assert [entry] = stored["result"]["results"]
-    assert entry["memory"]["source_refs"] == ["message:#{statement.id}"]
-    assert {:ok, [record]} = ProfileMemory.list_current(scope.owner)
-    assert record.provenance["consent_kind"] == "conversation_context"
+    assert refused["status"] == "refused"
+    assert refused["error"]["code"] == "memory_consent_required"
+    assert {:ok, []} = ProfileMemory.list_current(scope.owner)
   end
 
-  test "a host-recorded confirmation covers its candidate and other claims store automatically",
+  test "a host-recorded confirmation covers its candidate and refuses a mismatch",
        %{
          snapshot: snapshot
        } do
@@ -289,7 +281,7 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
       )
     )
 
-    assert {:ok, fallback} =
+    assert {:ok, refused} =
              Runner.run(
                snapshot,
                call("memory_remember", %{
@@ -300,10 +292,32 @@ defmodule OpenAgents.Tools.ProfileMemoryToolsTest do
                confirmed_context
              )
 
-    assert fallback["status"] == "succeeded"
+    assert refused["status"] == "refused"
+    assert refused["error"]["code"] == "memory_consent_mismatch"
     assert {:ok, records} = ProfileMemory.list_current(scope.owner)
-    record = Enum.find(records, &(&1.claim == "I prefer detailed answers"))
-    assert record.provenance["consent_kind"] == "conversation_context"
+    refute Enum.any?(records, &(&1.claim == "I prefer detailed answers"))
+  end
+
+  test "a fabricated claim with no consent record authorizing it is refused", %{
+    snapshot: snapshot
+  } do
+    scope = browser("memory-fabricated")
+    message = user_message(scope.conversation, "Discussing project plans.")
+
+    assert {:ok, refused} =
+             Runner.run(
+               snapshot,
+               call("memory_remember", %{
+                 "memories" => [
+                   %{"category" => "preference", "claim" => "I prefer detailed answers"}
+                 ]
+               }),
+               context(scope, message)
+             )
+
+    assert refused["status"] == "refused"
+    assert refused["error"]["code"] == "memory_consent_required"
+    assert {:ok, []} = ProfileMemory.list_current(scope.owner)
   end
 
   test "correct supersedes a conflicting record with the new claim", %{snapshot: snapshot} do

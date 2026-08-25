@@ -6,9 +6,9 @@ defmodule OpenAgentsWeb.ThreadIndexLive do
   counts, timestamps, terminal usage — never the transcript (issue #201's
   shell/detail split). The row title is the thread's objective: it is what the
   reader asked for, it lives on the shell row, and deriving the first
-  `turn.user` event would mean reading transcripts for a listing. The list is a
-  snapshot taken at mount; live updates belong to the detail page, which
-  subscribes to its one thread's topic.
+  `turn.user` event would mean reading transcripts for a listing. The listing
+  subscribes to the user's thread topic so newly opened and updated threads
+  render live without a page refresh.
   """
 
   use OpenAgentsWeb, :live_view
@@ -22,6 +22,8 @@ defmodule OpenAgentsWeb.ThreadIndexLive do
     user = socket.assigns.current_user
     _reaped = Threads.reap_expired(user)
 
+    if connected?(socket), do: Threads.subscribe_user(user)
+
     threads = Threads.list_for_user(user)
 
     {:ok,
@@ -29,6 +31,19 @@ defmodule OpenAgentsWeb.ThreadIndexLive do
      |> assign(:page_title, "Threads · OpenAgents")
      |> assign(:threads_empty?, threads == [])
      |> stream(:threads, threads)}
+  end
+
+  @impl true
+  def handle_info({:thread_created, thread}, socket) do
+    {:noreply,
+     socket
+     |> assign(:threads_empty?, false)
+     |> stream_insert(:threads, thread, at: 0)}
+  end
+
+  @impl true
+  def handle_info({:thread_updated, thread}, socket) do
+    {:noreply, stream_insert(socket, :threads, thread)}
   end
 
   @impl true

@@ -364,6 +364,8 @@ defmodule OpenAgents.Threads do
           broadcast(spawn)
         end
 
+        broadcast_user_thread(thread.owner_visitor_id, {:thread_created, thread})
+
         {:ok, thread}
 
       {:error, :admission, :thread_quota_reached, _changes} ->
@@ -618,6 +620,8 @@ defmodule OpenAgents.Threads do
           Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(updated.id), {:thread_event, event})
         end
 
+        broadcast_user_thread(updated.owner_visitor_id, {:thread_updated, updated})
+
         {:ok, updated, events}
 
       {:error, reason} ->
@@ -672,6 +676,39 @@ defmodule OpenAgents.Threads do
   end
 
   defp topic(thread_id), do: "thread:" <> thread_id
+
+  @doc """
+  Subscribe to thread lifecycle changes for one account's threads index.
+  """
+  @spec subscribe_user(User.t() | String.t()) :: :ok | {:error, term()}
+  def subscribe_user(%User{id: user_id}), do: subscribe_user(user_id)
+
+  def subscribe_user(user_id) when is_binary(user_id) do
+    Phoenix.PubSub.subscribe(OpenAgents.PubSub, user_topic(user_id))
+  end
+
+  @doc """
+  Drop a user thread listing subscription.
+  """
+  @spec unsubscribe_user(User.t() | String.t()) :: :ok
+  def unsubscribe_user(%User{id: user_id}), do: unsubscribe_user(user_id)
+
+  def unsubscribe_user(user_id) when is_binary(user_id) do
+    Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, user_topic(user_id))
+  end
+
+  defp user_topic(user_id), do: "threads:user:" <> user_id
+
+  defp broadcast_user_thread(visitor_id, message) when is_binary(visitor_id) do
+    case Repo.one(from v in Visitor, where: v.id == ^visitor_id, select: v.user_id) do
+      user_id when is_binary(user_id) ->
+        Phoenix.PubSub.broadcast(OpenAgents.PubSub, user_topic(user_id), message)
+
+      _nil ->
+        :ok
+    end
+  end
+
 
   defp broadcast(%Event{} = event) do
     Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(event.thread_id), {:thread_event, event})
@@ -1046,8 +1083,12 @@ defmodule OpenAgents.Threads do
           _revoked = Inference.revoke_active_for_thread(current.id)
 
           case current |> Thread.terminal_changeset(attributes) |> Repo.update() do
-            {:ok, updated} -> updated
-            {:error, changeset} -> Repo.rollback(changeset)
+            {:ok, updated} ->
+              broadcast_user_thread(updated.owner_visitor_id, {:thread_updated, updated})
+              updated
+
+            {:error, changeset} ->
+              Repo.rollback(changeset)
           end
 
         _terminal ->

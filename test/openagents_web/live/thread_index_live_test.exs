@@ -60,4 +60,31 @@ defmodule OpenAgentsWeb.ThreadIndexLiveTest do
   test "anonymous browser is redirected", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/threads")
   end
+
+  test "a newly opened thread dynamically updates the live table", %{conn: conn} do
+    owner = github_user("thread-index-live-owner")
+    {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads")
+
+    assert has_element?(view, "#threads-empty")
+    refute has_element?(view, "#threads-table")
+
+    {:ok, thread} = Threads.open(owner, "Live stream test thread")
+
+    assert has_element?(view, "#threads-table")
+    assert has_element?(view, "#thread-link-#{thread.id}")
+    refute has_element?(view, "#threads-empty")
+  end
+
+  test "an updated thread updates its row live", %{conn: conn} do
+    owner = github_user("thread-index-update-owner")
+    {:ok, thread} = Threads.open(owner, "Initial thread status")
+
+    {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads")
+
+    assert view |> element("#threads-#{thread.id}") |> render() =~ "open"
+
+    {:ok, _finished} = Threads.finish(thread, %{status: "succeeded", report: "All done"})
+
+    assert view |> element("#threads-#{thread.id}") |> render() =~ "succeeded"
+  end
 end

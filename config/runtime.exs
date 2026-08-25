@@ -173,6 +173,45 @@ if config_env() == :prod do
   config :openagents, :changelog_backfill_on_boot, true
 end
 
+# The mail provider for the notification email channel (#141). Absent by
+# default: a deployment that sets no provider keeps `deliverable: false` from
+# `config/prod.exs`, the settings surface declines to collect an address, and
+# nothing is queued for a channel that cannot send.
+#
+# The API key is read here and nowhere else, per RELEASE-002: it enters from the
+# environment at boot and is absent from source, the build context, and image
+# arguments. All three providers are HTTP APIs served by `Swoosh.ApiClient.Req`,
+# so none of them adds a dependency or an SMTP credential.
+if config_env() == :prod and optional_text.("OPENAGENTS_MAIL_PROVIDER") != nil do
+  mail_from_address = required_text.("OPENAGENTS_MAIL_FROM")
+  mail_api_key = required_text.("OPENAGENTS_MAIL_API_KEY")
+
+  mailer_config =
+    case required_text.("OPENAGENTS_MAIL_PROVIDER") do
+      "resend" ->
+        [adapter: Swoosh.Adapters.Resend, api_key: mail_api_key]
+
+      "postmark" ->
+        [adapter: Swoosh.Adapters.Postmark, api_key: mail_api_key]
+
+      "mailgun" ->
+        [
+          adapter: Swoosh.Adapters.Mailgun,
+          api_key: mail_api_key,
+          domain: required_text.("OPENAGENTS_MAIL_DOMAIN")
+        ]
+
+      _invalid ->
+        raise "environment variable OPENAGENTS_MAIL_PROVIDER must be resend, postmark, or mailgun"
+    end
+
+  config :openagents, OpenAgents.Mailer, mailer_config
+
+  config :openagents, OpenAgents.Notifications.EmailChannel,
+    from: {"OpenAgents", mail_from_address},
+    deliverable: true
+end
+
 if config_env() == :prod and runtime_role == :web do
   runtime_environment =
     case required_text.("OPENAGENTS_ENVIRONMENT") do

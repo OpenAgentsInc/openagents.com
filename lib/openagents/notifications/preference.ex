@@ -18,6 +18,20 @@ defmodule OpenAgents.Notifications.Preference do
   can predict from its name. That is why closing an issue is `issue_activity`
   rather than a quiet widening of `issue_comments`: somebody who switched off
   comments did not thereby ask to stop hearing that the issue closed.
+
+  ## Categories and channels are different questions
+
+  A category is *what* an account hears about. A channel is *where*. They are
+  kept apart because they fail differently: switching off a category means
+  wanting less, switching off a channel means wanting it somewhere else, and a
+  list that mixed them would let a rename quietly move an account from one
+  answer to the other.
+
+  There is one channel switch, `email_enabled`, and it defaults off. The inbox
+  has no switch because the inbox is the product surface; email leaves the
+  application, so nobody gets it without asking. It is also inert on its own —
+  `OpenAgents.Notifications.EmailChannel.verified_address/1` still has to
+  return an address somebody confirmed.
   """
 
   use Ecto.Schema
@@ -31,12 +45,15 @@ defmodule OpenAgents.Notifications.Preference do
   @categories ~w(mentions_enabled issue_comments_enabled assignments_enabled
                  issue_activity_enabled label_changes_enabled)a
 
+  @channels ~w(email_enabled)a
+
   schema "notification_preferences" do
     field :mentions_enabled, :boolean, default: true
     field :issue_comments_enabled, :boolean, default: true
     field :assignments_enabled, :boolean, default: true
     field :issue_activity_enabled, :boolean, default: true
     field :label_changes_enabled, :boolean, default: false
+    field :email_enabled, :boolean, default: false
 
     belongs_to :user, User
 
@@ -46,11 +63,14 @@ defmodule OpenAgents.Notifications.Preference do
   @doc "Every category this account can switch, in the order the form lists them."
   def categories, do: @categories
 
+  @doc "Every switch on this row, category and channel alike."
+  def switches, do: @categories ++ @channels
+
   @doc false
   def changeset(preference, attrs) do
     preference
-    |> cast(attrs, @categories)
-    |> validate_required(@categories)
+    |> cast(attrs, switches())
+    |> validate_required(switches())
     |> unique_constraint(:user_id)
     |> foreign_key_constraint(:user_id)
   end

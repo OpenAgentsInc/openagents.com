@@ -1,64 +1,63 @@
 defmodule OpenAgents.Notifications.Delivery do
   @moduledoc """
-  Durable outbound email delivery seam for notifications.
+  The durable outbound half of a notification.
 
-  Enqueues one `email.delivery` effect keyed to a notification `dedupe_key`.
-  A recipient is optional in the caller's data; if none is provided the handler
-  records a terminal `nothing_to_send_to` outcome instead of a failure.
+  In-product delivery needs no queue: the record is written in the transaction
+  that writes the comment it announces, so it exists exactly when the event
+  does. Email cannot work that way. A send happens after that transaction
+  commits and can fail on somebody else's server, so the asking has to be
+  durable even though the doing is not.
 
-  No real send happens here. The adapter is a future seam: the default
-  `OpenAgents.Notifications.Delivery.NullAdapter` refuses unless a real
-  provider is configured, and the caller supplies a `to` address.
+  `enqueue/1` is called inside the same transaction as the notification row and
+  writes one `email.delivery` effect. From there `OpenAgents.Effects` owns the
+  schedule: a lease per attempt, exponential backoff between them, and a
+  terminal `failed` at `maximum_attempts`. The effect's idempotency key is the
+  recipient and the notification's `dedupe_key`, which is the same key the
+  unique index on `notifications` uses, so a replayed fan-out produces one
+  record and one send rather than two of each.
+
+  ## What the payload may carry
+
+  Identifiers, and no address. The recipient is resolved at send time by
+  `OpenAgents.Notifications.email_dispatch/1` from the account's confirmed
+  address, so a queued delivery cannot outlive the consent it was queued under:
+  an account that removes its address, switches the channel off, or loses
+  access to the repository stops being mailed, including for effects already
+  sitting in the queue.
   """
 
   alias OpenAgents.Effects
-  alias OpenAgents.Notifications.Notification
 
   @kind "email.delivery"
   @source_kind "notification"
 
   @doc """
-  Enqueue an email delivery for a `Notification` or a bare `dedupe_key`.
+  Enqueue the email half of one notification.
 
-  Accepted shapes:
-    * `%Notification{}`
-    * a map or keyword with `:dedupe_key` and optional `:data`, `:user_id`,
-      `:notification_id`, and `:maximum_attempts`
-
-  When a `user_id` is known, the idempotency key is scoped to that user so the
-  same `dedupe_key` for two different accounts stays two distinct deliveries.
+  Requires `:dedupe_key`, `:user_id`, `:issue_id`, and `:kind`, and accepts
+  `:actor_login` and `:maximum_attempts`. The idempotency key is scoped to the
+  account, so the same event for two recipients is two deliveries.
   """
-  @spec enqueue(Notification.t() | map() | keyword()) ::
-          {:ok, Effects.Effect.t()} | {:error, term()}
-  def enqueue(%Notification{} = notification) do
-    enqueue(%{
-      dedupe_key: notification.dedupe_key,
-      user_id: notification.user_id,
-      notification_id: notification.id,
-      data: %{}
-    })
-  end
-
+  @spec enqueue(map() | keyword()) :: {:ok, Effects.Effect.t()} | {:error, term()}
   def enqueue(attrs) when is_list(attrs), do: enqueue(Map.new(attrs))
 
   def enqueue(attrs) when is_map(attrs) do
     dedupe_key = fetch!(attrs, :dedupe_key)
-    user_id = Map.get(attrs, :user_id)
-    notification_id = Map.get(attrs, :notification_id)
-    data = Map.get(attrs, :data) || %{}
-
-    idempotency_source = if user_id, do: "#{user_id}/#{dedupe_key}", else: dedupe_key
+    user_id = fetch!(attrs, :user_id)
+    issue_id = fetch!(attrs, :issue_id)
+    kind = fetch!(attrs, :kind)
 
     Effects.enqueue(@kind, %{
       payload: %{
         "dedupe_key" => dedupe_key,
         "user_id" => user_id,
-        "notification_id" => notification_id,
-        "data" => data
+        "issue_id" => issue_id,
+        "kind" => kind,
+        "actor_login" => Map.get(attrs, :actor_login)
       },
       source_kind: @source_kind,
       source_id: dedupe_key,
-      idempotency_key: Effects.idempotency_key(@kind, @source_kind, idempotency_source),
+      idempotency_key: Effects.idempotency_key(@kind, @source_kind, "#{user_id}/#{dedupe_key}"),
       maximum_attempts: Map.get(attrs, :maximum_attempts, 5)
     })
   end

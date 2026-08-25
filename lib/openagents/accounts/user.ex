@@ -25,6 +25,18 @@ defmodule OpenAgents.Accounts.User do
     field :public_leaderboard_opted_out, :boolean, default: false
     field :browser_key_hash, :binary
 
+    # The notification channel's address, and the proof its owner asked for it.
+    # Nothing reads `notification_email` as a recipient on its own:
+    # `OpenAgents.Notifications.EmailChannel.verified_address/1` is the one
+    # read, and it returns `nil` while `notification_email_verified_at` is,
+    # so an address typed but never confirmed is inert. The code is held as a
+    # SHA-256 digest, never as plaintext.
+    field :notification_email, :string
+    field :notification_email_verified_at, :utc_datetime_usec
+    field :notification_email_code_digest, :binary, redact: true
+    field :notification_email_code_sent_at, :utc_datetime_usec
+    field :notification_email_code_attempts, :integer, default: 0
+
     # Not a column: resolved once by `UserAuth.on_mount/4` when it builds the
     # scope, because the sidebar asks on every render and the answer must not
     # be a query each time. Defaults to false, so a user loaded by any other
@@ -61,6 +73,11 @@ defmodule OpenAgents.Accounts.User do
           github_token_rotated_at: DateTime.t() | nil,
           public_leaderboard_opted_out: boolean(),
           browser_key_hash: binary() | nil,
+          notification_email: String.t() | nil,
+          notification_email_verified_at: DateTime.t() | nil,
+          notification_email_code_digest: binary() | nil,
+          notification_email_code_sent_at: DateTime.t() | nil,
+          notification_email_code_attempts: non_neg_integer(),
           agent_surfaces?: boolean(),
           unread_notifications: non_neg_integer(),
           inserted_at: DateTime.t(),

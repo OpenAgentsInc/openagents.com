@@ -145,7 +145,15 @@ defmodule OpenAgents.DataRights.AccountExport do
        "account" => %{
          "id" => user.id,
          "github_login" => user.github_login,
-         "github_name" => user.github_name
+         "github_name" => user.github_name,
+         # The one field on the account the person typed rather than the
+         # provider supplied, so it is the one they are most likely to have
+         # forgotten giving. Reported whether or not it was confirmed, because
+         # the question a data export answers is what this deployment holds,
+         # not what it would act on; the flag beside it says which.
+         "notification_email" => user.notification_email,
+         "notification_email_verified" =>
+           not is_nil(OpenAgents.Notifications.EmailChannel.verified_address(user))
        },
        "identities" => identities_export(user, actor_links, refs),
        "bounds" => bounds(),

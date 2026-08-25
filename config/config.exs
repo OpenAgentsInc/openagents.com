@@ -511,6 +511,22 @@ config :phoenix_live_view,
 # at the `config/runtime.exs`.
 config :openagents, OpenAgents.Mailer, adapter: Swoosh.Adapters.Local
 
+# The notification email channel (#141).
+#
+# `deliverable` is what the settings surface asks before it offers to take an
+# address, and it is set here rather than inferred from the Swoosh adapter,
+# because the adapter answers the question wrongly in both directions: the
+# local adapter is real delivery in development, where the message lands in the
+# mailbox preview at "/dev/mailbox", and it is a black hole in production.
+# `config/prod.exs` turns it off, and `config/runtime.exs` turns it back on for
+# a deployment that configured a provider.
+config :openagents, OpenAgents.Notifications.EmailChannel,
+  from: {"OpenAgents", "notifications@openagents.com"},
+  deliverable: true
+
+config :openagents, OpenAgents.Notifications.Delivery,
+  adapter: OpenAgents.Notifications.Delivery.MailerAdapter
+
 # Product analytics (docs/2026-08-21-posthog-integration-runbook.md). The
 # default supervisor stays off; OpenAgents.Application starts PostHog.Supervisor
 # only when a project token was configured at boot. Error tracking is a

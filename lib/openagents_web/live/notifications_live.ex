@@ -28,10 +28,25 @@ defmodule OpenAgentsWeb.NotificationsLive do
   One page is `OpenAgents.Notifications.per_page/0` rows. There is no older
   page yet; the inbox is a recent-activity surface, and an archive is a
   separate question from delivery.
+
+  ## Email
+
+  This page is also where an account gives an address and confirms it. The
+  address is typed here rather than taken from GitHub, and it does nothing
+  until a code mailed to it comes back — see
+  `OpenAgents.Notifications.EmailChannel`. Only then does the channel switch
+  appear, because a switch that turns on a channel with no reachable address
+  would be a control that does nothing.
+
+  A deployment with no mail provider says so and offers no address field. That
+  is honest rather than defensive: collecting an address it cannot mail to
+  would be collecting a secret for no purpose.
   """
   use OpenAgentsWeb, :live_view
 
+  alias OpenAgents.Accounts.User
   alias OpenAgents.Notifications
+  alias OpenAgents.Notifications.EmailChannel
   alias OpenAgents.Notifications.Preference
   alias OpenAgents.Repositories
 
@@ -69,16 +84,85 @@ defmodule OpenAgentsWeb.NotificationsLive do
     end
   end
 
+  def handle_event("set_email_address", %{"email" => %{"address" => address}}, socket) do
+    socket.assigns.email_account
+    |> EmailChannel.set_address(address)
+    |> resolve(socket, "Check that address for a verification code.")
+  end
+
+  def handle_event("resend_email_code", _params, socket) do
+    socket.assigns.email_account
+    |> EmailChannel.resend_code()
+    |> resolve(socket, "Another code is on its way.")
+  end
+
+  def handle_event("verify_email_code", %{"email" => %{"code" => code}}, socket) do
+    socket.assigns.email_account
+    |> EmailChannel.verify(code)
+    |> resolve(socket, "Address confirmed.")
+  end
+
+  def handle_event("remove_email_address", _params, socket) do
+    socket.assigns.email_account
+    |> EmailChannel.remove_address()
+    |> resolve(socket, "Address removed. Nothing else will be mailed to it.")
+  end
+
+  def handle_event("update_email_channel", %{"channel" => params}, socket) do
+    attrs = %{email_enabled: checked?(params["email_enabled"])}
+
+    case Notifications.update_preferences(socket.assigns.current_scope, attrs) do
+      {:ok, _preferences} ->
+        {:noreply, socket |> put_flash(:info, "Notification settings saved.") |> load()}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Notification settings could not be saved.")}
+    end
+  end
+
+  defp resolve({:ok, %User{} = user}, socket, message) do
+    {:noreply,
+     socket
+     |> assign(:email_account, user)
+     |> put_flash(:info, message)
+     |> load()}
+  end
+
+  defp resolve({:error, reason}, socket, _message) do
+    {:noreply, socket |> put_flash(:error, refusal(reason)) |> load()}
+  end
+
+  defp refusal(:invalid_address), do: "That does not look like an email address."
+  defp refusal(:not_deliverable), do: "This deployment cannot send email."
+  defp refusal(:too_soon), do: "A code went out a moment ago. Wait a minute and ask again."
+  defp refusal(:nothing_pending), do: "There is no code waiting to be confirmed."
+  defp refusal(:expired), do: "That code has expired. Ask for another one."
+  defp refusal(:incorrect_code), do: "That code is not right."
+  defp refusal(:too_many_attempts), do: "Too many wrong codes. Ask for a new one."
+  defp refusal(_reason), do: "That could not be saved."
+
   defp checked?("true"), do: true
   defp checked?("on"), do: true
   defp checked?(_value), do: false
 
   defp load(socket) do
     user = socket.assigns.current_scope
+    account = Map.get(socket.assigns, :email_account, user)
     notifications = Notifications.list_notifications(user)
     preferences = Notifications.preferences(user)
 
     socket
+    |> assign(:email_account, account)
+    |> assign(:email_deliverable?, EmailChannel.deliverable?())
+    |> assign(:email_state, EmailChannel.state(account))
+    |> assign(
+      :email_form,
+      to_form(%{"address" => account.notification_email, "code" => ""}, as: :email)
+    )
+    |> assign(
+      :email_channel_form,
+      to_form(%{"email_enabled" => preferences.email_enabled}, as: :channel)
+    )
     |> assign(:unread_count, Notifications.unread_count(user))
     |> assign(:notifications_empty?, notifications == [])
     |> assign(
@@ -225,6 +309,111 @@ defmodule OpenAgentsWeb.NotificationsLive do
               label="Label changes on issues you follow"
             />
           </.form>
+        </section>
+
+        <section aria-labelledby="notifications-email-heading" class="flex flex-col gap-4">
+          <h2 id="notifications-email-heading" class="text-base font-medium text-foreground">
+            Email
+          </h2>
+
+          <p
+            :if={!@email_deliverable?}
+            id="notifications-email-unavailable"
+            class="text-sm text-muted-foreground"
+          >
+            This deployment has no mail provider configured, so there is nowhere to
+            send to. Notifications arrive in the inbox above.
+          </p>
+
+          <%= if @email_deliverable? do %>
+            <p class="text-sm text-muted-foreground">
+              Give an address and confirm it with the code that arrives, and mentions
+              can also reach you by email. Nothing is sent to an address that has not
+              been confirmed, and the channel stays off until you turn it on. Only
+              mentions travel this way for now — the other categories are waiting on a
+              digest, because one message per comment is not a channel anybody keeps.
+            </p>
+
+            <.form
+              for={@email_form}
+              id="notification-email-address-form"
+              phx-submit="set_email_address"
+              class="flex flex-col gap-3"
+            >
+              <.input
+                field={@email_form[:address]}
+                type="email"
+                label="Email address"
+                autocomplete="email"
+              />
+
+              <div class="flex items-center gap-2">
+                <.button id="notification-email-save" type="submit" size={:sm}>
+                  {if @email_state.verified?, do: "Change address", else: "Send code"}
+                </.button>
+
+                <.button
+                  :if={@email_state.address}
+                  id="notification-email-remove"
+                  variant={:ghost}
+                  size={:sm}
+                  tone={:danger}
+                  phx-click="remove_email_address"
+                >
+                  Remove
+                </.button>
+              </div>
+            </.form>
+
+            <.form
+              :if={@email_state.pending?}
+              for={@email_form}
+              id="notification-email-code-form"
+              phx-submit="verify_email_code"
+              class="flex flex-col gap-3"
+            >
+              <.input
+                field={@email_form[:code]}
+                type="text"
+                label="Verification code"
+                autocomplete="one-time-code"
+              />
+
+              <div class="flex items-center gap-2">
+                <.button id="notification-email-confirm" type="submit" size={:sm}>
+                  Confirm
+                </.button>
+
+                <.button
+                  id="notification-email-resend"
+                  variant={:ghost}
+                  size={:sm}
+                  phx-click="resend_email_code"
+                >
+                  Send another code
+                </.button>
+              </div>
+            </.form>
+
+            <div :if={@email_state.verified?} class="flex flex-col gap-3">
+              <p id="notification-email-verified" class="text-sm text-muted-foreground">
+                <.badge variant={:info}>Confirmed</.badge>
+                {@email_state.address}
+              </p>
+
+              <.form
+                for={@email_channel_form}
+                id="notification-email-channel-form"
+                phx-change="update_email_channel"
+              >
+                <.input
+                  field={@email_channel_form[:email_enabled]}
+                  type="checkbox"
+                  label="Send mentions to this address"
+                />
+              </.form>
+            </div>
+          <% end %>
         </section>
       </div>
     </Layouts.app>

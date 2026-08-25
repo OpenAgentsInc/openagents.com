@@ -1,10 +1,13 @@
 defmodule OpenAgentsWeb.NotificationsLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
 
+  alias OpenAgents.Accounts.User
   alias OpenAgents.Issues
   alias OpenAgents.Notifications
+  alias OpenAgents.Notifications.EmailChannel
+  alias OpenAgents.Repo
   alias OpenAgents.Repositories
 
   defp setup_thread(conn, visibility) do
@@ -153,6 +156,107 @@ defmodule OpenAgentsWeb.NotificationsLiveTest do
       |> render_change()
 
       assert Notifications.preferences(reader).mentions_enabled
+    end
+  end
+
+  describe "the email channel" do
+    test "an address is taken, and is not a recipient until the code comes back", %{conn: conn} do
+      %{conn: conn, reader: reader} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+
+      assert has_element?(view, "#notification-email-address-form")
+      refute has_element?(view, "#notification-email-code-form")
+      refute has_element?(view, "#notification-email-channel-form")
+
+      view
+      |> form("#notification-email-address-form", %{"email" => %{"address" => "me@example.com"}})
+      |> render_submit()
+
+      pending = Repo.get!(User, reader.id)
+      assert pending.notification_email == "me@example.com"
+      assert EmailChannel.verified_address(pending) == nil
+
+      # The switch that would turn the channel on is not offered yet, because
+      # there is nowhere for it to send.
+      assert has_element?(view, "#notification-email-code-form")
+      refute has_element?(view, "#notification-email-channel-form")
+
+      assert_receive {:email, %Swoosh.Email{subject: subject}}
+      code = hd(Regex.run(~r/[0-9A-Z]{8}/, subject))
+
+      view
+      |> form("#notification-email-code-form", %{"email" => %{"code" => code}})
+      |> render_submit()
+
+      assert EmailChannel.verified_address(Repo.get!(User, reader.id)) == "me@example.com"
+      assert has_element?(view, "#notification-email-channel-form")
+      assert has_element?(view, "#notification-email-verified")
+    end
+
+    test "a wrong code leaves the address unverified", %{conn: conn} do
+      %{conn: conn, reader: reader} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+
+      view
+      |> form("#notification-email-address-form", %{"email" => %{"address" => "me@example.com"}})
+      |> render_submit()
+
+      html =
+        view
+        |> form("#notification-email-code-form", %{"email" => %{"code" => "00000000"}})
+        |> render_submit()
+
+      assert html =~ "not right"
+      assert EmailChannel.verified_address(Repo.get!(User, reader.id)) == nil
+    end
+
+    test "the channel switch is off until the account turns it on", %{conn: conn} do
+      %{conn: conn, reader: reader} = setup_thread(conn, "public")
+
+      {:ok, pending} = EmailChannel.set_address(reader, "me@example.com")
+      assert_receive {:email, %Swoosh.Email{subject: subject}}
+      {:ok, _verified} = EmailChannel.verify(pending, hd(Regex.run(~r/[0-9A-Z]{8}/, subject)))
+
+      refute Notifications.preferences(reader).email_enabled
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+
+      view
+      |> form("#notification-email-channel-form", %{"channel" => %{"email_enabled" => "true"}})
+      |> render_change()
+
+      assert Notifications.preferences(reader).email_enabled
+    end
+
+    test "removing the address takes the switch with it", %{conn: conn} do
+      %{conn: conn, reader: reader} = setup_thread(conn, "public")
+
+      {:ok, pending} = EmailChannel.set_address(reader, "me@example.com")
+      assert_receive {:email, %Swoosh.Email{subject: subject}}
+      {:ok, _verified} = EmailChannel.verify(pending, hd(Regex.run(~r/[0-9A-Z]{8}/, subject)))
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+      assert has_element?(view, "#notification-email-channel-form")
+
+      view |> element("#notification-email-remove") |> render_click()
+
+      refute has_element?(view, "#notification-email-channel-form")
+      assert EmailChannel.verified_address(Repo.get!(User, reader.id)) == nil
+    end
+
+    test "a deployment with no mail provider collects no address at all", %{conn: conn} do
+      configured = Application.get_env(:openagents, EmailChannel)
+      Application.put_env(:openagents, EmailChannel, Keyword.put(configured, :deliverable, false))
+      on_exit(fn -> Application.put_env(:openagents, EmailChannel, configured) end)
+
+      %{conn: conn} = setup_thread(conn, "public")
+
+      {:ok, view, _html} = live(conn, ~p"/notifications")
+
+      assert has_element?(view, "#notifications-email-unavailable")
+      refute has_element?(view, "#notification-email-address-form")
     end
   end
 

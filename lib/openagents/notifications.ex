@@ -19,10 +19,23 @@ defmodule OpenAgents.Notifications do
   `OpenAgents.Repositories.readable_by/2` again, so a recipient who loses
   membership after the row was written stops seeing it.
 
-  Delivery is in-product only. This deployment has no outbound mail path and
-  accounts carry no email address, so an email channel would be a second,
-  unconfigured system. Adding one means adding an address, an adapter, and a
-  retry schedule, and belongs behind its own change.
+  ## The second channel
+
+  Delivery is in-product first and by email second. The inbox is the channel
+  with no switch, because it is the product surface; email is off until an
+  account confirms an address (`OpenAgents.Notifications.EmailChannel`) and
+  turns `email_enabled` on, and it carries mentions only. A mention is the
+  event addressed to one person by name and the lowest-volume category there
+  is; the rest wait for a digest, because one message per comment on a busy
+  issue is how a channel gets filtered to a folder nobody opens (#141).
+
+  Email cannot inherit the durability the inbox gets for free. The record is
+  written in the transaction, but the send is not, so `Delivery.enqueue/1`
+  writes an `email.delivery` effect in that same transaction and
+  `OpenAgents.Effects` owns the attempts. `email_dispatch/1` is the other half:
+  it re-decides, at send time, everything the enqueue decided — confirmed
+  address, channel, category, and the recipient's access to the repository — so
+  a queued message cannot outlive the consent it was queued under.
   """
 
   import Ecto.Query, warn: false
@@ -30,6 +43,8 @@ defmodule OpenAgents.Notifications do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Notifications.Delivery
+  alias OpenAgents.Notifications.EmailChannel
   alias OpenAgents.Notifications.IssueSubscription
   alias OpenAgents.Notifications.Mentions
   alias OpenAgents.Notifications.Notification
@@ -44,6 +59,12 @@ defmodule OpenAgents.Notifications do
   @mention_limit 50
 
   @notifications_per_page 50
+
+  # The kinds the email channel carries. One, deliberately. A mention names a
+  # person, so it is the category whose volume is bounded by how often somebody
+  # types your login; every other kind follows the traffic on a thread, and
+  # mailing one message per comment is what a digest exists to avoid (#141).
+  @email_kinds ["mention"]
 
   def per_page, do: @notifications_per_page
 
@@ -296,6 +317,7 @@ defmodule OpenAgents.Notifications do
     |> Enum.filter(&enabled?(&1, kind))
     |> Enum.map(fn user ->
       insert_notification(user, issue, nil, kind, actor_login, dedupe_key)
+      enqueue_email(user, issue, kind, actor_login, dedupe_key)
       user.id
     end)
   end
@@ -344,8 +366,32 @@ defmodule OpenAgents.Notifications do
     |> Enum.filter(fn {user, _kind} -> readable?(repository, user) end)
     |> Enum.map(fn {user, kind} ->
       insert_notification(user, issue, comment, kind, actor_login, dedupe_key)
+      enqueue_email(user, issue, kind, actor_login, dedupe_key)
       user.id
     end)
+  end
+
+  # The email half, asked for in the same transaction as the record it
+  # announces. The four conditions are re-decided at send time by
+  # `email_dispatch/1`; checking them here as well keeps the queue from filling
+  # with effects for accounts that were never going to be mailed.
+  defp enqueue_email(%User{} = user, %Issue{} = issue, kind, actor_login, dedupe_key) do
+    if email_wanted?(user, kind) do
+      Delivery.enqueue(
+        dedupe_key: dedupe_key,
+        user_id: user.id,
+        issue_id: issue.id,
+        kind: kind,
+        actor_login: actor_login
+      )
+    end
+
+    :ok
+  end
+
+  defp email_wanted?(%User{} = user, kind) do
+    kind in @email_kinds and EmailChannel.deliverable?() and
+      not is_nil(EmailChannel.verified_address(user)) and preferences(user).email_enabled
   end
 
   defp insert_notification(user, issue, comment, kind, actor_login, dedupe_key) do
@@ -526,7 +572,7 @@ defmodule OpenAgents.Notifications do
     case existing do
       %Preference{id: nil} ->
         Repo.insert(changeset,
-          on_conflict: {:replace, Preference.categories() ++ [:updated_at]},
+          on_conflict: {:replace, Preference.switches() ++ [:updated_at]},
           conflict_target: [:user_id]
         )
 
@@ -538,5 +584,97 @@ defmodule OpenAgents.Notifications do
   @doc "Whether the account has an explicit preference row."
   def preferences_recorded?(%User{} = user) do
     Repo.exists?(from preference in Preference, where: preference.user_id == ^user.id)
+  end
+
+  ## Outbound
+
+  @doc """
+  Resolves a queued `email.delivery` payload to a recipient and a pointer.
+
+  Every question the enqueue answered is asked again here, against the database
+  as it is now rather than as it was when the comment landed: is the account
+  still active, is its address still confirmed, is the channel still on, is the
+  category still on, and can it still read the repository. A queued message
+  therefore cannot outlive the consent or the access it was queued under, which
+  matters precisely because a sent message is the one notification no later
+  authorization check can withdraw.
+
+  A `{:refused, outcome}` is a completion, not a failure: none of these answers
+  changes by being asked again in eight seconds. The outcome string is recorded
+  on the effect, so the queue says why it sent nothing.
+
+  The pointer carries what NOTIFY-001 lets a notification carry — the kind, the
+  actor's login, the repository path, and the issue number — plus the two URLs
+  a message needs to be useful. The issue's title is not in it.
+  """
+  @spec email_dispatch(map()) :: {:ok, String.t(), map()} | {:refused, String.t()}
+  def email_dispatch(payload) when is_map(payload) do
+    with {:ok, user} <- dispatch_user(payload["user_id"]),
+         {:ok, address} <- dispatch_address(user),
+         preferences = preferences(user),
+         :ok <- dispatch_channel(preferences),
+         :ok <- dispatch_category(preferences, payload["kind"]),
+         {:ok, issue} <- dispatch_issue(payload["issue_id"]),
+         {:ok, repository} <- dispatch_repository(issue, user) do
+      {:ok, address, pointer(payload, issue, repository)}
+    end
+  end
+
+  defp dispatch_user(user_id) when is_binary(user_id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(user_id),
+         %User{status: "active"} = user <- Repo.get(User, uuid) do
+      {:ok, user}
+    else
+      _absent -> {:refused, "recipient_gone"}
+    end
+  end
+
+  defp dispatch_user(_user_id), do: {:refused, "recipient_gone"}
+
+  defp dispatch_address(user) do
+    case EmailChannel.verified_address(user) do
+      nil -> {:refused, "no_verified_address"}
+      address -> {:ok, address}
+    end
+  end
+
+  defp dispatch_channel(%Preference{email_enabled: true}), do: :ok
+  defp dispatch_channel(%Preference{}), do: {:refused, "channel_off"}
+
+  defp dispatch_category(preferences, kind) when kind in @email_kinds do
+    if category_enabled(preferences, kind), do: :ok, else: {:refused, "category_off"}
+  end
+
+  defp dispatch_category(_preferences, _kind), do: {:refused, "kind_not_carried"}
+
+  # The issue's key is an integer, so the payload carries one and this reads it
+  # back as one. Anything else is a payload this release did not write.
+  defp dispatch_issue(issue_id) when is_integer(issue_id) do
+    case Repo.get(Issue, issue_id) do
+      %Issue{} = issue -> {:ok, issue}
+      nil -> {:refused, "issue_gone"}
+    end
+  end
+
+  defp dispatch_issue(_issue_id), do: {:refused, "issue_gone"}
+
+  defp dispatch_repository(%Issue{repository_id: repository_id}, user) do
+    repository = Repo.get(Repository, repository_id)
+
+    if readable?(repository, user), do: {:ok, repository}, else: {:refused, "not_readable"}
+  end
+
+  defp pointer(payload, issue, repository) do
+    base = String.trim_trailing(OpenAgentsWeb.Endpoint.url(), "/")
+    path = "#{repository.owner}/#{repository.name}"
+
+    %{
+      "kind" => payload["kind"],
+      "actor_login" => payload["actor_login"],
+      "repository" => path,
+      "issue_number" => issue.number,
+      "url" => "#{base}/#{path}/issues/#{issue.number}",
+      "settings_url" => "#{base}/notifications"
+    }
   end
 end

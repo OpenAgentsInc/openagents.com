@@ -645,6 +645,32 @@ source of truth for paths and JSON shape.
 **Effect CLI** — the TypeScript CLI (`@openagentsinc/cli`) that calls this
 surface via `openagents api`.
 
+### Notifications
+
+**Category** — what an account hears about: `mentions`, `issue_comments`,
+`assignments`, `issue_activity`, `label_changes`. Each names what it delivers,
+so switching one off has an effect you can predict from its name.
+
+**Channel** — where it hears about it. Two: the in-product inbox, which has no
+switch because it is the surface itself, and email, which has `email_enabled`
+and defaults off. Say category for what and channel for where; a list that
+mixes them lets a rename move an account from one answer to the other.
+`OpenAgents.Notifications.Preference` keeps the two apart and `switches/0` is
+the union.
+
+**Confirmed address** — an address an account typed into its notification
+settings and proved by returning a code mailed to it.
+`OpenAgents.Notifications.EmailChannel.verified_address/1` is the only read a
+send resolves a recipient through, so an address that is merely recorded
+reaches nothing. Say confirmed, not verified, of the address; `verified_at` is
+the column and confirming is what a person does.
+
+**Delivery** — one queued outbound message,
+`OpenAgents.Notifications.Delivery`, carried as an `email.delivery` effect in
+the durable outbox. It is not the notification record, which is written in the
+transaction and needs no queue, and it is not the message, which is
+`OpenAgents.Notifications.Email`.
+
 ### Pull requests and stacks
 
 **Pull request** — a repository-scoped proposal to merge one hosted branch

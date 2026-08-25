@@ -5321,13 +5321,56 @@ stays correct past the page the inbox renders and drops repositories the reader
 can no longer read. It is keyed by the session's own account and refreshed only
 over that account's own topic.
 
-Delivery is in-product only. Accounts carry no email address and no outbound
-mail adapter is configured, so no channel here leaves the application.
+Delivery is in-product first and by email second, and the second channel is
+the only one that leaves the application. Four things gate it, and all four are
+decided twice — once when the delivery is queued and again when it is sent —
+because a sent message is the one notification no later authorization check can
+withdraw.
+
+The address is the first gate. An account has no address until somebody types
+one here; GitHub OAuth is not asked for `user:email`, so no address arrives that
+its owner did not choose to give this deployment. A typed address is inert:
+`OpenAgents.Notifications.EmailChannel.verified_address/1` is the only read any
+send resolves a recipient through, and it returns `nil` until a code mailed to
+that address comes back. The code is held as a SHA-256 digest, compared in
+constant time, expires in thirty minutes, and is retired after five wrong
+guesses. The check constraint `users_notification_email_state_check` refuses a
+verified timestamp on a row that names no address, so the gate holds
+independently of this application's code. The verification message is the one
+thing sent to an unconfirmed address, and it carries the code and nothing about
+the account.
+
+The channel is the second. `email_enabled` defaults off and is backfilled false
+for every account that already exists, because turning on a channel that leaves
+the application for people who chose the inbox is not a default anybody picked.
+The category is the third: only `mention` is carried, so no other category
+becomes an email by widening. Repository access is the fourth, re-read through
+`Repositories.readable_by/2` at send time.
+
+The queued half is durable rather than immediate, because a send happens after
+the transaction commits and can fail on somebody else's server.
+`Delivery.enqueue/1` writes one `email.delivery` effect inside the transaction
+that writes the record, keyed to the same `(user_id, dedupe_key)` pair the
+unique index uses, so a replayed fan-out is one record and one message.
+`OpenAgents.Effects` owns attempts, backoff, and the terminal `failed`. A
+refusal at send time is recorded as a completion with its reason rather than
+retried, because none of these four answers improves by being asked again. The
+payload names an account and an event and never an address, so no caller can
+put a recipient into the queue.
+
+A message carries what a record carries — the kind, the actor's login, the
+repository path, and the issue number — plus a link. Not the issue's title, and
+not a body.
 
 Evidence: `OpenAgents.Notifications`, `OpenAgents.Notifications.Mentions`,
+`OpenAgents.Notifications.EmailChannel`, `OpenAgents.Notifications.Delivery`,
+`OpenAgents.Notifications.Email`, `OpenAgents.Effects.Handlers.EmailDelivery`,
 `OpenAgents.Issues.update_issue/3`, `OpenAgentsWeb.NotificationsLive`,
 `OpenAgentsWeb.UserAuth.on_mount/4`, `test/openagents/notifications_test.exs`,
-and `test/openagents_web/live/notifications_live_test.exs`.
+`test/openagents/notifications/email_channel_test.exs`,
+`test/openagents/notifications/email_delivery_test.exs`,
+`test/openagents/notifications/delivery_test.exs`, and
+`test/openagents_web/live/notifications_live_test.exs`.
 
 ### FORGEAPI-001 — One error envelope, and a route inventory derived from the router
 
@@ -5456,7 +5499,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-002 | `test/openagents/box_runs_test.exs` |
 | PROMISE-001 | `test/openagents/promise_registry_test.exs`, `test/openagents_web/controllers/project_controller_test.exs` |
 | PROMISE-002 | `test/openagents/promise_registry_test.exs` |
-| NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
+| NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents/notifications/email_channel_test.exs`, `test/openagents/notifications/email_delivery_test.exs`, `test/openagents/notifications/delivery_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
 
 | FORGEAPI-001 | `test/openagents_web/controllers/api_error_contract_test.exs`, `test/openagents_web/controllers/api_extension_controller_test.exs`, `test/openagents_web/api_error_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
 | FORGEAPI-002 | `test/openagents_web/api_version_posture_test.exs`, `test/openagents_web/plugs/api_v3_rewrite_test.exs` |

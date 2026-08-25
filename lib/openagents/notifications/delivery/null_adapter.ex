@@ -1,11 +1,13 @@
 defmodule OpenAgents.Notifications.Delivery.NullAdapter do
   @moduledoc """
-  Default no-op email delivery adapter.
+  The adapter a deployment that configured none gets.
 
-  No provider is configured, so a delivery that has a recipient cannot be sent.
-  The handler returns an error and the durable outbox retries up to its
-  `maximum_attempts`. A delivery without a recipient is handled before the
-  adapter is ever called.
+  It refuses every send, so a delivery that reached it — meaning the account
+  confirmed an address and asked for mail — is retried by the durable outbox
+  and then recorded as terminally failed rather than quietly dropped. A
+  deployment in that state should be saying so on the settings surface too:
+  `OpenAgents.Notifications.EmailChannel.deliverable?/0` is the switch that
+  stops an address being collected in the first place.
   """
 
   @behaviour OpenAgents.Notifications.Delivery.Adapter

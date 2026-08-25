@@ -31,6 +31,12 @@ config :swoosh, api_client: Swoosh.ApiClient.Req
 # Disable Swoosh Local Memory Storage
 config :swoosh, local: false
 
+# No mail provider until `config/runtime.exs` finds one in the environment. The
+# local adapter is still configured, so a stray send would be swallowed rather
+# than raised; saying so here means the settings surface declines to collect an
+# address instead of accepting one this deployment cannot mail (#141).
+config :openagents, OpenAgents.Notifications.EmailChannel, deliverable: false
+
 # Do not print debug messages in production
 config :logger, level: :info
 

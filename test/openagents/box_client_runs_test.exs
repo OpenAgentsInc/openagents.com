@@ -24,22 +24,28 @@ defmodule OpenAgents.BoxClientRunsTest do
 
   test "dispatch uses one detached mkdir-and-launch command", do: begin_dispatch()
 
-  test "assignment dispatch keeps credential setup outside the child shell" do
+  test "assignment dispatch carries the credential in the command, never in env" do
     token = "oa_assignment_11111111-1111-4111-8111-111111111111.secret-token"
     run_directory = "/home/box-user/.openagents/box-runs"
 
     Req.Test.expect(__MODULE__, fn request ->
       command = request.body_params["command"]
 
-      assert request.body_params["env"] == %{"OPENAGENTS_FORGE_TOKEN" => token}
+      # The provider's CommandRequest schema has no `env`, so a credential sent
+      # there is dropped and the wrapper dies on an unbound variable.
+      refute Map.has_key?(request.body_params, "env")
+      refute command =~ "OPENAGENTS_FORGE_TOKEN"
+
+      # The credential reaches the box inside the command, base64 only so a
+      # token cannot break the surrounding shell quoting.
       refute command =~ token
+      assert command =~ Base.encode64("https://x:#{token}@openagents.com\n")
 
       assert command =~ "root=#{run_directory}"
       assert command =~ ~s(> "$root/forge-credential")
       assert command =~ ~s(git config --file="$root/gitconfig")
       assert command =~ ~s(env GIT_CONFIG_GLOBAL="$root/gitconfig")
-
-      assert command =~ "unset OPENAGENTS_FORGE_TOKEN"
+      assert command =~ "umask 077"
       refute command =~ "credential_setup"
 
       script_path =
@@ -63,6 +69,70 @@ defmodule OpenAgents.BoxClientRunsTest do
                run_directory,
                token
              )
+  end
+
+  test "the credential setup a box executes reconstructs the git credential file" do
+    token = "oa_assignment_11111111-1111-4111-8111-111111111111.secret-token"
+    encoded = Base.encode64("https://x:#{token}@openagents.com\n")
+
+    assert {output, 0} =
+             System.cmd("sh", ["-c", "printf '%s' '#{encoded}' | base64 -d"])
+
+    assert output == "https://x:#{token}@openagents.com\n"
+  end
+
+  test "a 2xx without a pid is logged bounded and with the credential struck out" do
+    token = "oa_assignment_11111111-1111-4111-8111-111111111111.secret-token"
+
+    Req.Test.expect(__MODULE__, fn request ->
+      Req.Test.json(request, %{
+        "exit_code" => 1,
+        "stdout" => "",
+        "stderr" => "bash: line 12: refused with #{token}\nsecond line\n",
+        "timed_out" => false
+      })
+    end)
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error, :box_response_invalid} =
+                 Client.dispatch_run(
+                   "bx_8bhkse3n",
+                   "11111111-1111-4111-8111-111111111111",
+                   "git push https://openagents.com/repo.git",
+                   "/home/box-user/.openagents/box-runs",
+                   token
+                 )
+      end)
+
+    assert log =~ "box_dispatch_response_invalid"
+    assert log =~ "box_id=bx_8bhkse3n"
+    assert log =~ "run_id=11111111-1111-4111-8111-111111111111"
+    assert log =~ "exit_code=1"
+    assert log =~ "stdout_bytes=0"
+    assert log =~ "[redacted]"
+    refute log =~ token
+    refute log =~ "second line"
+  end
+
+  test "an uncredentialed 2xx without a pid is logged without a credential" do
+    Req.Test.expect(__MODULE__, fn request ->
+      Req.Test.json(request, %{"exit_code" => 73, "stdout" => "OPENAGENTS_RUN_EXISTS\n"})
+    end)
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error, :box_response_invalid} =
+                 Client.dispatch_run(
+                   "bx_8bhkse3n",
+                   "11111111-1111-4111-8111-111111111111",
+                   "echo detached"
+                 )
+      end)
+
+    assert log =~ "box_dispatch_response_invalid"
+    assert log =~ "exit_code=73"
+    assert log =~ "keys=exit_code,stdout"
   end
 
   test "poll decodes bounded output from a recorded offset" do

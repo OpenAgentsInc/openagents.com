@@ -267,3 +267,89 @@ used.
 3. Output logs, tokens, and push receipts on the server: **output logs
    demonstrated live**; tokens not applicable (no model turn); **push
    receipts blocked** by the credentialed-dispatch failure above.
+
+## 8. Server-side Box fixes and live verification (2026-08-25)
+
+Three defects named in §7 and in openagents#58 were fixed on the server. Boxes
+`bx_732ts8jg` and `bx_se9xfq7q` on conversation `3dd6d813` carried the
+verification; both were stopped afterwards, peak concurrency 2.
+
+### Setup script: configuration first, pinned artifact, PATH the run sees
+
+`OpenAgents.Box.setup_script/0` piped `https://opencode.ai/install` into bash.
+That installer resolves its version through the unauthenticated GitHub API,
+which answers 403 for the provider's shared egress IP, and the whole script
+runs under `set -euo pipefail`, so one rate-limited lookup cost the box both
+the binary and the `opencode.json` write that followed it.
+
+The script now writes the configuration first, fetches a pinned release
+tarball directly (`releases/download/v1.18.23/opencode-<target>.tar.gz`, arch
+resolved from `uname -m`), retries a refused fetch twice before failing loudly,
+and symlinks the binary into `$HOME/.local/bin` — already on the PATH a
+non-interactive `sh -c` run gets, which the installer's
+`$HOME/.opencode/bin` plus a shell-rc `export PATH` line never was.
+
+Verified on `bx_se9xfq7q`: with `~/.opencode`, `~/.local/bin/opencode`, and
+`~/.config/opencode` deleted, the rendered script exits 0 and
+`sh -c 'command -v opencode && opencode --version'` answers
+`/home/user/.local/bin/opencode` and `1.18.23`. An `opencode run` in that state
+returns `> build · stealth/ox-alpha` and the model's reply, with
+`OPENROUTER_API_KEY` supplied by the box environment as before.
+
+Verified on `bx_732ts8jg`: the same script pointed at an unreachable release
+tag retries twice, exits 1 — so `setup_status` still reports `failed` honestly
+— and leaves `opencode.json` intact with no binary.
+
+### Conversation bootstrap a box token can reach
+
+`GET /api/v1/conversation` under the `box_control_api` pipeline answers
+`conversation_id` for the calling account, creating the conversation when the
+account has none. Confirmed against production that a `box:control`-only token
+is refused `401` on `GET /api/v1/user`, which is why a route of its own exists
+rather than a field added there.
+
+The field is deliberately not on `/api/v1/user`. That response is
+GitHub-shaped, and API-001 holds every OpenAgents field there to a namespaced
+`openagents` object, which is not what `BoxClient.resolveConversationId` reads.
+One canonical route carries it at the top level instead. The CLI change that
+follows this is a one-line reader retarget in the `openagents` monorepo; the
+body shape already matches what the probe expects.
+
+### Credentialed dispatch: the provider command API has no `env`
+
+The provider's published `CommandRequest` schema is `command`, `cwd`,
+`timeoutSeconds`, and `detached`. There is no `env`, so
+`OpenAgents.Box.Client.dispatch_run/5` sent a field that was accepted with the
+request and dropped. The wrapper then read `$OPENAGENTS_FORGE_TOKEN` under
+`set -u` and died on the unbound variable before printing a pid — the
+`box_response_invalid` of §7. Reproduced exactly on `bx_732ts8jg`: the same
+wrapper with the variable unset returns HTTP 2xx, `exit_code` 1, empty stdout,
+and `bash: line 12: OPENAGENTS_FORGE_TOKEN: unbound variable`.
+
+`env` on box *create* is a different endpoint and does work, which is how
+`OPENROUTER_API_KEY` reaches a box. It is not available here: an assignment
+credential is minted per attempt, long after its box exists, and
+`PATCH /boxes/{id}` takes only `name`, `ttlSeconds`, and `subdomain`. So the
+credential now travels inside the dispatch command, base64 only so a token
+cannot break the surrounding shell quoting. The cost is explicit: the
+credential is in the provider's request body and in whatever the provider logs
+of it. It is not in `box_runs.command`, which holds the caller's script and
+never sees this wrapper, and an assignment credential is short-lived and scoped
+to one branch of one repository.
+
+A 2xx that carries no pid now logs a bounded operational event — response keys,
+exit code, output sizes, and one truncated stderr line with the credential
+struck out by exact match — instead of a bare atom.
+
+Verified on `bx_732ts8jg` with a stand-in credential: dispatch returns a
+parseable pid, the run root is created, the detached child runs under
+`GIT_CONFIG_GLOBAL` pointing at the run's own gitconfig, `git credential fill`
+for `https://openagents.com` presents `username=x` and the password, the exit
+sentinel is written, and `forge-credential` and `gitconfig` are removed when
+the run ends.
+
+A push receipt is still not demonstrated. It needs a real assignment
+credential, which `Forge.Assignments.create/1` mints server-side and never
+returns to an API caller, so it cannot be exercised until this change is
+deployed. Every step before the authenticated git handshake is demonstrated
+live above.

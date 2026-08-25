@@ -8,7 +8,16 @@ defmodule OpenAgents.Box.Client do
   before any request leaves the host. Desktop and viewer URLs never pass
   through this module: no function requests them, so a token-bearing URL
   cannot reach a caller or a log.
+
+  One secret does leave here by design. `dispatch_run/5` puts an assignment's
+  Git credential in the command it sends, because the provider's command API
+  takes no environment map and a box environment can only be set at create.
+  That function says why the channel is what it is and what bounds it. No log
+  this module writes carries that credential: the one path that reads a failed
+  dispatch response strikes it out by exact match first.
   """
+
+  require Logger
 
   @default_base_url "https://ascii.dev/api/box/v1"
 
@@ -80,7 +89,7 @@ defmodule OpenAgents.Box.Client do
              "command" => dispatch_command(run_id, command, run_directory),
              "timeoutSeconds" => 30
            }),
-         {:ok, pid} <- dispatch_pid(body) do
+         {:ok, pid} <- dispatch_pid_logged(body, box_id, run_id) do
       {:ok, pid}
     end
   end
@@ -90,16 +99,33 @@ defmodule OpenAgents.Box.Client do
   def dispatch_run(box_id, run_id, command, run_directory, nil),
     do: dispatch_run(box_id, run_id, command, run_directory)
 
+  # The credential travels inside the dispatch command, not beside it. The
+  # provider's `CommandRequest` schema is `command`, `cwd`, `timeoutSeconds`,
+  # and `detached` — there is no `env`, so an `env` map was accepted with the
+  # rest of the request and dropped. The wrapper then read
+  # `$OPENAGENTS_FORGE_TOKEN` under `set -u`, died on the unbound variable, and
+  # printed no pid, which is the `box_response_invalid` this replaces.
+  #
+  # `env` on box *create* is a different endpoint and does work, and it is the
+  # better channel because the secret never enters a command request. It is not
+  # available here: an assignment credential is minted per attempt, long after
+  # its box exists, and `PATCH /boxes/{id}` takes only `name`, `ttlSeconds`,
+  # and `subdomain`. So this is the documented fallback, and its cost is
+  # explicit — the credential is in the provider's request body and in whatever
+  # the provider logs of it. It is not in `box_runs.command`, which holds the
+  # caller's script and never sees this wrapper, and it is base64 only so that
+  # a token cannot break the surrounding shell quoting. That is encoding, not
+  # protection. An assignment credential is short-lived and scoped to one
+  # branch of one repository, which is what bounds the exposure.
   def dispatch_run(box_id, run_id, command, run_directory, credential)
       when is_binary(box_id) and is_binary(run_id) and is_binary(command) and
              is_binary(run_directory) and is_binary(credential) do
     with {:ok, body} <-
            command(box_id, %{
-             "command" => dispatch_command(run_id, command, run_directory, true),
-             "timeoutSeconds" => 30,
-             "env" => %{"OPENAGENTS_FORGE_TOKEN" => credential}
+             "command" => dispatch_command(run_id, command, run_directory, credential),
+             "timeoutSeconds" => 30
            }),
-         {:ok, pid} <- dispatch_pid(body) do
+         {:ok, pid} <- dispatch_pid_logged(body, box_id, run_id, credential) do
       {:ok, pid}
     end
   end
@@ -168,20 +194,22 @@ defmodule OpenAgents.Box.Client do
   end
 
   defp dispatch_command(run_id, command, run_directory) do
-    dispatch_command(run_id, command, run_directory, false)
+    dispatch_command(run_id, command, run_directory, nil)
   end
 
-  defp dispatch_command(run_id, command, run_directory, with_credential) do
+  defp dispatch_command(run_id, command, run_directory, credential) do
     root = run_root(run_id, run_directory)
     encoded = Base.encode64(command)
+    with_credential = is_binary(credential)
 
     credential_setup =
       if with_credential do
+        encoded_credential = Base.encode64("https://x:#{credential}@openagents.com\n")
+
         """
         umask 077
-        printf 'https://x:%s@openagents.com\\n' "$OPENAGENTS_FORGE_TOKEN" > "$root/forge-credential"
+        printf '%s' '#{encoded_credential}' | base64 -d > "$root/forge-credential"
         git config --file="$root/gitconfig" credential.helper "store --file=$root/forge-credential"
-        unset OPENAGENTS_FORGE_TOKEN
         """
       else
         ""
@@ -275,6 +303,59 @@ defmodule OpenAgents.Box.Client do
 
   defp run_root(run_id, nil), do: "$HOME/.openagents/box-runs/#{run_id}"
   defp run_root(_run_id, run_directory), do: run_directory
+
+  defp dispatch_pid_logged(body, box_id, run_id, credential \\ nil) do
+    case dispatch_pid(body) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, :box_response_invalid} = error ->
+        log_dispatch_refusal(body, box_id, run_id, credential)
+        error
+    end
+  end
+
+  # A 2xx whose body carries no pid used to be a bare atom, which said nothing
+  # about whether the provider refused the request or the wrapper ran and
+  # failed. Those are opposite diagnoses, and the exit code plus the first line
+  # of stderr separates them in one look.
+  #
+  # This is an operational event, so it stays bounded and carries no raw
+  # command result: the response's top-level keys, the exit code, output sizes,
+  # and one truncated stderr line with the assignment credential struck out by
+  # exact match. The credential is the one secret that can reach this path, and
+  # this function is the one place that holds it.
+  defp log_dispatch_refusal(body, box_id, run_id, credential) do
+    body = if is_map(body), do: body, else: %{}
+
+    Logger.warning(
+      "box_dispatch_response_invalid box_id=#{box_id} run_id=#{run_id} " <>
+        "keys=#{body |> Map.keys() |> Enum.sort() |> Enum.join(",")} " <>
+        "exit_code=#{inspect(body["exit_code"] || body["exitCode"])} " <>
+        "stdout_bytes=#{output_bytes(body["stdout"])} " <>
+        "stderr_bytes=#{output_bytes(body["stderr"])} " <>
+        "timed_out=#{inspect(body["timed_out"] || body["timedOut"])} " <>
+        "stderr_head=#{inspect(stderr_head(body["stderr"], credential))}"
+    )
+  end
+
+  defp output_bytes(value) when is_binary(value), do: byte_size(value)
+  defp output_bytes(_value), do: 0
+
+  defp stderr_head(stderr, credential) when is_binary(stderr) do
+    stderr
+    |> redact(credential)
+    |> String.split("\n", parts: 2)
+    |> List.first()
+    |> String.slice(0, 200)
+  end
+
+  defp stderr_head(_stderr, _credential), do: ""
+
+  defp redact(text, credential) when is_binary(credential) and credential != "",
+    do: String.replace(text, credential, "[redacted]")
+
+  defp redact(text, _credential), do: text
 
   defp dispatch_pid(%{"stdout" => output}) when is_binary(output) do
     case Regex.run(~r/(?:\A|\n)(\d+)\s*\z/, output) do

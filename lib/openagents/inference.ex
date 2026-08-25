@@ -198,9 +198,22 @@ defmodule OpenAgents.Inference do
   token usage, prices it, increments the call count, and flips the grant to
   `exhausted` when any ceiling is reached — atomically, re-reading under a row
   lock so concurrent calls cannot exceed the budget.
+
+  `served` names the model that actually answered, because the grant's model is
+  what was asked for and the two are not always the same name. `:requested`
+  says the lane cannot be substituted for, so the grant's model served it.
+  `:unresolved` says the lane can be substituted for and the response did not
+  disclose what answered, which is priced at nothing rather than at the
+  requested model's rate. A binary is the serving model's own name (METER-001).
   """
   @spec record_usage(Grant.t(), map()) :: {:ok, Grant.t()} | {:error, term()}
-  def record_usage(%Grant{id: id}, provider_usage) when is_map(provider_usage) do
+  def record_usage(%Grant{} = grant, provider_usage) when is_map(provider_usage),
+    do: record_usage(grant, provider_usage, :requested)
+
+  @spec record_usage(Grant.t(), map(), :requested | :unresolved | String.t()) ::
+          {:ok, Grant.t()} | {:error, term()}
+  def record_usage(%Grant{id: id}, provider_usage, served)
+      when is_map(provider_usage) and (served in [:requested, :unresolved] or is_binary(served)) do
     Repo.transaction(fn ->
       grant =
         Grant
@@ -210,7 +223,7 @@ defmodule OpenAgents.Inference do
 
       case grant do
         %Grant{status: "active"} = grant ->
-          merged = merge_usage(grant.usage, provider_usage, grant.model_id)
+          merged = merge_usage(grant.usage, provider_usage, served_name(served, grant.model_id))
           would_exhaust = would_exhaust?(grant, merged)
           next_status = if would_exhaust, do: "exhausted", else: "active"
 
@@ -385,9 +398,37 @@ defmodule OpenAgents.Inference do
   @cost_fields ~w(input_tokens output_tokens total_tokens reasoning_tokens
                   cache_read_input_tokens cache_write_input_tokens)
 
-  @doc false
-  def merge_usage(existing, provider_usage, model_id) do
+  # The two names a usage record's `served_model` can carry that are not a
+  # model. Neither resolves in the catalog, so `Pricing.price/2` prices both at
+  # nothing — which is the point: an unknown is not a rate.
+  @unresolved_model "unresolved"
+  @mixed_model "mixed"
+
+  @doc "What a usage record's `served_model` says when the provider disclosed nothing."
+  @spec unresolved_model() :: String.t()
+  def unresolved_model, do: @unresolved_model
+
+  @doc "What a usage record's `served_model` says when more than one model served it."
+  @spec mixed_model() :: String.t()
+  def mixed_model, do: @mixed_model
+
+  defp served_name(:requested, model_id), do: model_id
+  defp served_name(:unresolved, _model_id), do: @unresolved_model
+  defp served_name(name, _model_id) when is_binary(name), do: name
+
+  @doc """
+  Merge one call's provider usage into a grant's record and price the total.
+
+  `served_model_name` is the model that answered this call. A record is priced
+  against the model that served it, never against the one that was asked for,
+  and a record whose calls were served by more than one model is priced at
+  nothing: a single total cannot be charged at two rates, and picking one would
+  be a guess (METER-001).
+  """
+  @spec merge_usage(map() | nil, map(), String.t() | nil) :: map()
+  def merge_usage(existing, provider_usage, served_model_name) do
     normalized = normalize_usage(provider_usage)
+    served = served_model(existing, served_model_name)
 
     merged =
       Enum.reduce(@cost_fields, %{}, fn field, acc ->
@@ -408,8 +449,43 @@ defmodule OpenAgents.Inference do
 
     merged
     |> Map.put("total_tokens", derived_total(existing, merged))
-    |> Pricing.price(model_id)
+    |> Map.put("served_model", served)
+    |> Pricing.price(served)
     |> Map.put("schema", @usage_schema)
+  end
+
+  # The model a record says served it. A record already naming one model that
+  # a later call did not use becomes `mixed`, because the accumulated total is
+  # then a sum across two rate tables and no single one prices it.
+  #
+  # A record written before this key existed names nothing, so the first call
+  # after that names the model that served it. That is the honest reading:
+  # nothing recorded which model served the earlier calls, and inventing an
+  # agreement in order to keep a price would be the failure this exists to
+  # prevent.
+  defp served_model(existing, name) do
+    name = canonical_model(name)
+
+    case Map.get(existing || %{}, "served_model") do
+      nil -> name
+      ^name -> name
+      _different -> @mixed_model
+    end
+  end
+
+  # One model, one name. A provider reports the vendor spelling
+  # (`google/gemini-3.7-flash`) and a grant may carry either, so both are
+  # written as the catalog id — otherwise two spellings of one model would read
+  # as two models and make a record `mixed` that never left its lane. A name
+  # the catalog does not serve stays as it came, which is exactly the case that
+  # prices at nothing.
+  defp canonical_model(nil), do: @unresolved_model
+
+  defp canonical_model(name) when is_binary(name) do
+    case Models.fetch(name) do
+      {:ok, %{id: id}} -> id
+      :error -> name
+    end
   end
 
   defp derived_total(existing, merged) do

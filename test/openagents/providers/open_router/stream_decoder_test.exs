@@ -142,6 +142,46 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoderTest do
     assert StreamDecoder.finish(decoder) == {:error, :truncated_stream}
   end
 
+  # METER-001, PROVIDER-002. The Vercel gateway shares this decoder, and its
+  # fallback list means the model that answers is not always the model that was
+  # asked for. The `model` field is the only place the answer says which one
+  # ran, so dropping it left the host pricing a Luna call at Gemini's rates.
+  test "reports the model the response says served it, once" do
+    stream =
+      frame(%{
+        "id" => "gen-f",
+        "model" => "openai/gpt-5.6-luna",
+        "choices" => [%{"delta" => %{"content" => "Hi"}}]
+      }) <>
+        frame(%{
+          "id" => "gen-f",
+          "model" => "openai/gpt-5.6-luna",
+          "choices" => [%{"delta" => %{}, "finish_reason" => "stop"}]
+        }) <> "data: [DONE]\n\n"
+
+    assert {:ok, decoder, events} = feed_in_pieces(stream, 11)
+    assert {:ok, _decoder, final} = StreamDecoder.finish(decoder)
+
+    assert events ++ final == [
+             {:response_started, "gen-f"},
+             {:model_served, "openai/gpt-5.6-luna"},
+             {:text_delta, "Hi"},
+             {:response_completed, "gen-f"}
+           ]
+  end
+
+  test "reports no served model where the response names none" do
+    stream =
+      frame(%{"id" => "gen-s", "choices" => [%{"delta" => %{"content" => "Hi"}}]}) <>
+        frame(%{"id" => "gen-s", "choices" => [%{"delta" => %{}, "finish_reason" => "stop"}]}) <>
+        "data: [DONE]\n\n"
+
+    assert {:ok, decoder, events} = feed_in_pieces(stream, 9)
+    assert {:ok, _decoder, final} = StreamDecoder.finish(decoder)
+
+    refute Enum.any?(events ++ final, &match?({:model_served, _}, &1))
+  end
+
   test "refuses a frame that is not JSON" do
     assert StreamDecoder.feed(StreamDecoder.new(), "data: {not json\n\n") ==
              {:error, :invalid_provider_event}

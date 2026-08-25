@@ -818,9 +818,16 @@ defmodule OpenAgents.Threads do
 
     unpriced_calls = Enum.sum(Enum.map(unpriced, fn {calls, _usage, _model} -> calls end))
 
+    # The lane named here is the one that made the total unknown, which is the
+    # model that served the call rather than the model the grant asked for.
+    # A gateway fallback answers a request for one model with another, and
+    # naming the requested lane would send an operator to price a lane that was
+    # already priced (METER-001).
     unpriced_models =
       unpriced
-      |> Enum.map(fn {_calls, _usage, model_id} -> model_id end)
+      |> Enum.map(fn {_calls, usage, model_id} ->
+        Map.get(usage || %{}, "served_model") || model_id
+      end)
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
       |> Enum.sort()

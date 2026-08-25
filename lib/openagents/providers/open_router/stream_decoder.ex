@@ -9,11 +9,17 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
   @identifier_regex ~r/\A[a-zA-Z0-9_.:\/-]+\z/
   @tool_name_regex ~r/\A[a-zA-Z0-9_-]+\z/
 
-  defstruct buffer: "", response_id: nil, terminal?: false, failed?: false, calls: %{}
+  defstruct buffer: "",
+            response_id: nil,
+            served_model: nil,
+            terminal?: false,
+            failed?: false,
+            calls: %{}
 
   @type t :: %__MODULE__{
           buffer: String.t(),
           response_id: String.t() | nil,
+          served_model: String.t() | nil,
           terminal?: boolean(),
           failed?: boolean(),
           calls: %{optional(integer()) => map()}
@@ -109,9 +115,10 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
 
   defp decode_json(state, {:ok, %{} = chunk}) do
     with {:ok, state, start_events} <- start_response(state, chunk["id"]),
+         {:ok, state, model_events} <- served_model(state, chunk["model"]),
          {:ok, state, choice_events} <- choices(state, chunk["choices"]),
          {:ok, usage_events} <- usage(chunk["usage"]) do
-      {:ok, state, start_events ++ choice_events ++ usage_events}
+      {:ok, state, start_events ++ model_events ++ choice_events ++ usage_events}
     end
   end
 
@@ -251,6 +258,26 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
   end
 
   defp start_response(%__MODULE__{} = state, _response_id), do: {:ok, state, []}
+
+  # Every chat-completions chunk names the model that produced it, and that
+  # name is not always the one the request asked for: the Vercel AI Gateway is
+  # configured with a fallback list, so a call for `google/gemini-3.7-flash`
+  # can come back served by `openai/gpt-5.6-luna`. Reading the field back is
+  # the only way the host learns which lane to price and attribute the call
+  # against, so it is carried out as an event rather than dropped.
+  #
+  # Reported once. A chunk whose model is missing or unreadable reports
+  # nothing rather than a guess, and the host treats silence from a
+  # substitutable adapter as unresolved rather than as the requested model.
+  defp served_model(%__MODULE__{served_model: nil} = state, model) do
+    if valid_identifier?(model) do
+      {:ok, %{state | served_model: model}, [{:model_served, model}]}
+    else
+      {:ok, state, []}
+    end
+  end
+
+  defp served_model(%__MODULE__{} = state, _model), do: {:ok, state, []}
 
   defp usage(nil), do: {:ok, []}
 

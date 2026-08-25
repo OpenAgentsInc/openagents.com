@@ -45,6 +45,30 @@ defmodule OpenAgents.Providers.VercelGatewayTest do
     end
   end
 
+  # METER-001, PROVIDER-002. The fallback list is an instruction to answer a
+  # failed call with a different model, so this lane's request is not evidence
+  # of what served it. Saying so is what makes the host read an undisclosed
+  # model as unresolved rather than as the model it asked for.
+  describe "whether this lane can be substituted for" do
+    setup do
+      previous = Application.get_env(:openagents, :vercel_gateway_fallback_models)
+
+      on_exit(fn ->
+        Application.put_env(:openagents, :vercel_gateway_fallback_models, previous)
+      end)
+
+      :ok
+    end
+
+    test "is true exactly while a fallback list is configured" do
+      Application.put_env(:openagents, :vercel_gateway_fallback_models, ["openai/gpt-5.6-luna"])
+      assert VercelGateway.substitutable?()
+
+      Application.put_env(:openagents, :vercel_gateway_fallback_models, [])
+      refute VercelGateway.substitutable?()
+    end
+  end
+
   describe "the credential" do
     test "is its own, not OpenRouter's" do
       previous = Application.get_env(:openagents, :vercel_gateway_api_key)

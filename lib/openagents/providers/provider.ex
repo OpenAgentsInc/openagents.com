@@ -23,7 +23,22 @@ defmodule OpenAgents.Providers.Provider do
   """
   @callback configured?() :: boolean()
 
-  @optional_callbacks configured?: 0
+  @doc """
+  Whether this adapter may have its request answered by a model other than the
+  one it asked for.
+
+  Optional, and `false` where it is not exported: an adapter that calls one
+  vendor with one model gets that model or an error. It is `true` only where
+  the deployment has configured the lane to substitute — the Vercel AI Gateway
+  with a fallback model list — and the answer bounds what silence means. A
+  substitutable adapter whose response does not disclose the serving model has
+  not told the host what answered, so the host records the model as unresolved
+  and prices nothing, rather than recording the requested model as though it
+  served (METER-001).
+  """
+  @callback substitutable?() :: boolean()
+
+  @optional_callbacks configured?: 0, substitutable?: 0
 
   @callback stream(
               OpenAgents.Providers.Request.t(),

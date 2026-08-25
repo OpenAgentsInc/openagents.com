@@ -1224,9 +1224,20 @@ Concretely:
   `model_mismatch` naming both, rather than silently answered by the grant's.
 - Every successful proxy response attributes the effective model — the
   `x-openagents-model` header and each SSE chunk's `model` field — so a
-  client renders what answered rather than what it assumed. A named model is
-  never substituted: because a mismatch is refused, a caller that named one
-  gets that one or an error.
+  client renders what answered rather than what it assumed. Nothing in this
+  application substitutes a named model: a mismatch is refused, so a caller
+  that named one gets that one or an error.
+- Amended 2026-08-25 (#250): one lane can be substituted for *by its provider*,
+  and the response says so rather than the host pretending otherwise. Where
+  `config :openagents, :vercel_gateway_fallback_models` is set, Vercel answers
+  a failed primary with another model and returns 200. The proxy reads the
+  serving model back off the response and attributes that, so the header and
+  the chunks name what actually ran. Where such a lane discloses no model, the
+  attribution is the word `unresolved` — not the requested model, which the
+  deployment cannot claim served. An adapter says whether it can be
+  substituted for (`OpenAgents.Providers.Provider.substitutable?/0`, false
+  where it is not exported), so silence from a lane that cannot substitute
+  still means the model that was asked for.
 - Amended 2026-08-25 (#199): where **nothing named a model** — neither the
   mint nor the call — the server selects, preferring a configured lane that is
   not `degraded` in catalog order and falling back to the catalog default when
@@ -1255,7 +1266,8 @@ unsupported `model` on `POST /api/v1/chat/turns` is a typed `422`, and
 Evidence: `OpenAgents.Inference.Models`, `OpenAgentsWeb.ModelCatalogController`,
 `OpenAgentsWeb.InferenceProxyController`, `OpenAgentsWeb.ThreadController`,
 `OpenAgents.Inference.ModelsTest`, `OpenAgentsWeb.ModelCatalogControllerTest`,
-`OpenAgentsWeb.InferenceProxyControllerTest`, and
+`OpenAgentsWeb.InferenceProxyControllerTest`,
+`OpenAgentsWeb.InferenceProxyFallbackTest`, and
 `OpenAgentsWeb.ThreadControllerTest`.
 
 ### METER-001 — A cost is reported only where a price exists, and never as zero
@@ -1304,6 +1316,35 @@ Concretely:
   `unpriced_calls/1` is above zero; `balance/1` publishes `complete?` so no
   reader shows a balance as whole when it is not.
 
+Amended 2026-08-25 (#250): a record is priced against the model that **served**
+the call, never the one that was asked for. The two are not always the same
+name. `config :openagents, :vercel_gateway_fallback_models` instructs the
+Vercel AI Gateway to answer a failed `google/gemini-3.7-flash` call with
+`openai/gpt-5.6-luna` and return 200, and the adapter did not read back which
+model answered — so a Luna call was priced at Gemini's rates and produced
+`$2.25` of measured-looking cost from a lane this deployment has no rates for.
+
+So every metered record also names its lane. `served_model` is read off the
+response's own `model` field, carried out of the chat-completions decoder as
+`{:model_served, name}`, and written as the catalog id where the catalog serves
+that model. Three values are not model names and none of them resolves to a
+rate table, so all three price at nothing:
+
+- `unresolved` — the lane may substitute (`Provider.substitutable?/0`, true for
+  the gateway exactly while a fallback list is configured) and the response
+  disclosed no model. Naming the requested model here would be a claim the
+  deployment cannot support.
+- `mixed` — one grant's calls were served by more than one model. A single
+  accumulated total cannot be charged at two rate tables, and picking one would
+  be a guess.
+- any model outside the catalog — a fallback the operator never priced.
+
+`OpenAgents.Threads.spend/1` reports the serving lane in `cost.unpriced_models`
+rather than the requested one, so an operator is sent to price the lane that
+actually ran. A lane that cannot be substituted for needs no disclosure: it
+gets the model it asked for or an error, so its silence still means the grant's
+model.
+
 An unpriced lane is not a free lane and not an error. It is the deployment
 saying it does not know what a call cost, which is a different fact from the
 call having cost nothing, and the distinction survives to every read surface.
@@ -1317,8 +1358,10 @@ edit. No code here may guess one.
 Evidence: `OpenAgents.Inference.Pricing`, `OpenAgents.Inference.PricingTest`,
 `OpenAgents.Inference.CreditTest`, `OpenAgents.ThreadsTest`,
 `OpenAgentsWeb.ModelCatalogControllerTest`,
-`OpenAgentsWeb.ThreadControllerTest`, `OpenAgentsWeb.ThreadShowLiveTest`, and
-`OpenAgentsWeb.ModelCatalogLiveTest`.
+`OpenAgentsWeb.ThreadControllerTest`, `OpenAgentsWeb.ThreadShowLiveTest`,
+`OpenAgentsWeb.ModelCatalogLiveTest`,
+`OpenAgentsWeb.InferenceProxyFallbackTest`, and
+`OpenAgents.Providers.OpenRouter.StreamDecoderTest`.
 
 ## Durable effects
 
@@ -5603,8 +5646,8 @@ contract; the invariant prose above defines the assertion, not the filename.
 | TURN-005 | `test/openagents/turn_tool_loop_test.exs` |
 | PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
 | PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs`, `test/openagents/dependency_boundary_test.exs` |
-| PROVIDER-002 | `test/openagents/inference/models_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
-| METER-001 | `test/openagents/inference/pricing_test.exs`, `test/openagents/inference/credit_test.exs`, `test/openagents/threads_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs`, `test/openagents_web/live/thread_show_live_test.exs`, `test/openagents_web/live/model_catalog_live_test.exs` |
+| PROVIDER-002 | `test/openagents/inference/models_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_fallback_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
+| METER-001 | `test/openagents/inference/pricing_test.exs`, `test/openagents/inference/credit_test.exs`, `test/openagents/threads_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_fallback_test.exs`, `test/openagents/providers/open_router/stream_decoder_test.exs`, `test/openagents_web/live/thread_show_live_test.exs`, `test/openagents_web/live/model_catalog_live_test.exs` |
 | EFFECT-001 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | EFFECT-002 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |

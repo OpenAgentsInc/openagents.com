@@ -26,6 +26,14 @@ defmodule OpenAgents.Providers.VercelGateway do
   where the credits are. `providerOptions.gateway.models` lists the fallback
   models Vercel tries if the primary model fails.
 
+  That list is why this lane reports `substitutable?/0` as true: a call for
+  `google/gemini-3.7-flash` can be answered by `openai/gpt-5.6-luna` and still
+  return 200, so the model that was asked for is not evidence of the model that
+  answered. The response's `model` field is, and the chat-completions decoder
+  reads it back as `{:model_served, name}` so the call is priced and attributed
+  against the lane that served it rather than the lane that was requested
+  (METER-001, PROVIDER-002).
+
   The wire format is OpenRouter's, so the request building and the stream
   decoding are OpenRouter's too. What differs is the endpoint, the credential,
   and the pin.
@@ -47,6 +55,19 @@ defmodule OpenAgents.Providers.VercelGateway do
   def configured? do
     match?({:ok, _key}, OpenAgents.RuntimeConfig.fetch_secret(:vercel_gateway_api_key))
   end
+
+  @doc """
+  Whether a call on this lane may be answered by a different model.
+
+  True exactly while a fallback list is configured. `providerOptions.gateway.models`
+  is an instruction to Vercel to try another model when the primary fails, so a
+  request for `google/gemini-3.7-flash` can be answered by `openai/gpt-5.6-luna`
+  and return 200. The host reads the serving model back off the response; this
+  says what its silence means, because a lane that cannot be substituted for
+  needs no disclosure to be attributed correctly.
+  """
+  @impl true
+  def substitutable?, do: fallback_models() != []
 
   @impl true
   def stream(%Request{} = request, on_event) when is_function(on_event, 1) do
@@ -81,10 +102,19 @@ defmodule OpenAgents.Providers.VercelGateway do
     |> Keyword.put(:payload_extra, payload_extra())
   end
 
+  @doc "The models Vercel may try when the requested one fails."
+  @spec fallback_models() :: [String.t()]
+  def fallback_models do
+    case Application.get_env(:openagents, :vercel_gateway_fallback_models, []) do
+      models when is_list(models) -> models
+      _not_a_list -> []
+    end
+  end
+
   @doc false
   def payload_extra do
     providers = Application.get_env(:openagents, :vercel_gateway_providers, [])
-    fallbacks = Application.get_env(:openagents, :vercel_gateway_fallback_models, [])
+    fallbacks = fallback_models()
 
     gateway =
       %{}

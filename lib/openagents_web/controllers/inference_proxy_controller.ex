@@ -18,6 +18,16 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   Every 200 attributes the effective model — the `x-openagents-model` header
   and each chunk's `model` field — so a client renders what answered.
 
+  What answered is read back off the response rather than assumed from the
+  request. One lane can substitute: the Vercel AI Gateway is configured with a
+  fallback model list, so a call for `google/gemini-3.7-flash` can be served by
+  `openai/gpt-5.6-luna` and still return 200. The serving model therefore
+  decides three things — the name attributed on the response, the lane whose
+  health is recorded, and the rate table the usage record is priced against
+  (METER-001). A substitutable lane whose response discloses no model is
+  attributed `unresolved` and priced at nothing, because naming the requested
+  model would be a claim the deployment cannot support.
+
   The probe→proxy hop is buffered (the provider still streams from the vendor
   internally); probe's transport reads the whole body before parsing, so this
   matches its consumer and keeps failure handling honest.
@@ -195,27 +205,31 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
     case result do
       :ok ->
+        # What answered is read back off the response, never assumed from the
+        # request: a gateway lane configured with fallback models can serve a
+        # call for one model with another and still return 200 (METER-001).
+        served = served_model(model, events)
         usage = usage_of(events)
-        _ = meter(grant, usage)
+        _ = meter(grant, usage, served)
+        record_health(model, served)
 
         # The effective model is attributed on the response itself — the
         # header and every chunk's `model` field — so a client renders what
-        # answered, not what it assumed (PROVIDER-002). Because a mismatched
-        # request was refused above, requested and effective are the same
-        # name on every 200.
-        OpenAgents.Inference.Health.record_success(model.id)
+        # answered, not what it assumed (PROVIDER-002).
+        label = model_label(model, served)
 
         conn
         |> put_resp_content_type("text/event-stream")
         |> put_resp_header("cache-control", "no-store")
-        |> put_resp_header("x-openagents-model", model.id)
-        |> send_resp(200, sse_body(events, model.id))
+        |> put_resp_header("x-openagents-model", label)
+        |> send_resp(200, sse_body(events, label))
 
       {:error, reason} ->
-        # A failure that produced partial usage is still metered; the probe
-        # sees a provider error, never raw provider detail.
+        # A failure that produced partial usage is still metered, against
+        # whatever the partial response said was serving it — the tokens were
+        # spent on that model whether or not the stream finished.
         usage = usage_of(events)
-        if usage != %{}, do: meter(grant, usage)
+        if usage != %{}, do: meter(grant, usage, served_model(model, events))
         class = OpenAgents.OperationalLog.code(reason)
         status = OpenAgents.OperationalLog.status(reason)
         # What the catalog publishes about this lane follows from what it
@@ -239,8 +253,71 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     end
   end
 
-  defp meter(grant, usage) when usage == %{}, do: {:ok, grant}
-  defp meter(grant, usage), do: Inference.record_usage(grant, usage)
+  defp meter(grant, usage, _served) when usage == %{}, do: {:ok, grant}
+  defp meter(grant, usage, served), do: Inference.record_usage(grant, usage, served)
+
+  # Which model actually served this call.
+  #
+  # `:requested` where the response named the model the grant pins, and where a
+  # lane that cannot be substituted for named nothing — such a lane gets the
+  # model it asked for or an error, so silence there is not ambiguity.
+  # `:unresolved` where a lane that *can* be substituted for named nothing: the
+  # deployment does not know what answered, and saying the requested model
+  # would be a claim it cannot support. Otherwise the name the provider gave.
+  defp served_model(model, events) do
+    case Enum.find_value(events, fn
+           {:model_served, name} -> name
+           _event -> nil
+         end) do
+      name when is_binary(name) ->
+        case Models.fetch(name) do
+          {:ok, %{id: id}} when id == model.id -> :requested
+          _other_or_unserved -> name
+        end
+
+      nil ->
+        if substitutable?(model.adapter), do: :unresolved, else: :requested
+    end
+  end
+
+  defp substitutable?(adapter) do
+    Code.ensure_loaded?(adapter) and function_exported?(adapter, :substitutable?, 0) and
+      adapter.substitutable?()
+  end
+
+  # Health is a claim about a lane, so it follows the lane that answered.
+  #
+  # A fallback that rescued a call is not evidence that the requested lane is
+  # working — it is evidence that it is not, which is exactly what `GET
+  # /api/v1/models` availability exists to publish (#238). An unresolved
+  # response records nothing at all: it says neither that the lane answered nor
+  # that it failed, and health that reports what it does not know is the fault
+  # being fixed rather than a smaller version of it.
+  defp record_health(model, :requested), do: OpenAgents.Inference.Health.record_success(model.id)
+  defp record_health(_model, :unresolved), do: :ok
+
+  defp record_health(model, name) when is_binary(name) do
+    OpenAgents.Inference.Health.record_failure(model.id, nil)
+
+    case Models.fetch(name) do
+      {:ok, %{id: id}} -> OpenAgents.Inference.Health.record_success(id)
+      :error -> :ok
+    end
+  end
+
+  # The name the response carries. A model the catalog serves is named as a
+  # client would ask for it; one it does not is named as the provider reported
+  # it; and where nothing disclosed what answered, the word `unresolved` says
+  # so rather than naming a model that may not have run.
+  defp model_label(model, :requested), do: model.id
+  defp model_label(_model, :unresolved), do: Inference.unresolved_model()
+
+  defp model_label(_model, name) when is_binary(name) do
+    case Models.fetch(name) do
+      {:ok, %{id: id}} -> id
+      :error -> name
+    end
+  end
 
   defp usage_of(events) do
     Enum.reduce(events, %{}, fn

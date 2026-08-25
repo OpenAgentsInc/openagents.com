@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-# Installs the forge-only push guard into this clone.
+# Installs the push guard into this clone: where a push is going, and whether
+# what it carries is formatted.
 #
 # `ops/ci/push-remote-check.sh` is the guard itself, and `.githooks/pre-push`
 # already runs it -- but `.githooks` binds only where `core.hooksPath` points
@@ -67,7 +68,21 @@ cat >"$hook_path" <<'HOOK'
 set -eu
 
 common_dir=$(cd "$(git rev-parse --git-common-dir)" && pwd)
-exec "$common_dir/hooks/openagents-push-remote-check.sh" "$@"
+"$common_dir/hooks/openagents-push-remote-check.sh" "$@"
+
+# Formatting, because `mix precommit` runs `mix format` rather than checking
+# it. An unformatted file therefore reaches main silently, and then every
+# release gate rewrites it mid-run and fails the relup stage for a dirty
+# worktree — reporting a whitespace slip as a deploy blocker, three stages
+# and forty minutes away from the cause. Seconds here, against that.
+repo_root=$(git rev-parse --show-toplevel)
+if [ -f "$repo_root/mix.exs" ] && command -v mix >/dev/null 2>&1; then
+  if ! (cd "$repo_root" && mix format --check-formatted >/dev/null 2>&1); then
+    echo "Refusing the push: files are not formatted. Run 'mix format'." >&2
+    (cd "$repo_root" && mix format --check-formatted 2>&1 | sed -n '1,20p') >&2
+    exit 1
+  fi
+fi
 HOOK
 
 chmod +x "$hook_path"

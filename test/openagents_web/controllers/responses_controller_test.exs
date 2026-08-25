@@ -1,7 +1,11 @@
 defmodule OpenAgentsWeb.ResponsesControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
-  alias OpenAgents.Providers.{FailingTestProvider, RecordingTestProvider, UnconfiguredTestProvider}
+  alias OpenAgents.Providers.{
+    FailingTestProvider,
+    RecordingTestProvider,
+    UnconfiguredTestProvider
+  }
 
   # The default model rides the Vercel gateway lane; swapping the lane's
   # adapter is how a test decides what "real inference" answers with.

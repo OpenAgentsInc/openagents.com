@@ -265,7 +265,10 @@ defmodule OpenAgentsWeb.ResponsesController do
 
   defp collect(conn, model, request) do
     parent = self()
-    result = model.adapter.stream(request, fn event -> send(parent, {:responses_event, event}) end)
+
+    result =
+      model.adapter.stream(request, fn event -> send(parent, {:responses_event, event}) end)
+
     events = drain([])
 
     text =

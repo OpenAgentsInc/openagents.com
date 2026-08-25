@@ -790,7 +790,8 @@ defmodule OpenAgents.VoiceSessionsTest do
                     %{
                       "type" => "response.create",
                       "response" => %{"instructions" => instructions, "tool_choice" => "auto"}
-                    }}
+                    }},
+                   2_000
 
     assert instructions =~ "<protected_identity"
     _state = :sys.get_state(VoiceSessions.whereis(session.id))

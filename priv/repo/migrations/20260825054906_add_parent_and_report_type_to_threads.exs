@@ -27,10 +27,24 @@ defmodule OpenAgents.Repo.Migrations.AddParentAndReportTypeToThreads do
 
     drop constraint(:threads, :threads_terminal_shape_check)
 
+    # `report_type` is required by the application, not yet by the database,
+    # and the gap is the rolling replacement. Migrations run on the first
+    # replaced node while the other two still serve the previous release, and
+    # that release sets only `status`, `report`, `report_digest`, and
+    # `completed_at` when a thread finishes. Requiring `report_type` here would
+    # stop those nodes closing, cancelling, or expiring any thread for the
+    # length of the roll — every session that finished on an old node would
+    # fail at the last step.
+    #
+    # So this release admits a terminal thread with no report type, and
+    # `OpenAgents.Threads` supplies one on every path it owns (THREAD-003).
+    # The column is tightened to NOT NULL in a later migration, once the
+    # release that always writes it is live on every node. Expand first,
+    # contract after.
     create constraint(:threads, :threads_terminal_shape_check,
              check: """
              (status = 'open' AND completed_at IS NULL AND report IS NULL AND report_type IS NULL)
-             OR (status <> 'open' AND completed_at IS NOT NULL AND report IS NOT NULL AND report_type IS NOT NULL)
+             OR (status <> 'open' AND completed_at IS NOT NULL AND report IS NOT NULL)
              """
            )
 

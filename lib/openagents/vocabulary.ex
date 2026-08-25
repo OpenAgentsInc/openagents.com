@@ -36,6 +36,12 @@ defmodule OpenAgents.Vocabulary do
     {"forge_assignments", "forge_assignments_machine_id_fkey"},
     {"inference_grants", "inference_grants_machine_id_fkey"},
     {"machine_pairings", "machine_pairings_machine_id_fkey"},
+    # The owner column is gone from the schema and unread by any code, but the
+    # column and this key survive one more release: dropping them during a
+    # rolling replacement would break this table for the nodes still running
+    # the release that declares `belongs_to :user`. The contract migration
+    # removes both once that release is off every node.
+    {"machine_pairings", "machine_pairings_user_id_fkey"},
     {"machine_pairings", "machine_pairings_pkey"},
     {"machine_pairings", "machine_pairings_status_check"},
     {"machine_pairings", "machine_pairings_tier_check"},

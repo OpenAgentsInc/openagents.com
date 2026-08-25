@@ -484,6 +484,13 @@ if config_env() == :prod and runtime_role == :web do
     openai_api_key: required_text.("OPENAI_API_KEY"),
     openrouter_api_key: optional_text.("OPENROUTER_API_KEY"),
     gemini_api_key: optional_text.("GEMINI_API_KEY"),
+    # The gateway lane the model catalog's default routes through. It was
+    # wired in the dev branch only, so in production the credential stayed nil
+    # and the catalog's first entry — what a caller naming no model gets —
+    # refused every call with `model_unavailable`. That is the published CLI's
+    # default path, so the omission took the default lane down rather than a
+    # corner of it.
+    vercel_gateway_api_key: optional_text.("AI_GATEWAY_API_KEY"),
     box_api_key: optional_text.("BOX_API_KEY"),
     inference_proxy_url: optional_text.("OPENAGENTS_INFERENCE_PROXY_URL"),
     forge_enabled: forge_enabled,

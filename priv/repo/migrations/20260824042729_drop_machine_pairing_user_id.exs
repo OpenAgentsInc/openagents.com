@@ -2,30 +2,32 @@ defmodule OpenAgents.Repo.Migrations.DropMachinePairingUserId do
   use Ecto.Migration
 
   @moduledoc """
-  `machine_pairings.user_id` was written by `do_approve_pairing/4` and read by
-  nothing. It is also strictly derivable: approval sets `user_id` and
-  `machine_id` in one changeset, nothing sets either alone, and
-  `machines.user_id` is the same account. See issue #184 and CANON-002.
+  `machine_pairings.user_id` is no longer written or read, and the drop is
+  deferred to the release after the one that stops writing it.
+
+  This is the expand half of expand-and-contract, and the reason is the roll
+  rather than the column. A rolling replacement runs migrations on the first
+  node while the other two still serve the previous release, and that release
+  declares `belongs_to :user` on `OpenAgents.Machines.Pairing` — which puts
+  `user_id` into every generated `SELECT`. Dropping the column here would make
+  every read and write of `machine_pairings` fail on the un-replaced nodes, so
+  CLI device pairing would break for two thirds of traffic, then one third,
+  for the length of the roll.
+
+  The column is dead weight and nothing else: the current release neither
+  writes nor reads it, and the owner it named is reachable through
+  `machines.user_id` (issue #184, CANON-002). Carrying it for one release
+  costs a nullable column; dropping it during a roll costs pairing.
+
+  The contract half — the actual `remove` — belongs in a later migration, once
+  the release that stopped writing it is live on every node.
   """
 
   def up do
-    alter table(:machine_pairings) do
-      remove :user_id
-    end
+    :ok
   end
 
   def down do
-    alter table(:machine_pairings) do
-      add :user_id, references(:users, type: :binary_id, on_delete: :delete_all)
-    end
-
-    # The owner was never lost: it is the computer's owner, which is where the
-    # column's only writer read it from in the first place.
-    execute("""
-    UPDATE machine_pairings AS p
-       SET user_id = m.user_id
-      FROM machines AS m
-     WHERE m.id = p.machine_id
-    """)
+    :ok
   end
 end

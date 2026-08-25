@@ -21,9 +21,15 @@ defmodule OpenAgents.Repo.Migrations.AllowUnboundedInferenceGrants do
 
   def up do
     alter table(:inference_grants) do
-      modify :max_total_tokens, :integer, null: true
+      # The declared type must match what the table already holds. Ecto's
+      # Postgres adapter always emits the type clause on `modify`, so naming
+      # `:integer` here would issue `ALTER COLUMN TYPE integer` against columns
+      # created as `:bigint` — a full table rewrite that also caps a grant at
+      # ~2.1 billion tokens and ~$2,147 forever, and that aborts the migration
+      # outright on any row already above it. Only nullability is changing.
+      modify :max_total_tokens, :bigint, null: true
       modify :max_calls, :integer, null: true
-      modify :max_cost_microusd, :integer, null: true
+      modify :max_cost_microusd, :bigint, null: true
     end
 
     execute("""
@@ -52,9 +58,9 @@ defmodule OpenAgents.Repo.Migrations.AllowUnboundedInferenceGrants do
     """)
 
     alter table(:inference_grants) do
-      modify :max_total_tokens, :integer, null: false
+      modify :max_total_tokens, :bigint, null: false
       modify :max_calls, :integer, null: false
-      modify :max_cost_microusd, :integer, null: false
+      modify :max_cost_microusd, :bigint, null: false
     end
 
     execute(guard("<>"))

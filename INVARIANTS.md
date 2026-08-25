@@ -4170,14 +4170,20 @@ GitHub ID. A push sent straight to GitHub inverts that: the WAL never sees the
 objects, and nothing reports the divergence until a clone disagrees with the
 site.
 
-The mirror that would keep GitHub current is not running. `mirror_url/1` reads
-`:forge_mirror_urls`, which is empty in `config/config.exs` and set by no
-environment, so `MirrorWatch` reports `off` and GitHub receives only what
-someone pushes to it. `mirror_now/1` is a `git push --mirror`, a force push of
-every ref, so configuring a mirror overwrites whatever direct pushes left on
-GitHub rather than merging with it. Configuring that mirror is what makes this
-contract complete; until then it keeps the forge authoritative and lets GitHub
-go stale, which is the honest trade and not an accident.
+A mirror is running. `mirror_url/1` reads `:forge_mirror_urls`, which is empty
+in `config/config.exs` but is set from `OPENAGENTS_FORGE_MIRROR_URLS_JSON` in
+`config/runtime.exs`, and production sets it for `openagents.com`, so
+`MirrorWatch` publishes a per-repo state rather than `off`. `mirror_now/1` is a
+`git push --mirror`, a force push of every ref, so the mirror overwrites
+whatever a direct push left on GitHub rather than merging with it. That is the
+reason this contract admits no direct GitHub push: a push that lands there is
+not merged later, it is erased.
+
+This paragraph read the other way — that no mirror was configured — until
+2026-08-25, while production had one. A contract that says the destructive
+thing is switched off, while it is switched on, is worse than one that says
+nothing, so what is configured is checked here against the running node rather
+than against `config/config.exs` alone.
 
 `ops/ci/push-remote-check.sh` admits only forge hosts and refuses every other
 remote, whatever URL form it takes. `.githooks/pre-push` runs it before the
@@ -4487,11 +4493,11 @@ which rebuilds this table from the WAL alone. The absence is the invariant
 holding, not an omission.
 
 Two operational facts bound the claim. `:forge_mirror_urls` is empty in
-`config/config.exs` and set by no environment, so no mirror runs today and
-GitHub holds whatever was last pushed to it directly, which is the trade
-`REPOSITORY-002` records. And `mirror_now/1` is a force push of every ref, so
-configuring a mirror overwrites what direct pushes left there rather than
-merging with it.
+`config/config.exs` but set from the environment in `config/runtime.exs`, and
+production sets it for `openagents.com`, so a mirror does run and GitHub holds
+what the forge last pushed there, which is the trade `REPOSITORY-002` records.
+And `mirror_now/1` is a force push of every ref, so the mirror overwrites what a
+direct push left there rather than merging with it.
 
 Evidence: `OpenAgents.Forge.Sync`, `OpenAgents.Forge.Pushes`,
 `OpenAgents.Forge.PushReceipt`, `OpenAgents.Forge.Verification`, and

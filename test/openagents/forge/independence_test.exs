@@ -502,6 +502,32 @@ defmodule OpenAgents.Forge.IndependenceTest do
 
   ## ── EXIT-003: recovery from the WAL, never from the mirror ─────────────
 
+  describe "the mirror contract" do
+    # `EXIT-003` and `CLAUDE.md` both stated that no mirror was configured and
+    # that none could be, while production had one configured through
+    # `OPENAGENTS_FORGE_MIRROR_URLS_JSON`. Since `mirror_now/1` force-pushes
+    # every ref, that made both documents promise the destructive thing was
+    # switched off while it was switched on. Neither claim can return while
+    # runtime still reads that variable.
+    test "does not claim a mirror is unconfigured while runtime configures one" do
+      assert File.read!("config/runtime.exs") =~ "OPENAGENTS_FORGE_MIRROR_URLS_JSON",
+             "the guard below is only meaningful while runtime reads this variable"
+
+      for path <- ["INVARIANTS.md", "CLAUDE.md"] do
+        text = File.read!(path)
+
+        for claim <- [
+              "set by no environment",
+              "no mirror runs today",
+              "Automatic mirroring to GitHub is not configured"
+            ] do
+          refute String.contains?(text, claim),
+                 "#{path} claims #{inspect(claim)}, which production contradicts"
+        end
+      end
+    end
+  end
+
   describe "recovery" do
     test "the WAL rebuilds the repository and re-derives receipts the database lost", context do
       seed_history!(context)

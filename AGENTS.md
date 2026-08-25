@@ -31,8 +31,9 @@ The `openagents` remote is the forge at `openagents.com`, which records every
 push in the durable WAL and serves it. The `origin` remote is the GitHub
 mirror; pushing to it directly leaves the forge behind a mirror it does not
 know about, and nothing reports the divergence until a clone disagrees with
-the site. Automatic mirroring to GitHub is not configured today, so GitHub
-stays at whatever was last pushed to it. `ops/ci/push-remote-check.sh` refuses
+the site. Production mirrors to GitHub with a force push of every ref, so a
+direct GitHub push is not merged later — it is overwritten. GitHub
+holds what the forge last mirrored there. `ops/ci/push-remote-check.sh` refuses
 a non-forge push, and `mix precommit` installs it into the clone you are
 working in, so running precommit before you push is enough. To install it by
 hand:

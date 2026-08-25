@@ -70,6 +70,7 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.Providers.FallbackTestProvider => :in_process,
     OpenAgents.Providers.RecordingTestProvider => :in_process,
     OpenAgents.Providers.Test => :in_process,
+    OpenAgents.Providers.ToolCallingTestProvider => :in_process,
     OpenAgents.Providers.UnconfiguredTestProvider => :in_process,
     OpenAgents.Voice.OpenAI.CallClient => :outbound_http,
     OpenAgents.Voice.OpenAI.Sideband => :outbound_socket,
@@ -108,6 +109,7 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.Providers.FallbackTestProvider => :adapter,
     OpenAgents.Providers.RecordingTestProvider => :adapter,
     OpenAgents.Providers.Test => :adapter,
+    OpenAgents.Providers.ToolCallingTestProvider => :adapter,
     OpenAgents.Providers.Request => :the_struct_itself
   }
 

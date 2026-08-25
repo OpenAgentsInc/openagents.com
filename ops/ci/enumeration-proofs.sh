@@ -18,4 +18,6 @@ env MIX_ENV=test mix test --warnings-as-errors \
   test/openagents/forge/deployment_lane_test.exs \
   test/openagents/capacity_test.exs \
   test/openagents/accounts/token_vault_test.exs \
-  test/openagents/machines/token_vault_test.exs
+  test/openagents/machines/token_vault_test.exs \
+  test/openagents/providers/persona_boundary_test.exs \
+  test/openagents/data_rights/export_inventory_test.exs

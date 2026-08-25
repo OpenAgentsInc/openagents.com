@@ -82,6 +82,22 @@ if [ -f "$repo_root/mix.exs" ] && command -v mix >/dev/null 2>&1; then
     (cd "$repo_root" && mix format --check-formatted 2>&1 | sed -n '1,20p') >&2
     exit 1
   fi
+
+  # The enumeration proofs. Each one asserts an exact set — the routes an
+  # operator surface publishes, the API families the export ledger classifies,
+  # the modules that may speak to a model — so adding a route, a family, or a
+  # provider without naming it turns one red. They are about a hundred tests
+  # and two seconds, and they have caught four separate breakages on main in a
+  # day, each of which otherwise surfaced forty minutes into a release gate.
+  # Set OPENAGENTS_SKIP_PUSH_PROOFS=1 to push without them.
+  if [ "${OPENAGENTS_SKIP_PUSH_PROOFS:-}" != "1" ] &&
+    [ -x "$repo_root/ops/ci/enumeration-proofs.sh" ]; then
+    if ! (cd "$repo_root" && sh ops/ci/enumeration-proofs.sh >/tmp/openagents-push-proofs.log 2>&1); then
+      echo "Refusing the push: an enumeration proof failed." >&2
+      sed -n '1,40p' /tmp/openagents-push-proofs.log >&2
+      exit 1
+    fi
+  fi
 fi
 HOOK
 

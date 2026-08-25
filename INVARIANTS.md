@@ -3069,8 +3069,24 @@ than its sound, but the operator route named in ADMIN-001 unseals and streams
 it; the seal here defends against a stolen database, not against the person who
 holds the key.
 
+Amended 2026-08-25 (issue #193). The asymmetry this contract carried is closed.
+`voice_transcript_items.content` used to rest as plaintext beside the sealed
+audio, so a stolen database got the words either way and the seal on the audio
+moved nothing. The transcript is now sealed too, under `OpenAgents.ContentVault`
+and its own key, along with `voice_sessions.compaction_summary`. Both are read
+through the schema — `OpenAgents.Voice.TranscriptItem.text/1` and
+`OpenAgents.Voice.Session.compaction_summary/1` — so no reader reaches the
+words by touching a field. What is unchanged is the boundary: these seals are
+under a key the operator holds, so they defend against a stolen database and
+not against the operator, exactly as the paragraph above says of the audio. The
+same words still rest in `messages.content`, which carries a generated
+`search_vector` and cannot be sealed without ending lexical recall; that is
+recorded in `EXIT-006` and in `docs/2026-08-25-encryption-at-rest.md` rather
+than implied here.
+
 Evidence: `OpenAgents.Voice.Recordings`, `OpenAgents.Voice.Recording`,
-`OpenAgents.Voice.RecordingChunk`, `OpenAgents.Voice.RecordingVault`, the
+`OpenAgents.Voice.RecordingChunk`, `OpenAgents.Voice.RecordingVault`,
+`OpenAgents.ContentVault`, `OpenAgents.Voice.TranscriptItem`, the
 `create_voice_recordings` migration, `OpenAgentsWeb.VoiceRecordingController`,
 `assets/js/voice_recording.mjs`, `OpenAgents.Voice.RecordingsTest`,
 `OpenAgentsWeb.VoiceRecordingControllerTest`, `assets/test/voice_recording_test.mjs`,
@@ -3499,11 +3515,12 @@ Evidence: `OpenAgents.GitHubOAuth.RuntimeConfig`,
 
 Status: Current
 
-The application holds three hand-rolled encryption vaults —
+The application holds four hand-rolled encryption vaults —
 `OpenAgents.Accounts.TokenVault` for GitHub access tokens,
 `OpenAgents.Machines.TokenVault` for computer tokens awaiting pairing claim,
-and `OpenAgents.Voice.RecordingVault` for call audio — and each seals under
-its own configured key. Rotating one vault's key never makes another vault's
+`OpenAgents.Voice.RecordingVault` for call audio, and `OpenAgents.ContentVault`
+for private text nobody searches — and each seals under its own configured
+key. Rotating one vault's key never makes another vault's
 records unreadable or unverifiable, because no vault reads another vault's
 key to seal. A vault whose own key is absent fails with a typed configuration
 error at its boundary rather than silently borrowing key material that
@@ -3527,21 +3544,46 @@ requires: the GitHub vault rotates losslessly through its keyed envelope and
 keyring rewrap; the pairing vault's own rotation loses at most one ten-minute
 window of unclaimed pairings, which retry; the recording vault has no keyring,
 so rotating its key strands prior recordings — a bounded, recorded loss, not a
-silent one.
+silent one. The content vault has no keyring either, so rotating
+`CONTENT_ENCRYPTION_KEY` strands every column it seals, together. That is the
+price of one vault over several columns rather than one per column, and it is
+paid deliberately: the separation that carries weight is credential from
+content, and splitting the content columns from each other would buy a finer
+blast radius at the cost of one production secret per column while every one of
+them stays readable to the same operator through the same application.
+
+The content vault is required rather than optional. `RuntimeConfig.validate/1`
+refuses a staging or production boot without its key, because the alternative
+is a node that accepts a voice transcript, a compaction summary, a preference
+observation, or a project note and then cannot seal it. There is deliberately
+no bridge to another vault's key of the kind `config/runtime.exs` still offers
+the pairing vault: that bridge is what #192 found and #253 repeated, and a
+vault added after both should not reintroduce it.
 
 Amended 2026-08-25 (issue #193). `OpenAgents.Forge.AtRest.sealed_columns/0`
-names the column each of these three vaults seals, and
-`test/openagents/forge/at_rest_test.exs` reads each column back with raw SQL
-after a real write, so "sealed" is checked against PostgreSQL rather than
-against the vault's own unit tests. A fourth vault would have to appear there
-before `EXIT-006` could count it.
+names the column each vault seals, and `test/openagents/forge/at_rest_test.exs`
+reads each column back with raw SQL after a real write, so "sealed" is checked
+against PostgreSQL rather than against the vault's own unit tests.
+
+Amended 2026-08-25 (issue #193, second pass). The fourth vault is
+`OpenAgents.ContentVault`, and it seals content rather than credentials:
+`voice_transcript_items.content`, `voice_sessions.compaction_summary`,
+`preference_observations.summary`, and `project_notes.body`. Its seals carry
+the column and the row identity as additional authenticated data, so ciphertext
+lifted from one row or one column does not open as another's sentence. The
+plaintext columns those replaced survive one more release, empty, because
+dropping a live column mid-roll breaks the nodes still writing into it; the
+contract migration removes them the way `machine_pairings.user_id` was removed
+a release after its last reader.
 
 Evidence: `OpenAgents.Machines.TokenVault`, `OpenAgents.Accounts.TokenVault`,
-`OpenAgents.Voice.RecordingVault`, `OpenAgents.Forge.AtRest`,
+`OpenAgents.Voice.RecordingVault`, `OpenAgents.ContentVault`,
+`OpenAgents.Forge.AtRest`,
 `OpenAgents.RuntimeConfig.validate/1`,
 `config/runtime.exs`, `test/openagents/machines/token_vault_test.exs`,
 `test/openagents/accounts/token_vault_test.exs`,
-`test/openagents/forge/at_rest_test.exs`, and
+`test/openagents/forge/at_rest_test.exs`,
+`test/openagents/forge/key_rotation_test.exs`, and
 `test/openagents/runtime_config_test.exs`.
 
 ### RELEASE-003 — Every published hostname can establish LiveView
@@ -4985,12 +5027,30 @@ That is the direction every other gather in this projection fails in.
 
 Amended 2026-08-25 (issue #193). The decision about which columns stop being
 server-readable is recorded in `docs/2026-08-25-encryption-at-rest.md` with its
-threat model, the cost to an account under an account-held key, and five
-rejected options. No content column is encrypted, and the reason is that an
-operator-held key protects a stolen dump and nothing else — the claim `EXIT-006`
-exists to keep off this page — while an account-held key ends search,
-rendering, and the `TRANSPARENCY-001` projections, and makes key loss permanent.
-The published key set did not change, so `STATUS-001` has nothing to move.
+threat model, the cost to an account under an account-held key, and the options
+rejected. The published key set did not change, so `STATUS-001` has nothing to
+move.
+
+Amended 2026-08-25 (issue #193, second pass). Four content columns are now
+sealed under `OpenAgents.ContentVault` — the voice transcript, the in-call
+compaction summary, the preference observation, and the project note — and the
+reason is narrower than "encryption at rest": each is read whole and searched
+by nothing, so a seal costs no feature. That is the whole test applied. The
+columns left in plaintext are left because a query reads them in a way a seal
+would end: `messages.content` carries a `search_vector` PostgreSQL generates
+from it, `issues.body`, `comments.body`, and `forum_posts.body_text` are
+matched with `ILIKE`, and the two `account_chat_runs` columns hold the same
+words that rest verbatim in `account_chat_events.payload` beside them, where
+the replay path reads them structurally. `plaintext_private_columns/0` now
+carries that reason per column, so the ledger records why a gap is open rather
+than only that it is.
+
+`encrypted_at_rest` is still `false`, and sealing four columns did not move it,
+which is the point. The boolean is `true` only when no private column rests as
+plaintext, and `operator_reads_source` is its negation, so this change cannot
+be read as protection from the operator: these seals are under a key the
+operator holds and defend against a stolen dump. `EXIT-006` exists to keep the
+larger claim off the page, and it still does.
 
 Amended 2026-08-24 (issue #178). The decision that a private export can be
 encrypted to a key the operator does not hold is recorded in

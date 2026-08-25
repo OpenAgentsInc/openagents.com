@@ -49,6 +49,19 @@ config :openagents,
        System.get_env("MACHINE_TOKEN_ENCRYPTION_KEY") ||
          Base.encode64("openagents-dev-machine-vault-key")
 
+# The voice recording vault and the content vault, each with its own key for
+# the same reason. Sealing the audio under one key and the words under another
+# is the whole point of VAULT-001: neither opens the other.
+config :openagents,
+       :voice_recording_encryption_key,
+       System.get_env("VOICE_RECORDING_ENCRYPTION_KEY") ||
+         Base.encode64("openagents-dev-recording-vaultkey")
+
+config :openagents,
+       :content_encryption_key,
+       System.get_env("CONTENT_ENCRYPTION_KEY") ||
+         Base.encode64("openagents-dev-content-vault-key3")
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #

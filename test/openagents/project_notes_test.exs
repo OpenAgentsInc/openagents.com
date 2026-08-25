@@ -4,6 +4,7 @@ defmodule OpenAgents.ProjectNotesTest do
   import OpenAgents.ProjectsFixtures
 
   alias OpenAgents.Projects
+  alias OpenAgents.Projects.ProjectNote
 
   setup do
     repository = repository_fixture()
@@ -50,8 +51,8 @@ defmodule OpenAgents.ProjectNotesTest do
 
       assert total == 2
       assert Enum.all?(notes, &(&1.kind == "activity"))
-      assert Enum.any?(notes, &(&1.body =~ "state"))
-      assert Enum.any?(notes, &(&1.body =~ "title"))
+      assert Enum.any?(notes, &(ProjectNote.text(&1) =~ "state"))
+      assert Enum.any?(notes, &(ProjectNote.text(&1) =~ "title"))
       assert Enum.all?(notes, &(&1.author == %{"login" => author.github_login}))
 
       assert [activity | _] = notes
@@ -75,7 +76,7 @@ defmodule OpenAgents.ProjectNotesTest do
       assert {:ok, note} =
                Projects.create_project_note(project, %{"body" => "- paused lane 3"}, author)
 
-      assert note.body == "- paused lane 3"
+      assert ProjectNote.text(note) == "- paused lane 3"
       assert note.kind == "note"
       assert note.author == %{"login" => author.github_login}
       assert note.author_user_id == author.id
@@ -114,8 +115,8 @@ defmodule OpenAgents.ProjectNotesTest do
       assert total == per_page + 3
       assert length(first_page) == per_page
       assert length(second_page) == 3
-      assert hd(first_page).body == "note #{per_page + 3}"
-      assert List.last(second_page).body == "note 1"
+      assert ProjectNote.text(hd(first_page)) == "note #{per_page + 3}"
+      assert ProjectNote.text(List.last(second_page)) == "note 1"
     end
 
     test "a note belongs to one project", %{project: project, author: author} do
@@ -134,7 +135,7 @@ defmodule OpenAgents.ProjectNotesTest do
       refute Projects.authored_by?(note, nil)
 
       assert {:ok, edited} = Projects.update_project_note(note, %{"body" => "mine, edited"})
-      assert edited.body == "mine, edited"
+      assert ProjectNote.text(edited) == "mine, edited"
       assert {:ok, _deleted} = Projects.delete_project_note(edited)
       assert Projects.count_project_notes(project) == 0
     end

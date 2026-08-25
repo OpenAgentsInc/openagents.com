@@ -8,6 +8,10 @@ set -eu
 : "${GITHUB_CLIENT_SECRET:?GITHUB_CLIENT_SECRET is required}"
 : "${GITHUB_TOKEN_ENCRYPTION_KEY:?GITHUB_TOKEN_ENCRYPTION_KEY is required}"
 : "${GITHUB_TOKEN_ENCRYPTION_KEY_ID:?GITHUB_TOKEN_ENCRYPTION_KEY_ID is required}"
+# The content vault's own key (VAULT-001, issue #193). No bridge exists to
+# another vault's key, so an unset value is a refused boot rather than two
+# vaults sealing under one key.
+: "${CONTENT_ENCRYPTION_KEY:?CONTENT_ENCRYPTION_KEY is required}"
 : "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
 : "${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}"
 

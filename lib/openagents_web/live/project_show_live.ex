@@ -28,6 +28,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
   alias OpenAgents.Issues
   alias OpenAgents.Markdown
   alias OpenAgents.Projects
+  alias OpenAgents.Projects.ProjectNote
   alias OpenAgents.Projects.PromiseRegistry
   alias OpenAgents.ProjectItems.ProjectItem
   alias OpenAgents.Repositories
@@ -742,7 +743,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
               <Circle.timeline_event
                 :if={note.kind == "activity"}
                 actor={author(note)}
-                text={note.body}
+                text={ProjectNote.text(note) || ""}
                 icon="history"
                 tone={:neutral}
                 at={stamp(note.inserted_at)}
@@ -753,7 +754,7 @@ defmodule OpenAgentsWeb.ProjectShowLive do
                 author={author(note)}
                 at={stamp(note.inserted_at)}
               >
-                {Markdown.to_html(note.body)}
+                {Markdown.to_html(ProjectNote.text(note) || "")}
                 <:actions>
                   <.button
                     :if={Projects.authored_by?(note, @current_user)}

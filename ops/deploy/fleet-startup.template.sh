@@ -44,6 +44,11 @@ export VOICE_RECORDING_ENCRYPTION_KEY="$(secret sarah-production-voice-recording
 # so two vaults sealed under one key and a GitHub rotation silently moved
 # the pairing vault too. The bridge was meant to last one deploy.
 export MACHINE_TOKEN_ENCRYPTION_KEY="$(secret openagents-machine-token-encryption-key)"
+# The content vault's own key (VAULT-001, issue #193). It seals voice
+# transcripts, in-call compaction summaries, preference observations, and
+# project notes. Nothing bridges to it and nothing bridges from it: an
+# unset value refuses the boot rather than borrowing another vault's key.
+export CONTENT_ENCRYPTION_KEY="$(secret openagents-content-encryption-key)"
 export RELEASE_COOKIE="$(secret sarah-release-cookie)"
 export OPENAGENTS_FORGE_OPERATOR_TOKEN="$(secret sarah-forge-operator-token)"
 export OPENAGENTS_POSTHOG_PROJECT_TOKEN="$(secret openagents-posthog-project-token)"
@@ -135,7 +140,7 @@ ENV_NAMES=(
   AI_GATEWAY_API_KEY
   GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
   GITHUB_TOKEN_ENCRYPTION_KEY VOICE_RECORDING_ENCRYPTION_KEY RELEASE_COOKIE
-  MACHINE_TOKEN_ENCRYPTION_KEY
+  MACHINE_TOKEN_ENCRYPTION_KEY CONTENT_ENCRYPTION_KEY
   OPENAGENTS_FORGE_OPERATOR_TOKEN OPENAGENTS_POSTHOG_PROJECT_TOKEN
   DATABASE_URL DNS_CLUSTER_QUERY
   GITHUB_OAUTH_SCOPES GITHUB_REDIRECT_URI GITHUB_TOKEN_DECRYPTION_KEYS_JSON

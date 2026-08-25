@@ -490,6 +490,10 @@ if config_env() == :prod and runtime_role == :web do
     voice: voice,
     voice_recording: voice_recording,
     voice_recording_encryption_key: optional_text.("VOICE_RECORDING_ENCRYPTION_KEY"),
+    # The content vault's own key. VAULT-001 forbids the bridge that #192
+    # found and #253 repeated, so there is deliberately no fallback here: an
+    # unset key is an unset key, and RuntimeConfig refuses the boot.
+    content_encryption_key: optional_text.("CONTENT_ENCRYPTION_KEY"),
     voice_recovery_worker_enabled: voice_enabled,
     voice_retention_worker_enabled: voice_retention_enabled,
     voice_retention_enabled: voice_retention_enabled,

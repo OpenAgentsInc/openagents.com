@@ -2,6 +2,8 @@ defmodule OpenAgents.VoiceSessionsTest do
   use OpenAgents.DataCase, async: false
   alias OpenAgents.{Conversations, Voice, VoiceSessions}
   alias OpenAgents.Voice.ProviderEvent
+  alias OpenAgents.Voice.Session
+  alias OpenAgents.Voice.TranscriptItem
 
   setup do
     previous_voice = Application.fetch_env!(:openagents, :voice)
@@ -105,9 +107,9 @@ defmodule OpenAgents.VoiceSessionsTest do
     assert Enum.map(Voice.list_events(stored), & &1.kind) == expected_event_kinds
 
     assert [
-             %{role: "user", content: "Tell me who you are."},
-             %{role: "assistant", content: "A durable final line."}
-           ] = Voice.list_transcript_items(stored)
+             %{role: "user", text: "Tell me who you are."},
+             %{role: "assistant", text: "A durable final line."}
+           ] = transcript_roles_and_text(stored)
 
     assert {:ok, ended} = VoiceSessions.end_session(stored)
     assert ended.status == "ended"
@@ -204,9 +206,9 @@ defmodule OpenAgents.VoiceSessionsTest do
     assert state.live_transcripts == %{}
 
     assert [
-             %{role: "user", content: "Say something long."},
-             %{role: "assistant", content: "The first words."}
-           ] = Voice.list_transcript_items(stored)
+             %{role: "user", text: "Say something long."},
+             %{role: "assistant", text: "The first words."}
+           ] = transcript_roles_and_text(stored)
 
     assert {:ok, _ended} = VoiceSessions.end_session(stored)
   end
@@ -1482,7 +1484,7 @@ defmodule OpenAgents.VoiceSessionsTest do
     assert state.compaction == nil
 
     stored = Voice.get_session!(session.id)
-    assert stored.compaction_summary == summary
+    assert Session.compaction_summary(stored) == summary
     assert stored.compaction_count == 1
     assert stored.status == "listening"
 
@@ -1558,5 +1560,13 @@ defmodule OpenAgents.VoiceSessionsTest do
                    1_000
 
     assert {:ok, _ended} = VoiceSessions.end_session(Voice.get_session!(session.id))
+  end
+
+  # Transcript text rests sealed (issue #193), so a transcript assertion asks
+  # the schema for the words rather than reading the column.
+  defp transcript_roles_and_text(session) do
+    session
+    |> Voice.list_transcript_items()
+    |> Enum.map(&%{role: &1.role, text: TranscriptItem.text(&1)})
   end
 end

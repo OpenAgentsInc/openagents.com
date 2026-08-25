@@ -38,6 +38,7 @@ defmodule OpenAgents.Forge.KeyRotationTest do
   import OpenAgents.IssuesFixtures
 
   alias OpenAgents.Accounts.TokenVault, as: GitHubVault
+  alias OpenAgents.ContentVault
   alias OpenAgents.Forge.{Verification, WAL}
   alias OpenAgents.Machines.TokenVault, as: MachineVault
   alias OpenAgents.Reputation
@@ -74,7 +75,14 @@ defmodule OpenAgents.Forge.KeyRotationTest do
     test "the verifier was compiled against no secret and no vault" do
       callees = external_calls(Verification)
 
-      for module <- [GitHubVault, MachineVault, RecordingVault, Reputation, OpenAgents.ApiTokens] do
+      for module <- [
+            GitHubVault,
+            MachineVault,
+            RecordingVault,
+            ContentVault,
+            Reputation,
+            OpenAgents.ApiTokens
+          ] do
         refute module in callees,
                "#{inspect(module)} reached OpenAgents.Forge.Verification. A receipt that " <>
                  "depends on a key stops being verifiable the moment that key rotates, " <>
@@ -281,6 +289,37 @@ defmodule OpenAgents.Forge.KeyRotationTest do
       )
     end
 
+    test "the content vault seals under its own key and no other vault's opens it" do
+      # VAULT-001, issue #193. The content vault is the fourth vault, and the
+      # bug #253 repeated is a vault reading someone else's key. So this asks
+      # the two questions that catch it: another vault's rotation must not
+      # reach sealed content, and this vault's own rotation must strand it
+      # rather than quietly falling back to a keyring it does not have.
+      content = Base.encode64(:crypto.strong_rand_bytes(32))
+      github = Base.encode64(:crypto.strong_rand_bytes(32))
+      binding = [Ecto.UUID.generate(), 1, "item-1", "user"]
+      scope = "voice_transcript_items.content"
+
+      sealed =
+        with_env([content_encryption_key: content, github_token_encryption_key: github], fn ->
+          assert {:ok, sealed} = ContentVault.seal("a sentence", scope, binding)
+          sealed
+        end)
+
+      rotated_github = Base.encode64(:crypto.strong_rand_bytes(32))
+
+      with_env(
+        [content_encryption_key: content, github_token_encryption_key: rotated_github],
+        fn ->
+          assert {:ok, "a sentence"} = ContentVault.open(sealed, scope, binding)
+        end
+      )
+
+      with_env([content_encryption_key: Base.encode64(:crypto.strong_rand_bytes(32))], fn ->
+        assert {:error, :content_unsealable} = ContentVault.open(sealed, scope, binding)
+      end)
+    end
+
     test "the voice recording vault has no keyring either, so its key cannot rotate" do
       first = Base.encode64(:crypto.strong_rand_bytes(32))
       second = Base.encode64(:crypto.strong_rand_bytes(32))
@@ -365,7 +404,8 @@ defmodule OpenAgents.Forge.KeyRotationTest do
       :forge_operator_token,
       :github_token_encryption_key,
       :github_token_encryption_key_id,
-      :voice_recording_encryption_key
+      :voice_recording_encryption_key,
+      :content_encryption_key
     ]
 
     previous = Enum.map(keys, &{&1, Application.get_env(:openagents, &1)})

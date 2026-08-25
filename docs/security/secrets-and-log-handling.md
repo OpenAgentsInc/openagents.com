@@ -38,6 +38,7 @@ use distinct names and values and remains locked.
 | `MACHINE_TOKEN_ENCRYPTION_KEY` | `openagents-staging-machine-vault-active` | web, fleet | Scheduled vault rotation or suspected exposure; rotation strands at most one ten-minute window of unclaimed pairings (VAULT-001). Until this secret exists, `config/runtime.exs` bridges the machine pairing vault to `GITHUB_TOKEN_ENCRYPTION_KEY` |
 | `OPENAI_API_KEY` | `openagents-staging-openai-api-key` | web, fleet | Provider rotation or suspected prompt/log exposure |
 | `VOICE_RECORDING_ENCRYPTION_KEY` | `openagents-staging-voice-recording-key` | web and fleet when recording is admitted | Scheduled recording-key procedure or suspected exposure |
+| `CONTENT_ENCRYPTION_KEY` | `openagents-staging-content-vault-active` | web, fleet, migrator | Scheduled vault rotation or suspected exposure; the content vault has no keyring, so rotation strands every sealed voice transcript, compaction summary, preference observation, and project note (VAULT-001) |
 | `OPENAGENTS_FORGE_OPERATOR_TOKEN` | `openagents-staging-forge-operator-token` | web, fleet, builder | Scheduled rotation, builder replacement, or suspected URL/argv/log exposure |
 | `RELEASE_COOKIE` | `openagents-staging-release-cookie` | web, fleet, deployer | Fleet-wide coordinated rotation or suspected exposure |
 | Connected Codex account slot 1 | `openagents-staging-scv-codex-operator-1` | web and fleet may add and read versions; an isolated Codex SCV runtime may read one exact version | Operator disconnect, OpenAI reauthentication, or suspected exposure |

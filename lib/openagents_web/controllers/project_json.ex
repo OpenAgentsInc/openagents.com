@@ -74,7 +74,7 @@ defmodule OpenAgentsWeb.ProjectJSON do
     %{
       id: note.id,
       kind: note.kind,
-      body: note.body,
+      body: OpenAgents.Projects.ProjectNote.text(note) || "",
       author: note.author,
       created_at: note.inserted_at,
       updated_at: note.updated_at

@@ -126,7 +126,7 @@ append_secret() {
 mkdir -p /run/openagents
 fetch_secret "$runtime_secret" /run/openagents/runtime.env
 
-if grep -Eq '^(DATABASE_URL|SECRET_KEY_BASE|GITHUB_CLIENT_SECRET|GITHUB_TOKEN_ENCRYPTION_KEY|GITHUB_TOKEN_DECRYPTION_KEYS_JSON|OPENAI_API_KEY|VOICE_RECORDING_ENCRYPTION_KEY|OPENAGENTS_FORGE_OPERATOR_TOKEN|RELEASE_COOKIE)=' /run/openagents/runtime.env; then
+if grep -Eq '^(DATABASE_URL|SECRET_KEY_BASE|GITHUB_CLIENT_SECRET|GITHUB_TOKEN_ENCRYPTION_KEY|GITHUB_TOKEN_DECRYPTION_KEYS_JSON|OPENAI_API_KEY|VOICE_RECORDING_ENCRYPTION_KEY|CONTENT_ENCRYPTION_KEY|OPENAGENTS_FORGE_OPERATOR_TOKEN|RELEASE_COOKIE)=' /run/openagents/runtime.env; then
   echo "Fleet configuration must not duplicate named secrets" >&2
   exit 1
 fi
@@ -138,6 +138,7 @@ append_secret GITHUB_TOKEN_ENCRYPTION_KEY openagents-staging-github-vault-active
 append_secret GITHUB_TOKEN_DECRYPTION_KEYS_JSON openagents-staging-github-vault-previous /run/openagents/runtime.env
 append_secret OPENAI_API_KEY openagents-staging-openai-api-key /run/openagents/runtime.env
 append_secret VOICE_RECORDING_ENCRYPTION_KEY openagents-staging-voice-recording-key /run/openagents/runtime.env
+append_secret CONTENT_ENCRYPTION_KEY openagents-staging-content-vault-active /run/openagents/runtime.env
 append_secret OPENAGENTS_FORGE_OPERATOR_TOKEN openagents-staging-forge-operator-token /run/openagents/runtime.env
 append_secret RELEASE_COOKIE openagents-staging-release-cookie /run/openagents/runtime.env
 

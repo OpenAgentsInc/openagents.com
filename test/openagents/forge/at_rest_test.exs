@@ -20,12 +20,21 @@ defmodule OpenAgents.Forge.AtRestTest do
   use OpenAgents.DataCase, async: false
 
   alias OpenAgents.Accounts
+  alias OpenAgents.Provenance.Canonical
+  alias OpenAgents.Chat.AccountRun
+  alias OpenAgents.ContentVault
   alias OpenAgents.Conversations
   alias OpenAgents.Forge.AtRest
+  alias OpenAgents.Forum
   alias OpenAgents.Machines
+  alias OpenAgents.Preferences
+  alias OpenAgents.Preferences.Observation
+  alias OpenAgents.Projects
+  alias OpenAgents.Projects.ProjectNote
   alias OpenAgents.Repo
   alias OpenAgents.Voice
   alias OpenAgents.Voice.Config
+  alias OpenAgents.Voice.Session
   alias OpenAgents.Voice.TranscriptItem
 
   describe "the sealed columns rest as ciphertext" do
@@ -89,6 +98,116 @@ defmodule OpenAgents.Forge.AtRestTest do
 
       refute contains?(stored, audio),
              "voice_recording_chunks.data holds the audio VOICE-012 says is sealed"
+    end
+  end
+
+  describe "the sealed content columns rest as ciphertext" do
+    # Issue #193. Each of these writes through the application path a person
+    # actually reaches, then asks PostgreSQL two questions: is the ciphertext
+    # column free of the words, and is the plaintext column it replaced empty.
+    # The second question is the one a round-trip test cannot ask.
+    test "a voice transcript is not readable in its own column" do
+      content = "sealed-transcript-#{System.unique_integer([:positive])}"
+      session = admitted_voice_session("at-rest-sealed-transcript")
+
+      {:ok, item} =
+        %TranscriptItem{}
+        |> TranscriptItem.create_changeset(%{
+          voice_session_id: session.id,
+          generation: session.generation,
+          provider_item_id: "item-#{System.unique_integer([:positive])}",
+          role: "user",
+          content: content,
+          status: "final",
+          observed_at: DateTime.utc_now()
+        })
+        |> Repo.insert()
+
+      assert TranscriptItem.text(Repo.get!(TranscriptItem, item.id)) == content
+
+      assert_sealed("voice_transcript_items", "content_ciphertext", "content", item.id, content)
+    end
+
+    test "an in-call compaction summary is not readable in its own column" do
+      summary = "sealed-compaction-#{System.unique_integer([:positive])}"
+      session = admitted_voice_session("at-rest-sealed-compaction")
+
+      assert {:ok, updated, ^summary} =
+               Voice.record_compaction_summary(session, session.generation, summary)
+
+      assert Session.compaction_summary(Repo.get!(Session, updated.id)) == summary
+
+      assert_sealed(
+        "voice_sessions",
+        "compaction_summary_ciphertext",
+        "compaction_summary",
+        session.id,
+        summary
+      )
+    end
+
+    test "a preference observation summary is not readable in its own column" do
+      summary = "sealed-observation-#{System.unique_integer([:positive])}"
+      {owner, conversation} = owner_conversation("at-rest-sealed-observation")
+      {:ok, source} = Conversations.create_voice_context_message(conversation, "source")
+
+      assert {:ok, observation} =
+               Preferences.observe(owner, %{
+                 "source_kind" => "current_user_message",
+                 "source_message_id" => source.id,
+                 "summary" => summary,
+                 "confidence_millis" => 900,
+                 "proposer_id" => "openagents.at_rest.test",
+                 "proposer_digest" => Canonical.sha256("openagents.at_rest.test")
+               })
+
+      assert Observation.summary(Repo.get!(Observation, observation.id)) == summary
+
+      assert_sealed(
+        "preference_observations",
+        "summary_ciphertext",
+        "summary",
+        observation.id,
+        summary
+      )
+    end
+
+    test "a project note body is not readable in its own column" do
+      body = "sealed-note-#{System.unique_integer([:positive])}"
+      repository = OpenAgents.AccountsFixtures.repository_fixture()
+      author = github_user("at-rest-sealed-note")
+
+      {:ok, project} =
+        Projects.create_project(repository, %{title: "At rest", owner: author.github_login})
+
+      assert {:ok, note} = Projects.create_project_note(project, %{"body" => body}, author)
+      assert ProjectNote.text(Repo.get!(ProjectNote, note.id)) == body
+
+      assert_sealed("project_notes", "body_ciphertext", "body", note.id, body)
+    end
+
+    test "a seal does not open under another column or another row" do
+      # The additional authenticated data is the reason the ledger can name a
+      # column rather than a key: ciphertext lifted out of one row does not
+      # become someone else's sentence in another.
+      content = "bound-#{System.unique_integer([:positive])}"
+      binding = ["11111111-1111-1111-1111-111111111111", 1, "item-1", "user"]
+
+      assert {:ok, sealed} =
+               ContentVault.seal(content, "voice_transcript_items.content", binding)
+
+      assert {:ok, ^content} =
+               ContentVault.open(sealed, "voice_transcript_items.content", binding)
+
+      assert {:error, :content_unsealable} =
+               ContentVault.open(sealed, "project_notes.body", binding)
+
+      assert {:error, :content_unsealable} =
+               ContentVault.open(
+                 sealed,
+                 "voice_transcript_items.content",
+                 ["11111111-1111-1111-1111-111111111111", 1, "item-1", "assistant"]
+               )
     end
   end
 
@@ -207,6 +326,21 @@ defmodule OpenAgents.Forge.AtRestTest do
     end
   end
 
+  defp assert_sealed(table, ciphertext_column, plaintext_column, id, written) do
+    sealed = raw_column(table, ciphertext_column, id)
+
+    assert is_binary(sealed) and byte_size(sealed) > 0,
+           "#{table}.#{ciphertext_column} is named as sealed but holds nothing"
+
+    refute contains?(sealed, written),
+           "#{table}.#{ciphertext_column} holds the text it was supposed to seal"
+
+    assert is_nil(raw_column(table, plaintext_column, id)),
+           "#{table}.#{plaintext_column} still holds a value. The seal is only a seal " <>
+             "when the column it replaced is empty; a row written through the current " <>
+             "release must leave nothing behind for the contract migration to drop."
+  end
+
   # ── reading PostgreSQL rather than Ecto ──────────────────────────────────
 
   defp raw_column(table, column, id) do
@@ -290,6 +424,57 @@ defmodule OpenAgents.Forge.AtRestTest do
     {item.id, content}
   end
 
+  defp write_private_row(%{table: "forum_posts", column: "body_text"}) do
+    body = "plaintext-forum-#{System.unique_integer([:positive])}"
+
+    {:ok, forum} =
+      %Forum.Forum{}
+      |> Forum.Forum.changeset(%{
+        slug: "at-rest-#{System.unique_integer([:positive])}",
+        title: "At rest"
+      })
+      |> Repo.insert()
+
+    {:ok, topic} =
+      Forum.create_topic(forum, %{
+        actor_ref: "agent:user_#{Ecto.UUID.generate()}",
+        actor_display_name: "At Rest",
+        actor_slug: "at-rest",
+        title: "At rest",
+        slug: "at-rest-#{System.unique_integer([:positive])}",
+        body_text: body
+      })
+
+    [post] = Forum.list_posts(topic)
+
+    {post.id, body}
+  end
+
+  defp write_private_row(%{table: "account_chat_runs", column: column}) do
+    content = "plaintext-chat-#{column}-#{System.unique_integer([:positive])}"
+    {:ok, conversation} = Conversations.ensure_conversation("at-rest-chat-#{column}")
+
+    attributes =
+      Map.put(
+        %{
+          status: "completed",
+          backend: List.first(OpenAgents.Chat.Backends.ids()),
+          reasoning_effort: "low",
+          user_content: content,
+          started_at: DateTime.utc_now()
+        },
+        String.to_existing_atom(column),
+        content
+      )
+
+    {:ok, run} =
+      %AccountRun{conversation_id: conversation.id}
+      |> AccountRun.changeset(attributes)
+      |> Repo.insert()
+
+    {run.id, content}
+  end
+
   defp write_private_row(%{table: "issues", column: "body"}) do
     body = "plaintext-issue-#{System.unique_integer([:positive])}"
     repository = OpenAgents.AccountsFixtures.repository_fixture()
@@ -325,6 +510,11 @@ defmodule OpenAgents.Forge.AtRestTest do
   defp github_user(key) do
     {:ok, user} = Accounts.upsert_github_user(github_profile(key))
     user
+  end
+
+  defp owner_conversation(key) do
+    {:ok, conversation} = Conversations.ensure_conversation(key)
+    {Conversations.get_conversation_owner!(conversation), conversation}
   end
 
   defp admitted_voice_session(key) do

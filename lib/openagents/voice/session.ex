@@ -4,8 +4,11 @@ defmodule OpenAgents.Voice.Session do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias OpenAgents.ContentVault
+
   @statuses ~w(connecting listening responding interrupted reconnecting ended failed)
   @digest_regex ~r/\A[0-9a-f]{64}\z/
+  @compaction_summary_scope "voice_sessions.compaction_summary"
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -37,7 +40,8 @@ defmodule OpenAgents.Voice.Session do
     field :program_artifact_receipt, :map
     field :event_sequence, :integer, default: 0
     field :usage, :map, default: %{}
-    field :compaction_summary, :string
+    field :compaction_summary, :string, redact: true
+    field :compaction_summary_ciphertext, :binary, redact: true
     field :compaction_count, :integer, default: 0
     field :started_at, :utc_datetime_usec
     field :connected_at, :utc_datetime_usec
@@ -150,7 +154,55 @@ defmodule OpenAgents.Voice.Session do
     |> validate_required([:compaction_summary, :compaction_count])
     |> validate_number(:compaction_count, greater_than_or_equal_to: 0)
     |> validate_length(:compaction_summary, min: 1, max: 8_192, count: :bytes)
+    |> seal_compaction_summary()
   end
+
+  @doc "The column this schema's sealed summary belongs to."
+  @spec compaction_summary_scope() :: String.t()
+  def compaction_summary_scope, do: @compaction_summary_scope
+
+  @doc """
+  The in-call compaction summary, opened from the seal.
+
+  Falls back to the plaintext column for a row an un-replaced node wrote during
+  a rolling replacement, and is `nil` once retention has purged it.
+  """
+  @spec compaction_summary(%__MODULE__{}) :: String.t() | nil
+  def compaction_summary(%__MODULE__{compaction_summary_ciphertext: sealed} = session)
+      when is_binary(sealed),
+      do:
+        ContentVault.text(sealed, @compaction_summary_scope, compaction_summary_binding(session))
+
+  def compaction_summary(%__MODULE__{compaction_summary: summary}), do: summary
+
+  @doc "The row identity a sealed compaction summary is bound to."
+  @spec compaction_summary_binding(%__MODULE__{}) :: ContentVault.binding()
+  def compaction_summary_binding(%__MODULE__{} = session), do: [session.id, session.generation]
+
+  # Sealed in the changeset so no update path reaches this column with the
+  # words still readable. Retention nulls both halves together, which is why
+  # this only ever runs on a change.
+  defp seal_compaction_summary(%Ecto.Changeset{valid?: true} = changeset) do
+    case get_change(changeset, :compaction_summary) do
+      nil ->
+        changeset
+
+      summary ->
+        binding = [get_field(changeset, :id), get_field(changeset, :generation)]
+
+        case ContentVault.seal(summary, @compaction_summary_scope, binding) do
+          {:ok, sealed} ->
+            changeset
+            |> put_change(:compaction_summary_ciphertext, sealed)
+            |> force_change(:compaction_summary, nil)
+
+          {:error, reason} ->
+            add_error(changeset, :compaction_summary, "cannot be sealed", reason: reason)
+        end
+    end
+  end
+
+  defp seal_compaction_summary(changeset), do: changeset
 
   defp validate_map(changeset, field, maximum_bytes) do
     validate_change(changeset, field, fn ^field, value ->

@@ -60,6 +60,10 @@ MIX_ENV=prod mix release --overwrite
 
 secret_key_base=$(openssl rand -base64 64 | tr -d '\n')
 github_token_key=$(openssl rand -base64 32 | tr -d '\n')
+# The content vault seals private content under its own key (VAULT-001,
+# issue #193). There is no bridge to the GitHub key, so the smoke provides
+# its own or the release refuses to boot.
+content_key=$(openssl rand -base64 32 | tr -d '\n')
 
 echo "Checking the release configuration profile"
 readiness_report=$(env \
@@ -68,6 +72,7 @@ readiness_report=$(env \
   GITHUB_CLIENT_SECRET="release-smoke-secret" \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
   GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-release-smoke-2026-08" \
+  CONTENT_ENCRYPTION_KEY="$content_key" \
   OPENAI_API_KEY="release-smoke-openai-key" \
   POOL_SIZE="2" \
   PORT="$port" \
@@ -88,6 +93,7 @@ env \
   GITHUB_CLIENT_SECRET="release-smoke-secret" \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
   GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-release-smoke-2026-08" \
+  CONTENT_ENCRYPTION_KEY="$content_key" \
   OPENAI_API_KEY="release-smoke-openai-key" \
   PHX_SERVER="true" \
   POOL_SIZE="2" \

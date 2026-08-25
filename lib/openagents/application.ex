@@ -5,6 +5,8 @@ defmodule OpenAgents.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
     case Application.get_env(:openagents, :runtime_role, :web) do
@@ -28,6 +30,13 @@ defmodule OpenAgents.Application do
     _persona = OpenAgents.Persona.install!(source_manifest)
     _program_catalog = OpenAgents.ProgramArtifacts.install!()
     :ok = OpenAgents.Voice.Config.validate_boot!()
+
+    unless OpenAgents.ContentVault.configured?() do
+      Logger.warning(
+        "OpenAgents.ContentVault is not configured: :content_encryption_key is missing or not a 32-byte base64-encoded key. " <>
+          "Writing sealed transcript, project note, observation, or session summary content will fail."
+      )
+    end
 
     # Build and install the tool catalog; this snapshot is passed to the
     # embedding warmer and the turn supervisor below.

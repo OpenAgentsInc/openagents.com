@@ -219,6 +219,24 @@ defmodule OpenAgents.RuntimeConfigTest do
              RuntimeConfig.validate(settings)
   end
 
+  test "a release refuses to boot without the content vault's own key" do
+    # VAULT-001, issue #193. Nothing bridges to this key, so an unset value has
+    # to stop the boot: the alternative is a node that accepts a project note
+    # or a voice transcript and then cannot seal it.
+    settings = Map.put(staging_settings(), :content_encryption_key, nil)
+
+    assert {:error, %{setting: :content_encryption_key}} = RuntimeConfig.validate(settings)
+
+    borrowed =
+      Map.put(
+        staging_settings(),
+        :content_encryption_key,
+        "not-a-base64-encoded-32-byte-key"
+      )
+
+    assert {:error, %{setting: :content_encryption_key}} = RuntimeConfig.validate(borrowed)
+  end
+
   test "hot-load examples are executable startup policy, not prose" do
     settings =
       staging_settings()

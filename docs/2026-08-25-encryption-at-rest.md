@@ -4,6 +4,8 @@
 **Issue:** #193
 **Parent:** #94
 **Companion:** `docs/2026-08-24-private-export-encryption.md`
+**Revised:** 2026-08-25, second pass. Section 8 records what changed and why
+the first pass's answer was narrower than the question.
 
 #178 asked whether a private export can be encrypted to a key the operator does
 not hold. It can, and is. That decision deliberately left the other half open,
@@ -130,7 +132,10 @@ another. `cloak_ecto`'s default is a single global keyring, which is the shape
 already here would trade a proven property for a familiar name.
 
 **Seal `voice_transcript_items.content` alone, since the audio beside it is
-sealed.** Rejected, and it was the closest call. The asymmetry is real, but the
+sealed.** Rejected in the first pass, and it was the closest call. **Overturned
+in section 8** — the reasoning below proves the seal does not close the *threat*
+while `messages.content` is searchable, which is true, and then wrongly
+concludes that it is not worth doing. The asymmetry is real, but the
 same words rest in `messages.content`, which is searched. Sealing one and not
 the other would move a number without moving the threat model, which is the
 failure mode this whole document is written against. It is recorded in section
@@ -188,10 +193,155 @@ it earned it.
 
 ## 7. What is still open
 
-- **Content columns are plaintext, and the operator reads them.** That is the
-  decision, not a gap in it. #193 stays open because the acceptance criteria
-  say it does: encryption did not land, and `/status` keeps publishing `false`.
+Sections 1 through 6 are the first pass and are kept as written. Section 8
+revises them: four content columns are sealed now, and the list below is
+narrower than it was. Read section 8 for the current state.
+
+- **Some content columns are plaintext, and the operator reads them.** Section
+  8.2 names each one and the query that keeps it readable. `/status` keeps
+  publishing `encrypted_at_rest: false` while any of them remains, which is the
+  outcome `EXIT-006` exists to produce.
 - **No operator read is audited.** `ADMIN-001`. An access log the operator
   writes into the operator's own database is evidence to the operator and to
   nobody else; #151 and #168 carry the external anchor.
 - **The transcript/audio asymmetry.** Section 4. Recorded, not closed.
+
+## 8. Second pass: seal everything a seal costs nothing
+
+The first pass above answered "should content be encrypted?" with a threat
+model, and the threat model said an operator-held key protects a stolen dump
+and nothing else. That is still true, and nothing below claims otherwise. But
+it answered a question nobody had to ask as one question, when it is two:
+
+1. **Should content stop being server-readable?** That needs an account-held
+   key, it ends search and rendering, and key loss becomes permanent. Section 4
+   still stands, and nobody has asked for it.
+2. **Should content that nothing reads still rest readable in a stolen dump?**
+   No. A seal that costs no feature is worth having even when it only defends
+   against theft, and "it does not defend against the operator" is an argument
+   for not *claiming* more, not for leaving plaintext on disk.
+
+The first pass collapsed the two and answered only the first. The owner's
+decision is the second: **encrypt as much as we can.** What follows is what
+that turned out to mean.
+
+### 8.1 The test that decides each column
+
+A column is sealed when nothing reads it except whole. A column stays plaintext
+when a query reads it in a way a seal would end — and the query is named, so
+the reason is checkable rather than asserted.
+
+That is the entire test. It is not about how sensitive the words are; it is
+about whether encryption costs a working feature. `INVARIANTS.md` preamble is
+the reason it is written this way: a gap left open needs a reason a reader can
+falsify.
+
+### 8.2 The inventory, from `information_schema`
+
+Every `text`, `varchar`, and `bytea` column whose name carries content-shaped
+vocabulary — `body`, `content`, `text`, `transcript`, `message`, `prompt`,
+`summary`, `description`, `note`, `payload`, `data` — was listed from the
+catalog rather than from memory. Of 972 text-shaped columns, 38 matched, and
+most of those are digests, enum-ish kinds, or public metadata. The private
+content columns, and what happened to each:
+
+**Sealed under `OpenAgents.ContentVault`:**
+
+| Column | Readers | Why a seal costs nothing |
+| --- | --- | --- |
+| `voice_transcript_items.content` | one: `OpenAgents.Timeline`, whole then truncated | no index, no predicate, no export path |
+| `voice_sessions.compaction_summary` | none — written, held in process state, purged | never read back from PostgreSQL at all |
+| `preference_observations.summary` | none — hashed into `evidence_digest` at write | the digest commits to the words; the column is not read |
+| `project_notes.body` | REST JSON and the project page, whole | no predicate, no index; rendering decrypts |
+
+**Left plaintext, with the query that keeps it there:**
+
+| Column | What reads it |
+| --- | --- |
+| `messages.content` | a `search_vector` PostgreSQL *generates* from this column, indexed `USING GIN`, driving `OpenAgents.Memory.LexicalRecall`. Sealing it ends lexical recall over your own history. This is the one the owner named, and it is the one that cannot move. |
+| `issues.body` | `OpenAgents.Issues.search/2` and `OpenAgents.Issues.TaskReferences`, both `ILIKE` |
+| `comments.body` | `OpenAgents.Issues.TaskReferences`, `ILIKE` |
+| `forum_posts.body_text` | `OpenAgents.Forum.search/2`, `ILIKE` |
+| `account_chat_runs.user_content` | nothing searches it — but the same words rest verbatim in `account_chat_events.payload`, which the replay path reads structurally. Sealing the text column alone moves the plaintext eight inches sideways. |
+| `account_chat_runs.assistant_content` | the same, plus the `completion` map beside it |
+
+**Not private content**, so out of scope rather than left: digests
+(`content_digest`, `payload_digest`), enum-ish kinds (`content_kind`,
+`transcript_kind`, `data_type`), token counters, public repository and project
+descriptions, published changelog and incident summaries, and
+`verified_artifact_listings.owner_description`, which is marketplace copy the
+listing exists to publish.
+
+`account_chat_runs` is the honest disappointment here. It is real private
+conversation, nothing searches it, and it is still plaintext — because the
+duplicate beside it is jsonb the streaming replay path reads by key, and
+sealing that is its own change with its own decisions about what stays
+structured. `plaintext_private_columns/0` carries that reason, so it is a
+tracked gap rather than a silence.
+
+### 8.3 One vault, four columns, its own key
+
+`OpenAgents.ContentVault` is the fourth vault. AES-256-GCM, versioned framing,
+and additional authenticated data naming the column and the row, so ciphertext
+lifted out of one row does not open as another's sentence.
+
+It is one vault over four columns rather than four vaults. `VAULT-001`'s
+property is that no vault reads another vault's key, and that holds: this vault
+reads `:content_encryption_key` and nothing else, with no bridge of the kind
+`config/runtime.exs` still offers the pairing vault — the bridge #192 found and
+#253 repeated. What one-vault-per-column would buy is a finer rotation blast
+radius, at the price of one production secret per column, for columns that are
+all readable to the same operator through the same application. The cost is
+recorded instead: rotating this key strands all four columns together.
+
+The key is **required**, not optional. Without it a transcript, a summary, an
+observation, and a note each refuse to be written rather than being written
+readable, so `RuntimeConfig.validate/1` refuses a staging or production boot
+without it. `cloak_ecto` is still rejected, for the reason section 5 gives.
+
+### 8.4 Expand and contract, because the fleet rolls
+
+Each column got a sibling `*_ciphertext` column, a backfill that seals every
+existing row and nulls the plaintext, and a `_present` check constraint so "this
+row has text" stays true while both halves are live. The plaintext columns are
+still declared and still read as a fallback, because `RELEASE-006`'s rolling
+replacement leaves nodes on the previous release writing into them. They are
+dropped by a contract migration a release later, the way
+`machine_pairings.user_id` was.
+
+Two limits, recorded rather than implied:
+
+- **Dead tuples.** `UPDATE ... SET content = NULL` writes a new row version and
+  leaves the old one on disk until autovacuum reclaims it. The plaintext
+  survives in dead tuples for a bounded window after the backfill.
+- **The roll window.** A node still running the previous release writes
+  plaintext for as long as the replacement takes. Those rows are readable until
+  the contract migration, which is why the fallback reader exists.
+
+### 8.5 What the status page says now
+
+`encrypted_at_rest` is still `false`, and sealing four columns did not move it.
+That is the design working. The boolean is `true` only when *no* private column
+rests as plaintext, and `operator_reads_source` is its negation, so this change
+cannot be mistaken for protection from the operator. `EXIT-006` exists to keep
+that claim off the page, and it still does.
+
+### 8.6 Proof
+
+`test/openagents/forge/at_rest_test.exs` gained a `describe` block that, for
+each sealed column, writes through the application path a person reaches and
+then asks PostgreSQL two questions with raw SQL: is the ciphertext column free
+of the words, and is the plaintext column it replaced empty. The second is the
+one a round-trip test cannot ask — a schema that seals on write and opens on
+read passes a round trip whether or not anything reached disk.
+
+`test/openagents/forge/key_rotation_test.exs` adds the two questions #253 is
+about: another vault's rotation must not reach sealed content, and this vault's
+own rotation must strand it rather than falling back to a keyring it does not
+have.
+
+The population still comes from `information_schema`. `content_ciphertext`,
+`summary_ciphertext`, `compaction_summary_ciphertext`, and `body_ciphertext`
+all match the secret-shaped pattern on `cipher`, so each had to be classified
+before the proof would go green — the same mechanism that catches a plaintext
+token column now catches an unclassified ciphertext one.

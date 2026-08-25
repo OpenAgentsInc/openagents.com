@@ -101,6 +101,7 @@ defmodule OpenAgents.Voice.Retention do
           # with the operational window; compaction_count stays as an
           # aggregate lifecycle fact.
           compaction_summary: nil,
+          compaction_summary_ciphertext: nil,
           operational_purged_at: now
         })
         |> Repo.update!()

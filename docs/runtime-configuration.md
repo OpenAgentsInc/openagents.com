@@ -160,6 +160,7 @@ arguments, repository URLs, receipts, or checked-in environment files.
 | Providers | `OPENAGENTS_INFERENCE_PROXY_URL` | HTTPS URL without credentials when computers are enabled; empty disables |
 | Computers | `OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS` | `300` through `2592000`; Gate 5 uses the 30-day maximum |
 | Recording | `VOICE_RECORDING_ENCRYPTION_KEY` | Base64-encoded 32-byte key when recording is enabled; empty disables recording storage |
+| Content | `CONTENT_ENCRYPTION_KEY` | Base64-encoded 32-byte key, required in staging and production. The content vault seals voice transcripts, in-call compaction summaries, preference observations, and project notes. It is the vault's own key: nothing bridges to it and nothing bridges from it (VAULT-001), so an unset value refuses the boot rather than borrowing another vault's key |
 
 `PHX_SERVER` is optional for evaluation commands. If set, it must be exactly
 `true` or `false`.

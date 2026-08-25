@@ -3,6 +3,10 @@ defmodule OpenAgents.Preferences.Observation do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias OpenAgents.ContentVault
+
+  @scope "preference_observations.summary"
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -11,7 +15,8 @@ defmodule OpenAgents.Preferences.Observation do
     belongs_to :owner, OpenAgents.Conversations.Visitor, foreign_key: :owner_visitor_id
     belongs_to :source_message, OpenAgents.Conversations.Message
     field :source_kind, :string
-    field :summary, :string
+    field :summary, :string, redact: true
+    field :summary_ciphertext, :binary, redact: true
     field :evidence_digest, :string
     field :confidence_millis, :integer
     field :observed_at, :utc_datetime_usec
@@ -60,7 +65,51 @@ defmodule OpenAgents.Preferences.Observation do
     |> validate_number(:policy_version, greater_than: 0)
     |> validate_format(:evidence_digest, ~r/\A[0-9a-f]{64}\z/)
     |> validate_format(:proposer_digest, ~r/\A[0-9a-f]{64}\z/)
+    |> seal_summary()
     |> foreign_key_constraint(:owner_visitor_id)
     |> foreign_key_constraint(:source_message_id)
   end
+
+  @doc "The column this schema's sealed summary belongs to."
+  @spec scope() :: String.t()
+  def scope, do: @scope
+
+  @doc """
+  The observation summary, opened from the seal.
+
+  Falls back to the plaintext column for a row an un-replaced node wrote during
+  a rolling replacement.
+  """
+  @spec summary(%__MODULE__{}) :: String.t() | nil
+  def summary(%__MODULE__{summary_ciphertext: sealed} = observation) when is_binary(sealed),
+    do: ContentVault.text(sealed, @scope, seal_binding(observation))
+
+  def summary(%__MODULE__{summary: summary}), do: summary
+
+  @doc "The row identity a sealed summary is bound to."
+  @spec seal_binding(%__MODULE__{}) :: ContentVault.binding()
+  def seal_binding(%__MODULE__{} = observation),
+    do: [observation.owner_visitor_id, observation.evidence_digest]
+
+  # The summary is hashed into `evidence_digest` before this runs, so sealing
+  # it changes nothing about what the digest commits to -- only about what
+  # rests readable beside it.
+  defp seal_summary(%Ecto.Changeset{valid?: true} = changeset) do
+    binding = [
+      get_field(changeset, :owner_visitor_id),
+      get_field(changeset, :evidence_digest)
+    ]
+
+    case ContentVault.seal(get_change(changeset, :summary), @scope, binding) do
+      {:ok, sealed} ->
+        changeset
+        |> put_change(:summary_ciphertext, sealed)
+        |> force_change(:summary, nil)
+
+      {:error, reason} ->
+        add_error(changeset, :summary, "cannot be sealed", reason: reason)
+    end
+  end
+
+  defp seal_summary(changeset), do: changeset
 end

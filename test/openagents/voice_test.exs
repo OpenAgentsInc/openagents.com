@@ -2,7 +2,7 @@ defmodule OpenAgents.VoiceTest do
   use OpenAgents.DataCase, async: false
   alias OpenAgents.{Conversations, Voice}
   alias OpenAgents.Tools.{ExecutionContext, Registry, Runner}
-  alias OpenAgents.Voice.{Config, ProviderEvent, Session}
+  alias OpenAgents.Voice.{Config, ProviderEvent, Session, TranscriptItem}
 
   test "admits one immutable generation and fences duplicate, stale, and terminal work" do
     {:ok, conversation} = Conversations.ensure_conversation("voice-generation-browser")
@@ -104,7 +104,9 @@ defmodule OpenAgents.VoiceTest do
     assert final_session.usage["pricing_id"] == "openai.gpt-realtime-2.1.2026-08-16"
 
     assert [user, assistant] = Voice.list_transcript_items(final_session)
-    assert {user.role, user.status, user.content} == {"user", "final", "What do you remember?"}
+
+    assert {user.role, user.status, TranscriptItem.text(user)} ==
+             {"user", "final", "What do you remember?"}
 
     assert {assistant.role, assistant.provider_response_id, assistant.status} ==
              {"assistant", "response-1", "final"}

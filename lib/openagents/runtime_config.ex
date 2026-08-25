@@ -446,6 +446,15 @@ defmodule OpenAgents.RuntimeConfig do
           not encryption_key?(Map.get(settings, :voice_recording_encryption_key)) ->
         error(:voice_recording_encryption_key, "is required when recording is enabled")
 
+      # The content vault's own key (VAULT-001, issue #193). Without it a voice
+      # transcript, a compaction summary, a preference observation, and a
+      # project note all refuse to be written rather than being written
+      # readable, so a node missing this key is a node that cannot serve —
+      # which is worth finding at boot rather than at the first write.
+      environment in [:staging, :production] and
+          not encryption_key?(Map.get(settings, :content_encryption_key)) ->
+        error(:content_encryption_key, "must be a base64-encoded 32-byte key")
+
       features.voice_retention and not features.voice_recording ->
         error(:voice_retention_enabled, "requires voice recording")
 

@@ -577,7 +577,7 @@ defmodule OpenAgents.ProjectsTest do
       {:ok, _restored} = Projects.restore_project(archived, user)
 
       {notes, _total} = Projects.list_project_notes_page(project, kind: "activity")
-      bodies = Enum.map(notes, & &1.body)
+      bodies = Enum.map(notes, &OpenAgents.Projects.ProjectNote.text/1)
 
       assert Enum.any?(bodies, &(&1 =~ "Archived the project."))
       assert Enum.any?(bodies, &(&1 =~ "Restored the project from the archive."))

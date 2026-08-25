@@ -74,6 +74,9 @@ prepare_runtime() {
   proof_port=$((42000 + ($$ % 10000)))
   proof_secret=$(openssl rand -base64 64 | tr -d '\n')
   proof_token_key=$(openssl rand -base64 32 | tr -d '\n')
+  # The content vault's own key (VAULT-001, issue #193). Nothing bridges
+  # to it, so the proof supplies one or the release refuses to boot.
+  proof_content_key=$(openssl rand -base64 32 | tr -d '\n')
 }
 
 profile() {
@@ -83,6 +86,7 @@ profile() {
     GITHUB_CLIENT_SECRET="relup-proof-secret" \
     GITHUB_TOKEN_ENCRYPTION_KEY="$proof_token_key" \
     GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-relup-proof-2026-08" \
+    CONTENT_ENCRYPTION_KEY="$proof_content_key" \
     OPENAI_API_KEY="relup-proof-openai-key" \
     OPENAGENTS_RELUP_INSTALL_BARRIER_MS="${OPENAGENTS_RELUP_INSTALL_BARRIER_MS:-0}" \
     OPENAGENTS_RELUP_INSTALL_BARRIER_PATH="${OPENAGENTS_RELUP_INSTALL_BARRIER_PATH:-}" \

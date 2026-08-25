@@ -37,6 +37,7 @@ locals {
     "openagents-staging-github-vault-previous",
     "openagents-staging-openai-api-key",
     "openagents-staging-voice-recording-key",
+    "openagents-staging-content-vault-active",
     "openagents-staging-forge-operator-token",
     "openagents-staging-release-cookie",
     "openagents-staging-scv-codex-operator-1",
@@ -55,6 +56,7 @@ locals {
     "openagents-staging-github-vault-previous",
     "openagents-staging-openai-api-key",
     "openagents-staging-voice-recording-key",
+    "openagents-staging-content-vault-active",
     "openagents-staging-forge-operator-token",
     "openagents-staging-release-cookie"
   ])

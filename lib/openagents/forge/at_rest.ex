@@ -21,7 +21,10 @@ defmodule OpenAgents.Forge.AtRest do
 
   `plaintext_private_columns/0` names columns that hold private, user-authored
   content and rest as plaintext. Its entries are proven plaintext by reading
-  the raw column back through SQL, so the list cannot claim a gap that closed.
+  the raw column back through SQL, so the list cannot claim a gap that closed,
+  and each carries the query that keeps it readable — a column is left in
+  plaintext because something reads it in a way a seal would end, never because
+  nobody got to it.
 
   `encrypted_at_rest?/0` is the boolean `EXIT-006` publishes, and it is now
   derived: the private store is encrypted at rest exactly when no private
@@ -58,8 +61,13 @@ defmodule OpenAgents.Forge.AtRest do
           holds: String.t()
         }
 
-  @typedoc "One private column that rests as plaintext."
-  @type plaintext :: %{table: String.t(), column: String.t(), holds: String.t()}
+  @typedoc "One private column that rests as plaintext, and why it still does."
+  @type plaintext :: %{
+          table: String.t(),
+          column: String.t(),
+          holds: String.t(),
+          reason: String.t()
+        }
 
   # The regular expression the proof hands to `information_schema` to build the
   # population it checks this module against. It lives here so the module and
@@ -84,6 +92,30 @@ defmodule OpenAgents.Forge.AtRest do
       column: "data",
       vault: OpenAgents.Voice.RecordingVault,
       holds: "one slice of uploaded call audio"
+    },
+    %{
+      table: "voice_transcript_items",
+      column: "content_ciphertext",
+      vault: OpenAgents.ContentVault,
+      holds: "the voice conversation record VOICE-012 calls authority"
+    },
+    %{
+      table: "voice_sessions",
+      column: "compaction_summary_ciphertext",
+      vault: OpenAgents.ContentVault,
+      holds: "one in-call compaction summary"
+    },
+    %{
+      table: "preference_observations",
+      column: "summary_ciphertext",
+      vault: OpenAgents.ContentVault,
+      holds: "private evidence proposing a behavior preference"
+    },
+    %{
+      table: "project_notes",
+      column: "body_ciphertext",
+      vault: OpenAgents.ContentVault,
+      holds: "project discussion and activity"
     }
   ]
 
@@ -92,14 +124,50 @@ defmodule OpenAgents.Forge.AtRest do
   # `false`, which is where it already is; a column named here that turns out
   # to be sealed turns the proof red. Both failures understate the store.
   @plaintext_private [
-    %{table: "messages", column: "content", holds: "conversation messages"},
     %{
-      table: "voice_transcript_items",
+      table: "messages",
       column: "content",
-      holds: "the voice conversation record VOICE-012 calls authority"
+      holds: "conversation messages",
+      reason:
+        "a generated `search_vector` is computed from this column inside PostgreSQL " <>
+          "and indexed with GIN; sealing it ends lexical recall over your own history"
     },
-    %{table: "issues", column: "body", holds: "issue bodies"},
-    %{table: "comments", column: "body", holds: "issue and pull request comments"}
+    %{
+      table: "issues",
+      column: "body",
+      holds: "issue bodies",
+      reason:
+        "`OpenAgents.Issues.search/2` and `OpenAgents.Issues.TaskReferences` match it " <>
+          "with `ILIKE`; sealing it ends issue search and cross-references"
+    },
+    %{
+      table: "comments",
+      column: "body",
+      holds: "issue and pull request comments",
+      reason: "`OpenAgents.Issues.TaskReferences` matches it with `ILIKE`"
+    },
+    %{
+      table: "forum_posts",
+      column: "body_text",
+      holds: "forum replies",
+      reason: "`OpenAgents.Forum.search/2` matches it with `ILIKE`"
+    },
+    %{
+      table: "account_chat_runs",
+      column: "user_content",
+      holds: "what an account typed into the chat console",
+      reason:
+        "the same words rest verbatim in `account_chat_events.payload`, which the " <>
+          "replay path reads structurally; sealing one and not the other moves nothing"
+    },
+    %{
+      table: "account_chat_runs",
+      column: "assistant_content",
+      holds: "what the model replied in the chat console",
+      reason:
+        "the same words rest in the `text_delta` events and in the `completion` map " <>
+          "beside it, for the same reason"
+    }
   ]
 
   # Every column the catalog reports under `secret_shaped_pattern/0`. The proof
@@ -109,6 +177,12 @@ defmodule OpenAgents.Forge.AtRest do
     # Reversible secret material, sealed under a vault key.
     {"users", "github_token_ciphertext"} => :sealed,
     {"machine_pairings", "token_ciphertext"} => :sealed,
+
+    # Private content, sealed under the content vault's own key (issue #193).
+    {"preference_observations", "summary_ciphertext"} => :sealed,
+    {"project_notes", "body_ciphertext"} => :sealed,
+    {"voice_sessions", "compaction_summary_ciphertext"} => :sealed,
+    {"voice_transcript_items", "content_ciphertext"} => :sealed,
 
     # One-way SHA-256 of a bearer credential, unique-indexed because it is the
     # lookup key. Nothing reverses these, so nothing seals them.

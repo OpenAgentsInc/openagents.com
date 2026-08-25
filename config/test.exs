@@ -130,6 +130,11 @@ config :openagents, :scv_codex,
 
 config :openagents, :voice_recording_encryption_key, Base.encode64(:crypto.strong_rand_bytes(32))
 
+# The content vault's own key, generated per run and shared with nothing.
+# VAULT-001: a recording key must not open a transcript, and neither opens a
+# GitHub token.
+config :openagents, :content_encryption_key, Base.encode64(:crypto.strong_rand_bytes(32))
+
 config :openagents, :voice_recording,
   enabled: true,
   timeslice_ms: 5_000,

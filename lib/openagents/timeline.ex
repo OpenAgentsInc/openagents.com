@@ -153,7 +153,7 @@ defmodule OpenAgents.Timeline do
       timestamp: item.observed_at,
       kind: :turn,
       record_id: item.id,
-      summary: "Voice #{item.role}: #{shorten(item.content)}",
+      summary: "Voice #{item.role}: #{shorten(TranscriptItem.text(item))}",
       metadata: %{
         role: item.role,
         status: item.status,

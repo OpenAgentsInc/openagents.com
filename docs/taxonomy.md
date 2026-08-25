@@ -70,6 +70,17 @@ with `OpenAgents.Forge.RepoRef` before it reaches a path — a name is a legal
 path segment, so using one as a key silently builds a directory that projects
 nothing, which is what issue #190 found on the live node.
 
+**Behind and diverged** — two things a node's bare repository can be, and never
+the same word. The repository is a projection of the WAL, each node keeps its
+own, and a node **behind** the log has simply not replayed an entry yet: it
+serves a state the log records, and it catches up on its own. A node
+**diverged** from the log serves a state the log does not record at or after
+the sequence that node claims to have applied, and nothing about that clears
+itself. `OpenAgents.Forge.Verification.verify/2` reports which, with how far
+behind and on which node; `verify_cluster/2` calls a fleet **converging** while
+members are behind and **diverged** only when one contradicts the log. Never
+write "diverged" for a node that is merely behind (EXIT-002, issue #251).
+
 **MirrorWatch** — the component that exports accepted `main` commits from the
 forge to GitHub. GitHub is a mirror only; nothing on GitHub can affect what
 the forge serves.

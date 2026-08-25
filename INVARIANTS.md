@@ -4612,9 +4612,56 @@ cache. This proves that divergence between the WAL and what is served is
 detectable. The first is about replay; the second is about detection, and
 neither substitutes for the other.
 
+Amended 2026-08-25 (issue #251). The WAL is shared and the projections are not,
+so a node is routinely a few entries behind a push another node accepted
+seconds ago. Reporting that as `served_refs_diverged` and `object_missing`,
+which is what this did, made the two findings that mean "the served state
+contradicts the record" fire on a healthy forge under ordinary push traffic —
+so the check that would catch a real one is the check an operator learns to
+skip. Lag and divergence are now separated, and the separation is a property of
+the log rather than a tolerance.
+
+A projection is *located* on the log: the greatest sequence whose recorded
+post-state refs it serves exactly is its position, and `head_seq - position` is
+how far behind it is. A projection at some sequence carries no finding and
+reports `status: :behind`; a projection at no sequence reports
+`served_refs_diverged` against the state it claims, and `status: :diverged`.
+Lag runs one way only, which is what keeps the boundary tight: a node that has
+not replayed an entry is missing what that entry introduced and can never serve
+a ref the log has no record of, a ref at a value the log never recorded, or a
+value recorded before the state it is serving. `object_missing` is bounded by
+the position rather than waived: every object an entry at or below it
+introduced must still be present.
+
+The applied-sequence marker `OpenAgents.Forge.Sync` writes is the projection's
+own claim, so it bounds the search rather than answering it. Only sequences at
+or above it are candidates, which means rolling the marker forward makes the
+check stricter rather than quieter, and rolling it back to `-1` admits only
+older states the log itself records. A marker naming a sequence the log does
+not have is `applied_seq_beyond_log`, which is how a WAL truncated at the tail
+— contiguous `0..n-1` afterward, and so invisible to every other check here —
+surfaces on a node that had already applied past it.
+
+Two cases are named rather than hidden. A projection rolled back to a state the
+log passed through, with its marker rolled back to match, is reported as behind:
+from the WAL and the repository alone, that is the same observation as a node
+mid-replay. A deleted cache is an empty projection at sequence `-1`, which is
+what a node that has never replayed looks like; the report still says how far
+from the log it is, and `REPOSITORY-003` is what brings it back.
+
+Because a node answers only for its own projection, a report names the node, its
+applied sequence, its position, and its distance from the head.
+`verify_cluster/2` combines the members' answers into a verdict lag cannot move:
+`:converging` while nothing contradicts the log and some member is behind or
+silent, and `:diverged` only when a member contradicts the log, when a member
+cannot see a repository the others verified, or when two members report
+different chain links at the same sequence. A scheduled pass (#179) can
+therefore publish findings without publishing the fleet's replay window.
+
 Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.RepoRef`,
 `OpenAgents.Forge.WAL`, `OpenAgents.Forge.Repos`,
-`test/openagents/forge/independence_test.exs`, and
+`test/openagents/forge/independence_test.exs`,
+`test/openagents/forge/verification_test.exs`, and
 `test/openagents/forge/repo_ref_test.exs`.
 
 ### EXIT-003 — Recovery comes from the WAL, and the mirror is strictly lossy
@@ -5856,7 +5903,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | REPOSITORY-002 | `ops/ci/push-remote-check.sh`, `ops/dev/install-push-guard.sh`, `test/openagents/push_remote_contract_test.exs` |
 | REPOSITORY-003 | `test/openagents/forge/wal_replay_test.exs`, `test/openagents/forge/sync_test.exs`, `test/openagents/forge/independence_test.exs` |
 | EXIT-001 | `test/openagents/data_rights/export_inventory_test.exs`, `test/openagents/data_rights/account_export_test.exs` |
-| EXIT-002 | `test/openagents/forge/independence_test.exs` |
+| EXIT-002 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/verification_test.exs` |
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs`, `test/openagents_web/controllers/forge_anchor_controller_test.exs` |

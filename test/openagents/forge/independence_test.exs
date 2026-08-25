@@ -162,13 +162,22 @@ defmodule OpenAgents.Forge.IndependenceTest do
       assert %{"seq" => 0} = detail(findings, "entry_object_missing")
     end
 
-    test "a lost cache is reported as diverged refs and missing objects", context do
+    test "a lost cache is reported as an empty projection, not as a disagreement", context do
       seed_history!(context)
+      {:ok, %{status: :current, head_seq: head_seq}} = Verification.verify(context.repo)
       File.rm_rf!(Repos.bare_path(context.repo))
 
-      assert {:error, %{findings: findings}} = Verification.verify(context.repo)
-      assert detail(findings, "served_refs_diverged") != nil
-      assert detail(findings, "object_missing") != nil
+      # A cache that was deleted and a node that has not replayed yet are the
+      # same observation from the WAL and the repository alone, and the second
+      # is every node's ordinary state (issue #251). Both are reported as an
+      # empty projection at sequence -1 rather than as tampering, which is what
+      # `REPOSITORY-003` says a disposable projection is. It is still not
+      # reported as current: the report says how far from the log it is.
+      assert {:ok, report} = Verification.verify(context.repo)
+      assert report.findings == []
+      assert report.status == :behind
+      assert report.position == -1
+      assert report.behind == head_seq + 1
     end
 
     test "verification reaches no database", _context do

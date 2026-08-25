@@ -10,8 +10,7 @@ defmodule OpenAgents.Forge.Verification do
   matches the record, and it reaches that answer without PostgreSQL, without an
   operator credential, and without any row an operator can edit.
 
-  Four findings are possible, and each one names a distinct way the two can
-  disagree:
+  Each finding names a distinct way the two can disagree:
 
   * `entry_object_missing` — the index names an entry the store cannot produce.
   * `entry_digest_mismatch` — the entry the store produced is not the entry the
@@ -20,11 +19,15 @@ defmodule OpenAgents.Forge.Verification do
     changes the key it should have and the recorded key stops matching.
   * `entry_sequence_broken` — the entries are not the contiguous run `0..n-1`.
     A removed or renumbered entry shows up here.
-  * `served_refs_diverged` — a ref the repository serves is not the ref the WAL
-    last recorded for it, in either direction. A ref moved on disk without a
-    push produces this.
+  * `served_refs_diverged` — the repository serves a ref state the WAL never
+    recorded at or after the sequence this projection claims, in either
+    direction. A ref moved on disk without a push produces this; a ref an entry
+    this node has not replayed yet does not, and the next section is where that
+    line is drawn.
+  * `applied_seq_beyond_log` — the projection's applied-sequence marker names a
+    sequence the log does not have, so it claims an entry that is not there.
   * `object_missing` — the repository cannot produce an object the WAL says a
-    push introduced.
+    push it has applied introduced.
   * `object_unreachable` — the repository produces every ref tip but cannot
     produce something an advertised ref reaches, so a clone aborts partway
     through the walk even though every tip resolves.
@@ -47,6 +50,69 @@ defmodule OpenAgents.Forge.Verification do
   which is what made an absent repository report `wal_unreadable` — the finding
   that means "your log is gone" — for a log that was never there (issue #190).
 
+  ## Behind the log is not the same as disagreeing with it
+
+  One WAL, many projections. Every node keeps its own bare repository on its
+  own disk and brings it up by replaying entries when it reads
+  (`OpenAgents.Forge.Sync`), so a node is routinely a few entries behind a push
+  another node accepted seconds ago. That is the ordinary state of a healthy
+  fleet, and a verifier that calls it tampering is a verifier people learn to
+  ignore — which is what this reported until issue #251.
+
+  The two are told apart by locating the projection on the log rather than
+  comparing it to the head. The served ref map is compared against the ref map
+  each entry recorded as its post-state, and the greatest sequence whose
+  recorded state the projection serves exactly is its `:position`.
+
+  * A projection that sits at some sequence on the log is **behind** it by
+    `head_seq - position` entries. No finding, `status: :behind`, and
+    `{:ok, report}` — nothing contradicts the log.
+  * A projection that sits at no sequence on the log **disagrees** with it.
+    `served_refs_diverged` names each ref, `status: :diverged`, and
+    `{:error, report}`.
+
+  Lag only ever runs one way, which is what makes the boundary tight. A node
+  that has not replayed an entry is missing what that entry introduced; it can
+  never serve a ref the log has no record of, a ref at a value the log never
+  recorded, or a ref value the log recorded *before* the state the node is
+  serving. Each of those is still a finding however far behind the node is, and
+  `object_missing` is still a finding for every object an entry at or below the
+  projection's position introduced.
+
+  The applied-sequence marker `OpenAgents.Forge.Sync` writes
+  (`OpenAgents.Forge.Repos.applied_seq/1`) is the projection's own claim about
+  itself, so it bounds the search rather than answering it. Only sequences at
+  or above the marker are candidates: a projection serving a state older than
+  the sequence it claims to have applied is reported, and a marker rolled
+  forward to the head therefore silences nothing — it makes the check stricter,
+  because the head's refs still have to be there. A marker rolled back to `-1`
+  widens the search to the whole log and to the empty state, which is the one
+  thing it buys and it buys nothing else: every candidate is still a state the
+  log itself records, so no ref value the log never held is ever admitted. A
+  marker naming a sequence the log does not have is `applied_seq_beyond_log`,
+  which is how a log truncated at the tail surfaces on a node that had already
+  applied past it.
+
+  What this cannot separate is named rather than hidden. A projection rolled
+  back to a state the log itself passed through, with its marker rolled back to
+  match, is indistinguishable from a node that has not finished replaying,
+  because from the WAL and the repository alone those are the same observation.
+  It is reported as behind, not as clean, and a node that stays behind while
+  its peers catch up is what `verify_cluster/2` makes visible.
+
+  ## One repository, three answers
+
+  Because each node answers for its own projection, `verify/2` answers for one
+  node and says which: the report carries `:node`, `:applied_seq`,
+  `:position`, `:behind`, and `:head_seq`. `verify_cluster/2` asks every member
+  and combines the answers into one verdict that does not flicker while a node
+  replays: `:verified` when every member answered and every one is current,
+  `:converging` when nothing contradicts the log and some member is behind or
+  silent, `:diverged` when some member contradicts the log or two members
+  disagree about the log itself, and `:unavailable` when nothing was checked.
+  Lag moves a fleet between `:verified` and `:converging`, which is a state
+  that clears itself; only a real disagreement reaches `:diverged`.
+
   What this cannot do is stated as plainly as what it can. Content addressing
   and the chain make tampering *evident*, not *impossible*. An operator who
   rewrites an entry, its key, the index, and every link after it produces a
@@ -63,9 +129,11 @@ defmodule OpenAgents.Forge.Verification do
   only an operator who serves something other than what was pushed.
   """
 
+  alias OpenAgents.Cluster
   alias OpenAgents.Forge.{RepoRef, Repos, WAL}
 
   @internal_ref_prefix "refs/internal/"
+  @cluster_timeout_ms 30_000
 
   @typedoc "One disagreement between the WAL and what the repository serves."
   @type finding :: %{code: String.t(), detail: map()}
@@ -73,14 +141,47 @@ defmodule OpenAgents.Forge.Verification do
   @typedoc "An independently held commitment to one entry's link."
   @type anchor :: %{seq: non_neg_integer(), link: String.t()}
 
-  @typedoc "The verification outcome for one repository."
+  @typedoc "Where one node's projection sits relative to the log."
+  @type status :: :current | :behind | :diverged | :unresolved
+
+  @typedoc "The verification outcome for one repository, on one node."
   @type report :: %{
           repo: RepoRef.ref(),
           storage_key: RepoRef.storage_key() | nil,
+          node: node(),
           entries: non_neg_integer(),
           findings: [finding()],
           head: anchor() | nil,
-          chained_from: non_neg_integer() | nil
+          chained_from: non_neg_integer() | nil,
+          status: status(),
+          head_seq: integer(),
+          applied_seq: integer(),
+          position: integer() | nil,
+          behind: non_neg_integer() | nil
+        }
+
+  @typedoc "One member's contribution to a fleet-wide answer."
+  @type node_result :: %{
+          node: node(),
+          status: status() | :unreachable,
+          head_seq: integer() | nil,
+          applied_seq: integer() | nil,
+          position: integer() | nil,
+          behind: non_neg_integer() | nil,
+          entries: non_neg_integer() | nil,
+          head: anchor() | nil,
+          findings: [finding()],
+          reason: term() | nil
+        }
+
+  @typedoc "The verification outcome for one repository, across the fleet."
+  @type cluster_report :: %{
+          repo: RepoRef.ref(),
+          status: :verified | :converging | :diverged | :unavailable,
+          head_seq: integer() | nil,
+          log_agreement: :agreed | :disagreed | :unknown,
+          nodes: [node_result()],
+          findings: [%{node: node(), code: String.t(), detail: map()}]
         }
 
   @doc """
@@ -110,12 +211,21 @@ defmodule OpenAgents.Forge.Verification do
   what a caller remembers so it can anchor a later verification, and
   `:chained_from`, the first sequence that carries a link. Entries before that
   sequence predate the chain and are not covered by it.
+
+  This answers for one node's projection, and says so: `:node`, `:applied_seq`,
+  `:position`, `:behind`, and `:head_seq` place the answer on the log. A node
+  that has not replayed an entry yet returns `{:ok, report}` with
+  `status: :behind` and no findings, because being behind is not a
+  disagreement. Use `verify_cluster/2` for the fleet's answer.
   """
   @spec verify(RepoRef.ref(), keyword()) :: {:ok, report()} | {:error, report()}
   def verify(repo_ref, opts \\ []) when is_binary(repo_ref) and is_list(opts) do
     case RepoRef.storage_key(repo_ref) do
-      {:ok, storage_key} -> verify_storage_key(repo_ref, storage_key, opts)
-      {:error, reason} -> report(repo_ref, nil, [], [resolution_finding(repo_ref, reason)])
+      {:ok, storage_key} ->
+        verify_storage_key(repo_ref, storage_key, opts)
+
+      {:error, reason} ->
+        unresolved(repo_ref, nil, [resolution_finding(repo_ref, reason)])
     end
   end
 
@@ -123,20 +233,22 @@ defmodule OpenAgents.Forge.Verification do
     case WAL.read_index(storage_key) do
       {:ok, _generation, index} ->
         entries = WAL.entries(index)
+        projection = locate(storage_key, entries)
 
         findings =
           sequence_findings(entries) ++
             entry_findings(storage_key, entries) ++
-            ref_findings(storage_key, index) ++
-            object_findings(storage_key, entries) ++
-            reachability_findings(storage_key, index) ++
+            marker_findings(projection) ++
+            ref_findings(entries, projection) ++
+            object_findings(storage_key, entries, projection) ++
+            reachability_findings(storage_key, entries, projection) ++
             chain_findings(entries) ++
             anchor_findings(entries, normalize_anchor(opts[:anchor]))
 
-        report(repo_ref, storage_key, entries, findings)
+        report(repo_ref, storage_key, entries, findings, projection)
 
       {:error, reason} ->
-        report(repo_ref, storage_key, [], [
+        unresolved(repo_ref, storage_key, [
           finding("wal_unreadable", %{"reason" => inspect(reason)})
         ])
     end
@@ -151,18 +263,49 @@ defmodule OpenAgents.Forge.Verification do
   defp resolution_finding(repo_ref, _not_found),
     do: finding("repository_not_found", %{"repo" => repo_ref})
 
-  defp report(repo, storage_key, entries, findings) do
+  # Nothing was compared: the reference named no single repository, or the log
+  # could not be read. A node that could not check is not a node that found
+  # something, and a fleet answer must not read one as the other.
+  defp unresolved(repo, storage_key, findings) do
+    {:error,
+     %{
+       repo: repo,
+       storage_key: storage_key,
+       node: node(),
+       entries: 0,
+       findings: findings,
+       head: nil,
+       chained_from: nil,
+       status: :unresolved,
+       head_seq: -1,
+       applied_seq: -1,
+       position: nil,
+       behind: nil
+     }}
+  end
+
+  defp report(repo, storage_key, entries, findings, projection) do
     report = %{
       repo: repo,
       storage_key: storage_key,
+      node: node(),
       entries: length(entries),
       findings: findings,
       head: head(entries),
-      chained_from: chained_from(entries)
+      chained_from: chained_from(entries),
+      status: status(findings, projection),
+      head_seq: projection.head_seq,
+      applied_seq: projection.applied_seq,
+      position: projection.position,
+      behind: projection.behind
     }
 
     if findings == [], do: {:ok, report}, else: {:error, report}
   end
+
+  defp status([_finding | _rest], _projection), do: :diverged
+  defp status([], %{behind: 0}), do: :current
+  defp status([], _projection), do: :behind
 
   defp head(entries) do
     case List.last(entries) do
@@ -258,36 +401,135 @@ defmodule OpenAgents.Forge.Verification do
     [finding("entry_object_missing", %{"entry" => inspect(entry)})]
   end
 
-  ## The served refs are the refs the WAL last recorded
+  ## Where on the log this node's projection sits
 
-  defp ref_findings(storage_key, index) do
-    recorded = index |> WAL.refs() |> Map.new()
+  # The projection's own marker says which entries it claims to have applied,
+  # and the served refs say what it is actually serving. The marker bounds the
+  # search; the refs decide it. A projection is *on* the log when it serves,
+  # exactly, the post-state some entry recorded — every ref that entry recorded
+  # and no other. The greatest such sequence at or above the marker is its
+  # position, and the distance from there to the head is how far behind it is.
+  #
+  # Everything below the marker is excluded because the projection has already
+  # claimed those entries: serving an older state than it claims to hold is a
+  # disagreement, not lag. Nothing above the head can be a candidate, so no
+  # marker can admit a state the log does not record.
+  defp locate(storage_key, entries) do
+    head_seq = head_seq(entries)
+    applied_seq = Repos.applied_seq(storage_key)
     served = storage_key |> Repos.refs() |> Map.new()
+    position = position(entries, served, applied_seq, head_seq)
 
-    diverged =
-      recorded
-      |> Map.keys()
-      |> Kernel.++(Map.keys(served))
-      |> Enum.uniq()
-      |> Enum.sort()
-      |> Enum.reject(fn name -> Map.get(recorded, name) == Map.get(served, name) end)
+    %{
+      head_seq: head_seq,
+      applied_seq: applied_seq,
+      served: served,
+      position: position,
+      behind: position && head_seq - position,
+      # The sequence whose state this projection is checked against: where it
+      # actually is, or — when it is nowhere on the log — where it claims to be.
+      checked_seq: position || min(applied_seq, head_seq)
+    }
+  end
 
-    Enum.map(diverged, fn name ->
+  defp head_seq(entries) do
+    case List.last(entries) do
+      nil -> -1
+      entry -> entry["seq"]
+    end
+  end
+
+  defp position(entries, served, applied_seq, head_seq) do
+    on_log =
+      entries
+      |> Enum.filter(&(&1["seq"] >= applied_seq and &1["seq"] <= head_seq))
+      |> Enum.reverse()
+      |> Enum.find_value(fn entry -> if entry_refs(entry) == served, do: entry["seq"] end)
+
+    # Sequence -1 is the empty projection, which is every node before it
+    # replays anything. It is a candidate only when the marker claims nothing.
+    cond do
+      on_log != nil -> on_log
+      applied_seq <= -1 and served == %{} -> -1
+      true -> nil
+    end
+  end
+
+  defp entry_refs(entry) do
+    case entry && Map.get(entry, "refs") do
+      refs when is_map(refs) -> refs
+      _absent -> %{}
+    end
+  end
+
+  defp recorded_refs_at(_entries, seq) when seq < 0, do: %{}
+
+  defp recorded_refs_at(entries, seq) do
+    case Enum.find(entries, &(&1["seq"] == seq)) do
+      nil -> entries |> List.last() |> entry_refs()
+      entry -> entry_refs(entry)
+    end
+  end
+
+  ## The projection claims no more of the log than the log holds
+
+  # A marker past the end of the log is not lag in either direction: the
+  # projection says it applied an entry that is not there. A tail truncated out
+  # of the WAL leaves `0..n-1` contiguous and so passes every other check; this
+  # is where a node that had already applied past the truncation reports it.
+  defp marker_findings(%{applied_seq: applied_seq, head_seq: head_seq})
+       when applied_seq > head_seq do
+    [
+      finding("applied_seq_beyond_log", %{
+        "applied_seq" => applied_seq,
+        "head_seq" => head_seq
+      })
+    ]
+  end
+
+  defp marker_findings(_projection), do: []
+
+  ## The served refs are a state the WAL recorded
+
+  # A projection with a position is serving a state the log records, so there
+  # is nothing to report: it is current or behind, which `:status` says. One
+  # without a position is serving something the log never recorded at or after
+  # the sequence it claims, and every ref that differs from the claimed state
+  # is named.
+  defp ref_findings(_entries, %{position: position}) when position != nil, do: []
+
+  defp ref_findings(entries, projection) do
+    recorded = recorded_refs_at(entries, projection.checked_seq)
+    served = projection.served
+
+    recorded
+    |> Map.keys()
+    |> Kernel.++(Map.keys(served))
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.reject(fn name -> Map.get(recorded, name) == Map.get(served, name) end)
+    |> Enum.map(fn name ->
       finding("served_refs_diverged", %{
         "ref" => name,
         "recorded" => Map.get(recorded, name),
-        "served" => Map.get(served, name)
+        "served" => Map.get(served, name),
+        "at_seq" => projection.checked_seq
       })
     end)
   end
 
-  ## Every object any accepted push named is present
+  ## Every object an applied push named is present
 
-  defp object_findings(storage_key, entries) do
+  # Bounded by where the projection is. An object introduced by an entry the
+  # node has not replayed is absent for the same reason the ref is, and both
+  # are the lag `:behind` reports. An object introduced at or below the
+  # projection's own position is not: it applied that entry.
+  defp object_findings(storage_key, entries, projection) do
     path = Repos.bare_path(storage_key)
 
     entries
-    |> Enum.flat_map(fn entry -> Map.to_list(entry["refs"] || %{}) end)
+    |> Enum.filter(&(&1["seq"] <= projection.checked_seq))
+    |> Enum.flat_map(fn entry -> Map.to_list(entry_refs(entry)) end)
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.reject(fn {_name, sha} ->
@@ -312,12 +554,16 @@ defmodule OpenAgents.Forge.Verification do
   # A shallow graft the repository legitimately carries stops the walk at its
   # boundary, so a grafted repository is clean here: it is servable, and
   # servable is the claim.
-  defp reachability_findings(storage_key, index) do
+  #
+  # The tips are the ones recorded at the projection's position, because a
+  # clone answered by this node walks the state this node holds, not the state
+  # the head describes.
+  defp reachability_findings(storage_key, entries, projection) do
     path = Repos.bare_path(storage_key)
 
     tips =
-      index
-      |> WAL.refs()
+      entries
+      |> recorded_refs_at(projection.checked_seq)
       |> exportable_refs()
       |> Map.values()
       |> Enum.uniq()
@@ -432,6 +678,173 @@ defmodule OpenAgents.Forge.Verification do
     do: %{seq: seq, link: link}
 
   defp normalize_anchor(_absent_or_malformed), do: nil
+
+  @doc """
+  Verify one repository across every node that serves it.
+
+  Each member answers for its own projection, so the fleet's answer is the
+  combination of theirs. The verdict is deliberately insensitive to lag:
+
+  * `:verified` — every member answered and every one is at the head.
+  * `:converging` — nothing contradicts the log, and at least one member is
+    behind it or did not answer. This state clears itself as nodes replay.
+  * `:diverged` — a member's projection contradicts the log, or two members
+    disagree about the log itself. Nothing here clears itself.
+  * `:unavailable` — nothing was checked: no member answered, or every member
+    could not resolve the repository or read its log.
+
+  Returns `{:ok, cluster_report}` for `:verified` and `:converging`, and
+  `{:error, cluster_report}` for `:diverged` and `:unavailable`. Findings are
+  carried with the node that produced them, so a reader can tell one node's
+  answer from the fleet's.
+
+  Options:
+
+  * `:anchor` — passed through to `verify/2` on every member. Because the
+    anchor comes from outside the log, this is also how the members are checked
+    against one repository history rather than only against each other.
+  * `:members` — a zero-arity function returning the members to ask. Defaults
+    to `OpenAgents.Cluster.members/0`.
+  * `:rpc` — a five-arity function with `:erpc.call/5`'s shape.
+  * `:timeout_ms` — per-member deadline.
+
+  This reaches no database either: membership comes from `OpenAgents.Cluster`,
+  which reads `Node`, and each member runs the same WAL-and-repository check.
+
+  `:log_agreement` compares the members that reported a chain link at the same
+  sequence. Two nodes reading one shared log cannot disagree there, so
+  `:disagreed` means one of them is not reading the log the other is. Members
+  at different sequences have nothing comparable, and the value is `:unknown`
+  when no two members reported the same one.
+  """
+  @spec verify_cluster(RepoRef.ref(), keyword()) ::
+          {:ok, cluster_report()} | {:error, cluster_report()}
+  def verify_cluster(repo_ref, opts \\ []) when is_binary(repo_ref) and is_list(opts) do
+    members = Keyword.get(opts, :members, &Cluster.members/0).() |> Enum.uniq()
+    rpc = Keyword.get(opts, :rpc, &:erpc.call/5)
+    timeout_ms = Keyword.get(opts, :timeout_ms, @cluster_timeout_ms)
+    verify_opts = Keyword.take(opts, [:anchor])
+
+    results =
+      members
+      |> Task.async_stream(
+        fn member -> ask(member, repo_ref, verify_opts, rpc, timeout_ms) end,
+        ordered: true,
+        timeout: timeout_ms + 1_000,
+        on_timeout: :kill_task,
+        max_concurrency: max(1, length(members))
+      )
+      |> Enum.zip(members)
+      |> Enum.map(fn
+        {{:ok, result}, member} -> node_result(member, result)
+        {{:exit, reason}, member} -> unreachable_result(member, reason)
+      end)
+
+    cluster_report(repo_ref, results)
+  end
+
+  defp ask(member, repo_ref, verify_opts, _rpc, _timeout_ms) when member == node(),
+    do: verify(repo_ref, verify_opts)
+
+  defp ask(member, repo_ref, verify_opts, rpc, timeout_ms) do
+    rpc.(member, __MODULE__, :verify, [repo_ref, verify_opts], timeout_ms)
+  catch
+    kind, reason -> {:unreachable, {kind, reason}}
+  end
+
+  defp node_result(member, {ok_or_error, report}) when ok_or_error in [:ok, :error] do
+    %{
+      node: member,
+      status: report.status,
+      head_seq: report.head_seq,
+      applied_seq: report.applied_seq,
+      position: report.position,
+      behind: report.behind,
+      entries: report.entries,
+      head: report.head,
+      findings: report.findings,
+      reason: nil
+    }
+  end
+
+  defp node_result(member, {:unreachable, reason}), do: unreachable_result(member, reason)
+  defp node_result(member, other), do: unreachable_result(member, {:invalid_result, other})
+
+  defp unreachable_result(member, reason) do
+    %{
+      node: member,
+      status: :unreachable,
+      head_seq: nil,
+      applied_seq: nil,
+      position: nil,
+      behind: nil,
+      entries: nil,
+      head: nil,
+      findings: [],
+      reason: reason
+    }
+  end
+
+  defp cluster_report(repo_ref, results) do
+    agreement = log_agreement(results)
+
+    findings =
+      Enum.flat_map(results, fn result ->
+        Enum.map(result.findings, &Map.put(&1, :node, result.node))
+      end)
+
+    report = %{
+      repo: repo_ref,
+      status: cluster_status(results, agreement),
+      head_seq: head_seq_across(results),
+      log_agreement: agreement,
+      nodes: results,
+      findings: findings
+    }
+
+    if report.status in [:verified, :converging], do: {:ok, report}, else: {:error, report}
+  end
+
+  defp head_seq_across(results) do
+    case results |> Enum.map(& &1.head_seq) |> Enum.reject(&is_nil/1) do
+      [] -> nil
+      seqs -> Enum.max(seqs)
+    end
+  end
+
+  defp cluster_status(results, agreement) do
+    checked = Enum.filter(results, &(&1.status in [:current, :behind, :diverged]))
+
+    cond do
+      Enum.any?(results, &(&1.status == :diverged)) -> :diverged
+      agreement == :disagreed -> :diverged
+      checked == [] -> :unavailable
+      # Some member cannot see a repository the others verified, which is a
+      # disagreement about the fleet rather than a lag window.
+      Enum.any?(results, &(&1.status == :unresolved)) -> :diverged
+      Enum.all?(results, &(&1.status == :current)) -> :verified
+      true -> :converging
+    end
+  end
+
+  # Two nodes that reported a link for the same sequence must have reported the
+  # same link: the WAL is one shared log. Nodes at different sequences are
+  # compared on nothing, which is why lag cannot reach this value.
+  defp log_agreement(results) do
+    by_seq =
+      results
+      |> Enum.map(& &1.head)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.group_by(& &1.seq, & &1.link)
+
+    comparable = Enum.filter(by_seq, fn {_seq, links} -> length(links) > 1 end)
+
+    cond do
+      comparable == [] -> :unknown
+      Enum.all?(comparable, fn {_seq, links} -> Enum.uniq(links) |> length() == 1 end) -> :agreed
+      true -> :disagreed
+    end
+  end
 
   @doc """
   The refs a clone receives: every recorded ref except the hidden internal

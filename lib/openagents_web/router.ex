@@ -417,6 +417,9 @@ defmodule OpenAgentsWeb.Router do
 
     get "/", ApiExtensionController, :show
 
+    get "/plugins", PluginRegistryController, :index
+    get "/plugins/:name", PluginRegistryController, :show
+
     post "/device/authorizations", DeviceAuthorizationController, :create
     post "/device/authorizations/token", DeviceAuthorizationController, :token
   end

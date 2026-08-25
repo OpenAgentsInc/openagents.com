@@ -313,6 +313,22 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            ).pipe_through == [:fleet_promotion_api]
   end
 
+  test "plugin discovery routes are public and not substring matched" do
+    for path <- ["/api/v1/plugins", "/api/v1/plugins/:name"] do
+      route = route!(:get, path)
+
+      assert route.class == :public_read, inspect(route)
+      assert route.principal == "anonymous", inspect(route)
+      assert route.scope == "plugins:discover", inspect(route)
+      refute route.mutation, inspect(route)
+    end
+
+    refute Enum.any?(
+             OpenAgentsWeb.Router.__routes__(),
+             &(&1.path == "/api/v1/pluginsXYZ")
+           )
+  end
+
   defp route!(verb, path) do
     Enum.find(RouteAuthority.inventory(), &(&1.verb == to_string(verb) and &1.path == path)) ||
       flunk("missing route #{verb} #{path}")

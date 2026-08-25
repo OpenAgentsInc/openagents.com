@@ -123,6 +123,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v1/device/authorizations/token" => {:anonymous, :device, :legacy},
       "post /api/v1/agents/register" => {:anonymous, :agent, :legacy},
       "get /api/v1/agents/:handle" => {:anonymous, :agent, :legacy},
+      # Anonymous by design: the CLI discovers validated plugin manifests.
+      "get /api/v1/plugins" => {:anonymous, :plugin, :legacy},
+      "get /api/v1/plugins/:name" => {:anonymous, :plugin, :legacy},
       # pipe_through :optional_forge_api — public reads, bearer-widened.
       # The ancillary issue metadata reads. Anonymous callers still read public
       # repositories; a bearer token widens them to the private repositories

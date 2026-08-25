@@ -589,6 +589,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
            false
          )
 
+  defp policy(%{path: path, verb: verb})
+       when path in ["/api/v1/plugins", "/api/v1/plugins/:name"] and
+              verb in [:get, :head],
+       do: declaration(:public_read, "anonymous", "plugins:discover", false)
+
   defp policy(%{path: path, verb: :post})
        when path in [
               "/api/v1/forum/topics",

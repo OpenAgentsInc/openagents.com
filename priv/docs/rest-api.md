@@ -357,9 +357,9 @@ They are not a promise that GitHub's own tooling runs against this host.
   https://openagents.com/api/v1/repos/OWNER/REPO/issues`, but `curl` and the
   `openagents` CLI do the same job without the confusion.
 
-Requests to `/api/v3` still answer today. That prefix is a temporary alias for
-clients released before the API moved to `/api/v1`, and it is scheduled for
-removal. Send new work to `/api/v1`.
+`/api/v3` no longer answers. It was a migration alias for clients released
+before the API moved to `/api/v1`, and it was removed on 2026-08-25 once the
+last client using it was upgraded. Send everything to `/api/v1`.
 
 ## Know the compatibility limits
 

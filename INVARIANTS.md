@@ -5733,7 +5733,7 @@ Evidence: `lib/openagents_web/api_error.ex`,
 `test/openagents_web/controllers/api_error_contract_test.exs`, and
 `test/openagents_web/controllers/api_extension_controller_test.exs`.
 
-### FORGEAPI-002 — The path names this API's version, and `/api/v3` is a dated alias
+### FORGEAPI-002 — The path names this API's version, and `/api/v3` is gone
 
 Status: Current
 
@@ -5750,20 +5750,17 @@ sends GraphQL to `/api/graphql` and `gh issue view` probes `GET /api/v3/meta`,
 and this application serves neither, so the prefix buys no working command.
 The one surface it does serve, the `gh api` passthrough, already reaches
 `/api/v1` when it is given a full URL. `gh` is therefore not a supported
-client, and `/api/v3` is a migration alias for released clients with a
-deletion scheduled, not a compatibility promise. The reasoning and the
-measurements are
+client, and `/api/v3` was a migration alias rather than a compatibility
+promise. The reasoning and the measurements are
 `docs/decisions/0009-serve-a-github-shaped-api-not-a-gh-compatible-one.md`.
 
-Because the alias is temporary, nothing may come to depend on it. Every
-versioned route is declared at `/api/v1`, and every URL a response emits names
-`/api/v1`, so a link this API hands a client survives the deletion.
-`OpenAgentsWeb.Plugs.ApiV3Rewrite` is the only file under `lib/` that names the
-old prefix at all, and a proof reads the tree for that, because the reasoning
-does not survive on care alone: the trace ingest route landed mid-rename and
-returned a `url` field naming `/api/v3/traces/{id}`, a link that would have
-gone dead the day the alias did. Deleting the alias stays what it should be, a
-one-file change with one test.
+The alias was deleted on 2026-08-25 (#216), the day `@openagentsinc/cli@0.4.0`
+was published and the one client still on the old prefix was upgraded to it.
+Nothing under `lib/` names the old prefix now, and a proof reads the tree for
+that rather than trusting care: the trace ingest route landed mid-rename and
+returned a `url` field naming `/api/v3/traces/{id}`, a link that went dead the
+day the alias did. Every versioned route is declared at `/api/v1` and every URL
+a response emits names `/api/v1`.
 
 Evidence: `lib/openagents_web/plugs/api_v3_rewrite.ex`,
 `lib/openagents_web/router.ex`,

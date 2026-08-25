@@ -355,6 +355,8 @@ config :openagents,
   # is a person working several checkouts at once, and THREAD-001 admits at
   # most one live grant per open thread, so the account's concurrent
   # thread-scoped authority is bounded by eight of the ceilings below.
+  # `OPENAGENTS_MAX_OPEN_THREADS` overrides the number at boot (runtime.exs)
+  # without changing the cap mechanism.
   maximum_open_threads_per_account: 8,
   # Unbounded, all three. A coding session reached 256 calls, a million tokens,
   # and two dollars in an afternoon, and was told to start a new session — the

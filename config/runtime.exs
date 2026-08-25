@@ -117,6 +117,16 @@ config :openagents,
          buyer: capacity_buyer
        )
 
+# The thread admission cap from config.exs, tunable per deployment. The cap
+# mechanism (THREAD-001: counted under the owner lock, refused with
+# `thread_quota_reached`) is unchanged; this only sets the number, for
+# fleet-scale testing and deployments whose concurrency profile differs from
+# the default. Unset means the config.exs default.
+if maximum_open_threads = System.get_env("OPENAGENTS_MAX_OPEN_THREADS") do
+  config :openagents,
+    maximum_open_threads_per_account: String.to_integer(maximum_open_threads)
+end
+
 continual_learning_config = Application.get_env(:openagents, OpenAgents.ContinualLearning, [])
 
 # The admitted base models are a JSON object of model reference to exact model

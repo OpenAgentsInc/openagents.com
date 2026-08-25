@@ -204,8 +204,13 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         usage = usage_of(events)
         if usage != %{}, do: meter(grant, usage)
         class = OpenAgents.OperationalLog.code(reason)
-        Logger.warning("inference_proxy_failed code=#{class}")
-        refuse(conn, {:provider_failed, class})
+        status = OpenAgents.OperationalLog.status(reason)
+        Logger.warning(
+          "inference_proxy_failed code=#{class}" <>
+            if(status == nil, do: "", else: " upstream_status=#{status}")
+        )
+
+        refuse(conn, {:provider_failed, class, status})
     end
   end
 
@@ -368,6 +373,11 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   # the server logs. Withholding it left the caller with "the model provider
   # failed" and nothing to act on, which reads as the product being broken
   # rather than as a call that ran out of context or hit a rate limit.
+  defp error_for({:provider_failed, class, status}) do
+    body = %{"code" => "provider_failed", "reason" => class}
+    {502, if(status == nil, do: body, else: Map.put(body, "upstream_status", status))}
+  end
+
   defp error_for({:provider_failed, class}) do
     {502, %{"code" => "provider_failed", "reason" => class}}
   end

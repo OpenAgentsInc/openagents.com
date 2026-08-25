@@ -353,3 +353,107 @@ credential, which `Forge.Assignments.create/1` mints server-side and never
 returns to an API caller, so it cannot be exercised until this change is
 deployed. Every step before the authenticated git handshake is demonstrated
 live above.
+
+## 9. Push-receipt attempt against production `496dcdf` (2026-08-25)
+
+The three fixes in §8 are deployed. This section records what they unblocked,
+and the next defect they exposed, which still blocks criterion (c) of
+openagents.com#255. Box `bx_9wxjdrkq`, conversation `3dd6d813`, stopped
+afterwards; peak concurrency 1.
+
+### What now works
+
+`GET /api/v1/conversation` answers `200` for a `box:control`-only token and
+returns `3dd6d813-97dd-496d-b3a2-7ea59c47cd2c`. The bootstrap that had no
+route is a single call.
+
+A freshly provisioned box reports `setup_status: done`, and
+`sh -c 'command -v opencode && opencode --version'` answers
+`/home/user/.local/bin/opencode` and `1.18.23`, with that path a symlink to
+`/home/user/.opencode/bin/opencode` and `opencode.json` pointing at
+`openrouter/stealth/ox-alpha`. The install and the PATH defects are closed in
+production, not just in a rehearsal.
+
+**The credentialed dispatch works.** Assignment
+`6556f2de-98ad-4a19-b5b6-381f50d83bf7` reached `state: running` with
+`started_at` set, and its run `318ca446-54a2-4787-992f-a18e0b5c5d12` recorded
+`dispatched_at` and ran to `exit_status: 128`. Before §8 this failed at
+dispatch with `box_response_invalid`, no pid, and no run root. The run got as
+far as cloning the repository, creating the branch, and writing commit
+`e5a157c`. `box_runs.command` holds the caller's script and carries no
+credential, as designed.
+
+### What still fails, and why
+
+The push is refused:
+
+```
+fatal: Authentication failed for 'https://openagents.com/OpenAgentsInc/openagents.com.git/'
+```
+
+This is not the dispatch defect and not branch policy. A second assignment
+(`6ac74171-2ff0-4688-adb2-4cf97af1a1d2`, run
+`17e308d3-d9f4-44a7-8bd0-b1a57bd46c76`, exit 0) inspected the live run
+environment instead of pushing:
+
+- the credential file exists at mode `0600`, and the run's `gitconfig` names it
+  as `credential.helper`
+- the token is intact: 94 bytes, prefix `oa_assignment_`, which is the exact
+  shape `persist_assignment/7` mints
+- `git-receive-pack` returns **401**
+- `git-upload-pack` returns **401**, on a public repository that clones
+  anonymously in the same run
+
+Both verbs failing with `401` places the refusal in
+`OpenAgentsWeb.Plugs.ForgeGitAuth`, before any branch or repository policy
+runs. Presenting the credential turns an anonymous read that succeeds into an
+authenticated read that fails.
+
+The cause is an identifier mismatch in
+`OpenAgents.Forge.Assignments`. `persist_assignment/7` generates one UUID, uses
+it as the **assignment's** primary key, and embeds it in the token:
+
+```elixir
+id = Ecto.UUID.generate()
+plaintext = @prefix <> id <> "." <> secret
+```
+
+The credential row is then inserted with no explicit id. Its schema declares
+`@primary_key {:id, :binary_id, autogenerate: true}` and its changeset never
+casts `:id`, so the row takes a different, random primary key and is linked
+only by `assignment_id`. But `authenticate/1` reads the uuid out of the token
+and looks the credential up by **its own** primary key:
+
+```elixir
+Repo.one(from c in AssignmentCredential, where: c.id == ^uuid, ...)
+```
+
+That row cannot exist. Every assignment credential fails authentication, every
+time — this is deterministic, not a race or a timing window.
+
+`Assignments.credential/1` queries `where: c.assignment_id == ^id`, so the rest
+of the module already treats `assignment_id` as the link. `authenticate/1` is
+the one place that does not.
+
+### Why this was not caught
+
+Both existing tests of `authenticate/1` assert only that an *invalid* token is
+refused. Every test that reaches `Assignments.create/1` wraps it in a `try`
+that tolerates the run failing to start, so none of them ever holds a real
+plaintext credential. Mint-then-present had no coverage anywhere.
+
+A reproduction is in
+`test/openagents/forge/assignment_credential_auth_test.exs`. It creates a real
+assignment, and three race-free assertions pass before the failure: the token's
+uuid equals the assignment id, `Repo.get(AssignmentCredential, token_uuid)` is
+`nil`, and `Repo.get_by(AssignmentCredential, assignment_id: token_uuid)`
+returns the row that does exist. `authenticate/1` then answers
+`{:error, :invalid_assignment_credential}`.
+
+### Criterion (c) status
+
+No branch reached the forge and no push receipt was recorded;
+`git ls-remote refs/heads/assignment/*` is empty and the branch read answers
+`404`. Criterion (c) remains unmet. The dispatch half is demonstrated live; the
+authentication half is blocked on the defect above, which is one query in
+`authenticate/1`.

@@ -110,8 +110,12 @@ trap cleanup EXIT INT TERM
 stage_inputs() {
   case $1 in
     compile | production_compile) echo "lib" ;;
-    precommit) echo "lib test priv assets ops" ;;
-    enumeration_proofs) echo "lib test ops" ;;
+    # `mix precommit` runs the documentation and reference checks as well as
+    # the suite, and those read the invariant ledger and the docs tree. Given
+    # the whole worktree it never reuses, which is the right answer for the
+    # broad stage: the savings are meant to come from the narrow ones.
+    precommit) echo "." ;;
+    enumeration_proofs) echo "." ;;
     cluster | direct_transaction | relup_topology | rolling_replacement) echo "lib test" ;;
     javascript) echo "assets" ;;
     relup | version_chain | interrupted_install) echo "lib priv assets ops" ;;

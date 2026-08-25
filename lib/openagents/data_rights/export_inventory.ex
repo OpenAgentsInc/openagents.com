@@ -374,25 +374,6 @@ defmodule OpenAgents.DataRights.ExportInventory do
       note: "The API's own route and extension inventory."
     },
     %{
-      family: :response,
-      api?: true,
-      status: :not_user_data,
-      mechanism: nil,
-      proof: nil,
-      issue: nil,
-      # Classified the moment the route landed, which is the only time this
-      # answer is cheap. `OpenAgentsWeb.ResponsesController` reaches no repo
-      # and no schema: it answers every request with one acknowledged message
-      # and writes nothing, so there is no record to give back. This entry
-      # stops being true the day a provider stands behind the stub and a
-      # response is persisted, and the classification is revisited then rather
-      # than inherited (#252).
-      note:
-        "POST /api/v1/responses is a stub. It consults no model and records " <>
-          "nothing, so it holds no record an account authors. Revisit this " <>
-          "entry when a provider stands behind it and a response is stored."
-    },
-    %{
       family: :model,
       api?: true,
       status: :not_user_data,

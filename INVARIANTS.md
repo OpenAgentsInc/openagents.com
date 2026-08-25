@@ -1588,11 +1588,40 @@ claimant or buyer reference, an operator identity, an approval reference, or a
 gateway reference. The claimant can export the full receipt, including their own
 destination, without a hosted wallet.
 
+**A simulated rail is admissible, and it cannot be mistaken for a real one.**
+`OpenAgents.Settlement.PaymentGateway.Simulated` exists so the loop can be
+driven end to end where no treasury is attached, and it is bounded three ways:
+it refuses outright when `runtime_environment` is `:production`, so pointing a
+live treasury at it fails the attempt rather than faking a payment; every
+`gateway_ref` it mints starts with `simulated:`, so a row it wrote is
+distinguishable from a real transfer in the database and in every export; and
+its payment hash is derived from the idempotency key alone, so a replay
+produces the identical hash and the unique `payment_hash` constraint refuses a
+second receipt. It keeps no ledger and vouches for no key it was not handed. It
+moves no sats: outbound payout stays on the self-custodial MoneyDevKit treasury
+bridge, which this repository does not implement.
+
+Sats are integers everywhere on this path — the treasury rules, the priced
+amount, the intent, the receipt amount, and the fee — and the rail itself
+refuses an amount that is not a positive integer rather than rounding one into
+a receipt.
+
 Evidence: `OpenAgents.Settlement`, `OpenAgents.Settlement.PaymentGateway`, the
 settlement schemas and tables, with their uniqueness and partial-uniqueness
 constraints, and the pricing, claim, verification, duplicate, stale-commit,
 approval, budget, retry, reconciliation, expiry, dispute, refund, privacy, and
-receipt-export cases in `test/openagents/settlement_test.exs`.
+receipt-export cases in `test/openagents/settlement_test.exs`. One bounty is
+driven the whole way on real material — a resolvable commit in a forge-hosted
+repository, a `bounty`-labelled issue, and an accepted `OUTCOME-001` completion
+claim closed at that revision — in
+`test/openagents/settlement/simulated_bounty_proof_test.exs`.
+
+Two things this invariant deliberately does not claim. Settlement checks the
+shape of a commit sha and never asks the forge whether that commit exists, and
+nothing requires a verification's evidence digest to be taken over an accepted
+completion claim; the end-to-end proof does both by hand, so the binding is
+shown rather than enforced. Making either one policy is `#207`'s successor
+work, not this invariant.
 
 ### MODULE-001 — Every invocation pins one immutable admitted module
 
@@ -5378,7 +5407,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | COLLECTIVE-003 | `test/openagents/collective_publication_test.exs` |
 | COMPENSATION-001 | `test/openagents/compensation_test.exs` |
 | REPUTATION-001 | `test/openagents/reputation_test.exs`, `test/openagents/forge/key_rotation_test.exs`, `test/openagents_web/controllers/reputation_controller_test.exs` |
-| SETTLEMENT-001 | `test/openagents/settlement_test.exs` |
+| SETTLEMENT-001 | `test/openagents/settlement_test.exs`, `test/openagents/settlement/constraints_test.exs`, `test/openagents/settlement/simulated_bounty_proof_test.exs` |
 | MODULE-001 | `test/openagents/modules/registry_test.exs`, `test/openagents/tool_step_persistence_test.exs` |
 | MODULE-002 | `test/openagents/modules/discovery_test.exs`, `test/openagents/modules/lifecycle_test.exs` |
 | MODULE-003 | `test/openagents/modules/router_test.exs`, `test/openagents/turn_tool_loop_test.exs` |

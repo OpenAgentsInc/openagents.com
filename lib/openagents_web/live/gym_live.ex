@@ -54,6 +54,16 @@ defmodule OpenAgentsWeb.GymLive do
   defp dollars(nil), do: "—"
   defp dollars(microusd), do: "$#{Float.round(microusd / 1_000_000, 4)}"
 
+  defp elapsed(nil), do: "—"
+
+  defp elapsed(seconds) when seconds < 60, do: "#{seconds}s"
+
+  defp elapsed(seconds) do
+    minutes = div(seconds, 60)
+    rest = rem(seconds, 60)
+    if(rest == 0, do: "#{minutes}m", else: "#{minutes}m #{rest}s")
+  end
+
   defp tokens(nil, nil), do: "—"
   defp tokens(input, output), do: "#{format_count(input)} in / #{format_count(output)} out"
 
@@ -107,6 +117,7 @@ defmodule OpenAgentsWeb.GymLive do
                 <th>Lane</th>
                 <th>Score</th>
                 <th>Tasks</th>
+                <th>Duration</th>
                 <th>Tokens</th>
                 <th>Cost</th>
               </tr>
@@ -127,6 +138,7 @@ defmodule OpenAgentsWeb.GymLive do
                 <td>{run.lane || "—"}</td>
                 <td class="font-semibold">{percent(Run.score(run))}</td>
                 <td>{run.tasks_passed}/{run.tasks_total}</td>
+                <td class="whitespace-nowrap">{elapsed(run.duration_seconds)}</td>
                 <td class="whitespace-nowrap text-sm">
                   {tokens(run.input_tokens, run.output_tokens)}
                 </td>

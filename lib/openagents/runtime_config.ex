@@ -66,6 +66,7 @@ defmodule OpenAgents.RuntimeConfig do
          :ok <- validate_endpoint(settings, environment),
          :ok <- validate_database(settings, environment),
          :ok <- validate_github(settings, environment),
+         :ok <- validate_vault_separation(settings, environment),
          {:ok, features} <- validate_features(settings, environment, staging_gate),
          :ok <- validate_staging_cleanup(settings, environment, staging_gate),
          :ok <- validate_providers(settings, features),
@@ -315,6 +316,8 @@ defmodule OpenAgents.RuntimeConfig do
          # it historically borrowed from. `config/runtime.exs` bridges an
          # unset `MACHINE_TOKEN_ENCRYPTION_KEY` to the GitHub key, so an
          # absent value here means both are missing (VAULT-001, #192).
+         # Presence alone cannot tell a provisioned key from a bridged one;
+         # `validate_vault_separation/2` is what does (#253).
          :ok <-
            ensure(
              encryption_key?(machine_token_key),
@@ -324,6 +327,63 @@ defmodule OpenAgents.RuntimeConfig do
       :ok
     end
   end
+
+  # The vaults VAULT-001 keeps apart, in the order a collision is reported.
+  # The GitHub vault comes first because it holds the key the others
+  # historically borrowed, so a duplicate is named against the borrower.
+  @vault_key_settings [
+    :github_token_encryption_key,
+    :machine_token_encryption_key,
+    :voice_recording_encryption_key,
+    :content_encryption_key
+  ]
+
+  # Each vault seals under its own key (VAULT-001), and until this check
+  # nothing enforced the "own" half. `config/runtime.exs` bridges an unset
+  # `MACHINE_TOKEN_ENCRYPTION_KEY` to the GitHub vault's active key so the
+  # deploy that introduced the variable could boot before an operator
+  # provisioned the secret. A bridged boot presents a perfectly valid
+  # 32-byte key that belongs to another vault, so the presence check above
+  # passes and a GitHub rotation quietly moves the pairing vault with it —
+  # correct on the day it shipped, wrong a week later, and indistinguishable
+  # from correct without reading two values by hand (#192, #253).
+  #
+  # Distinctness is the predicate rather than "did the bridge fire", because
+  # it also catches an operator who provisions the dedicated secret with the
+  # GitHub vault's value, which is the same defect by a different route.
+  #
+  # This lives here rather than in `config/runtime.exs` on purpose. The
+  # bridge is deliberate and still assembles a complete configuration, so
+  # configuration evaluation keeps working everywhere; what changes is that
+  # a staging or production node refuses to *serve* on a borrowed key, at
+  # the declared fail-closed boundary, with the setting named. Development
+  # and test are exempt: both already configure distinct keys, and a shared
+  # key there strands nothing a person would retry. That is the same posture
+  # the content vault's key already takes in `validate_features/3`.
+  #
+  # Only configured keys are compared. An absent key is another check's
+  # error, and a vault whose feature is off has none.
+  defp validate_vault_separation(settings, environment)
+       when environment in [:staging, :production] do
+    @vault_key_settings
+    |> Enum.map(&{&1, Map.get(settings, &1)})
+    |> Enum.filter(fn {_setting, key} -> encryption_key?(key) end)
+    |> Enum.reduce_while(%{}, fn {setting, key}, seen ->
+      case Map.fetch(seen, key) do
+        {:ok, owner} -> {:halt, {setting, owner}}
+        :error -> {:cont, Map.put(seen, key, setting)}
+      end
+    end)
+    |> case do
+      {setting, owner} ->
+        error(setting, "must differ from #{owner}: no vault seals under another vault's key")
+
+      seen when is_map(seen) ->
+        :ok
+    end
+  end
+
+  defp validate_vault_separation(_settings, _environment), do: :ok
 
   defp token_key_id?(key_id) when is_binary(key_id),
     do: String.match?(key_id, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\z/)

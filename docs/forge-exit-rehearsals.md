@@ -413,10 +413,13 @@ The forge holds several key-like secrets and they rotate differently:
     ten-minute window of unclaimed pairings becomes unreadable, and a person
     retries the pairing. There is no keyring because no record outlives the
     window. The code no longer reaches the GitHub key, which is #192's fix,
-    but production has not provisioned `MACHINE_TOKEN_ENCRYPTION_KEY`, so the
-    boot bridge in `config/runtime.exs` still configures this vault with the
-    GitHub vault's active key. Until that secret is set, a GitHub key rotation
-    does move this vault's key. #253 carries it.
+    and since 2026-08-25 production provisions `MACHINE_TOKEN_ENCRYPTION_KEY`
+    with its own value on every fleet node, so a GitHub key rotation no longer
+    moves this vault's key. The boot bridge in `config/runtime.exs` survives as
+    a fallback for a node that comes up without the secret, and
+    `OpenAgents.RuntimeConfig.validate/1` refuses a staging or production boot
+    whose pairing key equals the GitHub key, so the bridge can no longer be
+    load-bearing without something failing. #253 closed on that.
   - `OpenAgents.Voice.RecordingVault` (call audio,
     `VOICE_RECORDING_ENCRYPTION_KEY`) rotates with permanent loss: one key,
     no key id, no keyring, so recordings sealed under the retired key never
@@ -445,6 +448,17 @@ pairing vault runs on the GitHub vault's key (#253). It also found that the
 GitHub retired keyring is empty and no reputation issuer key is admitted, so
 neither rotation has ever run here.
 `docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` records the inventory.
+
+**The gap is closed, 2026-08-25.** A later read the same day, again without
+printing key material, answers `machine_set=true` and `same_as_github=false` on
+all three fleet nodes, and all four vault keys are set and pairwise distinct.
+`MACHINE_TOKEN_ENCRYPTION_KEY` is provisioned in Secret Manager and exported by
+`ops/deploy/fleet-startup.template.sh`, and the fleet has rolled onto a revision
+that carries it. `OpenAgents.RuntimeConfig.validate/1` now refuses a staging or
+production boot on a borrowed vault key, so the next reader does not have to
+compare two configured values by hand to learn whether the bridge is
+load-bearing. The retired GitHub keyring is still empty and no reputation
+issuer key is admitted; neither rotation has run.
 
 ## 5. Operator loss
 

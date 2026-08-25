@@ -308,6 +308,49 @@ defmodule OpenAgents.RuntimeConfigTest do
              RuntimeConfig.validate(settings)
   end
 
+  test "a staging or production release refuses to serve on a borrowed vault key" do
+    # VAULT-001, issues #192 and #253. The presence check above passes for a
+    # bridged boot, because `config/runtime.exs` hands the pairing vault the
+    # GitHub vault's key, which is a valid 32-byte key. Distinctness is what
+    # separates a provisioned key from a load-bearing bridge.
+    settings = staging_settings()
+    github_key = Map.fetch!(settings, :github_token_encryption_key)
+
+    assert {:ok, _config} = RuntimeConfig.validate(settings)
+
+    bridged = Map.put(settings, :machine_token_encryption_key, github_key)
+
+    assert {:error, %{setting: :machine_token_encryption_key, reason: reason}} =
+             RuntimeConfig.validate(bridged)
+
+    assert reason =~ "github_token_encryption_key"
+
+    # The same rule holds for every other vault, and names the borrower.
+    assert {:error, %{setting: :content_encryption_key}} =
+             settings
+             |> Map.put(:content_encryption_key, github_key)
+             |> RuntimeConfig.validate()
+
+    assert {:error, %{setting: :voice_recording_encryption_key}} =
+             settings
+             |> Map.put(
+               :voice_recording_encryption_key,
+               Map.fetch!(settings, :machine_token_encryption_key)
+             )
+             |> RuntimeConfig.validate()
+
+    # Development boots the bridge without complaint: a shared key there
+    # strands nothing a person would retry.
+    assert {:ok, _config} =
+             bridged
+             |> Map.put(:runtime_environment, :development)
+             |> Map.put(:migrate_on_boot, false)
+             |> Map.put(:secure_cookies, false)
+             |> update_oauth(:redirect_uri, "http://localhost:4000/auth/github/callback")
+             |> Map.put(:github_token_encryption_key_id, "development-2026-08")
+             |> RuntimeConfig.validate()
+  end
+
   test "forge mirror remotes refuse credential-bearing URLs" do
     for url <- [
           "https://operator:secret@mirror.example/openagents.com.git",

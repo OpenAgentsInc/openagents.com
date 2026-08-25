@@ -298,6 +298,15 @@ the old key to the keyring, activate the new one, rewrap with
 production. That is a fact rather than a defect, and it is the reason this
 rehearsal's live half is an inventory instead of a rotation.
 
+> **Later the same day (2026-08-25):** the pairing-vault row above is no longer
+> current. `MACHINE_TOKEN_ENCRYPTION_KEY` is provisioned in Secret Manager,
+> `ops/deploy/fleet-startup.template.sh` exports it, and a re-read of all three
+> fleet nodes answers `machine_set=true` and `same_as_github=false`, with all
+> four vault keys set and pairwise distinct. `RuntimeConfig.validate/1` now
+> refuses a staging or production boot on a duplicate vault key, so the reading
+> above cannot recur unnoticed. #253 records the gap and its close. The rest of
+> this inventory stands: no key has been rotated here.
+
 **No attestation has been signed here.** `OpenAgents.Reputation.keys()` returns
 none on the live node, so the issuer rotation path has no production
 population. The ordering rule is proven in the test process and has never been

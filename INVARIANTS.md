@@ -3532,10 +3532,17 @@ documented GitHub rotation would have unread every outstanding pairing.
 Decrypt-side compatibility is narrower than sealing and stays explicit: the
 pairing vault opens with its dedicated key first and falls back to the GitHub
 keyring — active key plus `:github_token_decryption_keys` — because that is
-the only key material its historical records were sealed under, and because
-`config/runtime.exs` deliberately bridges an unset
-`MACHINE_TOKEN_ENCRYPTION_KEY` to the GitHub key until the operator
-provisions the dedicated secret. The fallback never rewraps: the only reader
+the only key material its historical records were sealed under, including
+every record sealed while `config/runtime.exs` bridged an unset
+`MACHINE_TOKEN_ENCRYPTION_KEY` to the GitHub key. That bridge is no longer the
+production configuration: the dedicated secret is provisioned, and the bridge
+is now only the fallback for a node that comes up without it. It cannot stay
+load-bearing unnoticed, because `RuntimeConfig.validate/1` refuses a staging or
+production boot in which any two vault keys are equal — presence alone never
+distinguished a provisioned key from a bridged one, which is how the bridge
+outlived by a week the single deploy it was written for (#253). The bridge
+survives in `config/runtime.exs` so configuration still assembles; what it can
+no longer do is serve. The fallback never rewraps: the only reader
 nulls `token_ciphertext` in the same transaction as a successful open
 (IDENTITY-011), so no record survives a read, and every fallback-sealed
 record is claimed or expired within one ten-minute pairing lifetime.
@@ -3576,6 +3583,15 @@ plaintext columns those replaced survive one more release, empty, because
 dropping a live column mid-roll breaks the nodes still writing into it; the
 contract migration removes them the way `machine_pairings.user_id` was removed
 a release after its last reader.
+
+Amended 2026-08-25 (issue #253). "Its own key" is now checked rather than
+described. `RuntimeConfig.validate/1` compares every configured vault key and
+refuses a staging or production boot on any duplicate, naming the borrowing
+setting and the setting it borrowed from. Distinctness is the predicate rather
+than "did the boot bridge fire", so it also refuses a dedicated secret
+provisioned by hand with another vault's value. Development and test are
+exempt: both already configure distinct keys, and a shared key there strands
+nothing a person would retry.
 
 Evidence: `OpenAgents.Machines.TokenVault`, `OpenAgents.Accounts.TokenVault`,
 `OpenAgents.Voice.RecordingVault`, `OpenAgents.ContentVault`,

@@ -34,8 +34,11 @@ defmodule OpenAgents.Machines.TokenVault do
   rotation procedure moves a retired key into that keyring rather than
   deleting it. The fallback covers two bounded populations: pairings sealed by
   the previous release during a deploy, and pairings sealed while
-  `config/runtime.exs` still bridges `:machine_token_encryption_key` to the
-  GitHub key pending `MACHINE_TOKEN_ENCRYPTION_KEY` provisioning.
+  `config/runtime.exs` bridged `:machine_token_encryption_key` to the GitHub
+  key. That bridge is no longer production's configuration — the dedicated
+  secret is provisioned — and `OpenAgents.RuntimeConfig.validate/1` refuses a
+  staging or production boot whose vault keys are not distinct, so the bridge
+  cannot become load-bearing again without failing (#253).
 
   The fallback deliberately never rewraps. The only reader is
   `OpenAgents.Machines.claim_locked_pairing/1`, which nulls

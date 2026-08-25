@@ -172,7 +172,7 @@ defmodule OpenAgentsWeb.ThreadController do
       # the generation, and hands back fresh authority on the same thread, so
       # a resumed session can never race a zombie of its former self
       # (THREAD-001). The plaintext token exists exactly once, in this
-      # response, like the one `POST /api/v3/threads` returns.
+      # response, like the one `POST /api/v1/threads` returns.
       case Threads.mint_grant(thread) do
         {:ok, minted, grant, token} ->
           conn
@@ -310,7 +310,7 @@ defmodule OpenAgentsWeb.ThreadController do
 
     sentence =
       "This account holds #{held} open threads and the configured maximum is #{limit}. " <>
-        "Revoke a thread with DELETE /api/v3/threads/{thread_id} before opening another."
+        "Revoke a thread with DELETE /api/v1/threads/{thread_id} before opening another."
 
     ApiError.refuse(conn, "thread_quota_reached",
       message: sentence,
@@ -602,7 +602,7 @@ defmodule OpenAgentsWeb.ThreadController do
     sentence =
       "#{inspect(model_id)} is in the catalog but its provider is not configured " <>
         "on this deployment. Currently available: " <>
-        "#{Enum.join(Models.available_ids(), ", ")}. See GET /api/v3/models."
+        "#{Enum.join(Models.available_ids(), ", ")}. See GET /api/v1/models."
 
     ApiError.refuse(conn, "model_unavailable",
       message: sentence,

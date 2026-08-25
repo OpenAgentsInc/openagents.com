@@ -69,7 +69,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
 
       body =
         conn
-        |> get(~p"/api/v3/repos/receipt-owner/open-work/pushes")
+        |> get(~p"/api/v1/repos/receipt-owner/open-work/pushes")
         |> json_response(200)
 
       assert body["repo"] == "receipt-owner/open-work"
@@ -96,7 +96,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
 
       body =
         conn
-        |> get(~p"/api/v3/repos/receipt-owner/open-work/pushes/1")
+        |> get(~p"/api/v1/repos/receipt-owner/open-work/pushes/1")
         |> json_response(200)
 
       assert body["wal_seq"] == 1
@@ -113,7 +113,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
 
       body =
         conn
-        |> get(~p"/api/v3/repos/receipt-owner/open-work/pushes/1")
+        |> get(~p"/api/v1/repos/receipt-owner/open-work/pushes/1")
         |> json_response(200)
 
       assert body["link"] == WAL.entry_link(head)
@@ -136,7 +136,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
 
       body =
         conn
-        |> get(~p"/api/v3/repos/receipt-owner/open-work/pushes")
+        |> get(~p"/api/v1/repos/receipt-owner/open-work/pushes")
         |> json_response(200)
 
       assert body["pushes"] == []
@@ -147,7 +147,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
       seed_wal!(repository.storage_key, 1)
 
       assert conn
-             |> get(~p"/api/v3/repos/receipt-owner/open-work/pushes/9")
+             |> get(~p"/api/v1/repos/receipt-owner/open-work/pushes/9")
              |> json_response(404)
     end
   end
@@ -157,7 +157,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
       seed_wal!(repository.storage_key, 1)
 
       assert conn
-             |> get(~p"/api/v3/repos/receipt-owner/closed-work/pushes")
+             |> get(~p"/api/v1/repos/receipt-owner/closed-work/pushes")
              |> json_response(404)
     end
 
@@ -169,7 +169,7 @@ defmodule OpenAgentsWeb.PushReceiptControllerTest do
 
       body =
         conn
-        |> get(~p"/api/v3/repos/receipt-owner/closed-work/pushes")
+        |> get(~p"/api/v1/repos/receipt-owner/closed-work/pushes")
         |> json_response(200)
 
       assert Enum.map(body["pushes"], & &1["wal_seq"]) == [0]

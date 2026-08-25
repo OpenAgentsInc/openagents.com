@@ -14,7 +14,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
   `OpenAgentsWeb.ApiRouteAuthority.families/0` publishes must appear here, so a
   new resource family cannot reach the API without someone deciding whether a
   user can export it. The rest of the ledger names the families that leave
-  through routes outside `/api/v3` — Git transport for repository content, the
+  through routes outside `/api/v1` — Git transport for repository content, the
   data-rights exports for conversations and memory, and `GET
   /data/export/account` for the forge-owned and forum-owned records an account
   authors.
@@ -62,7 +62,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :issue,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/issues",
       proof: :inventory,
       issue: nil,
       note:
@@ -74,7 +74,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :project,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/projectsV2",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/projectsV2",
       proof: :inventory,
       issue: nil,
       note: "Widens for a member the same way issues do; returns the full set unpaged."
@@ -83,7 +83,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :repository,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/user/repos",
+      mechanism: "GET /api/v1/user/repos",
       proof: :inventory,
       issue: nil,
       note: "The one account-wide list the API publishes. Cursor paged, so it enumerates."
@@ -92,7 +92,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :comment,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/comments",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/issues/{issue_number}/comments",
       proof: :inventory,
       issue: nil,
       note:
@@ -104,7 +104,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :label,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/labels",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/labels",
       proof: :inventory,
       issue: nil,
       note: "Widens for a member the same way issues do; returns the full set unpaged."
@@ -113,7 +113,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :milestone,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/milestones",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/milestones",
       proof: :inventory,
       issue: nil,
       note: "Widens for a member, with the open and closed issue counts each milestone carries."
@@ -122,7 +122,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :assignee,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/assignees",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/assignees",
       proof: :inventory,
       issue: nil,
       note:
@@ -133,7 +133,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :issue_label,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/labels",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/issues/{issue_number}/labels",
       proof: :inventory,
       issue: nil,
       note: "Widens for a member, one issue at a time."
@@ -142,7 +142,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
       family: :issue_assignee,
       api?: true,
       status: :portable,
-      mechanism: "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/assignees",
+      mechanism: "GET /api/v1/repos/{owner}/{repo}/issues/{issue_number}/assignees",
       proof: :inventory,
       issue: nil,
       note: "Widens for a member, one issue at a time."
@@ -158,7 +158,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
         "The durable records behind the chat family are conversation messages, " <>
           "turns, tool steps, and the account chat backend's own runs and event " <>
           "stream, all of which leave through the DATA-004 export rather than " <>
-          "through /api/v3."
+          "through /api/v1."
     },
     %{
       family: :repository_content,
@@ -201,7 +201,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
         "forge_pushes.principal is user:<account-id> for a person's push, so " <>
           "the account export returns exactly the account's own rows with the " <>
           "WAL sequence and ref map a clone does not carry. A repository-scoped " <>
-          "read is published too, GET /api/v3/repos/{owner}/{repo}/pushes, " <>
+          "read is published too, GET /api/v1/repos/{owner}/{repo}/pushes, " <>
           "proven by " <>
           "test/openagents_web/controllers/push_receipt_controller_test.exs. It " <>
           "serves the WAL's own entries rather than the derived rows, so it " <>
@@ -340,6 +340,29 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "test OpenAgentsWeb.ReputationController applies."
     },
 
+    # ── a record a user authors that nothing gives back ───────────────────
+    %{
+      family: :trace,
+      api?: true,
+      status: :blocked,
+      # There is none. `POST /api/v1/traces` is the whole surface: a person
+      # uploads their own agent transcript and no route reads one back, not
+      # their own and not by id. That is a record they authored, held on their
+      # behalf, with no way to take it with them.
+      mechanism: nil,
+      proof: :inventory,
+      # #217 owns this surface — it is the issue the upload route was built
+      # under — and the missing read is part of it. Named rather than opening a
+      # second issue for half of one surface.
+      issue: 217,
+      note:
+        "Write-only. `POST /api/v1/traces` accepts an ATIF trace and nothing " <>
+          "reads one back, not by id and not for the owner, so an uploaded " <>
+          "trace cannot be exported. Classified when the route landed rather " <>
+          "than left undeclared, because an unclassified family is one the " <>
+          "export question never reaches."
+    },
+
     # ── not a record a user authors and takes with them ───────────────────
     %{
       family: :meta,
@@ -438,7 +461,7 @@ defmodule OpenAgents.DataRights.ExportInventory do
   @spec with_status(status()) :: [entry()]
   def with_status(status), do: Enum.filter(@entries, &(&1.status == status))
 
-  @doc "The families this ledger claims cover the published `/api/v3` surface."
+  @doc "The families this ledger claims cover the published `/api/v1` surface."
   @spec api_families() :: [atom()]
   def api_families do
     @entries |> Enum.filter(& &1.api?) |> Enum.map(& &1.family) |> Enum.sort()

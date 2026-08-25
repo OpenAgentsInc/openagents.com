@@ -14,12 +14,12 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
   alias OpenAgents.Repo
   alias OpenAgents.Threads
 
-  describe "POST /api/v3/threads" do
+  describe "POST /api/v1/threads" do
     test "opens a thread and returns a grant that names it", %{conn: conn} do
       body =
         conn
         |> put_chat_api_token("thread-open")
-        |> post(~p"/api/v3/threads", %{"objective" => "Rename the fence."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Rename the fence."})
         |> json_response(201)
 
       assert %{"thread" => thread, "grant" => grant} = body
@@ -45,7 +45,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       grant =
         conn
         |> put_chat_api_token("thread-ceilings")
-        |> post(~p"/api/v3/threads", %{"objective" => "Measure the budget."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Measure the budget."})
         |> json_response(201)
         |> Map.fetch!("grant")
 
@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       thread =
         conn
         |> put_chat_api_token("thread-shape")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Edit the file.",
           "reasoning" => "low",
           "permission_profile" => "workspace_write"
@@ -80,7 +80,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       thread =
         conn
         |> put_chat_api_token("thread-repository")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "openagents coder in OpenAgentsInc/openagents.com on main",
           "repository" => "OpenAgentsInc/openagents.com"
         })
@@ -98,7 +98,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       thread =
         conn
         |> put_chat_api_token("thread-no-repository")
-        |> post(~p"/api/v3/threads", %{"objective" => "No repository named."})
+        |> post(~p"/api/v1/threads", %{"objective" => "No repository named."})
         |> json_response(201)
         |> Map.fetch!("thread")
 
@@ -109,7 +109,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-blank-repository")
-        |> post(~p"/api/v3/threads", %{"objective" => "Blank it.", "repository" => "   "})
+        |> post(~p"/api/v1/threads", %{"objective" => "Blank it.", "repository" => "   "})
         |> json_response(422)
 
       assert body["code"] == "validation_failed"
@@ -120,7 +120,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-long-repository")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Bound it.",
           "repository" => String.duplicate("a", 201)
         })
@@ -133,7 +133,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-ox-alpha")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Delegate the edit.",
           "model" => "ox-alpha"
         })
@@ -146,7 +146,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-default-model")
-        |> post(~p"/api/v3/threads", %{"objective" => "Take the default."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Take the default."})
         |> json_response(201)
 
       assert body["grant"]["model"] == OpenAgents.Inference.Models.default_id()
@@ -167,7 +167,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-unavailable-model")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Ask for the unconfigured lane.",
           "model" => "ox-alpha"
         })
@@ -191,7 +191,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-bad-model")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Ask for the impossible.",
           "model" => "attacker/gpt-9-ultra"
         })
@@ -205,7 +205,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-no-objective")
-        |> post(~p"/api/v3/threads", %{})
+        |> post(~p"/api/v1/threads", %{})
         |> json_response(422)
 
       assert body["code"] == "validation_failed"
@@ -216,7 +216,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-bad-reasoning")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Ask for the impossible.",
           "reasoning" => "not-a-legal-value"
         })
@@ -230,7 +230,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       body =
         conn
         |> put_chat_api_token("thread-bad-profile")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Ask for the impossible.",
           "permission_profile" => "root"
         })
@@ -252,13 +252,13 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       for index <- 1..limit do
         assert authenticated
-               |> post(~p"/api/v3/threads", %{"objective" => "Concurrent #{index}."})
+               |> post(~p"/api/v1/threads", %{"objective" => "Concurrent #{index}."})
                |> json_response(201)
       end
 
       body =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "One too many."})
+        |> post(~p"/api/v1/threads", %{"objective" => "One too many."})
         |> json_response(429)
 
       assert body["code"] == "thread_quota_reached"
@@ -275,7 +275,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       opened =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Spend it all."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Spend it all."})
         |> json_response(201)
 
       grant = Repo.get_by!(Grant, thread_id: opened["thread"]["id"])
@@ -289,7 +289,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       body =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "One more, on empty."})
+        |> post(~p"/api/v1/threads", %{"objective" => "One more, on empty."})
         |> json_response(402)
 
       assert body["code"] == "credit_exhausted"
@@ -308,37 +308,37 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       assert conn
              |> put_chat_api_token("thread-cap-mine")
-             |> post(~p"/api/v3/threads", %{"objective" => "Mine."})
+             |> post(~p"/api/v1/threads", %{"objective" => "Mine."})
              |> json_response(201)
 
       assert conn
              |> put_chat_api_token("thread-cap-yours")
-             |> post(~p"/api/v3/threads", %{"objective" => "Yours."})
+             |> post(~p"/api/v1/threads", %{"objective" => "Yours."})
              |> json_response(201)
     end
 
     test "an anonymous caller is refused with the envelope", %{conn: conn} do
-      body = conn |> post(~p"/api/v3/threads", %{"objective" => "No."}) |> json_response(401)
+      body = conn |> post(~p"/api/v1/threads", %{"objective" => "No."}) |> json_response(401)
 
       assert body["code"] == "unauthenticated"
       assert is_map(body["errors"])
     end
   end
 
-  describe "GET /api/v3/threads/:thread_id" do
+  describe "GET /api/v1/threads/:thread_id" do
     test "reports usage, and reports no remainder where there is no ceiling", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-read")
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Report on me."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Report on me."})
         |> json_response(201)
 
       id = created["thread"]["id"]
       grant = Repo.get_by!(Grant, thread_id: id)
       {:ok, _spent} = Inference.record_usage(grant, %{"input_tokens" => 10, "output_tokens" => 5})
 
-      body = authenticated |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+      body = authenticated |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       assert body["thread"]["status"] == "open"
       assert body["grant"]["status"] == "active"
@@ -365,13 +365,13 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       created =
         conn
         |> put_chat_api_token("thread-owner")
-        |> post(~p"/api/v3/threads", %{"objective" => "Private work."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Private work."})
         |> json_response(201)
 
       body =
         conn
         |> put_chat_api_token("thread-stranger")
-        |> get(~p"/api/v3/threads/#{created["thread"]["id"]}")
+        |> get(~p"/api/v1/threads/#{created["thread"]["id"]}")
         |> json_response(404)
 
       assert body["code"] == "not_found"
@@ -382,17 +382,17 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       created =
         conn
         |> put_chat_api_token("thread-owner-two")
-        |> post(~p"/api/v3/threads", %{"objective" => "Private work."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Private work."})
         |> json_response(201)
 
       stranger = put_chat_api_token(conn, "thread-stranger-two")
 
       theirs =
-        stranger |> get(~p"/api/v3/threads/#{created["thread"]["id"]}") |> json_response(404)
+        stranger |> get(~p"/api/v1/threads/#{created["thread"]["id"]}") |> json_response(404)
 
       absent =
         stranger
-        |> get(~p"/api/v3/threads/00000000-0000-4000-8000-000000000001")
+        |> get(~p"/api/v1/threads/00000000-0000-4000-8000-000000000001")
         |> json_response(404)
 
       assert Map.drop(theirs, ["request_id"]) == Map.drop(absent, ["request_id"])
@@ -408,12 +408,12 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Outlive me."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Outlive me."})
         |> json_response(201)
 
       body =
         authenticated
-        |> get(~p"/api/v3/threads/#{created["thread"]["id"]}")
+        |> get(~p"/api/v1/threads/#{created["thread"]["id"]}")
         |> json_response(200)
 
       assert body["grant"]["status"] == "active"
@@ -434,12 +434,12 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Outlive me."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Outlive me."})
         |> json_response(201)
 
       body =
         authenticated
-        |> get(~p"/api/v3/threads/#{created["thread"]["id"]}")
+        |> get(~p"/api/v1/threads/#{created["thread"]["id"]}")
         |> json_response(200)
 
       assert body["grant"]["status"] == "expired"
@@ -454,7 +454,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       first =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "First."})
+        |> post(~p"/api/v1/threads", %{"objective" => "First."})
         |> json_response(201)
 
       assert Threads.open_count(github_user("api-token-thread-expiry-cap")) == 1
@@ -462,37 +462,37 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       # Waiting does not free it. There is no clock to wait out.
       refused =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Second."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Second."})
         |> json_response(429)
 
       assert refused["code"] == "thread_quota_reached"
 
       # Saying so does.
-      _deleted = authenticated |> delete(~p"/api/v3/threads/#{first["thread"]["id"]}")
+      _deleted = authenticated |> delete(~p"/api/v1/threads/#{first["thread"]["id"]}")
 
       second =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Second."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Second."})
         |> json_response(201)
 
       assert second["grant"]["token"] != first["grant"]["token"]
     end
   end
 
-  describe "DELETE /api/v3/threads/:thread_id" do
+  describe "DELETE /api/v1/threads/:thread_id" do
     test "revokes the grant immediately", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-revoke")
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Stop me."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Stop me."})
         |> json_response(201)
 
       id = created["thread"]["id"]
       token = created["grant"]["token"]
       assert {:ok, _usable} = Inference.resolve(token)
 
-      body = authenticated |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+      body = authenticated |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       assert body["thread"]["status"] == "cancelled"
       assert body["grant"]["status"] == "revoked"
@@ -505,12 +505,12 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Stop me twice."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Stop me twice."})
         |> json_response(201)
 
       id = created["thread"]["id"]
-      assert authenticated |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
-      body = authenticated |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+      assert authenticated |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
+      body = authenticated |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       assert body["thread"]["status"] == "cancelled"
       assert body["grant"]["status"] == "revoked"
@@ -520,13 +520,13 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       created =
         conn
         |> put_chat_api_token("thread-revoke-owner")
-        |> post(~p"/api/v3/threads", %{"objective" => "Mine alone."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Mine alone."})
         |> json_response(201)
 
       body =
         conn
         |> put_chat_api_token("thread-revoke-stranger")
-        |> delete(~p"/api/v3/threads/#{created["thread"]["id"]}")
+        |> delete(~p"/api/v1/threads/#{created["thread"]["id"]}")
         |> json_response(404)
 
       assert body["code"] == "not_found"
@@ -540,7 +540,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Answer one question."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Answer one question."})
         |> json_response(201)
 
       proxied =
@@ -558,7 +558,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       assert proxied.status == 200
 
-      body = authenticated |> get(~p"/api/v3/threads/#{created["thread"]["id"]}")
+      body = authenticated |> get(~p"/api/v1/threads/#{created["thread"]["id"]}")
       grant = json_response(body, 200)["grant"]
 
       assert grant["call_count"] == 1
@@ -570,11 +570,11 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Answer, then stop."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Answer, then stop."})
         |> json_response(201)
 
       assert authenticated
-             |> delete(~p"/api/v3/threads/#{created["thread"]["id"]}")
+             |> delete(~p"/api/v1/threads/#{created["thread"]["id"]}")
              |> json_response(200)
 
       proxied =
@@ -619,18 +619,18 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Remember me."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Remember me."})
         |> json_response(201)
 
       %{authenticated: authenticated, id: created["thread"]["id"]}
     end
 
     test "records an event and advances the count", %{authenticated: conn, id: id} do
-      before = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+      before = conn |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "event_type" => "turn.user",
           "payload" => %{"text" => "list the open issues"}
         })
@@ -644,14 +644,14 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     test "reads the transcript back, oldest first", %{authenticated: conn, id: id} do
       for text <- ["first", "second", "third"] do
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "event_type" => "turn.user",
           "payload" => %{"text" => text}
         })
         |> json_response(201)
       end
 
-      body = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+      body = conn |> get(~p"/api/v1/threads/#{id}/events") |> json_response(200)
 
       # The server's copy is the only copy: a client reads this back rather than
       # keeping its own, so two machines on one thread see one transcript.
@@ -667,17 +667,17 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     test "continues from an event already read", %{authenticated: conn, id: id} do
       for text <- ["one", "two", "three"] do
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "event_type" => "turn.user",
           "payload" => %{"text" => text}
         })
         |> json_response(201)
       end
 
-      first = conn |> get(~p"/api/v3/threads/#{id}/events?limit=2") |> json_response(200)
+      first = conn |> get(~p"/api/v1/threads/#{id}/events?limit=2") |> json_response(200)
       cursor = List.last(first["events"])["id"]
 
-      rest = conn |> get(~p"/api/v3/threads/#{id}/events?after=#{cursor}") |> json_response(200)
+      rest = conn |> get(~p"/api/v1/threads/#{id}/events?after=#{cursor}") |> json_response(200)
 
       # A working session records a turn and every tool it ran, which passes
       # the listing cap inside an hour. Without a cursor its history could not
@@ -695,13 +695,13 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert byte_size(reasoning) > 16_384
 
       conn
-      |> post(~p"/api/v3/threads/#{id}/events", %{
+      |> post(~p"/api/v1/threads/#{id}/events", %{
         "event_type" => "turn.reasoning",
         "payload" => %{"text" => reasoning}
       })
       |> json_response(201)
 
-      body = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+      body = conn |> get(~p"/api/v1/threads/#{id}/events") |> json_response(200)
 
       stored =
         body["events"]
@@ -719,7 +719,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       # column holds valid JSON, not that the JSON is interesting.
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{"event_type" => "turn.started"})
+        |> post(~p"/api/v1/threads/#{id}/events", %{"event_type" => "turn.started"})
         |> json_response(201)
 
       assert body["thread"]["event_count"] > 0
@@ -728,7 +728,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     test "returns the created event, whose id is the cursor", %{authenticated: conn, id: id} do
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "event_type" => "turn.user",
           "payload" => %{"text" => "echo me back"}
         })
@@ -742,14 +742,14 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["event"]["payload"] == %{"text" => "echo me back"}
       assert is_binary(body["event"]["inserted_at"])
 
-      read = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+      read = conn |> get(~p"/api/v1/threads/#{id}/events") |> json_response(200)
       assert List.last(read["events"])["id"] == body["event"]["id"]
     end
 
     test "refuses an event with no type", %{authenticated: conn, id: id} do
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{"payload" => %{"text" => "x"}})
+        |> post(~p"/api/v1/threads/#{id}/events", %{"payload" => %{"text" => "x"}})
         |> json_response(422)
 
       # The code is the machine's half of the refusal, symmetric with
@@ -759,11 +759,11 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     end
 
     test "refuses to append to a revoked thread", %{authenticated: conn, id: id} do
-      conn |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+      conn |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{"event_type" => "turn.user"})
+        |> post(~p"/api/v1/threads/#{id}/events", %{"event_type" => "turn.user"})
         |> json_response(422)
 
       # A transcript that keeps growing after the report was written is not the
@@ -775,11 +775,11 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       authenticated: conn,
       id: id
     } do
-      before = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+      before = conn |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "events" => [
             %{"event_type" => "turn.user", "payload" => %{"text" => "first"}},
             %{"event_type" => "tool.ran", "payload" => %{"tool" => "bash"}},
@@ -799,19 +799,19 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert Enum.all?(body["events"], &is_binary(&1["inserted_at"]))
       assert body["thread"]["event_count"] == before["thread"]["event_count"] + 3
 
-      read = conn |> get(~p"/api/v3/threads/#{id}/events") |> json_response(200)
+      read = conn |> get(~p"/api/v1/threads/#{id}/events") |> json_response(200)
       assert Enum.take(read["events"], -3) |> Enum.map(& &1["id"]) == ids
     end
 
     test "a batch with one invalid event records nothing", %{authenticated: conn, id: id} do
-      before = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+      before = conn |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       # The second entry passes the route's parse — its type is non-blank — and
       # is refused by the database's 80-character ceiling, so the refusal
       # proves the transaction rolled the first entry back with it.
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "events" => [
             %{"event_type" => "turn.user", "payload" => %{"text" => "landed?"}},
             %{"event_type" => String.duplicate("x", 81), "payload" => %{}}
@@ -822,7 +822,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert body["code"] == "event_invalid"
       assert body["errors"]["events[1].event_type"] != nil
 
-      after_refusal = conn |> get(~p"/api/v3/threads/#{id}") |> json_response(200)
+      after_refusal = conn |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
       assert after_refusal["thread"]["event_count"] == before["thread"]["event_count"]
     end
 
@@ -832,7 +832,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     } do
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "events" => [
             %{"event_type" => "turn.user"},
             %{"payload" => %{"text" => "no type"}}
@@ -850,7 +850,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     } do
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{"events" => []})
+        |> post(~p"/api/v1/threads/#{id}/events", %{"events" => []})
         |> json_response(422)
 
       assert body["code"] == "event_invalid"
@@ -867,7 +867,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "events" =>
             for index <- 1..3 do
               %{"event_type" => "turn.user", "payload" => %{"index" => index}}
@@ -884,11 +884,11 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     end
 
     test "refuses a batch to a revoked thread as one refusal", %{authenticated: conn, id: id} do
-      conn |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+      conn |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       body =
         conn
-        |> post(~p"/api/v3/threads/#{id}/events", %{
+        |> post(~p"/api/v1/threads/#{id}/events", %{
           "events" => [
             %{"event_type" => "turn.user", "payload" => %{"text" => "late"}},
             %{"event_type" => "turn.assistant", "payload" => %{"text" => "later"}}
@@ -901,26 +901,26 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
     test "does not read another account's transcript", %{authenticated: conn, id: id} do
       conn
-      |> post(~p"/api/v3/threads/#{id}/events", %{"event_type" => "turn.user"})
+      |> post(~p"/api/v1/threads/#{id}/events", %{"event_type" => "turn.user"})
       |> json_response(201)
 
       stranger = put_chat_api_token(build_conn(), "thread-stranger")
 
-      assert stranger |> get(~p"/api/v3/threads/#{id}/events") |> json_response(404)
+      assert stranger |> get(~p"/api/v1/threads/#{id}/events") |> json_response(404)
     end
   end
 
-  describe "GET /api/v3/threads" do
+  describe "GET /api/v1/threads" do
     test "lists the account's threads, newest first", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-index")
 
       for objective <- ["older", "newer"] do
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => objective})
+        |> post(~p"/api/v1/threads", %{"objective" => objective})
         |> json_response(201)
       end
 
-      body = authenticated |> get(~p"/api/v3/threads") |> json_response(200)
+      body = authenticated |> get(~p"/api/v1/threads") |> json_response(200)
 
       # A client that outlives its process needs a way back to the work it was
       # doing, and the account is the only place that knows.
@@ -937,7 +937,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
           ] do
         authenticated
         |> post(
-          ~p"/api/v3/threads",
+          ~p"/api/v1/threads",
           %{"objective" => objective}
           |> Map.merge(if repository, do: %{"repository" => repository}, else: %{})
         )
@@ -946,7 +946,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       body =
         authenticated
-        |> get(~p"/api/v3/threads?repository=OpenAgentsInc/openagents.com")
+        |> get(~p"/api/v1/threads?repository=OpenAgentsInc/openagents.com")
         |> json_response(200)
 
       # An exact match on the recorded field, so a resume picker filters
@@ -954,39 +954,39 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert Enum.map(body["threads"], & &1["objective"]) == ["here"]
       assert Enum.map(body["threads"], & &1["repository"]) == ["OpenAgentsInc/openagents.com"]
 
-      unfiltered = authenticated |> get(~p"/api/v3/threads") |> json_response(200)
+      unfiltered = authenticated |> get(~p"/api/v1/threads") |> json_response(200)
       assert length(unfiltered["threads"]) == 3
     end
 
     test "does not list another account's threads", %{conn: conn} do
       put_chat_api_token(conn, "thread-mine")
-      |> post(~p"/api/v3/threads", %{"objective" => "mine"})
+      |> post(~p"/api/v1/threads", %{"objective" => "mine"})
       |> json_response(201)
 
       body =
         build_conn()
         |> put_chat_api_token("thread-theirs")
-        |> get(~p"/api/v3/threads")
+        |> get(~p"/api/v1/threads")
         |> json_response(200)
 
       assert body["threads"] == []
     end
   end
 
-  describe "POST /api/v3/threads/:thread_id/grants" do
+  describe "POST /api/v1/threads/:thread_id/grants" do
     test "re-mints authority on the same thread and revokes the old grant", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-remint")
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Resume me."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Resume me."})
         |> json_response(201)
 
       id = created["thread"]["id"]
       old_token = created["grant"]["token"]
       assert {:ok, _usable} = Inference.resolve(old_token)
 
-      body = authenticated |> post(~p"/api/v3/threads/#{id}/grants") |> json_response(201)
+      body = authenticated |> post(~p"/api/v1/threads/#{id}/grants") |> json_response(201)
 
       assert body["thread"]["id"] == id
       assert body["thread"]["status"] == "open"
@@ -1001,13 +1001,13 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         authenticated
-        |> post(~p"/api/v3/threads", %{"objective" => "Close me first."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Close me first."})
         |> json_response(201)
 
       id = created["thread"]["id"]
-      _cancelled = authenticated |> delete(~p"/api/v3/threads/#{id}") |> json_response(200)
+      _cancelled = authenticated |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
 
-      refused = authenticated |> post(~p"/api/v3/threads/#{id}/grants") |> json_response(422)
+      refused = authenticated |> post(~p"/api/v1/threads/#{id}/grants") |> json_response(422)
       assert refused["code"] == "thread_terminal"
     end
 
@@ -1016,13 +1016,13 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       created =
         owner
-        |> post(~p"/api/v3/threads", %{"objective" => "Mine alone."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Mine alone."})
         |> json_response(201)
 
       id = created["thread"]["id"]
 
       stranger = put_chat_api_token(recycle(conn), "thread-remint-stranger")
-      assert stranger |> post(~p"/api/v3/threads/#{id}/grants") |> json_response(404)
+      assert stranger |> post(~p"/api/v1/threads/#{id}/grants") |> json_response(404)
     end
   end
 end

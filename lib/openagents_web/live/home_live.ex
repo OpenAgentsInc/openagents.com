@@ -541,7 +541,7 @@ defmodule OpenAgentsWeb.HomeLive do
           </:item>
           <:item question="What does the API look like?">
             <p>
-              It is shaped after GitHub's REST API and served under <code>/api/v3</code>. An existing client usually needs only a base URL
+              It is shaped after GitHub's REST API and served under <code>/api/v1</code>. An existing client usually needs only a base URL
               change.
             </p>
           </:item>

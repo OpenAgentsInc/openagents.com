@@ -18,7 +18,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> put_api_token(user, ["computer:control"])
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegation-targets")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegation-targets")
       |> json_response(200)
 
     assert response["schema"] == "openagents.delegation_targets.v1"
@@ -28,7 +28,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> put_api_token(user, ["box:control"])
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegation-targets")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegation-targets")
       |> json_response(200)
 
     assert [%{"kind" => "box", "id" => "box:" <> _}] = response["targets"]
@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> put_api_token(outsider, ["box:control"])
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegation-targets")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegation-targets")
       |> json_response(404)
 
     assert response == %{"error" => %{"code" => "conversation_not_found"}}
@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
       build_conn()
       |> put_api_token(owner, ["box:control"])
       |> get(
-        ~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{Ecto.UUID.generate()}"
+        ~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{Ecto.UUID.generate()}"
       )
       |> json_response(404)
 
@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
       response =
         conn
         |> put_api_token(user, ["box:control", "computer:control"])
-        |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/#{id}")
+        |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/#{id}")
         |> json_response(404)
 
       assert response == %{"error" => %{"code" => "delegation_not_found"}}
@@ -85,7 +85,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
 
     missing_agent =
       token_conn
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "computer:#{machine.id}",
         "agent_id" => "codex",
         "prompt" => "private prompt",
@@ -99,7 +99,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     invalid_cwd =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "computer:#{machine.id}",
         "agent_id" => "claude",
         "prompt" => "private prompt",
@@ -119,7 +119,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "computer:#{machine.id}",
         "agent_id" => "codex",
         "prompt" => "do not queue",
@@ -140,7 +140,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> put_api_token(user, ["box:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "computer:#{machine.id}",
         "agent_id" => "codex",
         "prompt" => "bounded",
@@ -153,7 +153,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "box:#{box.id}",
         "command" => "echo bounded"
       })
@@ -178,7 +178,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> bearer(box_credential)
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "computer:#{machine.id}",
         "agent_id" => "codex",
         "prompt" => "must refuse",
@@ -191,7 +191,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(box_credential)
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/computer-job:#{job.id}")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/computer-job:#{job.id}")
       |> json_response(403)
 
     assert response == %{"error" => %{"code" => "agent_computer_control_forbidden"}}
@@ -199,7 +199,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(box_credential)
-      |> delete(~p"/api/v3/conversations/#{conversation.id}/delegations/computer-job:#{job.id}")
+      |> delete(~p"/api/v1/conversations/#{conversation.id}/delegations/computer-job:#{job.id}")
       |> json_response(403)
 
     assert response == %{"error" => %{"code" => "agent_computer_control_forbidden"}}
@@ -212,7 +212,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(computer_credential)
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "box:#{box.id}",
         "command" => "must refuse"
       })
@@ -223,7 +223,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(computer_credential)
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(403)
 
     assert response == %{"error" => %{"code" => "agent_box_control_forbidden"}}
@@ -231,7 +231,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(computer_credential)
-      |> delete(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> delete(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(403)
 
     assert response == %{"error" => %{"code" => "agent_box_control_forbidden"}}
@@ -251,7 +251,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> bearer(credential)
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "box:#{box.id}",
         "command" => "must refuse"
       })
@@ -262,7 +262,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(credential)
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(404)
 
     assert response == %{"error" => %{"code" => "delegation_not_found"}}
@@ -270,7 +270,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(credential)
-      |> delete(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> delete(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(404)
 
     assert response == %{"error" => %{"code" => "delegation_not_found"}}
@@ -290,7 +290,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> bearer(credential)
-      |> post(~p"/api/v3/conversations/#{conversation.id}/delegations", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/delegations", %{
         "target_id" => "box:#{box.id}",
         "command" => "must refuse"
       })
@@ -301,7 +301,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(credential)
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(403)
 
     assert response == %{"error" => %{"code" => "agent_box_control_forbidden"}}
@@ -309,7 +309,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> bearer(credential)
-      |> delete(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> delete(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(403)
 
     assert response == %{"error" => %{"code" => "agent_box_control_forbidden"}}
@@ -334,7 +334,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       conn
       |> put_api_token(user, ["box:control", "computer:control"])
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/box-run:#{run.id}")
       |> json_response(200)
 
     assert response["delegation"]["kind"] == "box"
@@ -345,7 +345,7 @@ defmodule OpenAgentsWeb.DelegationsControllerTest do
     response =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> get(~p"/api/v3/conversations/#{conversation.id}/delegations/computer-job:#{job.id}")
+      |> get(~p"/api/v1/conversations/#{conversation.id}/delegations/computer-job:#{job.id}")
       |> json_response(200)
 
     assert response["delegation"]["kind"] == "computer"

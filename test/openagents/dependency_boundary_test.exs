@@ -129,7 +129,7 @@ defmodule OpenAgents.DependencyBoundaryTest do
       A surface gained the ability to promote a fleet target.
 
       FLEETPROMOTE-001 names the `/admin/forge` **Promote** button and
-      `POST /api/v3/admin/forge/targets` as one authority path. A third surface
+      `POST /api/v1/admin/forge/targets` as one authority path. A third surface
       must be named there before it is added here.
       """)
     end

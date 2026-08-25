@@ -25,7 +25,7 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
     :ok
   end
 
-  test "POST, GET, and PATCH /api/v3/repos/:owner/:repo/pulls manage a pull request", %{
+  test "POST, GET, and PATCH /api/v1/repos/:owner/:repo/pulls manage a pull request", %{
     conn: conn
   } do
     target = repository_fixture()
@@ -38,7 +38,7 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
     conn = put_forge_api_token(conn, "pull-request-lifecycle", target)
 
     create_conn =
-      post(conn, "/api/v3/repos/#{target.owner}/#{target.name}/pulls", %{
+      post(conn, "/api/v1/repos/#{target.owner}/#{target.name}/pulls", %{
         title: "Add pull request support",
         body: "Issue-backed pull request",
         head_repository: "#{source.owner}/#{source.name}",
@@ -55,13 +55,13 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
              "base" => %{"ref" => "main"}
            } = json_response(create_conn, 201)
 
-    show_conn = get(conn, "/api/v3/repos/#{target.owner}/#{target.name}/pulls/#{number}")
+    show_conn = get(conn, "/api/v1/repos/#{target.owner}/#{target.name}/pulls/#{number}")
 
     assert %{"number" => ^number, "title" => "Add pull request support"} =
              json_response(show_conn, 200)
 
     update_conn =
-      patch(conn, "/api/v3/repos/#{target.owner}/#{target.name}/pulls/#{number}", %{
+      patch(conn, "/api/v1/repos/#{target.owner}/#{target.name}/pulls/#{number}", %{
         title: "Ship pull request support",
         state: "closed",
         draft: false
@@ -75,12 +75,12 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
            } = json_response(update_conn, 200)
   end
 
-  test "POST /api/v3/repos/:owner/:repo/pulls rejects a disabled repository", %{conn: conn} do
+  test "POST /api/v1/repos/:owner/:repo/pulls rejects a disabled repository", %{conn: conn} do
     target = repository_fixture(%{pull_requests_enabled: false})
     conn = put_forge_api_token(conn, "pull-request-disabled", target)
 
     conn =
-      post(conn, "/api/v3/repos/#{target.owner}/#{target.name}/pulls", %{
+      post(conn, "/api/v1/repos/#{target.owner}/#{target.name}/pulls", %{
         title: "Cannot open",
         head_repository: "#{target.owner}/#{target.name}",
         head: "main"
@@ -90,44 +90,44 @@ defmodule OpenAgentsWeb.PullRequestControllerTest do
              json_response(conn, 409)
   end
 
-  test "POST /api/v3/repos/:owner/:repo/pulls requires a bearer token", %{conn: conn} do
+  test "POST /api/v1/repos/:owner/:repo/pulls requires a bearer token", %{conn: conn} do
     repository = repository_fixture()
 
     conn =
-      post(conn, "/api/v3/repos/#{repository.owner}/#{repository.name}/pulls", %{
+      post(conn, "/api/v1/repos/#{repository.owner}/#{repository.name}/pulls", %{
         title: "Unauthenticated pull request"
       })
 
     assert %{"error" => "invalid_api_token"} = json_response(conn, 401)
   end
 
-  test "GET /api/v3/repos/:owner/:repo/pulls lists pull requests", %{conn: conn} do
+  test "GET /api/v1/repos/:owner/:repo/pulls lists pull requests", %{conn: conn} do
     repository = repository_fixture()
 
     conn =
-      get(conn, "/api/v3/repos/#{repository.owner}/#{repository.name}/pulls")
+      get(conn, "/api/v1/repos/#{repository.owner}/#{repository.name}/pulls")
 
     assert [] == json_response(conn, 200)
   end
 
-  test "PATCH /api/v3/repos/:owner/:repo updates the owner pull request setting", %{conn: conn} do
+  test "PATCH /api/v1/repos/:owner/:repo updates the owner pull request setting", %{conn: conn} do
     repository = repository_fixture()
     conn = put_forge_api_token(conn, "pull-request-settings", repository)
 
     conn =
-      patch(conn, "/api/v3/repos/#{repository.owner}/#{repository.name}", %{
+      patch(conn, "/api/v1/repos/#{repository.owner}/#{repository.name}", %{
         pull_requests_enabled: false
       })
 
     assert %{"pull_requests_enabled" => false} = json_response(conn, 200)
   end
 
-  test "PATCH /api/v3/repos/:owner/:repo requires an owner", %{conn: conn} do
+  test "PATCH /api/v1/repos/:owner/:repo requires an owner", %{conn: conn} do
     repository = repository_fixture()
     conn = put_forge_api_token(conn, "pull-request-nonowner")
 
     conn =
-      patch(conn, "/api/v3/repos/#{repository.owner}/#{repository.name}", %{
+      patch(conn, "/api/v1/repos/#{repository.owner}/#{repository.name}", %{
         pull_requests_enabled: false
       })
 

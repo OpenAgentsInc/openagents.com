@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.BoxFanoutControllerTest do
     response =
       conn
       |> put_box_api_token("box-fanout-controller")
-      |> post("/api/v3/conversations/#{conversation.id}/boxes/fanout", %{
+      |> post("/api/v1/conversations/#{conversation.id}/boxes/fanout", %{
         "count" => 3,
         "labels" => ["left", "middle", "right"]
       })
@@ -81,7 +81,7 @@ defmodule OpenAgentsWeb.BoxFanoutControllerTest do
     response =
       conn
       |> put_box_api_token("box-fanout-foreign-account")
-      |> post("/api/v3/conversations/#{conversation.id}/boxes/fanout", %{"count" => 1})
+      |> post("/api/v1/conversations/#{conversation.id}/boxes/fanout", %{"count" => 1})
       |> json_response(404)
 
     assert response == %{"error" => %{"code" => "conversation_not_found"}}

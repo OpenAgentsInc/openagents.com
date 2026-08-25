@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.GymLive do
   The Gym: graded benchmark runs of our agents, operator-only.
 
   Read-only over `OpenAgents.Gym` — the harness runs elsewhere and posts
-  results through `POST /api/v3/gym/runs`; this surface is the scoreboard
+  results through `POST /api/v1/gym/runs`; this surface is the scoreboard
   that capability work (models, plugins, harness changes) is read against.
   Operator-gated the same way `/chat` is: the route sits behind the
   `:operator` pipeline, the mount re-checks, and every event re-checks,
@@ -101,7 +101,7 @@ defmodule OpenAgentsWeb.GymLive do
         <div :if={@runs_empty?}>
           <.empty title="No runs recorded yet">
             No graded runs have been posted. The harness records one with
-            <code>POST /api/v3/gym/runs</code>
+            <code>POST /api/v1/gym/runs</code>
             — see <code>docs/2026-08-24-harbor-terminal-bench-plan.md</code>.
           </.empty>
         </div>

@@ -10,7 +10,7 @@ defmodule OpenAgentsWeb.ContributionContract do
   file an issue, how to get a change in, and how to show that the change
   landed.
 
-  It does not restate the API. `GET /api/v3` already publishes the route
+  It does not restate the API. `GET /api/v1` already publishes the route
   inventory, the resource families, the extension fields, and the error
   envelope, all derived from the router. Publishing a second copy here would
   give an agent two documents that can disagree. This contract points at that
@@ -26,7 +26,7 @@ defmodule OpenAgentsWeb.ContributionContract do
 
   - Each published request carries the class, principal, and scope that
     `OpenAgentsWeb.RouteAuthority` computes for that exact router route, and
-    `/api/v3` requests additionally carry the resource family from
+    `/api/v1` requests additionally carry the resource family from
     `OpenAgentsWeb.ApiRouteAuthority`.
   - The credential scopes come from `OpenAgents.ApiTokens.allowed_scopes/0`
     and the agent participation scope the router enforces.
@@ -233,18 +233,18 @@ defmodule OpenAgentsWeb.ContributionContract do
           "api-description",
           "Read the route inventory, families, extensions, and error envelope.",
           method: "GET",
-          path: "/api/v3"
+          path: "/api/v1"
         ),
         step("ready-queue", "List open issues with no open prerequisite.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/issues",
+          path: "/api/v1/repos/:owner/:repo/issues",
           query: "state=open&blocked=false"
         ),
         step(
           "labels",
           "Read the tracker's labels. `agent-ready` marks issues shaped for an agent.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/labels",
+          path: "/api/v1/repos/:owner/:repo/labels",
           note:
             "Labels are tracker data, not part of this contract. Narrow the ready queue " <>
               "with `labels=agent-ready` only after this endpoint confirms the label exists."
@@ -253,22 +253,22 @@ defmodule OpenAgentsWeb.ContributionContract do
           "issue",
           "Read one issue, including its acceptance criteria and its `openagents` fields.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/issues/:issue_number"
+          path: "/api/v1/repos/:owner/:repo/issues/:issue_number"
         ),
         step("dependencies", "Read what an issue waits on and what waits on it.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/issues/:issue_number/dependencies"
+          path: "/api/v1/repos/:owner/:repo/issues/:issue_number/dependencies"
         ),
         step(
           "progress",
           "Filter by how far along an issue is, as the reader's own boards derive it.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/issues",
+          path: "/api/v1/repos/:owner/:repo/issues",
           query: "state=open&progress=not_started"
         ),
         step("project-views", "List the project boards a repository publishes.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/projectsV2"
+          path: "/api/v1/repos/:owner/:repo/projectsV2"
         )
       ]
     }
@@ -303,16 +303,16 @@ defmodule OpenAgentsWeb.ContributionContract do
         ),
         step("device-flow", "Authorize a headless client without a browser on the same machine.",
           method: "POST",
-          path: "/api/v3/device/authorizations"
+          path: "/api/v1/device/authorizations"
         ),
         step("register-agent", "Register an agent and receive its participation credential.",
           method: "POST",
-          path: "/api/v3/agents/register"
+          path: "/api/v1/agents/register"
         ),
         step("call", "Send the credential as a bearer.",
           command:
             "curl --header \"Authorization: Bearer $OPENAGENTS_API_TOKEN\" " <>
-              base <> "/api/v3/repos/{owner}/{repo}/issues"
+              base <> "/api/v1/repos/{owner}/{repo}/issues"
         )
       ]
     }
@@ -339,15 +339,15 @@ defmodule OpenAgentsWeb.ContributionContract do
         ),
         step("file", "File an issue.",
           method: "POST",
-          path: "/api/v3/repos/:owner/:repo/issues"
+          path: "/api/v1/repos/:owner/:repo/issues"
         ),
         step("comment", "Add evidence to an issue.",
           method: "POST",
-          path: "/api/v3/repos/:owner/:repo/issues/:issue_number/comments"
+          path: "/api/v1/repos/:owner/:repo/issues/:issue_number/comments"
         ),
         step("declare-dependency", "Record that an issue waits on another.",
           method: "POST",
-          path: "/api/v3/repos/:owner/:repo/issues/:issue_number/dependencies"
+          path: "/api/v1/repos/:owner/:repo/issues/:issue_number/dependencies"
         )
       ]
     }
@@ -385,11 +385,11 @@ defmodule OpenAgentsWeb.ContributionContract do
         step("push", "Push to the forge.", command: "git push openagents HEAD:main"),
         step("pull-request", "Open a pull request on the forge.",
           method: "POST",
-          path: "/api/v3/repos/:owner/:repo/pulls"
+          path: "/api/v1/repos/:owner/:repo/pulls"
         ),
         step("read-pull-requests", "Read pull requests.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/pulls"
+          path: "/api/v1/repos/:owner/:repo/pulls"
         ),
         step("clone-anonymous", "Read without a credential.",
           command: "git clone " <> base <> "/{owner}/{repo}.git"
@@ -419,7 +419,7 @@ defmodule OpenAgentsWeb.ContributionContract do
           "attempts",
           "Read the attempts made against one issue, with the commit each ended at.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/issues/:issue_number"
+          path: "/api/v1/repos/:owner/:repo/issues/:issue_number"
         ),
         step("changelog", "Read entries with their push, build, and deploy receipt identifiers.",
           method: "GET",
@@ -431,11 +431,11 @@ defmodule OpenAgentsWeb.ContributionContract do
         ),
         step("deployment", "Read one deployment and its provider receipt.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/deployments/:id"
+          path: "/api/v1/repos/:owner/:repo/deployments/:id"
         ),
         step("close", "Close the issue, with the evidence in a comment.",
           method: "PATCH",
-          path: "/api/v3/repos/:owner/:repo/issues/:issue_number"
+          path: "/api/v1/repos/:owner/:repo/issues/:issue_number"
         )
       ]
     }
@@ -468,7 +468,7 @@ defmodule OpenAgentsWeb.ContributionContract do
         ),
         step("promises", "Filter a project board's items by promise state.",
           method: "GET",
-          path: "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items",
+          path: "/api/v1/repos/:owner/:repo/projectsV2/:project_number/items",
           query: "promise_state=LIVE",
           document: "docs/product-promises-registry.md"
         )
@@ -489,7 +489,7 @@ defmodule OpenAgentsWeb.ContributionContract do
         "state" =>
           "Implemented in the domain and not served. No route prices, claims, verifies, " <>
             "or settles a bounty, and no payment surface is reachable over HTTP.",
-        "absent_route" => "POST /api/v3/repos/{owner}/{repo}/issues/{issue_number}/bounty",
+        "absent_route" => "POST /api/v1/repos/{owner}/{repo}/issues/{issue_number}/bounty",
         "policy_document" => "docs/bounty-settlement.md"
       },
       %{
@@ -509,15 +509,15 @@ defmodule OpenAgentsWeb.ContributionContract do
             "at, and the push, build, and deploy receipts for a commit are read from the " <>
             "changelog or the commit page. The join from an issue to those receipt " <>
             "identifiers is still made by the reader.",
-        "absent_route" => "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/receipts"
+        "absent_route" => "GET /api/v1/repos/{owner}/{repo}/issues/{issue_number}/receipts"
       },
       %{
         "id" => "openapi_document",
         "summary" => "An OpenAPI description of the API.",
         "state" =>
-          "Not published. `GET /api/v3` carries the route inventory, the resource " <>
+          "Not published. `GET /api/v1` carries the route inventory, the resource " <>
             "families, and the error envelope instead.",
-        "absent_route" => "GET /api/v3/openapi.json"
+        "absent_route" => "GET /api/v1/openapi.json"
       },
       %{
         "id" => "fork",
@@ -525,7 +525,7 @@ defmodule OpenAgentsWeb.ContributionContract do
         "state" =>
           "Not implemented. The contribution path from outside a repository's membership " <>
             "is a detailed issue.",
-        "absent_route" => "POST /api/v3/repos/{owner}/{repo}/forks"
+        "absent_route" => "POST /api/v1/repos/{owner}/{repo}/forks"
       },
       %{
         "id" => "automatic_github_mirroring",
@@ -594,13 +594,13 @@ defmodule OpenAgentsWeb.ContributionContract do
   end
 
   # Each surface has exactly one authority, and this publishes whichever one
-  # owns the route. `/api/v3` belongs to `OpenAgentsWeb.ApiRouteAuthority`,
+  # owns the route. `/api/v1` belongs to `OpenAgentsWeb.ApiRouteAuthority`,
   # whose classifications are proven against what the enforcing pipeline does
   # to an anonymous request. Everything else belongs to the site-wide
   # `OpenAgentsWeb.RouteAuthority`. Publishing both for one route would let the
   # document contradict itself wherever the two are worded differently.
   defp access(method, path) do
-    if String.starts_with?(path, "/api/v3") do
+    if String.starts_with?(path, "/api/v1") do
       api_access(method, path)
     else
       site_access(method, path)

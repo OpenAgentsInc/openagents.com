@@ -123,9 +123,9 @@ turn, work item, or voice session.
 ## Durable account chat
 
 `OpenAgents.Chat.AccountTurns` is the application entry point for account chat
-submissions from both `/chat` and `POST /api/v3/chat/turns`. It creates the run
+submissions from both `/chat` and `POST /api/v1/chat/turns`. It creates the run
 and first event in one transaction before it starts provider work. The browser
-and `GET /api/v3/chat/events` then project the same account-scoped journal.
+and `GET /api/v1/chat/events` then project the same account-scoped journal.
 LiveView messages and PubSub notifications remain replaceable projections of
 that durable state.
 

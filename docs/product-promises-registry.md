@@ -61,19 +61,19 @@ within a project. Every promise item has one canonical issue.
 List promises by state:
 
 ```text
-GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items?promise_state=LIVE
+GET /api/v1/repos/{owner}/{repo}/projectsV2/{project_number}/items?promise_state=LIVE
 ```
 
 List bounty candidates:
 
 ```text
-GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items?bounty_candidate=true
+GET /api/v1/repos/{owner}/{repo}/projectsV2/{project_number}/items?bounty_candidate=true
 ```
 
 Read the append-only history for an item:
 
 ```text
-GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events?page=1
+GET /api/v1/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events?page=1
 ```
 
 Promise data appears under `openagents.promise`. Evidence that points to a

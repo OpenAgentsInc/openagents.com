@@ -28,5 +28,5 @@ member.
 ## Through the API
 
 Every browser action here has a REST equivalent under
-`/api/v3/repos/:owner/:repo/issues`. See [REST API](/docs/rest-api), or use
+`/api/v1/repos/:owner/:repo/issues`. See [REST API](/docs/rest-api), or use
 [`openagents api`](/docs/cli-api) to work with issues from a terminal.

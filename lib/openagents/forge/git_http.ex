@@ -474,7 +474,7 @@ defmodule OpenAgents.Forge.GitHTTP do
     append_side_band(
       output,
       "openagents wal-receipt seq=#{seq} link=#{link}" <>
-        " (GET /api/v3/repos/#{repository.owner}/#{repository.name}/pushes/#{seq})"
+        " (GET /api/v1/repos/#{repository.owner}/#{repository.name}/pushes/#{seq})"
     )
   rescue
     error ->

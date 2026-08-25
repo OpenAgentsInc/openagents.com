@@ -21,8 +21,8 @@ this module never admits, reserves, or leases anything.
 | Endpoint | Principal | Purpose |
 | --- | --- | --- |
 | `GET /api/capacity` | Signed-in account session | The projection the web surface reads |
-| `GET /api/v3/capacity` | `chat:account` bearer token | The same projection for agents |
-| `POST /api/v3/capacity/matches` | `chat:account` bearer token | Ranked candidates or a typed refusal for one job requirement |
+| `GET /api/v1/capacity` | `chat:account` bearer token | The same projection for agents |
+| `POST /api/v1/capacity/matches` | `chat:account` bearer token | Ranked candidates or a typed refusal for one job requirement |
 
 Both capacity projections come from one function, so a web reader and an API
 reader with the same authority see the same numbers.
@@ -126,7 +126,7 @@ code while quantities stay visible.
 
 ## Matching
 
-`POST /api/v3/capacity/matches` takes one typed requirement:
+`POST /api/v1/capacity/matches` takes one typed requirement:
 
 ```json
 {

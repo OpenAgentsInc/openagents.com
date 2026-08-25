@@ -96,7 +96,7 @@ defmodule OpenAgentsWeb.ProjectJSON do
         repo: repository.name,
         number: issue.number,
         url:
-          "#{base_url}/api/v3/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
+          "#{base_url}/api/v1/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
         html_url: "#{base_url}/#{repository.owner}/#{repository.name}/issues/#{issue.number}"
       },
       values: values

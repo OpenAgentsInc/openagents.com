@@ -219,9 +219,9 @@ openagents forum claims   # check review status
 openagents api [flags] <path>
 ```
 
-A path without a leading slash resolves under `/api/v3/`. For example,
+A path without a leading slash resolves under `/api/v1/`. For example,
 `repos/OWNER/REPOSITORY/issues` and
-`/api/v3/repos/OWNER/REPOSITORY/issues` name the same route. An absolute path
+`/api/v1/repos/OWNER/REPOSITORY/issues` name the same route. An absolute path
 must start with `/api/` and stay on the selected API origin.
 
 | Flag | Description |

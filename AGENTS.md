@@ -514,15 +514,15 @@ We are driving the GitHub-compatible Issues and Projects API through tests. This
 
 Build the endpoints in this order:
 
-1. `GET /api/v3/repos/{owner}/{repo}/issues` — list
-2. `GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}` — get
-3. `POST /api/v3/repos/{owner}/{repo}/issues` — create
-4. `PATCH /api/v3/repos/{owner}/{repo}/issues/{issue_number}` — update
-5. `GET/POST /api/v3/repos/{owner}/{repo}/issues/{issue_number}/comments` — comments
-6. `GET/POST/DELETE /api/v3/repos/{owner}/{repo}/issues/{issue_number}/assignees` — assignees
-7. `GET/POST/DELETE /api/v3/repos/{owner}/{repo}/issues/{issue_number}/labels` — labels
-8. `GET/POST/DELETE /api/v3/repos/{owner}/{repo}/milestones` — milestones
-9. `/api/v3/users/{username}/projectsV2/*` — project read and write
+1. `GET /api/v1/repos/{owner}/{repo}/issues` — list
+2. `GET /api/v1/repos/{owner}/{repo}/issues/{issue_number}` — get
+3. `POST /api/v1/repos/{owner}/{repo}/issues` — create
+4. `PATCH /api/v1/repos/{owner}/{repo}/issues/{issue_number}` — update
+5. `GET/POST /api/v1/repos/{owner}/{repo}/issues/{issue_number}/comments` — comments
+6. `GET/POST/DELETE /api/v1/repos/{owner}/{repo}/issues/{issue_number}/assignees` — assignees
+7. `GET/POST/DELETE /api/v1/repos/{owner}/{repo}/issues/{issue_number}/labels` — labels
+8. `GET/POST/DELETE /api/v1/repos/{owner}/{repo}/milestones` — milestones
+9. `/api/v1/users/{username}/projectsV2/*` — project read and write
 
 ### Test anatomy
 
@@ -531,8 +531,8 @@ Each endpoint test file follows this shape:
     defmodule OpenAgentsWeb.IssueControllerTest do
       use OpenAgentsWeb.ConnCase
 
-      test "GET /api/v3/repos/:owner/:repo/issues lists open issues", %{conn: conn} do
-        conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      test "GET /api/v1/repos/:owner/:repo/issues lists open issues", %{conn: conn} do
+        conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
         assert json_response(conn, 200)["issues"] != nil
       end
     end

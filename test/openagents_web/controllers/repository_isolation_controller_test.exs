@@ -37,11 +37,11 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
   } do
     assert initial_issue.number == second_issue.number
 
-    assert get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/1")
+    assert get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/1")
            |> json_response(200)
            |> Map.fetch!("title") == "Initial issue"
 
-    assert get(recycle(conn), ~p"/api/v3/repos/SecondOrg/second-repo/issues/1")
+    assert get(recycle(conn), ~p"/api/v1/repos/SecondOrg/second-repo/issues/1")
            |> json_response(200)
            |> Map.fetch!("title") == "Second issue"
   end
@@ -50,7 +50,7 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
     conn: conn,
     second_issue: second_issue
   } do
-    assert patch(conn, ~p"/api/v3/repos/SecondOrg/second-repo/issues/1", %{title: "Crossed"})
+    assert patch(conn, ~p"/api/v1/repos/SecondOrg/second-repo/issues/1", %{title: "Crossed"})
            |> api_error_code(404) == "not_found"
 
     assert Issues.get_issue_by_path!("SecondOrg", "second-repo", 1).title == second_issue.title
@@ -66,17 +66,17 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
     {:ok, _initial_milestone} = Milestones.create_milestone(initial, %{title: "Initial M"})
     {:ok, _second_milestone} = Milestones.create_milestone(second, %{title: "Second M"})
 
-    assert get(conn, ~p"/api/v3/repos/SecondOrg/second-repo/labels/priority")
+    assert get(conn, ~p"/api/v1/repos/SecondOrg/second-repo/labels/priority")
            |> json_response(200)
            |> Map.fetch!("color") == "222222"
 
-    assert get(recycle(conn), ~p"/api/v3/repos/SecondOrg/second-repo/milestones/1")
+    assert get(recycle(conn), ~p"/api/v1/repos/SecondOrg/second-repo/milestones/1")
            |> json_response(200)
            |> Map.fetch!("title") == "Second M"
   end
 
   test "a resource cannot be read through an unknown repository path", %{conn: conn} do
-    assert get(conn, ~p"/api/v3/repos/Unknown/nope/issues/1")
+    assert get(conn, ~p"/api/v1/repos/Unknown/nope/issues/1")
            |> api_error_code(404) == "not_found"
   end
 
@@ -91,7 +91,7 @@ defmodule OpenAgentsWeb.RepositoryIsolationControllerTest do
 
     assert {:ok, _issue} = Issues.create_issue(private_repository, %{title: "Private"})
 
-    assert get(conn, ~p"/api/v3/repos/PrivateOrg/private-repo/issues/1")
+    assert get(conn, ~p"/api/v1/repos/PrivateOrg/private-repo/issues/1")
            |> api_error_code(404) == "not_found"
   end
 end

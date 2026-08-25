@@ -351,7 +351,7 @@ defmodule OpenAgents.Forge.IndependenceTest do
       assert link == WAL.entry_link(head)
 
       # And where to read it again, so the line is self-describing.
-      assert output =~ "/api/v3/repos/exit-owner/demo/pushes/#{seq}"
+      assert output =~ "/api/v1/repos/exit-owner/demo/pushes/#{seq}"
     end
 
     test "the link the pusher kept reports a rewrite the log agrees with", context do

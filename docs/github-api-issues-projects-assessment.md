@@ -6,7 +6,7 @@ Status: Repository-scoped subset implemented; bounded compatibility gaps remain
 
 ## Intent
 
-OpenAgents exposes a bounded `/api/v3` subset so familiar GitHub-shaped clients
+OpenAgents exposes a bounded `/api/v1` subset so familiar GitHub-shaped clients
 can interact with issues and project boards. The shape is a compatibility aid,
 not a claim that the application implements the complete GitHub API.
 
@@ -44,7 +44,7 @@ them, and an advertised URL that answers `404` is worse than an absent one.
 
 GitHub has no parameter that lists one kind without the other, so the
 OpenAgents `type` filter (`issue`, `pull_request`, or `all`, defaulting to
-`all`) is published under `issue.openagents` at `GET /api/v3` rather than
+`all`) is published under `issue.openagents` at `GET /api/v1` rather than
 presented as a GitHub parameter.
 
 ## Implemented Projects V2 subset
@@ -223,7 +223,7 @@ reading one refusal taught you nothing about the next.
   "message": "Validation Failed",
   "code": "validation_failed",
   "status": 422,
-  "documentation_url": "https://openagents.com/api/v3",
+  "documentation_url": "https://openagents.com/api/v1",
   "request_id": "GM5_fLaSSJDluDMAACUh",
   "errors": { "state": ["must be one of: open, closed, all"] }
 }
@@ -234,7 +234,7 @@ reading one refusal taught you nothing about the next.
 | `message` | The human sentence. A GitHub-shaped client reads this key, and a missing resource still reads exactly `Not Found`. |
 | `code` | A stable identifier from the table below. Branch on this, not on `message`. |
 | `status` | The HTTP status, repeated so a logged body is self-describing. |
-| `documentation_url` | This deployment's `GET /api/v3`, which publishes the codes and the routes. |
+| `documentation_url` | This deployment's `GET /api/v1`, which publishes the codes and the routes. |
 | `request_id` | The value of the response's `x-request-id`. Name it when you report a failure. |
 | `errors` | Field name to an array of messages. Always present, `{}` when the failure is not field-level. |
 
@@ -259,7 +259,7 @@ refusals on issue and comment creation, and the `401` from the bearer-token
 pipelines. New clients read `code`. No key that a client already read has been
 renamed or removed.
 
-`GET /api/v3` publishes which routes answer with this envelope, under each
+`GET /api/v1` publishes which routes answer with this envelope, under each
 route's `errors` field. Routes marked `legacy` there still answer with their own
 shape; the repository, deployment, box, forum, and agent families have not been
 converged yet, and `priv/api-contracts/repositories-v1.json` remains the
@@ -268,13 +268,13 @@ superset of.
 
 ## Route inventory
 
-`GET /api/v3` is the root document. It is derived from
+`GET /api/v1` is the root document. It is derived from
 `OpenAgentsWeb.Router.__routes__/0` through `OpenAgentsWeb.ApiRouteAuthority`,
 never maintained beside it, so it cannot claim a route the router does not
 serve or omit one it does.
 
 ```sh
-openagents api /api/v3
+openagents api /api/v1
 ```
 
 It carries:
@@ -288,7 +288,7 @@ It carries:
 ```json
 {
   "method": "GET",
-  "path": "/api/v3/repos/{owner}/{repo}/issues/{issue_number}",
+  "path": "/api/v1/repos/{owner}/{repo}/issues/{issue_number}",
   "authority": "optional_bearer",
   "family": "issue",
   "errors": "envelope",
@@ -334,7 +334,7 @@ bodies, response envelopes, Issues recipes, and Projects recipes.
 
 These are current measured behaviors:
 
-- `/api/v3` anonymous and optional-bearer reads and authenticated writes use
+- `/api/v1` anonymous and optional-bearer reads and authenticated writes use
   separate pipelines.
   Writes require an expiring digest-only `oa_pat_…` bearer with exact
   `forge:write` scope. An authenticated person creates and revokes credentials
@@ -394,7 +394,7 @@ These are compatibility limits, not authorization fallbacks:
   objects; this one is a field-to-messages map, which is what the local
   clients already read.
 - Families outside the issue family still answer with their own error shapes.
-  `GET /api/v3` names which, so a client can tell without probing.
+  `GET /api/v1` names which, so a client can tell without probing.
 
 Closed on 2026-08-21, each pinned by tests: label rename through `new_name`,
 create-on-add for missing labels at the issue-labels endpoint, 404 for

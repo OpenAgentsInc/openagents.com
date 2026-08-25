@@ -94,7 +94,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
           slug: "cli-api",
           title: "Call the API with the CLI",
           icon: "square-code",
-          route: "/api/v3/repos/:owner/:repo/issues"
+          route: "/api/v1/repos/:owner/:repo/issues"
         }
       ]
     },
@@ -159,7 +159,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
           slug: "merging-stacks",
           title: "Merging stacks",
           icon: "check-circle",
-          route: "/api/v3/repos/:owner/:repo/stacks"
+          route: "/api/v1/repos/:owner/:repo/stacks"
         }
       ]
     },
@@ -223,13 +223,13 @@ defmodule OpenAgentsWeb.DocsCatalog do
           slug: "rest-api",
           title: "REST API",
           icon: "square-code",
-          route: "/api/v3/repos/:owner/:repo/issues"
+          route: "/api/v1/repos/:owner/:repo/issues"
         },
         %{
           slug: "stacks-api",
           title: "Stacks API",
           icon: "square-code",
-          route: "/api/v3/repos/:owner/:repo/stacks"
+          route: "/api/v1/repos/:owner/:repo/stacks"
         },
         %{slug: "status-api", title: "Status API", icon: "info", route: "/api/status"}
       ]

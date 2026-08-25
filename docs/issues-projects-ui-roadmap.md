@@ -23,7 +23,7 @@ The Phoenix LiveView application currently ships these pages:
 | Project list | `/:owner/:repo/projects` | Writable members |
 | Project board | `/:owner/:repo/projects/:number` | Writable members |
 
-The matching `/api/v3` issue, comment, label, assignee, milestone, and Projects
+The matching `/api/v1` issue, comment, label, assignee, milestone, and Projects
 V2 subset is implemented and covered. The dated
 [coverage audit](2026-08-20-test-coverage-audit.md) records the original gaps
 and the coverage added to close them. The

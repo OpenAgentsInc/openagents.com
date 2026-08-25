@@ -17,6 +17,8 @@
 ^docs/2026-08-23-thread-primitive-audit\.md:
 ^docs/2026-08-24-delegation-release-handoff\.md:
 ^docs/2026-08-24-coder-account-integration-audit\.md:
+^docs/2026-08-24-invariant-proof-audit\.md:
+^docs/projects/
 ^docs/chat-inference-plan\.md:
 ^docs/component-library\.md:
 ^docs/episode-triage\.md:

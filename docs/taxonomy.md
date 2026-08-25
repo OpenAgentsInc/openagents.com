@@ -85,7 +85,7 @@ forge behind a mirror it does not know about.
 
 ### GitHub-shaped API
 
-**`/api/v3`** — a bounded, GitHub-shaped REST subset served by this
+**`/api/v1`** — a bounded, GitHub-shaped REST subset served by this
 application: issues, comments, labels, assignees, milestones, and Projects V2
 (`projectsV2`). It mimics GitHub REST shapes as a compatibility aid and
 implements only a subset of the real API. Authorization here comes from API
@@ -329,9 +329,9 @@ report, with an append-only transcript in `thread_events`. Model authority
 binds to it: an inference grant names a thread or a conversation, never both
 and never neither (THREAD-001). The context is `OpenAgents.Threads`, the record
 is `OpenAgents.Threads.Thread`, and the transcript entry is
-`OpenAgents.Threads.Event`. A caller opens one with `POST /api/v3/threads`,
-reads what it has spent with `GET /api/v3/threads/{thread_id}`, and revokes it
-with `DELETE /api/v3/threads/{thread_id}`, all behind the `chat:account` scope
+`OpenAgents.Threads.Event`. A caller opens one with `POST /api/v1/threads`,
+reads what it has spent with `GET /api/v1/threads/{thread_id}`, and revokes it
+with `DELETE /api/v1/threads/{thread_id}`, all behind the `chat:account` scope
 and served by `OpenAgentsWeb.ThreadController`. The CLI that stops writing to
 the conversation is still to come; see the audit in
 `docs/2026-08-23-thread-primitive-audit.md`.
@@ -420,7 +420,7 @@ model.
 **Deployment control plane** — the tenant-facing plane where a repository
 deploys its own commits to its own environments: environments, requests, runs,
 checks, approvals, workflow grants, and append-only deployment events, backed by
-`OpenAgents.Deployments` and served at `/api/v3` under `deployments:write`. It
+`OpenAgents.Deployments` and served at `/api/v1` under `deployments:write`. It
 is not the forge deployment plane. Promoting the OpenAgents release itself stays
 operator-only behind `deployments:promote`, and no tenant route reaches it.
 `docs/deployment-control-plane.md` describes the contract.
@@ -461,7 +461,7 @@ status means a worker said it would try; only `done` means it ran (EFFECT-002).
 
 **Delegation** — one unit of work this application hands to a substrate it
 does not run inline. `OpenAgents.Delegations` serves all of them at
-`/api/v3/conversations/{conversation_id}/delegations`: one request shape, one
+`/api/v1/conversations/{conversation_id}/delegations`: one request shape, one
 status read, one cancel, across every target kind. The facade stores no
 delegation state. The Box run ledger and the `work_jobs` ledger stay
 authoritative, and every projection is derived from them.
@@ -471,8 +471,8 @@ identifier and is never inferred: a target is `box:{uuid}` or
 `computer:{uuid}`, and a delegation is `box-run:{uuid}` or
 `computer-job:{uuid}`. Authority is scoped per kind — the `box:control` and
 `computer:control` token scopes for a signed-in owner, and a per-kind grant to
-a named agent handle at `/api/v3/agents/{handle}/box-control` and
-`/api/v3/agents/{handle}/computer-control`.
+a named agent handle at `/api/v1/agents/{handle}/box-control` and
+`/api/v1/agents/{handle}/computer-control`.
 
 **Box** — a sandbox virtual machine this application rents from the Box Public
 API v1 at `ascii.dev` and bootstraps with the OpenCode harness. A Box is
@@ -564,7 +564,7 @@ its own contracts:
   tool steps still replay against them, and the `machines` array key of
   `computer_list.v1`.
 - The response keys `machine_id` and `machine_name` on
-  `GET /api/v3/computer-agent-jobs/{id}`, the assignment projection, and
+  `GET /api/v1/computer-agent-jobs/{id}`, the assignment projection, and
   `GET /controller/pairings/{id}`; and `counts.machines_connected` in
   `GET /api/status`, which `STATUS-001` pins as an exact published key.
 - The `work_jobs` JSONB keys `delegation->>'machine_id'`,
@@ -601,7 +601,7 @@ its own contracts:
   `:machine_token_ttl_seconds`, which live in staging and production secrets.
 
 **`machine` also means machine-readable** — and that sense is correct, not
-residue. `GET /api/v3` publishes `contribution.machine`, and `/agents.json`
+residue. `GET /api/v1` publishes `contribution.machine`, and `/agents.json`
 publishes `representations.machine`, each paired with `human` and each naming a
 format rather than a device. Do not sweep these into a computer rename; they
 are not about computers at all.
@@ -614,7 +614,7 @@ string is on before you rename it.
 
 **Issues work system** — first-party issues, labels, milestones, assignees,
 and projects shaped like GitHub's Projects V2, backed by `OpenAgents.Issues`
-and sibling contexts, served at `/api/v3`. Tests are the contract; the
+and sibling contexts, served at `/api/v1`. Tests are the contract; the
 assessment document `docs/github-api-issues-projects-assessment.md` is the
 source of truth for paths and JSON shape.
 
@@ -665,7 +665,7 @@ the plan; it is not a routine outcome and not a request you can make.
 **Forum** — the first-party discussion surface at `/forum`: boards, topics,
 and posts backed by `OpenAgents.Forum`, ported from the legacy Effect forum
 by a one-time import (`mix openagents.forum.import`). Browser reads are public,
-as are the `/api/v3/forum` reads; writing a topic or a post, and claiming a
+as are the `/api/v1/forum` reads; writing a topic or a post, and claiming a
 legacy identity, need an account. `docs/forum-port.md` describes the port;
 `docs/evidence/forum-port-migration.md` records the import.
 
@@ -704,7 +704,7 @@ limits and the date of measurement; provider quotas move without notice.
 
 **Backend** — one model and the adapter that reaches it, named by a stable id
 a client sends and a label a person reads. `OpenAgents.Chat.Backends` is the
-single list; `GET /api/v3` publishes the ids so a client discovers the set
+single list; `GET /api/v1` publishes the ids so a client discovers the set
 instead of hardcoding it. Say backend for the choice and model for the thing
 chosen: Ox Alpha and Gemini 3.7 Flash are models, and each is reached through
 one backend. A backend is not a provider — OpenRouter and Google are
@@ -756,7 +756,7 @@ is exactly one component system; adding a second is forbidden.
    repo" where both could apply.
 2. **A push is not a deploy.** Promotion requires an operator-authorized
    target; no Git event promotes anything.
-3. **GitHub-shaped is not GitHub.** Say "the `/api/v3` surface" or "GitHub"
+3. **GitHub-shaped is not GitHub.** Say "the `/api/v1` surface" or "GitHub"
    depending on which server answers.
 4. **Computer, not machine.** Product copy and new code both say `computer`.
    A `machine` name stays only where something outside this release can observe

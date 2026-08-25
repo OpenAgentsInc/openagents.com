@@ -97,7 +97,7 @@ defmodule OpenAgentsWeb.IssueController do
       # `pull_request` object, so this endpoint asks for both by default even
       # though `OpenAgents.Issues` defaults its lists to issues alone. A client
       # that wants one kind without the other sends `?type=`, which GitHub has
-      # no counterpart for and which `GET /api/v3` therefore publishes as an
+      # no counterpart for and which `GET /api/v1` therefore publishes as an
       # `issue.openagents` filter.
       type: Map.get(params, "type", "all"),
       state: Map.get(params, "state", "open"),

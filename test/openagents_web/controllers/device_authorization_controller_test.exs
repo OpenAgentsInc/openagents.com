@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
   alias OpenAgents.Repo
 
   test "a pending device authorization is digested and polling is paced", %{conn: conn} do
-    created = post(conn, ~p"/api/v3/device/authorizations", %{})
+    created = post(conn, ~p"/api/v1/device/authorizations", %{})
 
     assert %{
              "device_code" => device_code,
@@ -29,12 +29,12 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     refute inspect(authorization) =~ user_code
 
     pending =
-      post(recycle(conn), ~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      post(recycle(conn), ~p"/api/v1/device/authorizations/token", %{device_code: device_code})
 
     assert json_response(pending, 428) == %{"code" => "authorization_pending"}
 
     paced =
-      post(recycle(conn), ~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      post(recycle(conn), ~p"/api/v1/device/authorizations/token", %{device_code: device_code})
 
     assert json_response(paced, 429) == %{"code" => "slow_down"}
     assert get_resp_header(paced, "cache-control") == ["no-store"]
@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
   test "approval returns one PAT exactly once", %{conn: conn} do
     %{"device_code" => device_code, "user_code" => user_code} =
       conn
-      |> post(~p"/api/v3/device/authorizations", %{})
+      |> post(~p"/api/v1/device/authorizations", %{})
       |> json_response(201)
 
     user = github_user("device-approval", "device-owner")
@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     claimed =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: device_code})
 
     assert %{
              "access_token" => "oa_pat_" <> _secret,
@@ -66,7 +66,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     repeated =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: device_code})
 
     assert json_response(repeated, 400) == %{"code" => "access_denied"}
 
@@ -78,14 +78,14 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
 
   test "unknown, denied, expired, and claimed codes share one refusal", %{conn: conn} do
     unknown =
-      post(conn, ~p"/api/v3/device/authorizations/token", %{device_code: "unknown-device"})
+      post(conn, ~p"/api/v1/device/authorizations/token", %{device_code: "unknown-device"})
 
     assert json_response(unknown, 400) == %{"code" => "access_denied"}
 
     %{"device_code" => denied_code, "user_code" => user_code} =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations", %{})
+      |> post(~p"/api/v1/device/authorizations", %{})
       |> json_response(201)
 
     user = github_user("device-denial")
@@ -94,14 +94,14 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     denied =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations/token", %{device_code: denied_code})
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: denied_code})
 
     assert json_response(denied, 400) == %{"code" => "access_denied"}
 
     %{"device_code" => expired_code} =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations", %{})
+      |> post(~p"/api/v1/device/authorizations", %{})
       |> json_response(201)
 
     DeviceAuthorization
@@ -113,7 +113,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     expired =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations/token", %{device_code: expired_code})
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: expired_code})
 
     assert json_response(expired, 400) == %{"code" => "access_denied"}
   end
@@ -121,7 +121,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
   test "a privileged scope can be requested but only an operator may grant it", %{conn: conn} do
     %{"device_code" => device_code, "user_code" => user_code, "scope" => scope} =
       conn
-      |> post(~p"/api/v3/device/authorizations", %{"scope" => "deployments:promote"})
+      |> post(~p"/api/v1/device/authorizations", %{"scope" => "deployments:promote"})
       |> json_response(201)
 
     assert scope == "deployments:promote"
@@ -136,7 +136,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     claimed =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: device_code})
 
     assert %{"scope" => "deployments:promote", "expires_in" => expires_in} =
              json_response(claimed, 200)
@@ -152,7 +152,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
   test "a login that names no scope can open a thread", %{conn: conn} do
     %{"device_code" => device_code, "user_code" => user_code} =
       conn
-      |> post(~p"/api/v3/device/authorizations", %{})
+      |> post(~p"/api/v1/device/authorizations", %{})
       |> json_response(201)
 
     user = github_user("device-chat", "device-chat-owner")
@@ -161,7 +161,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     %{"access_token" => token, "scope" => scope} =
       conn
       |> recycle()
-      |> post(~p"/api/v3/device/authorizations/token", %{device_code: device_code})
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: device_code})
       |> json_response(200)
 
     assert scope == "chat:account forge:write"
@@ -170,7 +170,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
       conn
       |> recycle()
       |> put_req_header("authorization", "Bearer " <> token)
-      |> post(~p"/api/v3/threads", %{"objective" => "run the coder"})
+      |> post(~p"/api/v1/threads", %{"objective" => "run the coder"})
 
     assert %{"thread" => %{"id" => _id}, "grant" => %{"token" => _grant, "limits" => limits}} =
              json_response(opened, 201)
@@ -183,7 +183,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
 
   test "an unknown scope is refused rather than silently narrowed", %{conn: conn} do
     refused =
-      post(conn, ~p"/api/v3/device/authorizations", %{"scope" => "deployments:everything"})
+      post(conn, ~p"/api/v1/device/authorizations", %{"scope" => "deployments:everything"})
 
     assert json_response(refused, 400) == %{"code" => "invalid_scope"}
   end

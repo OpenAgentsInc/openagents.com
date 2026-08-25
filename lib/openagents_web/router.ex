@@ -412,7 +412,7 @@ defmodule OpenAgentsWeb.Router do
     get "/controller/status", ControllerPairingController, :status
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :api
 
     get "/", ApiExtensionController, :show
@@ -426,7 +426,7 @@ defmodule OpenAgentsWeb.Router do
   # behind the optional bearer so a member of a private repository can read the
   # comments, labels, milestones, and assignees of their own issues. An
   # anonymous caller reaches exactly the public repositories it reached before.
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :optional_forge_api
 
     get "/repos/:owner/:repo/issues/:issue_number/comments", CommentController, :index
@@ -447,7 +447,7 @@ defmodule OpenAgentsWeb.Router do
     get "/repos/:owner/:repo/pushes/:wal_seq", PushReceiptController, :show
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :deployments_api
 
     get "/repos/:owner/:repo/deployment-environments", DeploymentController, :environments
@@ -475,13 +475,13 @@ defmodule OpenAgentsWeb.Router do
            :revoke_grant
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :api
 
     post "/agents/register", AgentController, :register
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :agent_participation_api
 
     post "/forum/topics", ForumApiController, :create_topic
@@ -498,7 +498,7 @@ defmodule OpenAgentsWeb.Router do
          :create
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :forge_write_api
 
     post "/agents/:handle/box-control", AgentController, :grant_box_control
@@ -514,7 +514,7 @@ defmodule OpenAgentsWeb.Router do
     get "/gym/runs", GymRunController, :index
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :delegation_api
 
     get "/conversations/:conversation_id/delegation-targets", DelegationsController, :targets
@@ -523,7 +523,7 @@ defmodule OpenAgentsWeb.Router do
     delete "/conversations/:conversation_id/delegations/:id", DelegationsController, :delete
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :computer_control_api
 
     get "/computers", ComputersController, :index
@@ -533,13 +533,13 @@ defmodule OpenAgentsWeb.Router do
     delete "/computer-agent-jobs/:id", ComputerAgentJobsController, :delete
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :human_computer_control_api
 
     patch "/computers/:id", ComputersController, :update
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :forge_write_api
 
     get "/agents/links", AgentController, :links
@@ -548,7 +548,7 @@ defmodule OpenAgentsWeb.Router do
     delete "/agents/links/:id", AgentController, :unlink
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :agent_token_api
 
     get "/agent", AgentController, :current
@@ -556,13 +556,13 @@ defmodule OpenAgentsWeb.Router do
     post "/agent/links", AgentController, :request_link
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :api
 
     get "/agents/:handle", AgentController, :show
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :chat_account_api
 
     get "/chat/events", ChatTurnController, :index
@@ -575,7 +575,7 @@ defmodule OpenAgentsWeb.Router do
   # same account scope as the chat lane, because a thread is what that lane's
   # single conversation could not be — plural, disposable, and fenced on its
   # own (THREAD-001).
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :chat_account_api
 
     # The typed model catalog the thread admission checks against. It sits in
@@ -592,7 +592,7 @@ defmodule OpenAgentsWeb.Router do
     post "/threads/:thread_id/grants", ThreadController, :mint
   end
 
-  scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do
+  scope "/api/v1/conversations/:conversation_id/boxes", OpenAgentsWeb do
     pipe_through :box_control_api
 
     get "/", BoxController, :index
@@ -609,7 +609,7 @@ defmodule OpenAgentsWeb.Router do
     post "/:box_id/runs/:run_id/cancel", BoxRunController, :cancel
   end
 
-  scope "/api/v3/conversations/:conversation_id/computers", OpenAgentsWeb do
+  scope "/api/v1/conversations/:conversation_id/computers", OpenAgentsWeb do
     pipe_through :assignment_computer_control_api
 
     post "/:computer_id/assignments", AssignmentController, :create
@@ -617,7 +617,7 @@ defmodule OpenAgentsWeb.Router do
     post "/:computer_id/assignments/:assignment_id/cancel", AssignmentController, :cancel
   end
 
-  scope "/api/v3/conversations/:conversation_id/boxes", OpenAgentsWeb do
+  scope "/api/v1/conversations/:conversation_id/boxes", OpenAgentsWeb do
     pipe_through :assignment_control_api
 
     post "/:box_id/assignments", AssignmentController, :create
@@ -625,7 +625,7 @@ defmodule OpenAgentsWeb.Router do
     post "/:box_id/assignments/:assignment_id/cancel", AssignmentController, :cancel
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :forge_write_api
 
     post "/forum/claims", ForumApiController, :create_claim
@@ -656,7 +656,7 @@ defmodule OpenAgentsWeb.Router do
     post "/forum/posts/:post_id/tips", ForumApiController, :create_tip
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :optional_forge_api
 
     get "/repos/:owner/:repo", RepositoryController, :show
@@ -715,7 +715,7 @@ defmodule OpenAgentsWeb.Router do
     get "/forum/topics/:id", ForumApiController, :show_topic
   end
 
-  scope "/api/v3/admin/forge", OpenAgentsWeb do
+  scope "/api/v1/admin/forge", OpenAgentsWeb do
     pipe_through :fleet_promotion_api
 
     post "/targets", FleetTargetController, :create
@@ -723,7 +723,7 @@ defmodule OpenAgentsWeb.Router do
     get "/targets/:id", FleetTargetController, :show
   end
 
-  scope "/api/v3", OpenAgentsWeb do
+  scope "/api/v1", OpenAgentsWeb do
     pipe_through :forge_write_api
 
     get "/user", ForgeUserController, :show

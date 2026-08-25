@@ -490,7 +490,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
       refute has_element?(visitor, ~s{[data-column="To Do"] } <> card)
     end
 
-    test "a status change made over /api/v3 moves the card on an open board", %{conn: conn} do
+    test "a status change made over /api/v1 moves the card on an open board", %{conn: conn} do
       project = project!()
       {:ok, issue} = Issues.create_issue(repository(), %{"title" => "Patched over the API"})
 
@@ -509,7 +509,7 @@ defmodule OpenAgentsWeb.ProjectShowLiveTest do
 
       assert api
              |> patch(
-               ~p"/api/v3/repos/OpenAgentsInc/openagents.com/projectsV2/#{project.number}/items/#{item.id}",
+               ~p"/api/v1/repos/OpenAgentsInc/openagents.com/projectsV2/#{project.number}/items/#{item.id}",
                %{"values" => %{"Status" => "In Progress"}}
              )
              |> json_response(200)

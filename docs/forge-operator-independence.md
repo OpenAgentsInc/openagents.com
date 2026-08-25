@@ -104,7 +104,7 @@ uneven enough that it deserves a ledger rather than a sentence.
 
 `OpenAgents.DataRights.ExportInventory` is that ledger. It classifies every
 resource family the API publishes, plus the families that leave through routes
-outside `/api/v3`, into four statuses:
+outside `/api/v1`, into four statuses:
 
 | Status | Meaning |
 | --- | --- |

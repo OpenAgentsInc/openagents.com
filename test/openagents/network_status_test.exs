@@ -96,12 +96,16 @@ defmodule OpenAgents.NetworkStatusTest do
     "independence.export",
     "independence.export.blocked",
     # `independence.export.gaps` is a list, and STATUS-001 declares list-element
-    # paths only while the list has an element. It is empty because EXIT-001
-    # records no `partial` or `blocked` family; a family that becomes a gap
-    # republishes `family`, `status`, and `issue`, and this set must readmit
-    # them.
+    # paths only while the list has an element. It has one: EXIT-001 records
+    # the `trace` family blocked, because `POST /api/v1/traces` accepts an
+    # upload and nothing reads one back. The three element paths are declared
+    # below, which is the decision this contract asks for when a family becomes
+    # a gap.
     "independence.export.families",
     "independence.export.gaps",
+    "independence.export.gaps[].family",
+    "independence.export.gaps[].issue",
+    "independence.export.gaps[].status",
     "independence.export.not_user_data",
     "independence.export.partial",
     "independence.export.portable",

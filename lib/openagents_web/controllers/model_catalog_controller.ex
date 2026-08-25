@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ModelCatalogController do
   @moduledoc """
-  `GET /api/v3/models`: the typed model catalog this deployment serves.
+  `GET /api/v1/models`: the typed model catalog this deployment serves.
 
   The CLI renders model selection from this list instead of guessing, so it is
   the same list every admission checks against — `OpenAgents.Inference.Models`

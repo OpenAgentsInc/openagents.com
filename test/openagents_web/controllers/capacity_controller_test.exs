@@ -39,7 +39,7 @@ defmodule OpenAgentsWeb.CapacityControllerTest do
     bearer_conn =
       build_conn()
       |> put_chat_api_token("capacity-bearer")
-      |> get("/api/v3/capacity")
+      |> get("/api/v1/capacity")
 
     assert json_response(session_conn, 200) == json_response(bearer_conn, 200)
   end
@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.CapacityControllerTest do
     conn =
       conn
       |> put_chat_api_token("capacity-unsupported")
-      |> post("/api/v3/capacity/matches", %{
+      |> post("/api/v1/capacity/matches", %{
         "requirement" => %{
           "isolation" => "managed_confidential",
           "egress" => "policy_broker",

@@ -67,7 +67,7 @@ Posts keep the identity they were written under: an `actor_ref` such as
 
 A legacy identity attaches to an account through `forum_actor_links`
 (`OpenAgents.Forum.ActorLink`). An account starts a claim at `/forum/claim`
-(or `POST /api/v3/forum/claims`), which creates a `pending` link; an operator
+(or `POST /api/v1/forum/claims`), which creates a `pending` link; an operator
 approves or rejects it at `/admin/forum/claims`. Only links in status
 `linked` resolve a post to an account (`OpenAgents.Forum.actor_user/1`), so
 unclaimed and rejected identities stay attributed to their legacy display
@@ -89,7 +89,7 @@ Browser reads are public. An anonymous visitor reaches the board list, a
 board, and a topic, and the sidebar row points every reader at the forum
 rather than only signed-in accounts. Posting, claiming a legacy identity at
 `/forum/claim`, and setting a tip destination at `/forum/tips` still need an
-account. The `/api/v3/forum` reads are public, and writes require a
+account. The `/api/v1/forum` reads are public, and writes require a
 `forge:write` token.
 
 No runtime dependency on `khala_sync_prod` remains. The only code that names

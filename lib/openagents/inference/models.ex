@@ -8,7 +8,7 @@ defmodule OpenAgents.Inference.Models do
   set from one config-driven list, `config :openagents, :model_catalog`:
   `OpenAgents.Threads` admits a thread's model against it, `OpenAgents.Inference.mint/1`
   refuses a grant naming anything else, `OpenAgentsWeb.InferenceProxyController`
-  asks it which adapter to call, and `GET /api/v3/models` publishes it so a
+  asks it which adapter to call, and `GET /api/v1/models` publishes it so a
   client selects from what is actually served instead of guessing.
 
   Two names appear per model and they are not the same name. The `id` is what
@@ -108,7 +108,7 @@ defmodule OpenAgents.Inference.Models do
   end
 
   @doc """
-  The public projection of the catalog, for `GET /api/v3/models`.
+  The public projection of the catalog, for `GET /api/v1/models`.
 
   No adapter module and no credential state beyond the availability word: a
   client learns what it can select and what each selection can carry, nothing

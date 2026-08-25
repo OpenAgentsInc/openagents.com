@@ -100,7 +100,8 @@ defmodule OpenAgents.SCV.OpenCodeExecutorTest do
                         type: "opencode_event",
                         event_type: ^event_type,
                         session_id: "ses_fixture"
-                      }}, 5_000
+                      }},
+                     5_000
     end
 
     assert_receive {:scv_event, %{type: "process_finished", status: "succeeded"}}, 5_000

@@ -1205,14 +1205,14 @@ Status: Current
 A turn is never answered by a different model than the one requested without
 the caller being told. `OpenAgents.Inference.Models` is the one config-driven
 catalog (`config :openagents, :model_catalog`) of the models this deployment
-serves, `GET /api/v3/models` publishes it — id, provider lane, context and
+serves, `GET /api/v1/models` publishes it — id, provider lane, context and
 output ceilings, availability — and every admission checks the same list, so
 the offered set and the refused-against set cannot drift.
 
 Concretely:
 
 - A model outside the catalog is refused with a typed error naming the served
-  set — a field-level `422` at `POST /api/v3/threads`, `model_not_served` at
+  set — a field-level `422` at `POST /api/v1/threads`, `model_not_served` at
   the inference proxy — never replaced by a default.
 - A model in the catalog whose provider credential is not configured is
   **listed as unavailable rather than omitted**, and selecting it is refused
@@ -1228,8 +1228,8 @@ Concretely:
   mismatch is refused, requested and effective agree on every `200`.
 
 The chat lane keeps the same law through `OpenAgents.Chat.Backends`: an
-unsupported `model` on `POST /api/v3/chat/turns` is a typed `422`, and
-`GET /api/v3` publishes the supported enum from the same list.
+unsupported `model` on `POST /api/v1/chat/turns` is a typed `422`, and
+`GET /api/v1` publishes the supported enum from the same list.
 
 Evidence: `OpenAgents.Inference.Models`, `OpenAgentsWeb.ModelCatalogController`,
 `OpenAgentsWeb.InferenceProxyController`, `OpenAgentsWeb.ThreadController`,
@@ -2169,7 +2169,7 @@ conversation, and a thread is not one.
 
 - **Authority is capped at admission.** `OpenAgents.Threads.open/3` refuses an
   account already holding `maximum_open_threads_per_account` open threads with
-  `:thread_quota_reached`, and `POST /api/v3/threads` renders that as a `429`
+  `:thread_quota_reached`, and `POST /api/v1/threads` renders that as a `429`
   naming the limit. The cap is taken before any row is written, so a refused
   caller leaves nothing behind. Because a thread has at most one live grant,
   capping open threads caps the account's concurrent thread-scoped authority by
@@ -2192,7 +2192,7 @@ conversation, and a thread is not one.
   `OpenAgents.Inference.Credit.remaining/1` says the account has left, so
   opening a second thread hands out no second allowance and an account with
   nothing left is refused `:credit_exhausted` rather than minted a grant it
-  cannot spend. `GET /api/v3` publishes both allowances, because a client that
+  cannot spend. `GET /api/v1` publishes both allowances, because a client that
   read a fixed per-thread cost cap would be reading a budget nobody is given.
 
   Amended 2026-08-24 (issue #195): the remainder is metered spend, and mints
@@ -2303,7 +2303,7 @@ until the account that opened it says so.
   admits `dark` and `ledger` and nothing else, by check constraint and by
   `Thread.open_changeset/3`. `pulse` would need a metadata-only projection of a
   transcript and `glass` a capability beyond reading one; neither exists, so
-  neither is stored. `POST /api/v3/threads` refuses any other value —
+  neither is stored. `POST /api/v1/threads` refuses any other value —
   a tier of the vocabulary this surface cannot enforce, or a word that is not a
   tier — with the stable code `thread_visibility_unsupported`, because a client
   that meant to publish and did not must learn it from the code it branches on
@@ -2321,7 +2321,7 @@ until the account that opened it says so.
   a column somebody can find changed with no account of when or why.
 - **A tier widens reading and nothing else.** `fetch_readable/2` is the only
   lookup a tier reaches, and it serves exactly two surfaces: `GET
-  /api/v3/threads/{thread_id}` with its `/events`, and `/threads/:id`. Every
+  /api/v1/threads/{thread_id}` with its `/events`, and `/threads/:id`. Every
   write — the transcript append, the cancel, the re-mint — resolves through the
   owner-scoped `get_for_user/2`, so a published transcript is never a thread a
   stranger may append to, end, or spend.
@@ -2489,7 +2489,7 @@ target, and the same key with different bytes is refused. An optional
 expected-current-target ID is a compare-and-set precondition, so two
 concurrent operators cannot unknowingly supersede each other.
 
-The `/admin/forge` **Promote** button and `POST /api/v3/admin/forge/targets`
+The `/admin/forge` **Promote** button and `POST /api/v1/admin/forge/targets`
 are one authority path, not two implementations of one policy. Both call
 `OpenAgents.Forge.Promotion`, which calls `OpenAgents.Forge.Targets.promote/4`,
 so both write the same append-only `forge_fleet_targets` receipt carrying the
@@ -2505,7 +2505,7 @@ and a digest of the idempotency key. Neither the plaintext credential nor the
 plaintext key is ever stored, and a status response discloses no node
 identity, filesystem path, or unrestricted failure detail.
 
-Refusals carry the one `/api/v3` envelope, `OpenAgentsWeb.ApiError`, with a
+Refusals carry the one `/api/v1` envelope, `OpenAgentsWeb.ApiError`, with a
 stable code per refusal reason so a release client can tell "you may not do
 this" from "someone promoted first" from "those bytes are not in the forge".
 
@@ -2870,7 +2870,7 @@ holds is enumerated below, and the proof asserts the enumeration rather than the
 sentence:
 
 - Promoting an already-pushed commit as the fleet deploy target, from
-  `/admin/forge` and from `POST /api/v3/admin/forge/targets`
+  `/admin/forge` and from `POST /api/v1/admin/forge/targets`
   (`OpenAgents.Forge.Promotion` into `OpenAgents.Forge.Targets`), receipted with
   the promoting operator's identity in the append-only `forge_fleet_targets`
   ledger. Only SHAs present in the WAL-backed repository are promotable, so the
@@ -2882,12 +2882,12 @@ sentence:
   `OpenAgents.SCV.Deployments`).
 - Forum moderation: closing, reopening, and pinning a topic and hiding or
   deleting a post, from `OpenAgentsWeb.ForumTopicLive` and from
-  `PATCH /api/v3/forum/topics/:id` and `PATCH /api/v3/forum/posts/:id`; and
+  `PATCH /api/v1/forum/topics/:id` and `PATCH /api/v1/forum/posts/:id`; and
   approving or rejecting an identity claim from `/admin/forum/claims` and
-  `PATCH /api/v3/forum/claims/:id`.
+  `PATCH /api/v1/forum/claims/:id`.
 - Approving or rejecting a reputation subject claim under
-  `GET /api/v3/reputation/subject-claims/pending` and
-  `PATCH /api/v3/reputation/subject-claims/:id`
+  `GET /api/v1/reputation/subject-claims/pending` and
+  `PATCH /api/v1/reputation/subject-claims/:id`
   (`OpenAgentsWeb.ReputationController`). The decision binds an attestation
   subject to an account under `EXIT-001`; it never issues, revokes, or alters
   an attestation, and `REPUTATION-001`'s verification does not read it.
@@ -3546,11 +3546,14 @@ either: a failed read is absent, never an error string.
 
 A list-element key path is published only while that list has an element, so
 the enumeration follows the data in both directions. `independence.export.gaps`
-is empty today because `EXIT-001` records no `partial` or `blocked` family, and
-its `family`, `status`, and `issue` paths are therefore not declared. A family
-that becomes a gap republishes all three, and the enumeration fails until this
-contract readmits them — which is the decision being asked for, not an
-accident.
+has one: `EXIT-001` records the `trace` family blocked, because
+`POST /api/v1/traces` accepts an ATIF upload and no route reads one back. Its
+`family`, `status`, and `issue` paths are therefore declared, and an anonymous
+caller reads that this deployment holds a kind of record it cannot yet hand
+back, and which issue tracks that. Publishing the gap is the point of the
+disclosure: a gap nobody outside can see is one nobody outside can hold us to.
+Should the list empty again, the three paths come back out — the enumeration
+follows the data, and it fails in both directions until someone decides.
 
 The independence disclosure also carries the anchor's own address
 (`/.well-known/openagents-forge-anchor.json`), which is a fixed path and not
@@ -3896,7 +3899,7 @@ Amended 2026-08-22 (explicit issue and project repository scope): production
 contexts accept a repository or a resource that already carries its repository
 identity. No context function selects a default repository or grants membership
 as a side effect. The Projects V2 API uses
-`/api/v3/repos/:owner/:repo/projectsV2`; every project, item, and field query
+`/api/v1/repos/:owner/:repo/projectsV2`; every project, item, and field query
 includes that repository. Optional bearer authentication lets a member read a
 private repository's issues and projects, while anonymous readers and
 nonmembers receive `404 Not Found`. Every write still requires `forge:write`
@@ -3919,12 +3922,12 @@ Evidence: `OpenAgents.Repositories`, `OpenAgents.Repositories.Provisioner`,
 
 Status: Current
 
-The GitHub-shaped API under `/api/v3` grows OpenAgents-specific fields in one
+The GitHub-shaped API under `/api/v1` grows OpenAgents-specific fields in one
 namespaced object per resource. GitHub-shaped keys keep their exact shape, so a
 GitHub client sees an additional `openagents` object and nothing else, and
 every OpenAgents field lives inside it.
 
-Discovery is mechanical, not tribal. `GET /api/v3` enumerates each extension
+Discovery is mechanical, not tribal. `GET /api/v1` enumerates each extension
 field with its type, its enum values, its owning version, and the endpoints it
 belongs to. A response carrying an extension names the namespace in the
 `x-openagents-extensions` header. A filter the root document lists is refused
@@ -3961,7 +3964,7 @@ Every deployment publishes one participation contract in two representations:
 `/agents.md` for a reader and `/agents.json` for a client. Both are rendered
 from `OpenAgentsWeb.ContributionContract`, so they carry the same contract
 identifier, version, revision, and digest and cannot drift apart by editing
-one of them. `GET /api/v3` points at both and republishes that digest, so an
+one of them. `GET /api/v1` points at both and republishes that digest, so an
 agent that starts at the API description finds the contract without guessing a
 path, and an agent receipt can record which instructions it followed.
 
@@ -3974,7 +3977,7 @@ unchanged identifier means the wording or a derived value moved.
 
 The document is derived rather than written beside the application. Each
 published request carries the classification of the authority that owns its
-surface, and only that one: `/api/v3` requests carry the principal, family, and
+surface, and only that one: `/api/v1` requests carry the principal, family, and
 error contract from `OpenAgentsWeb.ApiRouteAuthority`, which is proven against
 what the enforcing pipeline does to an anonymous request, and every other
 request carries the class, principal, and scope from
@@ -4109,9 +4112,9 @@ maintained beside it.
 
 Coverage is derived, not curated. Every resource family
 `OpenAgentsWeb.ApiRouteAuthority.families/0` publishes must appear, in both
-directions, so a family reaching `/api/v3` without someone deciding whether a
+directions, so a family reaching `/api/v1` without someone deciding whether a
 user can export it fails the build, and a family the API drops leaves no stale
-claim behind. Families that leave through routes outside `/api/v3` — Git
+claim behind. Families that leave through routes outside `/api/v1` — Git
 transport for repository content, the `DATA-004` exports for conversations and
 memory, and `GET /data/export/account` for the forge-owned and forum-owned
 records an account authors — are listed alongside them.
@@ -4145,7 +4148,7 @@ under a principal that is not the requesting account. `push_receipt` is probed
 there rather than against the route inventory: what the account gets back is
 its own `forge_pushes` rows, matched exactly on the `user:<account-id>`
 principal a person's push records. A repository-scoped read is published beside
-it — `GET /api/v3/repos/{owner}/{repo}/pushes` (#167), which serves the WAL's
+it — `GET /api/v1/repos/{owner}/{repo}/pushes` (#167), which serves the WAL's
 own entries and the `EXIT-005` chain link `git push` printed to the pusher —
 and it is proven by its own test rather than by this probe, because the
 question here is what an *account* gets back.
@@ -4440,7 +4443,7 @@ asserts both halves: clean with no anchor, reported with one.
 The link leaves the forge at acknowledgment. `OpenAgents.Forge.GitHTTP` appends
 one side-band band-2 message to the `receive-pack` response, so an ordinary
 `git push` prints `remote: openagents wal-receipt seq=<n> link=<sha256>` and the
-pusher can keep it; `GET /api/v3/repos/{owner}/{repo}/pushes` serves the same
+pusher can keep it; `GET /api/v1/repos/{owner}/{repo}/pushes` serves the same
 values from the WAL afterwards. A pusher who keeps that line holds a value the
 operator cannot retroactively change, and `verify/2` with it as `:anchor`
 reports `anchor_mismatch` against a log rewritten at or before that sequence.
@@ -5087,7 +5090,7 @@ and `test/openagents_web/live/notifications_live_test.exs`.
 
 Status: Current
 
-Every refusal from an issue-family `/api/v3` route carries one envelope:
+Every refusal from an issue-family `/api/v1` route carries one envelope:
 `message`, `code`, `status`, `documentation_url`, `request_id`, and `errors`.
 `OpenAgentsWeb.ApiError` owns it, and a code determines its status there, so no
 controller chooses a status for a failure the API has already named. Two
@@ -5101,7 +5104,7 @@ table distinguishes them.
 Amended 2026-08-23 (issue #186): that ambiguity is load-bearing, so nothing
 else may hide behind it. A `rescue Ecto.NoResultsError` wrapped around a whole
 controller action caught every bang lookup the action reached, not only the
-repository one it was written for, so `POST /api/v3/repos/{owner}/{repo}/issues`
+repository one it was written for, so `POST /api/v1/repos/{owner}/{repo}/issues`
 answered `404` for a label the request body named that the repository does not
 have — the same `404` a repository the caller cannot see answers with, which
 made the honest error unreachable and sent one reporter to the router and the
@@ -5118,7 +5121,7 @@ to a private repository the caller is not a member of still answers
 `not_found`, with `errors` empty and a body that names neither the repository
 nor the label.
 
-The published route inventory at `GET /api/v3` is derived from
+The published route inventory at `GET /api/v1` is derived from
 `OpenAgentsWeb.Router.__routes__/0` through `OpenAgentsWeb.ApiRouteAuthority`,
 never maintained beside it. Each route carries three mandatory classifications
 — principal, resource family, and error contract — so a route added to the

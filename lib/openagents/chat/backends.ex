@@ -5,7 +5,7 @@ defmodule OpenAgents.Chat.Backends do
   A backend is a model and the adapter that reaches it, named by a stable id a
   client sends and a label a person reads. Everything that needs to know the
   set reads it from here: the turn runtime picks the adapter, the chat API
-  refuses an id that is not in the list, and `GET /api/v3` publishes the ids so
+  refuses an id that is not in the list, and `GET /api/v1` publishes the ids so
   a client discovers the choice instead of hardcoding it. Adding a backend is
   one entry in `@backends`, and every one of those surfaces follows.
 

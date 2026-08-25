@@ -24,7 +24,7 @@ defmodule OpenAgentsWeb.MilestoneJSON do
       due_on: milestone.due_on,
       open_issues: milestone.open_issues,
       closed_issues: milestone.closed_issues,
-      url: "#{url_base(assigns)}/api/v3/repos/#{owner}/#{repo}/milestones/#{milestone.number}"
+      url: "#{url_base(assigns)}/api/v1/repos/#{owner}/#{repo}/milestones/#{milestone.number}"
     }
   end
 

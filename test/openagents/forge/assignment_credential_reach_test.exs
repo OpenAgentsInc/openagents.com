@@ -134,7 +134,7 @@ defmodule OpenAgents.Forge.AssignmentCredentialReachTest do
             build_conn()
             |> put_api_token(user, ["computer:control"])
             |> post(
-              ~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments",
+              ~p"/api/v1/conversations/#{conversation.id}/computers/#{machine.id}/assignments",
               %{
                 "repository_id" => repository.id,
                 "issue_number" => issue.number,

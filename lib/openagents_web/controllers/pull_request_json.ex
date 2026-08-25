@@ -31,7 +31,7 @@ defmodule OpenAgentsWeb.PullRequestJSON do
       created_at: pr.inserted_at,
       updated_at: pr.updated_at,
       html_url: "#{base_url}/#{owner}/#{repo}/pulls/#{pr.issue.number}",
-      url: "#{base_url}/api/v3/repos/#{owner}/#{repo}/pulls/#{pr.issue.number}"
+      url: "#{base_url}/api/v1/repos/#{owner}/#{repo}/pulls/#{pr.issue.number}"
     }
   end
 

@@ -132,7 +132,7 @@ defmodule OpenAgentsWeb.IssueCompletionClaimControllerTest do
       build_conn()
       |> put_req_header("authorization", "Bearer #{context.credential}")
       |> post(
-        ~p"/api/v3/repos/#{elsewhere.owner}/#{elsewhere.name}/issues/#{context.issue.number}/completion_claim",
+        ~p"/api/v1/repos/#{elsewhere.owner}/#{elsewhere.name}/issues/#{context.issue.number}/completion_claim",
         %{
           "assignment_id" => context.assignment.id,
           "evidence" => [%{"criterion" => @criterion, "evidence_id" => context.evidence.id}]
@@ -156,7 +156,7 @@ defmodule OpenAgentsWeb.IssueCompletionClaimControllerTest do
     conn =
       get(
         build_conn(),
-        ~p"/api/v3/repos/#{context.repository.owner}/#{context.repository.name}/issues/#{context.issue.number}"
+        ~p"/api/v1/repos/#{context.repository.owner}/#{context.repository.name}/issues/#{context.issue.number}"
       )
 
     assert %{"openagents" => %{"completion_claims" => [claim]}} = json_response(conn, 200)
@@ -175,7 +175,7 @@ defmodule OpenAgentsWeb.IssueCompletionClaimControllerTest do
   defp post_claim_conn(conn, context) do
     post(
       conn,
-      ~p"/api/v3/repos/#{context.repository.owner}/#{context.repository.name}/issues/#{context.issue.number}/completion_claim",
+      ~p"/api/v1/repos/#{context.repository.owner}/#{context.repository.name}/issues/#{context.issue.number}/completion_claim",
       %{
         "assignment_id" => context.assignment.id,
         "evidence" => [%{"criterion" => @criterion, "evidence_id" => context.evidence.id}]

@@ -9,17 +9,17 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
   alias OpenAgents.Milestones
 
   describe "index" do
-    test "GET /api/v3/repos/:owner/:repo/milestones lists milestones", %{conn: conn} do
+    test "GET /api/v1/repos/:owner/:repo/milestones lists milestones", %{conn: conn} do
       milestone_fixture(repository(), %{title: "v1.0", state: "open"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones")
 
       assert %{"milestones" => [milestone]} = json_response(conn, 200)
       assert milestone["title"] == "v1.0"
       assert milestone["state"] == "open"
     end
 
-    test "GET /api/v3/repos/:owner/:repo/milestones renders issue counts and url", %{conn: conn} do
+    test "GET /api/v1/repos/:owner/:repo/milestones renders issue counts and url", %{conn: conn} do
       milestone = milestone_fixture(repository(), %{title: "v1.0"})
 
       {:ok, _open_issue} =
@@ -32,27 +32,27 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
           state: "closed"
         })
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones")
 
       assert %{"milestones" => [rendered]} = json_response(conn, 200)
       assert rendered["open_issues"] == 1
       assert rendered["closed_issues"] == 1
 
       assert rendered["url"] ==
-               "http://www.example.com/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"
+               "http://www.example.com/api/v1/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"
     end
 
-    test "GET /api/v3/repos/:owner/:repo/milestones returns an empty list", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones")
+    test "GET /api/v1/repos/:owner/:repo/milestones returns an empty list", %{conn: conn} do
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones")
 
       assert json_response(conn, 200) == %{"milestones" => []}
     end
   end
 
   describe "create" do
-    test "POST /api/v3/repos/:owner/:repo/milestones creates a milestone", %{conn: conn} do
+    test "POST /api/v1/repos/:owner/:repo/milestones creates a milestone", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones", %{
           title: "v2.0",
           description: "Second release"
         })
@@ -67,19 +67,19 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
       assert Milestones.get_milestone_by_number!(repository(), number).title == "v2.0"
     end
 
-    test "POST /api/v3/repos/:owner/:repo/milestones assigns sequential numbers", %{conn: conn} do
+    test "POST /api/v1/repos/:owner/:repo/milestones assigns sequential numbers", %{conn: conn} do
       first =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones", %{title: "one"})
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones", %{title: "one"})
 
       second =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones", %{title: "two"})
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones", %{title: "two"})
 
       assert json_response(second, 201)["number"] == json_response(first, 201)["number"] + 1
     end
 
-    test "POST /api/v3/repos/:owner/:repo/milestones returns 422 without a title", %{conn: conn} do
+    test "POST /api/v1/repos/:owner/:repo/milestones returns 422 without a title", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones", %{
           description: "No title"
         })
 
@@ -89,32 +89,32 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
   end
 
   describe "show" do
-    test "GET /api/v3/repos/:owner/:repo/milestones/:milestone_number returns it", %{conn: conn} do
+    test "GET /api/v1/repos/:owner/:repo/milestones/:milestone_number returns it", %{conn: conn} do
       milestone = milestone_fixture(repository(), %{title: "Show me"})
 
       conn =
-        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}")
+        get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}")
 
       assert %{"title" => "Show me", "id" => id} = json_response(conn, 200)
       assert id == milestone.id
     end
 
-    test "GET /api/v3/repos/:owner/:repo/milestones/:milestone_number returns 404 when missing",
+    test "GET /api/v1/repos/:owner/:repo/milestones/:milestone_number returns 404 when missing",
          %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/999999")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/999999")
 
       assert_api_error(conn, 404, "not_found")
     end
   end
 
   describe "update" do
-    test "PATCH /api/v3/repos/:owner/:repo/milestones/:milestone_number closes it", %{conn: conn} do
+    test "PATCH /api/v1/repos/:owner/:repo/milestones/:milestone_number closes it", %{conn: conn} do
       milestone = milestone_fixture(repository(), %{title: "Close me", state: "open"})
 
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}",
           %{
             state: "closed"
           }
@@ -124,7 +124,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
       assert Milestones.get_milestone_by_number!(repository(), milestone.number).state == "closed"
     end
 
-    test "PATCH /api/v3/repos/:owner/:repo/milestones/:milestone_number retitles it", %{
+    test "PATCH /api/v1/repos/:owner/:repo/milestones/:milestone_number retitles it", %{
       conn: conn
     } do
       milestone = milestone_fixture(repository(), %{title: "Old title"})
@@ -132,7 +132,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}",
           %{
             title: "New title"
           }
@@ -141,7 +141,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
       assert json_response(conn, 200)["title"] == "New title"
     end
 
-    test "PATCH /api/v3/repos/:owner/:repo/milestones/:milestone_number returns 422 for a blank title",
+    test "PATCH /api/v1/repos/:owner/:repo/milestones/:milestone_number returns 422 for a blank title",
          %{conn: conn} do
       milestone = milestone_fixture(repository(), %{title: "Keep me"})
 
@@ -149,7 +149,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
         conn
         |> put_req_header("content-type", "application/json")
         |> patch(
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}",
           ~s({"title": null})
         )
 
@@ -159,10 +159,10 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
                "Keep me"
     end
 
-    test "PATCH /api/v3/repos/:owner/:repo/milestones/:milestone_number returns 404 when missing",
+    test "PATCH /api/v1/repos/:owner/:repo/milestones/:milestone_number returns 404 when missing",
          %{conn: conn} do
       conn =
-        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/999999", %{
+        patch(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/999999", %{
           state: "closed"
         })
 
@@ -171,7 +171,7 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
   end
 
   describe "delete" do
-    test "DELETE /api/v3/repos/:owner/:repo/milestones/:milestone_number returns 204", %{
+    test "DELETE /api/v1/repos/:owner/:repo/milestones/:milestone_number returns 204", %{
       conn: conn
     } do
       milestone = milestone_fixture(repository(), %{title: "Delete me"})
@@ -179,16 +179,16 @@ defmodule OpenAgentsWeb.MilestoneControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/#{milestone.number}"
         )
 
       assert response(conn, 204) == ""
       assert Milestones.list_milestones(repository()) == []
     end
 
-    test "DELETE /api/v3/repos/:owner/:repo/milestones/:milestone_number returns 404 when missing",
+    test "DELETE /api/v1/repos/:owner/:repo/milestones/:milestone_number returns 404 when missing",
          %{conn: conn} do
-      conn = delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/milestones/999999")
+      conn = delete(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/milestones/999999")
 
       assert_api_error(conn, 404, "not_found")
     end

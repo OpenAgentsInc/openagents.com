@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       authed = put_forge_api_token(conn, "forum-tips-destination")
 
       created =
-        post(authed, ~p"/api/v3/forum/tips/destination", %{
+        post(authed, ~p"/api/v1/forum/tips/destination", %{
           kind: "bolt12",
           destination: "lno1qsgpayer",
           label: "Phone wallet"
@@ -71,7 +71,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       read =
         conn
         |> put_forge_api_token("forum-tips-destination")
-        |> get(~p"/api/v3/forum/tips/destination")
+        |> get(~p"/api/v1/forum/tips/destination")
 
       assert %{"destination" => same} = json_response(read, 200)
       assert same["fingerprint"] == destination["fingerprint"]
@@ -81,7 +81,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
     test "a caller opts out of tips without deleting the destination", %{conn: conn} do
       authed = put_forge_api_token(conn, "forum-tips-optout")
 
-      post(authed, ~p"/api/v3/forum/tips/destination", %{
+      post(authed, ~p"/api/v1/forum/tips/destination", %{
         kind: "lnurl",
         destination: "lnurl1dp68gurn8ghj7"
       })
@@ -89,7 +89,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       updated =
         patch(
           put_forge_api_token(conn, "forum-tips-optout"),
-          ~p"/api/v3/forum/tips/destination",
+          ~p"/api/v1/forum/tips/destination",
           %{accepting_tips: false}
         )
 
@@ -99,10 +99,10 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
     end
 
     test "the destination endpoints need a bearer token", %{conn: conn} do
-      assert json_response(get(conn, ~p"/api/v3/forum/tips/destination"), 401)
+      assert json_response(get(conn, ~p"/api/v1/forum/tips/destination"), 401)
 
       assert json_response(
-               post(conn, ~p"/api/v3/forum/tips/destination", %{
+               post(conn, ~p"/api/v1/forum/tips/destination", %{
                  kind: "bolt12",
                  destination: "lno1x"
                }),
@@ -118,7 +118,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       created =
         conn
         |> put_forge_api_token("forum-tips-payer")
-        |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+        |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
           amount_sats: 1_000,
           idempotency_key: Ecto.UUID.generate()
         })
@@ -139,7 +139,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       first =
         conn
         |> put_forge_api_token("forum-tips-retry")
-        |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+        |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
           amount_sats: 400,
           idempotency_key: key
         })
@@ -147,7 +147,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       second =
         conn
         |> put_forge_api_token("forum-tips-retry")
-        |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+        |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
           amount_sats: 400,
           idempotency_key: key
         })
@@ -164,7 +164,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       created =
         conn
         |> put_forge_api_token("forum-tips-failed")
-        |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+        |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
           amount_sats: 100,
           idempotency_key: Ecto.UUID.generate()
         })
@@ -186,14 +186,14 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       created =
         conn
         |> put_forge_api_token("forum-tips-outage")
-        |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+        |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
           amount_sats: 100,
           idempotency_key: Ecto.UUID.generate()
         })
 
       assert json_response(created, 503)["error"]
 
-      listed = get(conn, ~p"/api/v3/forum/topics?forum=general")
+      listed = get(conn, ~p"/api/v1/forum/topics?forum=general")
       assert [topic] = json_response(listed, 200)["topics"]
       assert topic["tip_sats"] == 0
     end
@@ -202,7 +202,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       author = author(forum)
 
       assert json_response(
-               post(conn, ~p"/api/v3/forum/posts/#{author.post.id}/tips", %{amount_sats: 100}),
+               post(conn, ~p"/api/v1/forum/posts/#{author.post.id}/tips", %{amount_sats: 100}),
                401
              )
     end
@@ -211,7 +211,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       created =
         conn
         |> put_forge_api_token("forum-tips-missing")
-        |> post(~p"/api/v3/forum/posts/#{Ecto.UUID.generate()}/tips", %{
+        |> post(~p"/api/v1/forum/posts/#{Ecto.UUID.generate()}/tips", %{
           amount_sats: 100,
           idempotency_key: Ecto.UUID.generate()
         })
@@ -229,7 +229,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
 
       conn
       |> put_forge_api_token("forum-tips-recipient-payer")
-      |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+      |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
         amount_sats: 900,
         idempotency_key: Ecto.UUID.generate()
       })
@@ -238,7 +238,7 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
       listed =
         conn
         |> put_forge_api_token("forum-tips-author")
-        |> get(~p"/api/v3/forum/tips/received")
+        |> get(~p"/api/v1/forum/tips/received")
 
       export = json_response(listed, 200)
       assert export["custody"] == "self"
@@ -256,13 +256,13 @@ defmodule OpenAgentsWeb.ForumTipsApiControllerTest do
 
       conn
       |> put_forge_api_token("forum-tips-public")
-      |> post(~p"/api/v3/forum/posts/#{author.post.id}/tips", %{
+      |> post(~p"/api/v1/forum/posts/#{author.post.id}/tips", %{
         amount_sats: 1_500,
         idempotency_key: Ecto.UUID.generate()
       })
       |> json_response(201)
 
-      thread = get(conn, ~p"/api/v3/forum/topics/#{author.topic.id}")
+      thread = get(conn, ~p"/api/v1/forum/topics/#{author.topic.id}")
       body = response(thread, 200)
 
       assert %{"topic" => topic, "posts" => [post]} = Jason.decode!(body)

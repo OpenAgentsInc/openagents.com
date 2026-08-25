@@ -47,7 +47,7 @@ defmodule OpenAgentsWeb.StackJSON do
       created_at: operation.inserted_at,
       completed_at: operation.completed_at,
       url:
-        "#{base_url}/api/v3/repos/#{assigns.owner}/#{assigns.repo}/pulls/#{assigns.pull_number}/merge-async/#{operation.id}"
+        "#{base_url}/api/v1/repos/#{assigns.owner}/#{assigns.repo}/pulls/#{assigns.pull_number}/merge-async/#{operation.id}"
     }
 
     case Map.get(assigns, :replay_state) do
@@ -82,7 +82,7 @@ defmodule OpenAgentsWeb.StackJSON do
       entries: Enum.map(stack.entries, &entry(&1, owner, repo, base_url)),
       created_at: stack.inserted_at,
       updated_at: stack.updated_at,
-      url: "#{base_url}/api/v3/repos/#{owner}/#{repo}/stacks/#{stack.number}"
+      url: "#{base_url}/api/v1/repos/#{owner}/#{repo}/stacks/#{stack.number}"
     }
   end
 
@@ -98,7 +98,7 @@ defmodule OpenAgentsWeb.StackJSON do
         state: pull_request.issue.state,
         head: %{ref: pull_request.head_ref, sha: pull_request.head_sha},
         base: %{ref: pull_request.base_ref, sha: pull_request.base_sha},
-        url: "#{base_url}/api/v3/repos/#{owner}/#{repo}/pulls/#{pull_request.issue.number}"
+        url: "#{base_url}/api/v1/repos/#{owner}/#{repo}/pulls/#{pull_request.issue.number}"
       }
     }
   end

@@ -15,7 +15,7 @@ defmodule OpenAgentsWeb.FleetTargetController do
   classifier, direct-load, relup, and rolling-replacement lanes still own
   execution, and the caller polls the target to a terminal state.
 
-  Refusals use `OpenAgentsWeb.ApiError`, the one `/api/v3` envelope, so release
+  Refusals use `OpenAgentsWeb.ApiError`, the one `/api/v1` envelope, so release
   tooling reads one shape and branches on one stable code.
   """
 
@@ -101,7 +101,7 @@ defmodule OpenAgentsWeb.FleetTargetController do
   end
 
   defp status_url(conn, %Target{id: id}) do
-    url(conn, ~p"/api/v3/admin/forge/targets/#{id}")
+    url(conn, ~p"/api/v1/admin/forge/targets/#{id}")
   end
 
   defp fetch(id) do
@@ -136,7 +136,7 @@ defmodule OpenAgentsWeb.FleetTargetController do
   end
 
   # Codes come from `OpenAgentsWeb.ApiError`'s one table, so this surface cannot
-  # disagree with the rest of `/api/v3` about what a refusal is worth.
+  # disagree with the rest of `/api/v1` about what a refusal is worth.
   defp failure(conn, :not_operator), do: ApiError.refuse(conn, "not_operator")
 
   defp failure(conn, :target_not_found), do: ApiError.not_found(conn)

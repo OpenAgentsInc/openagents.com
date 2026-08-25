@@ -231,10 +231,10 @@ defmodule OpenAgentsWeb.ApiExtensionController do
         "The inference backends an account chat turn may choose between. " <>
           "Every backend answers with the same events and the same terminal " <>
           "shape, so the choice changes which model replies and nothing else.",
-      "endpoints" => ["POST /api/v3/chat/turns", "GET /api/v3/chat/events"],
+      "endpoints" => ["POST /api/v1/chat/turns", "GET /api/v1/chat/events"],
       "parameters" => %{
         "model" => %{
-          "endpoint" => "POST /api/v3/chat/turns",
+          "endpoint" => "POST /api/v1/chat/turns",
           "type" => "string",
           "enum" => OpenAgents.Chat.Backends.ids(),
           "default" => OpenAgents.Chat.Backends.default_id(),
@@ -251,8 +251,8 @@ defmodule OpenAgentsWeb.ApiExtensionController do
       "description" => "Owner-safe quantity-based capacity and matching projections.",
       "endpoints" => [
         "GET /api/capacity",
-        "GET /api/v3/capacity",
-        "POST /api/v3/capacity/matches"
+        "GET /api/v1/capacity",
+        "POST /api/v1/capacity/matches"
       ],
       "schemas" => [
         "openagents.capacity.v1",
@@ -317,12 +317,12 @@ defmodule OpenAgentsWeb.ApiExtensionController do
       },
       "filters" => %{
         "blocked" => %{
-          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/issues",
+          "endpoint" => "GET /api/v1/repos/{owner}/{repo}/issues",
           "type" => "boolean",
           "description" => "Lists issues that do or do not have an open prerequisite."
         },
         "progress" => %{
-          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/issues",
+          "endpoint" => "GET /api/v1/repos/{owner}/{repo}/issues",
           "type" => "string",
           "enum" => OpenAgents.Issues.progress_values(),
           "description" =>
@@ -330,7 +330,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "state, so done needs state=all or state=closed."
         },
         "type" => %{
-          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/issues",
+          "endpoint" => "GET /api/v1/repos/{owner}/{repo}/issues",
           "type" => "string",
           "enum" => OpenAgents.Issues.type_values(),
           "default" => "all",
@@ -342,9 +342,9 @@ defmodule OpenAgentsWeb.ApiExtensionController do
         }
       },
       "endpoints" => [
-        "GET /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
-        "POST /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
-        "DELETE /api/v3/repos/{owner}/{repo}/issues/{issue_number}/dependencies/{blocked_by_number}"
+        "GET /api/v1/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
+        "POST /api/v1/repos/{owner}/{repo}/issues/{issue_number}/dependencies",
+        "DELETE /api/v1/repos/{owner}/{repo}/issues/{issue_number}/dependencies/{blocked_by_number}"
       ]
     },
     "project_item.openagents" => %{
@@ -363,24 +363,24 @@ defmodule OpenAgentsWeb.ApiExtensionController do
       },
       "filters" => %{
         "promise_state" => %{
-          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items",
+          "endpoint" => "GET /api/v1/repos/{owner}/{repo}/projectsV2/{project_number}/items",
           "type" => "string",
           "enum" => ["LIVE", "GATED", "WITHDRAWN"]
         },
         "bounty_candidate" => %{
-          "endpoint" => "GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items",
+          "endpoint" => "GET /api/v1/repos/{owner}/{repo}/projectsV2/{project_number}/items",
           "type" => "boolean"
         }
       },
       "endpoints" => [
-        "GET /api/v3/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events"
+        "GET /api/v1/repos/{owner}/{repo}/projectsV2/{project_number}/items/{item_id}/events"
       ]
     }
   }
 
   def show(conn, _params) do
     json(conn, %{
-      "api_version" => "v3",
+      "api_version" => "v1",
       "version" => @document_version,
       "extensions" => Map.put(@extensions, "thread.openagents", thread_extension()),
       "errors" => errors_contract(),
@@ -423,21 +423,21 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "conversation, and a grant names one or the other, never both " <>
           "(THREAD-001).",
       "endpoints" => [
-        "GET /api/v3/models",
-        "POST /api/v3/threads",
-        "GET /api/v3/threads/{thread_id}",
-        "DELETE /api/v3/threads/{thread_id}"
+        "GET /api/v1/models",
+        "POST /api/v1/threads",
+        "GET /api/v1/threads/{thread_id}",
+        "DELETE /api/v1/threads/{thread_id}"
       ],
       "parameters" => %{
         "objective" => %{
-          "endpoint" => "POST /api/v3/threads",
+          "endpoint" => "POST /api/v1/threads",
           "type" => "string",
           "description" =>
             "What this body of work is for. Required, non-blank, and capped " <>
               "at 32 KB."
         },
         "repository" => %{
-          "endpoint" => "POST /api/v3/threads",
+          "endpoint" => "POST /api/v1/threads",
           "type" => "string",
           "description" =>
             "The repository the work concerns, as the opener names it " <>
@@ -445,12 +445,12 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "capped at 200 bytes; not validated against the forge's " <>
               "repositories, because a thread may concern a repository the " <>
               "forge does not host. Returned in every thread view, and " <>
-              "GET /api/v3/threads?repository= filters the listing by exact " <>
+              "GET /api/v1/threads?repository= filters the listing by exact " <>
               "match, so a resume picker filters structurally instead of " <>
               "parsing the objective back."
         },
         "visibility" => %{
-          "endpoint" => "POST /api/v3/threads",
+          "endpoint" => "POST /api/v1/threads",
           "type" => "string",
           "enum" => OpenAgents.Threads.Thread.visibilities(),
           "default" => OpenAgents.Threads.Thread.default_visibility(),
@@ -459,7 +459,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "transcript, from the same dark/pulse/ledger/glass vocabulary " <>
               "the forge uses for disclosure. Optional and owner-only by " <>
               "default: `dark` keeps the thread to the account that opened " <>
-              "it, and `ledger` opens GET /api/v3/threads/{thread_id} and its " <>
+              "it, and `ledger` opens GET /api/v1/threads/{thread_id} and its " <>
               "events to any signed-in reader holding the thread id. Widening " <>
               "is recorded in the transcript as `thread.visibility_set`. The " <>
               "`pulse` and `glass` tiers have no thread read path behind them " <>
@@ -469,13 +469,13 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "and a reader admitted by the tier is served `\"grant\": null`."
         },
         "model" => %{
-          "endpoint" => "POST /api/v3/threads",
+          "endpoint" => "POST /api/v1/threads",
           "type" => "string",
           "enum" => OpenAgents.Inference.Models.ids(),
           "default" => OpenAgents.Inference.Models.default_id(),
           "description" =>
             "The model the thread's grant pins, and therefore the model every " <>
-              "call at the inference proxy reaches. GET /api/v3/models is the " <>
+              "call at the inference proxy reaches. GET /api/v1/models is the " <>
               "typed catalog behind this enum, with each model's provider, " <>
               "ceilings, and availability. A value outside this enum is " <>
               "refused with a field-level 422 naming `model`; a listed model " <>
@@ -484,7 +484,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "second thread to run other work on another model."
         },
         "reasoning" => %{
-          "endpoint" => "POST /api/v3/threads",
+          "endpoint" => "POST /api/v1/threads",
           "type" => "string",
           "enum" => OpenAgents.Threads.Thread.reasoning_efforts(),
           "default" => OpenAgents.Threads.default_reasoning(),
@@ -494,7 +494,7 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "`reasoning` rather than replaced by the default."
         },
         "permission_profile" => %{
-          "endpoint" => "POST /api/v3/threads",
+          "endpoint" => "POST /api/v1/threads",
           "type" => "string",
           "enum" => OpenAgents.Threads.Thread.permission_profiles(),
           "default" => OpenAgents.Threads.default_permission_profile(),

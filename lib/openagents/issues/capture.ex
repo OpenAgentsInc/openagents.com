@@ -4,7 +4,7 @@ defmodule OpenAgents.Issues.Capture do
 
   This module is the whole of the behavior. The chat tool
   (`OpenAgents.Tools.IssueCapture`) and the authenticated API operation
-  (`POST /api/v3/repos/:owner/:repo/issues/capture`) are two transports over
+  (`POST /api/v1/repos/:owner/:repo/issues/capture`) are two transports over
   it, so the two cannot drift: a refusal the tool gives is the refusal the API
   gives, and a draft the API writes is the draft the tool writes.
 

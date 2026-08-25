@@ -69,26 +69,26 @@ defmodule OpenAgentsWeb.RouteAuthority do
   # is what the token changes, and every one of these routes resolves the
   # repository through `Repositories.get_visible_by_path!/3`.
   @optional_forge_read_paths [
-    "/api/v3/repos/:owner/:repo/issues",
-    "/api/v3/repos/:owner/:repo/issues/:issue_number",
-    "/api/v3/repos/:owner/:repo/issues/:issue_number/dependencies",
-    "/api/v3/repos/:owner/:repo/issues/:issue_number/comments",
-    "/api/v3/repos/:owner/:repo/issues/comments/:id",
-    "/api/v3/repos/:owner/:repo/issues/:issue_number/labels",
-    "/api/v3/repos/:owner/:repo/issues/:issue_number/assignees",
-    "/api/v3/repos/:owner/:repo/labels",
-    "/api/v3/repos/:owner/:repo/labels/:name",
-    "/api/v3/repos/:owner/:repo/milestones",
-    "/api/v3/repos/:owner/:repo/milestones/:milestone_number",
-    "/api/v3/repos/:owner/:repo/assignees",
-    "/api/v3/repos/:owner/:repo/assignees/:assignee",
-    "/api/v3/repos/:owner/:repo/pulls",
-    "/api/v3/repos/:owner/:repo/pulls/:pull_number",
-    "/api/v3/repos/:owner/:repo/projectsV2",
-    "/api/v3/repos/:owner/:repo/projectsV2/:project_number",
-    "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items",
-    "/api/v3/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/events",
-    "/api/v3/repos/:owner/:repo/projectsV2/:project_number/fields"
+    "/api/v1/repos/:owner/:repo/issues",
+    "/api/v1/repos/:owner/:repo/issues/:issue_number",
+    "/api/v1/repos/:owner/:repo/issues/:issue_number/dependencies",
+    "/api/v1/repos/:owner/:repo/issues/:issue_number/comments",
+    "/api/v1/repos/:owner/:repo/issues/comments/:id",
+    "/api/v1/repos/:owner/:repo/issues/:issue_number/labels",
+    "/api/v1/repos/:owner/:repo/issues/:issue_number/assignees",
+    "/api/v1/repos/:owner/:repo/labels",
+    "/api/v1/repos/:owner/:repo/labels/:name",
+    "/api/v1/repos/:owner/:repo/milestones",
+    "/api/v1/repos/:owner/:repo/milestones/:milestone_number",
+    "/api/v1/repos/:owner/:repo/assignees",
+    "/api/v1/repos/:owner/:repo/assignees/:assignee",
+    "/api/v1/repos/:owner/:repo/pulls",
+    "/api/v1/repos/:owner/:repo/pulls/:pull_number",
+    "/api/v1/repos/:owner/:repo/projectsV2",
+    "/api/v1/repos/:owner/:repo/projectsV2/:project_number",
+    "/api/v1/repos/:owner/:repo/projectsV2/:project_number/items",
+    "/api/v1/repos/:owner/:repo/projectsV2/:project_number/items/:item_id/events",
+    "/api/v1/repos/:owner/:repo/projectsV2/:project_number/fields"
   ]
 
   @spec classes() :: [atom()]
@@ -262,7 +262,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
               verb in [:get, :head],
        do: declaration(:public_read, "anonymous", "published:api-contract", false)
 
-  defp policy(%{path: "/api/v3", verb: verb}) when verb in [:get, :head],
+  defp policy(%{path: "/api/v1", verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:api-extensions", false)
 
   defp policy(%{path: "/controller/pairings", verb: :post}),
@@ -292,7 +292,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
            false
          )
 
-  defp policy(%{path: "/api/v3/agent/credentials", verb: :post}),
+  defp policy(%{path: "/api/v1/agent/credentials", verb: :post}),
     do:
       declaration(
         :authenticated_api,
@@ -303,11 +303,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: path, verb: verb})
        when path in [
-              "/api/v3/computers",
-              "/api/v3/computers/:id",
-              "/api/v3/computers/:computer_id/probe",
-              "/api/v3/computers/:computer_id/agent-jobs",
-              "/api/v3/computer-agent-jobs/:id"
+              "/api/v1/computers",
+              "/api/v1/computers/:id",
+              "/api/v1/computers/:computer_id/probe",
+              "/api/v1/computers/:computer_id/agent-jobs",
+              "/api/v1/computer-agent-jobs/:id"
             ] do
     declaration(
       :authenticated_api,
@@ -317,7 +317,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     )
   end
 
-  defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes", verb: verb})
+  defp policy(%{path: "/api/v1/conversations/:conversation_id/boxes", verb: verb})
        when verb in [:get, :post],
        do:
          declaration(
@@ -327,7 +327,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
            verb == :post
          )
 
-  defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes/:box_id", verb: :get}),
+  defp policy(%{path: "/api/v1/conversations/:conversation_id/boxes/:box_id", verb: :get}),
     do:
       declaration(
         :authenticated_api,
@@ -337,7 +337,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
       )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/commands",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/commands",
          verb: :post
        }),
        do:
@@ -348,7 +348,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
            true
          )
 
-  defp policy(%{path: "/api/v3/conversations/:conversation_id/boxes/:box_id/stop", verb: :post}),
+  defp policy(%{path: "/api/v1/conversations/:conversation_id/boxes/:box_id/stop", verb: :post}),
     do:
       declaration(
         :authenticated_api,
@@ -358,7 +358,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
       )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/assignments",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/assignments",
          verb: :post
        }),
        do:
@@ -370,7 +370,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id",
          verb: :get
        }),
        do:
@@ -383,7 +383,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{
          path:
-           "/api/v3/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id/cancel",
+           "/api/v1/conversations/:conversation_id/boxes/:box_id/assignments/:assignment_id/cancel",
          verb: :post
        }),
        do:
@@ -395,7 +395,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/computers/:computer_id/assignments",
+         path: "/api/v1/conversations/:conversation_id/computers/:computer_id/assignments",
          verb: :post
        }),
        do:
@@ -408,7 +408,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{
          path:
-           "/api/v3/conversations/:conversation_id/computers/:computer_id/assignments/:assignment_id",
+           "/api/v1/conversations/:conversation_id/computers/:computer_id/assignments/:assignment_id",
          verb: :get
        }),
        do:
@@ -421,7 +421,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{
          path:
-           "/api/v3/conversations/:conversation_id/computers/:computer_id/assignments/:assignment_id/cancel",
+           "/api/v1/conversations/:conversation_id/computers/:computer_id/assignments/:assignment_id/cancel",
          verb: :post
        }),
        do:
@@ -433,7 +433,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/runs",
          verb: verb
        })
        when verb in [:get, :post],
@@ -446,7 +446,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/runs/:run_id",
          verb: :get
        }),
        do:
@@ -458,7 +458,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id/output",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/runs/:run_id/output",
          verb: :get
        }),
        do:
@@ -470,7 +470,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{
-         path: "/api/v3/conversations/:conversation_id/boxes/:box_id/runs/:run_id/cancel",
+         path: "/api/v1/conversations/:conversation_id/boxes/:box_id/runs/:run_id/cancel",
          verb: :post
        }),
        do:
@@ -508,7 +508,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
         verb not in [:get, :head]
       )
 
-  defp policy(%{path: "/api/v3/device/authorizations" <> _path, verb: :post}),
+  defp policy(%{path: "/api/v1/device/authorizations" <> _path, verb: :post}),
     do:
       declaration(
         :authenticated_api,
@@ -518,11 +518,11 @@ defmodule OpenAgentsWeb.RouteAuthority do
       )
 
   defp policy(%{path: path, verb: verb})
-       when path in ["/api/v3/user", "/api/v3/user/repos", "/api/v3/repository-imports/:id"] and
+       when path in ["/api/v1/user", "/api/v1/user/repos", "/api/v1/repository-imports/:id"] and
               verb in [:get, :head],
        do: declaration(:authenticated_api, "first-party bearer token", "forge:read", false)
 
-  defp policy(%{path: "/api/v3/repos/:owner/:repo", verb: verb}) when verb in [:get, :head],
+  defp policy(%{path: "/api/v1/repos/:owner/:repo", verb: verb}) when verb in [:get, :head],
     do:
       declaration(
         :public_read,
@@ -532,10 +532,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
       )
 
   # Fleet promotion is release authority over OpenAgents itself, so it is
-  # classified before every /api/v3 rule below it: an operator credential
+  # classified before every /api/v1 rule below it: an operator credential
   # holding `deployments:promote`, never the generic write catch-all, and never
   # the tenant plane's `deployments:write`.
-  defp policy(%{path: "/api/v3/admin/forge/targets" <> _path, verb: verb}),
+  defp policy(%{path: "/api/v1/admin/forge/targets" <> _path, verb: verb}),
     do:
       declaration(
         :operator,
@@ -548,7 +548,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   # discloses what a repository ships and when, so every route here authenticates
   # a tenant principal, and none of them carries the operator fleet authority
   # behind `/admin/forge`.
-  defp policy(%{path: "/api/v3/repos/:owner/:repo/deployment" <> _path, verb: verb})
+  defp policy(%{path: "/api/v1/repos/:owner/:repo/deployment" <> _path, verb: verb})
        when verb in [:get, :head],
        do:
          declaration(
@@ -558,7 +558,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
            false
          )
 
-  defp policy(%{path: "/api/v3/repos/:owner/:repo/deployment" <> _path}),
+  defp policy(%{path: "/api/v1/repos/:owner/:repo/deployment" <> _path}),
     do:
       declaration(
         :authenticated_api,
@@ -567,16 +567,16 @@ defmodule OpenAgentsWeb.RouteAuthority do
         true
       )
 
-  defp policy(%{path: "/api/v3/chat/events", verb: verb}) when verb in [:get, :head],
+  defp policy(%{path: "/api/v1/chat/events", verb: verb}) when verb in [:get, :head],
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
 
-  defp policy(%{path: "/api/v3/chat/turns", verb: :post}),
+  defp policy(%{path: "/api/v1/chat/turns", verb: :post}),
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", true)
 
-  defp policy(%{path: "/api/v3/capacity", verb: verb}) when verb in [:get, :head],
+  defp policy(%{path: "/api/v1/capacity", verb: verb}) when verb in [:get, :head],
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
 
-  defp policy(%{path: "/api/v3/capacity/matches", verb: :post}),
+  defp policy(%{path: "/api/v1/capacity/matches", verb: :post}),
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", true)
 
   defp policy(%{path: path, verb: verb})
@@ -591,10 +591,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{path: path, verb: :post})
        when path in [
-              "/api/v3/forum/topics",
-              "/api/v3/forum/topics/:topic_id/posts",
-              "/api/v3/repos/:owner/:repo/issues",
-              "/api/v3/repos/:owner/:repo/issues/:issue_number/comments"
+              "/api/v1/forum/topics",
+              "/api/v1/forum/topics/:topic_id/posts",
+              "/api/v1/repos/:owner/:repo/issues",
+              "/api/v1/repos/:owner/:repo/issues/:issue_number/comments"
             ],
        do:
          declaration(
@@ -604,10 +604,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
            true
          )
 
-  defp policy(%{path: "/api/v3/" <> _path, verb: verb}) when verb in [:get, :head],
+  defp policy(%{path: "/api/v1/" <> _path, verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:forge", false)
 
-  defp policy(%{path: "/api/v3/" <> _path}),
+  defp policy(%{path: "/api/v1/" <> _path}),
     do: declaration(:authenticated_api, "first-party bearer token", "forge:write", true)
 
   defp policy(%{path: "/dev/" <> _path}),

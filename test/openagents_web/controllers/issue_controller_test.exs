@@ -13,25 +13,25 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   import OpenAgents.LabelsFixtures
 
   describe "index" do
-    test "GET /api/v3/repos/:owner/:repo/issues lists open issues by default", %{
+    test "GET /api/v1/repos/:owner/:repo/issues lists open issues by default", %{
       conn: conn
     } do
       {:ok, _issue} = Issues.create_issue(repository(), %{title: "First issue"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => [issue | _]} = json_response(conn, 200)
       assert issue["title"] == "First issue"
       assert issue["state"] == "open"
     end
 
-    test "GET /api/v3/repos/:owner/:repo/issues filters by state", %{conn: conn} do
+    test "GET /api/v1/repos/:owner/:repo/issues filters by state", %{conn: conn} do
       {:ok, _open_issue} = Issues.create_issue(repository(), %{title: "Open issue"})
 
       {:ok, _closed_issue} =
         Issues.create_issue(repository(), %{title: "Closed issue", state: "closed"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=closed")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?state=closed")
 
       assert %{"issues" => [issue]} = json_response(conn, 200)
       assert issue["title"] == "Closed issue"
@@ -40,9 +40,9 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   end
 
   describe "create" do
-    test "POST /api/v3/repos/:owner/:repo/issues creates an issue", %{conn: conn} do
+    test "POST /api/v1/repos/:owner/:repo/issues creates an issue", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "New issue",
           body: "A description"
         })
@@ -55,11 +55,11 @@ defmodule OpenAgentsWeb.IssueControllerTest do
              } = json_response(conn, 201)
     end
 
-    test "POST /api/v3/repos/:owner/:repo/issues returns 422 for missing title", %{
+    test "POST /api/v1/repos/:owner/:repo/issues returns 422 for missing title", %{
       conn: conn
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{body: "No title"})
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{body: "No title"})
 
       assert json_response(conn, 422)["errors"] != %{}
     end
@@ -75,7 +75,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer #{credential}")
-        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        |> post(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "Agent issue",
           body: "Filed without a human link"
         })
@@ -100,7 +100,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer #{credential}")
-        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        |> post(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "Should fail",
           body: "Suspended"
         })
@@ -126,7 +126,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer #{credential}")
-        |> post("/api/v3/repos/#{private.owner}/#{private.name}/issues", %{
+        |> post("/api/v1/repos/#{private.owner}/#{private.name}/issues", %{
           title: "Should fail",
           body: "Private"
         })
@@ -152,7 +152,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       created =
         conn
         |> put_req_header("authorization", "Bearer #{credential}")
-        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        |> post(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "Stable issue",
           body: "Authorship must remain stable"
         })
@@ -163,7 +163,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert {:ok, _unlinked} = Agents.unlink(agent, user)
 
       after_link =
-        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{number}")
+        get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{number}")
         |> json_response(200)
 
       assert after_link["user"] == before_author
@@ -191,7 +191,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
         conn
         |> put_req_header("authorization", "Bearer #{credential}")
         |> patch(
-          "/api/v3/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
+          "/api/v1/repos/#{repository.owner}/#{repository.name}/issues/#{issue.number}",
           %{state: "closed"}
         )
 
@@ -202,12 +202,12 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   end
 
   describe "show" do
-    test "GET /api/v3/repos/:owner/:repo/issues/:issue_number returns the issue", %{
+    test "GET /api/v1/repos/:owner/:repo/issues/:issue_number returns the issue", %{
       conn: conn
     } do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Show me"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{
                "title" => "Show me",
@@ -217,10 +217,10 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert n == issue.number
     end
 
-    test "GET /api/v3/repos/:owner/:repo/issues/:issue_number returns 404 when missing", %{
+    test "GET /api/v1/repos/:owner/:repo/issues/:issue_number returns 404 when missing", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/999999")
 
       assert json_response(conn, 404)
     end
@@ -232,7 +232,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(private_repository, %{title: "Private issue"})
 
       path =
-        "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues"
+        "/api/v1/repos/#{private_repository.owner}/#{private_repository.name}/issues"
 
       assert get(build_conn(), path) |> json_response(404)
 
@@ -257,7 +257,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         get(
           conn,
-          "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues"
+          "/api/v1/repos/#{private_repository.owner}/#{private_repository.name}/issues"
         )
 
       assert json_response(conn, 404)
@@ -272,7 +272,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   describe "a name the repository does not have" do
     test "POST with an unknown label answers 422 and names the label", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "Labelled",
           labels: ["area:data-rights"]
         })
@@ -287,7 +287,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
 
     test "POST with an unknown assignee answers 422 and names the login", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "Assigned",
           assignees: ["not-a-member"]
         })
@@ -301,7 +301,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
 
     test "POST with an unknown milestone answers 422 and names the number", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues", %{
           title: "Planned",
           milestone: 4004
         })
@@ -317,7 +317,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Relabel me"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
+        patch(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
           labels: ["area:data-rights"]
         })
 
@@ -335,7 +335,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         post(
           conn,
-          "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues",
+          "/api/v1/repos/#{private_repository.owner}/#{private_repository.name}/issues",
           %{title: "Filed blind", labels: ["area:data-rights"]}
         )
 
@@ -380,14 +380,14 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       unknown_label =
         post(
           put_forge_api_token(build_conn(), "issue-create-typo", repository()),
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues",
           %{title: "Typo", labels: ["area:data-rights"]}
         )
 
       unreadable_repository =
         post(
           put_forge_api_token(build_conn(), "issue-create-blind"),
-          "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}/issues",
+          "/api/v1/repos/#{private_repository.owner}/#{private_repository.name}/issues",
           %{title: "Blind", labels: ["area:data-rights"]}
         )
 
@@ -400,13 +400,13 @@ defmodule OpenAgentsWeb.IssueControllerTest do
   end
 
   describe "update" do
-    test "PATCH /api/v3/repos/:owner/:repo/issues/:issue_number closes an issue", %{
+    test "PATCH /api/v1/repos/:owner/:repo/issues/:issue_number closes an issue", %{
       conn: conn
     } do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Close me"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
+        patch(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
           state: "closed"
         })
 
@@ -422,7 +422,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         conn
         |> Map.replace!(:host, "staging.example.com")
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => [issue]} = json_response(conn, 200)
 
@@ -436,7 +436,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       conn =
         conn
         |> put_req_header("x-forwarded-host", "evil.example.net")
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => [issue]} = json_response(conn, 200)
       refute issue["html_url"] =~ "evil.example.net"
@@ -550,7 +550,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "index returns bounded pagination metadata", %{conn: conn} do
       {:ok, _issue} = Issues.create_issue(repository(), %{title: "Counted issue"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => issues, "pagination" => pagination} = json_response(conn, 200)
       assert length(issues) <= Issues.per_page()
@@ -583,7 +583,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
             %{"milestone" => "3"},
             %{"q" => "wombat"}
           ] do
-        conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?#{params}")
+        conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?#{params}")
         assert %{"issues" => [issue], "pagination" => %{"total" => 1}} = json_response(conn, 200)
         assert issue["title"] == "Wombat routing"
       end
@@ -594,7 +594,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
         {:ok, _} = Issues.create_issue(repository(), %{title: "Paged #{n}"})
       end)
 
-      first = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      first = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => page_one, "pagination" => %{"total_pages" => 2}} =
                json_response(first, 200)
@@ -602,7 +602,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       assert length(page_one) == Issues.per_page()
 
       second =
-        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?page=2")
+        get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?page=2")
 
       assert %{"issues" => page_two} = json_response(second, 200)
       assert length(page_two) == 30 - Issues.per_page()
@@ -611,14 +611,14 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
 
     test "index rejects an unknown state with a stable error", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=bogus")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?state=bogus")
 
       assert %{"errors" => %{"state" => [message]}} = json_response(conn, 422)
       assert message =~ "open"
     end
 
     test "index rejects a non-integer page with a stable error", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?page=zero")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?page=zero")
 
       assert %{"errors" => %{"page" => [message]}} = json_response(conn, 422)
       assert message =~ "positive integer"
@@ -631,7 +631,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
       assert :ok = Issues.add_dependencies(blocked, [blocker.number])
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{blocked.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{blocked.number}")
 
       assert %{
                "openagents" => %{
@@ -650,7 +650,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
       assert :ok = Issues.add_dependencies(blocked, [blocker.number])
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => issues} = json_response(conn, 200)
       by_number = Map.new(issues, &{&1["number"], &1["openagents"]})
@@ -662,7 +662,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "an issue without prerequisites reports an empty graph", %{conn: conn} do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Ready"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"blocked" => false, "blocked_by" => [], "blocks" => []}} =
                json_response(conn, 200)
@@ -671,7 +671,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "an issue nobody has worked reports no attempts, not a missing field", %{conn: conn} do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Unworked"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"work" => []}} = json_response(conn, 200)
     end
@@ -683,7 +683,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       record_attempt(issue, "agent/first", -600, %{state: "failed", failure_reason: "timeout"})
       record_attempt(issue, "agent/second", -60, %{state: "completed", terminal_commit: sha})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"work" => [first, second]}} = json_response(conn, 200)
 
@@ -702,7 +702,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Bounded"})
       record_attempt(issue, "agent/bounded", -30, %{})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"work" => [attempt]}} = json_response(conn, 200)
 
@@ -737,12 +737,12 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       # `Repositories.readable_by/2` admits both.
       member =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
         |> json_response(200)
 
       anonymous =
         Phoenix.ConnTest.build_conn()
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
         |> json_response(200)
 
       assert [%{"branch" => "agent/secret-rename"}] = member["openagents"]["work"]
@@ -761,7 +761,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, _idle} = Issues.create_issue(repository(), %{title: "Idle"})
       record_attempt(worked, "agent/page", -45, %{})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => issues} = json_response(conn, 200)
       by_title = Map.new(issues, &{&1["title"], &1["openagents"]["work"]})
@@ -775,7 +775,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "an issue nothing has evaluated reports no evidence, not a missing field", %{conn: conn} do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Unevaluated"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"evidence" => []}} = json_response(conn, 200)
     end
@@ -785,7 +785,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       sha = String.duplicate("9a", 20)
       record_evidence(issue, sha)
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"evidence" => [build, deploy]}} = json_response(conn, 200)
 
@@ -804,7 +804,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Bounded evidence"})
       record_evidence(issue, String.duplicate("7b", 20))
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"evidence" => [entry | _]}} = json_response(conn, 200)
 
@@ -826,7 +826,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, _idle} = Issues.create_issue(repository(), %{title: "Unevidenced"})
       record_evidence(shipped, String.duplicate("4c", 20))
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => issues} = json_response(conn, 200)
       by_title = Map.new(issues, &{&1["title"], &1["openagents"]["evidence"]})
@@ -843,7 +843,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, _ready} = Issues.create_issue(repository(), %{title: "Ready"})
       assert :ok = Issues.add_dependencies(blocked, [blocker.number])
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=true")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?blocked=true")
 
       assert %{"issues" => [issue], "pagination" => %{"total" => 1}} = json_response(conn, 200)
       assert issue["title"] == "Waiting"
@@ -855,7 +855,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, _ready} = Issues.create_issue(repository(), %{title: "Ready"})
       assert :ok = Issues.add_dependencies(blocked, [blocker.number])
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=false")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?blocked=false")
 
       assert %{"issues" => issues, "pagination" => %{"total" => 2}} = json_response(conn, 200)
       assert Enum.map(issues, & &1["title"]) |> Enum.sort() == ["Prerequisite", "Ready"]
@@ -866,14 +866,14 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, blocker} = Issues.create_issue(repository(), %{title: "Prerequisite"})
       assert :ok = Issues.add_dependencies(blocked, [blocker.number])
 
-      patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{blocker.number}", %{
+      patch(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{blocker.number}", %{
         state: "closed"
       })
 
-      blocked_conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=true")
+      blocked_conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?blocked=true")
       assert %{"issues" => [], "pagination" => %{"total" => 0}} = json_response(blocked_conn, 200)
 
-      ready_conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=false")
+      ready_conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?blocked=false")
 
       assert %{"issues" => [issue], "pagination" => %{"total" => 1}} =
                json_response(ready_conn, 200)
@@ -882,7 +882,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
 
     test "index rejects a blocked value that is not a boolean", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?blocked=maybe")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?blocked=maybe")
 
       assert %{"errors" => %{"blocked" => [message]}} = json_response(conn, 422)
       assert message =~ "true or false"
@@ -894,7 +894,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Underway"})
       place(repository(), issue, "In Progress")
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"progress" => "in_progress"}} = json_response(conn, 200)
     end
@@ -902,7 +902,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "an issue on no board has not started", %{conn: conn} do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Queued"})
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
 
       assert %{"openagents" => %{"progress" => "to_do"}} = json_response(conn, 200)
     end
@@ -912,7 +912,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       place(repository(), issue, "In Progress")
 
       conn =
-        patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
+        patch(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}", %{
           state: "closed"
         })
 
@@ -924,7 +924,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, queued} = Issues.create_issue(repository(), %{title: "Queued"})
       place(repository(), started, "In Progress")
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
       assert %{"issues" => issues} = json_response(conn, 200)
       by_number = Map.new(issues, &{&1["number"], &1["openagents"]["progress"]})
@@ -937,7 +937,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, issue} = Issues.create_issue(repository(), %{title: "Underway"})
       place(repository(), issue, "In Progress")
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
       body = json_response(conn, 200)
 
       assert body["state"] == "open"
@@ -959,7 +959,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       {:ok, _queued} = Issues.create_issue(repository(), %{title: "Queued"})
       place(repository(), started, "In Progress")
 
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?progress=in_progress")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?progress=in_progress")
 
       assert %{"issues" => [issue], "pagination" => %{"total" => 1}} = json_response(conn, 200)
       assert issue["title"] == "Underway"
@@ -976,7 +976,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
         conn =
           get(
             conn,
-            ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?state=all&progress=#{value}"
+            ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?state=all&progress=#{value}"
           )
 
         for issue <- json_response(conn, 200)["issues"] do
@@ -993,7 +993,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       anonymous =
         get(
           build_conn(),
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}"
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}"
         )
 
       assert %{"openagents" => %{"progress" => "to_do"}} = json_response(anonymous, 200)
@@ -1001,14 +1001,14 @@ defmodule OpenAgentsWeb.IssueControllerTest do
       listed =
         get(
           build_conn(),
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?progress=in_progress"
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?progress=in_progress"
         )
 
       assert %{"issues" => [], "pagination" => %{"total" => 0}} = json_response(listed, 200)
     end
 
     test "index rejects a progress value outside the published enum", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?progress=doing")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?progress=doing")
 
       assert %{"errors" => %{"progress" => [message]}} = json_response(conn, 422)
       assert message =~ "to_do"
@@ -1046,7 +1046,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       %{"issues" => issues} =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
         |> json_response(200)
 
       numbers = Enum.map(issues, & &1["number"])
@@ -1060,14 +1060,14 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       %{"issues" => issues} =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
         |> json_response(200)
 
       entry = Enum.find(issues, &(&1["number"] == proposal.number))
 
       assert entry["draft"] == false
       assert entry["pull_request"]["html_url"] =~ "/pulls/#{proposal.number}"
-      assert entry["pull_request"]["url"] =~ "/api/v3/repos/OpenAgentsInc/openagents.com/pulls/"
+      assert entry["pull_request"]["url"] =~ "/api/v1/repos/OpenAgentsInc/openagents.com/pulls/"
       assert entry["pull_request"]["merged_at"] == nil
     end
 
@@ -1077,7 +1077,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       entry =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{plain.number}")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{plain.number}")
         |> json_response(200)
 
       refute Map.has_key?(entry, "pull_request")
@@ -1087,7 +1087,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     test "the show endpoint marks a pull request too", %{conn: conn, proposal: proposal} do
       entry =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{proposal.number}")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{proposal.number}")
         |> json_response(200)
 
       assert entry["pull_request"]["html_url"] =~ "/pulls/#{proposal.number}"
@@ -1100,7 +1100,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       %{"issues" => issues} =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?type=issue")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?type=issue")
         |> json_response(200)
 
       numbers = Enum.map(issues, & &1["number"])
@@ -1115,7 +1115,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     } do
       %{"issues" => issues} =
         conn
-        |> get(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?type=pull_request")
+        |> get(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?type=pull_request")
         |> json_response(200)
 
       numbers = Enum.map(issues, & &1["number"])
@@ -1124,7 +1124,7 @@ defmodule OpenAgentsWeb.IssueControllerTest do
     end
 
     test "index rejects a type outside the published enum", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues?type=proposal")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues?type=proposal")
 
       assert %{"errors" => %{"type" => [message]}} = json_response(conn, 422)
       assert message =~ "pull_request"

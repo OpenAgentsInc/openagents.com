@@ -8,7 +8,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
     response =
       conn
       |> put_chat_api_token(key)
-      |> post(~p"/api/v3/chat/turns", %{"message" => "Read the README."})
+      |> post(~p"/api/v1/chat/turns", %{"message" => "Read the README."})
       |> json_response(202)
 
     assert %{"id" => run_id, "status" => "streaming"} = response["turn"]
@@ -16,7 +16,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
     response =
       conn
       |> put_chat_api_token(key)
-      |> get(~p"/api/v3/chat/events")
+      |> get(~p"/api/v1/chat/events")
       |> json_response(200)
 
     assert [first | _events] = response["events"]
@@ -30,7 +30,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
     refusal =
       conn
       |> put_forge_api_token("chat-wrong-scope")
-      |> get(~p"/api/v3/chat/events")
+      |> get(~p"/api/v1/chat/events")
 
     assert assert_api_error(refusal, 401, "unauthenticated")["error"] == "invalid_api_token"
   end
@@ -82,7 +82,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
     events =
       conn
       |> put_chat_api_token(key)
-      |> get(~p"/api/v3/chat/events")
+      |> get(~p"/api/v1/chat/events")
       |> json_response(200)
       |> Map.fetch!("events")
 
@@ -162,7 +162,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
     events =
       conn
       |> put_chat_api_token(key)
-      |> get(~p"/api/v3/chat/events")
+      |> get(~p"/api/v1/chat/events")
       |> json_response(200)
       |> Map.fetch!("events")
 
@@ -187,7 +187,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
   end
 
   test "chat API requires a bearer token", %{conn: conn} do
-    assert conn |> get(~p"/api/v3/chat/events") |> api_error_code(401) == "unauthenticated"
+    assert conn |> get(~p"/api/v1/chat/events") |> api_error_code(401) == "unauthenticated"
   end
 
   describe "backend selection" do
@@ -201,7 +201,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
         response =
           conn
           |> put_chat_api_token(key)
-          |> post(~p"/api/v3/chat/turns", Map.merge(%{"message" => "Hello."}, sent))
+          |> post(~p"/api/v1/chat/turns", Map.merge(%{"message" => "Hello."}, sent))
           |> json_response(202)
 
         assert response["turn"]["model"] == expected
@@ -212,7 +212,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
       refusal =
         conn
         |> put_chat_api_token("chat-bad-backend")
-        |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => "gpt-4"})
+        |> post(~p"/api/v1/chat/turns", %{"message" => "Hello.", "model" => "gpt-4"})
 
       body = json_response(refusal, 422)
 
@@ -229,7 +229,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
       response =
         conn
         |> put_chat_api_token("chat-empty-backend")
-        |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => ""})
+        |> post(~p"/api/v1/chat/turns", %{"message" => "Hello.", "model" => ""})
         |> json_response(202)
 
       assert response["turn"]["model"] == "ox-alpha"

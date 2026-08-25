@@ -988,7 +988,7 @@ defmodule OpenAgents.DataRights.AccountExport do
         "reason" =>
           "Posts written under a legacy actor_ref this account has not claimed, or whose claim " <>
             "is still pending, are not exported. Only a linked claim resolves a legacy identity.",
-        "mechanism" => "POST /api/v3/forum/claims",
+        "mechanism" => "POST /api/v1/forum/claims",
         "issue" => nil
       }
     ]

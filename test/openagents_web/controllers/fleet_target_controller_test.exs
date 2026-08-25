@@ -18,7 +18,7 @@ defmodule OpenAgentsWeb.FleetTargetControllerTest do
   alias OpenAgentsWeb.ApiError
 
   @repo "openagents.com"
-  @create "/api/v3/admin/forge/targets"
+  @create "/api/v1/admin/forge/targets"
 
   setup do
     isolate_forge_storage!()
@@ -58,7 +58,7 @@ defmodule OpenAgentsWeb.FleetTargetControllerTest do
     assert response["replayed"] == false
     assert response["terminal"] == false
     assert is_binary(response["request_id"])
-    assert response["status_url"] =~ "/api/v3/admin/forge/targets/#{response["id"]}"
+    assert response["status_url"] =~ "/api/v1/admin/forge/targets/#{response["id"]}"
 
     assert Targets.current(@repo).id == response["id"]
   end

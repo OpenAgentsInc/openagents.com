@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ForumApiController do
   @moduledoc """
-  The forum surface of the `/api/v3` JSON API: boards, topics, posts, and
+  The forum surface of the `/api/v1` JSON API: boards, topics, posts, and
   legacy identity claims.
 
   Reads are public. Writes require a `forge:write` API token and attribute

@@ -5,7 +5,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
 
   test "registers an agent and returns a one-time credential", %{conn: conn} do
     conn =
-      post(conn, "/api/v3/agents/register", %{
+      post(conn, "/api/v1/agents/register", %{
         "handle" => "controller-bot",
         "display_name" => "Controller bot"
       })
@@ -25,14 +25,14 @@ defmodule OpenAgentsWeb.AgentControllerTest do
   test "rejects duplicate and malformed handles with typed errors", %{conn: conn} do
     assert %{"agent" => _agent} =
              conn
-             |> post("/api/v3/agents/register", %{
+             |> post("/api/v1/agents/register", %{
                "handle" => "duplicate-bot",
                "display_name" => "Duplicate bot"
              })
              |> json_response(201)
 
     duplicate =
-      post(conn, "/api/v3/agents/register", %{
+      post(conn, "/api/v1/agents/register", %{
         "handle" => "duplicate-bot",
         "display_name" => "Duplicate bot"
       })
@@ -40,7 +40,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
     assert json_response(duplicate, 422)["error"]["code"] == "handle_unavailable"
 
     malformed =
-      post(conn, "/api/v3/agents/register", %{
+      post(conn, "/api/v1/agents/register", %{
         "handle" => "bot--name",
         "display_name" => "Malformed bot"
       })
@@ -50,7 +50,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
 
   test "rejects reserved handles through the controller", %{conn: conn} do
     conn =
-      post(conn, "/api/v3/agents/register", %{
+      post(conn, "/api/v1/agents/register", %{
         "handle" => "admin",
         "display_name" => "Admin bot"
       })
@@ -71,7 +71,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
     end)
 
     conn =
-      post(conn, "/api/v3/agents/register", %{
+      post(conn, "/api/v1/agents/register", %{
         "handle" => "limited-bot",
         "display_name" => "Limited bot"
       })
@@ -93,7 +93,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
     rotated =
       conn
       |> put_req_header("authorization", "Bearer #{credential}")
-      |> post("/api/v3/agent/credentials", %{"name" => "rotated"})
+      |> post("/api/v1/agent/credentials", %{"name" => "rotated"})
 
     assert %{
              "credential" => "oa_agent_" <> new_credential,
@@ -106,7 +106,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
       conn
       |> recycle()
       |> put_req_header("authorization", "Bearer #{credential}")
-      |> get("/api/v3/agent")
+      |> get("/api/v1/agent")
 
     assert json_response(old_still_works, 200)["agent"]["handle"] == "rotate-controller-bot"
   end
@@ -119,13 +119,13 @@ defmodule OpenAgentsWeb.AgentControllerTest do
         "registration_ip" => "192.0.2.30"
       })
 
-    profile = get(conn, "/api/v3/agents/profile-bot")
+    profile = get(conn, "/api/v1/agents/profile-bot")
     assert json_response(profile, 200)["agent"]["id"] == agent.id
 
     current =
       conn
       |> put_req_header("authorization", "Bearer #{credential}")
-      |> get("/api/v3/agent")
+      |> get("/api/v1/agent")
 
     assert json_response(current, 200)["agent"]["handle"] == "profile-bot"
   end
@@ -149,7 +149,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
       conn
       |> recycle()
       |> put_req_header("authorization", "Bearer #{credential}")
-      |> post("/api/v3/repos/test-owner/test-repo/deployments/1/approvals", %{})
+      |> post("/api/v1/repos/test-owner/test-repo/deployments/1/approvals", %{})
 
     assert promotion.status == 401
 
@@ -157,7 +157,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
       conn
       |> recycle()
       |> put_req_header("authorization", "Bearer #{credential}")
-      |> patch("/api/v3/repos/test-owner/test-repo/issues/1", %{"title" => "test"})
+      |> patch("/api/v1/repos/test-owner/test-repo/issues/1", %{"title" => "test"})
 
     assert membership.status == 401
 
@@ -165,7 +165,7 @@ defmodule OpenAgentsWeb.AgentControllerTest do
       conn
       |> recycle()
       |> put_req_header("authorization", "Bearer #{credential}")
-      |> post("/api/v3/forum/posts/1/tips", %{"amount" => "1"})
+      |> post("/api/v1/forum/posts/1/tips", %{"amount" => "1"})
 
     assert tip.status == 401
   end

@@ -20,7 +20,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert build_conn()
            |> put_api_token(user, ["computer:control"])
-           |> get(~p"/api/v3/computers")
+           |> get(~p"/api/v1/computers")
            |> json_response(200) == %{
              "schema" => "openagents.computers.v1",
              "computers" => [],
@@ -29,16 +29,16 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert build_conn()
            |> put_api_token(user, ["box:control"])
-           |> get(~p"/api/v3/computers")
+           |> get(~p"/api/v1/computers")
            |> json_response(401) == %{"error" => %{"code" => "invalid_api_token"}}
 
     assert build_conn()
            |> put_api_token(user, ["computer:control"])
-           |> get(~p"/api/v3/conversations/not-a-conversation/boxes")
+           |> get(~p"/api/v1/conversations/not-a-conversation/boxes")
            |> json_response(401) == %{"error" => %{"code" => "invalid_api_token"}}
 
     assert conn
-           |> get(~p"/api/v3/computers")
+           |> get(~p"/api/v1/computers")
            |> json_response(401) == %{"error" => %{"code" => "invalid_api_token"}}
   end
 
@@ -49,7 +49,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     listed =
       token_conn
-      |> get(~p"/api/v3/computers")
+      |> get(~p"/api/v1/computers")
       |> json_response(200)
       |> get_in(["computers", Access.at(0)])
 
@@ -76,7 +76,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     probed =
       token_conn
-      |> post(~p"/api/v3/computers/#{machine.id}/probe")
+      |> post(~p"/api/v1/computers/#{machine.id}/probe")
       |> json_response(200)
 
     assert probed["computer"]["online"]
@@ -98,14 +98,14 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert build_conn()
            |> bearer(credential)
-           |> get(~p"/api/v3/computers")
+           |> get(~p"/api/v1/computers")
            |> json_response(200)
            |> Map.get("computers")
            |> Enum.any?(&(&1["id"] == machine.id))
 
     assert build_conn()
            |> bearer(credential)
-           |> patch(~p"/api/v3/computers/#{machine.id}", %{
+           |> patch(~p"/api/v1/computers/#{machine.id}", %{
              "scoped_forge_credentials_enabled" => true
            })
            |> api_error_code(401) == "unauthenticated"
@@ -114,7 +114,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert build_conn()
            |> bearer(credential)
-           |> get(~p"/api/v3/computers")
+           |> get(~p"/api/v1/computers")
            |> json_response(403) == %{
              "error" => %{"code" => "agent_computer_control_forbidden"}
            }
@@ -131,7 +131,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert conn
            |> bearer(box_credential)
-           |> get(~p"/api/v3/computers")
+           |> get(~p"/api/v1/computers")
            |> json_response(403) == %{
              "error" => %{"code" => "agent_computer_control_forbidden"}
            }
@@ -143,7 +143,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert conn
            |> bearer(computer_credential)
-           |> get(~p"/api/v3/conversations/#{conversation.id}/boxes")
+           |> get(~p"/api/v1/conversations/#{conversation.id}/boxes")
            |> json_response(403) == %{
              "error" => %{"code" => "agent_box_control_forbidden"}
            }
@@ -167,7 +167,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     response =
       token_conn
-      |> post(~p"/api/v3/computers/#{machine.id}/agent-jobs", %{
+      |> post(~p"/api/v1/computers/#{machine.id}/agent-jobs", %{
         "agent_id" => "codex",
         "prompt" => "do not echo this prompt",
         "cwd" => @root
@@ -180,14 +180,14 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     assert build_conn()
            |> put_api_token(outsider, ["computer:control"])
-           |> get(~p"/api/v3/computer-agent-jobs/#{job_id}")
+           |> get(~p"/api/v1/computer-agent-jobs/#{job_id}")
            |> json_response(404) == %{"error" => "job_not_found"}
 
     [{pid, _value}] = Horde.Registry.lookup(OpenAgents.HordeRegistry, {:work_job, job_id})
     ref = Process.monitor(pid)
 
     assert token_conn
-           |> delete(~p"/api/v3/computer-agent-jobs/#{job_id}")
+           |> delete(~p"/api/v1/computer-agent-jobs/#{job_id}")
            |> json_response(202)
            |> Map.take(["job_id", "status"])
            |> Map.equal?(%{"job_id" => job_id, "status" => "stopping"})
@@ -204,7 +204,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     missing_agent =
       token_conn
-      |> post(~p"/api/v3/computers/#{machine.id}/agent-jobs", %{
+      |> post(~p"/api/v1/computers/#{machine.id}/agent-jobs", %{
         "agent_id" => "codex",
         "prompt" => "bounded",
         "cwd" => @root
@@ -215,7 +215,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
 
     invalid_cwd =
       token_conn
-      |> post(~p"/api/v3/computers/#{machine.id}/agent-jobs", %{
+      |> post(~p"/api/v1/computers/#{machine.id}/agent-jobs", %{
         "agent_id" => "claude",
         "prompt" => "bounded",
         "cwd" => "/tmp/outside"
@@ -244,7 +244,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
     response =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
         "repository_id" => repository.id,
         "issue_number" => issue.number,
         "branch" => "agent/computer-#{issue.number}",
@@ -299,7 +299,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
     response =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
         "repository_id" => repository.id,
         "issue_number" => issue.number,
         "branch" => "agent/policy-#{issue.number}",
@@ -316,7 +316,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
     updated =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> patch(~p"/api/v3/computers/#{machine.id}", %{
+      |> patch(~p"/api/v1/computers/#{machine.id}", %{
         "scoped_forge_credentials_enabled" => false
       })
       |> json_response(200)
@@ -361,7 +361,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
     response =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
         "repository_id" => repository.id,
         "issue_number" => issue.number,
         "branch" => "agent/disconnect-#{issue.number}",
@@ -411,7 +411,7 @@ defmodule OpenAgentsWeb.ComputerControlApiTest do
     response =
       build_conn()
       |> put_api_token(user, ["computer:control"])
-      |> post(~p"/api/v3/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
+      |> post(~p"/api/v1/conversations/#{conversation.id}/computers/#{machine.id}/assignments", %{
         "repository_id" => repository.id,
         "issue_number" => issue.number,
         "branch" => "agent/computer-#{issue.number}",

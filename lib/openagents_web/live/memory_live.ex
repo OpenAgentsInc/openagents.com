@@ -23,6 +23,9 @@ defmodule OpenAgentsWeb.MemoryLive do
   alias OpenAgents.Analytics
   alias OpenAgents.Conversations
   alias OpenAgents.DataRights
+  alias OpenAgents.ExperienceMemory
+  alias OpenAgents.GraphMemory
+  alias OpenAgents.Memory.Consent
   alias OpenAgents.ProfileMemory
   alias OpenAgents.Voice.Recordings
 
@@ -48,7 +51,8 @@ defmodule OpenAgentsWeb.MemoryLive do
      |> assign(:leaderboard_opted_out?, current_user.public_leaderboard_opted_out)
      |> assign(:recording_config, Recordings.config())
      |> assign(:privacy_delete_form, to_form(%{"confirmation" => ""}, as: :privacy))
-     |> reload_memory()}
+     |> assign(:work_scope, "conversation:#{conversation.id}")
+     |> load_dashboard()}
   end
 
   @impl true
@@ -68,6 +72,11 @@ defmodule OpenAgentsWeb.MemoryLive do
         privacy_delete_form={@privacy_delete_form}
         recording_config={@recording_config}
         leaderboard_opted_out?={@leaderboard_opted_out?}
+        work_scope={@work_scope}
+        graph_entities={@graph_entities}
+        engram_timeline={@engram_timeline}
+        derived_heuristics={@derived_heuristics}
+        supersession_trail={@supersession_trail}
       />
     </Layouts.app>
     """
@@ -179,29 +188,121 @@ defmodule OpenAgentsWeb.MemoryLive do
      socket
      |> assign(:pending_memory_action, nil)
      |> assign(:memory_status, {status, message})
-     |> reload_memory()}
+     |> load_dashboard()}
+  end
+
+  def handle_event("retract_engram", %{"record_ref" => ref}, socket) do
+    owner = socket.assigns.memory_owner
+
+    context_consent = %{
+      "kind" => "first_party_ui",
+      "operation" => "forget",
+      "claim" => ref
+    }
+
+    result =
+      with {:ok, _consent} <- Consent.forget(nil, "record", ref, context_consent),
+           record_id <- String.replace_prefix(ref, "experience:", ""),
+           {:ok, parsed_id} <- Ecto.UUID.cast(record_id),
+           {:ok, receipt} <- ExperienceMemory.delete(owner, parsed_id, "operator_retraction") do
+        {:ok, receipt}
+      else
+        :error -> {:error, :invalid_engram_ref}
+        {:error, reason} -> {:error, reason}
+      end
+
+    message =
+      case result do
+        {:ok, receipt} ->
+          "Retracted #{ref}. Receipt #{receipt.receipt_digest}."
+
+        {:error, :invalid_engram_ref} ->
+          "That engram reference is not valid."
+
+        {:error, reason} ->
+          "Could not retract engram: #{format_reason(reason)}"
+      end
+
+    status = if match?({:ok, _}, result), do: :ok, else: :error
+
+    {:noreply,
+     socket
+     |> assign(:memory_status, {status, message})
+     |> load_dashboard()}
+  end
+
+  defp format_reason(reason) do
+    cond do
+      is_binary(reason) -> reason
+      is_atom(reason) -> String.replace_leading(Atom.to_string(reason), "Elixir.", "")
+      true -> inspect(reason)
+    end
   end
 
   # Another tab correcting or forgetting a record must be reflected here: the
   # records are one account's, not one socket's.
   @impl true
   def handle_info({:profile_memory_updated, _result}, socket) do
-    {:noreply, reload_memory(socket)}
+    {:noreply, load_dashboard(socket)}
   end
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
-  defp reload_memory(socket) do
-    case ProfileMemory.export(socket.assigns.memory_owner) do
-      {:ok, export} -> assign(socket, :memory_records, export["records"])
-      {:error, _reason} -> assign(socket, :memory_status, {:error, "Memory is unavailable."})
-    end
+  defp load_dashboard(socket) do
+    owner = socket.assigns.memory_owner
+    work_scope = socket.assigns.work_scope
+    profile_result = ProfileMemory.export(owner)
+
+    profile_export =
+      case profile_result do
+        {:ok, export} -> export
+        {:error, _reason} -> %{"records" => []}
+      end
+
+    memory_status =
+      case {socket.assigns.memory_status, profile_result} do
+        {nil, {:error, _reason}} -> {:error, "Memory is unavailable."}
+        {status, _} -> status
+      end
+
+    graph_entities =
+      case GraphMemory.export(owner, work_scope) do
+        {:ok, export} -> export
+        {:error, _reason} -> nil
+      end
+
+    {engram_timeline, derived_heuristics} =
+      case ExperienceMemory.export_scope(owner, work_scope) do
+        {:ok, export} -> {export["records"] || [], export["patterns"] || []}
+        {:error, _reason} -> {[], []}
+      end
+
+    records_by_id = Map.new(profile_export["records"] || [], &{&1["id"], &1})
+
+    supersession_trail =
+      Enum.reduce(profile_export["records"] || [], [], fn record, acc ->
+        if record["supersedes_record_id"] do
+          previous = Map.get(records_by_id, record["supersedes_record_id"])
+          [%{previous: previous, replacement: record} | acc]
+        else
+          acc
+        end
+      end)
+      |> Enum.reverse()
+
+    socket
+    |> assign(:memory_records, profile_export["records"] || [])
+    |> assign(:memory_status, memory_status)
+    |> assign(:graph_entities, graph_entities)
+    |> assign(:engram_timeline, engram_timeline)
+    |> assign(:derived_heuristics, derived_heuristics)
+    |> assign(:supersession_trail, supersession_trail)
   end
 
   defp memory_result(socket, :ok, message) do
     socket
     |> assign(:memory_status, {:ok, message})
-    |> reload_memory()
+    |> load_dashboard()
   end
 
   defp memory_result(socket, {:error, reason}, _message) do
@@ -271,6 +372,11 @@ defmodule OpenAgentsWeb.MemoryLive do
   attr :privacy_delete_form, :any, required: true
   attr :recording_config, :map, required: true
   attr :leaderboard_opted_out?, :boolean, required: true
+  attr :work_scope, :string, required: true
+  attr :graph_entities, :any, default: nil
+  attr :engram_timeline, :list, default: []
+  attr :derived_heuristics, :list, default: []
+  attr :supersession_trail, :list, default: []
 
   defp memory_manager(assigns) do
     ~H"""
@@ -393,6 +499,14 @@ defmodule OpenAgentsWeb.MemoryLive do
       <div :if={@memory_records != []} id="memory-records" class="memory-records">
         <.memory_record :for={record <- @memory_records} record={record} />
       </div>
+
+      <.memory_dashboard
+        work_scope={@work_scope}
+        graph_entities={@graph_entities}
+        engram_timeline={@engram_timeline}
+        derived_heuristics={@derived_heuristics}
+        supersession_trail={@supersession_trail}
+      />
 
       <.card id="leaderboard-preference" aria-labelledby="leaderboard-preference-heading">
         <header>
@@ -571,4 +685,154 @@ defmodule OpenAgentsWeb.MemoryLive do
     </.card>
     """
   end
+
+  attr :work_scope, :string, required: true
+  attr :graph_entities, :any, default: nil
+  attr :engram_timeline, :list, default: []
+  attr :derived_heuristics, :list, default: []
+  attr :supersession_trail, :list, default: []
+
+  defp memory_dashboard(assigns) do
+    ~H"""
+    <section id="memory-dashboard" class="memory-dashboard" aria-labelledby="memory-dashboard-heading">
+      <h2 id="memory-dashboard-heading">Memory evolution and consent</h2>
+
+      <.card id="active-memory-graph" aria-labelledby="active-memory-graph-heading">
+        <header>
+          <h3 id="active-memory-graph-heading">Active memory graph</h3>
+        </header>
+        <.empty :if={is_nil(@graph_entities)} title="Graph projection unavailable">
+          Graph memory is disabled or has not been built for this conversation yet.
+        </.empty>
+        <div :if={not is_nil(@graph_entities)} class="memory-graph">
+          <p>
+            <.badge variant={:info}>{@graph_entities["manifest"]["ref"]}</.badge>
+          </p>
+          <.list :if={active_graph_nodes(@graph_entities) != []}>
+            <:item
+              :for={node <- active_graph_nodes(@graph_entities)}
+              title={node["artifact_id"]}
+            >
+              <.badge variant={:success}>{node["entity_kind"] || "node"}</.badge>
+              <span class="memory-graph__label">{graph_node_label(node)}</span>
+            </:item>
+          </.list>
+          <.empty :if={active_graph_nodes(@graph_entities) == []} title="No active graph entities">
+            The current graph has no active nodes.
+          </.empty>
+        </div>
+      </.card>
+
+      <.card id="engram-timeline" aria-labelledby="engram-timeline-heading">
+        <header>
+          <h3 id="engram-timeline-heading">Recent engrams</h3>
+        </header>
+        <.empty :if={@engram_timeline == []} title="No recent engrams">
+          Experience memory is empty for this conversation.
+        </.empty>
+        <.list :if={@engram_timeline != []}>
+          <:item
+            :for={engram <- @engram_timeline}
+            title={engram["objective"]}
+          >
+            <div class="memory-engram__meta">
+              <.badge variant={engram_state_variant(engram["state"])}>
+                {String.upcase(engram["state"])}
+              </.badge>
+              <.badge variant={:default}>{engram["record_ref"]}</.badge>
+            </div>
+            <p :if={engram["outcome"]} class="memory-engram__outcome">
+              {engram["outcome"]}
+            </p>
+            <.button
+              id={"retract-engram-#{engram_id(engram["record_ref"])}"}
+              variant={:link}
+              tone={:danger}
+              size={:sm}
+              phx-click="retract_engram"
+              phx-value-record_ref={engram["record_ref"]}
+            >
+              <.icon name="trash" /> RETRACT
+            </.button>
+          </:item>
+        </.list>
+      </.card>
+
+      <.card id="derived-heuristics" aria-labelledby="derived-heuristics-heading">
+        <header>
+          <h3 id="derived-heuristics-heading">Derived heuristics</h3>
+        </header>
+        <.empty :if={@derived_heuristics == []} title="No derived heuristics">
+          No advisory patterns have been synthesized yet.
+        </.empty>
+        <.list :if={@derived_heuristics != []}>
+          <:item
+            :for={pattern <- @derived_heuristics}
+            title={pattern["phenomenon"]}
+          >
+            <p>{pattern["applicability"]}</p>
+            <div class="memory-heuristic__support">
+              <.badge variant={:info}>Effect: {pattern["expected_effect"]}</.badge>
+              <.badge variant={:success}>Successes: {pattern["support"]["successes"]}</.badge>
+              <.badge variant={:danger}>Failures: {pattern["support"]["failures"]}</.badge>
+            </div>
+          </:item>
+        </.list>
+      </.card>
+
+      <.card id="supersession-audit" aria-labelledby="supersession-audit-heading">
+        <header>
+          <h3 id="supersession-audit-heading">Supersession audit trail</h3>
+        </header>
+        <.empty :if={@supersession_trail == []} title="No supersessions">
+          No corrections or supersessions are recorded.
+        </.empty>
+        <.list :if={@supersession_trail != []}>
+          <:item
+            :for={event <- @supersession_trail}
+            title={event.replacement["claim"] || "WITHHELD"}
+          >
+            <p>
+              Superseded
+              <time :if={event.previous["inserted_at"]} datetime={event.previous["inserted_at"]}>
+                {memory_date(event.previous["inserted_at"])}
+              </time>
+              : {event.previous["claim"] || "WITHHELD"}
+            </p>
+            <.badge variant={:warning}>Superseded by {event.replacement["id"]}</.badge>
+          </:item>
+        </.list>
+      </.card>
+    </section>
+    """
+  end
+
+  defp active_graph_nodes(graph) do
+    (graph["artifacts"] || [])
+    |> Enum.filter(fn artifact ->
+      artifact["kind"] == "node" and
+        (artifact["properties"]["eligible_for_traversal"] == true or
+           artifact["entity_kind"] == "pattern")
+    end)
+  end
+
+  defp graph_node_label(node) do
+    properties = node["properties"] || %{}
+
+    cond do
+      properties["phenomenon"] -> properties["phenomenon"]
+      properties["outcome"] -> properties["outcome"]
+      properties["label"] -> properties["label"]
+      true -> node["identity_key"] || ""
+    end
+  end
+
+  defp engram_state_variant("succeeded"), do: :success
+  defp engram_state_variant("failed"), do: :danger
+  defp engram_state_variant("corrected"), do: :warning
+  defp engram_state_variant("running"), do: :info
+  defp engram_state_variant(_state), do: :default
+
+  defp engram_id(ref) when is_binary(ref), do: String.replace_prefix(ref, "experience:", "")
+  defp engram_id(_ref), do: ""
 end

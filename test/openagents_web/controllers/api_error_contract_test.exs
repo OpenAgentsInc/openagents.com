@@ -57,12 +57,12 @@ defmodule OpenAgentsWeb.ApiErrorContractTest do
 
     private_body =
       build_conn()
-      |> get("/api/v3/repos/#{private.owner}/#{private.name}/issues/1")
+      |> get("/api/v1/repos/#{private.owner}/#{private.name}/issues/1")
       |> json_response(404)
 
     absent_body =
       build_conn()
-      |> get("/api/v3/repos/#{private.owner}/no-such-repository/issues/1")
+      |> get("/api/v1/repos/#{private.owner}/no-such-repository/issues/1")
       |> json_response(404)
 
     assert Map.drop(private_body, ["request_id"]) == Map.drop(absent_body, ["request_id"])
@@ -73,7 +73,7 @@ defmodule OpenAgentsWeb.ApiErrorContractTest do
   test "a rejected filter names the field it rejected" do
     body =
       build_conn()
-      |> get("/api/v3/repos/nobody/nonexistent/issues?state=sideways")
+      |> get("/api/v1/repos/nobody/nonexistent/issues?state=sideways")
       |> json_response(404)
 
     # The repository check runs first, so this path proves only non-disclosure.

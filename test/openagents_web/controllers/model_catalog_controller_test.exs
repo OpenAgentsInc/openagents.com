@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ModelCatalogControllerTest do
   @moduledoc """
-  `GET /api/v3/models`: the typed catalog a client selects from (PROVIDER-002).
+  `GET /api/v1/models`: the typed catalog a client selects from (PROVIDER-002).
 
   The catalog is what makes model selection honest: the CLI renders this list,
   the thread admission refuses against the same list, and a lane whose
@@ -15,7 +15,7 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
     body =
       conn
       |> put_chat_api_token("model-catalog")
-      |> get(~p"/api/v3/models")
+      |> get(~p"/api/v1/models")
       |> json_response(200)
 
     assert body["default"] == Models.default_id()
@@ -50,7 +50,7 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
     body =
       conn
       |> put_chat_api_token("model-catalog-unavailable")
-      |> get(~p"/api/v3/models")
+      |> get(~p"/api/v1/models")
       |> json_response(200)
 
     # The model stays in the list — "served here, not currently configured"
@@ -70,7 +70,7 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
   test "the catalog requires the same bearer as threads", %{conn: conn} do
     body =
       conn
-      |> get(~p"/api/v3/models")
+      |> get(~p"/api/v1/models")
       |> json_response(401)
 
     assert body["code"] == "unauthenticated"

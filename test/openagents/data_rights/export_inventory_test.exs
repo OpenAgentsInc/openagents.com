@@ -161,7 +161,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
       assert repository.visibility == "private"
 
       assert build_conn()
-             |> get(~p"/api/v3/repos/exit-owner/private-work/issues")
+             |> get(~p"/api/v1/repos/exit-owner/private-work/issues")
              |> json_response(404)
     end
 
@@ -447,7 +447,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
   end
 
   defp probe(:issue, %{conn: conn, issue: issue}) do
-    case get(conn, ~p"/api/v3/repos/exit-owner/private-work/issues") do
+    case get(conn, ~p"/api/v1/repos/exit-owner/private-work/issues") do
       %{status: 200} = response ->
         numbers =
           response |> json_response(200) |> Map.fetch!("issues") |> Enum.map(& &1["number"])
@@ -460,7 +460,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
   end
 
   defp probe(:project, %{conn: conn}) do
-    case get(conn, ~p"/api/v3/repos/exit-owner/private-work/projectsV2") do
+    case get(conn, ~p"/api/v1/repos/exit-owner/private-work/projectsV2") do
       %{status: 200} = response ->
         titles =
           response |> json_response(200) |> Map.fetch!("projects") |> Enum.map(& &1["title"])
@@ -473,7 +473,7 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
   end
 
   defp probe(:repository, %{conn: conn}) do
-    case get(conn, ~p"/api/v3/user/repos") do
+    case get(conn, ~p"/api/v1/user/repos") do
       %{status: 200} = response ->
         names =
           response
@@ -489,30 +489,30 @@ defmodule OpenAgents.DataRights.ExportInventoryTest do
   end
 
   defp probe(:comment, %{conn: conn, issue: issue}) do
-    read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/issues/#{issue.number}/comments")
+    read_probe(conn, ~p"/api/v1/repos/exit-owner/private-work/issues/#{issue.number}/comments")
   end
 
   defp probe(:label, %{conn: conn}) do
-    read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/labels")
+    read_probe(conn, ~p"/api/v1/repos/exit-owner/private-work/labels")
   end
 
   defp probe(:milestone, %{conn: conn}) do
-    read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/milestones")
+    read_probe(conn, ~p"/api/v1/repos/exit-owner/private-work/milestones")
   end
 
   defp probe(:assignee, %{conn: conn}) do
-    read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/assignees")
+    read_probe(conn, ~p"/api/v1/repos/exit-owner/private-work/assignees")
   end
 
   defp probe(:issue_label, %{conn: conn, issue: issue}) do
-    read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/issues/#{issue.number}/labels")
+    read_probe(conn, ~p"/api/v1/repos/exit-owner/private-work/issues/#{issue.number}/labels")
   end
 
   defp probe(:issue_assignee, %{conn: conn, issue: issue}) do
-    read_probe(conn, ~p"/api/v3/repos/exit-owner/private-work/issues/#{issue.number}/assignees")
+    read_probe(conn, ~p"/api/v1/repos/exit-owner/private-work/issues/#{issue.number}/assignees")
   end
 
-  # No /api/v3 route serves receipts and none is expected to; the claim is that
+  # No /api/v1 route serves receipts and none is expected to; the claim is that
   # the account export returns the account's own rows, so that is what is
   # probed. A receipt whose principal is not this account must not appear.
   defp probe(:push_receipt, %{account_export: export, owner: owner}) do

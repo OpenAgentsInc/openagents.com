@@ -171,7 +171,13 @@ defmodule OpenAgents.Threads do
       # nine open threads behind an eight-thread promise (issue #195).
       _serialized = lock_owner(repo, visitor_id)
 
-      if open_count(visitor_id) >= maximum_open_per_account() do
+      ceiling = maximum_open_per_account()
+
+      # `nil` is unbounded. A session no longer destroys its thread on the way
+      # out, so a count of open threads is a count of every session the account
+      # has ever run — and refusing the ninth would refuse the work rather than
+      # bound it.
+      if ceiling != nil and open_count(visitor_id) >= ceiling do
         {:error, :thread_quota_reached}
       else
         {:ok, :admitted}
@@ -248,7 +254,7 @@ defmodule OpenAgents.Threads do
   reader has the fact without asking again.
 
   The audience of a wide tier is *any signed-in account holding the thread's
-  id*: both surfaces that call this — `GET /api/v3/threads/{thread_id}` and
+  id*: both surfaces that call this — `GET /api/v1/threads/{thread_id}` and
   `/threads/:id` — require an authenticated principal, and this function does
   not invent an anonymous one (THREAD-002).
   """
@@ -540,7 +546,7 @@ defmodule OpenAgents.Threads do
 
   Read from `config/config.exs` and stated separately from the delegation
   ceilings in `OpenAgents.Inference`, because a thread's budget is not a
-  delegation's budget. `GET /api/v3` publishes this map, so a client reads the
+  delegation's budget. `GET /api/v1` publishes this map, so a client reads the
   budget it was given rather than discovering it by exhausting it.
 
   The cost figure here is the configured per-thread cap. What a particular
@@ -589,9 +595,9 @@ defmodule OpenAgents.Threads do
     end
   end
 
-  @doc "How many threads one account may hold open at once."
-  @spec maximum_open_per_account() :: pos_integer()
-  def maximum_open_per_account, do: setting(:maximum_open_threads_per_account, 8)
+  @doc "How many threads one account may hold open at once, or `nil` for no limit."
+  @spec maximum_open_per_account() :: pos_integer() | nil
+  def maximum_open_per_account, do: setting(:maximum_open_threads_per_account, nil)
 
   @doc "How many threads this account currently holds open."
   @spec open_count(User.t() | Visitor.t() | String.t()) :: non_neg_integer()

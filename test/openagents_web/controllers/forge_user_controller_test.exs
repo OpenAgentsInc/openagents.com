@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.ForgeUserControllerTest do
     :ok
   end
 
-  test "GET /api/v3/user returns the GitHub identity and eligible namespaces", %{conn: conn} do
+  test "GET /api/v1/user returns the GitHub identity and eligible namespaces", %{conn: conn} do
     user = github_user("forge-user", "octavia")
 
     {:ok, user} =
@@ -39,7 +39,7 @@ defmodule OpenAgentsWeb.ForgeUserControllerTest do
     response =
       conn
       |> put_req_header("authorization", "Bearer " <> plaintext)
-      |> get(~p"/api/v3/user")
+      |> get(~p"/api/v1/user")
 
     assert %{
              "id" => github_id,
@@ -56,10 +56,10 @@ defmodule OpenAgentsWeb.ForgeUserControllerTest do
     assert get_resp_header(response, "cache-control") == ["no-store"]
   end
 
-  test "GET /api/v3/user requires a bearer token", %{conn: conn} do
+  test "GET /api/v1/user requires a bearer token", %{conn: conn} do
     assert %{"error" => "invalid_api_token"} =
              conn
-             |> get(~p"/api/v3/user")
+             |> get(~p"/api/v1/user")
              |> json_response(401)
   end
 end

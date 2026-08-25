@@ -1,11 +1,11 @@
 defmodule OpenAgentsWeb.ApiExtensionControllerTest do
   use OpenAgentsWeb.ConnCase, async: true
 
-  test "GET /api/v3 lists the issue extension fields an agent can rely on", %{conn: conn} do
-    conn = get(conn, ~p"/api/v3")
+  test "GET /api/v1 lists the issue extension fields an agent can rely on", %{conn: conn} do
+    conn = get(conn, ~p"/api/v1")
 
     assert %{
-             "api_version" => "v3",
+             "api_version" => "v1",
              "extensions" => %{
                "issue.openagents" => %{
                  "version" => _version,
@@ -22,16 +22,16 @@ defmodule OpenAgentsWeb.ApiExtensionControllerTest do
     assert Enum.any?(endpoints, &String.contains?(&1, "/dependencies"))
   end
 
-  test "GET /api/v3 publishes one route entry for every live API v3 route", %{conn: conn} do
+  test "GET /api/v1 publishes one route entry for every live API v1 route", %{conn: conn} do
     published =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> Map.fetch!("routes")
 
     live =
       OpenAgentsWeb.Router.__routes__()
-      |> Enum.filter(&String.starts_with?(&1.path, "/api/v3"))
+      |> Enum.filter(&String.starts_with?(&1.path, "/api/v1"))
       |> Enum.map(fn route ->
         {String.upcase(Atom.to_string(route.verb)),
          Regex.replace(~r/:([a-z_]+)/, route.path, fn _whole, segment -> "{#{segment}}" end)}
@@ -44,7 +44,7 @@ defmodule OpenAgentsWeb.ApiExtensionControllerTest do
   test "every published route names its authority, family, and error contract", %{conn: conn} do
     published =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> Map.fetch!("routes")
 
@@ -60,8 +60,8 @@ defmodule OpenAgentsWeb.ApiExtensionControllerTest do
     end
   end
 
-  test "GET /api/v3 publishes the error envelope and its stable codes", %{conn: conn} do
-    body = conn |> get(~p"/api/v3") |> json_response(200)
+  test "GET /api/v1 publishes the error envelope and its stable codes", %{conn: conn} do
+    body = conn |> get(~p"/api/v1") |> json_response(200)
 
     assert body["errors"]["envelope"] == OpenAgentsWeb.ApiError.envelope_keys()
 
@@ -72,8 +72,8 @@ defmodule OpenAgentsWeb.ApiExtensionControllerTest do
     assert is_binary(body["errors"]["field_errors"])
   end
 
-  test "GET /api/v3 names every family the router serves", %{conn: conn} do
-    body = conn |> get(~p"/api/v3") |> json_response(200)
+  test "GET /api/v1 names every family the router serves", %{conn: conn} do
+    body = conn |> get(~p"/api/v1") |> json_response(200)
 
     published = MapSet.new(body["routes"], & &1["family"])
 

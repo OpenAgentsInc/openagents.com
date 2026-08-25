@@ -28,14 +28,14 @@ defmodule OpenAgentsWeb.ReputationControllerTest do
       |> Map.fetch!("attestations")
       |> hd()
 
-    keys = build_conn() |> get("/api/v3/reputation/keys") |> json_response(200)
+    keys = build_conn() |> get("/api/v1/reputation/keys") |> json_response(200)
     key = Enum.find(keys["keys"], &(&1["key_id"] == published["issuer_key_id"]))
 
     assert published["claim_digest"] == attestation.claim_digest
     assert Claim.valid_signature?(published["claim"], published["signature"], key["public_key"])
     assert published["revocation"]["revoked"] == false
 
-    policy = build_conn() |> get("/api/v3/reputation/policy") |> json_response(200)
+    policy = build_conn() |> get("/api/v1/reputation/policy") |> json_response(200)
     version = hd(policy["versions"])
 
     assert policy["score"] == nil
@@ -84,7 +84,7 @@ defmodule OpenAgentsWeb.ReputationControllerTest do
 
   test "scoped evidence never publishes a score", context do
     {:ok, _attestation} = attest(context)
-    path = "/api/v3/repos/#{path(context)}/reputation/subjects/actor:builder"
+    path = "/api/v1/repos/#{path(context)}/reputation/subjects/actor:builder"
 
     body = build_conn() |> get(path) |> json_response(200)
 
@@ -119,7 +119,7 @@ defmodule OpenAgentsWeb.ReputationControllerTest do
         ]
       })
 
-    path = "/api/v3/repos/#{repository.owner}/#{repository.name}/attestations/#{attestation.id}"
+    path = "/api/v1/repos/#{repository.owner}/#{repository.name}/attestations/#{attestation.id}"
 
     assert build_conn() |> get(path) |> json_response(404)
 
@@ -132,11 +132,11 @@ defmodule OpenAgentsWeb.ReputationControllerTest do
 
   test "an unknown attestation is not found", context do
     assert build_conn()
-           |> get("/api/v3/repos/#{path(context)}/attestations/#{Ecto.UUID.generate()}")
+           |> get("/api/v1/repos/#{path(context)}/attestations/#{Ecto.UUID.generate()}")
            |> json_response(404)
 
     assert build_conn()
-           |> get("/api/v3/repos/#{path(context)}/attestations/not-a-uuid")
+           |> get("/api/v1/repos/#{path(context)}/attestations/not-a-uuid")
            |> json_response(404)
   end
 
@@ -165,10 +165,10 @@ defmodule OpenAgentsWeb.ReputationControllerTest do
   end
 
   defp issue_path(context),
-    do: "/api/v3/repos/#{path(context)}/issues/#{context.issue.number}/attestations"
+    do: "/api/v1/repos/#{path(context)}/issues/#{context.issue.number}/attestations"
 
   defp attestation_path(context, attestation),
-    do: "/api/v3/repos/#{path(context)}/attestations/#{attestation.id}"
+    do: "/api/v1/repos/#{path(context)}/attestations/#{attestation.id}"
 
   defp path(context), do: "#{context.repository.owner}/#{context.repository.name}"
 

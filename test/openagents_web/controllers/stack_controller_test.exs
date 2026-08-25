@@ -32,7 +32,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     :ok
   end
 
-  describe "POST /api/v3/repos/:owner/:repo/stacks" do
+  describe "POST /api/v1/repos/:owner/:repo/stacks" do
     test "creates a stack, reads it back, and replays the idempotency key", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, ["layer-1", "layer-2", "layer-3"])
@@ -231,7 +231,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/append" do
+  describe "POST /api/v1/repos/:owner/:repo/stacks/:stack_number/append" do
     test "appends to the top, bumps the version, and replays retries", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, ["layer-1", "layer-2"])
@@ -342,7 +342,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/unstack" do
+  describe "POST /api/v1/repos/:owner/:repo/stacks/:stack_number/unstack" do
     test "removes the top layer, records the event, and replays retries", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, ["layer-1", "layer-2"])
@@ -446,7 +446,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/dissolve" do
+  describe "POST /api/v1/repos/:owner/:repo/stacks/:stack_number/dissolve" do
     test "releases every layer, dissolves the stack, and replays retries", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, ["layer-1", "layer-2"])
@@ -525,7 +525,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase" do
+  describe "POST /api/v1/repos/:owner/:repo/stacks/:stack_number/rebase" do
     test "accepts a rebase, exposes the operation, and replays retries", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, ["layer-1"])
@@ -625,7 +625,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "POST /api/v3/repos/:owner/:repo/stacks/:stack_number/merge" do
+  describe "POST /api/v1/repos/:owner/:repo/stacks/:stack_number/merge" do
     test "accepts a merge, exposes the operation, and replays retries", %{conn: conn} do
       repository = repository_fixture()
       oids = seed_chain(repository, ["layer-1"])
@@ -728,7 +728,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "PUT /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async" do
+  describe "PUT /api/v1/repos/:owner/:repo/pulls/:pull_number/merge-async" do
     test "accepts a submission, polls it, replays retries, and reports the active conflict",
          %{conn: conn} do
       repository = repository_fixture()
@@ -855,7 +855,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  describe "GET /api/v3/repos/:owner/:repo/stacks" do
+  describe "GET /api/v1/repos/:owner/:repo/stacks" do
     test "reads are public for a public repository", %{conn: conn} do
       repository = repository_fixture()
 
@@ -879,7 +879,7 @@ defmodule OpenAgentsWeb.StackControllerTest do
 
       assert %{"number" => stack_number} = json_response(create_conn, 201)
 
-      pulls = "/api/v3/repos/#{repository.owner}/#{repository.name}/pulls"
+      pulls = "/api/v1/repos/#{repository.owner}/#{repository.name}/pulls"
 
       show_conn = get(conn, "#{pulls}/#{pr_2}")
       main_oid = oids["main"]
@@ -904,10 +904,10 @@ defmodule OpenAgentsWeb.StackControllerTest do
     end
   end
 
-  defp path(repository), do: "/api/v3/repos/#{repository.owner}/#{repository.name}/stacks"
+  defp path(repository), do: "/api/v1/repos/#{repository.owner}/#{repository.name}/stacks"
 
   defp pulls_path(repository),
-    do: "/api/v3/repos/#{repository.owner}/#{repository.name}/pulls"
+    do: "/api/v1/repos/#{repository.owner}/#{repository.name}/pulls"
 
   defp seed_chain(repository, branches) do
     path = Repos.ensure_repo!(repository.storage_key, repository.default_branch)

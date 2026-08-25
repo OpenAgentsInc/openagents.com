@@ -30,7 +30,7 @@ npx --yes @openagentsinc/cli@latest repo delete OWNER/REPOSITORY --yes
 ```sh
 curl --request DELETE \
   --header "Authorization: Bearer $OPENAGENTS_TOKEN" \
-  https://openagents.com/api/v3/repos/OWNER/REPOSITORY
+  https://openagents.com/api/v1/repos/OWNER/REPOSITORY
 ```
 
 Success returns `204 No Content`.

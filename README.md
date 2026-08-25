@@ -124,7 +124,7 @@ an independently pushed GitHub branch as production authority.
 
 An agent starts at the front door instead. Every deployment serves the same
 participation contract in two representations, `/agents.md` for a reader and
-`/agents.json` for a client, and `GET /api/v3` points at both with the digest
+`/agents.json` for a client, and `GET /api/v1` points at both with the digest
 it currently carries. The contract is derived from the application rather than
 written beside it: `OpenAgentsWeb.ContributionContract` builds it and
 `OpenAgentsWeb.ContributionContractTest` refuses any claim in it the

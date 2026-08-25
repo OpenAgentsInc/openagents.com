@@ -7,7 +7,7 @@ allowed-tools:
   - grep
 ---
 
-Use this skill when the user asks you to manage OpenAgents issues, projects, comments, labels, assignees, milestones, or Projects V2 boards from the command line. Do not use the `pro-work-management` skill or the Pro Linear/MCP surface. This skill targets the OpenAgents `/api/v3` surface through the `@openagentsinc/cli` package.
+Use this skill when the user asks you to manage OpenAgents issues, projects, comments, labels, assignees, milestones, or Projects V2 boards from the command line. Do not use the `pro-work-management` skill or the Pro Linear/MCP surface. This skill targets the OpenAgents `/api/v1` surface through the `@openagentsinc/cli` package.
 
 The CLI has named commands for most of this work: `openagents issue`
 (`list`, `view`, `create`, `close`, `reopen`, `comment`, `label`, `assign`,
@@ -40,7 +40,7 @@ position, and the examples below show them.
 
 ## Route addressing
 
-A relative path for `openagents api` resolves under `/api/v3/`. For example, `repos/OWNER/REPO/issues` is the same as `/api/v3/repos/OWNER/REPO/issues`.
+A relative path for `openagents api` resolves under `/api/v1/`. For example, `repos/OWNER/REPO/issues` is the same as `/api/v1/repos/OWNER/REPO/issues`.
 
 - Method: `-X GET|POST|PATCH|PUT|DELETE`.
 - String fields: repeatable `-f KEY=VALUE`. Every value is sent as a JSON string.
@@ -133,7 +133,7 @@ openagents api "repos/OWNER/REPO/issues?progress=in_progress"
 Ask the API what OpenAgents adds to the GitHub shape instead of reading prose:
 
 ```sh
-openagents api "/api/v3"
+openagents api "/api/v1"
 ```
 
 That root document enumerates every `openagents` field with its type, enum

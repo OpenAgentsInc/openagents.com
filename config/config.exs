@@ -351,13 +351,12 @@ config :openagents,
   # calls and a longer life, and a lower token and cost ceiling, because
   # nothing on the server bounded the work first.
   #
-  # `maximum_open_threads_per_account` is the admission cap. Eight open threads
-  # is a person working several checkouts at once, and THREAD-001 admits at
-  # most one live grant per open thread, so the account's concurrent
-  # thread-scoped authority is bounded by eight of the ceilings below.
-  # `OPENAGENTS_MAX_OPEN_THREADS` overrides the number at boot (runtime.exs)
-  # without changing the cap mechanism.
-  maximum_open_threads_per_account: 8,
+  # No cap. A coder session no longer revokes its thread when it exits — a
+  # thread is durable and `--resume` is the whole point of that — so a count of
+  # open threads is a count of every session the account has ever run, and
+  # refusing the ninth would refuse the work rather than bound it. What bounds
+  # an account is its credit.
+  maximum_open_threads_per_account: nil,
   # Unbounded, all three. A coding session reached 256 calls, a million tokens,
   # and two dollars in an afternoon, and was told to start a new session — the
   # same interruption the clock below used to cause, by another route. A

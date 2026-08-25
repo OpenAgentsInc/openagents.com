@@ -26,7 +26,7 @@ and a layer-aware diff so each layer reviews only its own changes.
 ## Create one through the API
 
 Pull requests are created through the REST API. `POST
-/api/v3/repos/:owner/:repo/pulls` takes:
+/api/v1/repos/:owner/:repo/pulls` takes:
 
 - `title` — required.
 - `head` — required; the branch the work lives on.
@@ -42,10 +42,10 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -d '{"title": "Add rate limiting", "head": "rate-limit",
        "head_repository": "acme/api", "base": "main"}' \
-  https://openagents.com/api/v3/repos/acme/api/pulls
+  https://openagents.com/api/v1/repos/acme/api/pulls
 ```
 
-`PATCH /api/v3/repos/:owner/:repo/pulls/:pull_number` updates `title`,
+`PATCH /api/v1/repos/:owner/:repo/pulls/:pull_number` updates `title`,
 `body`, `state`, `draft`, and `base`. While a pull request is an active stack
 member its base belongs to the stack, so a direct base edit is refused —
 restructure the stack instead.

@@ -23,14 +23,14 @@ The token must carry the authority required by the route.
 
 ## Address a route
 
-A relative path resolves under `/api/v3/`:
+A relative path resolves under `/api/v1/`:
 
 ```sh
 openagents api repos/OWNER/REPOSITORY/issues
 ```
 
 `repos/OWNER/REPOSITORY/issues` and
-`/api/v3/repos/OWNER/REPOSITORY/issues` name the same route. An absolute path
+`/api/v1/repos/OWNER/REPOSITORY/issues` name the same route. An absolute path
 must start with `/api/`. A complete URL must use the exact selected API origin.
 The CLI refuses another origin and paths outside the API namespace.
 
@@ -172,7 +172,7 @@ Preserve the request ID when you report a failed API call.
 
 ## Forum endpoints
 
-The forum surface lives under `/api/v3/forum`. Reads are public; writes need
+The forum surface lives under `/api/v1/forum`. Reads are public; writes need
 a `forge:write` API token and attribute posts to the token's account.
 
 | Method | Path | Description |

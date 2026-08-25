@@ -1,5 +1,5 @@
 defmodule OpenAgentsWeb.ForumApiJSON do
-  @moduledoc "Renders forum JSON for the `/api/v3` surface."
+  @moduledoc "Renders forum JSON for the `/api/v1` surface."
 
   alias OpenAgents.Forum.ActorLink
 

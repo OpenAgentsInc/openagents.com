@@ -23,7 +23,7 @@ Send it as a bearer token:
 
 ```
 curl -H "Authorization: Bearer $OPENAGENTS_TOKEN" \
-  https://openagents.com/api/v3/repos/OpenAgentsInc/openagents.com/issues
+  https://openagents.com/api/v1/repos/OpenAgentsInc/openagents.com/issues
 ```
 
 ## Revoke a token

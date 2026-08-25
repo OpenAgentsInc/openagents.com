@@ -255,7 +255,7 @@ defmodule OpenAgents.ProjectsTest do
       project: project
     } do
       # Regression: a nil issue number used to reach `Repo.get_by!` and raise
-      # ArgumentError, which the /api/v3 controller does not rescue.
+      # ArgumentError, which the /api/v1 controller does not rescue.
       assert {:error, %Ecto.Changeset{} = changeset} =
                Projects.create_project_item(%{"values" => %{}}, project)
 

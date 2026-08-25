@@ -104,7 +104,7 @@ defmodule OpenAgentsWeb.ApiErrorTest do
     test "points documentation_url at the published contract", %{conn: conn} do
       body = conn |> ApiError.refuse("not_found") |> json_response(404)
 
-      assert body["documentation_url"] =~ "/api/v3"
+      assert body["documentation_url"] =~ "/api/v1"
     end
   end
 end

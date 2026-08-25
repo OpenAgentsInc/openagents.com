@@ -7,7 +7,7 @@ defmodule OpenAgents.Issues do
   therefore takes a `:type` option, and it defaults to `"issue"`: a list this
   module returns is issues unless the caller asks for more, so a count labelled
   "Issues" counts issues. `OpenAgentsWeb.IssueController` passes `"all"` to keep
-  `GET /api/v3/repos/:owner/:repo/issues` shaped like GitHub's, which returns
+  `GET /api/v1/repos/:owner/:repo/issues` shaped like GitHub's, which returns
   both and marks the pull requests with a `pull_request` object.
   """
 

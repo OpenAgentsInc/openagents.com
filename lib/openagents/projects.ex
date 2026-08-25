@@ -992,7 +992,7 @@ defmodule OpenAgents.Projects do
   same way every other project write does. A card's `Status` is a stored field
   value, so a board that did not hear about this write would keep rendering the
   card in the column it left — the write path, not the caller, owns the
-  announcement, so a change made over `/api/v3` and a change made from the
+  announcement, so a change made over `/api/v1` and a change made from the
   board produce the same event.
   """
   def update_project_item(%ProjectItem{} = item, attrs, actor \\ nil) do

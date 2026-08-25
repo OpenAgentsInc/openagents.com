@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.IssueCaptureControllerTest do
   @moduledoc """
-  `POST /api/v3/repos/:owner/:repo/issues/capture` (#77).
+  `POST /api/v1/repos/:owner/:repo/issues/capture` (#77).
 
   The API operation and the `capture_issue` chat tool are two transports over
   `OpenAgents.Issues.Capture`, so what this file proves is that the transport
@@ -21,7 +21,7 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
 
     test "POST .../issues/capture files a drafted issue and answers 201", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{
           problem: "Let me export a board to CSV.",
           current_behavior: "The board only renders on screen.",
           acceptance_criteria: ["A CSV downloads"]
@@ -44,14 +44,14 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
     # client can tell the two apart without a body key of ours.
     test "a repeat answers 200 with the same issue", %{conn: conn} do
       created =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{
           problem: "Let me export a board to CSV."
         })
 
       assert %{"number" => number} = json_response(created, 201)
 
       repeated =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{
           problem: "let me export a board to CSV!"
         })
 
@@ -61,7 +61,7 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
 
     test "a blank statement is a validation failure, not a filed issue", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{problem: "  "})
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{problem: "  "})
 
       assert %{"code" => "validation_failed", "errors" => errors} = json_response(conn, 422)
       assert errors["problem"] == ["can't be blank"]
@@ -76,7 +76,7 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
       conn = put_forge_api_token(conn, "issue-capture-reader")
 
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{
           problem: "Let me export a board to CSV."
         })
 
@@ -96,7 +96,7 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
       conn = put_forge_api_token(conn, "issue-capture-private-stranger")
 
       conn =
-        post(conn, ~p"/api/v3/repos/#{private.owner}/#{private.name}/issues/capture", %{
+        post(conn, ~p"/api/v1/repos/#{private.owner}/#{private.name}/issues/capture", %{
           problem: "Let me export a board to CSV."
         })
 
@@ -105,7 +105,7 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
 
     test "an anonymous caller is refused before the controller runs", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{
           problem: "Let me export a board to CSV."
         })
 
@@ -127,7 +127,7 @@ defmodule OpenAgentsWeb.IssueCaptureControllerTest do
       conn =
         conn
         |> put_req_header("authorization", "Bearer #{credential}")
-        |> post(~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/capture", %{
+        |> post(~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/capture", %{
           problem: "Let me export a board to CSV."
         })
 

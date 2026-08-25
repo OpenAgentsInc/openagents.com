@@ -24,8 +24,8 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
   end
 
   test "public forge reads and bearer-authenticated forge writes are separate" do
-    read = route!(:get, "/api/v3/repos/:owner/:repo/issues")
-    write = route!(:post, "/api/v3/repos/:owner/:repo/issues")
+    read = route!(:get, "/api/v1/repos/:owner/:repo/issues")
+    write = route!(:post, "/api/v1/repos/:owner/:repo/issues")
 
     assert read.class == :public_read
     assert read.principal == "anonymous or first-party bearer token"
@@ -39,14 +39,14 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "GET",
-             "/api/v3/repos/OpenAgentsInc/openagents.com/issues",
+             "/api/v1/repos/OpenAgentsInc/openagents.com/issues",
              "stage.openagents.com"
            ).pipe_through == [:optional_forge_api]
 
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "POST",
-             "/api/v3/repos/OpenAgentsInc/openagents.com/issues",
+             "/api/v1/repos/OpenAgentsInc/openagents.com/issues",
              "stage.openagents.com"
            ).pipe_through == [:agent_participation_api]
   end
@@ -54,20 +54,20 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
   # The six ancillary issue families used to sit behind the credential-free
   # `:api` pipeline, which discarded a bearer token, so a private repository
   # refused its own owner. They are declared here rather than falling through
-  # the `/api/v3` read catch-all, whose "anonymous" principal is now wrong for
+  # the `/api/v1` read catch-all, whose "anonymous" principal is now wrong for
   # them.
   test "issue metadata reads accept an optional bearer instead of discarding it" do
     for path <- [
-          "/api/v3/repos/:owner/:repo/issues/:issue_number/comments",
-          "/api/v3/repos/:owner/:repo/issues/comments/:id",
-          "/api/v3/repos/:owner/:repo/issues/:issue_number/labels",
-          "/api/v3/repos/:owner/:repo/issues/:issue_number/assignees",
-          "/api/v3/repos/:owner/:repo/labels",
-          "/api/v3/repos/:owner/:repo/labels/:name",
-          "/api/v3/repos/:owner/:repo/milestones",
-          "/api/v3/repos/:owner/:repo/milestones/:milestone_number",
-          "/api/v3/repos/:owner/:repo/assignees",
-          "/api/v3/repos/:owner/:repo/assignees/:assignee"
+          "/api/v1/repos/:owner/:repo/issues/:issue_number/comments",
+          "/api/v1/repos/:owner/:repo/issues/comments/:id",
+          "/api/v1/repos/:owner/:repo/issues/:issue_number/labels",
+          "/api/v1/repos/:owner/:repo/issues/:issue_number/assignees",
+          "/api/v1/repos/:owner/:repo/labels",
+          "/api/v1/repos/:owner/:repo/labels/:name",
+          "/api/v1/repos/:owner/:repo/milestones",
+          "/api/v1/repos/:owner/:repo/milestones/:milestone_number",
+          "/api/v1/repos/:owner/:repo/assignees",
+          "/api/v1/repos/:owner/:repo/assignees/:assignee"
         ] do
       route = route!(:get, path)
 
@@ -78,16 +78,16 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     end
 
     for path <- [
-          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/1/comments",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/1",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/1/labels",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/1/assignees",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/labels",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/labels/bug",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/milestones",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/milestones/1",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/assignees",
-          "/api/v3/repos/OpenAgentsInc/openagents.com/assignees/someone"
+          "/api/v1/repos/OpenAgentsInc/openagents.com/issues/1/comments",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/issues/comments/1",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/issues/1/labels",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/issues/1/assignees",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/labels",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/labels/bug",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/milestones",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/milestones/1",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/assignees",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/assignees/someone"
         ] do
       assert Phoenix.Router.route_info(
                OpenAgentsWeb.Router,
@@ -100,7 +100,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
   end
 
   test "agent credential rotation is an agent-scoped bearer write" do
-    route = route!(:post, "/api/v3/agent/credentials")
+    route = route!(:post, "/api/v1/agent/credentials")
 
     assert route.class == :authenticated_api
     assert route.principal == "agent bearer token"
@@ -110,7 +110,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "POST",
-             "/api/v3/agent/credentials",
+             "/api/v1/agent/credentials",
              "stage.openagents.com"
            ).pipe_through == [:agent_token_api]
   end
@@ -148,10 +148,10 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
   end
 
   test "repository identity, list, and import status reads require bearer authentication" do
-    forge_user = route!(:get, "/api/v3/user")
-    repository_list = route!(:get, "/api/v3/user/repos")
-    import_status = route!(:get, "/api/v3/repository-imports/:id")
-    repository_view = route!(:get, "/api/v3/repos/:owner/:repo")
+    forge_user = route!(:get, "/api/v1/user")
+    repository_list = route!(:get, "/api/v1/user/repos")
+    import_status = route!(:get, "/api/v1/repository-imports/:id")
+    repository_view = route!(:get, "/api/v1/repos/:owner/:repo")
 
     assert forge_user.class == :authenticated_api
     assert forge_user.scope == "forge:read"
@@ -165,28 +165,28 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "GET",
-             "/api/v3/user",
+             "/api/v1/user",
              "stage.openagents.com"
            ).pipe_through == [:forge_write_api]
 
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "GET",
-             "/api/v3/user/repos",
+             "/api/v1/user/repos",
              "stage.openagents.com"
            ).pipe_through == [:forge_write_api]
 
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "GET",
-             "/api/v3/repos/octavia/project",
+             "/api/v1/repos/octavia/project",
              "stage.openagents.com"
            ).pipe_through == [:optional_forge_api]
   end
 
   test "account chat uses its own scoped bearer pipeline" do
-    events = route!(:get, "/api/v3/chat/events")
-    turns = route!(:post, "/api/v3/chat/turns")
+    events = route!(:get, "/api/v1/chat/events")
+    turns = route!(:post, "/api/v1/chat/turns")
 
     assert events.scope == "chat:account"
     refute events.mutation
@@ -196,22 +196,22 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "GET",
-             "/api/v3/chat/events",
+             "/api/v1/chat/events",
              "stage.openagents.com"
            ).pipe_through == [:chat_account_api]
 
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "POST",
-             "/api/v3/chat/turns",
+             "/api/v1/chat/turns",
              "stage.openagents.com"
            ).pipe_through == [:chat_account_api]
   end
 
   test "Box control uses its human or delegated bearer pipeline" do
-    route = route!(:get, "/api/v3/conversations/:conversation_id/boxes")
-    create = route!(:post, "/api/v3/conversations/:conversation_id/boxes")
-    command = route!(:post, "/api/v3/conversations/:conversation_id/boxes/:box_id/commands")
+    route = route!(:get, "/api/v1/conversations/:conversation_id/boxes")
+    create = route!(:post, "/api/v1/conversations/:conversation_id/boxes")
+    command = route!(:post, "/api/v1/conversations/:conversation_id/boxes/:box_id/commands")
 
     assert route.class == :authenticated_api
     assert route.principal == "human or delegated box-control bearer token"
@@ -223,7 +223,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "GET",
-             "/api/v3/conversations/00000000-0000-4000-8000-000000000001/boxes",
+             "/api/v1/conversations/00000000-0000-4000-8000-000000000001/boxes",
              "stage.openagents.com"
            ).pipe_through == [:box_control_api]
   end
@@ -274,10 +274,10 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
            }
   end
 
-  test "fleet promotion is an operator mutation, not a generic api v3 write" do
-    create = route!(:post, "/api/v3/admin/forge/targets")
-    show = route!(:get, "/api/v3/admin/forge/targets/:id")
-    index = route!(:get, "/api/v3/admin/forge/targets")
+  test "fleet promotion is an operator mutation, not a generic api v1 write" do
+    create = route!(:post, "/api/v1/admin/forge/targets")
+    show = route!(:get, "/api/v1/admin/forge/targets/:id")
+    index = route!(:get, "/api/v1/admin/forge/targets")
 
     for route <- [create, show, index] do
       assert route.class == :operator, inspect(route)
@@ -290,13 +290,13 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     refute index.mutation
 
     # The tenant deployment plane is a different scope on a different path, and
-    # neither the generic /api/v3 write catch-all nor `deployments:write`
+    # neither the generic /api/v1 write catch-all nor `deployments:write`
     # reaches fleet promotion.
-    tenant = route!(:post, "/api/v3/repos/:owner/:repo/deployments")
+    tenant = route!(:post, "/api/v1/repos/:owner/:repo/deployments")
     assert tenant.scope == "deployments:write"
     assert tenant.class == :authenticated_api
 
-    for path <- ["/api/v3/admin/forge/targets", "/api/v3/admin/forge/targets/:id"] do
+    for path <- ["/api/v1/admin/forge/targets", "/api/v1/admin/forge/targets/:id"] do
       assert Phoenix.Router.route_info(
                OpenAgentsWeb.Router,
                "GET",
@@ -308,7 +308,7 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
              "POST",
-             "/api/v3/admin/forge/targets",
+             "/api/v1/admin/forge/targets",
              "stage.openagents.com"
            ).pipe_through == [:fleet_promotion_api]
   end

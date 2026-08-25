@@ -37,9 +37,11 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     {"get", "/admin/recordings", "voice:recording:list", false},
     {"get", "/admin/tokens", "tokens:productivity:read", false},
     {"get", "/chat", "chat:preview", false},
+    # `/gym` landed while the rename was in flight; the forge targets move with
+    # everything else.
     {"get", "/gym", "gym:read", false},
-    {"get", "/api/v3/admin/forge/targets", "deployments:promote", false},
-    {"get", "/api/v3/admin/forge/targets/:id", "deployments:promote", false},
+    {"get", "/api/v1/admin/forge/targets", "deployments:promote", false},
+    {"get", "/api/v1/admin/forge/targets/:id", "deployments:promote", false},
     {"get", "/api/operator/artifact-listings/:id/export", "artifact-catalog:operate", false},
     {"get", "/api/operator/continual-learning/jobs", "continual-learning:operate", false},
     {"get", "/api/operator/continual-learning/jobs/:id", "continual-learning:operate", false},
@@ -54,7 +56,7 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     {"get", "/admin/forge", "forge:promote", true},
     {"get", "/admin/forum/claims", "forum:identity:link", true},
     {"get", "/admin/scv/accounts", "scv:account:connect", true},
-    {"post", "/api/v3/admin/forge/targets", "deployments:promote", true},
+    {"post", "/api/v1/admin/forge/targets", "deployments:promote", true},
     {"post", "/api/operator/agents/:handle/reinstate", "agents:moderate", true},
     {"post", "/api/operator/agents/:handle/suspend", "agents:moderate", true},
     {"post", "/api/operator/artifact-listings", "artifact-catalog:operate", true},

@@ -10,7 +10,7 @@ never relaxes what the trunk requires.
 
 ## Merge a prefix in one operation
 
-`POST /api/v3/repos/:owner/:repo/stacks/:stack_number/merge` lands a
+`POST /api/v1/repos/:owner/:repo/stacks/:stack_number/merge` lands a
 contiguous prefix as one operation:
 
 ```sh
@@ -19,7 +19,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{"pull_request_number": 118, "merge_method": "merge"}' \
-  https://openagents.com/api/v3/repos/acme/api/stacks/1/merge
+  https://openagents.com/api/v1/repos/acme/api/stacks/1/merge
 ```
 
 - `pull_request_number` names the highest layer to land. The operation
@@ -38,7 +38,7 @@ bottom.
 
 ## Merge one layer asynchronously
 
-`PUT /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async` submits a
+`PUT /api/v1/repos/:owner/:repo/pulls/:pull_number/merge-async` submits a
 merge against one stacked pull request — it lands the contiguous prefix from
 the bottom of the stack through that layer — and returns `202 Accepted`
 immediately with an `operation_id` and a poll URL:
@@ -49,7 +49,7 @@ curl -X PUT \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{"merge_method": "squash"}' \
-  https://openagents.com/api/v3/repos/acme/api/pulls/117/merge-async
+  https://openagents.com/api/v1/repos/acme/api/pulls/117/merge-async
 ```
 
 Poll `GET .../pulls/:pull_number/merge-async/:operation_id` for the outcome.

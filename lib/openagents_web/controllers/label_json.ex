@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.LabelJSON do
       description: label.description,
       default: false,
       url:
-        "#{url_base(assigns)}/api/v3/repos/#{owner}/#{repo}/labels/#{URI.encode(label.name, &URI.char_unreserved?/1)}"
+        "#{url_base(assigns)}/api/v1/repos/#{owner}/#{repo}/labels/#{URI.encode(label.name, &URI.char_unreserved?/1)}"
     }
   end
 

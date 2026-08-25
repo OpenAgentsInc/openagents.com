@@ -48,7 +48,7 @@ defmodule OpenAgentsWeb.ThreadIndexLive do
         <.empty :if={@threads_empty?} id="threads-empty" title="No threads yet">
           Open one with
           <.kbd>openagents coder</.kbd>
-          or <.kbd>POST /api/v3/threads</.kbd>.
+          or <.kbd>POST /api/v1/threads</.kbd>.
         </.empty>
 
         <.table :if={!@threads_empty?} id="threads-table" rows={@streams.threads}>

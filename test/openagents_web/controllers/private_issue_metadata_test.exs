@@ -49,7 +49,7 @@ defmodule OpenAgentsWeb.PrivateIssueMetadataTest do
   end
 
   defp paths(%{issue: issue, comment: comment, label: label, milestone: milestone, owner: owner}) do
-    base = "/api/v3/repos/metadata-owner/private-work"
+    base = "/api/v1/repos/metadata-owner/private-work"
 
     %{
       "issue comments" => "#{base}/issues/#{issue.number}/comments",
@@ -80,7 +80,7 @@ defmodule OpenAgentsWeb.PrivateIssueMetadataTest do
 
       assert %{"comments" => [read]} =
                conn
-               |> get("/api/v3/repos/metadata-owner/private-work/issues/#{issue.number}/comments")
+               |> get("/api/v1/repos/metadata-owner/private-work/issues/#{issue.number}/comments")
                |> json_response(200)
 
       assert read["id"] == comment.id
@@ -88,28 +88,28 @@ defmodule OpenAgentsWeb.PrivateIssueMetadataTest do
 
       assert %{"labels" => labels} =
                conn
-               |> get("/api/v3/repos/metadata-owner/private-work/labels")
+               |> get("/api/v1/repos/metadata-owner/private-work/labels")
                |> json_response(200)
 
       assert "shipped" in Enum.map(labels, & &1["name"])
 
       assert %{"milestones" => [milestone]} =
                conn
-               |> get("/api/v3/repos/metadata-owner/private-work/milestones")
+               |> get("/api/v1/repos/metadata-owner/private-work/milestones")
                |> json_response(200)
 
       assert milestone["title"] == "first release"
 
       assert %{"assignees" => assignees} =
                conn
-               |> get("/api/v3/repos/metadata-owner/private-work/assignees")
+               |> get("/api/v1/repos/metadata-owner/private-work/assignees")
                |> json_response(200)
 
       assert context.owner.github_login in Enum.map(assignees, & &1["login"])
 
       assert %{"labels" => [issue_label]} =
                conn
-               |> get("/api/v3/repos/metadata-owner/private-work/issues/#{issue.number}/labels")
+               |> get("/api/v1/repos/metadata-owner/private-work/issues/#{issue.number}/labels")
                |> json_response(200)
 
       assert issue_label["name"] == "mine"
@@ -163,7 +163,7 @@ defmodule OpenAgentsWeb.PrivateIssueMetadataTest do
       public_issue: issue,
       public_comment: comment
     } do
-      base = "/api/v3/repos/metadata-public/open-work"
+      base = "/api/v1/repos/metadata-public/open-work"
 
       for path <- [
             "#{base}/issues/#{issue.number}/comments",
@@ -192,7 +192,7 @@ defmodule OpenAgentsWeb.PrivateIssueMetadataTest do
       conn: conn,
       public_issue: issue
     } do
-      base = "/api/v3/repos/metadata-public/open-work"
+      base = "/api/v1/repos/metadata-public/open-work"
       path = "#{base}/issues/#{issue.number}/comments"
 
       anonymous = build_conn() |> get(path) |> json_response(200)

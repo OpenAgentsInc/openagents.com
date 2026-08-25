@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.IssueJSON do
   stays the requested outcome and never becomes a second work record.
 
   Every key this module can put inside the object is enumerated at
-  `GET /api/v3`, and `OpenAgentsWeb.ApiExtensionGovernanceTest` fails if one
+  `GET /api/v1`, and `OpenAgentsWeb.ApiExtensionGovernanceTest` fails if one
   is not.
   """
 
@@ -65,7 +65,7 @@ defmodule OpenAgentsWeb.IssueJSON do
       updated_at: issue.updated_at,
       closed_at: issue.closed_at,
       html_url: "#{url_base}/#{owner}/#{repo}/issues/#{issue.number}",
-      url: "#{url_base}/api/v3/repos/#{owner}/#{repo}/issues/#{issue.number}"
+      url: "#{url_base}/api/v1/repos/#{owner}/#{repo}/issues/#{issue.number}"
     }
     |> put_pull_request(issue, assigns, owner, repo, url_base)
     |> put_extension(issue, assigns)
@@ -89,7 +89,7 @@ defmodule OpenAgentsWeb.IssueJSON do
         json
         |> Map.put(:draft, marker.draft)
         |> Map.put(:pull_request, %{
-          url: "#{url_base}/api/v3/repos/#{owner}/#{repo}/pulls/#{issue.number}",
+          url: "#{url_base}/api/v1/repos/#{owner}/#{repo}/pulls/#{issue.number}",
           html_url: "#{url_base}/#{owner}/#{repo}/pulls/#{issue.number}",
           merged_at: marker.merged_at
         })

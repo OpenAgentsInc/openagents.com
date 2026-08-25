@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.ChatTurnController do
   Bearer-authenticated access to an account's durable chat turns.
 
   A turn may name the backend that answers it with `model`, whose supported
-  values `GET /api/v3` publishes. An unsupported value is refused with a
+  values `GET /api/v1` publishes. An unsupported value is refused with a
   field-level `422` rather than quietly answered by the default, because a
   caller that asked for one model and was served another has no way to tell.
   """

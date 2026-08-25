@@ -27,12 +27,12 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
   end
 
   describe "index" do
-    test "GET /api/v3/repos/:owner/:repo/projectsV2 lists the repository's projects", %{
+    test "GET /api/v1/repos/:owner/:repo/projectsV2 lists the repository's projects", %{
       conn: conn
     } do
       project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
 
-      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
+      conn = get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2")
 
       assert %{"projects" => [project]} = json_response(conn, 200)
       assert project["title"] == "Roadmap"
@@ -40,28 +40,28 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert project["state"] == "open"
     end
 
-    test "GET /api/v3/repos/:owner/:repo/projectsV2 excludes another repository", %{conn: conn} do
+    test "GET /api/v1/repos/:owner/:repo/projectsV2 excludes another repository", %{conn: conn} do
       project_fixture(%{title: "Mine", owner: "alice"})
       other_repository = repository_fixture(%{owner: "Elsewhere", name: "other-projects"})
 
       {:ok, _project} =
         Projects.create_project(other_repository, %{title: "Theirs", owner: "bob"})
 
-      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
+      conn = get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2")
 
       assert %{"projects" => [%{"title" => "Mine"}]} = json_response(conn, 200)
     end
 
-    test "GET /api/v3/repos/:owner/:repo/projectsV2 hides a private repository from a non-member" do
-      conn = get(build_conn(), ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
+    test "GET /api/v1/repos/:owner/:repo/projectsV2 hides a private repository from a non-member" do
+      conn = get(build_conn(), ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2")
       assert_api_error(conn, 404, "not_found")
     end
   end
 
   describe "create" do
-    test "POST /api/v3/repos/:owner/:repo/projectsV2 creates a project", %{conn: conn} do
+    test "POST /api/v1/repos/:owner/:repo/projectsV2 creates a project", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{
+        post(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2", %{
           title: "New board"
         })
 
@@ -71,11 +71,11 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert Projects.get_project_by_number!(repository(), number).title == "New board"
     end
 
-    test "POST /api/v3/repos/:owner/:repo/projectsV2 accepts a Markdown description", %{
+    test "POST /api/v1/repos/:owner/:repo/projectsV2 accepts a Markdown description", %{
       conn: conn
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{
+        post(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2", %{
           title: "Stress testing Ox Alpha",
           description: "## Why\n\nProvider order is under test."
         })
@@ -84,11 +84,11 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
                json_response(conn, 201)
     end
 
-    test "POST /api/v3/repos/:owner/:repo/projectsV2 ignores repository override params", %{
+    test "POST /api/v1/repos/:owner/:repo/projectsV2 ignores repository override params", %{
       conn: conn
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{
+        post(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2", %{
           title: "Board",
           owner: "mallory",
           repo: "elsewhere"
@@ -97,10 +97,10 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert json_response(conn, 201)["owner"] == "alice"
     end
 
-    test "POST /api/v3/repos/:owner/:repo/projectsV2 returns 422 without a title", %{
+    test "POST /api/v1/repos/:owner/:repo/projectsV2 returns 422 without a title", %{
       conn: conn
     } do
-      conn = post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2", %{})
+      conn = post(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2", %{})
 
       assert %{"errors" => %{"title" => _}} = json_response(conn, 422)
       assert Projects.list_projects(repository()) == []
@@ -108,21 +108,21 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
   end
 
   describe "show" do
-    test "GET /api/v3/repos/:owner/:repo/projectsV2/:project_number returns the project", %{
+    test "GET /api/v1/repos/:owner/:repo/projectsV2/:project_number returns the project", %{
       conn: conn
     } do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
-      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}")
+      conn = get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}")
 
       assert %{"title" => "Roadmap", "id" => id} = json_response(conn, 200)
       assert id == project.id
     end
 
-    test "GET /api/v3/repos/:owner/:repo/projectsV2/:project_number returns 404 when missing", %{
+    test "GET /api/v1/repos/:owner/:repo/projectsV2/:project_number returns 404 when missing", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999")
+      conn = get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/999999")
 
       assert_api_error(conn, 404, "not_found")
     end
@@ -135,7 +135,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
       conn =
-        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+        get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       assert json_response(conn, 200) == %{"items" => []}
     end
@@ -145,7 +145,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       item = project_item_fixture(%{project_id: project.id, values: %{"Status" => "Todo"}})
 
       conn =
-        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+        get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       assert %{"items" => [rendered]} = json_response(conn, 200)
       assert rendered["id"] == item.id
@@ -174,7 +174,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
         )
 
       conn =
-        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+        get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       body = response(conn, 200)
       refute body =~ "hidden-api"
@@ -189,7 +189,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     test "GET .../projectsV2/:project_number/items returns 404 for a missing project", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/items")
+      conn = get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/999999/items")
 
       assert_api_error(conn, 404, "not_found")
     end
@@ -228,7 +228,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         get(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items?promise_state=LIVE"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items?promise_state=LIVE"
         )
 
       assert %{
@@ -286,7 +286,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         get(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items?promise_state=GATED&bounty_candidate=true"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items?promise_state=GATED&bounty_candidate=true"
         )
 
       assert %{
@@ -327,7 +327,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         get(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}/events"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}/events"
         )
 
       assert %{
@@ -364,7 +364,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       conn =
         build_conn()
-        |> get(~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+        |> get(~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       assert %{"items" => [_item]} = json_response(conn, 200)
     end
@@ -404,7 +404,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
         )
 
       conn =
-        get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
+        get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items")
 
       assert %{"items" => [%{"openagents" => %{"promise" => %{"record" => record}}}]} =
                json_response(conn, 200)
@@ -428,7 +428,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{
             issue_number: issue.number
           }
@@ -453,7 +453,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "SourceOrg", repo: "source-api", number: issue.number}}
         )
 
@@ -495,7 +495,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "ReadableOrg", repo: "readable-api", number: issue.number}}
         )
 
@@ -522,7 +522,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           put_forge_api_token(build_conn(), "project-reader", "carol"),
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "WriterOrg", repo: "writer-api", number: issue.number}}
         )
 
@@ -537,7 +537,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "NoSuchOrg", repo: "no-such-api", number: 1}}
         )
 
@@ -554,7 +554,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "SourceOrg", repo: "empty-api", number: 999_999}}
         )
 
@@ -576,7 +576,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "SourceOrg", repo: "same-number-api", number: source_issue.number}}
         )
 
@@ -594,7 +594,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       {:ok, issue} = Issues.create_issue(source, %{title: "Added once"})
       body = %{issue: %{owner: "SourceOrg", repo: "repeat-api", number: issue.number}}
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
 
       assert %{"items" => [%{"id" => id}]} = json_response(post(conn, path, body), 201)
       assert %{"items" => [%{"id" => ^id}]} = json_response(post(recycle(conn), path, body), 200)
@@ -613,7 +613,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue: %{owner: "SecretOrg", repo: "secret-api", number: issue.number}}
         )
 
@@ -629,7 +629,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{
             issue_number: issue.number,
             values: %{"Status" => "In Progress"}
@@ -648,7 +648,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{
             issue_number: issue.number,
             values: "not-a-map"
@@ -666,7 +666,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{}
         )
 
@@ -679,7 +679,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{
             issue_number: "not-a-number"
           }
@@ -696,7 +696,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{
             issue_number: 999_999
           }
@@ -710,7 +710,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       issue: issue
     } do
       conn =
-        post(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/items", %{
+        post(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/999999/items", %{
           issue_number: issue.number
         })
 
@@ -733,7 +733,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
           %{
             values: %{"Status" => "Done"}
           }
@@ -761,7 +761,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
           %{values: %{"Status" => "Done"}}
         )
 
@@ -777,7 +777,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
           %{
             values: %{"Priority" => "P1"}
           }
@@ -795,7 +795,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
           %{
             values: "not-a-map"
           }
@@ -812,7 +812,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/999999",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/999999",
           %{
             values: %{"Status" => "Done"}
           }
@@ -831,7 +831,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         get(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
         )
 
       assert json_response(conn, 200) == %{"fields" => []}
@@ -851,7 +851,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         get(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
         )
 
       assert %{"fields" => [rendered]} = json_response(conn, 200)
@@ -864,7 +864,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
     test "GET .../projectsV2/:project_number/fields returns 404 for a missing project", %{
       conn: conn
     } do
-      conn = get(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/999999/fields")
+      conn = get(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/999999/fields")
 
       assert_api_error(conn, 404, "not_found")
     end
@@ -875,7 +875,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{
             name: "Status",
             data_type: "single_select",
@@ -905,7 +905,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{}
         )
 
@@ -924,7 +924,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{
             name: "Status",
             data_type: "text",
@@ -957,39 +957,39 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert get(
                mallory_conn,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
              )
              |> api_error_code(404) == "not_found"
 
       assert get(
                recycle(mallory_conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
              )
              |> api_error_code(404) == "not_found"
 
       assert get(
                recycle(mallory_conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
              )
              |> api_error_code(404) == "not_found"
 
       assert post(
                recycle(mallory_conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
                %{issue_number: issue.number}
              )
              |> api_error_code(404) == "not_found"
 
       assert patch(
                recycle(mallory_conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
                %{values: %{"Status" => "Done"}}
              )
              |> api_error_code(404) == "not_found"
 
       assert post(
                recycle(mallory_conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
                %{name: "Priority", data_type: "text"}
              )
              |> api_error_code(404) == "not_found"
@@ -1001,7 +1001,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       other_repository =
         repository_fixture(%{owner: "OtherOrg", name: "other-private", visibility: "private"})
 
-      assert post(conn, ~p"/api/v3/repos/OtherOrg/other-private/projectsV2", %{
+      assert post(conn, ~p"/api/v1/repos/OtherOrg/other-private/projectsV2", %{
                title: "Not Alice's"
              })
              |> api_error_code(404) == "not_found"
@@ -1015,7 +1015,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+        patch(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
           title: "Stress testing Ox Alpha",
           description: "## Why\n\nProvider order is under test.",
           state: "closed"
@@ -1034,7 +1034,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+        patch(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
           title: "Renamed",
           number: 9999,
           owner: "mallory"
@@ -1050,7 +1050,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+        patch(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
           state: "sideways"
         })
 
@@ -1064,7 +1064,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert patch(
                mallory,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}",
                %{title: "Mine now"}
              )
              |> api_error_code(404) == "not_found"
@@ -1080,7 +1080,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       created =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
           %{body: "- paused lane 3"}
         )
 
@@ -1096,7 +1096,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       listed =
         get(
           recycle(conn),
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
         )
 
       assert %{"notes" => [note], "page" => 1, "per_page" => per_page, "total_count" => 1} =
@@ -1120,7 +1120,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       page_two =
         get(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?page=2"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?page=2"
         )
 
       assert %{"notes" => notes, "page" => 2} = json_response(page_two, 200)
@@ -1129,7 +1129,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       activity =
         get(
           recycle(conn),
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?kind=activity"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?kind=activity"
         )
 
       assert %{"notes" => [%{"kind" => "activity", "body" => body}], "total_count" => 1} =
@@ -1148,20 +1148,20 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert patch(
                mallory_conn,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
                %{body: "not mine"}
              )
              |> api_error_code(403) == "forbidden"
 
       assert delete(
                recycle(mallory_conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
              )
              |> api_error_code(403) == "forbidden"
 
       assert patch(
                conn,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}",
                %{body: "mine, edited"}
              )
              |> json_response(200)
@@ -1169,7 +1169,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert delete(
                recycle(conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{note.id}"
              )
              |> response(204)
 
@@ -1185,14 +1185,14 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert patch(
                conn,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}",
                %{body: "rewritten"}
              )
              |> api_error_code(403) == "forbidden"
 
       assert delete(
                recycle(conn),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes/#{activity.id}"
              )
              |> api_error_code(403) == "forbidden"
 
@@ -1211,13 +1211,13 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert get(
                build_conn(),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
              )
              |> api_error_code(404) == "not_found"
 
       assert post(
                put_forge_api_token(build_conn(), "project-outsider-notes", "outsider"),
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes",
                %{body: "mine now"}
              )
              |> api_error_code(404) == "not_found"
@@ -1225,7 +1225,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert %{"notes" => [_note]} =
                get(
                  conn,
-                 ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
+                 ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes"
                )
                |> json_response(200)
     end
@@ -1234,7 +1234,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
   describe "lifecycle" do
     test "PATCH projectsV2/:number closes, reopens, and archives a project", %{conn: conn} do
       project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
 
       assert %{"state" => "closed", "archived" => false} =
                conn |> patch(path, %{state: "closed"}) |> json_response(200)
@@ -1258,7 +1258,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
       conn =
-        patch(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
+        patch(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}", %{
           archived: "sideways"
         })
 
@@ -1270,7 +1270,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn: conn
     } do
       project = project_fixture(%{title: "Roadmap", owner: "alice", state: "open"})
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
 
       assert json_response(patch(conn, path, %{state: "closed"}), 200)
       assert json_response(patch(conn, path, %{archived: true}), 200)
@@ -1278,7 +1278,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert %{"notes" => notes} =
                conn
                |> get(
-                 ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?kind=activity"
+                 ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/notes?kind=activity"
                )
                |> json_response(200)
 
@@ -1292,7 +1292,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
 
       conn =
-        delete(conn, ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}")
+        delete(conn, ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}")
 
       assert %{"errors" => %{"archived" => [message]}} = json_response(conn, 422)
       assert message =~ "archived"
@@ -1307,7 +1307,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       item = project_item_fixture(%{project_id: project.id, issue_id: issue.id})
       field = project_field_fixture(%{project_id: project.id, name: "Status", data_type: "text"})
 
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
       assert json_response(patch(conn, path, %{archived: true}), 200)
       assert response(delete(conn, path), 204) == ""
 
@@ -1324,7 +1324,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
     test "DELETE projectsV2/:number hides a private repository from a non-member", %{conn: conn} do
       project = project_fixture(%{title: "Alice only", owner: "alice"})
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}"
       assert json_response(patch(conn, path, %{archived: true}), 200)
 
       mallory = put_forge_api_token(build_conn(), "project-mallory-delete", "mallory")
@@ -1342,7 +1342,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert json_response(
                patch(
                  conn,
-                 ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{retired.number}",
+                 ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{retired.number}",
                  %{archived: true}
                ),
                200
@@ -1350,14 +1350,14 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert %{"projects" => listed} =
                conn
-               |> get(~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2")
+               |> get(~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2")
                |> json_response(200)
 
       assert Enum.map(listed, & &1["number"]) == [kept.number]
 
       assert %{"projects" => all} =
                conn
-               |> get(~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2?archived=true")
+               |> get(~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2?archived=true")
                |> json_response(200)
 
       assert Enum.sort(Enum.map(all, & &1["number"])) == Enum.sort([kept.number, retired.number])
@@ -1371,7 +1371,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{name: "Status", data_type: "rocket"}
         )
 
@@ -1381,7 +1381,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
     test "POST fields rejects a duplicate name, ignoring case", %{conn: conn} do
       project = project_fixture(%{title: "Roadmap", owner: "alice"})
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields"
 
       assert json_response(post(conn, path, %{name: "Status", data_type: "text"}), 201)
 
@@ -1399,7 +1399,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
         assert json_response(
                  post(
                    conn,
-                   ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{board.number}/fields",
+                   ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{board.number}/fields",
                    %{name: "Status", data_type: "text"}
                  ),
                  201
@@ -1413,7 +1413,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{name: "Status", data_type: "single_select"}
         )
 
@@ -1427,7 +1427,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{name: "Status", data_type: "single_select", options: %{values: ["Todo", "Todo"]}}
         )
 
@@ -1441,7 +1441,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{
             name: "Status",
             data_type: "single_select",
@@ -1467,7 +1467,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields",
           %{name: "Points", data_type: "number", options: %{values: ["1", "2"]}}
         )
 
@@ -1501,7 +1501,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
           %{name: "Stage"}
         )
 
@@ -1518,7 +1518,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
           %{data_type: "text"}
         )
 
@@ -1534,7 +1534,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
           %{options: %{values: ["Todo", "In progress", "Done"]}}
         )
 
@@ -1552,7 +1552,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
           %{options: %{values: ["Done"]}}
         )
 
@@ -1576,7 +1576,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
           %{name: "Priority"}
         )
 
@@ -1593,7 +1593,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{other.number}/fields/#{field.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{other.number}/fields/#{field.id}",
           %{name: "Stage"}
         )
 
@@ -1608,7 +1608,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert patch(
                mallory,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}",
                %{name: "Mine now"}
              )
              |> api_error_code(404) == "not_found"
@@ -1640,7 +1640,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
         )
 
       assert response(conn, 204) == ""
@@ -1657,7 +1657,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
         )
 
       assert %{"errors" => %{"name" => [message]}} = json_response(conn, 422)
@@ -1674,7 +1674,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
       assert delete(
                mallory,
-               ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
+               ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/fields/#{field.id}"
              )
              |> api_error_code(404) == "not_found"
 
@@ -1708,7 +1708,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{
             issue_number: issue.number,
             values: %{"Status" => "Done", "Points" => 3, "Due" => "2026-09-01"}
@@ -1727,7 +1727,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue_number: issue.number, values: %{"Status" => "Sideways"}}
         )
 
@@ -1741,7 +1741,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       project: project,
       issue: issue
     } do
-      path = ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
+      path = ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items"
 
       assert %{"errors" => %{"values" => [_ | _]}} =
                conn
@@ -1764,7 +1764,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items",
           %{issue_number: issue.number, values: %{"Squad" => "Platform"}}
         )
 
@@ -1786,7 +1786,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         patch(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}",
           %{values: %{"Status" => "Sideways"}}
         )
 
@@ -1810,7 +1810,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
         )
 
       assert response(conn, 204) == ""
@@ -1824,7 +1824,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       item: item
     } do
       path =
-        ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+        ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
 
       assert response(delete(conn, path), 204) == ""
       assert_api_error(delete(recycle(conn), path), 404, "not_found")
@@ -1839,7 +1839,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         delete(
           mallory_conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
         )
 
       assert_api_error(conn, 404, "not_found")
@@ -1868,7 +1868,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
+          ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}"
         )
 
       assert_api_error(conn, 404, "not_found")
@@ -1898,7 +1898,7 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
 
     defp move_path(project, item),
       do:
-        ~p"/api/v3/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}/move"
+        ~p"/api/v1/repos/ProjectTestOrg/project-api/projectsV2/#{project.number}/items/#{item.id}/move"
 
     defp add_item(project, title, values) do
       {:ok, issue} = Issues.create_issue(repository(), %{title: title})

@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
 
     created =
       authed
-      |> post(~p"/api/v3/reputation/subject-claims", %{
+      |> post(~p"/api/v1/reputation/subject-claims", %{
         "subject_kind" => "account",
         "subject_id" => "user:" <> user.id
       })
@@ -30,7 +30,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     listed =
       build_conn()
       |> put_forge_api_token("reputation-claim")
-      |> get(~p"/api/v3/reputation/subject-claims")
+      |> get(~p"/api/v1/reputation/subject-claims")
 
     assert [claim] = json_response(listed, 200)["claims"]
     assert claim["id"] == created["id"]
@@ -40,7 +40,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     body =
       conn
       |> put_forge_api_token("reputation-claim-wrong")
-      |> post(~p"/api/v3/reputation/subject-claims", %{
+      |> post(~p"/api/v1/reputation/subject-claims", %{
         "subject_kind" => "account",
         "subject_id" => "user:" <> Ecto.UUID.generate()
       })
@@ -53,7 +53,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     body =
       conn
       |> put_forge_api_token("reputation-claim-kind")
-      |> post(~p"/api/v3/reputation/subject-claims", %{
+      |> post(~p"/api/v1/reputation/subject-claims", %{
         "subject_kind" => "solver",
         "subject_id" => "actor:whoever"
       })
@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     created =
       conn
       |> put_forge_api_token("reputation-claim-review")
-      |> post(~p"/api/v3/reputation/subject-claims", %{
+      |> post(~p"/api/v1/reputation/subject-claims", %{
         "subject_kind" => "account",
         "subject_id" => "user:" <> user.id
       })
@@ -78,12 +78,12 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
 
     assert build_conn()
            |> put_forge_api_token("reputation-claim-review")
-           |> get(~p"/api/v3/reputation/subject-claims/pending")
+           |> get(~p"/api/v1/reputation/subject-claims/pending")
            |> json_response(403)
 
     assert build_conn()
            |> put_forge_api_token("reputation-claim-review")
-           |> patch(~p"/api/v3/reputation/subject-claims/#{created["id"]}", %{
+           |> patch(~p"/api/v1/reputation/subject-claims/#{created["id"]}", %{
              "status" => "linked"
            })
            |> json_response(403)
@@ -95,7 +95,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     pending =
       build_conn()
       |> put_forge_api_token("reputation-claim-operator")
-      |> get(~p"/api/v3/reputation/subject-claims/pending")
+      |> get(~p"/api/v1/reputation/subject-claims/pending")
       |> json_response(200)
 
     assert Enum.any?(pending["claims"], &(&1["id"] == created["id"]))
@@ -103,7 +103,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     linked =
       build_conn()
       |> put_forge_api_token("reputation-claim-operator")
-      |> patch(~p"/api/v3/reputation/subject-claims/#{created["id"]}", %{"status" => "linked"})
+      |> patch(~p"/api/v1/reputation/subject-claims/#{created["id"]}", %{"status" => "linked"})
       |> json_response(200)
 
     assert linked["status"] == "linked"
@@ -111,7 +111,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
 
     assert build_conn()
            |> put_forge_api_token("reputation-claim-operator")
-           |> patch(~p"/api/v3/reputation/subject-claims/#{created["id"]}", %{
+           |> patch(~p"/api/v1/reputation/subject-claims/#{created["id"]}", %{
              "status" => "linked"
            })
            |> json_response(409)
@@ -122,7 +122,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
 
     conn
     |> put_forge_api_token("reputation-claim-first")
-    |> post(~p"/api/v3/reputation/subject-claims", %{
+    |> post(~p"/api/v1/reputation/subject-claims", %{
       "subject_kind" => "account",
       "subject_id" => "user:" <> first.id
     })
@@ -131,7 +131,7 @@ defmodule OpenAgentsWeb.ReputationSubjectClaimControllerTest do
     body =
       build_conn()
       |> put_forge_api_token("reputation-claim-second")
-      |> post(~p"/api/v3/reputation/subject-claims", %{
+      |> post(~p"/api/v1/reputation/subject-claims", %{
         "subject_kind" => "account",
         "subject_id" => "user:" <> first.id
       })

@@ -9,7 +9,7 @@ New repositories allow pull requests by default. `OpenAgentsInc/openagents.com` 
 A repository owner can change this setting in the repository's **Pull requests** panel or with the repository API:
 
 ```http
-PATCH /api/v3/repos/{owner}/{repo}
+PATCH /api/v1/repos/{owner}/{repo}
 Authorization: Bearer {forge-write-token}
 Content-Type: application/json
 
@@ -22,10 +22,10 @@ Maintainers, contributors, viewers, and unauthenticated callers cannot change th
 
 Use these endpoints to work with pull requests:
 
-- `GET /api/v3/repos/{owner}/{repo}/pulls`
-- `GET /api/v3/repos/{owner}/{repo}/pulls/{pull_number}`
-- `POST /api/v3/repos/{owner}/{repo}/pulls`
-- `PATCH /api/v3/repos/{owner}/{repo}/pulls/{pull_number}`
+- `GET /api/v1/repos/{owner}/{repo}/pulls`
+- `GET /api/v1/repos/{owner}/{repo}/pulls/{pull_number}`
+- `POST /api/v1/repos/{owner}/{repo}/pulls`
+- `PATCH /api/v1/repos/{owner}/{repo}/pulls/{pull_number}`
 
 Create a pull request with a title, optional body, source repository, source ref, and optional base ref:
 

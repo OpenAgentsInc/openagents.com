@@ -67,5 +67,6 @@ defmodule OpenAgentsWeb.Endpoint do
   # Analytics hints only; identity still comes from the session.
   plug PostHog.Integrations.Plug
 
+  plug OpenAgentsWeb.Plugs.ApiV3Rewrite
   plug OpenAgentsWeb.Router
 end

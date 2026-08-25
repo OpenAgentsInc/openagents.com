@@ -6,7 +6,7 @@ This plane serves tenants: a repository deploys its own code to its own
 environments. It is not the forge fleet-promotion surface. Promoting the
 OpenAgents release itself remains operator-only behind `deployments:promote`,
 and nothing described here can reach it. That surface is
-`OpenAgents.Forge.Promotion` behind `POST /api/v3/admin/forge/targets`; it
+`OpenAgents.Forge.Promotion` behind `POST /api/v1/admin/forge/targets`; it
 requires the privileged scope *and* live operator standing, and it is
 documented in [API authentication](api-authentication.md) and the
 [production deploy runbook](operations/production-deploy-runbook.md).
@@ -121,7 +121,7 @@ host that cannot execute runs still records and evaluates them.
 
 ## API
 
-The routes live under `/api/v3/repos/:owner/:repo` and require
+The routes live under `/api/v1/repos/:owner/:repo` and require
 `deployments:write` or a workflow grant. `forge:write` is not deployment
 authority.
 

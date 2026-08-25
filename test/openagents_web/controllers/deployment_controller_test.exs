@@ -25,7 +25,7 @@ defmodule OpenAgentsWeb.DeploymentControllerTest do
       conn: put_deployments_api_token(conn, owner),
       owner: owner,
       repository: repository,
-      path: "/api/v3/repos/#{repository.owner}/#{repository.name}"
+      path: "/api/v1/repos/#{repository.owner}/#{repository.name}"
     }
   end
 
@@ -61,7 +61,7 @@ defmodule OpenAgentsWeb.DeploymentControllerTest do
       response =
         build_conn()
         |> put_req_header("authorization", "Bearer " <> plaintext)
-        |> post("/api/v3/repos/#{other.owner}/#{other.name}/deployments", %{
+        |> post("/api/v1/repos/#{other.owner}/#{other.name}/deployments", %{
           "environment" => "production",
           "commit_sha" => commit_sha(),
           "artifact_digest" => artifact_digest(),
@@ -222,7 +222,7 @@ defmodule OpenAgentsWeb.DeploymentControllerTest do
       response =
         build_conn()
         |> put_deployments_api_token(other_owner)
-        |> get("/api/v3/repos/#{other.owner}/#{other.name}/deployments/#{created["id"]}")
+        |> get("/api/v1/repos/#{other.owner}/#{other.name}/deployments/#{created["id"]}")
         |> json_response(403)
 
       assert response["error"]["detail"] == "cross_repository"

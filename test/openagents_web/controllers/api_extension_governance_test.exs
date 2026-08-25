@@ -2,7 +2,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   @moduledoc """
   The rule that makes the extension surface governed rather than documented.
 
-  A field only counts as part of the API once `GET /api/v3` enumerates it, and
+  A field only counts as part of the API once `GET /api/v1` enumerates it, and
   a filter only counts once the endpoint it names actually rejects a value
   outside its enum. These tests read the root document and the live responses
   and refuse any disagreement between them, so adding a field to the
@@ -33,12 +33,12 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
 
     documented = documented_fields(conn, "issue.openagents")
 
-    show = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{blocked.number}")
+    show = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{blocked.number}")
     served = show |> json_response(200) |> Map.fetch!("openagents") |> Map.keys() |> Enum.sort()
 
     assert served == documented
 
-    index = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues")
+    index = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues")
 
     for issue <- json_response(index, 200)["issues"] do
       assert issue |> Map.fetch!("openagents") |> Map.keys() |> Enum.sort() == documented
@@ -51,10 +51,10 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   } do
     {:ok, issue} = Issues.create_issue(repository, %{title: "Named"})
 
-    show = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
+    show = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}")
     [named] = get_resp_header(show, "x-openagents-extensions")
 
-    extensions = conn |> get(~p"/api/v3") |> json_response(200) |> Map.fetch!("extensions")
+    extensions = conn |> get(~p"/api/v1") |> json_response(200) |> Map.fetch!("extensions")
 
     for name <- String.split(named, ",", trim: true) do
       assert Map.has_key?(extensions, String.trim(name))
@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   test "every documented filter is enforced by the endpoint that documents it", %{conn: conn} do
     filters =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> get_in(["extensions", "issue.openagents", "filters"])
 
@@ -93,7 +93,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   } do
     field =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> get_in(["extensions", "issue.openagents", "fields", "progress"])
 
@@ -105,7 +105,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   } do
     parameter =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> get_in(["extensions", "chat.openagents", "parameters", "model"])
 
@@ -115,7 +115,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   end
 
   test "every published backend is one a turn actually accepts", %{conn: conn} do
-    document = conn |> get(~p"/api/v3") |> json_response(200)
+    document = conn |> get(~p"/api/v1") |> json_response(200)
     published = get_in(document, ["extensions", "chat.openagents", "backends"])
 
     assert Enum.map(published, & &1["id"]) == OpenAgents.Chat.Backends.ids()
@@ -126,7 +126,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
       accepted =
         conn
         |> put_chat_api_token("governance-backend-" <> backend["id"])
-        |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => backend["id"]})
+        |> post(~p"/api/v1/chat/turns", %{"message" => "Hello.", "model" => backend["id"]})
 
       assert json_response(accepted, 202)["turn"]["model"] == backend["id"]
     end
@@ -136,7 +136,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
     refusal =
       conn
       |> put_chat_api_token("governance-backend-unknown")
-      |> post(~p"/api/v3/chat/turns", %{"message" => "Hello.", "model" => "not-a-legal-value"})
+      |> post(~p"/api/v1/chat/turns", %{"message" => "Hello.", "model" => "not-a-legal-value"})
 
     assert %{"errors" => errors} = json_response(refusal, 422)
     assert Map.has_key?(errors, "model")
@@ -147,7 +147,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   } do
     parameters =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> get_in(["extensions", "thread.openagents", "parameters"])
 
@@ -169,7 +169,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   } do
     limits =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> get_in(["extensions", "thread.openagents", "limits"])
 
@@ -191,7 +191,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
     created =
       conn
       |> put_chat_api_token("governance-thread-budget")
-      |> post(~p"/api/v3/threads", %{"objective" => "Measure the published budget."})
+      |> post(~p"/api/v1/threads", %{"objective" => "Measure the published budget."})
       |> json_response(201)
 
     granted = created["grant"]["limits"]
@@ -205,7 +205,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
   test "every published thread parameter value is one the route actually accepts", %{conn: conn} do
     parameters =
       conn
-      |> get(~p"/api/v3")
+      |> get(~p"/api/v1")
       |> json_response(200)
       |> get_in(["extensions", "thread.openagents", "parameters"])
 
@@ -214,14 +214,14 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
       accepted =
         conn
         |> put_chat_api_token("governance-thread-#{name}-#{value}")
-        |> post(~p"/api/v3/threads", %{"objective" => "Accept #{value}.", name => value})
+        |> post(~p"/api/v1/threads", %{"objective" => "Accept #{value}.", name => value})
 
       assert json_response(accepted, 201)["thread"]
 
       refused =
         conn
         |> put_chat_api_token("governance-thread-#{name}-refused")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Refuse anything else.",
           name => "not-a-legal-value"
         })
@@ -235,7 +235,7 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
 
   defp documented_fields(conn, extension) do
     conn
-    |> get(~p"/api/v3")
+    |> get(~p"/api/v1")
     |> json_response(200)
     |> get_in(["extensions", extension, "fields"])
     |> Map.keys()

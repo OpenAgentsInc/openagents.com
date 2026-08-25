@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       issue: issue
     } do
       conn =
-        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees")
+        get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees")
 
       assert json_response(conn, 200) == %{"assignees" => []}
     end
@@ -34,14 +34,14 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       {:ok, _issue} = Issues.add_assignees(issue, ["octocat"])
 
       conn =
-        get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees")
+        get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees")
 
       assert %{"assignees" => [assignee]} = json_response(conn, 200)
       assert assignee["login"] == "octocat"
     end
 
     test "GET .../issues/:issue_number/assignees returns 404 for a missing issue", %{conn: conn} do
-      conn = get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees")
+      conn = get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/999999/assignees")
 
       assert_api_error(conn, 404, "not_found")
     end
@@ -52,7 +52,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
           %{
             assignees: ["octocat"]
           }
@@ -71,7 +71,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
           %{
             assignees: ["octocat", "hubot"]
           }
@@ -90,7 +90,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
           %{
             assignees: ["octocat"]
           }
@@ -104,7 +104,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn =
         post(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
           %{}
         )
 
@@ -113,7 +113,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
 
     test "POST .../issues/:issue_number/assignees returns 404 for a missing issue", %{conn: conn} do
       conn =
-        post(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees", %{
+        post(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/999999/assignees", %{
           assignees: ["octocat"]
         })
 
@@ -131,7 +131,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
           %{
             assignees: ["octocat"]
           }
@@ -152,7 +152,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn =
         delete(
           conn,
-          ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
+          ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/assignees",
           %{
             assignees: ["nobody"]
           }
@@ -165,7 +165,7 @@ defmodule OpenAgentsWeb.IssueAssigneeControllerTest do
       conn: conn
     } do
       conn =
-        delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/assignees", %{
+        delete(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/999999/assignees", %{
           assignees: ["octocat"]
         })
 

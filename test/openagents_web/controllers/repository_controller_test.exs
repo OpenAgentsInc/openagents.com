@@ -5,14 +5,14 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
   alias OpenAgents.Forge.{Repos, WAL}
   alias OpenAgents.Repositories
 
-  test "POST /api/v3/user/repos creates in the authenticated GitHub namespace", %{conn: conn} do
+  test "POST /api/v1/user/repos creates in the authenticated GitHub namespace", %{conn: conn} do
     user = github_user("repository-api-create", "octavia")
 
     response =
       conn
       |> authorize(user)
       |> put_req_header("idempotency-key", "repo-create-1")
-      |> post(~p"/api/v3/user/repos", %{
+      |> post(~p"/api/v1/user/repos", %{
         name: "My-Project",
         description: "An API-created repository",
         private: true,
@@ -43,20 +43,20 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     assert %{"code" => "invalid_idempotency_key"} =
              conn
              |> authorize(user)
-             |> post(~p"/api/v3/user/repos", %{name: "missing-key"})
+             |> post(~p"/api/v1/user/repos", %{name: "missing-key"})
              |> json_response(400)
 
     first =
       conn
       |> authorize(user)
       |> put_req_header("idempotency-key", "same-key")
-      |> post(~p"/api/v3/user/repos", %{name: "same-request"})
+      |> post(~p"/api/v1/user/repos", %{name: "same-request"})
 
     replayed =
       conn
       |> authorize(user)
       |> put_req_header("idempotency-key", "same-key")
-      |> post(~p"/api/v3/user/repos", %{name: "same-request"})
+      |> post(~p"/api/v1/user/repos", %{name: "same-request"})
 
     assert json_response(first, 202)["id"] == json_response(replayed, 202)["id"]
 
@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
              conn
              |> authorize(user)
              |> put_req_header("idempotency-key", "same-key")
-             |> post(~p"/api/v3/user/repos", %{name: "different-request"})
+             |> post(~p"/api/v1/user/repos", %{name: "different-request"})
              |> json_response(409)
   end
 
@@ -91,18 +91,18 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
 
     assert %{"id" => public_id, "permissions" => %{"pull" => true, "push" => false}} =
              conn
-             |> get(~p"/api/v3/repos/visible-owner/public-repo")
+             |> get(~p"/api/v1/repos/visible-owner/public-repo")
              |> json_response(200)
 
     assert public_id == public_repository.id
 
     assert conn
-           |> get(~p"/api/v3/repos/visible-owner/private-repo")
+           |> get(~p"/api/v1/repos/visible-owner/private-repo")
            |> json_response(404)
 
     assert conn
            |> authorize(viewer)
-           |> get(~p"/api/v3/repos/visible-owner/private-repo")
+           |> get(~p"/api/v1/repos/visible-owner/private-repo")
            |> json_response(404)
 
     {:ok, _membership} = Repositories.add_member(private_repository, viewer, "viewer")
@@ -110,13 +110,13 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     assert %{"id" => private_id, "permissions" => %{"pull" => true, "push" => false}} =
              conn
              |> authorize(viewer)
-             |> get(~p"/api/v3/repos/visible-owner/private-repo")
+             |> get(~p"/api/v1/repos/visible-owner/private-repo")
              |> json_response(200)
 
     assert private_id == private_repository.id
   end
 
-  test "GET /api/v3/user/repos returns a bounded visible list", %{conn: conn} do
+  test "GET /api/v1/user/repos returns a bounded visible list", %{conn: conn} do
     user = github_user("repository-api-list", "repo-list-owner")
 
     Enum.each(1..3, fn number ->
@@ -131,7 +131,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     first =
       conn
       |> authorize(user)
-      |> get(~p"/api/v3/user/repos?per_page=2")
+      |> get(~p"/api/v1/user/repos?per_page=2")
       |> json_response(200)
 
     assert length(first["repositories"]) == 2
@@ -140,7 +140,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     second =
       conn
       |> authorize(user)
-      |> get(~p"/api/v3/user/repos?per_page=2&after=#{first["next_cursor"]}")
+      |> get(~p"/api/v1/user/repos?per_page=2&after=#{first["next_cursor"]}")
       |> json_response(200)
 
     assert MapSet.disjoint?(
@@ -149,7 +149,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
            )
   end
 
-  test "GET /api/v3/user/repos filters by GitHub namespace", %{conn: conn} do
+  test "GET /api/v1/user/repos filters by GitHub namespace", %{conn: conn} do
     user = github_user("repository-api-list-namespace", "repo-list-filter")
 
     assert {:ok, _repository, :created} =
@@ -162,7 +162,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     response =
       conn
       |> authorize(user)
-      |> get(~p"/api/v3/user/repos?namespace=repo-list-filter&per_page=10")
+      |> get(~p"/api/v1/user/repos?namespace=repo-list-filter&per_page=10")
       |> json_response(200)
 
     assert Enum.map(response["repositories"], & &1["full_name"]) == [
@@ -172,7 +172,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     assert %{"repositories" => []} =
              conn
              |> authorize(user)
-             |> get(~p"/api/v3/user/repos?namespace=another-owner&per_page=10")
+             |> get(~p"/api/v1/user/repos?namespace=another-owner&per_page=10")
              |> json_response(200)
   end
 
@@ -191,18 +191,18 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     assert conn
            |> authorize(user)
            |> put_req_header("idempotency-key", "quota-first")
-           |> post(~p"/api/v3/user/repos", %{name: "first"})
+           |> post(~p"/api/v1/user/repos", %{name: "first"})
            |> json_response(202)
 
     assert %{"code" => "repository_quota_exceeded"} =
              conn
              |> authorize(user)
              |> put_req_header("idempotency-key", "quota-second")
-             |> post(~p"/api/v3/user/repos", %{name: "second"})
+             |> post(~p"/api/v1/user/repos", %{name: "second"})
              |> json_response(422)
   end
 
-  test "DELETE /api/v3/repos/:owner/:repo removes an owned repository and its storage", %{
+  test "DELETE /api/v1/repos/:owner/:repo removes an owned repository and its storage", %{
     conn: conn
   } do
     configure_repository_storage("repository-api-delete")
@@ -222,7 +222,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     response =
       conn
       |> authorize(owner)
-      |> delete("/api/v3/repos/delete-owner/delete-me")
+      |> delete("/api/v1/repos/delete-owner/delete-me")
 
     assert response.status == 204
     assert response.resp_body == ""
@@ -235,7 +235,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     refute File.exists?(bare_path)
   end
 
-  test "DELETE /api/v3/repos/:owner/:repo permits only repository owners", %{conn: conn} do
+  test "DELETE /api/v1/repos/:owner/:repo permits only repository owners", %{conn: conn} do
     owner = github_user("repository-api-delete-authorization-owner", "protected-owner")
     maintainer = github_user("repository-api-delete-authorization-maintainer")
 
@@ -252,7 +252,7 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
     assert %{"code" => "not_found"} =
              conn
              |> authorize(maintainer)
-             |> delete("/api/v3/repos/protected-owner/protected-repository")
+             |> delete("/api/v1/repos/protected-owner/protected-repository")
              |> json_response(404)
 
     assert Repositories.get_by_path!("protected-owner", "protected-repository").id ==

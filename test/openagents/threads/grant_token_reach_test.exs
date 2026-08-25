@@ -164,7 +164,7 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
 
     created =
       conn
-      |> post(~p"/api/v3/threads", %{"objective" => "Count the doors that hand out authority."})
+      |> post(~p"/api/v1/threads", %{"objective" => "Count the doors that hand out authority."})
       |> json_response(201)
 
     thread_id = created["thread"]["id"]

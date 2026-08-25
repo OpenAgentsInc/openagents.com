@@ -78,7 +78,7 @@ defmodule OpenAgentsWeb.ContributionContractTest do
     end
 
     test "the API description points at the contract with a matching digest", %{conn: conn} do
-      contribution = conn |> get(~p"/api/v3") |> json_response(200) |> Map.fetch!("contribution")
+      contribution = conn |> get(~p"/api/v1") |> json_response(200) |> Map.fetch!("contribution")
       document = document(conn)
 
       assert contribution["contract"] == document["contract"]
@@ -129,7 +129,7 @@ defmodule OpenAgentsWeb.ContributionContractTest do
     end
 
     test "every published API request states what the API authority says", %{conn: conn} do
-      api = Enum.filter(requests(document(conn)), &String.starts_with?(&1["path"], "/api/v3"))
+      api = Enum.filter(requests(document(conn)), &String.starts_with?(&1["path"], "/api/v1"))
 
       assert api != []
 
@@ -153,13 +153,13 @@ defmodule OpenAgentsWeb.ContributionContractTest do
     end
 
     # One authority per surface, so the document cannot hold two answers for
-    # the same route. `POST /api/v3/agents/register` is the case that proves it
+    # the same route. `POST /api/v1/agents/register` is the case that proves it
     # matters: the API inventory calls it anonymous, because that is what the
-    # pipeline does, and the site-wide inventory's catch-all for `/api/v3`
+    # pipeline does, and the site-wide inventory's catch-all for `/api/v1`
     # writes would have called it a bearer route.
     test "no API request is described by the site-wide authority", %{conn: conn} do
       for request <- requests(document(conn)) do
-        if String.starts_with?(request["path"], "/api/v3") do
+        if String.starts_with?(request["path"], "/api/v1") do
           assert request["access"]["source"] == "api"
           refute Map.has_key?(request["access"], "class")
         else
@@ -427,7 +427,7 @@ defmodule OpenAgentsWeb.ContributionContractTest do
       assert queue["note"] =~ "agent-ready"
 
       response =
-        get(build_conn(), "/api/v3/repos/OpenAgentsInc/openagents.com/issues?labels=agent-ready")
+        get(build_conn(), "/api/v1/repos/OpenAgentsInc/openagents.com/issues?labels=agent-ready")
 
       assert json_response(response, 200)["issues"] == []
     end

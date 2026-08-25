@@ -5,13 +5,13 @@ defmodule OpenAgentsWeb.ApiRouteAuthorityTest do
 
   @endpoint OpenAgentsWeb.Endpoint
 
-  # Every live /api/v3 route must be classified exactly once. A route added to
+  # Every live /api/v1 route must be classified exactly once. A route added to
   # the router without an entry in ApiRouteAuthority fails here, so a new
   # surface cannot inherit authority from a broad pipeline default.
-  test "the inventory covers every api v3 route and nothing else" do
+  test "the inventory covers every api v1 route and nothing else" do
     live =
       OpenAgentsWeb.Router.__routes__()
-      |> Enum.filter(&String.starts_with?(&1.path, "/api/v3"))
+      |> Enum.filter(&String.starts_with?(&1.path, "/api/v1"))
       |> Enum.map(&{Atom.to_string(&1.verb), &1.path})
       |> MapSet.new()
 

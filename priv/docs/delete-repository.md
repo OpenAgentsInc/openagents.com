@@ -40,7 +40,7 @@ Send an API token with the `forge:write` scope:
 ```sh
 curl --request DELETE \
   --header "Authorization: Bearer $OPENAGENTS_TOKEN" \
-  https://openagents.com/api/v3/repos/OWNER/REPOSITORY
+  https://openagents.com/api/v1/repos/OWNER/REPOSITORY
 ```
 
 Success returns `204 No Content`. OpenAgents returns `404 Not Found` when the

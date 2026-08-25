@@ -16,12 +16,12 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
 
   defp signed_in(conn, user), do: Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
-  describe "POST /api/v3/threads" do
+  describe "POST /api/v1/threads" do
     test "a thread opens owner-only when the caller names no tier", %{conn: conn} do
       thread =
         conn
         |> put_chat_api_token("visibility-default")
-        |> post(~p"/api/v3/threads", %{"objective" => "Keep it to myself."})
+        |> post(~p"/api/v1/threads", %{"objective" => "Keep it to myself."})
         |> json_response(201)
         |> Map.fetch!("thread")
 
@@ -32,7 +32,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
       thread =
         conn
         |> put_chat_api_token("visibility-explicit")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Share the transcript.",
           "visibility" => "ledger"
         })
@@ -47,7 +47,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
       body =
         conn
         |> put_chat_api_token("visibility-unknown")
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Widen me.",
           "visibility" => "public"
         })
@@ -64,7 +64,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
         body =
           conn
           |> put_chat_api_token("visibility-unenforceable-" <> tier)
-          |> post(~p"/api/v3/threads", %{"objective" => "Widen me.", "visibility" => tier})
+          |> post(~p"/api/v1/threads", %{"objective" => "Widen me.", "visibility" => tier})
           |> assert_api_error(422, nil)
 
         assert body["code"] == "thread_visibility_unsupported"
@@ -75,7 +75,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
       body =
         conn
         |> put_chat_api_token("visibility-nonstring")
-        |> post(~p"/api/v3/threads", %{"objective" => "Widen me.", "visibility" => 3})
+        |> post(~p"/api/v1/threads", %{"objective" => "Widen me.", "visibility" => 3})
         |> assert_api_error(422, nil)
 
       assert body["code"] == "validation_failed"
@@ -83,7 +83,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
     end
   end
 
-  describe "GET /api/v3/threads/{thread_id}" do
+  describe "GET /api/v1/threads/{thread_id}" do
     test "a reader admitted by the tier reads the thread without the owner's grant", %{conn: conn} do
       {:ok, thread} =
         Threads.open(github_user("api-wide-owner"), "Shared work", visibility: "ledger")
@@ -91,7 +91,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
       body =
         conn
         |> put_chat_api_token("api-wide-reader")
-        |> get(~p"/api/v3/threads/#{thread.id}")
+        |> get(~p"/api/v1/threads/#{thread.id}")
         |> json_response(200)
 
       assert body["thread"]["id"] == thread.id
@@ -106,14 +106,14 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
 
       thread =
         conn
-        |> post(~p"/api/v3/threads", %{
+        |> post(~p"/api/v1/threads", %{
           "objective" => "Shared work.",
           "visibility" => "ledger"
         })
         |> json_response(201)
         |> Map.fetch!("thread")
 
-      body = conn |> get(~p"/api/v3/threads/#{thread["id"]}") |> json_response(200)
+      body = conn |> get(~p"/api/v1/threads/#{thread["id"]}") |> json_response(200)
 
       assert body["grant"]["status"] == "active"
     end
@@ -123,7 +123,7 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
 
       assert conn
              |> put_chat_api_token("api-dark-stranger")
-             |> get(~p"/api/v3/threads/#{thread.id}")
+             |> get(~p"/api/v1/threads/#{thread.id}")
              |> api_error_code(404) == "not_found"
     end
 
@@ -135,10 +135,10 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
 
       reader = put_chat_api_token(conn, "api-events-reader")
 
-      body = reader |> get(~p"/api/v3/threads/#{wide.id}/events") |> json_response(200)
+      body = reader |> get(~p"/api/v1/threads/#{wide.id}/events") |> json_response(200)
       assert Enum.any?(body["events"], &(&1["event_type"] == "tool.ran"))
 
-      assert reader |> get(~p"/api/v3/threads/#{dark.id}/events") |> api_error_code(404) ==
+      assert reader |> get(~p"/api/v1/threads/#{dark.id}/events") |> api_error_code(404) ==
                "not_found"
     end
 
@@ -151,17 +151,17 @@ defmodule OpenAgentsWeb.ThreadVisibilityTest do
       reader = put_chat_api_token(conn, "api-fence-reader")
 
       assert reader
-             |> post(~p"/api/v3/threads/#{thread.id}/events", %{
+             |> post(~p"/api/v1/threads/#{thread.id}/events", %{
                "event_type" => "turn.user",
                "payload" => %{"text" => "not yours"}
              })
              |> api_error_code(404) == "not_found"
 
       assert reader
-             |> post(~p"/api/v3/threads/#{thread.id}/grants", %{})
+             |> post(~p"/api/v1/threads/#{thread.id}/grants", %{})
              |> api_error_code(404) == "not_found"
 
-      assert reader |> delete(~p"/api/v3/threads/#{thread.id}") |> api_error_code(404) ==
+      assert reader |> delete(~p"/api/v1/threads/#{thread.id}") |> api_error_code(404) ==
                "not_found"
 
       assert Threads.get_for_user(github_user("api-fence-owner"), thread.id).status == "open"

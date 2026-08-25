@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
     :ok
   end
 
-  test "POST /api/v3/user/repos/imports accepts one frozen GitHub snapshot", %{conn: conn} do
+  test "POST /api/v1/user/repos/imports accepts one frozen GitHub snapshot", %{conn: conn} do
     user = github_user("repository-import-api", "octavia")
     assert {:ok, user} = Accounts.store_github_token(user, "gho_import_fixture")
     main_sha = String.duplicate("a", 40)
@@ -29,7 +29,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
       conn
       |> authorize(user)
       |> put_req_header("idempotency-key", "import-key-1")
-      |> post(~p"/api/v3/user/repos/imports", %{
+      |> post(~p"/api/v1/user/repos/imports", %{
         source: %{provider: "github", repository: "octavia/source-project"},
         name: "copied-project",
         private: true
@@ -60,7 +60,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
     status =
       conn
       |> authorize(user)
-      |> get(~p"/api/v3/repository-imports/#{import_id}")
+      |> get(~p"/api/v1/repository-imports/#{import_id}")
 
     assert json_response(status, 200)["import"]["id"] == import_id
 
@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
     assert conn
            |> authorize(other_user)
-           |> get(~p"/api/v3/repository-imports/#{import_id}")
+           |> get(~p"/api/v1/repository-imports/#{import_id}")
            |> json_response(404)
   end
 
@@ -83,7 +83,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
       conn
       |> authorize(user)
       |> put_req_header("idempotency-key", "public-import-key")
-      |> post(~p"/api/v3/user/repos/imports", %{
+      |> post(~p"/api/v1/user/repos/imports", %{
         source: %{provider: "github", repository: "octavia/source-project"}
       })
 
@@ -115,7 +115,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
       conn
       |> authorize(user)
       |> put_req_header("idempotency-key", "org-create-key")
-      |> post(~p"/api/v3/orgs/acme/repos", %{name: "org-project", private: false})
+      |> post(~p"/api/v1/orgs/acme/repos", %{name: "org-project", private: false})
 
     assert %{
              "full_name" => "acme/org-project",
@@ -137,7 +137,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
         conn
         |> authorize(user)
         |> put_req_header("idempotency-key", "foreign-import-key")
-        |> post(~p"/api/v3/user/repos/imports", %{
+        |> post(~p"/api/v1/user/repos/imports", %{
           source: %{provider: "github", repository: "tobi/walgit"}
         })
 
@@ -165,7 +165,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
         conn
         |> authorize(user)
         |> put_req_header("idempotency-key", "mirror-key")
-        |> post(~p"/api/v3/user/repos/imports", %{
+        |> post(~p"/api/v1/user/repos/imports", %{
           source: %{provider: "github", repository: "tobi/walgit"},
           mirror: true
         })
@@ -199,7 +199,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
         conn
         |> authorize(user)
         |> put_req_header("idempotency-key", "unlicensed-mirror-key")
-        |> post(~p"/api/v3/user/repos/imports", %{
+        |> post(~p"/api/v1/user/repos/imports", %{
           source: %{provider: "github", repository: "tobi/walgit"},
           mirror: true
         })
@@ -217,7 +217,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
         conn
         |> authorize(user)
         |> put_req_header("idempotency-key", "private-mirror-key")
-        |> post(~p"/api/v3/user/repos/imports", %{
+        |> post(~p"/api/v1/user/repos/imports", %{
           source: %{provider: "github", repository: "tobi/walgit"},
           mirror: true
         })
@@ -232,7 +232,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
         conn
         |> authorize(user)
         |> put_req_header("idempotency-key", "owned-projection-key")
-        |> post(~p"/api/v3/user/repos", %{name: "mine", private: false})
+        |> post(~p"/api/v1/user/repos", %{name: "mine", private: false})
 
       assert %{"mirror" => false, "upstream" => nil} = json_response(response, 202)
     end

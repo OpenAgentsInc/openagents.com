@@ -219,7 +219,7 @@ the scope by name:
 curl --request POST \
   --header "Content-Type: application/json" \
   --data '{"scope": "deployments:promote"}' \
-  https://openagents.com/api/v3/device/authorizations
+  https://openagents.com/api/v1/device/authorizations
 ```
 
 Open `/device` in a signed-in operator browser, confirm the code, and read the
@@ -229,7 +229,7 @@ requested scope shown on the approval page. Then exchange the device code:
 curl --request POST \
   --header "Content-Type: application/json" \
   --data '{"device_code": "'"$DEVICE_CODE"'"}' \
-  https://openagents.com/api/v3/device/authorizations/token
+  https://openagents.com/api/v1/device/authorizations/token
 ```
 
 Approval is refused unless the approving account is a current operator. A
@@ -249,7 +249,7 @@ curl --request POST \
     "idempotency_key": "release-2026-08-23-0001",
     "expected_current_target_id": "'"$CURRENT_TARGET_ID"'"
   }' \
-  https://openagents.com/api/v3/admin/forge/targets
+  https://openagents.com/api/v1/admin/forge/targets
 ```
 
 The response is `202 Accepted` with the immutable target ID, the exact SHA,
@@ -262,7 +262,7 @@ openagents api admin/forge/targets/$TARGET_ID
 openagents api admin/forge/targets
 ```
 
-Refusals carry the shared `/api/v3` error envelope. Three codes matter during
+Refusals carry the shared `/api/v1` error envelope. Three codes matter during
 an incident:
 
 - `idempotency_conflict` (409) — that key already names different bytes. Pick a

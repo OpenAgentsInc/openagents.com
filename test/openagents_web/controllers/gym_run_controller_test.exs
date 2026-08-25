@@ -37,7 +37,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
 
     created =
       authenticated
-      |> post(~p"/api/v3/gym/runs", payload())
+      |> post(~p"/api/v1/gym/runs", payload())
       |> json_response(201)
 
     assert created["run"]["score"] == 0.7
@@ -45,7 +45,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
 
     replayed =
       authenticated
-      |> post(~p"/api/v3/gym/runs", payload(%{"tasks_passed" => 1}))
+      |> post(~p"/api/v1/gym/runs", payload(%{"tasks_passed" => 1}))
       |> json_response(200)
 
     assert replayed["replayed"] == true
@@ -57,7 +57,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
     refused =
       conn
       |> put_forge_api_token("gym-ordinary")
-      |> post(~p"/api/v3/gym/runs", payload())
+      |> post(~p"/api/v1/gym/runs", payload())
       |> json_response(403)
 
     assert refused["code"] == "not_operator"
@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
     refused =
       conn
       |> operator_token("gym-invalid")
-      |> post(~p"/api/v3/gym/runs", payload(%{"tasks_passed" => 99}))
+      |> post(~p"/api/v1/gym/runs", payload(%{"tasks_passed" => 99}))
       |> json_response(422)
 
     assert refused["errors"]["tasks_passed"]
@@ -78,14 +78,14 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
     authenticated = operator_token(conn, "gym-lister")
 
     _created =
-      authenticated |> post(~p"/api/v3/gym/runs", payload()) |> json_response(201)
+      authenticated |> post(~p"/api/v1/gym/runs", payload()) |> json_response(201)
 
-    listed = authenticated |> get(~p"/api/v3/gym/runs") |> json_response(200)
+    listed = authenticated |> get(~p"/api/v1/gym/runs") |> json_response(200)
     assert [%{"suite" => "terminal-bench@2.0"}] = listed["runs"]
 
     filtered =
       authenticated
-      |> get(~p"/api/v3/gym/runs?suite=swebench@lite")
+      |> get(~p"/api/v1/gym/runs?suite=swebench@lite")
       |> json_response(200)
 
     assert filtered["runs"] == []
@@ -93,7 +93,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
     refused =
       conn
       |> put_forge_api_token("gym-list-ordinary")
-      |> get(~p"/api/v3/gym/runs")
+      |> get(~p"/api/v1/gym/runs")
       |> json_response(403)
 
     assert refused["code"] == "not_operator"

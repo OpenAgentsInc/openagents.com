@@ -79,7 +79,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{"trunk_ref": "main", "pull_requests": [117, 118, 119]}' \
-  https://openagents.com/api/v3/repos/acme/api/stacks
+  https://openagents.com/api/v1/repos/acme/api/stacks
 ```
 
 The order in `pull_requests` runs bottom-first. Creation validates the whole

@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ApiError do
   @moduledoc """
-  One error envelope for the issue-family `/api/v3` routes.
+  One error envelope for the issue-family `/api/v1` routes.
 
   Before this module a caller met six incompatible bodies for the same class of
   failure: `message` for a missing resource, `errors` for a rejected field,
@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.ApiError do
       to branch. This is what gives a CLI distinct exit results.
     * `status` — the HTTP status, repeated in the body so a logged envelope is
       self-describing.
-    * `documentation_url` — the published contract at `GET /api/v3`, which
+    * `documentation_url` — the published contract at `GET /api/v1`, which
       enumerates every code and the routes that use this envelope.
     * `request_id` — the endpoint's `x-request-id`, so a report names one
       request.
@@ -103,7 +103,7 @@ defmodule OpenAgentsWeb.ApiError do
   @doc """
   Every stable error code and the one status it maps to.
 
-  `OpenAgentsWeb.ApiExtensionController` publishes this table at `GET /api/v3`,
+  `OpenAgentsWeb.ApiExtensionController` publishes this table at `GET /api/v1`,
   so a client reads the codes it must handle rather than collecting them from
   runtime examples.
   """
@@ -226,7 +226,7 @@ defmodule OpenAgentsWeb.ApiError do
   end
 
   defp documentation_url do
-    OpenAgentsWeb.Endpoint.url() |> String.trim_trailing("/") |> Kernel.<>("/api/v3")
+    OpenAgentsWeb.Endpoint.url() |> String.trim_trailing("/") |> Kernel.<>("/api/v1")
   end
 
   defp translate({message, options}) do

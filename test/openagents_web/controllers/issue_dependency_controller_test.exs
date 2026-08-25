@@ -70,7 +70,7 @@ defmodule OpenAgentsWeb.IssueDependencyControllerTest do
       conn =
         post(
           conn,
-          "/api/v3/repos/OpenAgentsInc/openagents.com/issues/999999/dependencies",
+          "/api/v1/repos/OpenAgentsInc/openagents.com/issues/999999/dependencies",
           %{blocked_by: []}
         )
 
@@ -127,7 +127,7 @@ defmodule OpenAgentsWeb.IssueDependencyControllerTest do
       {:ok, issue} = Issues.create_issue(private_repository, %{title: "Private"})
 
       path =
-        "/api/v3/repos/#{private_repository.owner}/#{private_repository.name}" <>
+        "/api/v1/repos/#{private_repository.owner}/#{private_repository.name}" <>
           "/issues/#{issue.number}/dependencies"
 
       assert get(build_conn(), path) |> json_response(404)
@@ -144,7 +144,7 @@ defmodule OpenAgentsWeb.IssueDependencyControllerTest do
       conn = put_forge_api_token(build_conn(), "dependency-nonmember")
 
       path =
-        "/api/v3/repos/#{other_repository.owner}/#{other_repository.name}" <>
+        "/api/v1/repos/#{other_repository.owner}/#{other_repository.name}" <>
           "/issues/#{blocked.number}/dependencies"
 
       assert post(conn, path, %{blocked_by: [blocker.number]}) |> json_response(404)
@@ -163,7 +163,7 @@ defmodule OpenAgentsWeb.IssueDependencyControllerTest do
   end
 
   defp dependencies_path(issue) do
-    "/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/dependencies"
+    "/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/dependencies"
   end
 
   defp repository do

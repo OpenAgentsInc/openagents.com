@@ -11,27 +11,27 @@ defmodule OpenAgentsWeb.CommentControllerTest do
     %{issue: issue}
   end
 
-  test "GET /api/v3/repos/:owner/:repo/issues/:issue_number/comments lists comments", %{
+  test "GET /api/v1/repos/:owner/:repo/issues/:issue_number/comments lists comments", %{
     conn: conn,
     issue: issue
   } do
     Issues.create_comment(%{issue_id: issue.id, body: "First comment"})
 
     conn =
-      get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments")
+      get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments")
 
     assert %{"comments" => [comment]} = json_response(conn, 200)
     assert comment["body"] == "First comment"
   end
 
-  test "POST /api/v3/repos/:owner/:repo/issues/:issue_number/comments creates a comment", %{
+  test "POST /api/v1/repos/:owner/:repo/issues/:issue_number/comments creates a comment", %{
     conn: conn,
     issue: issue
   } do
     conn =
       post(
         conn,
-        ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments",
+        ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments",
         %{
           body: "New comment"
         }
@@ -55,7 +55,7 @@ defmodule OpenAgentsWeb.CommentControllerTest do
       conn
       |> put_req_header("authorization", "Bearer #{credential}")
       |> post(
-        ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments",
+        ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/#{issue.number}/comments",
         %{body: "Agent comment"}
       )
 
@@ -63,40 +63,40 @@ defmodule OpenAgentsWeb.CommentControllerTest do
              json_response(conn, 201)
   end
 
-  test "GET /api/v3/repos/:owner/:repo/issues/comments/:id returns a comment", %{
+  test "GET /api/v1/repos/:owner/:repo/issues/comments/:id returns a comment", %{
     conn: conn,
     issue: issue
   } do
     {:ok, comment} = Issues.create_comment(%{issue_id: issue.id, body: "Show me"})
 
     conn =
-      get(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
+      get(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
 
     assert %{"body" => "Show me"} = json_response(conn, 200)
   end
 
-  test "PATCH /api/v3/repos/:owner/:repo/issues/comments/:id updates a comment", %{
+  test "PATCH /api/v1/repos/:owner/:repo/issues/comments/:id updates a comment", %{
     conn: conn,
     issue: issue
   } do
     {:ok, comment} = Issues.create_comment(%{issue_id: issue.id, body: "Before"})
 
     conn =
-      patch(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}", %{
+      patch(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}", %{
         body: "After"
       })
 
     assert %{"body" => "After"} = json_response(conn, 200)
   end
 
-  test "DELETE /api/v3/repos/:owner/:repo/issues/comments/:id removes a comment", %{
+  test "DELETE /api/v1/repos/:owner/:repo/issues/comments/:id removes a comment", %{
     conn: conn,
     issue: issue
   } do
     {:ok, comment} = Issues.create_comment(%{issue_id: issue.id, body: "Delete me"})
 
     conn =
-      delete(conn, ~p"/api/v3/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
+      delete(conn, ~p"/api/v1/repos/OpenAgentsInc/openagents.com/issues/comments/#{comment.id}")
 
     assert response(conn, 204)
   end

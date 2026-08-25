@@ -12,7 +12,7 @@ All of them require write access to the repository.
 When the trunk moves, or a lower layer is rewritten, the layers above it go
 stale. Click **Rebase the stack** on any stacked pull request page — it also
 appears in the stale-boundary notice — or call `POST
-/api/v3/repos/:owner/:repo/stacks/:stack_number/rebase`.
+/api/v1/repos/:owner/:repo/stacks/:stack_number/rebase`.
 
 The rebase works bottom-to-top on the server:
 
@@ -50,7 +50,7 @@ branches that have since moved is refused rather than applied.
 **Remove from stack** appears on the stack's top layer only. It detaches that
 pull request from the stack — the pull request itself stays open and stops
 being a layer. The equivalent API is `POST
-/api/v3/repos/:owner/:repo/stacks/:stack_number/unstack` with
+/api/v1/repos/:owner/:repo/stacks/:stack_number/unstack` with
 `{"pull_request": <number>}`.
 
 Only the top layer can leave, because removing a middle layer would orphan
@@ -59,13 +59,13 @@ down to it, or dissolve the stack.
 
 ## Grow the stack
 
-`POST /api/v3/repos/:owner/:repo/stacks/:stack_number/append` adds one open
+`POST /api/v1/repos/:owner/:repo/stacks/:stack_number/append` adds one open
 pull request on top. Its base branch must be the current top layer's head
 branch.
 
 ## Dissolve the stack
 
-`POST /api/v3/repos/:owner/:repo/stacks/:stack_number/dissolve` closes the
+`POST /api/v1/repos/:owner/:repo/stacks/:stack_number/dissolve` closes the
 stack as an object while leaving every pull request open and every branch
 where it is. Use it when the layers should continue as independent pull
 requests.

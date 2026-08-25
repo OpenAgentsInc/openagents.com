@@ -240,7 +240,7 @@ defmodule OpenAgentsWeb.BoxControllerTest do
       conn
       |> put_req_header("authorization", "Bearer " <> credential)
       |> post(
-        "/api/v3/conversations/#{conversation.id}/boxes/#{box.box_id}/assignments",
+        "/api/v1/conversations/#{conversation.id}/boxes/#{box.box_id}/assignments",
         %{
           "repository_id" => repository.id,
           "issue_number" => issue.number,
@@ -485,7 +485,7 @@ defmodule OpenAgentsWeb.BoxControllerTest do
     assert Task.await(second) == {:error, :rate_limited}
   end
 
-  defp box_path(conversation_id), do: "/api/v3/conversations/#{conversation_id}/boxes"
+  defp box_path(conversation_id), do: "/api/v1/conversations/#{conversation_id}/boxes"
 
   defp box_body(overrides \\ %{}) do
     %{

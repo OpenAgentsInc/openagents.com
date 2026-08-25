@@ -1,6 +1,6 @@
 # Stacks API
 
-The stack surface lives under `/api/v3` beside the rest of the
+The stack surface lives under `/api/v1` beside the rest of the
 [REST API](/docs/rest-api). Reads are public on a public repository; writes
 require an `oa_pat_` bearer token with `forge:write` scope and an
 `Idempotency-Key` header.
@@ -8,26 +8,26 @@ require an `oa_pat_` bearer token with `forge:write` scope and an
 ## Routes
 
 ```text
-GET  /api/v3/repos/:owner/:repo/pulls
-GET  /api/v3/repos/:owner/:repo/pulls/:pull_number
-POST /api/v3/repos/:owner/:repo/pulls
-PATCH /api/v3/repos/:owner/:repo/pulls/:pull_number
+GET  /api/v1/repos/:owner/:repo/pulls
+GET  /api/v1/repos/:owner/:repo/pulls/:pull_number
+POST /api/v1/repos/:owner/:repo/pulls
+PATCH /api/v1/repos/:owner/:repo/pulls/:pull_number
 
-GET  /api/v3/repos/:owner/:repo/stacks
-GET  /api/v3/repos/:owner/:repo/stacks/:stack_number
-POST /api/v3/repos/:owner/:repo/stacks
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/append
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/rebase
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/merge
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/unstack
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/dissolve
+GET  /api/v1/repos/:owner/:repo/stacks
+GET  /api/v1/repos/:owner/:repo/stacks/:stack_number
+POST /api/v1/repos/:owner/:repo/stacks
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/append
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/rebase
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/merge
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/unstack
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/dissolve
 
-GET  /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue
-POST /api/v3/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/abort
+GET  /api/v1/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/continue
+POST /api/v1/repos/:owner/:repo/stacks/:stack_number/operations/:operation_id/abort
 
-PUT  /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async
-GET  /api/v3/repos/:owner/:repo/pulls/:pull_number/merge-async/:operation_id
+PUT  /api/v1/repos/:owner/:repo/pulls/:pull_number/merge-async
+GET  /api/v1/repos/:owner/:repo/pulls/:pull_number/merge-async/:operation_id
 ```
 
 ## The stack payload
@@ -39,7 +39,7 @@ A stack read returns the stack's `number`, `trunk_ref`, `state`, `health`,
 exact commits the stack has observed.
 
 ```sh
-curl https://openagents.com/api/v3/repos/acme/api/stacks/1
+curl https://openagents.com/api/v1/repos/acme/api/stacks/1
 ```
 
 ## Idempotency
@@ -73,7 +73,7 @@ while one is active returns `409 Conflict` carrying the active
 Create three chained pull requests, stack them, and merge the bottom two:
 
 ```sh
-repo=https://openagents.com/api/v3/repos/acme/api
+repo=https://openagents.com/api/v1/repos/acme/api
 auth="Authorization: Bearer $OPENAGENTS_TOKEN"
 
 # One pull request per layer: base of each is the head of the one below.

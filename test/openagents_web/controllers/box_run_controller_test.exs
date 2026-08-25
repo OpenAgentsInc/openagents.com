@@ -69,7 +69,7 @@ defmodule OpenAgentsWeb.BoxRunControllerTest do
     response =
       conn
       |> put_box_api_token("box-run-controller")
-      |> get("/api/v3/conversations/#{conversation.id}/boxes/#{box.box_id}/runs/#{run.id}")
+      |> get("/api/v1/conversations/#{conversation.id}/boxes/#{box.box_id}/runs/#{run.id}")
       |> json_response(200)
 
     assert response["run"]["id"] == run.id
@@ -80,7 +80,7 @@ defmodule OpenAgentsWeb.BoxRunControllerTest do
       conn
       |> put_box_api_token("box-run-controller")
       |> get(
-        "/api/v3/conversations/#{conversation.id}/boxes/#{box.box_id}/runs/#{run.id}/output?offset=2"
+        "/api/v1/conversations/#{conversation.id}/boxes/#{box.box_id}/runs/#{run.id}/output?offset=2"
       )
       |> json_response(200)
 
@@ -96,7 +96,7 @@ defmodule OpenAgentsWeb.BoxRunControllerTest do
     {:ok, foreign} = Conversations.ensure_conversation(github_user("box-run-foreign"))
 
     path =
-      "/api/v3/conversations/#{foreign.id}/boxes/bx_foreign/runs/missing/output?offset=0"
+      "/api/v1/conversations/#{foreign.id}/boxes/bx_foreign/runs/missing/output?offset=0"
 
     response =
       conn
@@ -134,7 +134,7 @@ defmodule OpenAgentsWeb.BoxRunControllerTest do
       Req.Test.json(request, %{"stdout" => "4242\n"})
     end)
 
-    path = "/api/v3/conversations/#{conversation.id}/boxes/#{box.box_id}/runs"
+    path = "/api/v1/conversations/#{conversation.id}/boxes/#{box.box_id}/runs"
 
     first =
       conn

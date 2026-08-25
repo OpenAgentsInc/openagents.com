@@ -3,7 +3,7 @@ defmodule OpenAgents.Chat.BackendsTest do
   The rules that keep one backend list from becoming three.
 
   Every surface that offers a backend — the turn runtime, the chat API's
-  refusal, and the published contract at `GET /api/v3` — reads this module. A
+  refusal, and the published contract at `GET /api/v1` — reads this module. A
   test that pins the list itself would only restate it, so these pin the
   properties a surface depends on instead.
   """

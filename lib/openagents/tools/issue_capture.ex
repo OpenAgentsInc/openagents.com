@@ -3,7 +3,7 @@ defmodule OpenAgents.Tools.IssueCapture do
   Files one unmet request from a conversation as a scoped forge issue.
 
   The behavior lives in `OpenAgents.Issues.Capture`, which
-  `POST /api/v3/repos/:owner/:repo/issues/capture` also calls, so the tool and
+  `POST /api/v1/repos/:owner/:repo/issues/capture` also calls, so the tool and
   the API operation cannot drift apart.
 
   ## Why this one is `:external_effect`

@@ -264,6 +264,29 @@ defmodule OpenAgentsWeb.IssueIndexLiveTest do
     refute has_element?(view, ~s{#issues-#{queued.id} .issue-status[data-category="started"]})
   end
 
+  # The workflow that produces almost all the movement here never opens a
+  # board: an agent picks an issue up, works it, pushes, and closes it. The row
+  # has to say so anyway (issue #254).
+  test "a session working an issue renders the started arc with no board", %{conn: conn} do
+    {:ok, started} = Issues.create_issue(repository(), %{"title" => "Being worked"})
+    {:ok, queued} = Issues.create_issue(repository(), %{"title" => "Nobody has touched this"})
+
+    # The reader is the account the setup logged in: the owner running the
+    # session is the one looking at the list.
+    {:ok, _thread} =
+      OpenAgents.Threads.open(github_user("issue-index"), "Work it", issue_id: started.id)
+
+    {:ok, view, _html} = live(conn, ~p"/OpenAgentsInc/openagents.com/issues")
+
+    assert has_element?(
+             view,
+             ~s{#issues-#{started.id} .issue-status[data-category="started"] .issue-status__arc}
+           )
+
+    assert has_element?(view, ~s{#issues-#{queued.id} .issue-status[data-category="open"]})
+    refute has_element?(view, ~s{#issues-#{queued.id} .issue-status[data-category="started"]})
+  end
+
   defp repository do
     OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

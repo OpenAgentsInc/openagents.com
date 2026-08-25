@@ -16,6 +16,8 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Accounts.User
   alias OpenAgents.Agents.Agent
   alias OpenAgents.Analytics
+  alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.Forge.Assignment
   alias OpenAgents.Issues.{Comment, Issue, IssueDependency, TaskReferences, UnknownReference}
   alias OpenAgents.Labels
   alias OpenAgents.Labels.Label
@@ -26,6 +28,9 @@ defmodule OpenAgents.Issues do
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
+  alias OpenAgents.Threads
+  alias OpenAgents.Threads.Thread
+  alias OpenAgents.Transparency.ArtifactLink
 
   @issues_per_page 25
   @maximum_page 10_000
@@ -45,6 +50,15 @@ defmodule OpenAgents.Issues do
     "started"
   ]
 
+  # The attempt states that hold an issue's claim. `forge_assignments` carries a
+  # partial unique index over exactly these two, so at most one attempt is
+  # working an issue at a time, and reaching a terminal state releases it.
+  @claiming_attempt_states ~w(admitted running)
+
+  # How long an open thread bound to an issue keeps reading as work in flight
+  # after its last recorded event. See the going-quiet rule in `progress_map/2`.
+  @thread_quiet_after_seconds 2 * 60 * 60
+
   @doc "How many issues one index page shows."
   def per_page, do: @issues_per_page
 
@@ -61,8 +75,8 @@ defmodule OpenAgents.Issues do
   Supported options: `:type`, `:state`, `:label`, `:assignee`, `:milestone`,
   `:q`, `:blocked`, `:progress`, `:reader`, and `:page`. Filters compose;
   counts and pages always agree because they read the same query. `:reader` is
-  the user whose readable boards `:progress` derives from, and only that option
-  reads it.
+  the user whose readable attempts, sessions, and boards `:progress` derives
+  from, and only that option reads it.
 
   `:type` defaults to `"issue"`, which excludes the issue rows pull requests
   are built on. Pass `"pull_request"` for only those, or `"all"` for GitHub's
@@ -277,6 +291,17 @@ defmodule OpenAgents.Issues do
 
   def get_issue_by_number!(%Repository{id: repository_id}, number) when is_integer(number),
     do: Repo.get_by!(Issue, repository_id: repository_id, number: number)
+
+  @doc """
+  The issue numbered `number` in `repository`, or `nil`.
+
+  The same lookup as `get_issue_by_number!/2` for a caller resolving a
+  reference somebody typed, where a number naming no issue is an ordinary
+  answer rather than an exception.
+  """
+  @spec get_issue_by_number(Repository.t(), integer()) :: Issue.t() | nil
+  def get_issue_by_number(%Repository{id: repository_id}, number) when is_integer(number),
+    do: Repo.get_by(Issue, repository_id: repository_id, number: number)
 
   def get_issue_by_path!(owner, repository_name, number) when is_integer(number) do
     # The repository is resolved through the one read predicate rather than a
@@ -503,18 +528,77 @@ defmodule OpenAgents.Issues do
   @doc """
   How far along each issue in `issues` is, keyed by issue id.
 
-  Progress is derived, never stored. An issue is `"done"` when it is closed,
-  because closing an issue is the act that finishes it. An open issue is
-  `"in_progress"` when a board `reader` can read places it in a started column,
-  and `"to_do"` otherwise — including when the only board saying otherwise is
-  one the reader cannot open, so a private board's column never becomes a fact
-  about a public issue.
+  Progress is derived, never stored. Nothing here reads a column somebody had
+  to remember to set: every input below is a record some other act already
+  wrote, which is why the value can be trusted without anybody maintaining it.
+
+  An issue is `"done"` when it is closed, because closing an issue is the act
+  that finishes it. An open issue is `"in_progress"` when any one of three
+  records the `reader` may read says work is under way on it, and `"to_do"`
+  otherwise.
+
+  ## The three ways work starts
+
+    * **An attempt holds the issue.** `forge_assignments` is the one record
+      binding an issue to work: `OpenAgents.Forge.Assignments.create/1` claims
+      the issue, and a partial unique index over the claiming states keeps that
+      claim singular. An attempt in `admitted` or `running` is work in flight.
+    * **A session is bound to the issue.** A coding session opens a thread, and
+      a thread whose objective named an issue in its own repository carries
+      that issue's id (`OpenAgents.Threads.open/3`). An open thread that has
+      recorded something recently is an agent working right now. This is the
+      input that matters most here, because it is the one the workflow that
+      produces almost all the movement actually writes.
+    * **A board says so.** A project board the reader can open places the issue
+      in a started column. This was the only input, and is now one of three,
+      because nothing in how work begins here touches a board (issue #254).
 
   A `Done` column on an open issue reads `"to_do"`: the board and the issue
   disagree, and the issue's own state is the one both the UI and the API
   already treat as authoritative.
 
-  One query serves a whole page, so rendering a list never walks the boards
+  ## The going-quiet rule
+
+  A claim that never lapses would say work is under way forever, so each input
+  says when it stops counting, and each says it from a clock that record
+  already keeps:
+
+    * An **attempt** counts while it holds the claim and its `deadline_at` has
+      not passed. `OpenAgents.Forge.AssignmentExpiry` reaps past-deadline
+      attempts every minute, and the deadline is read here too, so a reader
+      never sees a claim the reaper has not yet reached.
+    * A **thread** counts while it is open and something was recorded on it
+      within #{div(@thread_quiet_after_seconds, 3600)} hours. Every appended
+      event advances the thread's `updated_at`, so that column is the session's
+      heartbeat. A session records a turn and every tool it runs; silence that
+      long is not a slow step, it is a session nobody came back to. The thread
+      stays open — a thread holds its admission slot until it finishes or its
+      authority is spent, and waiting alone reaches neither — but it stops
+      claiming an issue.
+    * A **board column** has no clock and is given none. It is a statement
+      somebody made deliberately, and it stands until somebody moves it.
+
+  ## Visibility
+
+  Every input is read through the authority that record already answers to, so
+  a private claim never becomes a public fact about an issue:
+
+    * A **board item** is evidence only for a reader who could open the board it
+      sits on, through the one readable predicate every repository surface
+      composes.
+    * A **thread** is evidence only for a reader who may read it, through
+      `OpenAgents.Threads.readable_by/2` — its owner, or anybody when the
+      thread was opened at a tier wider than owner-only (THREAD-002).
+    * An **attempt** is evidence only when its transparency tier is not `dark`
+      and its artifact link is not revoked. That an attempt of some shape is
+      running is a `pulse` fact for any reader who reached the issue
+      (`OpenAgents.Transparency.WorkDisclosure`), and the two conditions here
+      are the two ways that projection resolves to `dark` instead.
+
+  Nothing about *who* is working reaches this value. It answers "is work under
+  way", never whose thread, whose board, or whose attempt.
+
+  One query serves a whole page, so rendering a list never walks these records
   once per row.
   """
   def progress_map(issues, reader \\ nil)
@@ -541,12 +625,58 @@ defmodule OpenAgents.Issues do
   defp started_issue_ids([], _reader), do: MapSet.new()
 
   defp started_issue_ids(ids, reader) do
-    reader
-    |> started_item_query()
-    |> where([item], item.issue_id in ^ids)
-    |> select([item], item.issue_id)
+    from(issue in Issue, as: :issue, where: issue.id in ^ids, select: issue.id)
+    |> where(^started_dynamic(reader))
     |> Repo.all()
     |> MapSet.new()
+  end
+
+  # The one place "work has started" is defined. Both the derived field and the
+  # `?progress=` filter compose this expression against a query that binds the
+  # issue as `:issue`, so the value the API serves and the rows the filter
+  # returns cannot disagree about the same issue.
+  defp started_dynamic(reader) do
+    dynamic(
+      exists(claiming_attempt_query()) or
+        exists(bound_thread_query(reader)) or
+        exists(started_item_query(reader))
+    )
+  end
+
+  # An attempt that holds the issue's claim and whose deadline has not passed,
+  # withheld when its own projection resolves to `dark`.
+  defp claiming_attempt_query do
+    now = DateTime.utc_now()
+
+    from(attempt in Assignment,
+      left_join: link in ArtifactLink,
+      on: link.id == attempt.artifact_link_id,
+      where: attempt.issue_id == parent_as(:issue).id,
+      where: attempt.state in ^@claiming_attempt_states,
+      where: attempt.deadline_at > ^now,
+      where: attempt.transparency_tier != "dark",
+      where: is_nil(attempt.artifact_link_id) or is_nil(link.revoked_at),
+      select: 1
+    )
+  end
+
+  # An open thread bound to the issue that has not gone quiet, narrowed to what
+  # the reader may read by the thread context's own predicate rather than a
+  # restatement of it.
+  defp bound_thread_query(reader) do
+    quiet_before = DateTime.add(DateTime.utc_now(), -@thread_quiet_after_seconds, :second)
+
+    from(thread in Thread,
+      as: :thread,
+      join: owner in Visitor,
+      as: :owner,
+      on: owner.id == thread.owner_visitor_id,
+      where: thread.issue_id == parent_as(:issue).id,
+      where: thread.status == "open",
+      where: thread.updated_at > ^quiet_before,
+      select: 1
+    )
+    |> Threads.readable_by(reader)
   end
 
   # A board item is only evidence for a reader who could open the board it sits
@@ -557,9 +687,11 @@ defmodule OpenAgents.Issues do
       from(repository in Repositories.readable_by(Repository, reader), select: repository.id)
 
     from(item in ProjectItem,
+      where: item.issue_id == parent_as(:issue).id,
       where: item.repository_id in subquery(readable),
       where:
-        fragment("lower(btrim(coalesce(? ->> 'Status', '')))", item.values) in ^@started_columns
+        fragment("lower(btrim(coalesce(? ->> 'Status', '')))", item.values) in ^@started_columns,
+      select: 1
     )
   end
 
@@ -1268,8 +1400,8 @@ defmodule OpenAgents.Issues do
 
   defp maybe_filter_progress(query, nil, _reader), do: query
 
-  # The filter reads the same closed-issue rule and the same started-column
-  # query the derived field does, so `?progress=` and `issue.openagents.progress`
+  # The filter reads the same closed-issue rule and the same started expression
+  # the derived field does, so `?progress=` and `issue.openagents.progress`
   # cannot disagree about the same issue.
   defp maybe_filter_progress(query, "done", _reader),
     do: where(query, [issue], issue.state == "closed")
@@ -1277,20 +1409,15 @@ defmodule OpenAgents.Issues do
   defp maybe_filter_progress(query, "in_progress", reader) do
     query
     |> where([issue], issue.state == "open")
-    |> where([], exists(started_exists_query(reader)))
+    |> where(^started_dynamic(reader))
   end
 
   defp maybe_filter_progress(query, "to_do", reader) do
+    started = started_dynamic(reader)
+
     query
     |> where([issue], issue.state == "open")
-    |> where([], not exists(started_exists_query(reader)))
-  end
-
-  defp started_exists_query(reader) do
-    reader
-    |> started_item_query()
-    |> where([item], item.issue_id == parent_as(:issue).id)
-    |> select([], 1)
+    |> where(^dynamic(not (^started)))
   end
 
   defp maybe_filter_search(query, nil), do: query

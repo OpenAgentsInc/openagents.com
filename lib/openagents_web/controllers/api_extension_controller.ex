@@ -304,8 +304,9 @@ defmodule OpenAgentsWeb.ApiExtensionController do
           "enum" => OpenAgents.Issues.progress_values(),
           "description" =>
             "How far along the issue is. Derived: a closed issue is done, and " <>
-              "an open issue is in_progress while a board the reader can open " <>
-              "places it in a started column."
+              "an open issue is in_progress while an attempt holds it, a " <>
+              "session the reader can read is bound to it, or a board the " <>
+              "reader can open places it in a started column."
         },
         "work" => %{
           "type" => "array",

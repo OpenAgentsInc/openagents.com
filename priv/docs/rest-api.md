@@ -161,14 +161,28 @@ Responses that carry an extension name the namespace in the
 derived, never stored:
 
 - A closed issue is `done`. Closing an issue is the act that finishes it.
-- An open issue is `in_progress` while a project board the reader can open
-  places it in a started column — `In Progress`, `In review`, or `Started`,
-  matched without regard to case or separators.
+- An open issue is `in_progress` while any one of three records says work is
+  under way on it:
+  - **An attempt holds it.** An execution attempt against the issue is
+    `admitted` or `running` and its deadline has not passed.
+  - **A session is bound to it.** A coding session the reader may read is open
+    on the issue and has recorded something in the last two hours. A session
+    binds itself: a thread whose objective names an issue in its own
+    repository carries that issue.
+  - **A board says so.** A project board the reader can open places the issue
+    in a started column — `In Progress`, `In review`, or `Started`, matched
+    without regard to case or separators.
 - Every other open issue is `to_do`, including one whose only board column is
   `Done`, because the issue is still open.
 
-Board visibility is the reader's own. A column on a board in a private
-repository the reader is not a member of never becomes a fact about the issue.
+Each input says when it stops counting, so a claim never reads as work
+forever: an attempt's deadline passes, a session goes quiet, or somebody moves
+the board column.
+
+Visibility is the reader's own for every input. A column on a board in a
+private repository the reader is not a member of, an owner-only session, and
+an attempt withheld at its own transparency tier all leave the issue reading
+`to_do`. Nothing here says *who* is working, only that work is under way.
 
 ```text
 GET /api/v1/repos/:owner/:repo/issues?progress=in_progress

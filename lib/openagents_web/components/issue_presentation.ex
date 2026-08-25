@@ -67,9 +67,10 @@ defmodule OpenAgentsWeb.Components.IssuePresentation do
   reason with a distinct reading, so it keeps the cancelled glyph; every other
   close is the purple check-circle.
 
-  The exception is `in_progress`. An open issue a board says someone has
-  started takes Circle's `:started` arc, which is the shape the component set
-  has always drawn and never had data for. The value is the same derived
+  The exception is `in_progress`. An open issue somebody has started takes
+  Circle's `:started` arc — an attempt holding the issue, a session bound to
+  it, or a board column saying so, whichever the reader may see
+  (`OpenAgents.Issues.progress_map/2`). The value is the same derived
   `issue.openagents.progress` the API serves, read through the same reader's
   visibility, so the list and the API cannot show different work as underway.
   A caller that has not read progress passes none and gets GitHub's two states.

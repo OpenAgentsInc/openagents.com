@@ -74,10 +74,14 @@ defmodule OpenAgents.Threads do
   alias OpenAgents.Chat.OpenRouter
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.Forge.CommitReferences
   alias OpenAgents.Inference
   alias OpenAgents.Inference.{Credit, Grant, Models, Pricing}
+  alias OpenAgents.Issues
   alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
+  alias OpenAgents.Repositories
+  alias OpenAgents.Repositories.Repository
   alias OpenAgents.Threads.Event
   alias OpenAgents.Threads.Thread
 
@@ -99,6 +103,14 @@ defmodule OpenAgents.Threads do
   slot held by an abandoned thread is released before the count is taken, and
   an account already at `maximum_open_per_account/0` is refused with
   `:thread_quota_reached` rather than given a further grant.
+
+  `:issue_id` binds the thread to the issue it is work for. A caller that names
+  none gets one derived: when `:repository` is given and the objective names an
+  issue in that repository the opener can read, the thread carries that issue's
+  id. An agent is launched with a prompt that names the issue it is to work,
+  and that prompt is the objective, so the binding needs no second act — which
+  is what lets an issue read `In progress` while a session is on it
+  (`OpenAgents.Issues.progress_map/2`, issue #254).
 
   `:visibility` is the thread's transparency tier and defaults to
   `OpenAgents.Threads.Thread.default_visibility/0`, owner-only. A wider tier
@@ -123,8 +135,71 @@ defmodule OpenAgents.Threads do
 
   def open(%Visitor{id: visitor_id} = owner, objective, options) when is_binary(objective) do
     _reaped = reap_expired(owner)
-    insert_thread(visitor_id, objective, options)
+    insert_thread(visitor_id, objective, bind_issue(owner, objective, options))
   end
+
+  # An agent is launched with a prompt that names the issue it is to work, and
+  # that prompt is the thread's objective. Resolving the reference once, here,
+  # is what gives `threads.issue_id` a writer — and what lets an issue read
+  # `In progress` while a session is on it without anybody marking a board or
+  # keeping a second field by hand (issue #254).
+  #
+  # The reference is read by `OpenAgents.Forge.CommitReferences`, which is the
+  # one place a `#N` reference is defined here, so an objective and a commit
+  # message mean the same thing by `#254`. The boundaries are the ones the
+  # closing-reference path already draws: the thread must name the repository
+  # it runs in, only a bare `#N` or that same `owner/name#N` resolves, and the
+  # issue must be one the opener could already read. A caller that passed an
+  # explicit `:issue_id` has said which issue it means, and is left alone.
+  defp bind_issue(%Visitor{} = owner, objective, options) do
+    if Keyword.has_key?(options, :issue_id) do
+      options
+    else
+      case referenced_issue(owner, objective, Keyword.get(options, :repository)) do
+        %Issue{id: id} -> Keyword.put(options, :issue_id, id)
+        nil -> options
+      end
+    end
+  end
+
+  defp referenced_issue(_owner, _objective, path) when not is_binary(path), do: nil
+
+  defp referenced_issue(%Visitor{user_id: user_id}, objective, path) do
+    with [owner, name] <- String.split(String.trim(path), "/", parts: 2),
+         number when is_integer(number) <- referenced_number(objective, owner, name),
+         %Repository{} = repository <-
+           Repositories.visible_by_path(owner, name, reader(user_id)) do
+      Issues.get_issue_by_number(repository, number)
+    else
+      _unresolved -> nil
+    end
+  end
+
+  defp reader(nil), do: nil
+  defp reader(user_id), do: Repo.get(User, user_id)
+
+  # The first reference in the objective that names this thread's own
+  # repository, bare or qualified. A reference to another repository resolves
+  # to nothing, the same boundary `OpenAgents.Issues.ClosingReferences` draws:
+  # binding across repositories asks a second authority question this does not
+  # answer.
+  defp referenced_number(objective, owner, name) do
+    objective
+    |> CommitReferences.all()
+    |> Enum.find_value(fn reference ->
+      if same_repository?(reference, owner, name), do: reference.number
+    end)
+  end
+
+  defp same_repository?(%{owner: nil, repository: nil}, _owner, _name), do: true
+
+  defp same_repository?(%{owner: owner, repository: name}, path_owner, path_name)
+       when is_binary(owner) and is_binary(name) do
+    String.downcase(owner) == String.downcase(path_owner) and
+      String.downcase(name) == String.downcase(path_name)
+  end
+
+  defp same_repository?(_reference, _owner, _name), do: false
 
   @doc """
   Open a thread and mint its authority, or leave nothing behind.
@@ -342,13 +417,15 @@ defmodule OpenAgents.Threads do
     with {:ok, id} <- Ecto.UUID.cast(thread_id),
          {%Thread{} = thread, owner_user_id} <-
            Repo.one(
-             from(t in Thread,
-               join: v in Visitor,
-               on: v.id == t.owner_visitor_id,
-               where: t.id == ^id,
-               select: {t, v.user_id}
+             from(thread in Thread,
+               as: :thread,
+               join: owner in Visitor,
+               as: :owner,
+               on: owner.id == thread.owner_visitor_id,
+               where: thread.id == ^id,
+               select: {thread, owner.user_id}
              )
-             |> readable_for(user)
+             |> readable_by(user)
            ) do
       {:ok, thread, if(owner_user_id == user.id, do: :owner, else: :reader)}
     else
@@ -389,21 +466,48 @@ defmodule OpenAgents.Threads do
   """
   @spec list_for_issue(Issue.t(), User.t()) :: [Thread.t()]
   def list_for_issue(%Issue{id: issue_id}, %User{} = reader) do
-    from(t in Thread,
-      join: v in Visitor,
-      on: v.id == t.owner_visitor_id,
-      where: t.issue_id == ^issue_id,
-      order_by: [desc: t.inserted_at, desc: t.id],
+    from(thread in Thread,
+      as: :thread,
+      join: owner in Visitor,
+      as: :owner,
+      on: owner.id == thread.owner_visitor_id,
+      where: thread.issue_id == ^issue_id,
+      order_by: [desc: thread.inserted_at, desc: thread.id],
       limit: ^@maximum_listed
     )
-    |> readable_for(reader)
+    |> readable_by(reader)
     |> Repo.all()
   end
 
-  defp readable_for(query, %User{id: user_id}) do
+  @doc """
+  Narrows a thread query to the threads `reader` may read.
+
+  A thread is admitted when the reader owns it, or when it was opened at a tier
+  wider than owner-only, because a thread's transcript is private until its
+  owner says otherwise (THREAD-002). An anonymous reader owns nothing, so only
+  the wide tiers reach them.
+
+  This is public so a caller outside this context composes the thread's own
+  authority rather than restating it — `OpenAgents.Issues.progress_map/2`
+  derives "an agent is working this issue" from a bound thread and must not
+  invent a second answer to who may see one. The query must bind the thread as
+  `:thread` and its owner visitor as `:owner`.
+  """
+  @spec readable_by(Ecto.Queryable.t(), User.t() | nil) :: Ecto.Query.t()
+  def readable_by(query, reader)
+
+  def readable_by(query, %User{id: user_id}) do
     wide = Thread.wide_visibilities()
 
-    where(query, [t, v], v.user_id == ^user_id or t.visibility in ^wide)
+    where(
+      query,
+      [thread: thread, owner: owner],
+      owner.user_id == ^user_id or thread.visibility in ^wide
+    )
+  end
+
+  def readable_by(query, nil) do
+    where(query, [thread: thread], thread.visibility in ^Thread.wide_visibilities())
   end
 
   defp in_repository(query, repository) when is_binary(repository),

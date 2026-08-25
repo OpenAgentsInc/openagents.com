@@ -72,6 +72,13 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:open_and_mint, 2} => :returns_plaintext_token,
     {:open_and_mint, 3} => :returns_plaintext_token,
     {:open_count, 1} => :scoped_by_owner,
+    # Narrows a query rather than resolving anything. It is the tier predicate
+    # `fetch_readable/2` and `list_for_issue/2` both compose, exported so a
+    # caller outside this context — `OpenAgents.Issues.progress_map/2` — reads
+    # threads through the same rule instead of writing a second one. It takes
+    # no identifier and returns no thread, so it hands a caller nothing it did
+    # not already have authority to ask for.
+    {:readable_by, 2} => :tier_predicate,
     {:reap_expired, 1} => :scoped_by_owner,
     {:record_event, 3} => :thread_struct,
     {:record_events, 2} => :thread_struct,

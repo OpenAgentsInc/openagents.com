@@ -4244,12 +4244,19 @@ for, or a published enum that has drifted from the value the context derives.
 A governance rule nothing enforces would be a contract with no proof.
 
 Derived fields state their sources, including whose visibility.
-`issue.openagents.progress` is derived from the reader's own readable boards
-through `OpenAgents.Repositories.readable_by/2`, the one predicate every
-repository surface composes, so a column on a board in a private repository the
-reader cannot open never becomes a fact about a public issue. The filter and
-the field read the same query, so a listed issue always reports the value it
-was listed under.
+`issue.openagents.progress` is derived from three records the reader may
+already read, each through the authority that record answers to: an attempt
+holding the issue in `forge_assignments`, admitted at `pulse` by
+`OpenAgents.Transparency.WorkDisclosure` and withheld when its own tier is
+`dark` or its artifact link is revoked; a thread bound to the issue, narrowed
+by `OpenAgents.Threads.readable_by/2` (THREAD-002); and a board column, narrowed
+by `OpenAgents.Repositories.readable_by/2`, the one predicate every repository
+surface composes. So neither a column on a board in a private repository, nor
+an owner-only session, nor a withheld attempt ever becomes a fact about a
+public issue. Each input also says when it stops counting — a passed deadline,
+a quiet session, a column somebody moves — so a claim cannot read as work
+forever. The filter and the field compose the same expression, so a listed
+issue always reports the value it was listed under.
 
 Evidence: `OpenAgentsWeb.ApiExtensionController`, `OpenAgentsWeb.IssueJSON`,
 `OpenAgents.Issues`,

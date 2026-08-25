@@ -78,21 +78,71 @@ previous_sha = (live && live.sha) || "$sha"
 previous_image_digest = (live && live.details["image_digest"]) || "$digest"
 expected_nodes = Enum.sort(["openagents@10.128.0.4", "openagents@10.128.0.110", "openagents@10.128.0.111"])
 
+# The forge builds a promoted target itself: OpenAgents.Forge.Builder
+# subscribes to the promotion broadcast, builds the artifact, and writes the
+# complete build receipt that finish_rolling_replacement/2 requires. This used
+# to advance promoted -> building -> built -> needs_rolling_replace by hand,
+# which raced the builder past its own window: the statuses said a build had
+# happened while no receipt existed, every node rolled, and settle then refused
+# with complete_build_receipt_not_found on a fleet already serving the new
+# image. Promote, then wait for the builder to say what it found.
+#
+# No backticks anywhere in this heredoc: it is unquoted so the shell expands it,
+# and a backticked word in a comment runs as a command.
+import Ecto.Query
+
+built? = fn target ->
+  OpenAgents.Repo.exists?(
+    from b in OpenAgents.Forge.BuildReceipt,
+      where: b.target_id == ^target.id and b.status == "complete"
+  )
+end
+
+await_built = fn await_built, remaining ->
+  t = OpenAgents.Forge.Targets.current("openagents.com")
+
+  cond do
+    t == nil or t.sha != "$sha" ->
+      raise "current target is #{inspect(t && t.sha)}, not $sha"
+
+    t.status == "failed" ->
+      raise "target #{t.id} failed to build"
+
+    t.status in ["needs_rolling_replace", "built"] and built?.(t) ->
+      t
+
+    remaining > 0 ->
+      Process.sleep(5_000)
+      await_built.(await_built, remaining - 1)
+
+    true ->
+      raise "target #{t.id} is #{t.status} with no complete build receipt"
+  end
+end
+
+promote_fresh = fn ->
+  {:ok, _} =
+    OpenAgents.Forge.Targets.promote("openagents.com", "$sha", "operator:14167547",
+      details: %{"source" => "operator_console"}
+    )
+
+  await_built.(await_built, 120)
+end
+
+# A target only counts as reusable when the receipt settlement needs is really
+# there. One parked at needs_rolling_replace with no receipt is what the old
+# hand-advance left behind, and reusing it walks into the same refusal, so it
+# is promoted again rather than waited on.
 target =
   case OpenAgents.Forge.Targets.current("openagents.com") do
     %{sha: "$sha", status: "needs_rolling_replace"} = t ->
-      t
-    %{sha: "$sha", status: "promoted"} = t ->
-      {:ok, t2} = OpenAgents.Forge.Targets.advance(t.id, "building")
-      {:ok, t3} = OpenAgents.Forge.Targets.advance(t2.id, "built")
-      {:ok, t4} = OpenAgents.Forge.Targets.advance(t3.id, "needs_rolling_replace")
-      t4
+      if built?.(t), do: t, else: promote_fresh.()
+
+    %{sha: "$sha", status: status} when status in ["promoted", "building", "built"] ->
+      await_built.(await_built, 120)
+
     _ ->
-      {:ok, t} = OpenAgents.Forge.Targets.promote("openagents.com", "$sha", "operator:14167547", details: %{"source" => "operator_console"})
-      {:ok, t2} = OpenAgents.Forge.Targets.advance(t.id, "building")
-      {:ok, t3} = OpenAgents.Forge.Targets.advance(t2.id, "built")
-      {:ok, t4} = OpenAgents.Forge.Targets.advance(t3.id, "needs_rolling_replace")
-      t4
+      promote_fresh.()
   end
 
 {:ok, authorized} =

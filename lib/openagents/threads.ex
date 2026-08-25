@@ -127,7 +127,11 @@ defmodule OpenAgents.Threads do
   @spec open_and_mint(User.t() | Visitor.t(), String.t(), keyword()) ::
           {:ok, Thread.t(), Grant.t(), String.t()}
           | {:error,
-             :thread_quota_reached | :thread_terminal | :credit_exhausted | Ecto.Changeset.t()}
+             :thread_quota_reached
+             | :thread_terminal
+             | :credit_exhausted
+             | :parent_authority_exhausted
+             | Ecto.Changeset.t()}
   def open_and_mint(owner, objective, options \\ []) do
     with {:ok, thread} <- open(owner, objective, options) do
       case mint_grant(thread) do
@@ -151,15 +155,16 @@ defmodule OpenAgents.Threads do
 
   defp insert_thread(visitor_id, objective, options) do
     now = DateTime.utc_now()
+    parent_id = Keyword.get(options, :parent_thread_id)
 
-    attributes = %{
+    base_attributes = %{
       objective: objective,
       repository: Keyword.get(options, :repository),
-      visibility: Keyword.get(options, :visibility) || Thread.default_visibility(),
       model: Keyword.get(options, :model) || Models.default_id(),
       reasoning_effort:
         OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
-      permission_profile: Keyword.get(options, :permission_profile, @default_permission_profile)
+      permission_profile: Keyword.get(options, :permission_profile, @default_permission_profile),
+      parent_thread_id: parent_id
     }
 
     Multi.new()
@@ -176,14 +181,39 @@ defmodule OpenAgents.Threads do
       # `nil` is unbounded. A session no longer destroys its thread on the way
       # out, so a count of open threads is a count of every session the account
       # has ever run — and refusing the ninth would refuse the work rather than
-      # bound it.
+      # bound it. A child thread is a normal open thread for this count, because
+      # every open thread holds a grant slot and a transcript, and capping the
+      # total number of open threads caps the account's joint credit exposure.
       if ceiling != nil and open_count(visitor_id) >= ceiling do
         {:error, :thread_quota_reached}
       else
-        {:ok, :admitted}
+        with {:ok, parent} <- load_parent(repo, parent_id, visitor_id) do
+          {:ok, parent}
+        end
       end
     end)
-    |> Multi.insert(:thread, Thread.open_changeset(attributes, visitor_id, now))
+    |> Multi.run(:resolved, fn _repo, %{admission: parent} ->
+      requested = Keyword.get(options, :visibility)
+
+      visibility =
+        if parent,
+          do: requested || parent.visibility,
+          else: requested || Thread.default_visibility()
+
+      if parent != nil and wider_visibility?(visibility, parent.visibility) do
+        {:error,
+         add_error(
+           %Thread{},
+           :visibility,
+           "cannot be wider than the parent thread's visibility"
+         )}
+      else
+        {:ok, Map.put(base_attributes, :visibility, visibility)}
+      end
+    end)
+    |> Multi.insert(:thread, fn %{resolved: attributes} ->
+      Thread.open_changeset(attributes, visitor_id, now)
+    end)
     |> Multi.run(:opened_event, fn _repo, %{thread: thread} ->
       insert_event(
         thread,
@@ -192,12 +222,30 @@ defmodule OpenAgents.Threads do
         now
       )
     end)
+    |> Multi.run(:spawn_event, fn _repo, %{admission: parent, thread: thread} ->
+      if parent do
+        insert_event(
+          parent,
+          "thread.spawn",
+          %{
+            "child_thread_id" => thread.id,
+            "child_objective" => objective,
+            "visibility" => thread.visibility
+          },
+          now
+        )
+      else
+        {:ok, nil}
+      end
+    end)
     # Widening is an act, so it leaves a record rather than only a column value
     # (THREAD-002). The event is written only when the opener asked for a tier
     # wider than owner-only: a default thread was never widened, and an event
-    # saying so on every open would make the record meaningless.
-    |> Multi.run(:widened_event, fn _repo, %{thread: thread} ->
-      if Thread.wide?(thread) do
+    # saying so on every open would make the record meaningless. A child thread
+    # inherits its parent\'s visibility, so its opening does not need its own
+    # visibility act unless the caller explicitly narrows or widens it.
+    |> Multi.run(:widened_event, fn _repo, %{admission: parent, thread: thread} ->
+      if is_nil(parent) and Thread.wide?(thread) do
         insert_event(
           thread,
           "thread.visibility_set",
@@ -212,11 +260,29 @@ defmodule OpenAgents.Threads do
       appended = if widened, do: 2, else: 1
       Thread.event_count_changeset(thread, thread.event_count + appended)
     end)
+    |> Multi.run(:parent_counted, fn _repo, %{admission: parent, spawn_event: spawn} ->
+      if parent && spawn do
+        parent
+        |> Thread.event_count_changeset(parent.event_count + 1)
+        |> Repo.update()
+      else
+        {:ok, nil}
+      end
+    end)
     |> Repo.transaction()
     |> case do
-      {:ok, %{counted: thread}} -> {:ok, thread}
-      {:error, :admission, :thread_quota_reached, _changes} -> {:error, :thread_quota_reached}
-      {:error, _step, %Ecto.Changeset{} = changeset, _changes} -> {:error, changeset}
+      {:ok, %{counted: thread, spawn_event: spawn}} ->
+        if is_struct(spawn, Event) do
+          broadcast(spawn)
+        end
+
+        {:ok, thread}
+
+      {:error, :admission, :thread_quota_reached, _changes} ->
+        {:error, :thread_quota_reached}
+
+      {:error, _step, %Ecto.Changeset{} = changeset, _changes} ->
+        {:error, changeset}
     end
   end
 
@@ -453,6 +519,10 @@ defmodule OpenAgents.Threads do
 
   defp topic(thread_id), do: "thread:" <> thread_id
 
+  defp broadcast(%Event{} = event) do
+    Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(event.thread_id), {:thread_event, event})
+  end
+
   @doc """
   Mint model authority for a thread.
 
@@ -462,6 +532,12 @@ defmodule OpenAgents.Threads do
   id; `OpenAgents.Inference.Models.fetch/1` resolves that spelling, and
   anything else it cannot route is refused rather than quietly replaced.
 
+  For a child thread, the grant is minted against the parent's remaining
+  allowance: the child can spend no more than the parent has left. A child
+  whose parent holds no active grant, or whose parent has no remaining calls,
+  tokens, or cost, is refused `:parent_authority_exhausted` rather than minted
+  authority it cannot use.
+
   This is the fence. In one transaction: the thread is locked and refused
   unless it is open, every active grant naming it is revoked, `generation` is
   bumped, and a fresh grant is minted against the thread — never against a
@@ -469,7 +545,11 @@ defmodule OpenAgents.Threads do
   """
   @spec mint_grant(Thread.t()) ::
           {:ok, Thread.t(), Grant.t(), String.t()}
-          | {:error, :thread_terminal | :credit_exhausted | Ecto.Changeset.t()}
+          | {:error,
+             :thread_terminal
+             | :credit_exhausted
+             | :parent_authority_exhausted
+             | Ecto.Changeset.t()}
   def mint_grant(%Thread{} = thread) do
     Repo.transaction(fn ->
       case locked(thread.id) do
@@ -483,7 +563,7 @@ defmodule OpenAgents.Threads do
           _revoked = Inference.revoke_active_for_thread(current.id)
 
           with {:ok, fenced} <- current |> Thread.generation_changeset() |> Repo.update(),
-               {:ok, ceilings} <- ceilings(fenced.owner_visitor_id),
+               {:ok, ceilings} <- grant_ceilings(fenced),
                {:ok, grant, token} <-
                  Inference.mint(%{
                    owner_visitor_id: fenced.owner_visitor_id,
@@ -508,8 +588,8 @@ defmodule OpenAgents.Threads do
   end
 
   @doc """
-  End a thread with its bounded report, revoking its authority in the same
-  transaction. Idempotent refusal on an already-terminal thread.
+  End a thread with its bounded, typed report, revoking its authority in the
+  same transaction. Idempotent refusal on an already-terminal thread.
   """
   @spec finish(Thread.t(), map()) ::
           {:ok, Thread.t()} | {:error, :thread_terminal | Ecto.Changeset.t()}
@@ -520,6 +600,7 @@ defmodule OpenAgents.Threads do
       status: Map.get(result, :status) || Map.get(result, "status") || "succeeded",
       report: report,
       report_digest: digest(report),
+      report_type: Map.get(result, :report_type) || Map.get(result, "report_type") || "outcome",
       usage: Map.get(result, :usage) || Map.get(result, "usage") || %{},
       error_code: Map.get(result, :error_code) || Map.get(result, "error_code"),
       completed_at: DateTime.utc_now()
@@ -536,6 +617,7 @@ defmodule OpenAgents.Threads do
       status: "cancelled",
       report: report,
       report_digest: digest(report),
+      report_type: "cancelled",
       error_code: "cancelled",
       completed_at: DateTime.utc_now()
     })
@@ -717,9 +799,118 @@ defmodule OpenAgents.Threads do
       status: "failed",
       report: report,
       report_digest: digest(report),
+      report_type: "failure",
       error_code: "authority_spent",
       completed_at: DateTime.utc_now()
     }
+  end
+
+  defp grant_ceilings(%Thread{parent_thread_id: nil} = thread),
+    do: ceilings(thread.owner_visitor_id)
+
+  defp grant_ceilings(%Thread{parent_thread_id: parent_id}) do
+    case Repo.one(from t in Thread, where: t.id == ^parent_id, lock: "FOR UPDATE") do
+      %Thread{status: "open"} = parent ->
+        grant =
+          Repo.one(
+            from g in Grant,
+              where: g.thread_id == ^parent.id and g.status == "active",
+              lock: "FOR UPDATE"
+          )
+
+        if grant,
+          do: child_ceilings_from_grant(grant),
+          else: {:error, :parent_authority_exhausted}
+
+      _ ->
+        {:error, :parent_authority_exhausted}
+    end
+  end
+
+  defp child_ceilings_from_grant(%Grant{} = grant) do
+    remaining_calls = remaining(grant.call_count, grant.max_calls)
+    remaining_tokens = remaining(to_integer(grant.usage["total_tokens"]), grant.max_total_tokens)
+
+    remaining_cost =
+      remaining(to_integer(grant.usage["estimated_cost_microusd"]), grant.max_cost_microusd)
+
+    remaining_ttl = remaining_seconds(grant.expires_at)
+
+    if exhausted_dimension?(remaining_calls) or exhausted_dimension?(remaining_tokens) or
+         exhausted_dimension?(remaining_cost) or exhausted_dimension?(remaining_ttl) do
+      {:error, :parent_authority_exhausted}
+    else
+      base = ceilings()
+
+      {:ok,
+       %{
+         max_total_tokens: min_option(base.max_total_tokens, remaining_tokens),
+         max_calls: min_option(base.max_calls, remaining_calls),
+         max_cost_microusd: min_option(base.max_cost_microusd, remaining_cost),
+         ttl_seconds: min_option(base.ttl_seconds, remaining_ttl)
+       }}
+    end
+  end
+
+  defp exhausted_dimension?(nil), do: false
+  defp exhausted_dimension?(value) when value <= 0, do: true
+  defp exhausted_dimension?(_), do: false
+
+  defp remaining(_spent, nil), do: nil
+  defp remaining(spent, limit), do: limit - spent
+
+  defp min_option(nil, b), do: b
+  defp min_option(a, nil), do: a
+  defp min_option(a, b), do: min(a, b)
+
+  defp remaining_seconds(nil), do: nil
+
+  defp remaining_seconds(expires_at) do
+    DateTime.diff(expires_at, DateTime.utc_now(), :second)
+    |> max(0)
+  end
+
+  defp to_integer(value) when is_integer(value), do: value
+  defp to_integer(value) when is_float(value), do: trunc(value)
+
+  defp to_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, _} -> int
+      :error -> 0
+    end
+  end
+
+  defp to_integer(_), do: 0
+
+  defp load_parent(_repo, nil, _visitor_id), do: {:ok, nil}
+
+  defp load_parent(repo, parent_id, visitor_id) do
+    case Ecto.UUID.cast(parent_id) do
+      {:ok, id} ->
+        case repo.one(
+               from t in Thread,
+                 where: t.id == ^id and t.owner_visitor_id == ^visitor_id and t.status == "open"
+             ) do
+          %Thread{} = parent ->
+            {:ok, parent}
+
+          nil ->
+            {:error, add_error(%Thread{}, :parent_thread_id, "not a valid, open parent thread")}
+        end
+
+      :error ->
+        {:error, add_error(%Thread{}, :parent_thread_id, "is not a valid UUID")}
+    end
+  end
+
+  defp add_error(%Thread{} = data, field, message) do
+    Ecto.Changeset.add_error(Ecto.Changeset.change(data, %{}), field, message)
+  end
+
+  defp wider_visibility?(child, parent) do
+    child_rank = Enum.find_index(Thread.visibilities(), &(&1 == child))
+    parent_rank = Enum.find_index(Thread.visibilities(), &(&1 == parent))
+    child_rank != nil and parent_rank != nil and child_rank > parent_rank
   end
 
   defp setting(key, default), do: Application.get_env(:openagents, key, default)

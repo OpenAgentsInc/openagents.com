@@ -56,7 +56,9 @@ defmodule OpenAgents.Threads.Thread do
     field :usage, :map, default: %{}
     field :started_at, :utc_datetime_usec
     field :completed_at, :utc_datetime_usec
+    field :report_type, :string
     has_many :events, Event, foreign_key: :thread_id
+    belongs_to :parent, __MODULE__, foreign_key: :parent_thread_id
     timestamps()
   end
 
@@ -119,7 +121,8 @@ defmodule OpenAgents.Threads.Thread do
       :reasoning_effort,
       :permission_profile,
       :repository,
-      :visibility
+      :visibility,
+      :parent_thread_id
     ])
     |> put_change(:owner_visitor_id, owner_visitor_id)
     |> put_change(:status, "open")
@@ -139,6 +142,8 @@ defmodule OpenAgents.Threads.Thread do
     |> validate_inclusion(:permission_profile, @permission_profiles)
     |> validate_inclusion(:visibility, @visibilities)
     |> foreign_key_constraint(:owner_visitor_id)
+    |> foreign_key_constraint(:parent_thread_id)
+    |> check_constraint(:parent_thread_id, name: :threads_no_self_parent)
     |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:objective, name: :threads_objective_bound_check)
     |> check_constraint(:repository, name: :threads_repository_bound_check)
@@ -161,17 +166,27 @@ defmodule OpenAgents.Threads.Thread do
     |> check_constraint(:event_count, name: :threads_event_count_nonnegative_check)
   end
 
-  @doc "The terminal receipt. A thread ends once and carries a report when it does."
+  @doc "The terminal receipt. A thread ends once and carries a typed report when it does."
   def terminal_changeset(%__MODULE__{} = thread, attributes) do
     thread
-    |> cast(attributes, [:status, :report, :report_digest, :usage, :error_code, :completed_at])
-    |> validate_required([:status, :report, :report_digest, :completed_at])
+    |> cast(attributes, [
+      :status,
+      :report,
+      :report_digest,
+      :report_type,
+      :usage,
+      :error_code,
+      :completed_at
+    ])
+    |> validate_required([:status, :report, :report_digest, :report_type, :completed_at])
     |> validate_inclusion(:status, @terminal_statuses)
     |> validate_length(:report, min: 1, max: @objective_bytes, count: :bytes)
     |> validate_format(:report_digest, ~r/\Asha256:[0-9a-f]{64}\z/)
+    |> validate_length(:report_type, max: 80)
     |> validate_length(:error_code, max: 80)
     |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:report, name: :threads_report_bound_check)
+    |> check_constraint(:report_type, name: :threads_report_type_bound_check)
     |> check_constraint(:completed_at, name: :threads_terminal_shape_check)
   end
 end

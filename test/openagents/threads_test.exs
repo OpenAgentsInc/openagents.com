@@ -332,6 +332,164 @@ defmodule OpenAgents.ThreadsTest do
     end
   end
 
+  defp set_config(key, value) do
+    previous = Application.get_env(:openagents, key)
+    Application.put_env(:openagents, key, value)
+
+    on_exit(fn ->
+      Application.put_env(:openagents, key, previous)
+    end)
+  end
+
+  describe "delegated child threads" do
+    test "a child thread names its parent and stays on the same account" do
+      user = owner("child-parent")
+      {:ok, parent, _grant, _token} = Threads.open_and_mint(user, "Parent")
+      {:ok, child} = Threads.open(user, "Child", parent_thread_id: parent.id)
+
+      assert child.parent_thread_id == parent.id
+      assert child.owner_visitor_id == parent.owner_visitor_id
+    end
+
+    test "a child cannot name another account's parent" do
+      mine = owner("child-owner-mine")
+      theirs = owner("child-owner-theirs")
+      {:ok, parent, _grant, _token} = Threads.open_and_mint(mine, "Parent")
+
+      assert {:error, changeset} =
+               Threads.open(theirs, "Child", parent_thread_id: parent.id)
+
+      assert %{parent_thread_id: _} = errors_on(changeset)
+    end
+
+    test "a child cannot name a terminal parent" do
+      user = owner("child-terminal-parent")
+      {:ok, parent, _grant, _token} = Threads.open_and_mint(user, "Parent")
+      {:ok, parent} = Threads.finish(parent, %{report: "Done."})
+
+      assert {:error, changeset} =
+               Threads.open(user, "Child", parent_thread_id: parent.id)
+
+      assert %{parent_thread_id: _} = errors_on(changeset)
+    end
+
+    test "a child is refused when the parent holds no active grant" do
+      user = owner("child-no-grant")
+      {:ok, parent} = Threads.open(user, "Parent")
+
+      assert {:error, :parent_authority_exhausted} =
+               Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
+    end
+
+    test "a child inherits its parent's visibility" do
+      user = owner("child-visibility-inherit")
+      {:ok, parent} = Threads.open(user, "Parent", visibility: "ledger")
+      {:ok, child} = Threads.open(user, "Child", parent_thread_id: parent.id)
+
+      assert child.visibility == "ledger"
+    end
+
+    test "a child cannot be opened wider than its parent" do
+      user = owner("child-visibility-wide")
+      {:ok, parent} = Threads.open(user, "Parent", visibility: "dark")
+
+      assert {:error, changeset} =
+               Threads.open(user, "Child",
+                 parent_thread_id: parent.id,
+                 visibility: "ledger"
+               )
+
+      assert %{visibility: _} = errors_on(changeset)
+    end
+
+    test "a child counts toward the admission cap" do
+      cap(2)
+      user = owner("child-cap")
+      {:ok, parent} = Threads.open(user, "Parent")
+      assert {:ok, _child} = Threads.open(user, "Child", parent_thread_id: parent.id)
+      assert {:error, :thread_quota_reached} = Threads.open(user, "Third")
+    end
+
+    test "spawning a child appends a thread.spawn event to the parent transcript" do
+      user = owner("child-spawn")
+      {:ok, parent, _grant, _token} = Threads.open_and_mint(user, "Parent")
+      {:ok, child} = Threads.open(user, "Child", parent_thread_id: parent.id)
+
+      parent = Threads.get_for_user(user, parent.id)
+      events = Threads.list_events(parent)
+
+      assert [%Event{event_type: "thread.opened"}, %Event{event_type: "thread.spawn"}] = events
+      spawn = List.last(events)
+      assert spawn.payload["child_thread_id"] == child.id
+      assert parent.event_count == 2
+    end
+  end
+
+  describe "child thread ceilings" do
+    test "a child grant is ceiled at the parent's remaining calls" do
+      set_config(:thread_grant_max_calls, 5)
+      set_config(:thread_grant_max_total_tokens, nil)
+      user = owner("child-calls")
+      {:ok, parent, grant, _token} = Threads.open_and_mint(user, "Parent")
+      {:ok, spent} = Inference.record_usage(grant, %{"output_tokens" => 1})
+      {:ok, spent} = Inference.record_usage(spent, %{"output_tokens" => 1})
+      assert spent.call_count == 2
+
+      {:ok, _child, child_grant, _token} =
+        Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
+
+      assert child_grant.max_calls == 3
+    end
+
+    test "a child grant is ceiled at the parent's remaining tokens" do
+      set_config(:thread_grant_max_total_tokens, 100)
+      set_config(:thread_grant_max_calls, nil)
+      user = owner("child-tokens")
+      {:ok, parent, grant, _token} = Threads.open_and_mint(user, "Parent")
+      {:ok, spent} = Inference.record_usage(grant, %{"output_tokens" => 30})
+      assert spent.usage["total_tokens"] == 30
+
+      {:ok, _child, child_grant, _token} =
+        Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
+
+      assert child_grant.max_total_tokens == 70
+    end
+
+    test "a child grant is ceiled at the parent's remaining cost" do
+      set_config(:account_credit_microusd, 100_000)
+      set_config(:visitor_credit_microusd, 100_000)
+      set_config(:thread_grant_max_calls, nil)
+      set_config(:thread_grant_max_total_tokens, nil)
+      user = owner("child-cost")
+      {:ok, parent, grant, _token} = Threads.open_and_mint(user, "Parent")
+      {:ok, spent} = Inference.record_usage(grant, %{"output_tokens" => 1000})
+      assert spent.usage["estimated_cost_microusd"] == 10_000
+
+      {:ok, _child, child_grant, _token} =
+        Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
+
+      assert child_grant.max_cost_microusd == 90_000
+    end
+  end
+
+  describe "typed thread reports" do
+    test "completing a thread records the requested report type" do
+      user = owner("typed-report")
+      {:ok, thread} = Threads.open(user, "Objective")
+      {:ok, finished} = Threads.finish(thread, %{report: "Done.", report_type: "result"})
+
+      assert finished.report_type == "result"
+    end
+
+    test "finish defaults the report type when the caller names none" do
+      user = owner("typed-report-default")
+      {:ok, thread} = Threads.open(user, "Objective")
+      {:ok, finished} = Threads.finish(thread, %{report: "Done."})
+
+      assert finished.report_type == "outcome"
+    end
+  end
+
   defp cap(limit) do
     previous = Application.get_env(:openagents, :maximum_open_threads_per_account)
     Application.put_env(:openagents, :maximum_open_threads_per_account, limit)

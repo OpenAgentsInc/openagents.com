@@ -2363,6 +2363,49 @@ Evidence: `OpenAgents.Threads.fetch_readable/2`,
 `test/openagents_web/thread_visibility_test.exs`, and
 `test/openagents/threads/grant_token_reach_test.exs`.
 
+### THREAD-003 — Child threads are nested, budgeted, and typed
+
+Status: Current
+
+A child thread is a normal thread that names an open parent from the same
+account. Delegation therefore uses a nested transcript ledger: each child gets
+its own grant, its own budget, and its own terminal report, while the parent
+gains a durable `thread.spawn` record that links to it.
+
+- **A child names an open, same-owner parent.** `OpenAgents.Threads.open/3`
+  accepts `parent_thread_id` and validates it. A parent that is missing,
+  malformed, terminal, or owned by another account is refused with a
+  `parent_thread_id` changeset error, and a `visibility` wider than the
+  parent is refused with a `visibility` changeset error.
+- **A child counts toward the same admission cap.** The cap already counts
+  every open thread, and a child is a normal open thread. Counting it keeps
+  a parent from spawning an unbounded number of concurrent children and
+  exceeding the account's joint credit-exposure bound.
+- **A child inherits its parent's visibility unless the caller narrows it.**
+  A child opened without a visibility takes the parent's visibility, and a
+  caller that names one cannot choose a tier wider than the parent's. The
+  parent's consent gate governs the whole subtree.
+- **A child budget is bounded by the parent's remaining allowance.** A child
+  grant is minted with ceilings no larger than the parent's active grant has
+  left in calls, total tokens, and cost, where `nil` means unbounded for that
+  dimension. If the parent has no active grant or no remaining allowance in a
+  bounded dimension, `OpenAgents.Threads.mint_grant/1` returns
+  `:parent_authority_exhausted`.
+- **Spawning records a `thread.spawn` event on the parent.** The parent and
+  child events are inserted in the same transaction as the child thread, and
+  the parent's `event_count` advances with it. No child event is mirrored on
+  the parent beyond this lifecycle record.
+- **Completion carries a typed report.** A terminal thread now stores
+  `report_type` alongside `report`. `OpenAgents.Threads.finish/2` records the
+  caller's `report_type` or defaults to `outcome`; `cancel/2` records
+  `cancelled`; the authority-spent reaper records `failure`. A terminal thread
+  always has both a report and its type, and neither is inferred from silence.
+
+Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
+`priv/repo/migrations/20260825054906_add_parent_and_report_type_to_threads.exs`,
+`test/openagents/threads_test.exs`, and
+`test/openagents/threads/visibility_test.exs`.
+
 ## Tenant deployment control plane
 
 ### DEPLOYPLANE-001 — A deployment intent carries no authority
@@ -5229,6 +5272,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs` |
 | THREAD-002 | `test/openagents/threads/visibility_test.exs`, `test/openagents_web/thread_visibility_test.exs`, `test/openagents/threads/grant_token_reach_test.exs` |
+| THREAD-003 | `test/openagents/threads_test.exs`, `test/openagents/threads/visibility_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs`, `test/openagents/issues/completion_claims_test.exs`, `test/openagents_web/controllers/issue_completion_claim_controller_test.exs` |
 | DEPLOYPLANE-001 | `test/openagents/deployments_test.exs`, `test/openagents_web/controllers/deployment_controller_test.exs`, `test/openagents_web/api_route_authority_test.exs` |
 | DEPLOYPLANE-002 | `test/openagents/deployments_test.exs` |

@@ -98,6 +98,11 @@ defmodule OpenAgents.Forge.BackfillTest do
     bundle = Path.join(base, "unrelated.bundle")
     sh!(unrelated, "git", ["bundle", "create", bundle, "--all"])
 
+    # The refusal below means nothing unless this repository really is
+    # unrelated, so say so rather than assume it.
+    [boundary] = Backfill.open_boundaries(storage_key)
+    refute sh!(unrelated, "git", ["rev-list", "--all"]) =~ boundary
+
     assert {:error, {:still_grafted, [_boundary]}} =
              Backfill.import_history(storage_key, bundle, "operator:test")
 
@@ -131,10 +136,14 @@ defmodule OpenAgents.Forge.BackfillTest do
     sh!(source, "git", ["config", "user.email", "test@example.com"])
     sh!(source, "git", ["config", "user.name", "Forge Test"])
 
+    # The content carries the repository's name because two repositories built
+    # from identical content, author, and second produce byte-identical commit
+    # objects — and therefore the same SHAs, which would make an "unrelated"
+    # repository share the very boundary the refusal test needs it to miss.
     Enum.each(1..4, fn n ->
-      File.write!(Path.join(source, "history-#{n}.txt"), "history #{n}\n")
+      File.write!(Path.join(source, "history-#{n}.txt"), "#{name} history #{n}\n")
       sh!(source, "git", ["add", "."])
-      sh!(source, "git", ["commit", "-m", "history #{n}"])
+      sh!(source, "git", ["commit", "-m", "#{name} history #{n}"])
     end)
 
     source

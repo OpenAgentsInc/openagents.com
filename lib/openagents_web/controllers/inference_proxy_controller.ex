@@ -192,6 +192,8 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         # answered, not what it assumed (PROVIDER-002). Because a mismatched
         # request was refused above, requested and effective are the same
         # name on every 200.
+        OpenAgents.Inference.Health.record_success(model.id)
+
         conn
         |> put_resp_content_type("text/event-stream")
         |> put_resp_header("cache-control", "no-store")
@@ -205,6 +207,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         if usage != %{}, do: meter(grant, usage)
         class = OpenAgents.OperationalLog.code(reason)
         status = OpenAgents.OperationalLog.status(reason)
+        # What the catalog publishes about this lane follows from what it
+        # actually did, not only from whether a credential is configured.
+        OpenAgents.Inference.Health.record_failure(model.id, status)
         Logger.warning(
           "inference_proxy_failed code=#{class}" <>
             if(status == nil, do: "", else: " upstream_status=#{status}")

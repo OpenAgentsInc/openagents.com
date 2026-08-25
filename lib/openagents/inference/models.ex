@@ -1,4 +1,6 @@
 defmodule OpenAgents.Inference.Models do
+  alias OpenAgents.Inference.Health
+
   @moduledoc """
   The typed model catalog: every model this deployment serves, and the
   provider lane that serves each.
@@ -98,6 +100,28 @@ defmodule OpenAgents.Inference.Models do
   test adapters need no credential, and an adapter that cannot say is refused
   at call time by its own `missing_api_key` rather than guessed at here.
   """
+  @doc """
+  What a client should believe about a lane, as one word.
+
+  `unavailable` means the deployment cannot call it at all — no credential.
+  `degraded` means it is configured and its recent calls have failed, which is
+  the case the old two-word answer could not express: a lane whose wiring is
+  right and whose every call fails used to publish `available` and mislead the
+  caller that trusted it (#238).
+
+  A lane nothing has called since boot is `available`, not `degraded`. Silence
+  is not evidence of failure, and refusing to offer an untried lane would make
+  every restart look like an outage.
+  """
+  @spec availability(t()) :: String.t()
+  def availability(%{id: id} = model) do
+    cond do
+      not available?(model) -> "unavailable"
+      match?({:degraded, _}, Health.status(id)) -> "degraded"
+      true -> "available"
+    end
+  end
+
   @spec available?(t()) :: boolean()
   def available?(%{adapter: adapter}) do
     if Code.ensure_loaded?(adapter) and function_exported?(adapter, :configured?, 0) do
@@ -124,7 +148,7 @@ defmodule OpenAgents.Inference.Models do
         "provider" => Atom.to_string(model.provider),
         "context_window" => model.context_window,
         "max_output" => model.max_output,
-        "availability" => if(available?(model), do: "available", else: "unavailable"),
+        "availability" => availability(model),
         "default" => model.id == default_id
       }
     end)

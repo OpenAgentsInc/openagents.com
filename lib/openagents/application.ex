@@ -53,6 +53,7 @@ defmodule OpenAgents.Application do
         OpenAgents.Forge.BootConverge,
         {DNSCluster, query: Application.get_env(:openagents, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: OpenAgents.PubSub},
+        OpenAgents.Inference.Health,
         OpenAgents.RuntimeSupervisor,
         OpenAgentsWeb.BoxRateLimiter,
         {Registry, keys: :unique, name: OpenAgents.BoxRunRegistry},

@@ -298,10 +298,11 @@ holds the seed alone.
 The forge's clone is not broken by this and `EXIT-004` is not violated by it.
 The clone succeeds, passes `git fsck`, and writes a `shallow` file naming five
 reconciled boundaries, which is `EXIT-004`'s stated outcome after #179: history
-that says where it stops is servable, and history that dangles is not. What is
-true is narrower and worth saying without softening it — **the forge is
-canonical for its own history only from the seed forward**, and a reader who
-wants this repository's first 307 commits has to get them from the mirror.
+that says where it stops is servable, and history that dangles is not. That was the state until the objects were imported. **The forge is now
+canonical for its whole history**: the pre-seed commits are in its own log, a
+clone carries them, and no reader has to go to the mirror for them. The
+paragraph above records what was measured before the import, because the
+reasoning that follows it was decided against that state.
 
 ### The decision about the 307 commits
 
@@ -346,16 +347,47 @@ occasion, not by a code path reaching for GitHub: no module on the recovery
 path gains a mirror call, and the proof that fails on one is untouched. What
 changes afterwards is that the mirror stops being the only copy of anything.
 
-**Not yet executed.** The bundle is built and verified — 7.2 MB, `git bundle
-verify` reports a complete history, and it closes all five recorded boundaries
-— and the recipe is in rehearsal 3 of `docs/forge-exit-rehearsals.md`. What is
-left is a production write that cannot be undone: a WAL append is permanent by
-design, `EXIT-005` makes removing an entry a rewrite of the whole suffix, and
-if a node fails to materialize the new entry `OpenAgents.Forge.Sync` falls back
-to a full rebuild from sequence zero, which rehearsal 3 records as never having
-been run against the live projection. That is an attended operation on a forge
-people are pushing to, not an unattended one, and #256 carries it rather than
-this document describing it as done.
+**Executed 2026-08-25.** `OpenAgents.Forge.Backfill.import_history/3` appended
+the bundle to `openagents.com`'s log at **sequence 426**, under the principal
+`operator:14167547`, and closed all five recorded boundaries:
+
+| Boundary | Parent the import supplied |
+| --- | --- |
+| `eda094c6` (the seed) | `c91327d6` |
+| `23f0d64c` | `0fcbbbb8` |
+| `521c208d` | `fdd00d4c` |
+| `70cadbb5` | `f8a7822a` |
+| `1f32e14d` | `e0e61fb1` |
+
+The bundle was built from a fresh mirror clone over those five parents, 7.3 MB,
+and `git bundle verify` reported a complete history before it was copied to a
+node. `open_boundaries/1` answered with the five commits before the import and
+with `[]` after it.
+
+Measured after the import, on a clone taken fresh through the published
+transport:
+
+| | Before | After |
+| --- | --- | --- |
+| `main` commits | 461 | 787 |
+| `shallow` file | five boundaries | absent |
+| `git cat-file -t c91327d6` | could not read | `commit` |
+| `git fsck` | clean | clean |
+
+The counts are at different tips; the gap is what closed.
+
+`OpenAgents.Forge.Verification.verify/2` reports no findings on all three
+nodes, each at head sequence 426 with an identical chain link. The projection
+is node-local while the log is shared (#251), so a node applies a new entry on
+its own schedule: two nodes had applied 426 immediately, and the third sat at
+425 for several minutes with its boundaries still open. It converged when
+`Sync.ensure_fresh/2` ran, which is what `OpenAgents.Forge.GitHttp` calls
+before serving any git request — so a clone routed to a lagging node converges
+it before it is answered rather than being served a grafted history. The
+fallback that made this an attended operation, a rebuild from sequence zero,
+was not reached on any node.
+
+The mirror is no longer the only copy of anything.
 
 ## Exit
 

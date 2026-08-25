@@ -414,7 +414,7 @@ behavior was exercised locally instead, by three tests in
 live 423-commit projection is untested.
 `docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` records both halves.
 
-**Step 4 re-measured later the same day, and step 5 is prepared but not run.**
+**Step 4 re-measured later the same day; step 5 was prepared and then run.**
 A fresh clone of each side: the forge serves 461 commits on `main`, `git fsck`
 clean, grafted at five `shallow` boundaries rooted at `eda094c6`; the mirror
 serves 767, `git fsck` clean, rooted at `a352f78e`, and `git rev-list --count
@@ -426,12 +426,28 @@ closes every boundary at once. Built from the mirror by the recipe in step 5
 over `fdd00d4c`, `e0e61fb1`, `0fcbbbb8`, `f8a7822a`, and `c91327d6`, it is
 7.2 MB and `git bundle verify` reports a complete history.
 
-The import itself was not performed. It is a permanent append to a shared
-production log, its failure mode is the fleet-wide rebuild step 3 has never
-exercised live, and both belong to an attended operation rather than to a
-read-only rehearsal. #188 records the decision — import the objects, keep the
-push record starting at the seed — `docs/forge-operator-independence.md`
-carries the reasoning, and #256 carries the operation.
+**Step 5 performed 2026-08-25 (#256).** `Backfill.import_history/3` appended
+the bundle at sequence **426** under `operator:14167547` and closed all five
+boundaries; `open_boundaries/1` answered `[]` afterwards. Re-measured on a
+fresh clone through the published transport, the forge now serves **787**
+commits on `main` with no `shallow` file, `git fsck` clean, and
+`git cat-file -t c91327d6` answering `commit` — against 461, five boundaries,
+and an unreadable object before. `Verification.verify/2` reports no findings on
+all three nodes, each at head sequence 426 on an identical chain link.
+
+Two things this exercised that the rehearsal had listed as unknown. The
+projection is node-local while the log is shared (#251): two nodes applied the
+entry immediately and the third sat at 425 with its boundaries still open for
+several minutes, converging only when `Sync.ensure_fresh/2` ran. That is the
+call `OpenAgents.Forge.GitHttp` makes before serving any git request, so a
+clone routed to a lagging node converges it before being answered rather than
+receiving a grafted history. And the failure mode that made this attended — a
+fleet-wide rebuild from sequence zero — was not reached on any node, so it
+remains unexercised live and step 3's gap is unchanged.
+
+#188 records the decision — import the objects, keep the push record starting
+at the seed — and `docs/forge-operator-independence.md` carries the reasoning
+and the measurements.
 
 ## 4. Key rotation
 

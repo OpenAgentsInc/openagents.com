@@ -124,42 +124,54 @@ defmodule OpenAgentsWeb.ForumBoardLive do
       sidebar_sections={assigns[:sidebar_sections]}
       current_scope={@current_scope}
     >
-      <div class="flex items-center gap-2 mb-4">
-        <.link navigate={~p"/forum"} class="text-sm text-muted-foreground hover:text-foreground">
-          Forum
-        </.link>
-        <span class="text-muted-foreground">/</span>
-        <h1 class="text-2xl font-bold">{@forum.title}</h1>
-      </div>
+      <div class="mx-auto w-full max-w-3xl">
+        <nav class="flex items-center gap-1.5 mb-2 text-sm text-muted-foreground">
+          <.link navigate={~p"/forum"} class="hover:text-foreground">Forum</.link>
+        </nav>
 
-      <.form for={@form} id="new-topic-form" phx-submit="new_topic" class="card !mx-0 !mt-0 mb-6">
-        <.input field={@form[:title]} label="Title" required />
-        <.input field={@form[:body_text]} label="First post" type="textarea" rows={4} required />
-        <footer class="flex justify-end mt-2">
-          <.button type="submit" variant={:primary}>Start topic</.button>
-        </footer>
-      </.form>
+        <header class="mb-6">
+          <h1 class="text-2xl font-semibold tracking-tight">{@forum.title}</h1>
+          <%= if @forum.description do %>
+            <p class="mt-1 text-sm text-muted-foreground">{@forum.description}</p>
+          <% end %>
+        </header>
 
-      <div id="topics" phx-update="stream">
-        <div id="topics-empty" class="hidden only:block text-sm text-muted-foreground">
-          No topics yet.
-        </div>
-        <div :for={{id, topic} <- @streams.topics} id={id} class="card !m-0 mb-3">
-          <.link navigate={~p"/forum/t/#{topic.id}"} class="text-lg font-semibold hover:underline">
-            {topic.title}
-          </.link>
-          <div class="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-            <span>{topic.actor_display_name}</span>
-            <span>{topic.post_count} posts</span>
-            <%= if topic.tip_count > 0 do %>
-              <span class="badge" data-variant="dim">{topic.tip_sats_total} sats</span>
-            <% end %>
-            <span>{Calendar.strftime(topic.updated_at, "%b %d, %Y")}</span>
-            <%= if topic.pin_state == "pinned" do %>
-              <span class="badge" data-variant="dim">pinned</span>
-            <% end %>
+        <div id="topics" phx-update="stream" class="flex flex-col gap-3">
+          <div id="topics-empty" class="hidden only:block text-sm text-muted-foreground">
+            No topics yet.
+          </div>
+          <div :for={{id, topic} <- @streams.topics} id={id} class="card !m-0">
+            <.link
+              navigate={~p"/forum/t/#{topic.id}"}
+              class="text-base font-semibold hover:underline text-balance"
+            >
+              {topic.title}
+            </.link>
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground mt-1.5">
+              <span>{topic.actor_display_name}</span>
+              <span aria-hidden="true">·</span>
+              <span>{topic.post_count} posts</span>
+              <span aria-hidden="true">·</span>
+              <time datetime={DateTime.to_iso8601(topic.updated_at)}>
+                {Calendar.strftime(topic.updated_at, "%b %d, %Y")}
+              </time>
+              <%= if topic.tip_count > 0 do %>
+                <span class="badge" data-variant="dim">{topic.tip_sats_total} sats</span>
+              <% end %>
+              <%= if topic.pin_state == "pinned" do %>
+                <span class="badge" data-variant="dim">pinned</span>
+              <% end %>
+            </div>
           </div>
         </div>
+
+        <.form for={@form} id="new-topic-form" phx-submit="new_topic" class="card !mx-0 !mt-8">
+          <.input field={@form[:title]} label="Title" required />
+          <.input field={@form[:body_text]} label="First post" type="textarea" rows={4} required />
+          <footer class="flex justify-end mt-2">
+            <.button type="submit" variant={:primary}>Start topic</.button>
+          </footer>
+        </.form>
       </div>
     </Layouts.app>
     """

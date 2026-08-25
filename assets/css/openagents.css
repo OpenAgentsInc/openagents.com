@@ -2448,6 +2448,10 @@
   .markdown {
     min-width: 0;
     color: var(--text-body);
+    /* A pasted URL or an unbroken token must wrap inside its card rather than
+       widen it; forum posts carry these routinely. Inherited, so one
+       declaration covers every descendant. */
+    overflow-wrap: break-word;
   }
 
   .markdown h1 {

@@ -40,6 +40,7 @@ defmodule OpenAgentsWeb.ForumTopicLive do
         if connected?(socket), do: Forum.subscribe_posts()
 
         posts = Forum.list_posts(topic)
+        board = Forum.get_forum!(topic.forum_id)
 
         {:ok,
          socket
@@ -47,8 +48,9 @@ defmodule OpenAgentsWeb.ForumTopicLive do
          |> assign(:current_scope, socket.assigns[:current_scope])
          |> assign(:read_scope, scope)
          |> assign(:topic, topic)
+         |> assign(:board, board)
          |> assign(:page_title, topic.title)
-         |> assign(:og, topic_og(topic, posts))
+         |> assign(:og, topic_og(board, topic, posts))
          |> assign(:posts, posts)
          |> stream(:posts, posts)
          |> assign(:form, to_form(%{"body_text" => ""}, as: :post))}
@@ -166,95 +168,124 @@ defmodule OpenAgentsWeb.ForumTopicLive do
       sidebar_sections={assigns[:sidebar_sections]}
       current_scope={@current_scope}
     >
-      <div class="flex items-center gap-2 mb-4">
-        <.link navigate={~p"/forum"} class="text-sm text-muted-foreground hover:text-foreground">
-          Forum
-        </.link>
-        <span class="text-muted-foreground">/</span>
-        <h1 class="text-2xl font-bold">{@topic.title}</h1>
-        <%!-- Tipping is commented out until the payment service is enabled here.
-        <.link navigate={~p"/forum/tips"} class="text-sm text-muted-foreground hover:text-foreground">
-          Tips
-        </.link>
-        --%>
-        <%= if @topic.state == "closed" do %>
-          <span class="badge" data-variant="dim">closed</span>
-        <% end %>
-        <%= if OpenAgents.Accounts.admin?(@current_user) do %>
-          <button class="btn" data-variant="ghost" data-size="sm" phx-click="toggle_closed">
-            {if @topic.state == "open", do: "Close topic", else: "Reopen topic"}
-          </button>
-        <% end %>
-      </div>
+      <div class="mx-auto w-full max-w-3xl">
+        <nav class="flex items-center gap-1.5 mb-2 text-sm text-muted-foreground">
+          <.link navigate={~p"/forum"} class="hover:text-foreground">Forum</.link>
+          <span aria-hidden="true">/</span>
+          <.link navigate={~p"/forum/f/#{@board.slug}"} class="hover:text-foreground">
+            {@board.title}
+          </.link>
+        </nav>
 
-      <div id="posts" phx-update="stream" class="space-y-4">
-        <div id="posts-empty" class="hidden only:block text-sm text-muted-foreground">
-          No posts yet.
-        </div>
-        <div :for={{id, post} <- @streams.posts} id={id} class="card !m-0">
-          <header class="flex items-center justify-between mb-2">
-            <span class="font-semibold text-sm">{post.actor_display_name}</span>
-            <span class="flex items-center gap-2">
-              <%= if OpenAgents.Accounts.admin?(@current_user) do %>
-                <button
-                  class="btn"
-                  data-variant="ghost"
-                  data-size="sm"
-                  phx-click="hide_post"
-                  phx-value-id={post.id}
-                >
-                  Hide
-                </button>
-              <% end %>
-              <%= if post.tip_count > 0 do %>
-                <span class="badge" data-variant="dim" title="Settled tips">
-                  {post.tip_sats_total} sats
-                </span>
-              <% end %>
-              <span class="text-xs text-muted-foreground"># {post.post_number}</span>
-            </span>
-          </header>
-          <div class="prose prose-sm dark:prose-invert max-w-none">
-            {Markdown.to_html(post.body_text)}
+        <header class="mb-6">
+          <h1 class="text-2xl font-semibold tracking-tight text-balance">{@topic.title}</h1>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm text-muted-foreground">
+            <span>{@topic.actor_display_name}</span>
+            <span aria-hidden="true">·</span>
+            <time datetime={DateTime.to_iso8601(@topic.created_at)}>
+              {Calendar.strftime(@topic.created_at, "%b %d, %Y")}
+            </time>
+            <span aria-hidden="true">·</span>
+            <span>{@topic.post_count} posts</span>
+            <%= if @topic.state == "closed" do %>
+              <span class="badge" data-variant="dim">closed</span>
+            <% end %>
+            <%= if OpenAgents.Accounts.admin?(@current_user) do %>
+              <button
+                class="btn ml-auto"
+                data-variant="ghost"
+                data-size="sm"
+                phx-click="toggle_closed"
+              >
+                {if @topic.state == "open", do: "Close topic", else: "Reopen topic"}
+              </button>
+            <% end %>
           </div>
-          <%!-- Tipping is commented out until the payment service is enabled here.
-          <footer :if={@current_user} class="flex items-center gap-2 mt-3">
-            <span class="text-xs text-muted-foreground">Tip the author</span>
-            <button
-              :for={amount <- tip_amounts()}
-              class="btn"
-              data-variant="ghost"
-              data-size="sm"
-              phx-click="tip"
-              phx-value-id={post.id}
-              phx-value-amount={amount}
-            >
-              {amount} sats
-            </button>
-          </footer>
-          --%>
-        </div>
-      </div>
+        </header>
 
-      <%= if @topic.state == "open" do %>
-        <.form for={@form} id="reply-form" phx-submit="reply" class="card !mx-0 !mt-6">
-          <.input field={@form[:body_text]} label="Reply" type="textarea" rows={4} required />
-          <footer class="flex justify-end mt-2">
-            <.button type="submit" variant={:primary}>Post reply</.button>
-          </footer>
-        </.form>
-      <% end %>
+        <%!-- Tipping is commented out until the payment service is enabled here. --%>
+
+        <div id="posts" phx-update="stream" class="flex flex-col gap-4">
+          <div id="posts-empty" class="hidden only:block text-sm text-muted-foreground">
+            No posts yet.
+          </div>
+          <article :for={{id, post} <- @streams.posts} id={id} class="card !m-0">
+            <header class="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
+              <span class="text-sm font-semibold">{post.actor_display_name}</span>
+              <%= if post.actor_is_agent do %>
+                <span class="badge" data-variant="dim">agent</span>
+              <% end %>
+              <time
+                class="text-xs text-muted-foreground"
+                datetime={DateTime.to_iso8601(post.created_at)}
+              >
+                {Calendar.strftime(post.created_at, "%b %d, %Y · %H:%M UTC")}
+              </time>
+              <span class="ml-auto flex items-center gap-2">
+                <%= if OpenAgents.Accounts.admin?(@current_user) do %>
+                  <button
+                    class="btn"
+                    data-variant="ghost"
+                    data-size="sm"
+                    phx-click="hide_post"
+                    phx-value-id={post.id}
+                  >
+                    Hide
+                  </button>
+                <% end %>
+                <%= if post.tip_count > 0 do %>
+                  <span class="badge" data-variant="dim" title="Settled tips">
+                    {post.tip_sats_total} sats
+                  </span>
+                <% end %>
+                <span class="text-xs text-muted-foreground">#{post.post_number}</span>
+              </span>
+            </header>
+            <div class="markdown">
+              {Markdown.to_html(post.body_text)}
+            </div>
+            <%!-- Tipping is commented out until the payment service is enabled here.
+            <footer :if={@current_user} class="flex items-center gap-2 mt-3">
+              <span class="text-xs text-muted-foreground">Tip the author</span>
+              <button
+                :for={amount <- tip_amounts()}
+                class="btn"
+                data-variant="ghost"
+                data-size="sm"
+                phx-click="tip"
+                phx-value-id={post.id}
+                phx-value-amount={amount}
+              >
+                {amount} sats
+              </button>
+            </footer>
+            --%>
+          </article>
+        </div>
+
+        <%= if @topic.state == "open" do %>
+          <.form for={@form} id="reply-form" phx-submit="reply" class="card !mx-0 !mt-8">
+            <.input field={@form[:body_text]} label="Reply" type="textarea" rows={4} required />
+            <footer class="flex justify-end mt-2">
+              <.button type="submit" variant={:primary}>Post reply</.button>
+            </footer>
+          </.form>
+        <% else %>
+          <p class="mt-8 text-sm text-muted-foreground">
+            This topic is closed. New replies are not accepted.
+          </p>
+        <% end %>
+      </div>
     </Layouts.app>
     """
   end
 
   defp current_user(socket), do: socket.assigns[:current_user]
 
-  defp topic_og(topic, posts) do
-    forum = Forum.get_forum!(topic.forum_id)
+  defp topic_og(board, topic, posts) do
     summary = with %{body_text: body} <- List.first(posts), do: body
 
-    OG.meta(OG.forum_topic(forum, topic, summary: summary))
+    OG.meta(OG.forum_topic(board, topic, summary: summary))
   end
 
   # The one re-read this page has, whether the write was made here or heard

@@ -84,7 +84,11 @@ defmodule OpenAgents.Repositories.VisibilityJoinTest do
       "the pull requests, stacks, and issue dependencies an export may carry",
     OpenAgents.Forge.Anchor =>
       "the repositories the published WAL anchor names, which is an anonymous " <>
-        "surface and must reach exactly what an anonymous reader already reaches"
+        "surface and must reach exactly what an anonymous reader already reaches",
+    OpenAgents.Plugins.ForgeSource =>
+      "the repositories the plugin registry index draws manifests from, which " <>
+        "is a public listing and must reach exactly what an anonymous reader " <>
+        "already reaches"
   }
 
   # Every site in `lib/` that names the predicate's own terms — a repository's

@@ -3835,10 +3835,13 @@ model, each named below.
   the anonymous one.
 - **Listing composes the predicate.** The modules that compose `readable_by/2`
   are `OpenAgents.Repositories`, `OpenAgents.Issues`, `OpenAgents.Projects`,
-  `OpenAgents.Notifications`, `OpenAgents.DataRights.AccountExport`, and
-  `OpenAgents.Forge.Anchor` — six, not the four the amendment above named. The
-  last is the published WAL anchor (`EXIT-005`), which is anonymous and must
-  name exactly the repositories an anonymous reader already reaches.
+  `OpenAgents.Notifications`, `OpenAgents.DataRights.AccountExport`,
+  `OpenAgents.Forge.Anchor`, and `OpenAgents.Plugins.ForgeSource` — seven, not
+  the four the amendment above named. The last two are anonymous surfaces and
+  must name exactly the repositories an anonymous reader already reaches: the
+  published WAL anchor (`EXIT-005`), and the plugin registry index, where a
+  private repository's manifest would disclose the repository the same way a
+  published anchor would.
 - **The predicate's terms live in one file, plus four stated exceptions.**
   Every site in `lib/` naming a repository's `visibility` or `lifecycle_state`
   against `"public"` or `"ready"` is classified, and the four that decide reach

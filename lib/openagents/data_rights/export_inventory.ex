@@ -399,6 +399,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "of the product, carrying no record an account authors."
     },
     %{
+      family: :plugin,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "The plugin registry index: validated manifests discovered from forge " <>
+          "repositories, each naming an artifact by digest. A manifest is a " <>
+          "published description of code, not a record an account authors — " <>
+          "what a person did with a plugin is their thread events, which " <>
+          "export whole."
+    },
+    %{
       family: :capacity,
       api?: true,
       status: :not_user_data,

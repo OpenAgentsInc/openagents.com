@@ -17,11 +17,20 @@ defmodule OpenAgents.Plugins.ForgeSource do
 
   alias OpenAgents.Plugins.Index
 
-  @doc "Return index entries for every public, ready repository that has a manifest.json on its default branch."
+  @doc """
+  Return index entries for every repository an anonymous reader can see that
+  has a `manifest.json` on its default branch.
+
+  The population composes `OpenAgents.Repositories.readable_by/2` with no user
+  rather than restating the join (REPOSITORY-001). The registry is a public
+  listing, so it must name exactly the repositories an anonymous reader
+  already reaches — a private repository publishing a plugin manifest here
+  would contradict TRANSPARENCY-001 the same way a published anchor would.
+  """
   @spec entries() :: [Index.Entry.t()]
   def entries do
     OpenAgents.Repositories.Repository
-    |> from(where: [visibility: "public", lifecycle_state: "ready"])
+    |> OpenAgents.Repositories.readable_by(nil)
     |> OpenAgents.Repo.all()
     |> Enum.flat_map(&entries_for_repository/1)
   end

@@ -200,6 +200,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/gym"}),
     do: declaration(:operator, "configured operator GitHub ID", "gym:read", false)
 
+  defp policy(%{path: "/gym/runs/:id"}),
+    do: declaration(:operator, "configured operator GitHub ID", "gym:read", false)
+
   defp policy(%{path: "/admin/analytics"}),
     do: declaration(:operator, "configured operator GitHub ID", "analytics:read", false)
 

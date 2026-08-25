@@ -60,6 +60,46 @@ defmodule OpenAgentsWeb.GymLiveTest do
     end
   end
 
+  describe "live updates" do
+    test "a running run appears, its tally moves, and it flips to graded in place", %{
+      conn: conn
+    } do
+      conn = log_in_admin_user(conn, "gym-live-operator")
+      {:ok, view, _html} = live(conn, ~p"/gym")
+
+      bearer = github_user("gym-live-bearer")
+
+      {:ok, run, false} =
+        Gym.start_run(%{
+          "suite" => "terminal-bench@2.0",
+          "agent" => "openagents-coder",
+          "model" => "ox-alpha",
+          "lane" => "proxy",
+          "tasks_total" => 2
+        })
+
+      running = view |> element("#gym-running-#{run.id}") |> render()
+      assert running =~ "terminal-bench@2.0"
+      assert running =~ "0 passed / 0 reported"
+      assert running =~ ~p"/gym/runs/#{run.id}"
+
+      {:ok, _trial} = Gym.record_trial(bearer, run, %{"task" => "hello", "state" => "passed"})
+
+      assert view |> element("#gym-running-#{run.id}") |> render() =~ "1 passed / 1 reported"
+
+      {:ok, graded} =
+        Gym.finalize_run(run, %{
+          "tasks_total" => 2,
+          "tasks_passed" => 1,
+          "recipe_digest" => "sha256:" <> String.duplicate("f", 64)
+        })
+
+      html = render(view)
+      refute has_element?(view, "#gym-running-#{graded.id}")
+      assert html =~ "50.0%"
+    end
+  end
+
   describe "runs" do
     test "recorded runs render with score, and the suite filter narrows", %{conn: conn} do
       _bench = record_run("terminal-bench@2.0", "d")

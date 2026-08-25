@@ -331,4 +331,54 @@ defmodule OpenAgents.GymTest do
       assert Gym.fetch_run("not-a-uuid") == :error
     end
   end
+
+  describe "fetch_trial_thread/1" do
+    test "reads a thread only through a stored, verified linkage" do
+      bearer = github_user("gym-thread-reader")
+      {:ok, thread} = Threads.open(bearer, "Run the linked trial")
+      run = running_run()
+
+      {:ok, linked} =
+        Gym.record_trial(bearer, run, %{
+          "task" => "linked",
+          "state" => "running",
+          "thread_id" => thread.id
+        })
+
+      assert {:ok, fetched} = Gym.fetch_trial_thread(linked.id)
+      assert fetched.id == thread.id
+    end
+
+    test "a trial without a linkage is refused" do
+      bearer = github_user("gym-thread-unlinked")
+      run = running_run()
+
+      {:ok, unlinked} =
+        Gym.record_trial(bearer, run, %{"task" => "local-lane", "state" => "running"})
+
+      assert Gym.fetch_trial_thread(unlinked.id) == :error
+    end
+
+    test "an unknown trial id is refused, however it is spelled" do
+      assert Gym.fetch_trial_thread(Ecto.UUID.generate()) == :error
+      assert Gym.fetch_trial_thread("not-a-uuid") == :error
+    end
+
+    test "a linkage whose thread was deleted with its account is refused" do
+      bearer = github_user("gym-thread-deleted")
+      {:ok, thread} = Threads.open(bearer, "Run then delete")
+      run = running_run()
+
+      {:ok, linked} =
+        Gym.record_trial(bearer, run, %{
+          "task" => "deleted",
+          "state" => "running",
+          "thread_id" => thread.id
+        })
+
+      {:ok, _deleted} = Repo.delete(thread)
+
+      assert Gym.fetch_trial_thread(linked.id) == :error
+    end
+  end
 end

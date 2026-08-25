@@ -2317,6 +2317,20 @@ conversation, and a thread is not one.
   anybody else's — ADMIN-001 names the same check at the route. It resolves
   and links; it never writes to the thread, mints for it, or returns it.
 
+  Amended 2026-08-25 (issue #242): the stored linkage gained a reader.
+  `OpenAgents.Gym.fetch_trial_thread/1` resolves a thread only through a
+  stored trial row's `thread_id` — a link `record_trial/3` admitted through
+  `get_for_user/2` at ingest — and serves the operator-gated `/gym/runs/:id`
+  transcript view (`OpenAgentsWeb.GymRunLive`, recheck on mount and on every
+  event). The trial row is the only key, so an arbitrary thread id has no
+  path in; the function reads, and never writes to the thread, mints for it,
+  or returns a grant. This is an operator read of another account's
+  transcript — exactly the transcripts a bearer deliberately linked to a
+  benchmark trial, and nothing else — and ADMIN-001 names it beside the
+  ingest check. `test/openagents/gym_test.exs` proves the refusals (unknown
+  trial, unlinked trial, deleted thread) and
+  `test/openagents_web/live/gym_run_live_test.exs` proves the gate.
+
 Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `OpenAgents.Threads.Event`, `OpenAgents.Inference.mint/1`,
 `OpenAgents.Inference.expire_elapsed_for_owner/1`,
@@ -2998,15 +3012,21 @@ sentence:
   and `PATCH /api/v1/gym/runs/:id`
   (`OpenAgentsWeb.GymRunController`, which rechecks the operator on every
   request over the bearer scope), and reading the scoreboard from `/gym`
-  (`OpenAgentsWeb.GymLive`, recheck on mount and on every event). A run is a
-  benchmark record — recipe digest, task, model, lane, reward, duration —
-  never account data; the surface is operator-only because it is
-  pre-release instrumentation, not because it reads across accounts. The one
-  cross-record link a trial may carry, a `thread_id`, is verified at ingest:
-  `OpenAgents.Gym.record_trial/3` admits a thread only when
-  `OpenAgents.Threads.get_for_user/2` resolves it for the bearer's account,
-  and an unknown thread and an unowned one refuse identically, so the Gym
-  cannot be used to confirm that a foreign thread id exists.
+  and a run's page from `/gym/runs/:id` (`OpenAgentsWeb.GymLive` and
+  `OpenAgentsWeb.GymRunLive`, recheck on mount and on every event). A run
+  is a benchmark record — recipe digest, task, model, lane, reward,
+  duration — never account data. The one cross-record link a trial may
+  carry, a `thread_id`, is verified at ingest: `OpenAgents.Gym.record_trial/3`
+  admits a thread only when `OpenAgents.Threads.get_for_user/2` resolves it
+  for the bearer's account, and an unknown thread and an unowned one refuse
+  identically, so the Gym cannot be used to confirm that a foreign thread
+  id exists. Since issue #242 that link is also read back: the run page
+  streams a linked trial's thread transcript to the operator through
+  `OpenAgents.Gym.fetch_trial_thread/1`, which resolves only through a
+  stored, ingest-verified trial linkage — so this surface does read another
+  account's data, exactly the transcripts a bearer deliberately linked to a
+  benchmark trial, and nothing else (THREAD-001 names the same reader from
+  the thread side).
 
 Reading a private forum board and raising a repository's transparency tier to
 `glass` are operator reads that widen with the same allowlist

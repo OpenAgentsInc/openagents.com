@@ -554,6 +554,19 @@ defmodule OpenAgents.Threads do
     Phoenix.PubSub.subscribe(OpenAgents.PubSub, topic(thread_id))
   end
 
+  @doc """
+  Drop a `subscribe/1` subscription.
+
+  For a viewer that moves between transcripts on one socket, so events from
+  the thread it left stop arriving instead of being filtered forever.
+  """
+  @spec unsubscribe(Thread.t() | String.t()) :: :ok
+  def unsubscribe(%Thread{id: thread_id}), do: unsubscribe(thread_id)
+
+  def unsubscribe(thread_id) when is_binary(thread_id) do
+    Phoenix.PubSub.unsubscribe(OpenAgents.PubSub, topic(thread_id))
+  end
+
   defp topic(thread_id), do: "thread:" <> thread_id
 
   defp broadcast(%Event{} = event) do

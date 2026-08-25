@@ -40,6 +40,7 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     # `/gym` landed while the rename was in flight; the forge targets move with
     # everything else.
     {"get", "/gym", "gym:read", false},
+    {"get", "/gym/runs/:id", "gym:read", false},
     {"get", "/api/v1/admin/forge/targets", "deployments:promote", false},
     {"get", "/api/v1/admin/forge/targets/:id", "deployments:promote", false},
     {"get", "/api/operator/artifact-listings/:id/export", "artifact-catalog:operate", false},
@@ -100,6 +101,8 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     OpenAgentsWeb.ForumBoardLive => "widens the board listing to private boards",
     OpenAgentsWeb.ForumTopicLive => "widens the topic read and gates closing and hiding",
     OpenAgentsWeb.GymLive => "rechecks the operator on mount and on every event",
+    OpenAgentsWeb.GymRunLive =>
+      "rechecks the operator on mount and on every event before streaming a linked transcript",
     OpenAgentsWeb.GymRunController =>
       "rechecks the operator on every request before recording or listing gym runs",
     OpenAgentsWeb.HomeLive => "marks the session operator for the home surface",

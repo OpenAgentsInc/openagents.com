@@ -23,9 +23,11 @@ defmodule OpenAgents.Gym do
   A trial's thread link is verified at ingest: the thread must exist and
   belong to the bearer's account, and an unknown thread and an unowned one
   refuse identically, so the check confirms nothing about threads the
-  account cannot see. A run still `running` whose last update is older
-  than six hours is swept to `abandoned` lazily on the read paths, so the
-  scoreboard never shows a forever-running row.
+  account cannot see. The operator-gated gym surface reads a linked
+  transcript back through `fetch_trial_thread/1`, which resolves only
+  through that stored, verified linkage. A run still `running` whose last
+  update is older than six hours is swept to `abandoned` lazily on the read
+  paths, so the scoreboard never shows a forever-running row.
 
   ## PubSub
 
@@ -213,6 +215,36 @@ defmodule OpenAgents.Gym do
   @spec list_trials(Run.t()) :: [Trial.t()]
   def list_trials(%Run{id: run_id}) do
     trials_query() |> where([t], t.run_id == ^run_id) |> Repo.all()
+  end
+
+  @doc """
+  The thread a trial's transcript lives on, read through the trial linkage.
+
+  This is the read path for the operator-gated gym surface. The `/gym`
+  viewer is any operator, not necessarily the thread's owner, so it cannot
+  read through the account-scoped `OpenAgents.Threads.fetch_readable/2`.
+  Reading here is sound because the linkage is the authority:
+  `record_trial/3` admitted the `thread_id` only after
+  `OpenAgents.Threads.get_for_user/2` resolved it for the reporting
+  bearer's account (INVARIANTS THREAD-001, ADMIN-001), so every stored
+  linkage names a thread its reporter owned and deliberately attached to a
+  benchmark trial. The trial row is the only key — an arbitrary thread id
+  has no path in — and the function reads; it never writes to the thread,
+  mints for it, or returns a grant.
+
+  Returns `:error` for an unknown trial, a trial with no linkage, and a
+  linked thread that no longer exists — a thread may be deleted with its
+  account while the benchmark record stays.
+  """
+  @spec fetch_trial_thread(String.t()) :: {:ok, Threads.Thread.t()} | :error
+  def fetch_trial_thread(trial_id) when is_binary(trial_id) do
+    with {:ok, id} <- Ecto.UUID.cast(trial_id),
+         %Trial{thread_id: thread_id} when is_binary(thread_id) <- Repo.get(Trial, id),
+         %Threads.Thread{} = thread <- Repo.get(Threads.Thread, thread_id) do
+      {:ok, thread}
+    else
+      _no_verified_linkage -> :error
+    end
   end
 
   @doc """

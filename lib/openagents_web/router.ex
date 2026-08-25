@@ -277,6 +277,7 @@ defmodule OpenAgentsWeb.Router do
       # than a second gating mechanism. Widening it is a decision, not a
       # default.
       live "/gym", GymLive, :index
+      live "/gym/runs/:id", GymRunLive, :show
     end
   end
 

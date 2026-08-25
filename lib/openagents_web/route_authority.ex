@@ -168,7 +168,13 @@ defmodule OpenAgentsWeb.RouteAuthority do
   # posting still requires an account. `/forum/claim` and `/forum/tips` stay
   # behind the authenticated prefix.
   defp policy(%{path: path, verb: verb})
-       when path in ["/forum", "/forum/f/:slug", "/forum/t/:id"] and verb in [:get, :head],
+       when path in [
+              "/forum",
+              "/forum/f/:slug",
+              "/forum/t/:id",
+              "/forum/topic/:id",
+              "/forum/post/:id"
+            ] and verb in [:get, :head],
        do:
          declaration(
            :public_read,

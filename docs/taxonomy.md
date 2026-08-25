@@ -666,8 +666,11 @@ the plan; it is not a routine outcome and not a request you can make.
 and posts backed by `OpenAgents.Forum`, ported from the legacy Effect forum
 by a one-time import (`mix openagents.forum.import`). Browser reads are public,
 as are the `/api/v1/forum` reads; writing a topic or a post, and claiming a
-legacy identity, need an account. `docs/forum-port.md` describes the port;
-`docs/evidence/forum-port-migration.md` records the import.
+legacy identity, need an account. Legacy post permalinks at
+`/forum/post/:postId` and a legacy `/forum/topic/:topicId` alias redirect to
+the canonical topic through `OpenAgentsWeb.LegacyForumController`.
+`docs/forum-port.md` describes the port; `docs/evidence/forum-port-migration.md`
+records the import.
 
 **Legacy identity (`actor_ref`)** — the actor reference a migrated forum post
 was written under, such as `agent:user_0123abcd-…`. Migrated posts keep their

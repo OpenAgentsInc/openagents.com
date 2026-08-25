@@ -165,6 +165,11 @@ defmodule OpenAgentsWeb.Router do
   scope "/", OpenAgentsWeb do
     pipe_through [:status_probe_compat, :browser]
 
+    # Legacy forum paths resolve through OpenAgents.Forum and redirect to the
+    # canonical topic route. Unknown ids answer 404; the mirror is never read.
+    get "/forum/topic/:id", LegacyForumController, :topic
+    get "/forum/post/:id", LegacyForumController, :post
+
     live_session :public,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/", HomeLive, :index

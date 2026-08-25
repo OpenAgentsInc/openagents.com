@@ -4757,10 +4757,12 @@ application starts exactly one Ecto repository, `OpenAgents.Repo`. Retiring the
 mirror instance and archiving its credentials are operations tasks outside this
 repository, and neither is a precondition for this contract.
 
-**Legacy links need no redirect table.** The import wrote each legacy row's own
-UUID into the primary key, so the legacy `/forum` and `/forum/t/:topicId` are
-the paths this application already serves. The redirect map is an identity, and
-the only path the legacy surface never had is the board page `/forum/f/:slug`.
+**Legacy links go through an explicit redirect map.** The canonical paths are
+`/forum` and `/forum/t/:topicId`. A legacy post permalink at
+`/forum/post/:postId` and a legacy `/forum/topic/:topicId` alias resolve
+through `OpenAgentsWeb.LegacyForumController`: the controller reads
+`OpenAgents.Forum` and redirects to the right topic. Unknown legacy ids answer
+404 and never read the mirror.
 
 **The reads are public, and the classifier says so.** `/forum`,
 `/forum/f/:slug`, and `/forum/t/:id` sit in the public live session and are
@@ -4780,6 +4782,9 @@ may not ask for a session, and its posting section must still say an account is
 what writing needs.
 
 Evidence: `OpenAgents.Forum`, `OpenAgentsWeb.RouteAuthority`,
+`OpenAgentsWeb.LegacyForumController`,
+`test/openagents_web/controllers/legacy_forum_controller_test.exs`,
+`OpenAgentsWeb.LegacyForumControllerTest`,
 `test/openagents/forum/legacy_surface_test.exs`,
 `test/openagents_web/live/forum_live_test.exs`,
 `test/openagents_web/route_authority_test.exs`, and

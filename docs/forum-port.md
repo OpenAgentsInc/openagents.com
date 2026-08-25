@@ -79,11 +79,13 @@ name. The user-facing procedure is
 The cutover is complete. `openagents.com/forum` serves this implementation,
 and nothing points at the legacy surface.
 
-The legacy routes were `/forum` (home) and `/forum/t/:topicId` (topic). This
-surface serves exactly those paths, and every migrated row keeps its source
-UUID, so the redirect map is an identity rather than a table: a legacy link is
-a URL this application already answers. `/forum/f/:slug`, the board page, is
-the one path the legacy surface never had.
+The legacy routes were `/forum` (home), `/forum/t/:topicId` (topic), and a
+post permalink at `/forum/post/:postId`. `/forum` and `/forum/t/:topicId`
+remain canonical. `/forum/post/:postId` now resolves through
+`OpenAgentsWeb.LegacyForumController`, looks the post up in
+`OpenAgents.Forum`, and redirects to `/forum/t/:topicId`. A legacy
+`/forum/topic/:topicId` alias also redirects to the canonical topic. Unknown
+legacy ids answer 404 and never read the mirror.
 
 Browser reads are public. An anonymous visitor reaches the board list, a
 board, and a topic, and the sidebar row points every reader at the forum

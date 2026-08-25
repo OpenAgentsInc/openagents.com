@@ -100,23 +100,15 @@ defmodule OpenAgents.Forge.Assignments do
            assignment_credential: plaintext
          ) do
       {:ok, run} ->
-        assignment =
-          case Repo.get!(Assignment, assignment.id) do
-            %Assignment{} = current when current.state in @terminal_states ->
-              current
+        case start_running(assignment, run.id) do
+          {:ok, started} ->
+            _ = announce(started)
+            {:ok, started, plaintext}
 
-            %Assignment{} = current ->
-              current
-              |> Assignment.changeset(%{
-                run_id: run.id,
-                state: "running",
-                started_at: DateTime.utc_now()
-              })
-              |> Repo.update!()
-          end
-
-        _ = announce(assignment)
-        {:ok, assignment, plaintext}
+          {:already_finished, finished} ->
+            _ = announce(finished)
+            {:error, :assignment_finished}
+        end
 
       {:error, reason} ->
         _ = finish(assignment, "failed", nil, inspect(reason))
@@ -128,11 +120,18 @@ defmodule OpenAgents.Forge.Assignments do
     if assignment.credential_delivery_status == "enabled",
       do: AssignmentCredentialVault.put(assignment.id, plaintext)
 
-    assignment =
-      assignment
-      |> Assignment.changeset(%{state: "running", started_at: DateTime.utc_now()})
-      |> Repo.update!()
+    case start_running(assignment) do
+      {:already_finished, finished} ->
+        AssignmentCredentialVault.delete(finished.id)
+        _ = announce(finished)
+        {:error, :assignment_finished}
 
+      {:ok, started} ->
+        start_computer_job(started, machine, plaintext, attrs, owner, conversation)
+    end
+  end
+
+  defp start_computer_job(assignment, machine, plaintext, attrs, owner, conversation) do
     _ = announce(assignment)
 
     params = %{
@@ -154,6 +153,50 @@ defmodule OpenAgents.Forge.Assignments do
         AssignmentCredentialVault.delete(assignment.id)
         _ = finish(assignment, "failed", nil, inspect(reason))
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Marks an assignment running, unless it already finished.
+
+  The guard and the write are one statement. Postgres evaluates
+  `state not in terminal` while it holds the row's write lock, so a starter that
+  arrives after `finish/4` matches no row and changes nothing, whichever of the
+  two reaches the row first.
+
+  Reading the state and then writing it back left a window between them. A run
+  that finalized inside that window had its credential revoked and its state
+  overwritten with `running`, which left an attempt that looked live and could
+  not authenticate: `usable?/1` refuses a revoked credential, so every push it
+  tried failed while its state said the attempt was still going.
+
+  Returns `{:ok, assignment}` when this caller made the transition and
+  `{:already_finished, assignment}` when it lost, so a caller can tell starting
+  work from finding the work already over.
+  """
+  @spec start_running(Assignment.t(), String.t() | nil) ::
+          {:ok, Assignment.t()} | {:already_finished, Assignment.t()}
+  def start_running(assignment, run_id \\ nil)
+
+  def start_running(%Assignment{id: id}, run_id) do
+    now = DateTime.utc_now()
+
+    set =
+      [state: "running", started_at: now, updated_at: now]
+      |> then(&if(run_id, do: Keyword.put(&1, :run_id, run_id), else: &1))
+
+    {_count, rows} =
+      Repo.update_all(
+        from(a in Assignment,
+          where: a.id == ^id and a.state not in ^@terminal_states,
+          select: a
+        ),
+        set: set
+      )
+
+    case rows do
+      [%Assignment{} = started] -> {:ok, started}
+      [] -> {:already_finished, Repo.get!(Assignment, id)}
     end
   end
 

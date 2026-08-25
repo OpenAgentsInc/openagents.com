@@ -39,10 +39,7 @@ defmodule OpenAgents.Forge.AssignmentCredentialAuthTest do
     original_key = Application.get_env(:openagents, :box_api_key)
 
     # The provider is stubbed so `start_target/7` succeeds and `create/1`
-    # returns the plaintext. A poll has to answer "still alive": a run that
-    # reaches a terminal state finalizes its assignment, which revokes the
-    # credential, and this case would then be racing its own fixture rather
-    # than testing the lookup.
+    # returns the plaintext.
     Application.put_env(:openagents, :box_api,
       base_url: "https://box-api.internal",
       request_options: [plug: &stub_provider/1]
@@ -186,21 +183,17 @@ defmodule OpenAgents.Forge.AssignmentCredentialAuthTest do
     }
   end
 
-  # The run exists only so `create/1` reaches its return. Any command POST
-  # parks the worker before it can transition:  a run that reaches a terminal
-  # state finalizes its assignment, which revokes the credential, and
-  # `start_target/7` then writes `state: "running"` back over the terminal
-  # state it read a moment earlier — leaving a live-looking assignment holding
-  # a revoked credential. A real run takes seconds and never lands in that
-  # window; a stubbed one closes it in microseconds. `start_run/6` returns as
-  # soon as the worker's `init/1` does, so parking here does not block
-  # `create/1`.
+  # The run exists only so `create/1` reaches its return. It used to park the
+  # worker on a 30-second sleep, because `start_target/7` read the assignment's
+  # state and then wrote `running` back over whatever a finalizing run had
+  # written in between — so a stubbed run that reached a terminal state revoked
+  # the credential this case had just minted. The guard and the write are one
+  # statement now (issue #257), so the worker runs at its own speed here.
   defp stub_provider(conn) do
     {:ok, raw, conn} = Plug.Conn.read_body(conn)
 
     case Jason.decode(raw) do
       {:ok, %{"command" => command}} when is_binary(command) ->
-        Process.sleep(30_000)
         Req.Test.json(conn, %{"stdout" => "4242\n"})
 
       _other ->

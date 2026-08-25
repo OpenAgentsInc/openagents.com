@@ -410,9 +410,25 @@ operator, or access non-Git API routes. The credential stores only a digest,
 expires with the assignment deadline, and is revoked when the assignment
 reaches a terminal state.
 
+**No assignment is in a non-terminal state while its credential is revoked.**
+Revocation and the terminal state are written in one transaction by `finish/4`,
+and the transition into `running` is one conditional statement:
+`Assignments.start_running/2` writes only where the state is not already
+terminal, so Postgres evaluates the guard while it holds the row's write lock.
+A starter that arrives after the finalizer matches no row, changes nothing, and
+returns `{:already_finished, assignment}`, which is how its caller tells
+starting work from finding the work already over.
+
 Evidence: `OpenAgents.Forge.Assignments`,
-`OpenAgentsWeb.Plugs.ForgeGitAuth`, `OpenAgents.Forge.GitHTTP`, and
-`test/openagents/forge/assignment_test.exs`.
+`OpenAgentsWeb.Plugs.ForgeGitAuth`, `OpenAgents.Forge.GitHTTP`,
+`test/openagents/forge/assignment_test.exs`, and
+`test/openagents/forge/assignment_start_race_test.exs`.
+
+(Amended 2026-08-25, issue #257: `start_target/7` read the state and then wrote
+`running` back, with nothing holding the row between them. A run that finalized
+inside that window had its credential revoked and its state overwritten, which
+left an attempt that looked live and could not authenticate. The guard and the
+write are now one statement.)
 
 ### IDENTITY-007 — Delegated Box control is explicit and revocable
 
@@ -5961,7 +5977,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |
 | IDENTITY-005 | `test/openagents_web/controllers/box_controller_test.exs` |
-| IDENTITY-006 | `test/openagents/forge/assignment_test.exs` |
+| IDENTITY-006 | `test/openagents/forge/assignment_test.exs`, `test/openagents/forge/assignment_start_race_test.exs` |
 | IDENTITY-007 | `test/openagents/agents_test.exs` |
 | IDENTITY-008 | `test/openagents_web/controllers/computer_control_api_test.exs`, `test/openagents/inference/computer_revocation_test.exs`, `test/openagents/computer_projection_test.exs`, `test/openagents/machines/index_reach_test.exs` |
 | IDENTITY-009 | `test/openagents_web/controllers/delegations_controller_test.exs` |

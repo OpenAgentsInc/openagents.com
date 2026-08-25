@@ -115,6 +115,9 @@ cp "$pkg/openagents-$to_version.tar.gz" "$runtime_root/releases/openagents-$to_v
 
 secret=$(openssl rand -base64 64 | tr -d '\n')
 token_key=$(openssl rand -base64 32 | tr -d '\n')
+# The pairing vault's own key (VAULT-001, issue #253): distinct, because a
+# release refuses to serve on a key borrowed from another vault.
+machine_key=$(openssl rand -base64 32 | tr -d '\n')
 
 profile() {
   env \
@@ -123,6 +126,7 @@ profile() {
     GITHUB_CLIENT_SECRET="relup-proof-secret" \
     GITHUB_TOKEN_ENCRYPTION_KEY="$token_key" \
     GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-relup-proof-2026-08" \
+    MACHINE_TOKEN_ENCRYPTION_KEY="$machine_key" \
     OPENAI_API_KEY="relup-proof-openai-key" \
     PHX_SERVER="true" \
     POOL_SIZE="2" \

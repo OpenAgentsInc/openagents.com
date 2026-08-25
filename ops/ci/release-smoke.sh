@@ -64,6 +64,10 @@ github_token_key=$(openssl rand -base64 32 | tr -d '\n')
 # issue #193). There is no bridge to the GitHub key, so the smoke provides
 # its own or the release refuses to boot.
 content_key=$(openssl rand -base64 32 | tr -d '\n')
+# The pairing vault's own key (VAULT-001, issue #253). The bridge in
+# `config/runtime.exs` would hand it the GitHub vault's key, and a release
+# refuses to serve on a borrowed one, so the smoke provides a distinct key.
+machine_key=$(openssl rand -base64 32 | tr -d '\n')
 
 echo "Checking the release configuration profile"
 readiness_report=$(env \
@@ -73,6 +77,7 @@ readiness_report=$(env \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
   GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-release-smoke-2026-08" \
   CONTENT_ENCRYPTION_KEY="$content_key" \
+  MACHINE_TOKEN_ENCRYPTION_KEY="$machine_key" \
   OPENAI_API_KEY="release-smoke-openai-key" \
   POOL_SIZE="2" \
   PORT="$port" \
@@ -94,6 +99,7 @@ env \
   GITHUB_TOKEN_ENCRYPTION_KEY="$github_token_key" \
   GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-release-smoke-2026-08" \
   CONTENT_ENCRYPTION_KEY="$content_key" \
+  MACHINE_TOKEN_ENCRYPTION_KEY="$machine_key" \
   OPENAI_API_KEY="release-smoke-openai-key" \
   PHX_SERVER="true" \
   POOL_SIZE="2" \

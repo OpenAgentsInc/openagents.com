@@ -77,6 +77,11 @@ prepare_runtime() {
   # The content vault's own key (VAULT-001, issue #193). Nothing bridges
   # to it, so the proof supplies one or the release refuses to boot.
   proof_content_key=$(openssl rand -base64 32 | tr -d '\n')
+  # The pairing vault's own key (VAULT-001, issue #253). `config/runtime.exs`
+  # still bridges an unset one to the GitHub key, and a staging or production
+  # release now refuses to serve on a borrowed key, so the proof supplies a
+  # distinct one rather than exercising the bridge it is not here to test.
+  proof_machine_key=$(openssl rand -base64 32 | tr -d '\n')
 }
 
 profile() {
@@ -87,6 +92,7 @@ profile() {
     GITHUB_TOKEN_ENCRYPTION_KEY="$proof_token_key" \
     GITHUB_TOKEN_ENCRYPTION_KEY_ID="staging-relup-proof-2026-08" \
     CONTENT_ENCRYPTION_KEY="$proof_content_key" \
+    MACHINE_TOKEN_ENCRYPTION_KEY="$proof_machine_key" \
     OPENAI_API_KEY="relup-proof-openai-key" \
     OPENAGENTS_RELUP_INSTALL_BARRIER_MS="${OPENAGENTS_RELUP_INSTALL_BARRIER_MS:-0}" \
     OPENAGENTS_RELUP_INSTALL_BARRIER_PATH="${OPENAGENTS_RELUP_INSTALL_BARRIER_PATH:-}" \

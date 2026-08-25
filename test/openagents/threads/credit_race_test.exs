@@ -10,62 +10,64 @@ defmodule OpenAgents.Threads.CreditRaceTest do
 
   What is deliberately not asserted is that overlapping live ceilings sum to
   the remainder. A live grant's unspent headroom does not reserve credit,
-  because a delegated child thread must be mintable while its parent holds the
-  whole remaining balance as its ceiling — reserving headroom would refuse
+  because a delegated child thread must be mintable while its parent holds
+  the whole remaining balance as its ceiling — reserving headroom would refuse
   every such child with `:credit_exhausted`. The joint exposure is instead
   bounded by the admission cap, which is why the cap has to hold under
   concurrency (THREAD-001).
+
+  These tests do not use the SQL sandbox. Each concurrent worker checks out a
+  real database connection, so the `FOR UPDATE` locks are exercised against
+  PostgreSQL and not flattened by a single shared sandbox connection.
   """
 
-  use OpenAgents.DataCase, async: false
+  use ExUnit.Case, async: false
 
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Repo
   alias OpenAgents.Threads
+  alias OpenAgents.Threads.Thread
+
+  import Ecto.Query
 
   test "simultaneous opens at the admission boundary admit exactly one thread" do
     cap(2)
-    visitor = visitor("cap-race")
+    visitor_id = fresh_visitor("cap-race")
 
-    {:ok, _first} = Threads.open(%Visitor{id: visitor}, "Already open")
+    unboxed(fn ->
+      {:ok, _first} = Threads.open(%Visitor{id: visitor_id}, "Already open")
+    end)
 
     results =
-      ["Second", "Third"]
-      |> Task.async_stream(
-        fn objective -> Threads.open(%Visitor{id: visitor}, objective) end,
-        max_concurrency: 2,
-        ordered: false,
-        timeout: :infinity
-      )
-      |> Enum.map(fn {:ok, result} -> result end)
+      concurrent(["Second", "Third"], fn objective ->
+        Threads.open(%Visitor{id: visitor_id}, objective)
+      end)
 
     assert Enum.count(results, &match?({:ok, _thread}, &1)) == 1
     assert Enum.count(results, &match?({:error, :thread_quota_reached}, &1)) == 1
-    assert Threads.open_count(visitor) == 2
+    assert unboxed(fn -> Threads.open_count(visitor_id) end) == 2
   end
 
   test "simultaneous opens against an exhausted account jointly mint nothing" do
-    visitor = visitor("exhausted-race")
+    visitor_id = fresh_visitor("exhausted-race")
 
-    {:ok, _spent} =
-      Inference.record_usage(minted(visitor), %{
-        "output_tokens" => output_tokens_costing(Credit.allowance(visitor))
-      })
+    unboxed(fn ->
+      {:ok, _spent} =
+        Inference.record_usage(minted(visitor_id), %{
+          "output_tokens" => output_tokens_costing(Credit.allowance(visitor_id))
+        })
+    end)
 
-    assert Credit.remaining(visitor) == 0
+    assert unboxed(fn -> Credit.remaining(visitor_id) end) == 0
 
     results =
-      ["First racer", "Second racer"]
-      |> Task.async_stream(
-        fn objective -> Threads.open_and_mint(%Visitor{id: visitor}, objective) end,
-        max_concurrency: 2,
-        ordered: false,
-        timeout: :infinity
-      )
-      |> Enum.map(fn {:ok, result} -> result end)
+      concurrent(["First racer", "Second racer"], fn objective ->
+        Threads.open_and_mint(%Visitor{id: visitor_id}, objective)
+      end)
 
     assert Enum.all?(results, &match?({:error, :credit_exhausted}, &1))
 
@@ -73,29 +75,34 @@ defmodule OpenAgents.Threads.CreditRaceTest do
     # The racers leave the account exactly one grant — the exhausted one that
     # spent the credit — and no open thread: exhausting the grant abandoned
     # its thread, and admission reaped it.
-    assert Threads.open_count(visitor) == 0
-    assert Repo.aggregate(from(g in Grant, where: g.owner_visitor_id == ^visitor), :count) == 1
+    assert unboxed(fn -> Threads.open_count(visitor_id) end) == 0
+
+    assert unboxed(fn ->
+             Repo.aggregate(from(g in Grant, where: g.owner_visitor_id == ^visitor_id), :count)
+           end) == 1
   end
 
   test "simultaneous opens mint the serialized remainder, the figure sequential opens mint" do
-    visitor = visitor("remainder-race")
+    visitor_id = fresh_visitor("remainder-race")
     spent = 250_000
 
-    {:ok, _spent} =
-      Inference.record_usage(minted(visitor), %{"output_tokens" => output_tokens_costing(spent)})
+    unboxed(fn ->
+      {:ok, _spent} =
+        Inference.record_usage(minted(visitor_id), %{
+          "output_tokens" => output_tokens_costing(spent)
+        })
+    end)
 
-    remainder = Credit.allowance(visitor) - spent
-    assert Credit.remaining(visitor) == remainder
+    remainder = unboxed(fn -> Credit.allowance(visitor_id) - spent end)
+    assert unboxed(fn -> Credit.remaining(visitor_id) end) == remainder
 
     grants =
-      ["First racer", "Second racer"]
-      |> Task.async_stream(
-        fn objective -> Threads.open_and_mint(%Visitor{id: visitor}, objective) end,
-        max_concurrency: 2,
-        ordered: false,
-        timeout: :infinity
-      )
-      |> Enum.map(fn {:ok, {:ok, _thread, grant, _token}} -> grant end)
+      concurrent(["First racer", "Second racer"], fn objective ->
+        case Threads.open_and_mint(%Visitor{id: visitor_id}, objective) do
+          {:ok, _thread, grant, _token} -> grant
+          other -> other
+        end
+      end)
 
     # Each racer is ceiled at the metered remainder — the same ceiling the two
     # opens mint in either serial order, because a mint spends nothing and a
@@ -106,23 +113,57 @@ defmodule OpenAgents.Threads.CreditRaceTest do
   end
 
   test "serial behavior is unchanged: the next thread is ceiled at what spend left behind" do
-    visitor = visitor("serial")
+    visitor_id = fresh_visitor("serial")
     spent = 250_000
 
-    {:ok, first} = Threads.open(%Visitor{id: visitor}, "Spend a little")
-    {:ok, first, grant, _token} = Threads.mint_grant(first)
+    unboxed(fn ->
+      {:ok, first} = Threads.open(%Visitor{id: visitor_id}, "Spend a little")
+      {:ok, first, grant, _token} = Threads.mint_grant(first)
+      assert grant.max_cost_microusd == Credit.allowance(visitor_id)
 
-    assert grant.max_cost_microusd == Credit.allowance(visitor)
+      {:ok, _spent} =
+        Inference.record_usage(grant, %{
+          "output_tokens" => output_tokens_costing(spent)
+        })
 
-    {:ok, _spent} =
-      Inference.record_usage(grant, %{"output_tokens" => output_tokens_costing(spent)})
+      {:ok, _finished} = Threads.finish(first, %{report: "Done."})
+      {:ok, second} = Threads.open(%Visitor{id: visitor_id}, "Spend the rest")
+      {:ok, _second, next_grant, _token} = Threads.mint_grant(second)
+      assert next_grant.max_cost_microusd == Credit.allowance(visitor_id) - spent
+      :ok
+    end)
+  end
 
-    {:ok, _finished} = Threads.finish(first, %{report: "Done."})
+  test "concurrent appends on one thread count every event" do
+    visitor_id = fresh_visitor("event-race")
 
-    {:ok, second} = Threads.open(%Visitor{id: visitor}, "Spend the rest")
-    {:ok, _second, next_grant, _token} = Threads.mint_grant(second)
+    thread =
+      unboxed(fn ->
+        {:ok, thread} = Threads.open(%Visitor{id: visitor_id}, "Event race")
+        thread
+      end)
 
-    assert next_grant.max_cost_microusd == Credit.allowance(visitor) - spent
+    results =
+      concurrent([%{"i" => "a"}, %{"i" => "b"}], fn payload ->
+        Threads.record_event(thread, "thread.race", payload)
+      end)
+
+    assert Enum.all?(results, &match?({:ok, _thread}, &1))
+
+    {event_count, events} =
+      unboxed(fn ->
+        current = Repo.get!(Thread, thread.id)
+        {current.event_count, Threads.list_events(current)}
+      end)
+
+    assert event_count == 3
+    assert length(events) == 3
+  end
+
+  defp fresh_visitor(key) do
+    visitor_id = unboxed(fn -> visitor(key) end)
+    on_exit(fn -> unboxed(fn -> cleanup(visitor_id) end) end)
+    visitor_id
   end
 
   defp visitor(key) do
@@ -154,5 +195,24 @@ defmodule OpenAgents.Threads.CreditRaceTest do
     on_exit(fn ->
       Application.put_env(:openagents, :maximum_open_threads_per_account, previous)
     end)
+  end
+
+  defp concurrent(inputs, fun) do
+    inputs
+    |> Task.async_stream(
+      fn item -> unboxed(fn -> fun.(item) end) end,
+      max_concurrency: 2,
+      ordered: false,
+      timeout: :infinity
+    )
+    |> Enum.map(fn {:ok, result} -> result end)
+  end
+
+  defp unboxed(fun) do
+    Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fun)
+  end
+
+  defp cleanup(visitor_id) do
+    Repo.delete_all(from(v in Visitor, where: v.id == ^visitor_id))
   end
 end

@@ -430,8 +430,8 @@ The import itself was not performed. It is a permanent append to a shared
 production log, its failure mode is the fleet-wide rebuild step 3 has never
 exercised live, and both belong to an attended operation rather than to a
 read-only rehearsal. #188 records the decision — import the objects, keep the
-push record starting at the seed — and
-`docs/forge-operator-independence.md` carries the reasoning.
+push record starting at the seed — `docs/forge-operator-independence.md`
+carries the reasoning, and #256 carries the operation.
 
 ## 4. Key rotation
 

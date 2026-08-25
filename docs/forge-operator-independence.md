@@ -354,8 +354,8 @@ design, `EXIT-005` makes removing an entry a rewrite of the whole suffix, and
 if a node fails to materialize the new entry `OpenAgents.Forge.Sync` falls back
 to a full rebuild from sequence zero, which rehearsal 3 records as never having
 been run against the live projection. That is an attended operation on a forge
-people are pushing to, not an unattended one, and it is tracked separately
-rather than being described here as done.
+people are pushing to, not an unattended one, and #256 carries it rather than
+this document describing it as done.
 
 ## Exit
 

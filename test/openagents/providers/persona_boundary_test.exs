@@ -66,6 +66,7 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.Providers.OpenAI => :outbound_http,
     OpenAgents.Providers.OpenRouter => :outbound_http,
     OpenAgents.Providers.VercelGateway => :outbound_http,
+    OpenAgents.Providers.FailingTestProvider => :in_process,
     OpenAgents.Providers.FallbackTestProvider => :in_process,
     OpenAgents.Providers.RecordingTestProvider => :in_process,
     OpenAgents.Providers.Test => :in_process,
@@ -98,10 +99,12 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.CompensationFixtures => :composes_installed_persona,
     OpenAgents.Persona.Evaluation.Runner => :composes_persona_candidate,
     OpenAgentsWeb.InferenceProxyController => :relays_caller_instructions,
+    OpenAgentsWeb.ResponsesController => :relays_caller_instructions,
     OpenAgents.Conversations => :pins_a_composed_request,
     OpenAgents.Providers.OpenAI => :adapter,
     OpenAgents.Providers.OpenRouter => :adapter,
     OpenAgents.Providers.VercelGateway => :adapter,
+    OpenAgents.Providers.FailingTestProvider => :adapter,
     OpenAgents.Providers.FallbackTestProvider => :adapter,
     OpenAgents.Providers.RecordingTestProvider => :adapter,
     OpenAgents.Providers.Test => :adapter,
@@ -317,9 +320,20 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
       end
     end
 
-    test "the inference proxy composes no OpenAgents persona" do
-      relays = for {module, :relays_caller_instructions} <- @request_sites, do: module
-      assert relays == [OpenAgentsWeb.InferenceProxyController]
+    test "a surface that relays a caller's instructions composes no OpenAgents persona" do
+      relays =
+        for({module, :relays_caller_instructions} <- @request_sites, do: module)
+        |> Enum.sort()
+
+      # Both surfaces take a caller's own instructions and answer them. The
+      # OpenResponses surface joined the inference proxy here rather than
+      # earning a classification of its own, because the property PERSONA-001
+      # needs from it is identical: it must reach no persona module.
+      assert relays ==
+               Enum.sort([
+                 OpenAgentsWeb.InferenceProxyController,
+                 OpenAgentsWeb.ResponsesController
+               ])
 
       for module <- relays do
         reached =

@@ -5769,11 +5769,9 @@ returned a `url` field naming `/api/v3/traces/{id}`, a link that went dead the
 day the alias did. Every versioned route is declared at `/api/v1` and every URL
 a response emits names `/api/v1`.
 
-Evidence: `lib/openagents_web/plugs/api_v3_rewrite.ex`,
-`lib/openagents_web/router.ex`,
-`lib/openagents_web/controllers/trace_controller.ex`,
-`test/openagents_web/api_version_posture_test.exs`, and
-`test/openagents_web/plugs/api_v3_rewrite_test.exs`.
+Evidence: `lib/openagents_web/router.ex`,
+`lib/openagents_web/controllers/trace_controller.ex`, and
+`test/openagents_web/api_version_posture_test.exs`.
 
 ## Executable proof index
 
@@ -5814,7 +5812,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents/notifications/email_channel_test.exs`, `test/openagents/notifications/email_delivery_test.exs`, `test/openagents/notifications/delivery_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
 
 | FORGEAPI-001 | `test/openagents_web/controllers/api_error_contract_test.exs`, `test/openagents_web/controllers/api_extension_controller_test.exs`, `test/openagents_web/api_error_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
-| FORGEAPI-002 | `test/openagents_web/api_version_posture_test.exs`, `test/openagents_web/plugs/api_v3_rewrite_test.exs` |
+| FORGEAPI-002 | `test/openagents_web/api_version_posture_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |

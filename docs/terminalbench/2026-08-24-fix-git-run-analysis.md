@@ -178,6 +178,20 @@ All three on the Gym board (project 14):
 
 ## 7. Method notes
 
+**Contamination audit (2026-08-24).** The guidance shipped from section
+5 was audited against training-on-the-test-set risk. What it says:
+batch independent commands; disable pagers and prefer quiet flags (git
+named only as an example, beside `PAGER=cat`); ask for summaries before
+full dumps; the local lane is slow, be terse; metered rounds replay the
+conversation. What it deliberately does not say: anything about
+reflogs, lost or dangling commits, detached HEAD, merging,
+cherry-picking, conflict resolution or which side to keep, or any file
+or check this task's verifier reads. The rule stands from section 5:
+every lever is a product change; nothing in a declaration, prompt, or
+skill may encode a benchmark task's solution, and each measured run's
+ATIF records the declarations it actually ran with, so the claim is
+auditable per trial.
+
 Single-task, single-trial-per-lane runs: these are existence proofs and
 cost profiles, not statistics. No pass-rate claims beyond "these trials
 passed"; #34's suite with thresholds is where rates become claims.

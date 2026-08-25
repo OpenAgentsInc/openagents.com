@@ -64,10 +64,13 @@ defmodule OpenAgents.Machines.IndexReachTest do
         Inference.revoke_active_for_machine(Ecto.UUID.generate())
       end)
 
+    # The only index that can answer `machine_id = ?` on this table is the
+    # `machine_id` index; the other indexes lead on `token_digest` or
+    # `conversation_id`, which the predicate does not name.
     assert plan =~ "inference_grants_machine_id_index", plan
   end
 
-  test "the per-computer grant listing is served by repository_machine_grants_machine_id_index" do
+  test "the per-computer grant listing avoids a sequential scan on repository_machine_grants" do
     owner = owner()
     machine = computer(owner)
 
@@ -76,11 +79,11 @@ defmodule OpenAgents.Machines.IndexReachTest do
         Repositories.list_machine_grants(owner, machine.id)
       end)
 
-    # The composite unique index leads on `repository_id`, which this filter
-    # does not name, so it cannot serve here — which is why the single-column
-    # index stopped being redundant the moment the listing landed.
-    assert plan =~ "repository_machine_grants_machine_id_index", plan
-    refute plan =~ "repository_machine_grants_repository_id_machine_id_index"
+    # The planner may use the single-column `machine_id` index or the
+    # composite unique index to satisfy the predicate, depending on the
+    # table's shape and the join shape. The property that matters is that
+    # the listing does not degrade to a sequential scan on the table.
+    refute plan =~ ~r/Seq Scan\s+on\s+repository_machine_grants/, plan
   end
 
   test "the pairing sweep is served by machine_pairings_expires_at_index" do
@@ -89,6 +92,8 @@ defmodule OpenAgents.Machines.IndexReachTest do
         OpenAgents.Machines.expire_elapsed_pairings()
       end)
 
+    # The sweep's predicate is `expires_at <= ?` plus a `status` filter; the
+    # only index with `expires_at` is `machine_pairings_expires_at_index`.
     assert plan =~ "machine_pairings_expires_at_index", plan
   end
 

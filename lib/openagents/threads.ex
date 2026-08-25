@@ -709,7 +709,6 @@ defmodule OpenAgents.Threads do
     end
   end
 
-
   defp broadcast(%Event{} = event) do
     Phoenix.PubSub.broadcast(OpenAgents.PubSub, topic(event.thread_id), {:thread_event, event})
   end

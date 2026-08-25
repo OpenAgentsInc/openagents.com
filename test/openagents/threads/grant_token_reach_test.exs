@@ -84,7 +84,9 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:record_events, 2} => :thread_struct,
     {:spend, 1} => :thread_struct,
     {:subscribe, 1} => :thread_struct,
-    {:unsubscribe, 1} => :thread_struct
+    {:unsubscribe, 1} => :thread_struct,
+    {:subscribe_user, 1} => :scoped_by_owner,
+    {:unsubscribe_user, 1} => :scoped_by_owner
   }
 
   # Every module that reaches a token-returning `OpenAgents.Threads` export.

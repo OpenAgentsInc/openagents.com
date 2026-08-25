@@ -2896,6 +2896,13 @@ sentence:
   `/api/operator/artifact-listings`.
 - Creating, cancelling, resuming, and replaying continual-learning jobs under
   `/api/operator/continual-learning/jobs`.
+- Recording a graded Gym run under `POST /api/v3/gym/runs`
+  (`OpenAgentsWeb.GymRunController`, which rechecks the operator on every
+  request over the bearer scope), and reading the scoreboard from `/gym`
+  (`OpenAgentsWeb.GymLive`, recheck on mount and on every event). A run is a
+  benchmark record — recipe digest, task, model, lane, reward, duration —
+  never account data; the surface is operator-only because it is
+  pre-release instrumentation, not because it reads across accounts.
 
 Reading a private forum board and raising a repository's transparency tier to
 `glass` are operator reads that widen with the same allowlist

@@ -37,6 +37,7 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     {"get", "/admin/recordings", "voice:recording:list", false},
     {"get", "/admin/tokens", "tokens:productivity:read", false},
     {"get", "/chat", "chat:preview", false},
+    {"get", "/gym", "gym:read", false},
     {"get", "/api/v3/admin/forge/targets", "deployments:promote", false},
     {"get", "/api/v3/admin/forge/targets/:id", "deployments:promote", false},
     {"get", "/api/operator/artifact-listings/:id/export", "artifact-catalog:operate", false},
@@ -96,6 +97,9 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     OpenAgentsWeb.ForumApiController => "gates topic, post, and claim moderation over the API",
     OpenAgentsWeb.ForumBoardLive => "widens the board listing to private boards",
     OpenAgentsWeb.ForumTopicLive => "widens the topic read and gates closing and hiding",
+    OpenAgentsWeb.GymLive => "rechecks the operator on mount and on every event",
+    OpenAgentsWeb.GymRunController =>
+      "rechecks the operator on every request before recording or listing gym runs",
     OpenAgentsWeb.HomeLive => "marks the session operator for the home surface",
     OpenAgentsWeb.Layouts => "shows the operator entries in the sidebar",
     OpenAgentsWeb.Plugs.OperatorApiTokenAuth => "rechecks the operator behind /api/operator",

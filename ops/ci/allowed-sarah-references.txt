@@ -1,3 +1,10 @@
+# Deploy tooling names the fleet's real GCP instances, disk paths, and Secret
+# Manager entries. These are the identifiers the infrastructure actually holds,
+# so a rename here would name resources that do not exist. The names change
+# when the infrastructure is renamed, not before.
+^ops/deploy/fleet-startup\.template\.sh:
+^ops/deploy/release-to-production\.sh:
+
 # Persona source, evaluation, and program artifacts.
 ^priv/sarah/
 

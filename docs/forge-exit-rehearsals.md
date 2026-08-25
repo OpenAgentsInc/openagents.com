@@ -27,15 +27,45 @@ that reads as executable.
 
 | Rehearsal | Executable proof | Performed against the live forge |
 | --- | --- | --- |
-| 1. Restore a repository and its work history | `EXIT-004`, `EXIT-001` | 2026-08-23 — **failed**, see #179 |
-| 2. Detect a forged, missing, reordered, or mismatched receipt | `EXIT-002`, `EXIT-005` | No |
+| 1. Restore a repository and its work history | `EXIT-004`, `EXIT-001` | 2026-08-23 — **failed**, see #179; steps 1 and 2 re-run 2026-08-25 and passed |
+| 2. Detect a forged, missing, reordered, or mismatched receipt | `EXIT-002`, `EXIT-005` | Steps 1 and 3 performed 2026-08-25 |
 | 3. Mirror divergence | `EXIT-003` | No |
 | 4. Key rotation | None | No |
 | 5. Operator loss | `EXIT-003` | No |
 | 6. Partial export | `EXIT-001` | No |
 
-Five of the six have never been run outside the test suite, which #180 carries.
-That is the honest state, and the one that was run failed.
+Four of the six have never been run outside the test suite, which #180 carries.
+That is the honest state.
+
+## Release re-check, 2026-08-25
+
+#187 found one cause behind six live failures on 2026-08-23: `main` held the
+exit surfaces and the deployed revision did not, so every invariant stayed
+green while the forge served none of them. A release carrying them was
+promoted, and each row was measured again against the live forge on revision
+`46cf8a5aea3791936c22e82c145a9a8dd734374d`.
+
+| Surface | Invariant | 2026-08-23 | 2026-08-25 |
+| --- | --- | --- | --- |
+| `GET /data/export/account` | `EXIT-001` | `404` | `302` to sign-in, so the route exists |
+| `GET /api/v3/repos/{owner}/{repo}/pushes` | `EXIT-005` | `404` | `200`, and `200` at the `/api/v1` path the route moved to |
+| `independence` section of `GET /api/status` | `EXIT-006` | absent | present, `degraded: true`, all four subsections served |
+| `OpenAgents.Forge.WAL.chain_link/2`, `OpenAgents.Forge.WAL.entry_link/1` | `EXIT-005` | not exported | both exported on the node |
+| `OpenAgents.Forge.Verification.verify/2` `:anchor` option | `EXIT-005` | `verify/1` only | `verify/2` exported, and a wrong anchor reports `anchor_mismatch` |
+| The `shallow` graft reconciliation | `EXIT-004` | absent, clone aborted | present, and a full anonymous clone completes |
+
+The chain claim is the one that changed shape rather than flipping. On
+2026-08-23 the log carried 0 links across 275 entries. It now carries 97
+across 376: the contiguous suffix 279 through 375, with `chained_from: 279`.
+That is what `EXIT-005` describes rather than a partial fix — a chain that
+starts in the middle is history, and no entry written since the chain shipped
+is missing a link. Rehearsals 1 and 2 above record the measurements.
+
+**What the re-check does not close.** Nothing reported this gap; a person
+found it by rehearsing six surfaces by hand, and the release that closed #187
+removes today's gap rather than the next one. #246 carries that, and the
+obvious home for it is not free: `EXIT-006`'s proof turns red when a commit
+sha reaches the disclosure.
 
 ## 1. Restore a repository and its bounded work history
 
@@ -127,6 +157,30 @@ actually holds, so a repository that cannot be walked repairs itself from the
 WAL. The pre-seed history remains outside this forge and is not recoverable
 from it. Rerun step 1 to confirm the live forge serves a full clone.
 
+### Result, 2026-08-25
+
+**Steps 1 and 2 pass.** Live revision
+`46cf8a5aea3791936c22e82c145a9a8dd734374d`, which carries the reconciliation.
+An anonymous clone of `OpenAgentsInc/openagents.com` over the published
+transport completes, checks out `adafa83`, carries 417 commits, and passes
+`git fsck --no-progress` with no output. The clone is grafted rather than
+truncated: it writes a `shallow` file, which is `EXIT-004`'s stated outcome,
+because history that says where it stops is servable and history that dangles
+is not. Cloning that copy with `--no-local` produces the same head and passes
+`git fsck` with no forge in the path, which is step 2.
+
+The repair is visible on the node rather than inferred from the clone. The
+bare projection holds five reconciled boundaries in its `shallow` file, its
+`OpenAgents.Forge.Repos.graft_seq_at/1` marker equals its applied sequence,
+and the walk
+`upload-pack` performs — `git rev-list --objects --quiet --all` — exits `0`.
+
+Steps 3 through 5 were not performed. `GET /data/export/account` answers `302`
+to an unauthenticated request, which is the route reached rather than the
+export read, and the document itself stays covered by
+`test/openagents/data_rights/account_export_test.exs`. Rehearsal 1 is
+therefore performed for the source half and not for the work-history half.
+
 ## 2. Detect a forged, missing, reordered, or mismatched receipt
 
 **Proves:** a verifier holding only the WAL and the bare repository — no
@@ -135,10 +189,14 @@ disagree with the record.
 
 **Cannot prove:** that a *consistent* rewrite happened. `EXIT-005` chains every
 entry to its predecessor, so a rewrite cannot be confined to one entry, but an
-operator who rewrites the whole suffix produces a self-consistent log. Only an
-anchor held somewhere the operator does not control refutes that, and none is
-published yet (#168). `GET /api/status` reports this as
-`independence.verification.anchor_published: false`.
+operator who rewrites the whole suffix produces a self-consistent log. Only a
+commitment held somewhere the operator does not control refutes that. One is
+published now, at `/.well-known/openagents-forge-anchor.json` (#168), and
+`GET /api/status` reports
+`independence.verification.anchor_published: true`. Publishing a commitment is
+not having one witnessed: the operator serves that document and could serve
+any document, so it refutes a rewrite only for a reader who kept a copy.
+`anchor_witnessed` stays `false`, and #151 carries the witness.
 
 ### Steps
 
@@ -161,6 +219,41 @@ published yet (#168). `GET /api/status` reports this as
 
    A rewritten prefix reports `anchor_mismatch`. Without the anchor argument
    the same log reports clean, which is the whole point of publishing one.
+
+### Result, 2026-08-25
+
+**Steps 1 and 3 pass** against this repository's log, storage key
+`ecd89cf6-f602-479f-9f47-266307345aaa`, on live revision
+`46cf8a5aea3791936c22e82c145a9a8dd734374d`.
+
+Step 1 reports `findings: []` over 376 entries, with
+`head: %{seq: 375, link: "19c7a2c5…"}` and `chained_from: 279`. Ninety-seven
+entries carry a link, which is the contiguous suffix 279 through 375. The
+entries before 279 predate the chain and carry none, which `EXIT-005` states
+is history rather than tampering: a chain that stops in the middle is a
+finding, and a chain that starts in the middle is not. No entry written since
+the chain shipped is unlinked.
+
+Step 3 was performed three ways against the same log. The head link the log
+itself reports verifies clean. A `link` of 64 zeroes at the head sequence
+reports one finding, `anchor_mismatch`, naming the anchored and recorded
+values. A sequence past the end of the log reports `anchor_unreachable`. The
+option is therefore honored rather than accepted and ignored, which is what a
+pusher holding a `remote: openagents wal-receipt` line depends on.
+
+Two of the surfaces the step needs were confirmed on the node rather than
+assumed: `OpenAgents.Forge.WAL` exports `chain_link/2` and `entry_link/1`, and
+`OpenAgents.Forge.Verification` exports `verify/2` beside `verify/1`.
+`GET /api/v1/repos/OpenAgentsInc/openagents.com/pushes` answers `200` and
+serves the same head link and `chained_from` the verifier reports.
+
+The bound in this rehearsal's own preamble still holds, with one correction:
+an anchor **is** published now, at
+`/.well-known/openagents-forge-anchor.json`, and `GET /api/status` reports
+`independence.verification.anchor_published: true` with `anchor_witnessed:
+false`. A consistent rewrite is refuted only for a reader who kept a copy of
+that document or a receipt line; nobody is attesting to it on the operator's
+behalf, and #151 carries the witness.
 
 ## 3. Mirror divergence
 

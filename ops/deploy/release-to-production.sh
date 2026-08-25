@@ -83,6 +83,22 @@ digest=$(gcloud artifacts docker images describe "$registry:$sha" \
 [ -n "$digest" ] || { echo "no image for $sha; build it first" >&2; exit 1; }
 echo "image digest: $digest"
 
+# Nothing to do is a valid outcome, and it has to be checked before anything
+# is promoted. A release already live on this sha used to fall through to a
+# fresh promotion, which builds a new target and rolls a fleet that is already
+# serving exactly what was asked for.
+live_now=$(mktemp)
+cat > "$live_now" <<ELIXIR
+live = OpenAgents.Forge.Targets.live("openagents.com")
+IO.puts(if live && live.sha == "$sha", do: "already-live", else: "roll-needed")
+ELIXIR
+if rpc_file sarah-fleet-1 us-central1-a "$live_now" 2>/dev/null | grep -q "already-live"; then
+  rm -f "$live_now"
+  echo "$sha is already live on this fleet; nothing to do"
+  exit 0
+fi
+rm -f "$live_now"
+
 echo "==> promote"
 promote=$(mktemp)
 cat > "$promote" <<ELIXIR

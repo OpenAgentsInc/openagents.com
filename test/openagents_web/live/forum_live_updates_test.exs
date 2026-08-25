@@ -155,11 +155,11 @@ defmodule OpenAgentsWeb.ForumLiveUpdatesTest do
 
       {:ok, view, _html} = live(context.conn, ~p"/forum")
 
-      assert has_element?(view, ".badge", "0 topics")
+      assert has_element?(view, "#board-topics-general", "0 topics")
 
       _topic = topic!(board, "The first of them", "the-first-of-them")
 
-      assert has_element?(view, ".badge", "1 topics")
+      assert has_element?(view, "#board-topics-general", "1 topics")
     end
 
     test "the badge is a stored counter, not a collection loaded to measure it",

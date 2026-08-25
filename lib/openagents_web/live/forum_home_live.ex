@@ -63,7 +63,10 @@ defmodule OpenAgentsWeb.ForumHomeLive do
               >
                 <div class="flex items-baseline justify-between gap-3">
                   <h2 class="text-base font-semibold">{forum.title}</h2>
-                  <span class="text-sm text-muted-foreground whitespace-nowrap">
+                  <span
+                    id={"board-topics-#{forum.slug}"}
+                    class="text-sm text-muted-foreground whitespace-nowrap"
+                  >
                     {forum.topic_count} topics
                   </span>
                 </div>

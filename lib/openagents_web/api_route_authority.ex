@@ -198,7 +198,6 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v1/chat/events" => {:required_bearer, :chat, :legacy},
       "post /api/v1/chat/turns" => {:required_bearer, :chat, :legacy},
       "get /api/v1/models" => {:required_bearer, :model, :envelope},
-      
       "post /api/v1/threads" => {:required_bearer, :thread, :envelope},
       "get /api/v1/threads" => {:required_bearer, :thread, :envelope},
       "get /api/v1/threads/:thread_id" => {:required_bearer, :thread, :envelope},

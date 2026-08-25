@@ -297,12 +297,26 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     input = integer(usage["input_tokens"] || usage[:input_tokens])
     output = integer(usage["output_tokens"] || usage[:output_tokens])
     total = integer(usage["total_tokens"] || usage[:total_tokens])
+    cache = cache_read_tokens(usage)
 
-    %{
+    base = %{
       "prompt_tokens" => input,
       "completion_tokens" => output,
       "total_tokens" => if(total > 0, do: total, else: input + output)
     }
+
+    if is_nil(cache) do
+      base
+    else
+      Map.put(base, "prompt_tokens_details", %{"cached_tokens" => cache})
+    end
+  end
+
+  defp cache_read_tokens(usage) do
+    case usage["cache_read_input_tokens"] || usage[:cache_read_input_tokens] do
+      value when is_integer(value) and value >= 0 -> value
+      _ -> nil
+    end
   end
 
   defp data(payload), do: ["data: ", Jason.encode!(payload), "\n\n"]

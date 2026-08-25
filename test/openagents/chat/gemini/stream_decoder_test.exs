@@ -239,6 +239,43 @@ defmodule OpenAgents.Chat.Gemini.StreamDecoderTest do
     end
   end
 
+  test "reports cache read input tokens on the internal usage map when present" do
+    stream =
+      frame(chunk([part("hi")])) <>
+        frame(%{
+          "candidates" => [%{"content" => %{"parts" => []}, "finishReason" => "STOP"}],
+          "usageMetadata" => %{
+            "promptTokenCount" => 17,
+            "candidatesTokenCount" => 14,
+            "totalTokenCount" => 304,
+            "cachedContentTokenCount" => 5
+          }
+        })
+
+    {state, _events} = feed_all(StreamDecoder.new(model: "m"), [stream])
+    assert state.usage["cache_read_input_tokens"] == 5
+    assert state.usage["input_tokens"] == 17
+    assert {:ok, _completion} = StreamDecoder.finish(state)
+  end
+
+  test "omits cache read input tokens from the internal usage map when absent" do
+    stream =
+      frame(chunk([part("hi")])) <>
+        frame(%{
+          "candidates" => [%{"content" => %{"parts" => []}, "finishReason" => "STOP"}],
+          "usageMetadata" => %{
+            "promptTokenCount" => 8,
+            "candidatesTokenCount" => 3,
+            "totalTokenCount" => 11
+          }
+        })
+
+    {state, _events} = feed_all(StreamDecoder.new(model: "m"), [stream])
+    refute Map.has_key?(state.usage, "cache_read_input_tokens")
+    refute Map.has_key?(state.usage, "cache_write_input_tokens")
+    assert {:ok, _completion} = StreamDecoder.finish(state)
+  end
+
   describe "failure" do
     test "a stream with no finishReason is truncated, not a short answer" do
       {state, _events} =

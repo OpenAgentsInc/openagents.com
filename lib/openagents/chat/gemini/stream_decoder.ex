@@ -188,7 +188,7 @@ defmodule OpenAgents.Chat.Gemini.StreamDecoder do
         "output_tokens" => count(usage["candidatesTokenCount"]),
         "total_tokens" => count(usage["totalTokenCount"]),
         "reasoning_tokens" => count(usage["thoughtsTokenCount"]),
-        "cached_tokens" => count(usage["cachedContentTokenCount"])
+        "cache_read_input_tokens" => count(usage["cachedContentTokenCount"])
       }
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Map.new()
@@ -246,7 +246,7 @@ defmodule OpenAgents.Chat.Gemini.StreamDecoder do
         "output_tokens" => usage["output_tokens"],
         "total_tokens" => usage["total_tokens"],
         "output_tokens_details" => details("reasoning_tokens", usage["reasoning_tokens"]),
-        "input_tokens_details" => details("cached_tokens", usage["cached_tokens"])
+        "input_tokens_details" => details("cached_tokens", usage["cache_read_input_tokens"])
       }
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Map.new()

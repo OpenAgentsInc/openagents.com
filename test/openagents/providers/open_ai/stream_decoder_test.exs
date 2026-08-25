@@ -57,13 +57,75 @@ defmodule OpenAgents.Providers.OpenAI.StreamDecoderTest do
               }},
              {:usage,
               %{
-                "cached_input_tokens" => 2,
+                "cache_read_input_tokens" => 2,
                 "input_tokens" => 10,
                 "output_tokens" => 4,
                 "reasoning_output_tokens" => 1,
                 "total_tokens" => 14
               }},
              {:response_completed, "resp_123"}
+           ]
+  end
+
+  test "decodes chat-completions usage and omits cache read tokens when absent" do
+    stream =
+      frame(%{"type" => "response.created", "response" => %{"id" => "resp_cc"}}) <>
+        frame(%{
+          "type" => "response.output_text.delta",
+          "delta" => "Ok"
+        }) <>
+        frame(%{
+          "type" => "response.completed",
+          "response" => %{
+            "id" => "resp_cc",
+            "usage" => %{
+              "prompt_tokens" => 7,
+              "completion_tokens" => 2,
+              "total_tokens" => 9
+            }
+          }
+        })
+
+    assert {:ok, decoder, events} = feed_all([stream])
+    assert {:ok, _decoder, final_events} = StreamDecoder.finish(decoder)
+
+    assert events ++ final_events == [
+             {:response_started, "resp_cc"},
+             {:text_delta, "Ok"},
+             {:usage, %{"input_tokens" => 7, "output_tokens" => 2, "total_tokens" => 9}},
+             {:response_completed, "resp_cc"}
+           ]
+  end
+
+  test "decodes prompt token cache details from chat-completions usage" do
+    stream =
+      frame(%{"type" => "response.created", "response" => %{"id" => "resp_cache"}}) <>
+        frame(%{
+          "type" => "response.completed",
+          "response" => %{
+            "id" => "resp_cache",
+            "usage" => %{
+              "prompt_tokens" => 12,
+              "completion_tokens" => 3,
+              "total_tokens" => 15,
+              "prompt_tokens_details" => %{"cached_tokens" => 6}
+            }
+          }
+        })
+
+    assert {:ok, decoder, events} = feed_all([stream])
+    assert {:ok, _decoder, final_events} = StreamDecoder.finish(decoder)
+
+    assert events ++ final_events == [
+             {:response_started, "resp_cache"},
+             {:usage,
+              %{
+                "input_tokens" => 12,
+                "output_tokens" => 3,
+                "total_tokens" => 15,
+                "cache_read_input_tokens" => 6
+              }},
+             {:response_completed, "resp_cache"}
            ]
   end
 

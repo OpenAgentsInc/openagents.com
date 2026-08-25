@@ -114,6 +114,60 @@ defmodule OpenAgents.InferenceTest do
       assert twice.usage["total_tokens"] == 155
     end
 
+    test "records cache read input tokens when the provider reports them" do
+      {:ok, grant, _token} = Inference.mint(scope("usage-cache"))
+
+      {:ok, once} =
+        Inference.record_usage(grant, %{
+          "input_tokens" => 100,
+          "output_tokens" => 40,
+          "cache_read_input_tokens" => 20
+        })
+
+      assert once.usage["input_tokens"] == 100
+      assert once.usage["output_tokens"] == 40
+      assert once.usage["cache_read_input_tokens"] == 20
+      assert once.usage["total_tokens"] == 140
+
+      {:ok, twice} =
+        Inference.record_usage(once, %{
+          "input_tokens" => 10,
+          "output_tokens" => 5,
+          "cache_read_input_tokens" => 3
+        })
+
+      assert twice.usage["cache_read_input_tokens"] == 23
+    end
+
+    test "omits cache splits when the provider does not report them" do
+      {:ok, grant, _token} = Inference.mint(scope("usage-no-cache"))
+
+      {:ok, once} =
+        Inference.record_usage(grant, %{"input_tokens" => 100, "output_tokens" => 40})
+
+      refute Map.has_key?(once.usage, "cache_read_input_tokens")
+      refute Map.has_key?(once.usage, "cache_write_input_tokens")
+      assert once.usage["input_tokens"] == 100
+      assert once.usage["total_tokens"] == 140
+    end
+
+    test "preserves existing cache read tokens when a later call reports none" do
+      {:ok, grant, _token} = Inference.mint(scope("usage-cache-persist"))
+
+      {:ok, once} =
+        Inference.record_usage(grant, %{
+          "input_tokens" => 100,
+          "output_tokens" => 40,
+          "cache_read_input_tokens" => 20
+        })
+
+      {:ok, twice} =
+        Inference.record_usage(once, %{"input_tokens" => 10, "output_tokens" => 5})
+
+      assert twice.usage["cache_read_input_tokens"] == 20
+      refute Map.has_key?(twice.usage, "cache_write_input_tokens")
+    end
+
     test "flips the grant to exhausted when a ceiling is reached" do
       {:ok, grant, _token} = Inference.mint(scope("usage-exhaust"))
 

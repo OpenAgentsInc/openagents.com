@@ -201,13 +201,21 @@ defmodule OpenAgents.Providers.OpenAI.StreamDecoder do
 
   defp normalize_usage(usage) when is_map(usage) and map_size(usage) <= 32 do
     normalized =
-      usage
-      |> Map.take(["input_tokens", "output_tokens", "total_tokens"])
-      |> Map.put("cached_input_tokens", get_in(usage, ["input_tokens_details", "cached_tokens"]))
-      |> Map.put(
-        "reasoning_output_tokens",
-        get_in(usage, ["output_tokens_details", "reasoning_tokens"])
-      )
+      %{
+        "input_tokens" => first_value([usage["input_tokens"], usage["prompt_tokens"]]),
+        "output_tokens" => first_value([usage["output_tokens"], usage["completion_tokens"]]),
+        "total_tokens" => first_value([usage["total_tokens"]]),
+        "cache_read_input_tokens" =>
+          first_value([
+            get_in(usage, ["input_tokens_details", "cached_tokens"]),
+            get_in(usage, ["prompt_tokens_details", "cached_tokens"])
+          ]),
+        "reasoning_output_tokens" =>
+          first_value([
+            get_in(usage, ["output_tokens_details", "reasoning_tokens"]),
+            get_in(usage, ["completion_tokens_details", "reasoning_tokens"])
+          ])
+      }
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Map.new()
 
@@ -217,6 +225,8 @@ defmodule OpenAgents.Providers.OpenAI.StreamDecoder do
   end
 
   defp normalize_usage(_usage), do: {:error, :invalid_provider_event}
+
+  defp first_value(values), do: Enum.find(values, fn value -> not is_nil(value) end)
 
   defp usage_events(nil), do: []
   defp usage_events(usage), do: [{:usage, usage}]

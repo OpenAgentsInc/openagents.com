@@ -383,7 +383,19 @@ defmodule OpenAgents.Inference do
 
     merged =
       Enum.reduce(@cost_fields, %{}, fn field, acc ->
-        Map.put(acc, field, integer(existing[field]) + integer(normalized[field]))
+        case {existing[field], normalized[field]} do
+          {nil, nil} ->
+            acc
+
+          {existing_value, nil} ->
+            Map.put(acc, field, integer(existing_value))
+
+          {nil, normalized_value} ->
+            Map.put(acc, field, integer(normalized_value))
+
+          {existing_value, normalized_value} ->
+            Map.put(acc, field, integer(existing_value) + integer(normalized_value))
+        end
       end)
 
     merged
@@ -412,8 +424,18 @@ defmodule OpenAgents.Inference do
 
   defp normalize_usage(usage) do
     Enum.reduce(@cost_fields, %{}, fn field, acc ->
-      Map.put(acc, field, integer(usage[field] || usage[String.to_atom(field)]))
+      case raw_value(usage, field) do
+        nil -> acc
+        value -> Map.put(acc, field, integer(value))
+      end
     end)
+  end
+
+  defp raw_value(usage, field) do
+    case usage[field] do
+      nil -> usage[String.to_atom(field)]
+      value -> value
+    end
   end
 
   # ── helpers ─────────────────────────────────────────────────────────────

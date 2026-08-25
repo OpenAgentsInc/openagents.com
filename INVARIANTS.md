@@ -3479,10 +3479,19 @@ window of unclaimed pairings, which retry; the recording vault has no keyring,
 so rotating its key strands prior recordings — a bounded, recorded loss, not a
 silent one.
 
+Amended 2026-08-25 (issue #193). `OpenAgents.Forge.AtRest.sealed_columns/0`
+names the column each of these three vaults seals, and
+`test/openagents/forge/at_rest_test.exs` reads each column back with raw SQL
+after a real write, so "sealed" is checked against PostgreSQL rather than
+against the vault's own unit tests. A fourth vault would have to appear there
+before `EXIT-006` could count it.
+
 Evidence: `OpenAgents.Machines.TokenVault`, `OpenAgents.Accounts.TokenVault`,
-`OpenAgents.Voice.RecordingVault`, `OpenAgents.RuntimeConfig.validate/1`,
+`OpenAgents.Voice.RecordingVault`, `OpenAgents.Forge.AtRest`,
+`OpenAgents.RuntimeConfig.validate/1`,
 `config/runtime.exs`, `test/openagents/machines/token_vault_test.exs`,
-`test/openagents/accounts/token_vault_test.exs`, and
+`test/openagents/accounts/token_vault_test.exs`,
+`test/openagents/forge/at_rest_test.exs`, and
 `test/openagents/runtime_config_test.exs`.
 
 ### RELEASE-003 — Every published hostname can establish LiveView
@@ -4809,11 +4818,40 @@ document: no parameter can widen it. `operator_reads_source` is derived from
 and publishing the encryption without it would let a reader conclude the
 operator cannot read an export.
 
-`encrypted_at_rest` is the one value still stated rather than derived, and it
-says so: no Ecto column in this repository is encrypted at rest, which issue
-#193 carries. There is no registry of encrypted columns to count, and inventing
-one so a number could appear would be the kind of claim this disclosure exists
-to prevent.
+`encrypted_at_rest` is derived too, from `OpenAgents.Forge.AtRest`: the private
+store is encrypted at rest exactly when no private column rests as plaintext.
+The value has not moved and is not expected to — it is `false`, and #193 stays
+open — but it can now fail, which as a literal it could not.
+
+The earlier wording of this entry said no Ecto column in this repository is
+encrypted at rest. Three are: `users.github_token_ciphertext`,
+`machine_pairings.token_ciphertext`, and `voice_recording_chunks.data`, each
+under the separate key `VAULT-001` binds. The sentence understated the vaults
+and, worse, was a quantified claim about columns with no population behind it,
+which is the failure this ledger's own preamble names.
+
+The registry that entry declined to invent is still declined. What replaced it
+is the smaller thing the preamble asks for: a population `information_schema`
+supplies. Every column carrying secret-shaped vocabulary is classified, no
+column may be classified `:plaintext_secret`, and the proof reads the catalog
+rather than a list, so a migration that adds a plaintext token column fails the
+day it lands rather than the day someone looks. The counts stay off the status
+page; only the boolean is published, and it is published because it can be
+wrong.
+
+The derivation fails downward. `plaintext_private_columns/0` is a floor, so a
+private column missing from it leaves the boolean at `false` — where it already
+is — and an incomplete list understates the store instead of flattering it.
+That is the direction every other gather in this projection fails in.
+
+Amended 2026-08-25 (issue #193). The decision about which columns stop being
+server-readable is recorded in `docs/2026-08-25-encryption-at-rest.md` with its
+threat model, the cost to an account under an account-held key, and five
+rejected options. No content column is encrypted, and the reason is that an
+operator-held key protects a stolen dump and nothing else — the claim `EXIT-006`
+exists to keep off this page — while an account-held key ends search,
+rendering, and the `TRANSPARENCY-001` projections, and makes key loss permanent.
+The published key set did not change, so `STATUS-001` has nothing to move.
 
 Amended 2026-08-24 (issue #178). The decision that a private export can be
 encrypted to a key the operator does not hold is recorded in
@@ -4843,12 +4881,23 @@ plaintext-store assertion catches once an anchor is configured; and hardcoding
 route, which the derivation assertion catches even though the projection does
 not.
 
-Evidence: `OpenAgents.Forge.Independence`, `OpenAgents.NetworkStatus`,
+Four more were confirmed and reverted for the at-rest derivation: a removed
+classification, standing in for a migration that adds an unclassified column;
+`api_tokens.token_digest` reclassified as a plaintext secret; a vault made to
+return its plaintext, which the raw-column read catches; and this module
+reverted to a literal `false`, which comparing the two values cannot catch —
+`false` is the correct answer today — so the proof reads the compiled import
+table the way `export_recipient_encryption` already does.
+
+Evidence: `OpenAgents.Forge.Independence`, `OpenAgents.Forge.AtRest`,
+`OpenAgents.NetworkStatus`,
 `OpenAgentsWeb.NetworkStatusLive`, `OpenAgents.DataRights.Age`,
 `test/openagents/forge/independence_disclosure_test.exs`,
+`test/openagents/forge/at_rest_test.exs`,
 `test/openagents/data_rights/age_test.exs`,
-`docs/forge-operator-independence.md`, and
-`docs/2026-08-24-private-export-encryption.md`.
+`docs/forge-operator-independence.md`,
+`docs/2026-08-24-private-export-encryption.md`, and
+`docs/2026-08-25-encryption-at-rest.md`.
 
 ### STACK-001 — A pull request stack is a durable object, not inferred topology
 
@@ -5578,7 +5627,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | OBSERVABILITY-001 | `test/openagents/observability_test.exs` |
 | RELEASE-001 | `ops/ci/release-smoke.sh`, `test/openagents_web/controllers/health_controller_test.exs` |
 | RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
-| VAULT-001 | `test/openagents/machines/token_vault_test.exs`, `test/openagents/runtime_config_test.exs` |
+| VAULT-001 | `test/openagents/machines/token_vault_test.exs`, `test/openagents/forge/at_rest_test.exs`, `test/openagents/runtime_config_test.exs` |
 | RELEASE-003 | `lib/openagents/runtime_config.ex`, `config/runtime.exs`, `test/openagents/runtime_config_test.exs` |
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs`, `test/openagents/hosted_ci_absence_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
@@ -5599,7 +5648,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | EXIT-003 | `test/openagents/forge/independence_test.exs` |
 | EXIT-004 | `test/openagents/forge/independence_test.exs` |
 | EXIT-005 | `test/openagents/forge/independence_test.exs`, `test/openagents/forge/wal_test.exs`, `test/openagents/forge/git_http_test.exs`, `test/openagents_web/controllers/push_receipt_controller_test.exs`, `test/openagents_web/controllers/forge_anchor_controller_test.exs` |
-| EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs`, `test/openagents/data_rights/age_test.exs` |
+| EXIT-006 | `test/openagents/forge/independence_disclosure_test.exs`, `test/openagents/forge/at_rest_test.exs`, `test/openagents/data_rights/age_test.exs` |
 | STACK-001 | `test/openagents/stacks_test.exs` |
 | ISSUE-001 | `test/openagents/forge/commit_references_test.exs`, `test/openagents/issues/closing_references_test.exs`, `test/openagents/forge/push_closes_issues_test.exs` |
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |

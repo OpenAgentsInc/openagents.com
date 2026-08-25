@@ -32,10 +32,13 @@ defmodule OpenAgents.Forge.Independence do
     export can be encrypted to a key the recipient holds (#178), and that is
     derived: `OpenAgentsWeb.DataController`'s compiled import table either
     reaches `OpenAgents.DataRights.Age` or it does not, so removing the
-    encryption removes the claim in the same commit. Nothing in PostgreSQL is
-    encrypted at rest, and that one is stated, because there is no registry of
-    encrypted columns to count and inventing one to make a number appear would
-    be the kind of claim this disclosure exists to avoid; #193 carries it.
+    encryption removes the claim in the same commit. The private store is not
+    encrypted at rest, and that one is now derived too, from
+    `OpenAgents.Forge.AtRest`: the store is encrypted exactly when no private
+    column rests as plaintext, and the columns that do are named and proven
+    plaintext against the database rather than asserted here. The derivation
+    can only lower the claim, so an incomplete list understates the store
+    instead of flattering it; #193 carries what is left.
     `operator_reads_source` is derived from the second fact rather than
     restated, because it is the same fact: the operator reads the plaintext an
     export is built from exactly while the store is plaintext. Publishing the
@@ -53,6 +56,7 @@ defmodule OpenAgents.Forge.Independence do
 
   alias OpenAgents.DataRights.ExportInventory
   alias OpenAgents.Forge.Anchor
+  alias OpenAgents.Forge.AtRest
 
   @schema "openagents.forge_independence.v1"
 
@@ -152,10 +156,13 @@ defmodule OpenAgents.Forge.Independence do
     }
   end
 
-  # `encrypted_at_rest` is the one stated value left here, and everything
-  # around it is read from the code rather than asserted beside it.
+  # `encrypted_at_rest` used to be the one stated value left here. It is now
+  # derived from `OpenAgents.Forge.AtRest`, which answers it from the columns
+  # that rest as plaintext rather than from a literal beside the disclosure. A
+  # failed read answers `false`, the same direction every other gather fails
+  # in: the store is claimed to be less protected than it is, never more.
   defp private_data_section do
-    encrypted_at_rest? = false
+    encrypted_at_rest? = safely(fn -> AtRest.encrypted_at_rest?() end) || false
 
     %{
       "export_recipient_encryption" => export_recipient_encryption?(),

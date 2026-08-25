@@ -37,6 +37,32 @@ defmodule OpenAgents.BoxTest do
   defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
   defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
 
+  # The setup script is private, and the provider payload is where it becomes
+  # observable, so read it back the way the provider does.
+  defp captured_setup_script(conversation_id) do
+    owner = self()
+
+    Req.Test.stub(__MODULE__, fn conn ->
+      {:ok, raw, conn} = Plug.Conn.read_body(conn)
+
+      case Jason.decode(raw) do
+        {:ok, %{"setupScript" => script}} -> send(owner, {:setup_script, script})
+        _other -> :ok
+      end
+
+      Req.Test.json(conn, box_body())
+    end)
+
+    assert {:ok, _record} = Box.create_box(conversation_id)
+    assert_received {:setup_script, script}
+    script
+  end
+
+  defp index_of(haystack, needle) do
+    assert [index | _rest] = :binary.match(haystack, needle) |> Tuple.to_list()
+    index
+  end
+
   defp box_body(overrides \\ %{}) do
     %{
       "box" =>
@@ -64,7 +90,6 @@ defmodule OpenAgents.BoxTest do
         {:ok, raw, conn} = Plug.Conn.read_body(conn)
         payload = Jason.decode!(raw)
         assert payload["noEnv"] == true
-        assert payload["setupScript"] =~ "opencode.ai/install"
         assert payload["setupScript"] =~ "openrouter/stealth/ox-alpha"
 
         Req.Test.json(conn, box_body(%{"state" => "provisioning", "setupStatus" => "pending"}))
@@ -90,6 +115,43 @@ defmodule OpenAgents.BoxTest do
       assert record.state == "ready"
       assert record.setup_status == "done"
       assert record.stopped_at == nil
+    end
+
+    test "writes the OpenCode configuration before installing", %{conversation_id: cid} do
+      script = captured_setup_script(cid)
+
+      configuration_at = index_of(script, "opencode.json")
+      install_at = index_of(script, "releases/download")
+
+      assert configuration_at < install_at,
+             "the configuration write must precede the install so a failed fetch cannot cost both"
+    end
+
+    test "installs a pinned release without the unauthenticated GitHub API", %{
+      conversation_id: cid
+    } do
+      script = captured_setup_script(cid)
+
+      assert script =~
+               ~r{https://github\.com/anomalyco/opencode/releases/download/v\d+\.\d+\.\d+/}
+
+      refute script =~ "api.github.com"
+      refute script =~ "opencode.ai/install"
+      refute script =~ "releases/latest"
+    end
+
+    test "links the binary onto the PATH a non-interactive run gets", %{conversation_id: cid} do
+      script = captured_setup_script(cid)
+
+      assert script =~ ~s(ln -sf "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode")
+    end
+
+    test "retries a transient fetch a bounded number of times", %{conversation_id: cid} do
+      script = captured_setup_script(cid)
+
+      assert script =~ "until curl"
+      assert script =~ ~r/if \[ "\$opencode_attempt" -ge \d+ \]/
+      assert script =~ "exit 1"
     end
 
     test "injects the OpenRouter key through the box environment only", %{conversation_id: cid} do

@@ -27,6 +27,19 @@ defmodule OpenAgents.Box do
   @default_poll_attempts 30
   @runnable_states ~w(ready idle running)
 
+  # OpenCode is pinned rather than tracked at `latest` on purpose. The upstream
+  # installer resolves its version through the unauthenticated GitHub API,
+  # which answers 403 for the provider's shared egress IP, and a `latest`
+  # download URL reintroduces a version lookup on a network path the box has no
+  # way to retry. A pinned tag is a plain artifact fetch: one request, one
+  # cacheable URL, and a version we chose deliberately. Raise it by editing
+  # this value and provisioning one box to confirm the new tag installs.
+  @opencode_version "1.18.23"
+  @opencode_install_dir "$HOME/.opencode/bin"
+  # Already on the PATH a non-interactive `sh -c` run gets on a box.
+  @opencode_link_dir "$HOME/.local/bin"
+  @opencode_download_attempts 3
+
   @doc "The default number of active Boxes one conversation can hold."
   @spec maximum_active_boxes() :: pos_integer()
   def maximum_active_boxes do
@@ -434,6 +447,11 @@ defmodule OpenAgents.Box do
   # application's configured OpenRouter model. OpenCode reads the
   # OPENROUTER_API_KEY environment variable natively, so the setup script
   # never touches the credential.
+  #
+  # The order matters. The whole script runs under `set -euo pipefail`, so the
+  # configuration is written first: an install that fails on a bad network day
+  # then costs the binary and nothing else, and a later manual install finds
+  # the model already pointed at Ox Alpha.
   defp setup_script do
     model = Application.get_env(:openagents, :openrouter_model, "stealth/ox-alpha")
 
@@ -446,11 +464,46 @@ defmodule OpenAgents.Box do
     """
     #!/bin/bash
     set -euo pipefail
-    curl -fsSL https://opencode.ai/install | bash
+
     mkdir -p "$HOME/.config/opencode"
     cat > "$HOME/.config/opencode/opencode.json" <<'OPENCODE_CONFIGURATION'
     #{configuration}
     OPENCODE_CONFIGURATION
+
+    case "$(uname -m)" in
+      x86_64|amd64) opencode_target="linux-x64" ;;
+      aarch64|arm64) opencode_target="linux-arm64" ;;
+      *) echo "opencode: unsupported architecture $(uname -m)" >&2; exit 1 ;;
+    esac
+
+    opencode_url="https://github.com/anomalyco/opencode/releases/download/v#{@opencode_version}/opencode-$opencode_target.tar.gz"
+    opencode_archive="$(mktemp)"
+    mkdir -p "#{@opencode_install_dir}" "#{@opencode_link_dir}"
+
+    # A bounded retry, because one refused connection should not cost the box
+    # its harness. An exhausted budget still fails loudly: the box reports
+    # setup_status failed rather than pretending to carry a binary it lacks.
+    opencode_attempt=1
+    until curl -fsSL --connect-timeout 10 --max-time 600 -o "$opencode_archive" "$opencode_url"; do
+      if [ "$opencode_attempt" -ge #{@opencode_download_attempts} ]; then
+        echo "opencode: download failed after $opencode_attempt attempts" >&2
+        rm -f "$opencode_archive"
+        exit 1
+      fi
+      sleep "$((opencode_attempt * 5))"
+      opencode_attempt="$((opencode_attempt + 1))"
+    done
+
+    tar -xzf "$opencode_archive" -C "#{@opencode_install_dir}"
+    rm -f "$opencode_archive"
+    chmod +x "#{@opencode_install_dir}/opencode"
+
+    # A box run is a non-interactive `sh -c`, which never sources the shell rc
+    # the upstream installer appends its PATH line to. Link the binary into a
+    # directory a plain exec already resolves.
+    ln -sf "#{@opencode_install_dir}/opencode" "#{@opencode_link_dir}/opencode"
+
+    "#{@opencode_link_dir}/opencode" --version
     """
   end
 

@@ -85,6 +85,15 @@ Tell the coder, in one message:
    with your shell tool (run `--help`, a dry-run, the tests) and report a
    verdict."
 
+## Expect decomposition
+
+Given one large brief, the coder tends to split the work into sequential
+delegate rounds — each child gets one requirement slice, and the coder
+functionally tests the increment itself (diffs, `--help`, dry-runs, even
+planted-secret leak checks) before delegating the next round. This is the
+supervision loop working; do not interrupt between rounds. The turn is over
+when the coder prints a final verdict, not when the first child exits.
+
 ## Monitoring
 
 - `tail`/`grep` `$SCRATCH/coder-session.log` for `[tool] delegate` and the

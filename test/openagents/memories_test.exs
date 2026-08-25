@@ -88,9 +88,25 @@ defmodule OpenAgents.MemoriesTest do
       assert %{body: _} = errors_on(changeset)
 
       assert {:error, changeset} =
-               Memories.create(user, %{"body" => "Fine.", "bucket" => "system"})
+               Memories.create(user, %{"body" => "Fine.", "bucket" => "wishlist"})
 
       assert %{bucket: _} = errors_on(changeset)
+    end
+
+    # `system` is in the vocabulary and carries a shape of its own
+    # (`OpenAgents.Memories.SystemMemoryTest`). A write that names the bucket
+    # and none of its fields is refused for the fields, not for the bucket.
+    test "refuses a system memory that carries none of the system fields" do
+      user = account("create-system-bare")
+
+      assert {:error, changeset} =
+               Memories.create(user, %{"body" => "Fine.", "bucket" => "system"})
+
+      errors = errors_on(changeset)
+
+      assert Map.has_key?(errors, :evidence_refs)
+      assert Map.has_key?(errors, :tier)
+      refute Map.has_key?(errors, :bucket)
     end
 
     test "refuses a body longer than the store's bound" do
@@ -305,7 +321,12 @@ defmodule OpenAgents.MemoriesTest do
   describe "MEMORY-010" do
     @scoped_modules [
       "lib/openagents/memories.ex",
-      "lib/openagents/memories/retrieval/lexical.ex"
+      "lib/openagents/memories/retrieval/lexical.ex",
+      # The system bucket's write authority reaches one row of another account
+      # — a steward correcting a network claim — and it does so as a predicate
+      # inside the `UPDATE`, naming `user_id` beside the role. Nothing is read
+      # out, so a caller with no standing learns nothing from the refusal.
+      "lib/openagents/memories/admissions.ex"
     ]
 
     test "every query rooted at the memory plane names user_id" do

@@ -311,11 +311,19 @@ these planes, not a second index.*
 **Memories** — `OpenAgents.Memories`, and a different thing from the memory
 planes above. A memory is account-scoped (`memories.user_id`, not a visitor),
 thread-sourced, and authoritative rather than derived: nothing can rebuild it,
-because the sentence a reader asked to have remembered is the only copy. Two
-buckets, `user` and `learned`. Recall runs server-side inside `POST
+because the sentence a reader asked to have remembered is the only copy. Three
+buckets, `user`, `learned`, and `system`. Recall runs server-side inside `POST
 /api/v1/responses`, so every client gets it without implementing retrieval.
 Use "memories" for this store and "memory planes" for the projections; a
 durable fact a reader states in the web conversation is still profile memory.
+
+**System memory** — the `system` bucket of that store: what the network as a
+whole has learned, rather than what one account asked to have remembered. Say
+"system memory" for a row and "admission record" for the steward's verdict on
+it, and keep the two apart — a candidate's status is derived from the records,
+never read from the candidate. Recall does not read this bucket: a system
+memory is stored, evidenced, and admitted, and surfaced to no session yet
+(MEMORY-011).
 
 ### Threads
 

@@ -43,11 +43,14 @@ defmodule OpenAgents.Memories do
 
   ## What it holds
 
-  Two buckets, described on `OpenAgents.Memories.Memory`. `user` memories are
+  Three buckets, described on `OpenAgents.Memories.Memory`. `user` memories are
   explicit: a reader said "remember that I prefer X" and something called
   `create/2`. Nothing here infers a memory from what a turn contained, and
   nothing should — a store that fills itself is a store nobody trusts.
   `learned` memories come from server-side consolidation over thread events.
+  `system` memories are what the network as a whole has learned, and they pass
+  an evidence-backed admission gate before they mean anything
+  (`OpenAgents.Memories.Admissions`). `recall/3` reads the first two only.
 
   ## Corrections supersede
 
@@ -107,21 +110,7 @@ defmodule OpenAgents.Memories do
           | {:error, :supersedes_not_found}
   def create(%User{} = user, attrs) when is_map(attrs) do
     attrs = normalize(attrs)
-    body = Map.get(attrs, "body")
-
-    embedding =
-      case body do
-        text when is_binary(text) and text != "" -> Semantic.embedding_for(text)
-        _absent -> nil
-      end
-
-    attrs =
-      case embedding do
-        {vector, model} -> Map.merge(attrs, %{"embedding" => vector, "embedding_model" => model})
-        nil -> attrs
-      end
-
-    changeset = Memory.changeset(%Memory{user_id: user.id}, attrs)
+    changeset = build(user, attrs)
 
     Multi.new()
     |> Multi.run(:supersedes, fn _repo, _changes -> superseded(user, attrs) end)
@@ -137,10 +126,42 @@ defmodule OpenAgents.Memories do
   end
 
   @doc """
+  The changeset one write of `attrs` for `user` produces, embedding included.
+
+  `create/2` is the ordinary way in. This is here for a caller that has to
+  write a memory inside a transaction of its own —
+  `OpenAgents.Memories.Admissions.supersede/3` corrects a system claim and
+  points the old row at the new one, and a nested `Repo.transaction/1` would
+  make its refusal path roll back more than it meant to.
+
+  The owner is set on the struct and never cast, here as in `create/2`.
+  """
+  @spec build(User.t(), map()) :: Ecto.Changeset.t()
+  def build(%User{} = user, attrs) when is_map(attrs) do
+    attrs = normalize(attrs)
+
+    embedding =
+      case Map.get(attrs, "body") do
+        text when is_binary(text) and text != "" -> Semantic.embedding_for(text)
+        _absent -> nil
+      end
+
+    attrs =
+      case embedding do
+        {vector, model} -> Map.merge(attrs, %{"embedding" => vector, "embedding_model" => model})
+        nil -> attrs
+      end
+
+    Memory.changeset(%Memory{user_id: user.id}, attrs)
+  end
+
+  @doc """
   The account's memories, newest first.
 
   Live only unless `include_superseded: true`. Options: `bucket` to narrow to
-  one bucket, and `limit`, capped at #{@maximum_listed}.
+  one bucket, `buckets` to narrow to several, and `limit`, capped at
+  #{@maximum_listed}. Every one of them is a predicate in the query rather than
+  a filter over its result.
   """
   @spec list(User.t(), keyword()) :: [Memory.t()]
   def list(%User{} = user, opts \\ []) do
@@ -203,11 +224,19 @@ defmodule OpenAgents.Memories do
   @doc """
   What this turn should be told, bounded.
 
-  `query` is the incoming input. Every live memory the account holds is ranked
-  against it; `user` memories are kept regardless of score and `learned` ones
-  only above the backend's floor; the result is cut to `maximum_attached`
-  memories and `maximum_attached_characters`, and what the cut excluded is
-  counted rather than dropped in silence.
+  `query` is the incoming input. Every live `user` or `learned` memory the
+  account holds is ranked against it; `user` memories are kept regardless of
+  score and `learned` ones only above the backend's floor; the result is cut to
+  `maximum_attached` memories and `maximum_attached_characters`, and what the
+  cut excluded is counted rather than dropped in silence.
+
+  The `system` bucket is not read here, by anyone, including its own author.
+  A system memory is stored and admitted (`OpenAgents.Memories.Admissions`) and
+  surfaced to nobody: an admitted row reaches every account's turn or none, and
+  the first is cross-account recall, which MEMORY-001 and MEMORY-010 forbid.
+  The bucket list is a predicate in the query rather than a filter applied to
+  its results, so widening it is a deliberate edit to the recall issue's
+  eligibility filter and not something a ranking change can do by accident.
 
   Never raises. An unreadable store or an unavailable backend recalls nothing.
   """
@@ -215,7 +244,9 @@ defmodule OpenAgents.Memories do
   def recall(user, query, opts \\ [])
 
   def recall(%User{} = user, query, opts) when is_binary(query) and query != "" do
-    candidates = list(user, limit: maximum_live_memories())
+    candidates =
+      list(user, limit: maximum_live_memories(), buckets: Memory.recallable_buckets())
+
     {backend, ranked, floor} = Retrieval.rank(user.id, query, candidates)
 
     eligible =
@@ -277,9 +308,18 @@ defmodule OpenAgents.Memories do
         where(query, [memory], is_nil(memory.superseded_by_id))
       end
 
+    query =
+      case Keyword.get(opts, :buckets) do
+        [_first | _rest] = buckets -> where(query, [m], m.bucket in ^buckets)
+        _all -> query
+      end
+
     case Keyword.get(opts, :bucket) do
-      bucket when bucket in ["user", "learned"] -> where(query, [m], m.bucket == ^bucket)
-      _all -> query
+      bucket when is_binary(bucket) ->
+        if bucket in Memory.buckets(), do: where(query, [m], m.bucket == ^bucket), else: query
+
+      _all ->
+        query
     end
   end
 

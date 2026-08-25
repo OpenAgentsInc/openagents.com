@@ -83,6 +83,8 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     OpenAgents.Deployments.Authority => "separates the fleet operator from a tenant principal",
     OpenAgents.DeviceAuthorizations => "refuses to mint a device grant for an operator account",
     OpenAgents.Forge.Promotion => "gates fleet deploy-target promotion",
+    OpenAgents.Memories.Admissions =>
+      "gates admitting a system memory and correcting an admitted one",
     OpenAgents.SCV.CodexAccounts => "gates connecting and disconnecting a Codex account",
     OpenAgents.SCV.Deployments => "gates starting an SCV deployment",
     OpenAgents.StagingCleanup => "refuses to delete an operator account",

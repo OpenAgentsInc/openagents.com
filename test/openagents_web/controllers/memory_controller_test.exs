@@ -91,11 +91,31 @@ defmodule OpenAgentsWeb.MemoryControllerTest do
       body =
         conn
         |> put_chat_api_token("memory-bucket")
-        |> post(~p"/api/v1/memories", %{"body" => "Fine.", "bucket" => "system"})
+        |> post(~p"/api/v1/memories", %{"body" => "Fine.", "bucket" => "wishlist"})
         |> json_response(422)
 
       assert body["code"] == "validation_failed"
       assert Map.has_key?(body["errors"], "bucket")
+    end
+
+    # This surface writes the account's own memories. The system bucket is a
+    # network claim behind an admission gate
+    # (`OpenAgents.Memories.Admissions`), and the route names none of the
+    # fields such a claim needs, so a caller cannot propose one through here.
+    test "refuses a system memory, whose fields this route does not carry", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("memory-system-bucket")
+        |> post(~p"/api/v1/memories", %{
+          "body" => "The gateway 402s when the default model is retired.",
+          "bucket" => "system",
+          "tier" => "ledger",
+          "slug" => "sys:gateway-402-retired-model"
+        })
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert Map.has_key?(body["errors"], "evidence_refs")
     end
 
     test "refuses a supersedes that names no live memory of this account", %{conn: conn} do

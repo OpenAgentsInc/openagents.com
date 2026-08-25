@@ -9,13 +9,28 @@ defmodule OpenAgents.Memories.Memory do
   a memory and nothing can rebuild it, because the sentence a reader typed once
   is the only copy.
 
-  Two buckets, kept distinct because they earn attention differently:
+  Three buckets, kept distinct because they earn attention differently:
 
   * `user` — the reader said "remember that I prefer X". Explicit only, never
     inferred from what a turn happened to contain.
   * `learned` — server-side consolidation over thread events produced it. It
     carries `source_ref` so a wrong learning is traced back to the work that
     taught it.
+  * `system` — what the network as a whole has learned. See
+    `OpenAgents.Memories.Admissions`.
+
+  A `system` row carries fields the other two do not, and they are required
+  together: a `sys:` slug, a transparency `tier` of `ledger` or `glass`, an
+  `as_of` date for the claim, an `admission` the author claims, and a non-empty
+  `evidence_refs` list. A `user` or `learned` row carries none of them. Both
+  halves of that rule are a database constraint (`memories_system_shape`) as
+  well as a validation here, so an evidence-free candidate is unrepresentable
+  rather than merely unwritten by the code that exists today.
+
+  `admission` is the author's claim and nothing more. Effective status comes
+  from `OpenAgents.Memories.Admissions.status/1`, which reads the admission
+  records, so a row that says `admitted` with no steward record behind it still
+  reads as a candidate.
 
   `superseded_by_id` is how a correction lands. The replacement is a new row
   and the old row points at it, so the store keeps the chain rather than
@@ -36,10 +51,17 @@ defmodule OpenAgents.Memories.Memory do
   @foreign_key_type :binary_id
   @timestamps_opts [type: :utc_datetime_usec]
 
-  @buckets ~w(user learned)
+  @buckets ~w(user learned system)
+  @recallable_buckets ~w(user learned)
   @default_bucket "user"
   @body_characters 2_000
   @source_ref_characters 200
+  @slug_characters 200
+  @slug_prefix "sys:"
+  @tiers ~w(ledger glass)
+  @admissions ~w(candidate admitted rejected)
+  @evidence_kinds ~w(receipt memory url)
+  @evidence_refs 20
 
   schema "memories" do
     belongs_to :user, User
@@ -48,6 +70,14 @@ defmodule OpenAgents.Memories.Memory do
     field :source_ref, :string
     field :embedding, {:array, :float}
     field :embedding_model, :string
+
+    # The system bucket's fields. Null on every other row.
+    field :slug, :string
+    field :entity, :string
+    field :tier, :string
+    field :as_of, :date
+    field :admission, :string
+    field :evidence_refs, {:array, :map}
     # The generated `tsvector` the lexical stand-in ranks over. PostgreSQL
     # writes it; nothing here reads it back, so it never rides a select.
     field :search_vector, :string, load_in_query: false
@@ -60,6 +90,34 @@ defmodule OpenAgents.Memories.Memory do
   @doc "The buckets a memory may be written into."
   @spec buckets() :: [String.t()]
   def buckets, do: @buckets
+
+  @doc """
+  The buckets recall reads.
+
+  `system` is stored and admitted but surfaced to nobody. Reading an admitted
+  system row into every account's turn is cross-account recall by construction,
+  which MEMORY-001 and MEMORY-010 forbid, so widening this list is a privacy
+  decision rather than a ranking change. It belongs to the recall issue that
+  owns the eligibility filter, not to the store.
+  """
+  @spec recallable_buckets() :: [String.t()]
+  def recallable_buckets, do: @recallable_buckets
+
+  @doc "The transparency tiers a system memory may carry."
+  @spec tiers() :: [String.t()]
+  def tiers, do: @tiers
+
+  @doc "The admission states an author may claim."
+  @spec admissions() :: [String.t()]
+  def admissions, do: @admissions
+
+  @doc "The kinds of evidence a system memory may cite."
+  @spec evidence_kinds() :: [String.t()]
+  def evidence_kinds, do: @evidence_kinds
+
+  @doc "The prefix every system slug carries."
+  @spec slug_prefix() :: String.t()
+  def slug_prefix, do: @slug_prefix
 
   @doc "The bucket a write lands in when it names none."
   @spec default_bucket() :: String.t()
@@ -75,16 +133,132 @@ defmodule OpenAgents.Memories.Memory do
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(memory, attrs) do
     memory
-    |> cast(attrs, [:bucket, :body, :source_ref, :embedding, :embedding_model])
+    |> cast(attrs, [
+      :bucket,
+      :body,
+      :source_ref,
+      :embedding,
+      :embedding_model,
+      :slug,
+      :entity,
+      :tier,
+      :as_of,
+      :admission,
+      :evidence_refs
+    ])
     |> update_change(:body, &trim/1)
     |> update_change(:source_ref, &trim/1)
+    |> update_change(:slug, &trim/1)
+    |> update_change(:entity, &trim/1)
     |> validate_required([:bucket, :body])
     |> validate_inclusion(:bucket, @buckets)
     |> validate_length(:body, min: 1, max: @body_characters, count: :graphemes)
     |> validate_length(:source_ref, min: 1, max: @source_ref_characters, count: :graphemes)
+    |> validate_bucket_fields()
     |> foreign_key_constraint(:user_id)
     |> check_constraint(:body, name: :memories_shape)
+    |> check_constraint(:evidence_refs,
+      name: :memories_system_shape,
+      message: "does not satisfy the system-memory shape"
+    )
   end
+
+  # The system fields, required together on a system row and refused outright
+  # on the other two. The database says the same thing in
+  # `memories_system_shape`; this is the half that can explain itself to the
+  # caller.
+  defp validate_bucket_fields(changeset) do
+    case get_field(changeset, :bucket) do
+      "system" -> validate_system(changeset)
+      _account_scoped -> refuse_system_fields(changeset)
+    end
+  end
+
+  defp validate_system(changeset) do
+    changeset
+    |> validate_required([:slug, :tier, :as_of, :admission, :evidence_refs])
+    |> validate_length(:slug, min: 1, max: @slug_characters, count: :graphemes)
+    |> validate_format(:slug, ~r/^sys:/, message: "must start with #{@slug_prefix}")
+    |> validate_length(:entity, min: 1, max: @slug_characters, count: :graphemes)
+    |> validate_inclusion(:tier, @tiers)
+    |> validate_inclusion(:admission, @admissions)
+    |> validate_evidence_refs()
+  end
+
+  defp refuse_system_fields(changeset) do
+    Enum.reduce([:slug, :entity, :tier, :as_of, :admission, :evidence_refs], changeset, fn
+      field, acc ->
+        if is_nil(get_field(acc, field)) do
+          acc
+        else
+          add_error(acc, field, "belongs only to a system memory")
+        end
+    end)
+  end
+
+  # A system memory without evidence is an assertion, and assertions do not
+  # enter the shared bucket. The list is required, non-empty, and every entry
+  # names a kind, a ref, and a digest — the digest so the evidence behind an
+  # admitted claim cannot be swapped afterwards.
+  defp validate_evidence_refs(changeset) do
+    case get_change(changeset, :evidence_refs, get_field(changeset, :evidence_refs)) do
+      nil ->
+        changeset
+
+      [] ->
+        add_error(changeset, :evidence_refs, "must name at least one piece of evidence")
+
+      refs when is_list(refs) and length(refs) > @evidence_refs ->
+        add_error(
+          changeset,
+          :evidence_refs,
+          "names more than #{@evidence_refs} pieces of evidence"
+        )
+
+      refs when is_list(refs) ->
+        if Enum.all?(refs, &evidence_ref?/1) do
+          put_change(changeset, :evidence_refs, Enum.map(refs, &normalize_ref/1))
+        else
+          add_error(
+            changeset,
+            :evidence_refs,
+            "each entry needs a kind of #{Enum.join(@evidence_kinds, ", ")}, a ref, and a digest"
+          )
+        end
+
+      _not_a_list ->
+        add_error(changeset, :evidence_refs, "must be a list")
+    end
+  end
+
+  defp evidence_ref?(ref) when is_map(ref) do
+    kind(ref) in @evidence_kinds and present?(entry(ref, "ref", :ref)) and
+      present?(entry(ref, "digest", :digest))
+  end
+
+  defp evidence_ref?(_ref), do: false
+
+  defp normalize_ref(ref) do
+    %{
+      "kind" => kind(ref),
+      "ref" => String.trim(entry(ref, "ref", :ref)),
+      "digest" => String.trim(entry(ref, "digest", :digest))
+    }
+  end
+
+  defp kind(ref), do: entry(ref, "kind", :kind)
+
+  # A caller writes `%{"kind" => …}` over the API and `%{kind: …}` in Elixir,
+  # and both mean the same evidence ref.
+  defp entry(ref, string_key, atom_key) do
+    case Map.get(ref, string_key, Map.get(ref, atom_key)) do
+      value when is_binary(value) -> value
+      _absent -> nil
+    end
+  end
+
+  defp present?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present?(_value), do: false
 
   @doc "Points a memory at the memory that replaced it."
   @spec supersede_changeset(t(), t()) :: Ecto.Changeset.t()

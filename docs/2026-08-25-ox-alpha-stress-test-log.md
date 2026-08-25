@@ -92,3 +92,78 @@ The backend in `openagents.com` already holds the complete Box runtime and deleg
   - Effective aggregate generation rate: **~350–410 tokens/sec** across 8 parallel streams.
   - Machine state: Load average 4.75, memory healthy, zero HTTP 429s or rate limit errors.
   - Error rate: 0.0% (0 / 8 failed).
+
+## 6. Cloud Box 2-way fan-out attempt (2026-08-25)
+
+Live qualification of the new `openagents box` CLI (openagents monorepo commit
+`6f575f466a`, issue OpenAgentsInc/openagents#58) against production, scoped to
+the owner-directed maximum of 2 boxes. No live Box VM was provisioned. The
+dispatch path is blocked by production credential and bootstrap configuration,
+not by the CLI or the server substrate. This section records the exact
+refusals as the current-state evidence for issue #255 acceptance criterion (a).
+
+### Commands and observed behavior
+
+The globally installed `openagents` binary predates the `box` subcommand, so
+every invocation ran from monorepo source:
+`tsx src/main.ts box ...` in `packages/openagents-cli` (read-only use of the
+canonical checkout).
+
+| Invocation | Result |
+| --- | --- |
+| `openagents box list` (no `--conversation`) | `api_error: Could not find an active conversation for this account.` The CLI resolves the default conversation from `GET /api/v1/user`, but production's `ForgeUserController` does not return a `conversation_id`, and no API route exposes one. |
+| `openagents box list --conversation <uuid> --json` | HTTP `401`, request id `GM8i9RIHftp1gmgAAA7B` |
+| `openagents box fanout --count 2 --labels ox-alpha-1,ox-alpha-2 --conversation <uuid> --json` | HTTP `401`, request id `GM8i9Tzl5IUatR8AABIx` |
+| `GET /api/v1/conversations/<uuid>/boxes` (raw, via `openagents api`) | `401 {"error":{"code":"invalid_api_token"}}`, request id `GM8i9ohpRAEvOXYAAA8x` |
+| `POST /api/v1/conversations/<uuid>/boxes/fanout` body `{"count":2,"labels":["ox-alpha-1","ox-alpha-2"]}` (raw) | `401 {"error":{"code":"invalid_api_token"}}`, request id `GM8i9-XmhZyTFNYAAAOC` |
+
+The `401` is deterministic, not transient: every `/api/v1/conversations/:id/boxes*`
+route sits behind the `box_control_api` pipeline
+(`OpenAgentsWeb.Plugs.AssignmentControlAuth`, `scope: "box:control"`), and the
+CLI session token carries only the sign-in defaults
+(`OpenAgents.ApiTokens.default_scopes/0` = `["chat:account", "forge:write"]`).
+A `box:control` token exists in `allowed_scopes` but is only mintable from the
+browser-session `POST /api/tokens` route, not from the CLI session. The scope
+gate refuses before conversation lookup, so the placeholder conversation UUID
+in the requests above does not change the observed behavior.
+
+### What this blocks and what it does not
+
+Because authentication refuses before admission, none of the downstream
+machinery was exercised live: no fanout plan row, no VM provisioning (so the
+production `BOX_API_KEY` provider credential also remains unverified), no
+isolated clone, no Ox Alpha turn on a box, and no server-side run output or
+receipts. Tokens generated on boxes: 0. Wall time to refusal: sub-second per
+request.
+
+The substrate below the auth gate is verified by test evidence on the same
+tree the site runs:
+
+- Server: 80 tests, 0 failures across `box_test.exs`, `box_fanout_test.exs`,
+  `box_fleet_test.exs`, `box_runs_test.exs`, `box_client_runs_test.exs`,
+  `box_reconciler_test.exs`, and the `BoxController`, `BoxFanoutController`,
+  and `BoxRunController` controller tests — covering the 2-box default cap
+  admission, queueing beyond the cap, durable run lifecycle, bounded output,
+  and cancellation.
+- CLI: `test/box-command.test.ts` passes (4 tests) against the same
+  request/response contract the live calls used.
+
+### Acceptance criteria status for issue #255
+
+1. Multi-box dispatch provisions/queues up to the cap: demonstrated at the
+   contract level only (fanout controller tests admit up to the default cap of
+   2 and queue the rest). Live dispatch refused with `401` as recorded above.
+2. Isolated repo clones and asynchronous Ox Alpha turns per box: not
+   demonstrated live; covered by `OpenAgents.Forge.Assignments` and
+   `OpenAgents.BoxRuns` tests only.
+3. Output logs, tokens, and push receipts on the server: not demonstrated
+   live; run output and receipt persistence covered by tests only.
+
+### Blockers (tracked in OpenAgentsInc/openagents#58 — do not duplicate)
+
+1. `box:control` scope grant for CLI sessions (`openagents auth login` or
+   `Agents.grant_box_control`).
+2. Conversation discovery/bootstrap when `--conversation` is omitted
+   (`GET /api/v1/user` returns no `conversation_id`).
+3. `BOX_API_KEY` provider credential configuration in production, verifiable
+   only after 1 and 2.

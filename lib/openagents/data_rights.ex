@@ -14,6 +14,7 @@ defmodule OpenAgents.DataRights do
     SourceMembership
   }
 
+  alias OpenAgents.Memories.Memory
   alias OpenAgents.Memory.SemanticDerivativeReceipt
   alias OpenAgents.{Accounts, ApiTokens, Conversations, ProfileMemory, Repo}
   alias OpenAgents.Voice.{ResponseContext, ResponseReceipt, Session, TranscriptItem}
@@ -151,6 +152,15 @@ defmodule OpenAgents.DataRights do
         Repo.delete_all(
           from(record in ProfileMemory.Record, where: record.owner_visitor_id == ^visitor_id)
         )
+
+      # Cloud memories are keyed on the account row, not on the visitor root,
+      # and the account row is deliberately retained (DATA-004) so deletion
+      # cannot erase a ban. The visitor cascade therefore does not reach them,
+      # and leaving that to the cascade would quietly keep what an account
+      # asked to have remembered after it asked for everything to be removed.
+      # They are removed here, explicitly, in the same transaction.
+      {_deleted_memories, nil} =
+        Repo.delete_all(from(memory in Memory, where: memory.user_id == ^user_id))
 
       Repo.delete!(owner)
 

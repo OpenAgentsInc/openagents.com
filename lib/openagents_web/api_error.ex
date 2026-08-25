@@ -66,6 +66,11 @@ defmodule OpenAgentsWeb.ApiError do
     # malformed request and not a forbidden one: the same call succeeds once
     # the caller revokes one, so it is the rate-limit status and its own code.
     "thread_quota_reached" => {429, "This account holds the maximum number of open threads"},
+    # Memory admission. Like the thread ceiling, this is neither a malformed
+    # request nor a forbidden one: the same call succeeds once the account
+    # removes or supersedes a memory, so it is the rate-limit status and its
+    # own code rather than a field message inside a generic 422.
+    "memory_quota_reached" => {429, "This account holds the maximum number of memories"},
     # Model availability (PROVIDER-002). The model is in the catalog but its
     # provider credential is not configured on this deployment, which is the
     # server's condition and not the caller's mistake: the same call succeeds

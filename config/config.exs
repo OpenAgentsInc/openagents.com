@@ -290,6 +290,21 @@ config :openagents,
     maximum_export_artifacts: 500
   ],
   memory_portability: [enabled: false],
+  # Cloud memories (`OpenAgents.Memories`). `embeddings_enabled` chooses the
+  # target retrieval backend; with it off, recall runs on the lexical stand-in.
+  # The three bounds are the store's ceiling per account and the per-turn
+  # ceilings on how much memory may reach the model.
+  memory_recall: [
+    embeddings_enabled: false,
+    provider: OpenAgents.Memory.OpenAIEmbeddings,
+    model_id: "text-embedding-3-small",
+    model_version: "2024-01",
+    dimensions: 64,
+    floor: 0.3,
+    maximum_live_memories: 200,
+    maximum_attached: 8,
+    maximum_attached_characters: 2_000
+  ],
   tool_discovery: [
     embeddings_enabled: false,
     provider: OpenAgents.Memory.OpenAIEmbeddings,

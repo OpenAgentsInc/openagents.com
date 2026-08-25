@@ -271,6 +271,7 @@ if config_env() == :prod and runtime_role == :web do
   portability_enabled = feature.("MEMORY_PORTABILITY")
   shadow_enabled = feature.("SHADOW_PROGRAMS")
   tool_embeddings_enabled = feature.("TOOL_EMBEDDINGS")
+  memory_embeddings_enabled = feature.("MEMORY_EMBEDDINGS")
   computers_enabled = feature.("COMPUTERS")
   conversation_reset_enabled = feature.("CONVERSATION_RESET")
   incident_fixer_enabled = feature.("INCIDENT_FIXER")
@@ -388,6 +389,11 @@ if config_env() == :prod and runtime_role == :web do
     :openagents
     |> Application.fetch_env!(:tool_discovery)
     |> Keyword.put(:embeddings_enabled, tool_embeddings_enabled)
+
+  memory_recall =
+    :openagents
+    |> Application.fetch_env!(:memory_recall)
+    |> Keyword.put(:embeddings_enabled, memory_embeddings_enabled)
 
   forge_repos = parse_csv.("OPENAGENTS_FORGE_REPOSITORIES")
   forge_owner = required_text.("OPENAGENTS_FORGE_OWNER")
@@ -515,6 +521,7 @@ if config_env() == :prod and runtime_role == :web do
     memory_portability: memory_portability,
     shadow_programs: shadow_programs,
     tool_discovery: tool_discovery,
+    memory_recall: memory_recall,
     computer_controller_enabled: computers_enabled,
     machine_token_ttl_seconds:
       parse_integer.("OPENAGENTS_MACHINE_TOKEN_TTL_SECONDS", 300..2_592_000),

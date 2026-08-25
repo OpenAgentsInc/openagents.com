@@ -118,9 +118,12 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
     %{
       # Anonymous by design: the extension index is a public API description.
       "get /api/v1" => {:anonymous, :meta, :legacy},
-      # Anonymous while the stub answers; required_bearer when a real loop
-      # stands behind it.
-      "post /api/v1/responses" => {:anonymous, :response, :envelope},
+      # An anonymous caller is answered as it always was. A caller that
+      # presents a `chat:account` bearer is recognized so its own memories are
+      # recalled into the turn, which is what makes this optional rather than
+      # anonymous. The credential widens the context of the answer, never the
+      # authority of the call.
+      "post /api/v1/responses" => {:optional_bearer, :response, :envelope},
       # Anonymous by design: device authorization bootstraps credentials.
       "post /api/v1/device/authorizations" => {:anonymous, :device, :legacy},
       "post /api/v1/device/authorizations/token" => {:anonymous, :device, :legacy},
@@ -205,6 +208,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v1/threads/:thread_id/events" => {:required_bearer, :thread, :envelope},
       "post /api/v1/threads/:thread_id/events" => {:required_bearer, :thread, :envelope},
       "post /api/v1/threads/:thread_id/grants" => {:required_bearer, :thread, :envelope},
+      "post /api/v1/memories" => {:required_bearer, :memory, :envelope},
+      "get /api/v1/memories" => {:required_bearer, :memory, :envelope},
+      "delete /api/v1/memories/:id" => {:required_bearer, :memory, :envelope},
       "get /api/v1/capacity" => {:required_bearer, :capacity, :legacy},
       "post /api/v1/capacity/matches" => {:required_bearer, :capacity, :legacy},
       # The bootstrap read for a box client. It answers a conversation, but it

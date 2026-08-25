@@ -301,12 +301,21 @@ Architecture forbids treating Sarah as a service boundary.
 inform Sarah's expression. It informs; it never grants capability or
 authority.
 
-**Memory planes** — account-scoped, consent-gated projections: conversation
+**Memory planes** — visitor-scoped, consent-gated projections: conversation
 recall (hybrid lexical + semantic), profile memory, learned preferences,
 experience memory, graph memory. All disposable except the authoritative
 messages and tool steps underneath them. *Search over thread history
 (checkpoints, trailers, and receipts) is proposed and unclaimed as a use of
 these planes, not a second index.*
+
+**Memories** — `OpenAgents.Memories`, and a different thing from the memory
+planes above. A memory is account-scoped (`memories.user_id`, not a visitor),
+thread-sourced, and authoritative rather than derived: nothing can rebuild it,
+because the sentence a reader asked to have remembered is the only copy. Two
+buckets, `user` and `learned`. Recall runs server-side inside `POST
+/api/v1/responses`, so every client gets it without implementing retrieval.
+Use "memories" for this store and "memory planes" for the projections; a
+durable fact a reader states in the web conversation is still profile memory.
 
 ### Threads
 

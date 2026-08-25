@@ -65,6 +65,15 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.ApiTokenAuth, scope: "chat:account"
   end
 
+  # An anonymous lane that recognizes an account when one presents a credential
+  # it can verify. It grants no authority and refuses nobody, so a route behind
+  # it answers an anonymous caller exactly as it would without it.
+  pipeline :ambient_account_api do
+    plug :accepts, ["json"]
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.AmbientApiTokenAuth, scope: "chat:account"
+  end
+
   pipeline :box_control_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -492,12 +501,17 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :api
 
     post "/agents/register", AgentController, :register
+  end
 
-    # The OpenResponses surface, currently a stub that acknowledges every
-    # request: the coder's dev lane speaks it first, and a real loop stands
-    # behind it later. Anonymous while it is a stub — a canned sentence
-    # spends nothing and reads nothing — and the auth flips to a required
-    # bearer with the loop that makes it worth protecting.
+  # The OpenResponses surface. Anonymous callers are answered exactly as they
+  # always were — the coder's dev lane reaches this route with no credential —
+  # and a caller that does present a `chat:account` bearer is recognized so the
+  # controller can recall that account's memories into the turn. The plug
+  # grants nothing and refuses nobody; see
+  # `OpenAgentsWeb.Plugs.AmbientApiTokenAuth`.
+  scope "/api/v1", OpenAgentsWeb do
+    pipe_through :ambient_account_api
+
     post "/responses", ResponsesController, :create
   end
 
@@ -594,6 +608,18 @@ defmodule OpenAgentsWeb.Router do
     post "/chat/turns", ChatTurnController, :create
     get "/capacity", CapacityController, :show
     post "/capacity/matches", CapacityController, :matches
+  end
+
+  # Memories: what the account asked to have remembered. The write path only —
+  # recall runs server-side inside `POST /api/v1/responses`, so no client
+  # implements retrieval. The account scope, because a memory belongs to an
+  # account rather than to a repository or a thread.
+  scope "/api/v1", OpenAgentsWeb do
+    pipe_through :chat_account_api
+
+    post "/memories", MemoryController, :create
+    get "/memories", MemoryController, :index
+    delete "/memories/:id", MemoryController, :delete
   end
 
   # Threads: the unit of agent work, and the model authority bound to one. The

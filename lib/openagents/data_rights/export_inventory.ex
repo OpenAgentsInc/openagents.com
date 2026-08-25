@@ -285,6 +285,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "so the export ledger now reaches what the deletion cascade always did."
     },
     %{
+      family: :memory,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v1/memories",
+      proof: {:test, "test/openagents_web/controllers/memory_controller_test.exs"},
+      issue: nil,
+      note:
+        "The list route is the export: it returns every memory the account " <>
+          "wrote, live and superseded both, to that account and to nobody " <>
+          "else. Unlike the recall planes this store is authoritative — the " <>
+          "sentence a reader typed once is the only copy — so it leaves " <>
+          "through a route of its own rather than as a projection of messages."
+    },
+    %{
       family: :pull_request,
       api?: true,
       status: :portable,

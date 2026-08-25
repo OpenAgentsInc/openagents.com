@@ -1,6 +1,8 @@
 defmodule OpenAgentsWeb.ResponsesControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
+  alias OpenAgents.Memories
+
   alias OpenAgents.Providers.{
     FailingTestProvider,
     RecordingTestProvider,
@@ -148,6 +150,152 @@ defmodule OpenAgentsWeb.ResponsesControllerTest do
 
       body = json_response(conn, 503)
       assert body["code"] == "model_unavailable"
+    end
+  end
+
+  # Server-side recall (#51). The point of putting recall here is that no
+  # client implements it, so what these prove is the seam: a recognized account
+  # gets its memories in the model context, an unrecognized caller gets exactly
+  # what it got before, and the attachment is bounded in both directions.
+  describe "recall for a recognized account" do
+    setup do
+      swap_lane(RecordingTestProvider)
+      Application.put_env(:openagents, :test_recording_provider_observer, self())
+      on_exit(fn -> Application.delete_env(:openagents, :test_recording_provider_observer) end)
+      :ok
+    end
+
+    test "attaches the account's memory as a bounded note", %{conn: conn} do
+      conn = put_chat_api_token(conn, "responses-recall")
+      user = github_user("api-token-responses-recall")
+
+      {:ok, _memory} = Memories.create(user, %{"body" => "I use pnpm, not npm."})
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "install the deps"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      assert request.instructions =~ "[From memory: user, "
+      assert request.instructions =~ "I use pnpm, not npm."
+    end
+
+    test "leaves the caller's own input untouched", %{conn: conn} do
+      conn = put_chat_api_token(conn, "responses-recall-input")
+      user = github_user("api-token-responses-recall-input")
+
+      {:ok, _memory} = Memories.create(user, %{"body" => "I use pnpm, not npm."})
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{
+               instructions: "Answer in French.",
+               input: "install the deps"
+             })
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      assert request.input == [%{role: "user", content: "install the deps"}]
+      # The note rides below the caller's instructions: material, not an
+      # instruction that outranks what the caller asked for.
+      assert String.starts_with?(request.instructions, "Answer in French.")
+      assert request.instructions =~ "[From memory:"
+    end
+
+    test "says what the bounds excluded rather than trailing off", %{conn: conn} do
+      previous = Application.get_env(:openagents, :memory_recall) || []
+
+      Application.put_env(
+        :openagents,
+        :memory_recall,
+        Keyword.merge(previous, maximum_attached: 1)
+      )
+
+      on_exit(fn -> Application.put_env(:openagents, :memory_recall, previous) end)
+
+      conn = put_chat_api_token(conn, "responses-recall-bounds")
+      user = github_user("api-token-responses-recall-bounds")
+
+      for index <- 1..4 do
+        {:ok, _memory} = Memories.create(user, %{"body" => "Preference number #{index}."})
+      end
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "what do you know"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      assert request.instructions =~ "3 more memories were not attached"
+      assert Enum.count(String.split(request.instructions, "[From memory: user,")) == 2
+    end
+
+    test "an account with no memories is not told about memory at all", %{conn: conn} do
+      conn = put_chat_api_token(conn, "responses-recall-empty")
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "install the deps"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      refute request.instructions =~ "From memory"
+    end
+
+    test "never reaches another account's memories", %{conn: conn} do
+      other = github_user("responses-recall-other-account")
+      {:ok, _theirs} = Memories.create(other, %{"body" => "Deploy with yarn."})
+
+      conn = put_chat_api_token(conn, "responses-recall-mine")
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "deploy with yarn"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      refute request.instructions =~ "From memory"
+    end
+  end
+
+  describe "an unrecognized caller is unchanged" do
+    setup do
+      swap_lane(RecordingTestProvider)
+      Application.put_env(:openagents, :test_recording_provider_observer, self())
+      on_exit(fn -> Application.delete_env(:openagents, :test_recording_provider_observer) end)
+      :ok
+    end
+
+    test "an anonymous request carries no memory note", %{conn: conn} do
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "install the deps"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      assert request.instructions == "You are OpenAgents Coder. Answer directly and concisely."
+    end
+
+    # The dev lane reaches this route with credentials this endpoint knows
+    # nothing about. Recognizing an account must never turn those into a
+    # refusal, so an unreadable bearer is answered, not rejected.
+    test "an unreadable bearer is answered rather than refused", %{conn: conn} do
+      assert conn
+             |> put_req_header("authorization", "Bearer not-a-token-this-server-minted")
+             |> post(~p"/api/v1/responses", %{input: "hello"})
+             |> json_response(200)
+    end
+
+    test "a bearer scoped for something else is answered rather than refused", %{conn: conn} do
+      assert conn
+             |> put_box_api_token("responses-wrong-scope")
+             |> post(~p"/api/v1/responses", %{input: "hello"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      refute request.instructions =~ "From memory"
+    end
+
+    test "a malformed authorization header is answered rather than refused", %{conn: conn} do
+      assert conn
+             |> put_req_header("authorization", "Basic bm90OmJlYXJlcg==")
+             |> post(~p"/api/v1/responses", %{input: "hello"})
+             |> json_response(200)
     end
   end
 

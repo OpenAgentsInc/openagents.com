@@ -1039,6 +1039,70 @@ Evidence: `OpenAgents.GraphMemory`, graph manifests/artifacts/memberships/outbox
 database guards, `test/openagents/graph_memory_test.exs`, the committed graph comparison,
 and `OpenAgents.GraphMemoryTest`.
 
+### MEMORY-010 — Cloud memories are account-scoped, explicit, and bounded at recall
+
+Status: Current
+
+Cloud memories (`OpenAgents.Memories`) are a plane of their own, distinct from
+the visitor-scoped memory planes MEMORY-001 through MEMORY-009 govern. They are
+account-scoped rather than conversation-scoped, thread-sourced rather than
+message-sourced, and authoritative rather than derived: dropping the table
+loses what an account asked to have remembered, which is the property that
+separates this store from every projection beside it. It is a separate plane
+because the existing ones cannot hold it — profile-memory records admit only a
+same-owner conversation-message source or host assertion (MEMORY-003), a thread
+is not a conversation (THREAD-001), and MEMORY-002 forbids consolidation-derived
+material from entering the profile plane at all.
+
+Scope is a database predicate, never an application filter. Every Ecto query
+rooted at `OpenAgents.Memories.Memory` names `user_id`, in the context and in
+every retrieval backend that reads PostgreSQL, and the queries are read from
+each module's own source AST rather than remembered, so a query added beside
+the scoped ones fails until it carries its scope. No read offers a cross-account
+or unscoped fallback, and a memory of another account is refused as absent
+rather than as forbidden.
+
+Writes are explicit. Nothing infers a memory from what a turn contained: a row
+exists because a caller asked for it through `POST /api/v1/memories`.
+Corrections supersede rather than edit — the replacement is a new row, the old
+row points at it, and recall reads live rows only — so a wrong memory is traced
+and replaced rather than overwritten. Bodies are immutable for the life of a
+row.
+
+Recall is bounded three ways and reports what it excluded. The store caps live
+memories per account at write; each turn caps how many memories attach and how
+many characters they spend; and the `[From memory: …]` note states the count
+that did not fit rather than truncating. A `user` memory attaches whenever the
+account holds one, because the reader asked for it and it need not share
+vocabulary with the turn; a `learned` memory must clear the retrieval backend's
+floor. Recall never fails a turn: an empty store, an unavailable embedding
+provider, and an unreadable backend each recall nothing.
+
+Retrieval is a swappable interface with two backends. The embedding backend is
+the target; the PostgreSQL full-text backend is a marked stand-in, and it is
+what a deployment runs unless `OPENAGENTS_FEATURE_MEMORY_EMBEDDINGS` and an
+embedding credential are both configured. No pgvector index exists for this
+plane — `message_semantic_embeddings` is bound to `message_id` — so the
+embedding backend compares vectors stored on the memory rows in process, the
+way the tool catalog does.
+
+Recognition on `POST /api/v1/responses` grants no authority. The ambient plug
+refuses nobody, so an anonymous caller, an unreadable credential, and a
+credential scoped elsewhere all reach the route exactly as before recall
+existed, and the account it recognizes only widens the context of the answer.
+
+Product-data deletion removes them. Memories key on the retained account row
+rather than the visitor root, so the DATA-004 visitor cascade does not reach
+them and `OpenAgents.DataRights.delete/3` removes them explicitly in the same
+transaction.
+
+Evidence: `OpenAgents.Memories`, `OpenAgents.Memories.Retrieval`,
+`OpenAgentsWeb.MemoryController`, `OpenAgentsWeb.Plugs.AmbientApiTokenAuth`,
+the `memories` table's shape constraint and partial indexes,
+`test/openagents/memories_test.exs`,
+`test/openagents_web/controllers/memory_controller_test.exs`, and
+`test/openagents_web/controllers/responses_controller_test.exs`.
+
 ### PRIVACY-001 — Secret-bearing profile memory is rejected, never scrub-stored
 
 Status: Current
@@ -3260,6 +3324,12 @@ in the same transaction only after the owner no longer exists.
 Derived graph manifests and artifacts cascade with the owner; standalone graph
 memberships, outbox events, cascade plans, and operation receipts are likewise
 removed in that transaction only after deletion of the visitor root.
+
+Cloud memories (MEMORY-010) are the one product-data family the visitor cascade
+cannot reach, because they key on the retained account row rather than on the
+visitor root. Deletion removes them by `user_id` explicitly, in the same
+transaction, so an account that asked for everything to be removed does not keep
+what it asked to have remembered.
 
 The minimal local account record (GitHub numeric ID, current login/avatar,
 access status, authentication timestamps, and currently the encrypted GitHub
@@ -5919,6 +5989,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | MEMORY-007 | `test/openagents/preferences_test.exs` |
 | MEMORY-008 | `test/openagents/experience_memory_test.exs` |
 | MEMORY-009 | `test/openagents/graph_memory_test.exs` |
+| MEMORY-010 | `test/openagents/memories_test.exs`, `test/openagents_web/controllers/memory_controller_test.exs`, `test/openagents_web/controllers/responses_controller_test.exs` |
 | PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | TURN-001 | `test/openagents/conversations_test.exs` |
 | TURN-002 | `test/openagents/conversations_test.exs` |

@@ -19,9 +19,38 @@ defmodule OpenAgentsWeb.ResponsesController do
   stream has opened arrives as `response.failed`, which is the
   specification's shape for exactly that.
 
-  The system prompt is deliberately minimal: the caller's `instructions`
-  when given, one sentence otherwise. This surface adds no context of its
-  own — what the coder wants the model to know arrives in the request.
+  The system prompt is deliberately minimal: the caller's `instructions` when
+  given, one sentence otherwise. This surface adds nothing the caller did not
+  ask for, with exactly one exception, stated here because it used to say it
+  added nothing at all.
+
+  ## Recall
+
+  A caller that presents a `chat:account` bearer is recognized by
+  `OpenAgentsWeb.Plugs.AmbientApiTokenAuth`, and that account's memories
+  (`OpenAgents.Memories`) are recalled against the incoming `input` and
+  appended to the instructions as a bounded `[From memory: …]` note. This is
+  where recall lives so that no client implements it: the CLI, the web app, and
+  a direct API caller all get the same memory attached to the same turns.
+
+  Three properties hold, and the tests pin all three:
+
+  * **Anonymous is unchanged.** No credential, an unreadable one, or one scoped
+    for something else means no recall and byte-identical behavior to before.
+    The plug refuses nobody, so a caller reaching this route with an unrelated
+    `Authorization` header is not newly broken.
+  * **The turns are untouched.** The note rides `instructions`, so the input
+    items the caller sent reach the provider exactly as sent.
+  * **It is bounded, and says what it dropped.** Count and characters both cap,
+    and the note's last line reports what did not fit rather than trailing off.
+
+  What this deliberately does **not** do is adopt `OpenAgents.Context.Composer`.
+  That module is the browser conversation's prompt builder, not a general
+  assembler: it requires an admitted persona, role, and Blueprint projection,
+  it composes only the `text` and `voice` surfaces, and its output tells the
+  model it is "in Simply Sarah: one text conversation scoped to this signed
+  browser". Running an API caller's turn through it would replace the caller's
+  own instructions with a description of a surface this is not.
 
   This codebase has long spoken OpenResponses as a client
   (`OpenAgents.Providers.OpenAI` at `/v1/responses` upstream); this is where
@@ -30,7 +59,10 @@ defmodule OpenAgentsWeb.ResponsesController do
 
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Accounts.User
   alias OpenAgents.Inference.Models
+  alias OpenAgents.Memories
+  alias OpenAgents.Memories.Note
   alias OpenAgents.Providers.{Request, ToolDefinition, ToolOutput}
   alias OpenAgentsWeb.ApiError
 
@@ -41,7 +73,7 @@ defmodule OpenAgentsWeb.ResponsesController do
     with {:ok, input} <- input_of(params),
          {:ok, model} <- model_of(params),
          :ok <- serving(model) do
-      request = build_request(model, input, params)
+      request = build_request(model, input, params, conn.assigns[:current_user])
 
       if params["stream"] == true do
         stream(conn, model, request)
@@ -196,7 +228,7 @@ defmodule OpenAgentsWeb.ResponsesController do
     if Models.available?(model), do: :ok, else: {:error, :model_unavailable}
   end
 
-  defp build_request(model, {messages, tool_outputs}, params) do
+  defp build_request(model, {messages, tool_outputs}, params, account) do
     {system, turns} = Enum.split_with(messages, &(&1.role == "system"))
 
     instructions =
@@ -204,6 +236,8 @@ defmodule OpenAgentsWeb.ResponsesController do
         text when is_binary(text) and text != "" -> text
         _absent -> joined_or_default(system)
       end
+
+    instructions = with_memory(instructions, account, turns)
 
     max_output =
       case params["max_output_tokens"] do
@@ -223,6 +257,31 @@ defmodule OpenAgentsWeb.ResponsesController do
 
   defp joined_or_default([]), do: @default_instructions
   defp joined_or_default(system), do: Enum.map_join(system, "\n\n", & &1.content)
+
+  # Recall, and the whole of it. An anonymous request returns the instructions
+  # it came in with, unchanged and untouched — this is the line that keeps the
+  # dev lane behaving exactly as it did.
+  #
+  # The note goes below the caller's instructions rather than above them: it is
+  # material the model reads, never an instruction that outranks what the
+  # caller asked for.
+  defp with_memory(instructions, %User{} = account, turns) do
+    case Note.render(Memories.recall(account, recall_query(turns))) do
+      nil -> instructions
+      note -> instructions <> "\n\n" <> note
+    end
+  end
+
+  defp with_memory(instructions, _anonymous, _turns), do: instructions
+
+  # What this turn is about: the user turns of the request, newest last, which
+  # is the text a memory has to be relevant to. Assistant turns are the
+  # model's own words and would rank memory against what it already said.
+  defp recall_query(turns) do
+    turns
+    |> Enum.filter(&(&1.role == "user"))
+    |> Enum.map_join("\n", & &1.content)
+  end
 
   # ── streaming ────────────────────────────────────────────────────────────
 

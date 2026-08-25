@@ -6,6 +6,10 @@ config :openagents, :repository_provisioner_enabled, false
 
 config :openagents, :runtime_environment, :test
 
+# Test fixtures create the forum boards each test needs; the seed migration
+# stays out of their way. See SeedGeneralForumBoard.
+config :openagents, :seed_forum_boards, false
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used

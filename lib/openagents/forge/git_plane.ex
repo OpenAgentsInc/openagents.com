@@ -24,6 +24,11 @@ defmodule OpenAgents.Forge.GitPlane do
   @oid_pattern ~r/\A(?:[0-9a-f]{40}|[0-9a-f]{64})\z/
   @ref_pattern ~r|\Arefs/[A-Za-z0-9][A-Za-z0-9._/-]{0,200}\z|
   @segment_pattern ~r/\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z/
+  # The most ancestry pairs one `containing/3` read may ask git for. A read
+  # path that spawns a subprocess per pair needs a ceiling, and this one is
+  # generous for the question it answers: a handful of commits against a
+  # window of recent release revisions.
+  @ancestry_pair_limit 64
   @committer_name "OpenAgents Forge"
   @committer_email "forge@openagents.com"
 
@@ -96,6 +101,55 @@ defmodule OpenAgents.Forge.GitPlane do
         {_output, 1} -> {:ok, false}
         _other -> {:error, :not_found}
       end
+    end
+  end
+
+  @doc """
+  For each commit in `ancestors`, which of `candidates` contain it.
+
+  `ancestor?/3` answers one pair and pays one WAL freshness check for it.
+  A caller asking "which release carried this work" holds several commits and
+  several release revisions at once, and paying a freshness check per pair
+  would make the answer cost a network round trip per cell of a matrix that
+  is mostly zeroes. This runs the check once and then one
+  `merge-base --is-ancestor` per pair.
+
+  The matrix is bounded at #{@ancestry_pair_limit} pairs. A caller that asks
+  for more gets `{:error, :too_many_pairs}` rather than an unbounded scan,
+  because the bound is what keeps a read path a read path.
+
+  A candidate this repository does not have does not contain anything: git
+  answers "not an ancestor" for a revision it cannot resolve, and so does
+  this. The question is "did this ship", and a revision the forge never saw
+  did not ship it.
+  """
+  @spec containing(String.t(), [String.t()], [String.t()]) ::
+          {:ok, %{String.t() => [String.t()]}} | {:error, term()}
+  def containing(repo, ancestors, candidates)
+      when is_binary(repo) and is_list(ancestors) and is_list(candidates) do
+    if length(ancestors) * length(candidates) > @ancestry_pair_limit do
+      {:error, :too_many_pairs}
+    else
+      with :ok <- Sync.ensure_fresh(repo) do
+        {:ok,
+         Map.new(ancestors, fn ancestor ->
+           {ancestor, Enum.filter(candidates, &contained_by?(repo, ancestor, &1))}
+         end)}
+      end
+    end
+  end
+
+  def containing(_repo, _ancestors, _candidates), do: {:error, :not_found}
+
+  defp contained_by?(repo, ancestor, candidate) do
+    with :ok <- check_rev(ancestor),
+         :ok <- check_rev(candidate) do
+      match?(
+        {_output, 0},
+        git(repo, ["merge-base", "--is-ancestor", "--end-of-options", ancestor, candidate])
+      )
+    else
+      _unreadable -> false
     end
   end
 

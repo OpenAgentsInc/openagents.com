@@ -10,25 +10,37 @@ defmodule OpenAgents.Issues.Activity do
   target, and deployment receipts. No new work record, no new linkage table, and
   no new repository authority: the repository is checked once and the thread
   authority is composed rather than restated.
+
+  `receipts` answers for the exact commit and stops there, which leaves the
+  last question a reader actually has unanswered: a fleet target is matched by
+  comparing shas, and a release is almost never promoted at the commit that
+  closed the issue. `releases` closes that gap through
+  `OpenAgents.Issues.Releases`, which asks the commit graph whether the
+  release's revision contains the issue's commits. It reads the same closing
+  references this module already reads, so the two halves of the answer can
+  never disagree about which commits the issue claims.
   """
 
   alias OpenAgents.Accounts.User
   alias OpenAgents.Forge
-  alias OpenAgents.Issues.{ClosingReferences, Issue}
+  alias OpenAgents.Issues.{ClosingReferences, Issue, Releases}
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
   alias OpenAgents.Threads
 
   @doc """
-  The threads and receipts that name `issue` and that `reader` may read.
+  The threads, receipts, and releases that name `issue` and that `reader` may
+  read.
 
-  Returns `%{threads: [...], receipts: [...]}`. An issue with no closing
-  references or no matching receipts returns an empty `:receipts` list, and an
-  issue with no readable threads returns an empty `:threads` list.
+  Returns `%{threads: [...], receipts: [...], releases: %{...}}`. An issue with
+  no closing references or no matching receipts returns an empty `:receipts`
+  list, an issue with no readable threads returns an empty `:threads` list, and
+  an issue no release carried returns `OpenAgents.Issues.Releases.empty/0`.
   """
   @spec for_issue(Issue.t(), User.t() | nil) :: %{
           threads: [Threads.Thread.t()],
-          receipts: [map()]
+          receipts: [map()],
+          releases: Releases.t()
         }
   def for_issue(%Issue{} = issue, %User{} = reader), do: do_for_issue(issue, reader)
   def for_issue(%Issue{} = issue, _reader), do: do_for_issue(issue, nil)
@@ -38,14 +50,15 @@ defmodule OpenAgents.Issues.Activity do
     repository = visible_repository(issue, reader)
     threads = if reader, do: Threads.list_for_issue(issue, reader), else: []
 
-    receipts =
+    {receipts, releases} =
       if repository do
-        issue |> ClosingReferences.for_issue() |> receipts_for_references(repository)
+        {issue |> ClosingReferences.for_issue() |> receipts_for_references(repository),
+         Releases.for_issue(repository, issue)}
       else
-        []
+        {[], Releases.empty()}
       end
 
-    %{threads: threads, receipts: receipts}
+    %{threads: threads, receipts: receipts, releases: releases}
   end
 
   defp visible_repository(%Issue{repository_id: repository_id}, reader) do

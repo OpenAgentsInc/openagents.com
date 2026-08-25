@@ -215,6 +215,47 @@ defmodule OpenAgents.Forge.GitPlaneTest do
     end
   end
 
+  describe "containing/3" do
+    test "answers the whole matrix in one read", %{
+      base_commit: base_commit,
+      b1: b1,
+      b2: b2,
+      c1: c1,
+      trunk_x: trunk_x
+    } do
+      assert {:ok, matrix} = GitPlane.containing(@repo, [b1, trunk_x], [b2, c1, trunk_x])
+
+      assert matrix[b1] == [b2, c1]
+      assert matrix[trunk_x] == [trunk_x]
+
+      assert {:ok, %{^base_commit => carried}} =
+               GitPlane.containing(@repo, [base_commit], [b2, trunk_x])
+
+      assert carried == [b2, trunk_x]
+    end
+
+    test "a revision the repository does not have contains nothing", %{b2: b2} do
+      absent = String.duplicate("a", 40)
+
+      assert {:ok, matrix} = GitPlane.containing(@repo, [absent, b2], [b2, absent])
+      assert matrix[absent] == []
+      assert matrix[b2] == [b2]
+    end
+
+    test "refuses a matrix past the pair bound rather than scanning it", %{b2: b2} do
+      candidates = List.duplicate(b2, 65)
+
+      assert {:error, :too_many_pairs} = GitPlane.containing(@repo, [b2], candidates)
+      assert {:ok, _matrix} = GitPlane.containing(@repo, [b2], Enum.take(candidates, 64))
+    end
+
+    test "an empty ask is an empty answer", %{b2: b2} do
+      assert {:ok, %{}} = GitPlane.containing(@repo, [], [b2])
+      assert {:ok, %{^b2 => []}} = GitPlane.containing(@repo, [b2], [])
+      assert {:error, :not_found} = GitPlane.containing(@repo, b2, [b2])
+    end
+  end
+
   describe "merge_base/3" do
     test "finds the common ancestor of diverged branches", %{base_commit: base_commit} do
       assert {:ok, ^base_commit} = GitPlane.merge_base(@repo, "layer-1", "main")

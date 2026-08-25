@@ -47,7 +47,41 @@ defmodule OpenAgentsWeb.IssueJSON do
 
     %{
       threads: Enum.map(activity.threads, &thread_json(&1, url_base)),
-      receipts: Enum.map(activity.receipts, &receipt_json/1)
+      receipts: Enum.map(activity.receipts, &receipt_json/1),
+      releases: releases_json(Map.get(activity, :releases))
+    }
+  end
+
+  # The release half of the activity answer. `receipts` matches a receipt to
+  # the exact commit; this says which release revision contains that commit,
+  # which is the question "did this ship" actually asks.
+  defp releases_json(nil), do: releases_json(OpenAgents.Issues.Releases.empty())
+
+  defp releases_json(releases) do
+    %{
+      commits:
+        Enum.map(releases.commits, fn commit ->
+          %{
+            sha: commit.sha,
+            verb: commit.verb,
+            referenced_at: commit.referenced_at,
+            releases: Enum.map(commit.releases, &release_json/1)
+          }
+        end),
+      released_in: release_json(releases.released_in),
+      truncated: releases.truncated
+    }
+  end
+
+  defp release_json(nil), do: nil
+
+  defp release_json(release) do
+    %{
+      id: release.id,
+      sha: release.sha,
+      status: release.status,
+      promoted_at: release.promoted_at,
+      settled_at: release.settled_at
     }
   end
 

@@ -75,6 +75,29 @@ defmodule OpenAgents.Inference.Models do
   def default_id, do: default().id
 
   @doc """
+  The model the server selects for a caller that names none, by policy.
+
+  A lane that is configured and not degraded is preferred, in catalog order.
+  If no such lane exists because every configured lane is degraded, or
+  because no lane is configured, the catalog default is returned. The proxy
+  still uses `Models.available?/1` to refuse the call when the default is
+  unavailable, so a degraded default is used but an unavailable one is not.
+  """
+  @spec select() :: t()
+  def select do
+    models = all()
+
+    case Enum.find(models, &healthy?/1) do
+      nil -> default()
+      model -> model
+    end
+  end
+
+  @doc "The id of the model `select/0` returns."
+  @spec select_id() :: String.t()
+  def select_id, do: select().id
+
+  @doc """
   The model with this id, or `:error`.
 
   A thread opened before this list existed carries the vendor string
@@ -93,13 +116,6 @@ defmodule OpenAgents.Inference.Models do
 
   def fetch(_id), do: :error
 
-  @doc """
-  Whether this model's adapter reports its credential configured.
-
-  An adapter that does not export `configured?/0` is taken as configured: the
-  test adapters need no credential, and an adapter that cannot say is refused
-  at call time by its own `missing_api_key` rather than guessed at here.
-  """
   @doc """
   What a client should believe about a lane, as one word.
 
@@ -122,6 +138,13 @@ defmodule OpenAgents.Inference.Models do
     end
   end
 
+  @doc """
+  Whether this model's adapter reports its credential configured.
+
+  An adapter that does not export `configured?/0` is taken as configured: the
+  test adapters need no credential, and an adapter that cannot say is refused
+  at call time by its own `missing_api_key` rather than guessed at here.
+  """
   @spec available?(t()) :: boolean()
   def available?(%{adapter: adapter}) do
     if Code.ensure_loaded?(adapter) and function_exported?(adapter, :configured?, 0) do
@@ -129,6 +152,10 @@ defmodule OpenAgents.Inference.Models do
     else
       true
     end
+  end
+
+  defp healthy?(%{id: id} = model) do
+    available?(model) and not match?({:degraded, _}, Health.status(id))
   end
 
   @doc """

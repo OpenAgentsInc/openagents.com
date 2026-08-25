@@ -3,6 +3,8 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.Health
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Machines
   alias OpenAgents.Providers.RecordingTestProvider
   alias OpenAgents.Repo
@@ -442,6 +444,79 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
       assert conn.status == 503
       assert Jason.decode!(conn.resp_body)["error"]["code"] == "model_unavailable"
+    end
+  end
+
+  describe "server-side model selection" do
+    setup do
+      Health.reset()
+      on_exit(&Health.reset/0)
+      :ok
+    end
+
+    test "all lanes healthy selects the catalog default and reports it", %{conn: conn} do
+      %{token: token} = grant("policy-healthy")
+
+      conn =
+        post_chat(conn, token, %{
+          "messages" => [%{"role" => "user", "content" => "hi"}]
+        })
+
+      assert conn.status == 200
+      expected = Models.default_id()
+      assert get_resp_header(conn, "x-openagents-model") == [expected]
+
+      for chunk <- sse_events(conn.resp_body), chunk != "[DONE]" do
+        assert Jason.decode!(chunk)["model"] == expected
+      end
+    end
+
+    test "default degraded selects a healthy alternative and reports it", %{conn: conn} do
+      default = Models.default_id()
+
+      for _ <- 1..Health.degraded_after() do
+        Health.record_failure(default)
+      end
+
+      expected = Models.select_id()
+      refute expected == default
+
+      %{token: token} = grant("policy-degraded")
+
+      conn =
+        post_chat(conn, token, %{
+          "messages" => [%{"role" => "user", "content" => "hi"}]
+        })
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "x-openagents-model") == [expected]
+
+      for chunk <- sse_events(conn.resp_body), chunk != "[DONE]" do
+        assert Jason.decode!(chunk)["model"] == expected
+      end
+    end
+
+    test "every lane degraded still selects the default and reports it", %{conn: conn} do
+      for id <- Models.ids(), _ <- 1..Health.degraded_after() do
+        Health.record_failure(id)
+      end
+
+      expected = Models.select_id()
+      assert expected == Models.default_id()
+
+      %{token: token} = grant("policy-all-degraded")
+
+      conn =
+        post_chat(conn, token, %{
+          "messages" => [%{"role" => "user", "content" => "hi"}]
+        })
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "x-openagents-model") == [expected]
+
+      for chunk <- sse_events(conn.resp_body), chunk != "[DONE]" do
+        assert Jason.decode!(chunk)["model"] == expected
+      end
     end
   end
 end

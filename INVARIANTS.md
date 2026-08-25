@@ -1224,8 +1224,19 @@ Concretely:
   `model_mismatch` naming both, rather than silently answered by the grant's.
 - Every successful proxy response attributes the effective model — the
   `x-openagents-model` header and each SSE chunk's `model` field — so a
-  client renders what answered rather than what it assumed. Because a
-  mismatch is refused, requested and effective agree on every `200`.
+  client renders what answered rather than what it assumed. A named model is
+  never substituted: because a mismatch is refused, a caller that named one
+  gets that one or an error.
+- Amended 2026-08-25 (#199): where **nothing named a model** — neither the
+  mint nor the call — the server selects, preferring a configured lane that is
+  not `degraded` in catalog order and falling back to the catalog default when
+  every configured lane is degraded. This is not substitution: there was no
+  request to substitute for, and a caller that said "whatever you serve" is
+  better served by a lane that answers than by a fixed one that does not. It
+  is bounded to exactly that case — a model named in the body, or a grant
+  minted for a model other than the default, is routed as it always was — and
+  the effective model is attributed on the response as always, so the answer
+  still says what produced it.
 
 The chat lane keeps the same law through `OpenAgents.Chat.Backends`: an
 unsupported `model` on `POST /api/v1/chat/turns` is a typed `422`, and

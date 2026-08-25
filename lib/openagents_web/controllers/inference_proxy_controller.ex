@@ -36,7 +36,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     # proxy never re-reads or re-parses it.
     with {:ok, token} <- bearer(conn),
          {:ok, grant} <- resolve(token),
-         {:ok, model} <- route(grant),
+         {:ok, model} <- route(grant, conn.body_params),
          :ok <- serving(model),
          :ok <- requested_model(model, conn.body_params),
          {:ok, request} <- build_request(model, conn.body_params) do
@@ -52,10 +52,21 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   # with. A grant minted before the model was routable — or one whose model has
   # since been withdrawn — is refused here rather than sent to a provider that
   # does not serve it.
-  defp route(grant) do
-    case Models.fetch(grant.model_id) do
-      {:ok, model} -> {:ok, model}
-      :error -> {:error, :model_unavailable}
+  defp route(grant, body) do
+    if no_model_in_body?(body) and grant.model_id == Models.default_id() do
+      {:ok, Models.select()}
+    else
+      case Models.fetch(grant.model_id) do
+        {:ok, model} -> {:ok, model}
+        :error -> {:error, :model_unavailable}
+      end
+    end
+  end
+
+  defp no_model_in_body?(body) do
+    case Map.get(body, "model") do
+      absent when absent in [nil, ""] -> true
+      _ -> false
     end
   end
 
@@ -210,6 +221,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         # What the catalog publishes about this lane follows from what it
         # actually did, not only from whether a credential is configured.
         OpenAgents.Inference.Health.record_failure(model.id, status)
+
         Logger.warning(
           "inference_proxy_failed code=#{class}" <>
             if(status == nil, do: "", else: " upstream_status=#{status}")

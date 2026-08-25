@@ -413,6 +413,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "export whole."
     },
     %{
+      family: :issue_activity,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "A derived assembly, not a store: the activity read composes the " <>
+          "threads that named the issue with the push, build, target, and " <>
+          "deployment receipts reachable from its commit references, and " <>
+          "stores nothing of its own. Every record it shows exports through " <>
+          "its own family."
+    },
+    %{
       family: :capacity,
       api?: true,
       status: :not_user_data,

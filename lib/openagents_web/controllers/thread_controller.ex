@@ -31,6 +31,17 @@ defmodule OpenAgentsWeb.ThreadController do
   a coding session run its own turns on one model and its delegated children on
   another: it opens a second thread on `ox-alpha` and gets authority for
   `ox-alpha`, with its own budget, rather than borrowing the first thread's.
+
+  The exception is the `local` lane, and it is an exception to the grant, not
+  to the record. `"lane": "local"` opens a transcript-only thread: the model is
+  the bounded vendor string a local runtime serves (`ollama:...`), checked
+  against no catalog and no provider, and the open mints nothing — the response
+  carries no grant, and `POST /grants` on the thread is refused with
+  `thread_lane_local`. Everything else is an ordinary thread: events append,
+  the transcript streams, the tier governs its readers, the open-thread cap
+  counts it, `DELETE` ends it. The lane exists so a run whose model calls never
+  touch this server still leaves the durable transcript everything rehydrates
+  from (issue #243).
   """
 
   use OpenAgentsWeb, :controller
@@ -45,11 +56,15 @@ defmodule OpenAgentsWeb.ThreadController do
   @extension "thread.openagents"
 
   def create(conn, params) do
-    with {:ok, objective} <- objective(params),
+    with {:ok, lane} <- lane(params),
+         {:ok, objective} <- objective(params),
          {:ok, repository} <- repository(params),
          {:ok, visibility} <- visibility(params),
-         {:ok, options} <- execution_shape(params) do
-      open(conn, objective, options ++ repository ++ visibility)
+         {:ok, options} <- shape_for(lane, params) do
+      case lane do
+        "local" -> open_local(conn, objective, options ++ repository ++ visibility)
+        _granted -> open(conn, objective, options ++ repository ++ visibility)
+      end
     else
       {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
       {:unavailable, model_id} -> unavailable_model(conn, model_id)
@@ -190,6 +205,18 @@ defmodule OpenAgentsWeb.ThreadController do
             errors: %{"thread" => [sentence]}
           )
 
+        {:error, :thread_local_lane} ->
+          sentence =
+            "This thread is on the local lane and holds no model authority to mint: " <>
+              "its model runs on the caller's own machine, and this server only " <>
+              "records the transcript. Open a thread without \"lane\": \"local\" " <>
+              "for a grant."
+
+          ApiError.refuse(conn, "thread_lane_local",
+            message: sentence,
+            errors: %{"thread" => [sentence]}
+          )
+
         {:error, :credit_exhausted} ->
           credit_exhausted(conn)
 
@@ -299,6 +326,26 @@ defmodule OpenAgentsWeb.ThreadController do
         ApiError.validation_failed(conn, %{
           "objective" => ["The thread could not be opened. Try again."]
         })
+    end
+  end
+
+  # The transcript-only open. No mint, so no token, no grant key, and no
+  # `credit_exhausted` — an account with nothing left can still record a run
+  # its own machine paid for. The quota refusal is the same one the granted
+  # lane gets, because the cap counts open threads, not granted ones.
+  defp open_local(conn, objective, options) do
+    case Threads.open(conn.assigns.current_user, objective, options) do
+      {:ok, thread} ->
+        conn
+        |> put_extension_header()
+        |> put_status(:created)
+        |> json(%{"thread" => thread_view(thread)})
+
+      {:error, :thread_quota_reached} ->
+        quota_reached(conn)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        ApiError.changeset(conn, changeset)
     end
   end
 
@@ -565,6 +612,76 @@ defmodule OpenAgentsWeb.ThreadController do
       message: sentence,
       errors: %{"visibility" => [sentence]}
     )
+  end
+
+  # The lane decides which door the model goes through. Absent means the
+  # granted lane, exactly as every create before the field existed; a value
+  # outside the admitted pair is refused rather than folded into a default,
+  # because a caller that asked for a transcript-only thread and was minted a
+  # grant — or the reverse — has no way to tell.
+  defp lane(%{"lane" => value}) when is_binary(value) do
+    trimmed = String.trim(value)
+
+    if trimmed in Thread.lanes() do
+      {:ok, trimmed}
+    else
+      {:refused, "lane",
+       "#{inspect(trimmed)} is not an admitted lane. " <>
+         "Admitted: #{Enum.join(Thread.lanes(), ", ")}."}
+    end
+  end
+
+  defp lane(%{"lane" => value}) when not is_nil(value) do
+    {:refused, "lane", "#{inspect(value)} is not a string."}
+  end
+
+  defp lane(_params), do: {:ok, Thread.default_lane()}
+
+  defp shape_for("local", params), do: local_execution_shape(params)
+  defp shape_for(_granted, params), do: execution_shape(params)
+
+  # The local lane's model is the vendor string a local runtime serves —
+  # `ollama:qwen3.8:27b-mtp-q8_0` — so it is bounded, not admitted: no catalog
+  # membership and no provider availability, because no grant will ever carry
+  # it to a provider (issue #243). It is required rather than defaulted: the
+  # catalog default is a model this thread deliberately does not use, and
+  # recording it would put a lie at the top of the transcript. The 200-byte
+  # bound is the changeset's, the same one every thread's model column holds.
+  defp local_execution_shape(params) do
+    with {:ok, model} <- local_model(params),
+         {:ok, reasoning} <-
+           admitted(params, "reasoning", Thread.reasoning_efforts(), Threads.default_reasoning()),
+         {:ok, profile} <-
+           admitted(
+             params,
+             "permission_profile",
+             Thread.permission_profiles(),
+             Threads.default_permission_profile()
+           ) do
+      {:ok, [lane: "local", model: model, reasoning: reasoning, permission_profile: profile]}
+    end
+  end
+
+  defp local_model(%{"model" => model}) when is_binary(model) do
+    case String.trim(model) do
+      "" ->
+        {:refused, "model",
+         "A local-lane thread records the model its local runtime serves, " <>
+           "and the string cannot be blank."}
+
+      trimmed ->
+        {:ok, trimmed}
+    end
+  end
+
+  defp local_model(%{"model" => model}) do
+    {:refused, "model", "#{inspect(model)} is not a string."}
+  end
+
+  defp local_model(_params) do
+    {:refused, "model",
+     "A local-lane thread requires a model: the vendor string its local " <>
+       "runtime serves, for example ollama:qwen3.8:27b-mtp-q8_0."}
   end
 
   defp execution_shape(params) do

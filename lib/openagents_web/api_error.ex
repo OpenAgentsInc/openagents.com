@@ -73,6 +73,12 @@ defmodule OpenAgentsWeb.ApiError do
     # and its own code — never a silent substitution.
     "model_unavailable" => {503, "The model's provider is not configured on this deployment"},
     "thread_terminal" => {422, "This thread is terminal and its transcript is closed"},
+    # The local lane (THREAD-001, issue #243). A local-lane thread is
+    # transcript-only by contract: its model runs on the caller's own machine,
+    # so there is no authority to mint and no amount of waiting changes that.
+    # Its own code, like `thread_terminal`, because a client that asked for a
+    # grant must learn the thread can never hold one, not that it should retry.
+    "thread_lane_local" => {422, "This thread is on the local lane and holds no model authority"},
     # Thread disclosure (THREAD-002). Widening a transcript is a consent
     # decision, so a tier that did not take is its own code rather than a field
     # message inside the generic 422: a client that meant to publish and did

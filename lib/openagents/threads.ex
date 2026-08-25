@@ -104,6 +104,14 @@ defmodule OpenAgents.Threads do
   `OpenAgents.Threads.Thread.default_visibility/0`, owner-only. A wider tier
   given here is recorded in the transcript as `thread.visibility_set`
   (THREAD-002).
+
+  `:lane` defaults to the granted `thread` lane. The `local` lane admits a
+  transcript-only thread: its `:model` is the bounded vendor string a local
+  runtime serves rather than a catalog id, its `thread.opened` event names the
+  lane, and no grant is ever minted for it — `mint_grant/1` refuses it with
+  `:thread_local_lane`. It still counts against the open-thread cap, because
+  an open thread holds an admission slot whether or not it holds authority
+  (issue #243).
   """
   @spec open(User.t() | Visitor.t(), String.t(), keyword()) ::
           {:ok, Thread.t()} | {:error, :thread_quota_reached | Ecto.Changeset.t()}
@@ -130,6 +138,7 @@ defmodule OpenAgents.Threads do
           | {:error,
              :thread_quota_reached
              | :thread_terminal
+             | :thread_local_lane
              | :credit_exhausted
              | :parent_authority_exhausted
              | Ecto.Changeset.t()}
@@ -162,6 +171,7 @@ defmodule OpenAgents.Threads do
       objective: objective,
       repository: Keyword.get(options, :repository),
       model: Keyword.get(options, :model) || Models.default_id(),
+      lane: Keyword.get(options, :lane, Thread.default_lane()),
       reasoning_effort:
         OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
       permission_profile: Keyword.get(options, :permission_profile, @default_permission_profile),
@@ -217,12 +227,13 @@ defmodule OpenAgents.Threads do
       Thread.open_changeset(attributes, visitor_id, now)
     end)
     |> Multi.run(:opened_event, fn _repo, %{thread: thread} ->
-      insert_event(
-        thread,
-        "thread.opened",
-        %{"objective_bytes" => byte_size(objective), "visibility" => thread.visibility},
-        now
-      )
+      # The lane rides in the record only when it is the exceptional one: a
+      # granted thread's opened event is byte-for-byte what it always was, and
+      # a local thread's transcript says up front that no authority backs it.
+      payload = %{"objective_bytes" => byte_size(objective), "visibility" => thread.visibility}
+      payload = if Thread.local?(thread), do: Map.put(payload, "lane", thread.lane), else: payload
+
+      insert_event(thread, "thread.opened", payload, now)
     end)
     |> Multi.run(:spawn_event, fn _repo, %{admission: parent, thread: thread} ->
       if parent do
@@ -564,6 +575,13 @@ defmodule OpenAgents.Threads do
   tokens, or cost, is refused `:parent_authority_exhausted` rather than minted
   authority it cannot use.
 
+  A local-lane thread is refused `:thread_local_lane` the way a terminal
+  thread is refused `:thread_terminal`. Its model is a vendor string a local
+  runtime serves, not an admitted catalog id, so a grant naming it would be
+  authority no provider here can honor — and the lane's whole contract is that
+  it holds none (issue #243). The refusal is what keeps the no-provider-key
+  and metering invariants true by construction rather than by review.
+
   This is the fence. In one transaction: the thread is locked and refused
   unless it is open, every active grant naming it is revoked, `generation` is
   bumped, and a fresh grant is minted against the thread — never against a
@@ -573,12 +591,16 @@ defmodule OpenAgents.Threads do
           {:ok, Thread.t(), Grant.t(), String.t()}
           | {:error,
              :thread_terminal
+             | :thread_local_lane
              | :credit_exhausted
              | :parent_authority_exhausted
              | Ecto.Changeset.t()}
   def mint_grant(%Thread{} = thread) do
     Repo.transaction(fn ->
       case locked(thread.id) do
+        %Thread{status: "open", lane: "local"} ->
+          Repo.rollback(:thread_local_lane)
+
         %Thread{status: "open"} = current ->
           # Concurrent mints for one account serialize on the owner row
           # (locked after the thread row, always in that order), so each mint

@@ -33,6 +33,14 @@ defmodule OpenAgents.Threads.Thread do
   @objective_bytes 32_768
   @repository_bytes 200
 
+  # Which lane opened the thread. `thread` is the granted lane: the model is a
+  # catalog id and the open mints a grant. `local` is the transcript-only lane:
+  # the model is the vendor string a local runtime serves, and no grant is ever
+  # minted (issue #243).
+  @lanes ~w(thread local)
+  @default_lane "thread"
+  @local_lane "local"
+
   # The disclosure vocabulary is `OpenAgents.Transparency`'s — `dark`, `pulse`,
   # `ledger`, `glass` (`docs/taxonomy.md`) — and a thread offers the two rungs
   # this surface can enforce, not a fifth word of its own.
@@ -45,6 +53,7 @@ defmodule OpenAgents.Threads.Thread do
     field :objective, :string, redact: true
     field :repository, :string
     field :visibility, :string, default: "dark"
+    field :lane, :string, default: "thread"
     field :status, :string, default: "open"
     field :model, :string
     field :reasoning_effort, :string
@@ -83,6 +92,23 @@ defmodule OpenAgents.Threads.Thread do
 
   @doc "The tier a thread takes when its opener names none: owner-only."
   def default_visibility, do: @default_visibility
+
+  @doc """
+  The lanes a thread may be opened on.
+
+  `thread` is the granted lane — the model is admitted against the catalog and
+  the open mints a grant. `local` is the transcript-only lane — the model is a
+  bounded vendor string and no grant is ever minted, so the thread records a
+  run whose model calls never touch this server (issue #243).
+  """
+  def lanes, do: @lanes
+
+  @doc "The lane a thread takes when its opener names none: the granted one."
+  def default_lane, do: @default_lane
+
+  @doc "Whether `thread` is on the transcript-only local lane."
+  @spec local?(t()) :: boolean()
+  def local?(%__MODULE__{lane: lane}), do: lane == @local_lane
 
   @doc """
   The tiers that admit a reader who is not the account that opened the thread.
@@ -124,6 +150,7 @@ defmodule OpenAgents.Threads.Thread do
       :permission_profile,
       :repository,
       :visibility,
+      :lane,
       :parent_thread_id,
       :issue_id
     ])
@@ -144,6 +171,7 @@ defmodule OpenAgents.Threads.Thread do
     |> validate_inclusion(:reasoning_effort, @reasoning_efforts)
     |> validate_inclusion(:permission_profile, @permission_profiles)
     |> validate_inclusion(:visibility, @visibilities)
+    |> validate_inclusion(:lane, @lanes)
     |> foreign_key_constraint(:owner_visitor_id)
     |> foreign_key_constraint(:parent_thread_id)
     |> foreign_key_constraint(:issue_id)
@@ -152,6 +180,7 @@ defmodule OpenAgents.Threads.Thread do
     |> check_constraint(:objective, name: :threads_objective_bound_check)
     |> check_constraint(:repository, name: :threads_repository_bound_check)
     |> check_constraint(:visibility, name: :threads_visibility_check)
+    |> check_constraint(:lane, name: :threads_lane_check)
     |> check_constraint(:reasoning_effort, name: :threads_reasoning_effort_check)
     |> check_constraint(:permission_profile, name: :threads_permission_profile_check)
   end

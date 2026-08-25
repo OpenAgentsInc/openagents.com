@@ -1238,6 +1238,16 @@ Concretely:
   the effective model is attributed on the response as always, so the answer
   still says what produced it.
 
+The thread API's local lane is not an exception to this law, because no
+selection happens there. Amended 2026-08-25 (issue #243): `POST
+/api/v1/threads` with `"lane": "local"` records a bounded free-form vendor
+string as the thread's model without catalog admission — and mints nothing.
+No grant ever carries that string, the proxy never pins it, and no provider
+is ever asked to serve it; `OpenAgents.Threads.mint_grant/1` refuses the
+thread outright (THREAD-001). Every path that mints authority still admits
+only the catalog, so a non-catalog model can be recorded but never granted,
+and no turn is ever answered by it.
+
 The chat lane keeps the same law through `OpenAgents.Chat.Backends`: an
 unsupported `model` on `POST /api/v1/chat/turns` is a typed `422`, and
 `GET /api/v1` publishes the supported enum from the same list.
@@ -2165,6 +2175,24 @@ conversation, and a thread is not one.
   thread's active grants inside the transaction that writes the terminal row,
   and `mint_grant/1` refuses a thread that is not open. Deleting a thread — or
   the account, under the DATA-004 cascade — deletes its grants with it.
+- **A local-lane thread holds no authority, ever.** Added 2026-08-25 (issue
+  #243). `threads.lane` admits `thread` and `local` by check constraint,
+  defaulting to `thread` — the granted lane every earlier thread came
+  through. `POST /api/v1/threads` with `"lane": "local"` opens a
+  transcript-only thread: its `model` is the bounded vendor string a local
+  runtime serves (`ollama:...`), admitted against no catalog and no provider,
+  and the open mints nothing — the response carries no grant and no token,
+  and the fence never moves off generation 0.
+  `OpenAgents.Threads.mint_grant/1` refuses a local-lane thread with
+  `:thread_local_lane` — rendered as the stable code `thread_lane_local` —
+  the way it refuses a terminal one, so the no-provider-key and metering
+  invariants hold by construction: a thread that can never be granted can
+  never spend the account's credit or reach a provider. Everything else about
+  it is an ordinary thread: the transcript appends and broadcasts, the
+  transparency tier governs its readers, the admission cap counts it, and
+  `DELETE` ends it. Its `thread.opened` event records `"lane": "local"`, so
+  the transcript itself says no authority backs it.
+  `test/openagents/threads/local_lane_test.exs` proves both halves.
 - **A thread is bounded where a bound means something.** The objective is
   capped at 32 KB and the terminal report at 32 KB, both by check constraint;
   every transcript entry is pinned to `openagents.thread.event.v1` with no
@@ -2295,8 +2323,10 @@ Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `OpenAgentsWeb.ThreadController`,
 `priv/repo/migrations/20260823221415_create_threads_and_thread_events.exs`,
 `priv/repo/migrations/20260823221416_allow_thread_scoped_inference_grants.exs`,
+`priv/repo/migrations/20260825120000_add_lane_to_threads.exs`,
 `test/openagents/threads/grant_fence_test.exs`,
 `test/openagents/threads/grant_token_reach_test.exs`,
+`test/openagents/threads/local_lane_test.exs`,
 `test/openagents/threads_test.exs`,
 `test/openagents_web/controllers/thread_controller_test.exs`, and
 `test/openagents_web/live/thread_show_live_test.exs`.
@@ -5303,7 +5333,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
-| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs` |
+| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs`, `test/openagents/threads/local_lane_test.exs` |
 | THREAD-002 | `test/openagents/threads/visibility_test.exs`, `test/openagents_web/thread_visibility_test.exs`, `test/openagents/threads/grant_token_reach_test.exs` |
 | THREAD-003 | `test/openagents/threads_test.exs`, `test/openagents/threads/visibility_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs`, `test/openagents/issues/completion_claims_test.exs`, `test/openagents_web/controllers/issue_completion_claim_controller_test.exs` |

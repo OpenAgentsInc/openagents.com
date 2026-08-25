@@ -1025,4 +1025,215 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert stranger |> post(~p"/api/v1/threads/#{id}/grants") |> json_response(404)
     end
   end
+
+  describe "the local lane" do
+    # The transcript-only lane (THREAD-001, issue #243): the model is the
+    # vendor string a local runtime serves, checked against no catalog and no
+    # provider, and no grant is ever minted. The other half of the contract is
+    # below: a create that names no lane is byte-for-byte the granted create
+    # it always was.
+    @vendor_model "ollama:qwen3.8:27b-mtp-q8_0"
+
+    test "opens a transcript-only thread: no grant, no token, no catalog check",
+         %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-local-open")
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Record a local run.",
+          "lane" => "local",
+          "model" => @vendor_model
+        })
+        |> json_response(201)
+
+      # The response carries the thread and nothing that spends: no grant key,
+      # no token anywhere in the body.
+      assert Map.keys(body) == ["thread"]
+      refute inspect(body) =~ "sig_"
+
+      thread = body["thread"]
+      assert thread["status"] == "open"
+      # Never minted, so the fence never moved: generation 0, where a granted
+      # create returns 1.
+      assert thread["generation"] == 0
+
+      stored = Repo.get!(OpenAgents.Threads.Thread, thread["id"])
+      assert stored.lane == "local"
+      assert stored.model == @vendor_model
+      assert Repo.get_by(Grant, thread_id: thread["id"]) == nil
+    end
+
+    test "a local-lane thread requires a model, and a blank one is refused", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-local-no-model")
+
+      absent =
+        authenticated
+        |> post(~p"/api/v1/threads", %{"objective" => "No model named.", "lane" => "local"})
+        |> json_response(422)
+
+      assert absent["code"] == "validation_failed"
+      assert Map.has_key?(absent["errors"], "model")
+
+      blank =
+        authenticated
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Blank model.",
+          "lane" => "local",
+          "model" => "   "
+        })
+        |> json_response(422)
+
+      assert Map.has_key?(blank["errors"], "model")
+    end
+
+    test "the vendor string is bounded, not admitted", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-local-model-bound")
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Bound the vendor string.",
+          "lane" => "local",
+          "model" => String.duplicate("a", 201)
+        })
+        |> json_response(422)
+
+      assert Map.has_key?(body["errors"], "model")
+    end
+
+    test "a lane outside the admitted pair is refused with a validation error", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-local-unknown-lane")
+        |> post(~p"/api/v1/threads", %{"objective" => "Wrong lane.", "lane" => "gym"})
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert [message] = body["errors"]["lane"]
+      assert message =~ "thread, local"
+
+      not_a_string =
+        conn
+        |> put_chat_api_token("thread-local-lane-shape")
+        |> post(~p"/api/v1/threads", %{"objective" => "Wrong shape.", "lane" => 7})
+        |> json_response(422)
+
+      assert Map.has_key?(not_a_string["errors"], "lane")
+    end
+
+    test "requesting a grant for a local-lane thread is refused", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-local-mint")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Ask for authority the lane forbids.",
+          "lane" => "local",
+          "model" => @vendor_model
+        })
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+
+      refused = authenticated |> post(~p"/api/v1/threads/#{id}/grants") |> json_response(422)
+      assert refused["code"] == "thread_lane_local"
+      refute inspect(refused) =~ "sig_"
+
+      # The refusal changed nothing: still open, still ungranted.
+      assert Repo.get!(OpenAgents.Threads.Thread, id).status == "open"
+      assert Repo.get_by(Grant, thread_id: id) == nil
+    end
+
+    test "events record and read back exactly as thread-lane events do", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-local-events")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Write the transcript here.",
+          "lane" => "local",
+          "model" => @vendor_model
+        })
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+
+      recorded =
+        authenticated
+        |> post(~p"/api/v1/threads/#{id}/events", %{
+          "event_type" => "turn.user",
+          "payload" => %{"text" => "Fix the bug"}
+        })
+        |> json_response(201)
+
+      assert recorded["event"]["event_type"] == "turn.user"
+
+      body = authenticated |> get(~p"/api/v1/threads/#{id}/events") |> json_response(200)
+
+      assert Enum.map(body["events"], & &1["event_type"]) == ["thread.opened", "turn.user"]
+      # The transcript itself says no authority backs it.
+      assert [opened | _rest] = body["events"]
+      assert opened["payload"]["lane"] == "local"
+    end
+
+    test "DELETE ends a local-lane thread like any other", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-local-delete")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "End the record.",
+          "lane" => "local",
+          "model" => @vendor_model
+        })
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+
+      ended = authenticated |> delete(~p"/api/v1/threads/#{id}") |> json_response(200)
+      assert ended["thread"]["status"] == "cancelled"
+    end
+
+    test "a create without a lane is the granted create it always was", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-local-regression")
+
+      body =
+        authenticated
+        |> post(~p"/api/v1/threads", %{"objective" => "Unchanged for existing callers."})
+        |> json_response(201)
+
+      # The same two keys, the same mint: a grant with a plaintext token, the
+      # fence at 1, and the stored lane is the granted one.
+      assert Map.keys(body) == ["grant", "thread"]
+      assert String.starts_with?(body["grant"]["token"], "sig_")
+      assert body["thread"]["generation"] == 1
+
+      assert Repo.get!(OpenAgents.Threads.Thread, body["thread"]["id"]).lane == "thread"
+
+      # And the lane-less create still admits only the catalog: a vendor
+      # string that opens a local-lane thread is refused here (PROVIDER-002).
+      refused =
+        authenticated
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "A vendor string without the lane.",
+          "model" => @vendor_model
+        })
+        |> json_response(422)
+
+      assert Map.has_key?(refused["errors"], "model")
+    end
+
+    test "naming the thread lane explicitly is the granted create too", %{conn: conn} do
+      body =
+        conn
+        |> put_chat_api_token("thread-local-explicit")
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "The default lane, spelled out.",
+          "lane" => "thread"
+        })
+        |> json_response(201)
+
+      assert String.starts_with?(body["grant"]["token"], "sig_")
+      assert Repo.get!(OpenAgents.Threads.Thread, body["thread"]["id"]).lane == "thread"
+    end
+  end
 end

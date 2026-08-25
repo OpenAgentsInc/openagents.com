@@ -332,7 +332,10 @@ is `OpenAgents.Threads.Thread`, and the transcript entry is
 `OpenAgents.Threads.Event`. A caller opens one with `POST /api/v1/threads`,
 reads what it has spent with `GET /api/v1/threads/{thread_id}`, and revokes it
 with `DELETE /api/v1/threads/{thread_id}`, all behind the `chat:account` scope
-and served by `OpenAgentsWeb.ThreadController`. The CLI that stops writing to
+and served by `OpenAgentsWeb.ThreadController`. A thread opened with
+`"lane": "local"` is transcript-only: its model is the vendor string a local
+runtime serves, and it is never granted authority — the server records the run
+without paying for it (THREAD-001, issue #243). The CLI that stops writing to
 the conversation is still to come; see the audit in
 `docs/2026-08-23-thread-primitive-audit.md`.
 

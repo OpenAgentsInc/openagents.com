@@ -457,3 +457,50 @@ No branch reached the forge and no push receipt was recorded;
 `404`. Criterion (c) remains unmet. The dispatch half is demonstrated live; the
 authentication half is blocked on the defect above, which is one query in
 `authenticate/1`.
+
+## 10. Push receipt landed (2026-08-25, production `b1f3cc1`)
+
+§9 closed with criterion (c) unmet and the remaining work one query wide. That
+query shipped as `edec722`: `Assignments.authenticate/1` reads the credential
+by `assignment_id`, which is the id its token carries. This section records the
+proof and supersedes §9's status line.
+
+Box `bx_t9sq6375`, conversation `3dd6d813`, one box, stopped afterwards.
+
+Assignment `28adb6cb-52d1-4824-be8f-6f0de2065790` reached `completed`. Its run
+`fed576ec-246f-4ffa-aed9-3634ac511482` exited `0`, and the forge answered the
+push inline:
+
+```
+remote: openagents wal-receipt seq=423 link=9c15d18bd13589f932ce418e6fcf8ece16ddfb81b1871bbc716aa9552df60ff2
+To https://openagents.com/OpenAgentsInc/openagents.com.git
+ * [new branch]      HEAD -> assignment/issue-255-receipt-proof
+```
+
+`GET /api/v1/repos/OpenAgentsInc/openagents.com/pushes/423` confirms it
+server-side, independently of the box:
+
+```json
+{
+  "format": "receive_pack",
+  "wal_seq": 423,
+  "principal": "assignment:28adb6cb-52d1-4824-be8f-6f0de2065790",
+  "pushed_at": "2026-08-25T22:52:08.789744Z",
+  "refs": {
+    "refs/heads/assignment/issue-255-receipt-proof": {
+      "old": null,
+      "new": "89edd3c465003e6956895bfa4f867871b9f4342b"
+    }
+  }
+}
+```
+
+The `principal` is the assignment itself, which is the part worth reading
+twice: the scoped credential authenticated, and the receipt attributes the ref
+move to the attempt that earned it rather than to an account or an operator
+token. `git ls-remote` shows the branch at that revision.
+
+Criterion (c) of openagents.com#255 is met. So are (a) and (b): a two-box
+fan-out honored the cap with a durable plan, and a box provisioned by the fixed
+setup script resolves `opencode` on a plain exec and completes a
+`stealth/ox-alpha` turn.

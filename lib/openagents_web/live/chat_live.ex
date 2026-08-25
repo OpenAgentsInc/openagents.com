@@ -951,6 +951,7 @@ defmodule OpenAgentsWeb.ChatLive do
                 active_turn={@active_turn}
                 message_queue={@message_queue}
                 voice_enabled?={true}
+                recording_config={@recording_config}
               />
               <audio id="voice-output" class="voice-output" autoplay playsinline></audio>
             </section>
@@ -962,6 +963,7 @@ defmodule OpenAgentsWeb.ChatLive do
               active_turn={@active_turn}
               message_queue={@message_queue}
               voice_enabled?={false}
+              recording_config={@recording_config}
             />
           </footer>
         </main>
@@ -1956,6 +1958,7 @@ defmodule OpenAgentsWeb.ChatLive do
   attr :active_turn, :map, default: nil
   attr :message_queue, :list, required: true
   attr :voice_enabled?, :boolean, required: true
+  attr :recording_config, :map, required: true
 
   defp composer_stack(assigns) do
     ~H"""
@@ -2028,7 +2031,11 @@ defmodule OpenAgentsWeb.ChatLive do
               trailing edge rather than an empty group being drawn opposite
               them. --%>
         <.prompt_input_tools class="ml-auto">
-          <.voice_session_buttons :if={@voice_enabled?} active_turn={@active_turn} />
+          <.voice_session_buttons
+            :if={@voice_enabled?}
+            active_turn={@active_turn}
+            recording_config={@recording_config}
+          />
           <%!-- Stop stays its own control rather than `on_stop` on the submit:
                 a message sent while a turn runs queues, so send and stop are
                 two live actions, not one control in two states. --%>
@@ -2067,9 +2074,15 @@ defmodule OpenAgentsWeb.ChatLive do
   end
 
   attr :active_turn, :map, default: nil
+  attr :recording_config, :map, required: true
 
   defp voice_session_buttons(assigns) do
     ~H"""
+    <p :if={@recording_config.enabled?} id="voice-recording-disclosure">
+      Call audio is recorded, stored encrypted, and readable by a Sarah operator.
+      It is deleted {@recording_config.retention_days} days after a call ends, and
+      deleting your data removes it immediately.
+    </p>
     <.prompt_input_button
       id="voice-start"
       variant={:outline}

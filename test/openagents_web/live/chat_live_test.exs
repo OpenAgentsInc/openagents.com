@@ -200,11 +200,40 @@ defmodule OpenAgentsWeb.ChatLiveTest do
     end)
 
     conn = log_in_github_user(conn, "voice-recording-off-user")
-    assert {:ok, view, html} = live(conn, ~p"/sarah")
+    assert {:ok, _view, html} = live(conn, ~p"/sarah")
 
     assert html =~ ~s(id="voice-controller")
-    refute has_element?(view, "#voice-recording-disclosure")
     assert html =~ ~s(data-recording-enabled="false")
+  end
+
+  test "recording on surfaces a disclosure before the voice control", %{conn: conn} do
+    previous_voice = Application.fetch_env!(:openagents, :voice)
+    previous_recording = Application.fetch_env!(:openagents, :voice_recording)
+
+    Application.put_env(:openagents, :voice, enabled_voice())
+
+    Application.put_env(
+      :openagents,
+      :voice_recording,
+      Keyword.put(previous_recording, :enabled, true)
+    )
+
+    on_exit(fn ->
+      Application.put_env(:openagents, :voice, previous_voice)
+      Application.put_env(:openagents, :voice_recording, previous_recording)
+    end)
+
+    conn = log_in_github_user(conn, "voice-recording-on-user")
+    assert {:ok, _view, html} = live(conn, ~p"/sarah")
+
+    assert html =~ ~s(id="voice-controller")
+    assert html =~ ~s(id="voice-recording-disclosure")
+    assert html =~ "readable by a Sarah operator"
+
+    assert html =~
+             "#{OpenAgents.Voice.Recordings.config().retention_days} days after a call ends"
+
+    assert html =~ ~s(data-recording-enabled="true")
   end
 
   test "a connected LiveView refuses events after the account is banned", %{conn: conn} do

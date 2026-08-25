@@ -80,11 +80,19 @@ expected_nodes = Enum.sort(["openagents@10.128.0.4", "openagents@10.128.0.110", 
 
 target =
   case OpenAgents.Forge.Targets.current("openagents.com") do
-    %{sha: "$sha", status: status} = t when status in ["promoted", "building", "built", "needs_rolling_replace"] ->
+    %{sha: "$sha", status: "needs_rolling_replace"} = t ->
       t
+    %{sha: "$sha", status: "promoted"} = t ->
+      {:ok, t2} = OpenAgents.Forge.Targets.advance(t.id, "building")
+      {:ok, t3} = OpenAgents.Forge.Targets.advance(t2.id, "built")
+      {:ok, t4} = OpenAgents.Forge.Targets.advance(t3.id, "needs_rolling_replace")
+      t4
     _ ->
       {:ok, t} = OpenAgents.Forge.Targets.promote("openagents.com", "$sha", "operator:14167547", details: %{"source" => "operator_console"})
-      t
+      {:ok, t2} = OpenAgents.Forge.Targets.advance(t.id, "building")
+      {:ok, t3} = OpenAgents.Forge.Targets.advance(t2.id, "built")
+      {:ok, t4} = OpenAgents.Forge.Targets.advance(t3.id, "needs_rolling_replace")
+      t4
   end
 
 {:ok, authorized} =

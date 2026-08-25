@@ -14,6 +14,7 @@ defmodule OpenAgentsWeb.ApiTokensLive do
      |> assign(:page_title, "API tokens · OpenAgents")
      |> assign(:issued_token, nil)
      |> assign(:form, token_form())
+     |> assign(:selectable_scopes, selectable_scopes())
      |> stream(:tokens, tokens)}
   end
 
@@ -21,7 +22,7 @@ defmodule OpenAgentsWeb.ApiTokensLive do
   def handle_event("create", %{"api_token" => params}, socket) do
     case ApiTokens.create(socket.assigns.current_user, %{
            "name" => params["name"],
-           "scopes" => ["chat:account", "forge:write"],
+           "scopes" => chosen_scopes(params),
            "lifetime_days" => params["lifetime_days"]
          }) do
       {:ok, token, plaintext} ->
@@ -32,7 +33,12 @@ defmodule OpenAgentsWeb.ApiTokensLive do
          |> stream_insert(:tokens, token, at: 0)}
 
       {:error, _invalid} ->
-        {:noreply, put_flash(socket, :error, "Choose a name and a lifetime from 1 to 90 days.")}
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Choose a name, at least one scope, and a lifetime from 1 to 90 days."
+         )}
     end
   end
 
@@ -55,9 +61,8 @@ defmodule OpenAgentsWeb.ApiTokensLive do
         <header class="space-y-2">
           <h1 class="text-3xl font-semibold tracking-tight">API tokens</h1>
           <p class="text-muted-foreground">
-            Create an expiring credential for account chat and Forge operations. Tokens carry
-            <code>chat:account</code>
-            and <code>forge:write</code>, are stored as digests, and are shown once.
+            Create an expiring credential and choose what it may do. Scopes are stored on the
+            token, tokens are stored as digests, and the value is shown once.
           </p>
         </header>
 
@@ -78,6 +83,20 @@ defmodule OpenAgentsWeb.ApiTokensLive do
             <.field>
               <.label for={@form[:name].id}>Name</.label>
               <.input field={@form[:name]} placeholder="Release CLI" required />
+            </.field>
+            <.field>
+              <.label>Scopes</.label>
+              <p class="text-sm text-muted-foreground">
+                A token carries exactly what you select here. Selecting less is the safer
+                default: a credential that cannot reach a surface cannot be spent on it.
+              </p>
+              <.input
+                :for={scope <- @selectable_scopes}
+                field={@form[:"scope_#{scope}"]}
+                type="checkbox"
+                checked={@form[:"scope_#{scope}"].value == "true"}
+                label={scope_label(scope)}
+              />
             </.field>
             <.field>
               <.label for={@form[:lifetime_days].id}>Lifetime in days</.label>
@@ -129,8 +148,37 @@ defmodule OpenAgentsWeb.ApiTokensLive do
     """
   end
 
+  # The scopes an ordinary account may select. Privileged scopes are excluded
+  # here as well as refused by `ApiTokens.create/2`: a control this account can
+  # tick and the server will always reject is worse than no control at all.
+  defp selectable_scopes do
+    ApiTokens.allowed_scopes() -- ApiTokens.privileged_scopes()
+  end
+
+  # Checkboxes arrive one parameter per scope, so the selection is read back
+  # rather than trusted from a list the form could have named freely. An
+  # unknown key cannot become a scope this way, and `ApiTokens.create/2`
+  # refuses an empty selection.
+  defp chosen_scopes(params) do
+    Enum.filter(selectable_scopes(), fn scope -> params["scope_#{scope}"] == "true" end)
+  end
+
+  defp scope_label("chat:account"), do: "chat:account — account chat and threads"
+  defp scope_label("forge:write"), do: "forge:write — push and forge writes"
+  defp scope_label("deployments:write"), do: "deployments:write — deployment records"
+  defp scope_label("box:control"), do: "box:control — cloud box fleet"
+  defp scope_label("computer:control"), do: "computer:control — paired computers"
+  defp scope_label(scope), do: scope
+
+  # The two scopes signing in already grants are ticked, so the common case is
+  # one click and the rest are a deliberate addition.
   defp token_form do
-    to_form(%{"name" => "", "lifetime_days" => "30"}, as: :api_token)
+    defaults =
+      Map.new(selectable_scopes(), fn scope ->
+        {"scope_#{scope}", to_string(scope in ["chat:account", "forge:write"])}
+      end)
+
+    to_form(Map.merge(defaults, %{"name" => "", "lifetime_days" => "30"}), as: :api_token)
   end
 
   defp format_time(%DateTime{} = value),

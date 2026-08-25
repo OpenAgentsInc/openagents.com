@@ -94,7 +94,7 @@ defmodule OpenAgentsWeb.GymRunLiveTest do
       row = view |> element("#trials-#{trial.id}") |> render()
       assert row =~ "hello-world"
       assert row =~ ~s(data-selected="true")
-      assert has_element?(view, "#gym-transcript-no-thread")
+      assert has_element?(view, "#gym-transcript-awaiting-thread")
     end
   end
 

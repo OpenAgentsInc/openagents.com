@@ -365,7 +365,7 @@ defmodule OpenAgentsWeb.GymRunLive do
                 </.empty>
               <% :no_thread -> %>
                 <%= if selected_trial_running?(@trials, @selected_trial_id) do %>
-                  <.empty id="gym-transcript-no-thread" title="Waiting for the thread">
+                  <.empty id="gym-transcript-awaiting-thread" title="Waiting for the thread">
                     The trial is running and its coder has not announced a
                     thread yet. The transcript attaches the moment it does.
                   </.empty>

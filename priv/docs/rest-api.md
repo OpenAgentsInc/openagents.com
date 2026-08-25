@@ -337,13 +337,38 @@ The notes read is paginated and takes `page` and `kind`, where `kind` is `note`,
 with write access receives `403 Forbidden`, and an activity entry is never
 editable. See [Projects](/docs/projects).
 
+## Choose a client
+
+The paths are GitHub-shaped so that you can adapt a client you already know.
+They are not a promise that GitHub's own tooling runs against this host.
+
+- **The `openagents` CLI** is the first-class client. It finds the API origin,
+  loads your stored credential, and returns JSON. See
+  [Call the API with the CLI](/docs/cli-api).
+- **A client that takes a base URL** works on shape alone. Point Octokit at
+  `https://openagents.com/api/v1` and the issue, comment, label, assignee,
+  milestone, and project reads and writes described on this page behave as the
+  paths suggest, within the limits below.
+- **GitHub's `gh` CLI is not supported.** Its ported commands do not use REST:
+  `gh issue list` sends a GraphQL query to `/api/graphql`, and `gh issue view`
+  first probes `GET /api/v3/meta`. OpenAgents serves neither, so those commands
+  fail whatever the base path is. The `gh api` passthrough does work if you
+  give it a full URL, as in `gh api
+  https://openagents.com/api/v1/repos/OWNER/REPO/issues`, but `curl` and the
+  `openagents` CLI do the same job without the confusion.
+
+Requests to `/api/v3` still answer today. That prefix is a temporary alias for
+clients released before the API moved to `/api/v1`, and it is scheduled for
+removal. Send new work to `/api/v1`.
+
 ## Know the compatibility limits
 
 - List responses use named envelopes such as `issues`, `comments`, `labels`,
   `milestones`, `assignees`, `projects`, `items`, and `fields`. GitHub commonly
   returns a bare array.
 - Pagination, filters, link headers, and error envelopes form a bounded local
-  contract. They do not provide complete Octokit or `gh` compatibility.
+  contract. They do not provide complete Octokit compatibility, and `gh` is not
+  a supported client at all.
 - Ancillary issue-resource reads do not yet use the optional-bearer pipeline
   for private repositories.
 - A nonnumeric issue or milestone number can produce `500 Internal Server

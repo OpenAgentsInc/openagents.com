@@ -417,8 +417,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "put /api/v1/repos/:owner/:repo/labels/:name" => {:required_bearer, :label, :envelope},
       "put /api/v1/repos/:owner/:repo/milestones/:milestone_number" =>
         {:required_bearer, :milestone, :envelope},
-      # Landed at `/api/v3` while the rename was in flight. It moves with
-      # everything else; the alias answers the prefix it was written against.
+      # Landed under the old prefix while the rename was in flight. It moves
+      # with everything else; the alias answers the prefix it was written
+      # against until that alias goes away.
       "post /api/v1/traces" => {:required_bearer, :trace, :envelope}
     }
   end

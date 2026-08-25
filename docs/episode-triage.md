@@ -1204,9 +1204,12 @@ references, "the last repo I ever make on GitHub." Devin scaffolds the Phoenix
 app; build order: issues first so development organizes itself publicly, then
 Projects V2 reads, then write endpoints, targeting GitHub API parity on the
 subset actually used (84 endpoints in the March 2026 spec tied to
-issues/projects) so `gh` and octokit work unchanged. DaisyUI-vs-Basecoat debate
-resolved toward simplicity (later reversed by the staging incident recorded in
-AGENTS.md). Bounties, leaderboard, and in-forge chat teased.
+issues/projects) so `gh` and octokit work unchanged (half true, and corrected
+2026-08-25 by ADR 0009: the shape carries octokit given a base URL, but never
+carried `gh`, whose ported commands run on GraphQL rather than REST). The
+DaisyUI-vs-Basecoat debate resolved toward simplicity (later reversed by the
+staging incident recorded in AGENTS.md). Bounties, leaderboard, and in-forge
+chat teased.
 
 #### 274 — Importing Repos
 

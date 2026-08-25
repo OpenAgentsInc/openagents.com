@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.TraceControllerTest do
   @moduledoc """
-  Accept ATIF v1 trace uploads at `POST /api/v3/traces`.
+  Accept ATIF v1 trace uploads at `POST /api/v1/traces`.
   """
 
   use OpenAgentsWeb.ConnCase, async: false
@@ -8,12 +8,12 @@ defmodule OpenAgentsWeb.TraceControllerTest do
   alias OpenAgents.Repo
   alias OpenAgents.Traces.Trace
 
-  describe "POST /api/v3/traces" do
+  describe "POST /api/v1/traces" do
     test "returns the trace id and url for a valid ATIF v1.7 document", %{conn: conn} do
       body =
         conn
         |> put_chat_api_token("trace-valid")
-        |> post(~p"/api/v3/traces", %{
+        |> post(~p"/api/v1/traces", %{
           "schema_version" => "ATIF/1.7",
           "trace" => %{"events" => [%{"type" => "step"}]}
         })
@@ -21,7 +21,7 @@ defmodule OpenAgentsWeb.TraceControllerTest do
 
       assert %{"id" => id, "url" => url} = body
       assert is_binary(id)
-      assert url =~ "/api/v3/traces/#{id}"
+      assert url =~ "/api/v1/traces/#{id}"
       assert body["visibility"] == "dark"
       assert is_integer(body["byte_size"])
       assert is_binary(body["digest"])
@@ -39,13 +39,13 @@ defmodule OpenAgentsWeb.TraceControllerTest do
       first =
         conn
         |> put_chat_api_token("trace-dedup")
-        |> post(~p"/api/v3/traces", document)
+        |> post(~p"/api/v1/traces", document)
         |> json_response(201)
 
       second =
         conn
         |> put_chat_api_token("trace-dedup")
-        |> post(~p"/api/v3/traces", document)
+        |> post(~p"/api/v1/traces", document)
         |> json_response(200)
 
       assert second["id"] == first["id"]
@@ -60,7 +60,7 @@ defmodule OpenAgentsWeb.TraceControllerTest do
       body =
         conn
         |> put_chat_api_token("trace-oversize")
-        |> post(~p"/api/v3/traces", %{
+        |> post(~p"/api/v1/traces", %{
           "schema_version" => "ATIF/1.7",
           "data" => big
         })
@@ -71,7 +71,7 @@ defmodule OpenAgentsWeb.TraceControllerTest do
 
     test "rejects an unauthenticated call", %{conn: conn} do
       conn
-      |> post(~p"/api/v3/traces", %{"schema_version" => "ATIF/1.7"})
+      |> post(~p"/api/v1/traces", %{"schema_version" => "ATIF/1.7"})
       |> assert_api_error(401, "unauthenticated")
     end
 
@@ -79,7 +79,7 @@ defmodule OpenAgentsWeb.TraceControllerTest do
       conn =
         conn
         |> put_chat_api_token("trace-invalid")
-        |> post(~p"/api/v3/traces", %{"schema_version" => "ATIF/2.0"})
+        |> post(~p"/api/v1/traces", %{"schema_version" => "ATIF/2.0"})
 
       assert_api_error(conn, 422, "validation_failed",
         errors: %{"document" => ["The document is not a valid ATIF v1 object."]}
@@ -90,7 +90,7 @@ defmodule OpenAgentsWeb.TraceControllerTest do
       conn =
         conn
         |> put_chat_api_token("trace-no-version")
-        |> post(~p"/api/v3/traces", %{"trace" => %{}})
+        |> post(~p"/api/v1/traces", %{"trace" => %{}})
 
       assert_api_error(conn, 422, "validation_failed")
     end
@@ -99,7 +99,7 @@ defmodule OpenAgentsWeb.TraceControllerTest do
       body =
         conn
         |> put_chat_api_token("trace-visibility")
-        |> post("/api/v3/traces?visibility=ledger", %{
+        |> post("/api/v1/traces?visibility=ledger", %{
           "schema_version" => "ATIF/1.7",
           "trace" => %{}
         })
@@ -117,13 +117,13 @@ defmodule OpenAgentsWeb.TraceControllerTest do
       first =
         conn
         |> put_chat_api_token("trace-owner-one")
-        |> post(~p"/api/v3/traces", document)
+        |> post(~p"/api/v1/traces", document)
         |> json_response(201)
 
       second =
         conn
         |> put_chat_api_token("trace-owner-two")
-        |> post(~p"/api/v3/traces", document)
+        |> post(~p"/api/v1/traces", document)
         |> json_response(201)
 
       refute first["id"] == second["id"]

@@ -90,7 +90,11 @@ application: issues, comments, labels, assignees, milestones, and Projects V2
 (`projectsV2`). It mimics GitHub REST shapes as a compatibility aid and
 implements only a subset of the real API. Authorization here comes from API
 tokens with scopes such as `forge:write`; path similarity to GitHub proves
-nothing about authorization.
+nothing about authorization. **GitHub-shaped** is not **GitHub-compatible**:
+the shape carries a client you configure with a base URL, and it does not
+carry GitHub's `gh`, which is unsupported. `/api/v3` is a dated alias for
+clients released before the rename, not a version this API claims. See
+`docs/decisions/0009-serve-a-github-shaped-api-not-a-gh-compatible-one.md`.
 
 **GitHub contexts (`OpenAgents.GitHub`, `github_oauth`)** — code that talks
 *to* GitHub: OAuth identity, delegated repository access. Tokens are

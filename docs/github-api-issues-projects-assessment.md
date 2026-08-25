@@ -387,7 +387,9 @@ These are compatibility limits, not authorization fallbacks:
 - Nonnumeric issue and milestone numbers can produce `500 Internal Server
   Error` instead of `404 Not Found`.
 - Pagination and link headers are a bounded local contract, not complete
-  Octokit or `gh` parity.
+  Octokit parity. `gh` is not a supported client at any level: its ported
+  commands run on GraphQL, which this application does not serve. See
+  `docs/decisions/0009-serve-a-github-shaped-api-not-a-gh-compatible-one.md`.
 - The error envelope is a superset of GitHub's: `message` and `errors` keep
   GitHub-compatible meaning, and `code`, `status`, `documentation_url`, and
   `request_id` are additions. GitHub's `errors` is an array of resource

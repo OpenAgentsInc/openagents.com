@@ -5271,6 +5271,44 @@ Evidence: `lib/openagents_web/api_error.ex`,
 `test/openagents_web/controllers/api_error_contract_test.exs`, and
 `test/openagents_web/controllers/api_extension_controller_test.exs`.
 
+### FORGEAPI-002 — The path names this API's version, and `/api/v3` is a dated alias
+
+Status: Current
+
+The version segment in `/api/v1` names this API's own version. It does not
+name GitHub's. The API is GitHub-shaped — familiar paths and response shapes,
+so a client you already know is cheap to adapt — and it is not GitHub, so a
+version GitHub chose is the wrong number to serve under.
+
+That distinction is load-bearing because one tool disagrees with it. GitHub's
+`gh` reaches any non-github.com host at a hardcoded `/api/v3` prefix, which
+reads as a reason to serve that prefix forever. It is not one. Measured
+against `gh` 2.89.0, the ported commands never reach REST: `gh issue list`
+sends GraphQL to `/api/graphql` and `gh issue view` probes `GET /api/v3/meta`,
+and this application serves neither, so the prefix buys no working command.
+The one surface it does serve, the `gh api` passthrough, already reaches
+`/api/v1` when it is given a full URL. `gh` is therefore not a supported
+client, and `/api/v3` is a migration alias for released clients with a
+deletion scheduled, not a compatibility promise. The reasoning and the
+measurements are
+`docs/decisions/0009-serve-a-github-shaped-api-not-a-gh-compatible-one.md`.
+
+Because the alias is temporary, nothing may come to depend on it. Every
+versioned route is declared at `/api/v1`, and every URL a response emits names
+`/api/v1`, so a link this API hands a client survives the deletion.
+`OpenAgentsWeb.Plugs.ApiV3Rewrite` is the only file under `lib/` that names the
+old prefix at all, and a proof reads the tree for that, because the reasoning
+does not survive on care alone: the trace ingest route landed mid-rename and
+returned a `url` field naming `/api/v3/traces/{id}`, a link that would have
+gone dead the day the alias did. Deleting the alias stays what it should be, a
+one-file change with one test.
+
+Evidence: `lib/openagents_web/plugs/api_v3_rewrite.ex`,
+`lib/openagents_web/router.ex`,
+`lib/openagents_web/controllers/trace_controller.ex`,
+`test/openagents_web/api_version_posture_test.exs`, and
+`test/openagents_web/plugs/api_v3_rewrite_test.exs`.
+
 ## Executable proof index
 
 This index is part of the ledger. Every `Current` invariant has at least one
@@ -5310,6 +5348,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | NOTIFY-001 | `test/openagents/notifications_test.exs`, `test/openagents_web/live/notifications_live_test.exs` |
 
 | FORGEAPI-001 | `test/openagents_web/controllers/api_error_contract_test.exs`, `test/openagents_web/controllers/api_extension_controller_test.exs`, `test/openagents_web/api_error_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
+| FORGEAPI-002 | `test/openagents_web/api_version_posture_test.exs`, `test/openagents_web/plugs/api_v3_rewrite_test.exs` |
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |

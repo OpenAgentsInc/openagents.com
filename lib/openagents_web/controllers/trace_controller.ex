@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.TraceController do
   @moduledoc """
-  Accept ATIF v1 trace uploads at `POST /api/v3/traces`.
+  Accept ATIF v1 trace uploads at `POST /api/v1/traces`.
   """
 
   use OpenAgentsWeb, :controller
@@ -46,7 +46,7 @@ defmodule OpenAgentsWeb.TraceController do
   defp trace_view(trace) do
     %{
       "id" => trace.id,
-      "url" => OpenAgentsWeb.Endpoint.url() <> "/api/v3/traces/" <> trace.id,
+      "url" => OpenAgentsWeb.Endpoint.url() <> "/api/v1/traces/" <> trace.id,
       "digest" => trace.digest,
       "byte_size" => trace.byte_size,
       "visibility" => trace.visibility,

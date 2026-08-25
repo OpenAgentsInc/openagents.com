@@ -94,8 +94,10 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
   # its authority resolves through the owner-scoped lookup, so widening a
   # transcript for reading can never widen what may be done to it. The one
   # controller serves both, because it serves both the reads and the writes;
-  # the web viewer only reads.
-  @owner_resolver_callers [OpenAgentsWeb.ThreadController]
+  # the web viewer only reads. The Gym resolves owner-scoped to verify a
+  # trial's claimed thread belongs to the bearer before linking it (#241);
+  # it never writes to the thread or mints for it.
+  @owner_resolver_callers [OpenAgents.Gym, OpenAgentsWeb.ThreadController]
   @tier_resolver_callers [OpenAgentsWeb.ThreadController, OpenAgentsWeb.ThreadShowLive]
 
   test "the modules that mint a grant token are exactly the set THREAD-001 accounts for" do

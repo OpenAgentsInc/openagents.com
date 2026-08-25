@@ -2282,6 +2282,13 @@ conversation, and a thread is not one.
   carries `"grant": null`, and the mint still resolves through
   `get_for_user/2`.
 
+  Amended 2026-08-25 (issue #241): the owner-scoped lookup gained a second
+  caller. `OpenAgents.Gym.record_trial/3` resolves a claimed trial thread
+  through `get_for_user/2` before linking it to a benchmark trial, so the Gym
+  admits only threads the bearer's account owns and confirms nothing about
+  anybody else's — ADMIN-001 names the same check at the route. It resolves
+  and links; it never writes to the thread, mints for it, or returns it.
+
 Evidence: `OpenAgents.Threads`, `OpenAgents.Threads.Thread`,
 `OpenAgents.Threads.Event`, `OpenAgents.Inference.mint/1`,
 `OpenAgents.Inference.expire_elapsed_for_owner/1`,
@@ -2956,13 +2963,20 @@ sentence:
   `OpenAgents.ProfileMemory.forget_active/2`, which supersedes rather than
   deletes, so a retraction is another entry in the audit trail the same
   surface renders and never a row that quietly stops existing.
-- Recording a graded Gym run under `POST /api/v3/gym/runs`
+- Recording Gym runs and trials under `POST /api/v1/gym/runs`, the lifecycle
+  routes `POST /api/v1/gym/runs/start`, `POST /api/v1/gym/runs/:id/trials`,
+  and `PATCH /api/v1/gym/runs/:id`
   (`OpenAgentsWeb.GymRunController`, which rechecks the operator on every
   request over the bearer scope), and reading the scoreboard from `/gym`
   (`OpenAgentsWeb.GymLive`, recheck on mount and on every event). A run is a
   benchmark record — recipe digest, task, model, lane, reward, duration —
   never account data; the surface is operator-only because it is
-  pre-release instrumentation, not because it reads across accounts.
+  pre-release instrumentation, not because it reads across accounts. The one
+  cross-record link a trial may carry, a `thread_id`, is verified at ingest:
+  `OpenAgents.Gym.record_trial/3` admits a thread only when
+  `OpenAgents.Threads.get_for_user/2` resolves it for the bearer's account,
+  and an unknown thread and an unowned one refuse identically, so the Gym
+  cannot be used to confirm that a foreign thread id exists.
 
 Reading a private forum board and raising a repository's transparency tier to
 `glass` are operator reads that widen with the same allowlist

@@ -64,6 +64,12 @@ defmodule OpenAgentsWeb.GymLive do
     if(rest == 0, do: "#{minutes}m", else: "#{minutes}m #{rest}s")
   end
 
+  # A run still `running` (or swept to `abandoned`) has no grades yet.
+  defp counts(passed, total) when is_integer(passed) and is_integer(total),
+    do: "#{passed}/#{total}"
+
+  defp counts(_passed, _total), do: "—"
+
   defp tokens(nil, nil), do: "—"
   defp tokens(input, output), do: "#{format_count(input)} in / #{format_count(output)} out"
 
@@ -137,7 +143,7 @@ defmodule OpenAgentsWeb.GymLive do
                 <td class="font-mono text-sm">{run.model}</td>
                 <td>{run.lane || "—"}</td>
                 <td class="font-semibold">{percent(Run.score(run))}</td>
-                <td>{run.tasks_passed}/{run.tasks_total}</td>
+                <td>{counts(run.tasks_passed, run.tasks_total)}</td>
                 <td class="whitespace-nowrap">{elapsed(run.duration_seconds)}</td>
                 <td class="whitespace-nowrap text-sm">
                   {tokens(run.input_tokens, run.output_tokens)}

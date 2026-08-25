@@ -97,6 +97,13 @@ defmodule OpenAgentsWeb.ApiError do
     # Reporting it as `not_found` would tell a pusher their push is not on
     # record, which is a different and much worse claim.
     "push_record_unreadable" => {503, "The push record is temporarily unreadable"},
+    # Gym run lifecycle. A harness that scripts against the lifecycle meets
+    # two conflicts it must tell apart: the run it is closing was already
+    # graded, and the digest it is pinning already names a different run.
+    # Each carries the standing run beside the envelope so the caller reads
+    # what it lost to rather than fetching again.
+    "run_already_graded" => {409, "This run is already graded"},
+    "recipe_digest_conflict" => {409, "That recipe digest already names another run"},
     "trace_body_too_large" => {413, "The trace body is larger than the maximum allowed size"}
   }
 

@@ -518,8 +518,13 @@ defmodule OpenAgentsWeb.Router do
     # The Gym's ingest and read: an ordinary forge:write bearer carries the
     # request, and the controller rechecks live operator standing on every
     # call — the fleet-promotion shape without a privileged scope, because
-    # recording a benchmark row moves no money and deploys nothing.
+    # recording a benchmark row moves no money and deploys nothing. The
+    # lifecycle routes (start, trial upsert, finalize) share the exact same
+    # posture.
     post "/gym/runs", GymRunController, :create
+    post "/gym/runs/start", GymRunController, :start
+    post "/gym/runs/:id/trials", GymRunController, :create_trial
+    patch "/gym/runs/:id", GymRunController, :update
     get "/gym/runs", GymRunController, :index
   end
 

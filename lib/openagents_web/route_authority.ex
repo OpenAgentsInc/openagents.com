@@ -56,6 +56,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
     # authenticated even where a thread's own tier widens who may read it
     # (THREAD-002): the wider audience is still signed in.
     "/threads",
+    # The model catalog and its rates. Same principal as `GET /api/v1/models`,
+    # which sits in the thread scope because the catalog names what a grant can
+    # be minted for: the reader of the prices is the caller who can spend them.
+    "/models",
     "/settings/api-tokens",
     "/github/connection",
     "/api/tokens",
@@ -709,6 +713,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/github/connection"), do: "github-tools:self"
   defp browser_scope("/notifications"), do: "notification:self"
   defp browser_scope("/settings/api-tokens"), do: "api-token:self"
+  defp browser_scope("/models"), do: "model-catalog:read"
   defp browser_scope(_path), do: "product:self"
 
   defp browser_mutation?(path, :get),

@@ -1294,6 +1294,12 @@ Concretely:
   same shape, nulls included.
 - The thread page shows the word `Unpriced` rather than a dollar figure, and
   labels a provisional figure as a working number rather than a bill.
+- `/models` renders that same catalog for a person, because the contract asks
+  that pricing be readable by the CLI **and** by the web before spend. An
+  unpriced lane's rate cells carry the word rather than `$0.00`, every lane
+  shows its basis and the id of the table it is priced against, and a
+  deployment where no lane is `declared` says at the top that nothing on it is
+  billable — derived from the catalog, so it cannot outlive the fact.
 - `OpenAgents.Inference.Credit.spent/1` is a floor, not a total, while
   `unpriced_calls/1` is above zero; `balance/1` publishes `complete?` so no
   reader shows a balance as whole when it is not.
@@ -1311,7 +1317,8 @@ edit. No code here may guess one.
 Evidence: `OpenAgents.Inference.Pricing`, `OpenAgents.Inference.PricingTest`,
 `OpenAgents.Inference.CreditTest`, `OpenAgents.ThreadsTest`,
 `OpenAgentsWeb.ModelCatalogControllerTest`,
-`OpenAgentsWeb.ThreadControllerTest`, and `OpenAgentsWeb.ThreadShowLiveTest`.
+`OpenAgentsWeb.ThreadControllerTest`, `OpenAgentsWeb.ThreadShowLiveTest`, and
+`OpenAgentsWeb.ModelCatalogLiveTest`.
 
 ## Durable effects
 
@@ -5597,7 +5604,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | PROVENANCE-001 | `test/openagents/turn_provenance_test.exs` |
 | PROVIDER-001 | `test/openagents/providers/provider_contract_test.exs`, `test/openagents/turn_provider_events_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | PROVIDER-002 | `test/openagents/inference/models_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/inference_proxy_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
-| METER-001 | `test/openagents/inference/pricing_test.exs`, `test/openagents/inference/credit_test.exs`, `test/openagents/threads_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs`, `test/openagents_web/live/thread_show_live_test.exs` |
+| METER-001 | `test/openagents/inference/pricing_test.exs`, `test/openagents/inference/credit_test.exs`, `test/openagents/threads_test.exs`, `test/openagents_web/controllers/model_catalog_controller_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs`, `test/openagents_web/live/thread_show_live_test.exs`, `test/openagents_web/live/model_catalog_live_test.exs` |
 | EFFECT-001 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | EFFECT-002 | `test/openagents/effects_test.exs`, `test/openagents/effects/work_launch_test.exs` |
 | TOOL-001 | `test/openagents/tools/registry_and_runner_test.exs` |

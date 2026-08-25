@@ -1,0 +1,94 @@
+defmodule OpenAgentsWeb.ModelCatalogLiveTest do
+  @moduledoc """
+  `/models`: the half of "pricing visible before spend" a person can read
+  (#200, METER-001).
+
+  The endpoint answered the CLI; nothing rendered the catalog for a human. What
+  matters here is not that the page exists but that it carries the same absence
+  the endpoint does: an unpriced lane shows the word rather than `$0.00`, and a
+  deployment with no declared rates says so at the top instead of presenting a
+  column of working figures as a price list.
+  """
+  use OpenAgentsWeb.ConnCase, async: false
+
+  import Phoenix.LiveViewTest
+
+  alias OpenAgents.Inference.Models
+
+  defp signed_in(conn, user), do: Plug.Test.init_test_session(conn, %{"user_id" => user.id})
+
+  defp reader(conn, handle), do: signed_in(conn, github_user(handle))
+
+  defp unpriced_id, do: Application.fetch_env!(:openagents, :openai_model)
+
+  test "every model this deployment serves has a row", %{conn: conn} do
+    {:ok, view, _html} = live(reader(conn, "model-catalog-rows"), ~p"/models")
+
+    assert has_element?(view, "#model-catalog-table")
+
+    for id <- Models.ids() do
+      assert has_element?(view, ~s([id="model-#{id}"])), "no row for #{id}"
+    end
+  end
+
+  test "an unpriced lane shows the word, never a zero", %{conn: conn} do
+    id = unpriced_id()
+    {:ok, view, _html} = live(reader(conn, "model-catalog-unpriced"), ~p"/models")
+
+    assert view |> element(~s([id="model-basis-#{id}"])) |> render() =~ "unpriced"
+    assert view |> element(~s([id="model-input-rate-#{id}"])) |> render() =~ "Unpriced"
+    assert view |> element(~s([id="model-output-rate-#{id}"])) |> render() =~ "Unpriced"
+
+    refute view |> element(~s([id="model-input-rate-#{id}"])) |> render() =~ "$0.00"
+    refute view |> element(~s([id="model-output-rate-#{id}"])) |> render() =~ "$0.00"
+  end
+
+  test "a lane with rates publishes them and names the table they came from", %{conn: conn} do
+    {:ok, view, _html} = live(reader(conn, "model-catalog-priced"), ~p"/models")
+
+    # 1_250_000 microUSD per million tokens is $1.25 per million tokens.
+    assert view |> element(~s([id="model-input-rate-gemini-3.7-flash"])) |> render() =~ "$1.25"
+    assert view |> element(~s([id="model-basis-gemini-3.7-flash"])) |> render() =~ "provisional"
+
+    assert view |> element(~s([id="model-pricing-id-gemini-3.7-flash"])) |> render() =~
+             "placeholder.gemini-3.7-flash.v1"
+  end
+
+  test "the page says nothing is billable while no lane declares its rates", %{conn: conn} do
+    {:ok, view, _html} = live(reader(conn, "model-catalog-not-billable"), ~p"/models")
+
+    assert has_element?(view, "#model-catalog-not-billable")
+  end
+
+  test "the billable notice is derived from the catalog, not written into the page",
+       %{conn: conn} do
+    previous = Application.fetch_env!(:openagents, :model_catalog)
+
+    declared =
+      List.update_at(previous, 0, fn entry ->
+        Map.put(entry, :pricing, %{
+          id: "declared.test.v1",
+          source: :declared,
+          input_per_million_tokens: 3_000_000,
+          output_per_million_tokens: 15_000_000
+        })
+      end)
+
+    Application.put_env(:openagents, :model_catalog, declared)
+    on_exit(fn -> Application.put_env(:openagents, :model_catalog, previous) end)
+
+    {:ok, view, _html} = live(reader(conn, "model-catalog-declared"), ~p"/models")
+
+    refute has_element?(view, "#model-catalog-not-billable")
+    assert view |> element(~s([id="model-basis-gemini-3.7-flash"])) |> render() =~ "declared"
+    assert view |> element(~s([id="model-input-rate-gemini-3.7-flash"])) |> render() =~ "$3.00"
+
+    # The lane with no rates is untouched by another lane becoming billable.
+    assert view |> element(~s([id="model-input-rate-#{unpriced_id()}"])) |> render() =~ "Unpriced"
+  end
+
+  test "an anonymous visitor is sent to sign in", %{conn: conn} do
+    assert {:error, {:redirect, %{to: path}}} = live(conn, ~p"/models")
+    refute path == ~p"/models"
+  end
+end

@@ -209,6 +209,17 @@ defmodule OpenAgentsWeb.DocsCatalog do
       ]
     },
     %{
+      title: "Inference",
+      items: [
+        %{
+          slug: "models",
+          title: "Models and pricing",
+          icon: "dollar-circle",
+          route: "/models"
+        }
+      ]
+    },
+    %{
       title: "Transparency",
       items: [
         %{slug: "changelog", title: "Changelog", icon: "text", route: "/changelog"},

@@ -218,6 +218,9 @@ defmodule OpenAgentsWeb.Router do
       live "/artifact-catalog", ArtifactCatalogLive, :index
       live "/notifications", NotificationsLive, :index
       live "/settings/api-tokens", ApiTokensLive, :index
+      # What each lane costs, before a thread spends against it. Same principal
+      # as `GET /api/v1/models`, which the page renders (METER-001).
+      live "/models", ModelCatalogLive, :index
       live "/threads", ThreadIndexLive, :index
       live "/threads/:id", ThreadShowLive, :show
       live "/device", DeviceAuthorizationLive, :show

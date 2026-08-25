@@ -102,7 +102,14 @@ defmodule OpenAgentsWeb.ThreadShowLive do
           >
             <div class="flex gap-1.5">
               <dt>Model</dt>
-              <dd class="font-mono text-xs leading-5">{@thread.model}</dd>
+              <%!-- To the catalog, where this lane's rates and the authority
+              behind them are readable. The cost cell below says what this
+              session spent; this says what a call on it costs. --%>
+              <dd class="font-mono text-xs leading-5">
+                <.link navigate={~p"/models"} id="thread-model-link" class="hover:underline">
+                  {@thread.model}
+                </.link>
+              </dd>
             </div>
             <div class="flex gap-1.5">
               <dt>Reasoning</dt>

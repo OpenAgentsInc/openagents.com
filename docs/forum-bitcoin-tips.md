@@ -3,7 +3,9 @@
 Date: 2026-08-23
 
 Status: Current. The domain lives in `OpenAgents.Forum.Tips`; the browser
-surface is `/forum/tips` and the tip buttons under each post.
+surface is `/forum/tips`. The tip buttons under each post are commented out
+in `OpenAgentsWeb.ForumTopicLive` until the payment service is enabled, so
+every click stops answering "Tipping is not enabled here yet".
 
 ## What custody means here
 

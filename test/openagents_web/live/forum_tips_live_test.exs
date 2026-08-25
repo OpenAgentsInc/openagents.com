@@ -23,36 +23,38 @@ defmodule OpenAgentsWeb.ForumTipsLiveTest do
     {Plug.Test.init_test_session(conn, %{"user_id" => user.id}), user}
   end
 
-  defp author(forum, key) do
-    {_conn, user} = sign_in(build_conn(), key)
-    actor_ref = "agent:user_ed8297d8-1279-4b43-a1e7-f7867da19e20"
-
-    {:ok, link} = Forum.start_actor_link(user, actor_ref)
-    {:ok, _linked} = Forum.approve_actor_link(link)
-
-    {:ok, destination} =
-      Tips.register_destination(%{
-        user_id: user.id,
-        kind: "bolt12",
-        destination: "lno1qsgliveauthor",
-        label: "Phone wallet"
-      })
-
-    {:ok, topic} =
-      Forum.create_topic(forum, %{
-        title: "Hello world",
-        slug: "hello-world",
-        body_text: "First post body",
-        idempotency_key: Ecto.UUID.generate(),
-        actor_ref: actor_ref,
-        actor_display_name: "Orrery",
-        actor_slug: "orrery"
-      })
-
-    [post] = Forum.list_posts(topic)
-
-    %{user: user, destination: destination, topic: topic, post: post}
-  end
+  # Used only by the commented-out thread tipping tests below.
+  #
+  # defp author(forum, key) do
+  #   {_conn, user} = sign_in(build_conn(), key)
+  #   actor_ref = "agent:user_ed8297d8-1279-4b43-a1e7-f7867da19e20"
+  #
+  #   {:ok, link} = Forum.start_actor_link(user, actor_ref)
+  #   {:ok, _linked} = Forum.approve_actor_link(link)
+  #
+  #   {:ok, destination} =
+  #     Tips.register_destination(%{
+  #       user_id: user.id,
+  #       kind: "bolt12",
+  #       destination: "lno1qsgliveauthor",
+  #       label: "Phone wallet"
+  #     })
+  #
+  #   {:ok, topic} =
+  #     Forum.create_topic(forum, %{
+  #       title: "Hello world",
+  #       slug: "hello-world",
+  #       body_text: "First post body",
+  #       idempotency_key: Ecto.UUID.generate(),
+  #       actor_ref: actor_ref,
+  #       actor_display_name: "Orrery",
+  #       actor_slug: "orrery"
+  #     })
+  #
+  #   [post] = Forum.list_posts(topic)
+  #
+  #   %{user: user, destination: destination, topic: topic, post: post}
+  # end
 
   test "a signed-in reader saves a destination and sees only its fingerprint", %{conn: conn} do
     {conn, user} = sign_in(conn, "forum-tips-live-owner")
@@ -85,47 +87,51 @@ defmodule OpenAgentsWeb.ForumTipsLiveTest do
     assert Tips.active_destination(user.id).accepting_tips == false
   end
 
-  test "tipping a post from the thread settles and shows the new total", %{
-    conn: conn,
-    forum: forum
-  } do
-    author = author(forum, "forum-tips-live-author")
-    {conn, _payer} = sign_in(conn, "forum-tips-live-payer")
-
-    {:ok, view, _html} = live(conn, ~p"/forum/t/#{author.topic.id}")
-
-    html = render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
-
-    assert html =~ "Sent 1000 sats"
-
-    render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
-
-    assert Repo.reload!(author.post).tip_sats_counted == 2_000
-    assert render(view) =~ "2000 sats"
-  end
-
-  test "a thread never renders a payment destination", %{conn: conn, forum: forum} do
-    author = author(forum, "forum-tips-live-privacy")
-    {conn, _payer} = sign_in(conn, "forum-tips-live-privacy-payer")
-
-    {:ok, view, _html} = live(conn, ~p"/forum/t/#{author.topic.id}")
-
-    html = render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
-
-    refute html =~ "lno1qsgliveauthor"
-    refute html =~ author.destination.destination
-  end
-
-  test "a payment outage tells the payer nothing was sent", %{conn: conn, forum: forum} do
-    author = author(forum, "forum-tips-live-outage")
-    {conn, _payer} = sign_in(conn, "forum-tips-live-outage-payer")
-    TipPaymentServiceStub.unavailable()
-
-    {:ok, view, _html} = live(conn, ~p"/forum/t/#{author.topic.id}")
-
-    html = render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
-
-    assert html =~ "payment service is unavailable"
-    assert Repo.reload!(author.post).tip_sats_total == 0
-  end
+  # Thread tipping is commented out in ForumTopicLive until the payment
+  # service is enabled here, and these tests go with it. The API-side tip
+  # tests in ForumTipsApiControllerTest still cover settlement itself.
+  #
+  # test "tipping a post from the thread settles and shows the new total", %{
+  #   conn: conn,
+  #   forum: forum
+  # } do
+  #   author = author(forum, "forum-tips-live-author")
+  #   {conn, _payer} = sign_in(conn, "forum-tips-live-payer")
+  #
+  #   {:ok, view, _html} = live(conn, ~p"/forum/t/#{author.topic.id}")
+  #
+  #   html = render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
+  #
+  #   assert html =~ "Sent 1000 sats"
+  #
+  #   render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
+  #
+  #   assert Repo.reload!(author.post).tip_sats_counted == 2_000
+  #   assert render(view) =~ "2000 sats"
+  # end
+  #
+  # test "a thread never renders a payment destination", %{conn: conn, forum: forum} do
+  #   author = author(forum, "forum-tips-live-privacy")
+  #   {conn, _payer} = sign_in(conn, "forum-tips-live-privacy-payer")
+  #
+  #   {:ok, view, _html} = live(conn, ~p"/forum/t/#{author.topic.id}")
+  #
+  #   html = render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
+  #
+  #   refute html =~ "lno1qsgliveauthor"
+  #   refute html =~ author.destination.destination
+  # end
+  #
+  # test "a payment outage tells the payer nothing was sent", %{conn: conn, forum: forum} do
+  #   author = author(forum, "forum-tips-live-outage")
+  #   {conn, _payer} = sign_in(conn, "forum-tips-live-outage-payer")
+  #   TipPaymentServiceStub.unavailable()
+  #
+  #   {:ok, view, _html} = live(conn, ~p"/forum/t/#{author.topic.id}")
+  #
+  #   html = render_click(view, "tip", %{"id" => author.post.id, "amount" => "1000"})
+  #
+  #   assert html =~ "payment service is unavailable"
+  #   assert Repo.reload!(author.post).tip_sats_total == 0
+  # end
 end

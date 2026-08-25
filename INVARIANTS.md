@@ -3264,8 +3264,8 @@ Production accepts the primary `PHX_HOST` plus explicitly configured HTTPS
 aliases for Phoenix origin checks. Invalid, insecure, or path-bearing origins
 fail startup rather than silently weakening socket validation.
 
-Evidence: `OpenAgentsWeb.AllowedOrigins`, `OpenAgentsWeb.AllowedOriginsTest`, and the
-production WebSocket read-back.
+Evidence: `OpenAgents.RuntimeConfig`, `config/runtime.exs`, and
+`test/openagents/runtime_config_test.exs`.
 
 ### RELEASE-004 — CI runs on owned infrastructure only, and gates every release
 
@@ -5252,7 +5252,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | RELEASE-001 | `ops/ci/release-smoke.sh`, `test/openagents_web/controllers/health_controller_test.exs` |
 | RELEASE-002 | `test/openagents/github_oauth/runtime_config_test.exs`, `ops/ci/reference-check.sh` |
 | VAULT-001 | `test/openagents/machines/token_vault_test.exs`, `test/openagents/runtime_config_test.exs` |
-| RELEASE-003 | `test/openagents_web/allowed_origins_test.exs`, `ops/ci/release-smoke.sh` |
+| RELEASE-003 | `lib/openagents/runtime_config.ex`, `config/runtime.exs`, `test/openagents/runtime_config_test.exs` |
 | RELEASE-004 | `ops/ci/gate.sh`, `test/openagents/forge/gate_receipt_test.exs`, `test/openagents/hosted_ci_absence_test.exs` |
 | RELEASE-005 | `test/openagents/forge/relup_deployment_test.exs`, `test/openagents/forge/relup_node_test.exs`, `test/openagents/release/appup_test.exs`, `test/openagents/cluster/code_change_test.exs`, `test/openagents/forge/rolling_replacement_test.exs` |
 | RELEASE-006 | `test/openagents/forge/rolling_boot_convergence_test.exs`, `test/openagents/forge/rolling_replacement_test.exs`, `test/openagents/forge/target_lifecycle_test.exs`, `test/openagents/forge/boot_converge_test.exs` |

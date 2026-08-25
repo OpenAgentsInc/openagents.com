@@ -831,7 +831,7 @@ defmodule OpenAgents.RuntimeConfig do
     case URI.new(origin) do
       {:ok,
        %URI{scheme: "https", host: host, path: path, query: nil, fragment: nil, userinfo: nil}}
-      when is_binary(host) and path in [nil, "", "/"] ->
+      when is_binary(host) and host != "" and path in [nil, "", "/"] ->
         true
 
       _invalid ->

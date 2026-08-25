@@ -162,6 +162,41 @@ defmodule OpenAgents.RuntimeConfigTest do
     assert {:ok, _config} = RuntimeConfig.validate(settings)
   end
 
+  test "staging rejects an insecure allowed origin" do
+    settings =
+      staging_settings()
+      |> put_endpoint(:check_origin, ["https://staging.openagents.com", "http://other.example"])
+
+    assert {:error, %{setting: :allowed_origins}} = RuntimeConfig.validate(settings)
+  end
+
+  test "staging rejects a path-bearing allowed origin" do
+    settings =
+      staging_settings()
+      |> put_endpoint(:check_origin, [
+        "https://staging.openagents.com",
+        "https://other.example/path"
+      ])
+
+    assert {:error, %{setting: :allowed_origins}} = RuntimeConfig.validate(settings)
+  end
+
+  test "staging rejects allowed origins with query, fragment, or missing scheme" do
+    for origin <- [
+          "https://other.example?query=1",
+          "https://other.example#fragment",
+          "https://",
+          "other.example"
+        ] do
+      settings =
+        staging_settings()
+        |> put_endpoint(:check_origin, ["https://staging.openagents.com", origin])
+
+      assert {:error, %{setting: :allowed_origins}} = RuntimeConfig.validate(settings),
+             "expected #{origin} to be rejected"
+    end
+  end
+
   test "enabled OpenAI features require the centralized provider secret" do
     settings =
       staging_settings()

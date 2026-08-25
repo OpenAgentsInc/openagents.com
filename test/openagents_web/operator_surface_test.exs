@@ -106,7 +106,9 @@ defmodule OpenAgentsWeb.OperatorSurfaceTest do
     OpenAgentsWeb.Layouts => "shows the operator entries in the sidebar",
     OpenAgentsWeb.Plugs.OperatorApiTokenAuth => "rechecks the operator behind /api/operator",
     OpenAgentsWeb.ReputationController => "gates reputation subject-claim review over the API",
-    OpenAgentsWeb.UserAuth => "gates the /admin scope as a plug and as an on_mount hook"
+    OpenAgentsWeb.UserAuth => "gates the /admin scope as a plug and as an on_mount hook",
+    OpenAgentsWeb.MemoryLive =>
+      "rechecks the operator before retracting memory records and engrams"
   }
 
   test "the operator-classified routes are exactly the set ADMIN-001 enumerates" do

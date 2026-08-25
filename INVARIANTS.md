@@ -2896,6 +2896,12 @@ sentence:
   `/api/operator/artifact-listings`.
 - Creating, cancelling, resuming, and replaying continual-learning jobs under
   `/api/operator/continual-learning/jobs`.
+- Retracting a memory record or an engram from `/memory`
+  (`OpenAgentsWeb.MemoryLive`, which rechecks the operator on the event, not
+  only on mount). The write appends: it goes through
+  `OpenAgents.ProfileMemory.forget_active/2`, which supersedes rather than
+  deletes, so a retraction is another entry in the audit trail the same
+  surface renders and never a row that quietly stops existing.
 - Recording a graded Gym run under `POST /api/v3/gym/runs`
   (`OpenAgentsWeb.GymRunController`, which rechecks the operator on every
   request over the bearer scope), and reading the scoreboard from `/gym`

@@ -149,6 +149,56 @@ defmodule OpenAgentsWeb.MemoryLiveTest do
     assert {:ok, []} = ProfileMemory.list_current(owner)
   end
 
+  test "supersession audit renders the chain of prior claims, superseded time, and consent kind",
+       %{
+         conn: conn
+       } do
+    token = "memory-audit-browser-credential-00000000000000"
+    %{record: record} = create_profile_memory(token, "I prefer concise answers")
+    conn = log_in_github_user(conn, token)
+    assert {:ok, view, _html} = live(conn, ~p"/memory")
+
+    view
+    |> form("#memory-record-#{record.id} form", %{
+      "claim" => "I prefer concise, direct answers"
+    })
+    |> render_submit()
+
+    html = render(view)
+
+    assert has_element?(view, "#supersession-audit ol li")
+    assert html =~ "I prefer concise answers"
+    assert html =~ "I prefer concise, direct answers"
+    assert html =~ "owner_assertion"
+  end
+
+  test "retract appends a tombstone and does not delete the row", %{conn: conn} do
+    token = "memory-retract-browser-credential-000000000000"
+    %{record: record} = create_profile_memory(token, "Retract me")
+    conn = log_in_admin_user(conn, token)
+    assert {:ok, view, _html} = live(conn, ~p"/memory")
+
+    view |> element("#retract-record-#{record.id}") |> render_click()
+
+    assert has_element?(view, "#memory-record-#{record.id}[data-status=forgotten]")
+    assert OpenAgents.Repo.get!(OpenAgents.ProfileMemory.Record, record.id).status == "forgotten"
+  end
+
+  test "unauthorized retraction redirects and does not mutate the record", %{conn: conn} do
+    token = "memory-unauthorized-retract-browser-0000000000"
+    %{record: record} = create_profile_memory(token, "No retract")
+    conn = log_in_github_user(conn, token)
+    assert {:ok, view, _html} = live(conn, ~p"/memory")
+
+    assert {:error, {:redirect, %{to: "/"}}} =
+             render_click(view, "retract_record", %{
+               "record_id" => record.id,
+               "expected_generation" => to_string(record.generation)
+             })
+
+    assert OpenAgents.Repo.get!(OpenAgents.ProfileMemory.Record, record.id).status == "active"
+  end
+
   defp create_profile_memory(token, claim, category \\ "preference") do
     assert {:ok, conversation} = Conversations.ensure_conversation(github_user(token))
     owner = Conversations.get_conversation_owner!(conversation)

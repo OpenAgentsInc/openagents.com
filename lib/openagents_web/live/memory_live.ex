@@ -52,6 +52,7 @@ defmodule OpenAgentsWeb.MemoryLive do
      |> assign(:recording_config, Recordings.config())
      |> assign(:privacy_delete_form, to_form(%{"confirmation" => ""}, as: :privacy))
      |> assign(:work_scope, "conversation:#{conversation.id}")
+     |> assign(:operator?, Accounts.admin?(current_user))
      |> load_dashboard()}
   end
 
@@ -77,6 +78,7 @@ defmodule OpenAgentsWeb.MemoryLive do
         engram_timeline={@engram_timeline}
         derived_heuristics={@derived_heuristics}
         supersession_trail={@supersession_trail}
+        operator?={@operator?}
       />
     </Layouts.app>
     """
@@ -191,7 +193,60 @@ defmodule OpenAgentsWeb.MemoryLive do
      |> load_dashboard()}
   end
 
+  def handle_event(
+        "retract_record",
+        %{"record_id" => record_id, "expected_generation" => generation},
+        socket
+      ) do
+    if Accounts.admin?(socket.assigns.current_user) do
+      case Integer.parse(generation) do
+        {expected_generation, ""} -> do_retract_record(record_id, expected_generation, socket)
+        _ -> {:noreply, assign(socket, :memory_status, {:error, "Invalid retraction request."})}
+      end
+    else
+      {:noreply, redirect(socket, to: ~p"/")}
+    end
+  end
+
   def handle_event("retract_engram", %{"record_ref" => ref}, socket) do
+    if Accounts.admin?(socket.assigns.current_user) do
+      do_retract_engram(ref, socket)
+    else
+      {:noreply, redirect(socket, to: ~p"/")}
+    end
+  end
+
+  defp do_retract_record(record_id, expected_generation, socket) do
+    owner = socket.assigns.memory_owner
+
+    result =
+      ProfileMemory.forget_active(owner, %{
+        "mode" => "record",
+        "record_id" => record_id,
+        "expected_generation" => expected_generation
+      })
+
+    message =
+      case result do
+        {:ok, %{disposition: "forgotten", records: records}} ->
+          "Retracted #{length(records)} memory record(s)."
+
+        {:ok, %{disposition: "already_absent"}} ->
+          "Those records were already absent."
+
+        {:error, reason} ->
+          "Could not retract record: #{format_reason(reason)}"
+      end
+
+    status = if match?({:ok, _}, result), do: :ok, else: :error
+
+    {:noreply,
+     socket
+     |> assign(:memory_status, {status, message})
+     |> load_dashboard()}
+  end
+
+  defp do_retract_engram(ref, socket) do
     owner = socket.assigns.memory_owner
 
     context_consent = %{
@@ -277,21 +332,24 @@ defmodule OpenAgentsWeb.MemoryLive do
         {:error, _reason} -> {[], []}
       end
 
-    records_by_id = Map.new(profile_export["records"] || [], &{&1["id"], &1})
+    records = profile_export["records"] || []
+    records_by_id = Map.new(records, &{&1["id"], &1})
+
+    superseded_ids =
+      for r <- records,
+          r["supersedes_record_id"],
+          into: MapSet.new(),
+          do: r["supersedes_record_id"]
 
     supersession_trail =
-      Enum.reduce(profile_export["records"] || [], [], fn record, acc ->
-        if record["supersedes_record_id"] do
-          previous = Map.get(records_by_id, record["supersedes_record_id"])
-          [%{previous: previous, replacement: record} | acc]
-        else
-          acc
-        end
-      end)
-      |> Enum.reverse()
+      records
+      |> Enum.reject(&MapSet.member?(superseded_ids, &1["id"]))
+      |> Enum.map(&build_supersession_chain(&1, records_by_id))
+      |> Enum.filter(&(&1.chain != []))
+      |> Enum.sort_by(& &1.current["inserted_at"], :desc)
 
     socket
-    |> assign(:memory_records, profile_export["records"] || [])
+    |> assign(:memory_records, records)
     |> assign(:memory_status, memory_status)
     |> assign(:graph_entities, graph_entities)
     |> assign(:engram_timeline, engram_timeline)
@@ -377,6 +435,7 @@ defmodule OpenAgentsWeb.MemoryLive do
   attr :engram_timeline, :list, default: []
   attr :derived_heuristics, :list, default: []
   attr :supersession_trail, :list, default: []
+  attr :operator?, :boolean, default: false
 
   defp memory_manager(assigns) do
     ~H"""
@@ -497,7 +556,11 @@ defmodule OpenAgentsWeb.MemoryLive do
       </.empty>
 
       <div :if={@memory_records != []} id="memory-records" class="memory-records">
-        <.memory_record :for={record <- @memory_records} record={record} />
+        <.memory_record
+          :for={record <- @memory_records}
+          record={record}
+          operator?={@operator?}
+        />
       </div>
 
       <.memory_dashboard
@@ -506,6 +569,7 @@ defmodule OpenAgentsWeb.MemoryLive do
         engram_timeline={@engram_timeline}
         derived_heuristics={@derived_heuristics}
         supersession_trail={@supersession_trail}
+        operator?={@operator?}
       />
 
       <.card id="leaderboard-preference" aria-labelledby="leaderboard-preference-heading">
@@ -601,6 +665,7 @@ defmodule OpenAgentsWeb.MemoryLive do
   end
 
   attr :record, :map, required: true
+  attr :operator?, :boolean, default: false
 
   defp memory_record(assigns) do
     ~H"""
@@ -680,6 +745,18 @@ defmodule OpenAgentsWeb.MemoryLive do
           >
             <.icon name="trash" /> FORGET {String.upcase(@record["category"])} CATEGORY
           </.text_button>
+          <.button
+            :if={@operator?}
+            id={"retract-record-#{@record["id"]}"}
+            variant={:link}
+            tone={:danger}
+            size={:sm}
+            phx-click="retract_record"
+            phx-value-record_id={@record["id"]}
+            phx-value-expected_generation={to_string(@record["generation"])}
+          >
+            <.icon name="trash" /> RETRACT
+          </.button>
         </div>
       </div>
     </.card>
@@ -691,6 +768,7 @@ defmodule OpenAgentsWeb.MemoryLive do
   attr :engram_timeline, :list, default: []
   attr :derived_heuristics, :list, default: []
   attr :supersession_trail, :list, default: []
+  attr :operator?, :boolean, default: false
 
   defp memory_dashboard(assigns) do
     ~H"""
@@ -745,6 +823,7 @@ defmodule OpenAgentsWeb.MemoryLive do
               {engram["outcome"]}
             </p>
             <.button
+              :if={@operator?}
               id={"retract-engram-#{engram_id(engram["record_ref"])}"}
               variant={:link}
               tone={:danger}
@@ -789,17 +868,38 @@ defmodule OpenAgentsWeb.MemoryLive do
         </.empty>
         <.list :if={@supersession_trail != []}>
           <:item
-            :for={event <- @supersession_trail}
-            title={event.replacement["claim"] || "WITHHELD"}
+            :for={chain <- @supersession_trail}
+            title={chain.current["claim"] || "WITHHELD"}
           >
-            <p>
-              Superseded
-              <time :if={event.previous["inserted_at"]} datetime={event.previous["inserted_at"]}>
-                {memory_date(event.previous["inserted_at"])}
-              </time>
-              : {event.previous["claim"] || "WITHHELD"}
-            </p>
-            <.badge variant={:warning}>Superseded by {event.replacement["id"]}</.badge>
+            <div class="memory-supersession__meta">
+              <.badge>{String.upcase(chain.current["category"])}</.badge>
+              <.badge variant={memory_badge_variant(chain.current["status"])}>
+                {String.upcase(chain.current["status"])}
+              </.badge>
+            </div>
+            <ol :if={chain.chain != []} class="memory-supersession__chain">
+              <li
+                :for={prior <- chain.chain}
+                id={"superseded-#{chain.current["id"]}-#{if prior.record, do: prior.record["id"], else: "missing"}"}
+              >
+                <%= if prior.record do %>
+                  <p>{prior.record["claim"] || "WITHHELD"}</p>
+                  <p class="memory-supersession__detail">
+                    Superseded
+                    <time :if={prior.superseded_at} datetime={prior.superseded_at}>
+                      {memory_date(prior.superseded_at)}
+                    </time>
+                    by {prior.superseded_by_id}
+                    <span :if={prior.consent_kind}>with consent {prior.consent_kind}</span>
+                  </p>
+                <% else %>
+                  <p>Prior value unavailable</p>
+                  <p class="memory-supersession__detail">
+                    Superseded record is no longer in the exported scope.
+                  </p>
+                <% end %>
+              </li>
+            </ol>
           </:item>
         </.list>
       </.card>
@@ -824,6 +924,45 @@ defmodule OpenAgentsWeb.MemoryLive do
       properties["outcome"] -> properties["outcome"]
       properties["label"] -> properties["label"]
       true -> node["identity_key"] || ""
+    end
+  end
+
+  defp build_supersession_chain(current, records_by_id) do
+    build_supersession_chain(current, records_by_id, [])
+  end
+
+  defp build_supersession_chain(current, records_by_id, chain) do
+    case current["supersedes_record_id"] do
+      nil ->
+        %{current: current, chain: chain}
+
+      previous_id ->
+        previous = Map.get(records_by_id, previous_id)
+
+        prior = %{
+          record: previous,
+          superseded_at: current["inserted_at"],
+          superseded_by_id: current["id"],
+          consent_kind: if(previous, do: consent_kind(current), else: nil)
+        }
+
+        if previous do
+          build_supersession_chain(previous, records_by_id, chain ++ [prior])
+        else
+          %{current: current, chain: chain ++ [prior]}
+        end
+    end
+  end
+
+  defp consent_kind(record) do
+    provenance = record["provenance"] || %{}
+    basis = provenance["basis"]
+    creator = provenance["creator"] || record["creator"] || "unknown"
+
+    if basis do
+      "#{basis} (#{creator})"
+    else
+      creator
     end
   end
 

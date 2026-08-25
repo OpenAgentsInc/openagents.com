@@ -96,7 +96,8 @@ defmodule OpenAgentsWeb.ApiError do
     # that will not answer is a temporary unreadability rather than an absence.
     # Reporting it as `not_found` would tell a pusher their push is not on
     # record, which is a different and much worse claim.
-    "push_record_unreadable" => {503, "The push record is temporarily unreadable"}
+    "push_record_unreadable" => {503, "The push record is temporarily unreadable"},
+    "trace_body_too_large" => {413, "The trace body is larger than the maximum allowed size"}
   }
 
   @doc """

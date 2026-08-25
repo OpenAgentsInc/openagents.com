@@ -583,6 +583,7 @@ defmodule OpenAgentsWeb.Router do
     get "/models", ModelCatalogController, :index
 
     post "/threads", ThreadController, :create
+    post "/traces", TraceController, :create
     get "/threads", ThreadController, :index
     get "/threads/:thread_id", ThreadController, :show
     delete "/threads/:thread_id", ThreadController, :delete

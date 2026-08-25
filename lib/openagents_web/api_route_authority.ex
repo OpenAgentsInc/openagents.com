@@ -408,7 +408,8 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
         {:required_bearer, :comment, :envelope},
       "put /api/v3/repos/:owner/:repo/labels/:name" => {:required_bearer, :label, :envelope},
       "put /api/v3/repos/:owner/:repo/milestones/:milestone_number" =>
-        {:required_bearer, :milestone, :envelope}
+        {:required_bearer, :milestone, :envelope},
+      "post /api/v3/traces" => {:required_bearer, :trace, :envelope}
     }
   end
 end

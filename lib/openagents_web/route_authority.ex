@@ -33,6 +33,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   @authenticated_browser_prefixes [
     "/sarah",
+    "/timeline",
     "/computers",
     "/voice/",
     "/data",
@@ -699,6 +700,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/voice/" <> _path), do: "voice:self"
   defp browser_scope("/data" <> _path), do: "data:self"
   defp browser_scope("/artifact-catalog"), do: "artifact-catalog:read"
+  defp browser_scope("/timeline"), do: "timeline:self"
   defp browser_scope("/memory/" <> _path), do: "memory:self"
   defp browser_scope("/github/connection"), do: "github-tools:self"
   defp browser_scope("/notifications"), do: "notification:self"

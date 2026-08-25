@@ -213,6 +213,7 @@ defmodule OpenAgentsWeb.Router do
       on_mount: [{OpenAgentsWeb.UserAuth, :ensure_authenticated}] do
       live "/sarah", ChatLive, :index
       live "/memory", MemoryLive, :index
+      live "/timeline", TimelineLive, :index
       live "/computers", ComputersLive, :index
       live "/artifact-catalog", ArtifactCatalogLive, :index
       live "/notifications", NotificationsLive, :index

@@ -39,6 +39,11 @@ export GITHUB_CLIENT_ID="$(secret sarah-production-github-client-id)"
 export GITHUB_CLIENT_SECRET="$(secret sarah-production-github-client-secret)"
 export GITHUB_TOKEN_ENCRYPTION_KEY="$(secret sarah-production-github-token-encryption-key-reserved)"
 export VOICE_RECORDING_ENCRYPTION_KEY="$(secret sarah-production-voice-recording-key)"
+# The pairing vault's own key (VAULT-001, issues #192 and #253). Until this
+# was set, runtime.exs bridged the pairing vault to the GitHub vault's key,
+# so two vaults sealed under one key and a GitHub rotation silently moved
+# the pairing vault too. The bridge was meant to last one deploy.
+export MACHINE_TOKEN_ENCRYPTION_KEY="$(secret openagents-machine-token-encryption-key)"
 export RELEASE_COOKIE="$(secret sarah-release-cookie)"
 export OPENAGENTS_FORGE_OPERATOR_TOKEN="$(secret sarah-forge-operator-token)"
 export OPENAGENTS_POSTHOG_PROJECT_TOKEN="$(secret openagents-posthog-project-token)"
@@ -130,6 +135,7 @@ ENV_NAMES=(
   AI_GATEWAY_API_KEY
   GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET
   GITHUB_TOKEN_ENCRYPTION_KEY VOICE_RECORDING_ENCRYPTION_KEY RELEASE_COOKIE
+  MACHINE_TOKEN_ENCRYPTION_KEY
   OPENAGENTS_FORGE_OPERATOR_TOKEN OPENAGENTS_POSTHOG_PROJECT_TOKEN
   DATABASE_URL DNS_CLUSTER_QUERY
   GITHUB_OAUTH_SCOPES GITHUB_REDIRECT_URI GITHUB_TOKEN_DECRYPTION_KEYS_JSON

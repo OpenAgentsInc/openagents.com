@@ -75,6 +75,19 @@ for command_name in jq mix npm rg; do
   fi
 done
 
+# The asset dependencies. A release worktree is created fresh, `assets/node_modules`
+# is not tracked, and nothing else in the gate installs it — so `mix esbuild`
+# fails to resolve an import eight stages in and reports a missing package as a
+# deploy blocker. Installed here, before any stage, because a gate that cannot
+# build the assets has not tested the release.
+if [ ! -d "$repo_root/assets/node_modules" ]; then
+  echo "Installing asset dependencies"
+  (cd "$repo_root/assets" && npm ci --no-audit --no-fund) || {
+    echo "asset dependencies could not be installed" >&2
+    exit 1
+  }
+fi
+
 run_root=$(mktemp -d /tmp/openagents-release-gate.XXXXXX)
 started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 started_epoch=$(date +%s)

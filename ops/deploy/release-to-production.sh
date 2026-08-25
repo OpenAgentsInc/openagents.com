@@ -99,12 +99,42 @@ if rpc_file sarah-fleet-1 us-central1-a "$live_now" 2>/dev/null | grep -q "alrea
 fi
 rm -f "$live_now"
 
+# What the fleet is replacing, resolved before the promotion so the authority
+# can be checked against something true. The live target's details do not
+# reliably carry an image digest — a target settled after its builder wrote
+# build details comes back with none — and the old fallback used this
+# release's own digest, which is the one value the authority check refuses:
+# a rolling replacement whose previous image equals its next image is not a
+# replacement. The registry knows what the live sha was built as, so ask it.
+echo "==> previous release"
+live_sha=$(mktemp)
+cat > "$live_sha" <<'ELIXIR'
+live = OpenAgents.Forge.Targets.live("openagents.com")
+IO.puts("live-sha=" <> ((live && live.sha) || "none"))
+ELIXIR
+previous_sha=$(rpc_file sarah-fleet-1 us-central1-a "$live_sha" 2>/dev/null |
+  grep -o 'live-sha=[0-9a-f]*' | head -1 | cut -d= -f2)
+rm -f "$live_sha"
+
+[ -n "$previous_sha" ] && [ "$previous_sha" != "none" ] ||
+  { echo "no live release to replace; refusing to guess a previous image" >&2; exit 1; }
+
+previous_digest=$(gcloud artifacts docker images describe "$registry:$previous_sha" \
+  --format='value(image_summary.digest)' --project="$project" 2>/dev/null || true)
+
+[ -n "$previous_digest" ] ||
+  { echo "no image in the registry for the live release $previous_sha" >&2; exit 1; }
+
+[ "$previous_digest" != "$digest" ] ||
+  { echo "the live release already runs this image; nothing to replace" >&2; exit 1; }
+
+echo "previous: $previous_sha ($previous_digest)"
+
 echo "==> promote"
 promote=$(mktemp)
 cat > "$promote" <<ELIXIR
-live = OpenAgents.Forge.Targets.live("openagents.com")
-previous_sha = (live && live.sha) || "$sha"
-previous_image_digest = (live && live.details["image_digest"]) || "$digest"
+previous_sha = "$previous_sha"
+previous_image_digest = "$previous_digest"
 expected_nodes = Enum.sort(["openagents@10.128.0.4", "openagents@10.128.0.110", "openagents@10.128.0.111"])
 
 # The forge builds a promoted target itself: OpenAgents.Forge.Builder

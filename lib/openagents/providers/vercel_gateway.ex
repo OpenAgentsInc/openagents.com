@@ -21,9 +21,10 @@ defmodule OpenAgents.Providers.VercelGateway do
   `"cost":"0"`: the call ran on Google's hardware against the credits, and the
   gateway charged nothing to put it there.
 
-  `providerOptions.gateway.only` pins the provider, because the same slug is
+  `providerOptions.gateway.order` tries Vertex first, because the same slug is
   also served by `google` — the Generative Language endpoint, which is not
-  where the credits are. Without the pin a fallback would quietly spend money.
+  where the credits are. `providerOptions.gateway.models` lists the fallback
+  models Vercel tries if the primary model fails.
 
   The wire format is OpenRouter's, so the request building and the stream
   decoding are OpenRouter's too. What differs is the endpoint, the credential,
@@ -82,9 +83,22 @@ defmodule OpenAgents.Providers.VercelGateway do
 
   @doc false
   def payload_extra do
-    case Application.get_env(:openagents, :vercel_gateway_providers) do
-      [_first | _rest] = providers -> %{providerOptions: %{gateway: %{only: providers}}}
-      _unset -> %{}
+    providers = Application.get_env(:openagents, :vercel_gateway_providers, [])
+    fallbacks = Application.get_env(:openagents, :vercel_gateway_fallback_models, [])
+
+    gateway =
+      %{}
+      |> maybe_put(:order, providers)
+      |> maybe_put(:models, fallbacks)
+
+    if map_size(gateway) > 0 do
+      %{providerOptions: %{gateway: gateway}}
+    else
+      %{}
     end
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, _key, []), do: map
+  defp maybe_put(map, key, [_ | _] = values), do: Map.put(map, key, values)
 end

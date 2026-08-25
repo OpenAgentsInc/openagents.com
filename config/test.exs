@@ -57,6 +57,7 @@ config :openagents,
 config :openagents, :provider, OpenAgents.Providers.Test
 config :openagents, :openrouter_provider, OpenAgents.Providers.Test
 config :openagents, :vercel_gateway_provider, OpenAgents.Providers.Test
+config :openagents, :vercel_gateway_fallback_models, []
 config :openagents, :voice_call_provider, OpenAgents.Voice.TestCallProvider
 config :openagents, :voice_sideband_provider, OpenAgents.Voice.TestSidebandProvider
 

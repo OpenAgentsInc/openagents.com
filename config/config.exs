@@ -194,11 +194,16 @@ config :openagents,
   ],
   gemini_api_key: nil,
   vercel_gateway_api_key: nil,
-  # Pin the gateway to Vertex for every model it serves here. The same Gemini
-  # slug is also served by `google` — the Generative Language endpoint, which
-  # is not where this account's credits are — and a silent fallback there would
-  # spend money beside a balance already paid for.
+  # Try Vertex first for every model it serves here. The same Gemini slug is
+  # also served by `google` — the Generative Language endpoint, which is not
+  # where this account's credits are — but the fallback models are not on
+  # Vertex, so Vercel may try other providers for them.
   vercel_gateway_providers: ["vertex"],
+  vercel_gateway_fallback_models: [
+    "zai/glm-5.3",
+    "zai/glm-5.2",
+    "openai/gpt-5.6-luna"
+  ],
   gemini_model: "gemini-3.7-flash",
   box_api_key: nil,
   box_api: [

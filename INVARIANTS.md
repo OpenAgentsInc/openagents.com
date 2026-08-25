@@ -1184,10 +1184,10 @@ A third lane, `OpenAgents.Providers.VercelGateway`, reaches models through
 Vercel's AI Gateway rather than a vendor directly. It speaks the same chat
 completions the OpenRouter adapter does, so it reuses that adapter's request
 building and stream decoding and differs only in endpoint, credential, and the
-provider it pins. The pin is the point: Gemini is served there by both `google`
-and `vertex`, and only `vertex` spends this account's Google credits, so
-`vercel_gateway_providers` names the provider set and an unpinned fallback
-cannot quietly spend money instead.
+provider it tries first. Gemini is served there by both `google` and `vertex`,
+and `vertex` is where this account's Google credits are spent, so
+`vercel_gateway_providers` names the provider order and `vercel_gateway_fallback_models`
+names the model fallback list Vercel tries if the primary model fails.
 
 Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
 `OpenAgents.Providers.OpenAI.StreamDecoderTest`,

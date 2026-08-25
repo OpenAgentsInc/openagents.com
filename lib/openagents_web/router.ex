@@ -489,6 +489,13 @@ defmodule OpenAgentsWeb.Router do
     pipe_through :api
 
     post "/agents/register", AgentController, :register
+
+    # The OpenResponses surface, currently a stub that acknowledges every
+    # request: the coder's dev lane speaks it first, and a real loop stands
+    # behind it later. Anonymous while it is a stub — a canned sentence
+    # spends nothing and reads nothing — and the auth flips to a required
+    # bearer with the loop that makes it worth protecting.
+    post "/responses", ResponsesController, :create
   end
 
   scope "/api/v1", OpenAgentsWeb do

@@ -118,6 +118,9 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
     %{
       # Anonymous by design: the extension index is a public API description.
       "get /api/v1" => {:anonymous, :meta, :legacy},
+      # Anonymous while the stub answers; required_bearer when a real loop
+      # stands behind it.
+      "post /api/v1/responses" => {:anonymous, :response, :envelope},
       # Anonymous by design: device authorization bootstraps credentials.
       "post /api/v1/device/authorizations" => {:anonymous, :device, :legacy},
       "post /api/v1/device/authorizations/token" => {:anonymous, :device, :legacy},
@@ -195,6 +198,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v1/chat/events" => {:required_bearer, :chat, :legacy},
       "post /api/v1/chat/turns" => {:required_bearer, :chat, :legacy},
       "get /api/v1/models" => {:required_bearer, :model, :envelope},
+      
       "post /api/v1/threads" => {:required_bearer, :thread, :envelope},
       "get /api/v1/threads" => {:required_bearer, :thread, :envelope},
       "get /api/v1/threads/:thread_id" => {:required_bearer, :thread, :envelope},

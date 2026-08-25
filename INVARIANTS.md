@@ -2501,12 +2501,33 @@ by joining `threads.visibility` and counting only rows at a tier that permits
 it; a counter that read `thread_events` without that join would republish, in
 aggregate, transcripts their owners kept `dark`.
 
+Amended 2026-08-25 (issue #218): the tier now gates a second consumer, the
+benchmark workbench's trace corpus. `OpenAgents.Threads.WekaExport` turns a
+consenting thread's transcript into a WEKA v1 trace — the block-hash format
+AgentX replays (`docs/2026-08-24-benchmark-workbench-agentx.md`, section 5) —
+and refuses a `dark` thread with `:consent_required`. The gate is applied per
+thread rather than per subtree, because a consenting parent may spawn a
+narrower child (THREAD-003): a `dark` child produces no sub-agent entry, no
+request, no block count, and no record that it existed. `corpus/2` takes a
+recorded thread-id set rather than running a query — a query is how a consent
+gate gets widened by accident — and records every refusal by id and reason
+beside the code revision that built the document, so a corpus is reproducible
+and honest about what it does not contain. `mix openagents.weka.export` is the
+only surface that writes one; no route publishes a corpus, and publication
+stays a separate, explicit decision. What leaves is structure and timing:
+prompts are cut into 64-token blocks replaced by session-salted chained
+hashes, remapped to session-local integers, so prefix reuse survives and
+content does not.
+
 Evidence: `OpenAgents.Threads.fetch_readable/2`,
 `OpenAgents.Threads.Thread.visibilities/0`, `OpenAgentsWeb.ThreadController`,
 `OpenAgentsWeb.ThreadShowLive`, `OpenAgents.DataRights.AccountExport`,
+`OpenAgents.Threads.WekaExport`,
 `priv/repo/migrations/20260824210500_add_visibility_to_threads.exs`,
 `test/openagents/threads/visibility_test.exs`,
-`test/openagents_web/thread_visibility_test.exs`, and
+`test/openagents_web/thread_visibility_test.exs`,
+`test/openagents/threads/weka_export_test.exs`,
+`test/mix/tasks/openagents_weka_export_test.exs`, and
 `test/openagents/threads/grant_token_reach_test.exs`.
 
 ### THREAD-003 — Child threads are nested, budgeted, and typed

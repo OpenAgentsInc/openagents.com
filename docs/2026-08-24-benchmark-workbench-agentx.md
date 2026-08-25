@@ -165,6 +165,33 @@ Shape:
   users, and — if published — the corpus is a contribution back to the
   AgentX ecosystem under our own consent rules.
 
+**Shipped (issue #218).** `OpenAgents.Threads.WekaExport` is the exporter.
+`export/2` turns one consenting thread into a WEKA v1 trace: an ordered list
+of model calls, each carrying its wall-clock offset, call duration, think
+time, input and output token counts, and the ids of the 64-token blocks its
+prompt was made of, under `block_size: 64` and `hash_id_scope: "local"` — the
+shape `proxy_to_weka.py` writes and AIPerf replays. A call closes at each
+`tool.*` and each `turn.assistant`; its prompt is everything recorded before
+the model-authored run began. Blocks are session-salted chained SHA-256 —
+chained because a repeated block at a different context position is not
+cache-equivalent, and only chaining tells the two apart — then remapped to
+session-local integers. Only whole blocks are hashed, so `in` is exactly what
+a replay would send. Consenting child threads become `subagent` entries with
+their own fresh context in the shared id space; a `dark` child is absent
+entirely.
+
+`corpus/2` builds a corpus from a recorded thread-id set, never from a query,
+and records the set, the refusals with their reasons, and the code revision,
+so the same set and revision rebuild the same document. `prefix_reuse/1`
+reports the measurement the axis-1 comparison needs — reused leading blocks
+over all blocks, per agent — and
+`test/openagents/threads/weka_export_test.exs` holds that number equal to the
+same statistic computed on the raw transcript, so the anonymized trace carries
+the source session's prefix-reuse characteristics rather than merely claiming
+to. `mix openagents.weka.export --threads SET_FILE --out CORPUS_FILE` is the
+operator surface. No route publishes a corpus; publication stays a separate
+decision, as this section always said.
+
 ## 6. Non-goals
 
 - No 2MW GPU fleet, no hardware SKU comparisons — that is InferenceX's

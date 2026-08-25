@@ -506,4 +506,41 @@ defmodule OpenAgents.ThreadsTest do
     Application.put_env(:openagents, :thread_grant_ttl_seconds, -1)
     on_exit(fn -> Application.put_env(:openagents, :thread_grant_ttl_seconds, previous) end)
   end
+
+  describe "what a thread spent" do
+    test "sums calls and usage across every grant the thread has held" do
+      user = owner("spend-sums")
+      {:ok, thread, grant, _token} = Threads.open_and_mint(user, "Spend some")
+
+      {:ok, _} = Inference.record_usage(grant, %{"input_tokens" => 100, "output_tokens" => 10})
+
+      # Resuming re-mints: the second grant is where later spend lands, and a
+      # reader asking what the session cost must see both.
+      {:ok, resumed, second, _token} = Threads.mint_grant(thread)
+      {:ok, _} = Inference.record_usage(second, %{"input_tokens" => 40, "output_tokens" => 5})
+
+      spend = Threads.spend(resumed)
+      assert spend.grants == 2
+      assert spend.calls == 2
+      assert spend.usage["input_tokens"] == 140
+      assert spend.usage["output_tokens"] == 15
+    end
+
+    test "a dimension no provider reported is absent rather than zero" do
+      user = owner("spend-partial")
+      {:ok, thread, grant, _token} = Threads.open_and_mint(user, "Partial usage")
+      {:ok, _} = Inference.record_usage(grant, %{"input_tokens" => 7})
+
+      spend = Threads.spend(thread)
+      assert spend.usage["input_tokens"] == 7
+      refute Map.has_key?(spend.usage, "cache_read_input_tokens")
+    end
+
+    test "a thread that never spent reports nothing spent" do
+      user = owner("spend-none")
+      {:ok, thread} = Threads.open(user, "Never spent")
+
+      assert Threads.spend(thread) == %{calls: 0, grants: 0, usage: %{}}
+    end
+  end
 end

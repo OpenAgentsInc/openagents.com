@@ -665,8 +665,17 @@ defmodule OpenAgentsWeb.ThreadController do
       "report" => thread.report,
       "error_code" => thread.error_code,
       "started_at" => stamp(thread.started_at),
-      "completed_at" => stamp(thread.completed_at)
+      "completed_at" => stamp(thread.completed_at),
+      # What the session cost, summed across every grant this thread has held
+      # (#132). A resumed thread re-mints, so the live grant alone would
+      # under-report; a dimension no provider gave is absent rather than zero.
+      "spend" => spend_view(thread)
     }
+  end
+
+  defp spend_view(%Thread{} = thread) do
+    spend = Threads.spend(thread)
+    %{"calls" => spend.calls, "grants" => spend.grants, "usage" => spend.usage}
   end
 
   # The plaintext token exists exactly once, here. Everything else in this map

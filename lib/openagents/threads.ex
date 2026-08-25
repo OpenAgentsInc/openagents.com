@@ -679,6 +679,49 @@ defmodule OpenAgents.Threads do
 
   @doc "How many threads one account may hold open at once, or `nil` for no limit."
   @spec maximum_open_per_account() :: pos_integer() | nil
+  @doc """
+  What a thread has spent, summed across every grant it has ever held.
+
+  A thread's authority is re-minted on resume — each mint is a new grant with
+  a new generation — so the calls and tokens a session cost are spread across
+  grants rather than sitting on one. Summing them is the only honest answer to
+  "what did this session cost": reading the live grant alone reports a resumed
+  session as though it had just started.
+
+  Absent stays absent. A dimension no provider reported is not summed into
+  existence as a zero, because a zero reads as a measurement and this is the
+  absence of one (#220).
+  """
+  @spec spend(Thread.t() | String.t()) :: %{
+          calls: non_neg_integer(),
+          grants: non_neg_integer(),
+          usage: map()
+        }
+  def spend(%Thread{id: thread_id}), do: spend(thread_id)
+
+  def spend(thread_id) when is_binary(thread_id) do
+    grants =
+      from(grant in Grant,
+        where: grant.thread_id == ^thread_id,
+        select: {grant.call_count, grant.usage}
+      )
+      |> Repo.all()
+
+    usage =
+      Enum.reduce(grants, %{}, fn {_calls, usage}, acc ->
+        Enum.reduce(usage || %{}, acc, fn
+          {key, value}, inner when is_integer(value) -> Map.update(inner, key, value, &(&1 + value))
+          {_key, _value}, inner -> inner
+        end)
+      end)
+
+    %{
+      calls: Enum.sum(Enum.map(grants, fn {calls, _usage} -> calls || 0 end)),
+      grants: length(grants),
+      usage: usage
+    }
+  end
+
   def maximum_open_per_account, do: setting(:maximum_open_threads_per_account, nil)
 
   @doc "How many threads this account currently holds open."

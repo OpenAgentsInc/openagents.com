@@ -67,6 +67,18 @@ removes today's gap rather than the next one. #246 carries that, and the
 obvious home for it is not free: `EXIT-006`'s proof turns red when a commit
 sha reaches the disclosure.
 
+**What #246 added.** The disclosure now publishes its own distance from the
+revision its proofs ran against. `independence.deployment.behind` on `/status`
+and `GET /api/status` is the number of commits on the head this node serves
+that the running revision does not carry, so the next 57-commit gap is a
+number on a public page rather than a rehearsal waiting to be performed. The
+proof stayed as it was: a distance is a count, and neither revision it lies
+between reaches the projection. What it still does not report is a forge that
+withholds its own repository — that node reports `known: false` and no
+distance, the same withholding `EXIT-005` and `EXIT-006` already decline to
+detect — and it does not act on the gap it reports. Nothing raises an incident
+when the distance grows; a reader or a check has to look.
+
 ## 1. Restore a repository and its bounded work history
 
 **Proves:** an account's source and its work records survive on a machine that

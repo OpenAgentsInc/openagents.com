@@ -327,6 +327,22 @@ rather than blurred.
 A forge that records its limits in a document and reports itself healthy on its
 status page has hidden them.
 
+The disclosure also publishes its own distance from the revision its proofs ran
+against. Every claim in it is derived from the running node, and the running
+node's code can be older than this ledger: in August 2026 the forge served a
+revision 57 commits behind `main`, where the account export, the WAL chain, and
+the disclosure itself did not exist, while every proof of them stayed green
+(#187). `independence.deployment.behind` is the number of commits on the head
+this node serves that the running revision does not carry, so a reader who
+checks `/status` sees the gap without performing a rehearsal to find it (#246).
+
+Its bound is the same withholding the rest of this document names. The distance
+is measured against the head this node serves, so a forge that will not serve
+its own repository, a node whose bare projection is empty, and a release built
+from a revision this forge never accepted all report `known: false` and no
+distance at all. Being behind is reported beside the independence verdict, not
+inside it: a node one commit behind is not less independent.
+
 ## Rehearsals
 
 `docs/forge-exit-rehearsals.md` defines six rehearsals — restore, receipt

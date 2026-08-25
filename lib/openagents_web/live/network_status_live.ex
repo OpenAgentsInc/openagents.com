@@ -291,6 +291,21 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
   defp independence_text(%{"degraded" => true}), do: "degraded"
   defp independence_text(_disclosure), do: "no disclosed gap"
 
+  # A proven invariant that is not deployed reports nothing, so the distance
+  # between the two is worth a line of its own (#246). It says what it cannot
+  # tell you as plainly as what it can.
+  defp deployment_text(%{"known" => true, "behind" => 0, "proven_ref" => ref}),
+    do: "running the head of #{ref}"
+
+  defp deployment_text(%{"known" => true, "behind" => behind, "proven_ref" => ref})
+       when is_integer(behind),
+       do:
+         "#{behind} #{if behind == 1, do: "commit", else: "commits"} behind #{ref}; " <>
+           "an invariant proven there is not proven here"
+
+  defp deployment_text(%{"proven_ref" => ref}),
+    do: "distance from #{ref} unknown; this node serves no head it can measure against"
+
   defp gap_text(%{"family" => family, "status" => status, "issue" => issue})
        when is_integer(issue),
        do: "#{family} · #{status} · ##{issue}"
@@ -603,6 +618,9 @@ defmodule OpenAgentsWeb.NetworkStatusLive do
                 private data: access controlled, not encrypted{issue_text(
                   @projection["independence"]["private_data"]["issue"]
                 )}
+              </li>
+              <li :if={@projection["independence"]["deployment"]} id="status-independence-deployment">
+                deployment: {deployment_text(@projection["independence"]["deployment"])}
               </li>
             </ul>
 

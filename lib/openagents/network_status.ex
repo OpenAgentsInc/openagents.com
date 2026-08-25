@@ -29,7 +29,10 @@ defmodule OpenAgents.NetworkStatus do
   projection because a single operator who can read and rewrite everything is a
   fact about the service's condition, not a footnote in a document. It carries
   counts, booleans, family names, and issue numbers only, and degrades to `nil`
-  like every other gather.
+  like every other gather. Its `deployment` section publishes how far the code
+  assembling this projection is from the head of the ref its proofs ran
+  against, because a disclosure compiled 57 commits ago answers for code nobody
+  is running (#187, #246).
   """
 
   @schema "openagents.network_status.v1"

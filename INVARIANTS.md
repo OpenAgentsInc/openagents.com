@@ -3849,6 +3849,17 @@ instance data: it is where a reader goes to hold the forge to `EXIT-005`, and a
 disclosure that named a gap without naming the surface that closes it would be
 asking the reader to go looking.
 
+It carries one more decision (issue #246). `independence.deployment` publishes
+how far the code assembling this projection is from the head of the ref its
+proofs ran against: `proven_ref` (`refs/heads/main`, a fixed ref name and not
+instance data), `known`, and `behind`. A count of commits is a count, so the
+content rule is unchanged and the shas that count lies between stay off this
+page — `EXIT-006`'s proof turns red for one, and this decision does not relax
+that. It belongs in the same bounded projection for the reason the disclosure
+does: a status page assembled by code 57 commits behind the ledger reports
+health for surfaces the reader cannot reach (#187), and nothing else on this
+page can tell them so.
+
 What the projection carries beside counts is the bounded public SCV activity
 band (`scvs`: a derived public id, a label, a status, a weight, and one
 bounded activity line), the forge deploy lane (short shas, statuses, timings,
@@ -4938,12 +4949,49 @@ published key set moved with the claim, as `STATUS-001` requires:
 `export_recipient_encryption`, and `operator_reads_source` was added. That is
 the decision being asked for, not an accident.
 
+Amended 2026-08-25 (issue #246). The disclosure publishes its own distance from
+the revision its proofs ran against. Every claim above is derived from the
+running node, and the running node's code can be older than the ledger those
+claims answer to: #187 found the forge serving a revision 57 commits behind
+`main`, where the export route, the `EXIT-005` chain, and this module itself did
+not exist, while every proof of them stayed green. An invariant that is proven
+and not deployed reports nothing, which is the outcome this contract exists to
+prevent, reached by a second route. So `independence.deployment` publishes the
+number of commits on the head this node serves that the running revision does
+not carry, and `/status` renders it in words.
+
+It is a distance and nothing else. Both revisions it lies between are commit
+shas, and adding one to this projection was among the mutations below; the
+proof stays red for them, and this amendment does not touch that rule. The
+distance is derived the way everything else here is: the running revision is
+the one `/api/status` already publishes for this node, the proven revision is
+the head of `refs/heads/main` in the bare projection this node serves, and the
+count is `git rev-list` over objects already on disk. `RELEASE-004` binds the
+proof matrix to the exact candidate sha and `.githooks/pre-push` refuses a push
+without it, which is what makes that head the newest proven revision.
+
+The claim is narrow on purpose. It is not "how far behind `main` this forge
+is" — nothing on this node can see a `main` it declines to serve. A forge that
+will not serve its own repository, a node whose bare projection is empty, and a
+release built from a revision this forge never accepted all report `known:
+false` and no distance, which is the same withholding `EXIT-005` and `EXIT-006`
+already decline to detect. The distance is also not an axis of `degraded?`: a
+node one commit behind is not less independent, and folding ordinary deploy lag
+into the independence verdict would make that verdict mean nothing on the day
+it mattered. It is published beside the verdict, as the verdict's margin of
+error. The published key set moved with the claim, as `STATUS-001` requires:
+`independence.deployment.proven_ref`, `.known`, and `.behind` were added, and
+`deployment/1` is public with the revision as a parameter for the same reason
+`degraded?/3` is — the node running the proof reports a build revision that is
+not a commit at all, so the projection alone could only ever exercise the
+branch that withholds.
+
 `STATUS-001`'s rule holds here: the section carries counts, booleans, family
-names, issue numbers, and one document path, and the proof asserts that every
-string it publishes is a ledger family name or fixed vocabulary — a repository
-path, an account id, a node name, or a commit sha reaching it turns the proof
-red. The whole section degrades to `nil` like every other gather, so a node
-that cannot assemble it renders the page without it rather than failing.
+names, issue numbers, one ref name, and one document path, and the proof asserts
+that every string it publishes is a ledger family name or fixed vocabulary — a
+repository path, an account id, a node name, or a commit sha reaching it turns
+the proof red. The whole section degrades to `nil` like every other gather, so a
+node that cannot assemble it renders the page without it rather than failing.
 
 Six mutations were confirmed to fail the proof and reverted: publishing an
 empty gap list while the ledger records gaps; making `degraded` constant;
@@ -4962,6 +5010,13 @@ return its plaintext, which the raw-column read catches; and this module
 reverted to a literal `false`, which comparing the two values cannot catch —
 `false` is the correct answer today — so the proof reads the compiled import
 table the way `export_recipient_encryption` already does.
+
+Three more were confirmed for the deployment section and reverted: publishing
+the running revision beside its distance, which the vocabulary assertion and
+both `STATUS-001` key-set assertions catch; hardcoding the distance to zero,
+which the seeded-repository counts catch and the compiled-import-table read
+catches independently of them; and dropping the section from the projection,
+which `STATUS-001`'s stale-key assertion catches.
 
 Evidence: `OpenAgents.Forge.Independence`, `OpenAgents.Forge.AtRest`,
 `OpenAgents.NetworkStatus`,

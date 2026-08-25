@@ -48,15 +48,34 @@ defmodule OpenAgents.Forge.Independence do
   `degraded?` is true while any of the three falls short, so the page does not
   need a human to decide when to say so. It is expected to be true today.
 
+  A fourth section says how much any of that is worth. Every claim above is
+  derived from the running node, and the running node's code can be older than
+  the ledger those claims answer to: #187 found the forge serving a revision 57
+  commits behind `main`, where the export route, the chain, and this module
+  itself did not exist, while every proof of them stayed green on `main`. A
+  disclosure that cannot say how far its own code is from the code its proofs
+  ran against is asking to be trusted on exactly the point it exists to remove,
+  so `deployment` publishes that distance: the number of commits on the head
+  this node serves that the running revision does not carry (#246).
+
+  It is a distance and nothing else. Publishing the two revisions it lies
+  between would put a commit sha on an anonymous surface, which `STATUS-001`
+  keeps content-free and this section's own proof turns red for. It is also not
+  an axis of `degraded?`: a node one commit behind is not less independent, and
+  folding ordinary deploy lag into the independence verdict would make that
+  verdict mean nothing on the day it mattered.
+
   Nothing here carries content: family names, counts, booleans, issue numbers,
-  and a document path. It answers with the same shape when the ledger is
-  unreadable, so `STATUS-001`'s rule that the page renders during an incident
-  still holds.
+  a ref name, and a document path. It answers with the same shape when the
+  ledger is unreadable, so `STATUS-001`'s rule that the page renders during an
+  incident still holds.
   """
 
   alias OpenAgents.DataRights.ExportInventory
   alias OpenAgents.Forge.Anchor
   alias OpenAgents.Forge.AtRest
+  alias OpenAgents.Forge.Pushes
+  alias OpenAgents.Forge.Repos
 
   @schema "openagents.forge_independence.v1"
 
@@ -67,6 +86,13 @@ defmodule OpenAgents.Forge.Independence do
   @export_encryption_module OpenAgents.DataRights.Age
   @export_controller OpenAgentsWeb.DataController
   @account_export OpenAgents.DataRights.AccountExport
+
+  # The ref a candidate is proven against before it is pushed: `RELEASE-004`
+  # binds the full local matrix to the exact candidate sha and
+  # `.githooks/pre-push` refuses a push without it, so the head of this ref is
+  # the newest revision the ledger's proofs have run against.
+  @proven_ref "refs/heads/main"
+  @sha ~r/\A[0-9a-f]{40}\z/
 
   @doc "The disclosure, in the shape `/api/status` publishes it."
   @spec projection() :: map()
@@ -82,6 +108,7 @@ defmodule OpenAgents.Forge.Independence do
       "export" => export,
       "verification" => verification,
       "private_data" => private_data,
+      "deployment" => deployment_section(),
       "document" => @document
     }
   end
@@ -197,6 +224,85 @@ defmodule OpenAgents.Forge.Independence do
     case :beam_lib.chunks(:code.which(module), [:imports]) do
       {:ok, {^module, [imports: imports]}} -> Enum.map(imports, &elem(&1, 0))
       _unreadable -> []
+    end
+  end
+
+  # How far the code answering all of the above is from the code the ledger's
+  # proofs ran against. The forge hosts its own repository, so no outside
+  # service is consulted: the running revision is the one this node reports as
+  # deployed, the proven revision is the head of `refs/heads/main` in the bare
+  # projection this node serves, and the distance between them is a `git`
+  # count over objects already on disk.
+  #
+  # The claim is deliberately narrow. It is not "how far behind `main` this
+  # forge is" — nothing here can see a `main` this node declines to serve. It
+  # is "how many commits on the head this node serves the running revision does
+  # not carry", which is exactly what the count establishes. A forge that will
+  # not serve its own repository, a node whose bare projection is empty, and a
+  # release built from a revision this forge never accepted all report `known:
+  # false` and no distance, which is the same withholding `EXIT-005` and
+  # `EXIT-006` already decline to detect.
+  defp deployment_section, do: deployment(safely(&running_revision/0))
+
+  @doc """
+  The deployment section for a given running revision.
+
+  Public with the revision as a parameter for the same reason `degraded?/3` is
+  public: the node that runs this proof reports a build revision that is not a
+  commit at all, so the projection alone can only ever exercise the branch that
+  withholds. A proof that never sees a real distance cannot fail on the day one
+  stops being computed.
+  """
+  @spec deployment(String.t() | nil) :: map()
+  def deployment(revision) do
+    behind = safely(fn -> commits_behind(revision) end)
+
+    %{
+      "proven_ref" => @proven_ref,
+      "known" => is_integer(behind),
+      "behind" => behind
+    }
+  end
+
+  defp commits_behind(running) do
+    with repo when is_binary(repo) <- List.first(Repos.allowed_repos()),
+         storage_key = Pushes.mirror_storage_key(repo),
+         true <- sha?(running),
+         head when is_binary(head) <- Map.get(Repos.refs(storage_key), @proven_ref),
+         true <- sha?(head) do
+      count_between(storage_key, running, head)
+    else
+      _unknown -> nil
+    end
+  end
+
+  # The same revision `/api/status` publishes for this node, so the distance
+  # and the revision it is measured from can never describe different code.
+  defp running_revision do
+    OpenAgents.Forge.DeploymentNode.health()["revision"]
+  end
+
+  defp sha?(value), do: is_binary(value) and Regex.match?(@sha, value)
+
+  # `running..head` counts commits reachable from the served head and not from
+  # the running revision, which stays the right number when the running
+  # revision is not an ancestor of it. A revision the bare projection has never
+  # heard of fails the read, and a failed read claims nothing.
+  defp count_between(storage_key, running, head) do
+    case Repos.git(Repos.bare_path(storage_key), [
+           "rev-list",
+           "--count",
+           "--end-of-options",
+           running <> ".." <> head
+         ]) do
+      {output, 0} ->
+        case Integer.parse(String.trim(output)) do
+          {behind, ""} -> behind
+          _unparsed -> nil
+        end
+
+      _unreadable ->
+        nil
     end
   end
 

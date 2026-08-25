@@ -92,6 +92,13 @@ defmodule OpenAgents.NetworkStatusTest do
     "generated_at",
     "independence",
     "independence.degraded",
+    # The disclosure's distance from the revision its proofs ran against
+    # (#246). A count and a ref name: the two revisions it lies between are
+    # commit shas, which this page does not publish.
+    "independence.deployment",
+    "independence.deployment.behind",
+    "independence.deployment.known",
+    "independence.deployment.proven_ref",
     "independence.document",
     "independence.export",
     "independence.export.blocked",

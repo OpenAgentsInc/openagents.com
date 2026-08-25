@@ -5,6 +5,12 @@ defmodule OpenAgents.Delegations do
   The Box run and Work delegation ledgers remain authoritative. This module
   stores no delegation state and derives every identifier and projection from
   those substrate records.
+
+  Every target and every delegation this module returns carries the seam
+  `OpenAgents.Delegations.Target` computes: custody, runtime class, one
+  lifecycle word across kinds, and the capabilities the asking caller may
+  exercise. Surfaces render those fields rather than deriving them, so no
+  surface can decide for itself that a caller may start work on a target.
   """
 
   import Ecto.Query
@@ -15,6 +21,7 @@ defmodule OpenAgents.Delegations do
   alias OpenAgents.BoxRuns
   alias OpenAgents.ComputerAgentJobs
   alias OpenAgents.ComputerProjection
+  alias OpenAgents.Delegations.Target
   alias OpenAgents.Conversations.{Conversation, Visitor}
   alias OpenAgents.Machines
   alias OpenAgents.Machines.Machine
@@ -31,8 +38,10 @@ defmodule OpenAgents.Delegations do
   @spec inventory(caller(), String.t()) :: {:ok, map()} | {:error, atom()}
   def inventory(caller, conversation_id) when is_map(caller) and is_binary(conversation_id) do
     with {:ok, owners} <- inventory_owners(caller, conversation_id) do
-      boxes = Enum.flat_map(owners.boxes, &box_targets(&1, conversation_id))
-      computers = Enum.flat_map(owners.computers, &computer_targets/1)
+      # `inventory_owners/2` already resolved per-kind reach: a kind the caller
+      # cannot reach yields no owner, so everything listed here is authorized.
+      boxes = Enum.flat_map(owners.boxes, &box_targets(&1, conversation_id, true))
+      computers = Enum.flat_map(owners.computers, &computer_targets(&1, true))
 
       {:ok,
        %{
@@ -113,12 +122,29 @@ defmodule OpenAgents.Delegations do
   @spec projection(User.t(), String.t()) :: map()
   def projection(%User{} = user, conversation_id) when is_binary(conversation_id) do
     base = Fleet.projection(conversation_id)
-    computers = computer_targets(user)
+    computers = computer_targets(user, true)
     jobs = latest_jobs(user.id, conversation_id)
 
     Map.merge(base, %{
+      boxes: Enum.map(base.boxes, &box_fleet_seam/1),
+      queued: Enum.map(base.queued, &box_fleet_seam/1),
       computers: Enum.map(computers, &computer_fleet_view(&1, Map.get(jobs, &1["computer_id"]))),
       maximum_computers: @maximum_targets
+    })
+  end
+
+  # The chat panel reads the same seam the API does. `OpenAgents.Box.Fleet`
+  # keys its projection with atoms, so the seam is restated in that convention
+  # rather than mixing key types inside one map.
+  defp box_fleet_seam(%{state: state} = view) do
+    seam = Target.seam("box", Target.box_lifecycle(state), true)
+
+    Map.merge(view, %{
+      custody: seam["custody"],
+      runtime_class: seam["runtime_class"],
+      lifecycle: seam["lifecycle"],
+      capabilities: seam["capabilities"],
+      unavailable_reason: seam["unavailable_reason"]
     })
   end
 
@@ -146,7 +172,7 @@ defmodule OpenAgents.Delegations do
   defp conversation_owned?(%User{} = user, conversation_id),
     do: not is_nil(OpenAgents.Conversations.get_conversation_for_user(user, conversation_id))
 
-  defp box_targets(%User{id: user_id}, conversation_id) do
+  defp box_targets(%User{id: user_id}, conversation_id, authorized?) do
     Repo.all(
       from box in ConversationBox,
         join: conversation in Conversation,
@@ -166,20 +192,24 @@ defmodule OpenAgents.Delegations do
         "box_id" => box.box_id,
         "stopped_at" => iso8601(box.stopped_at)
       }
+      |> Map.merge(Target.seam("box", Target.box_lifecycle(box.state), authorized?))
     end)
   end
 
-  defp computer_targets(%User{id: user_id}) do
+  defp computer_targets(%User{id: user_id}, authorized?) do
     Machines.list_machines(user_id)
     |> Enum.take(@maximum_targets)
     |> Enum.map(fn machine ->
-      machine
-      |> ComputerProjection.project()
+      projection = ComputerProjection.project(machine)
+      lifecycle = Target.computer_lifecycle(machine, projection["online"] == true)
+
+      projection
       |> Map.merge(%{
         "id" => "computer:" <> machine.id,
         "kind" => "computer",
         "computer_id" => machine.id
       })
+      |> Map.merge(Target.seam("computer", lifecycle, authorized?))
     end)
   end
 
@@ -294,6 +324,7 @@ defmodule OpenAgents.Delegations do
       "failure_reason" => bounded(run.failure_reason, 500),
       "finished_at" => iso8601(run.finished_at)
     }
+    |> Map.merge(Target.delegation_seam(Target.run_lifecycle(run.state)))
   end
 
   defp delegation_projection("computer", %Job{} = job) do
@@ -312,6 +343,7 @@ defmodule OpenAgents.Delegations do
       "failure_reason" => bounded(job.error_code, 500),
       "finished_at" => iso8601(job.completed_at)
     }
+    |> Map.merge(Target.delegation_seam(Target.job_lifecycle(job.status)))
   end
 
   defp computer_fleet_view(target, nil), do: Map.put(target, "delegation", nil)

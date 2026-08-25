@@ -534,6 +534,46 @@ The distinction decides what a failure means. A Box that is gone was reclaimed,
 and you can provision another. A Computer that is gone is somebody's laptop,
 and waiting is the only recovery.
 
+**"Cloud computer" is not a term here** — it is a collision, and issue #37
+settled it. The `docs/2026-08-22-cloud-computer-scale-architecture-audit.md`
+program calls an OpenAgents-managed sandbox a *cloud computer*, but a Computer
+in this application is never provisioned, so that phrase names a Box. Read the
+audit's "cloud computer" as **Box** and its "customer-connected computer" as
+**Computer**, and do not introduce a third target kind for it. The upstream
+contract keeps its own name: `openagents.cloud_computer.v1` is a schema in the
+`OpenAgentsInc/openagents` monorepo, and its `state` enum is where this
+application's target lifecycle vocabulary comes from.
+
+**Target seam** — the five fields `OpenAgents.Delegations.Target` computes for
+any delegation target, and that every surface renders rather than derives.
+`docs/2026-08-25-delegation-target-seam.md` holds the reasoning.
+
+- **Custody** — `openagents_managed` or `customer_premises`, derived from the
+  target kind alone. It is never read from the route that received the request
+  or from whether the caller typed or spoke. A Box is managed; a Computer is
+  the customer's premises.
+- **Target lifecycle** — one of `cold`, `queued`, `starting`, `active`,
+  `stopping`, `failed`, `destroyed`, taken verbatim from the
+  `openagents.cloud_computer.v1` state enum. It is a projection of the
+  substrate state, which stays the authority and travels beside it. Four
+  substrate vocabularies feed it: `conversation_boxes.state`, `box_runs.state`,
+  `work_jobs.status`, and a Computer's `status` plus its live reachability read.
+- **Delegation lifecycle** — one of `queued`, `starting`, `active`,
+  `succeeded`, `failed`, `cancelled`. A delegation ends; a target persists, so
+  the two vocabularies are deliberately different words.
+- **Capability** — the operations the asking caller may exercise *now*, as an
+  explicit list: `["start"]` on a target, `["cancel"]` on a delegation, or `[]`
+  with an `unavailable_reason`. A surface that derives this for itself can
+  widen reach past the substrate, which is what IDENTITY-009 forbids.
+
+**Runtime class** — an `OpenAgents.Capacity.Catalog` id: `standard`, `strong`,
+`batch`, or `connected`, each naming an isolation, an egress posture, and a
+data location. A Computer is `connected`. **A Box has no class yet**: naming it
+`standard` would assert `policy_broker` egress that nothing here establishes,
+so `runtime_class` is `nil` for a Box until that evidence exists. A class is
+not a target — matching returns a class, and it takes a target reference to
+address anything.
+
 **Computer, not machine** — "computer" is both the product word and the
 current code word. `OpenAgents.Computer` owns live control,
 `OpenAgents.ComputerAgentJobs` owns durable ACP delegations,

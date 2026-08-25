@@ -1119,7 +1119,7 @@ the `memories` table's shape constraint and partial indexes,
 `test/openagents_web/controllers/memory_controller_test.exs`, and
 `test/openagents_web/controllers/responses_controller_test.exs`.
 
-### MEMORY-011 — A system memory is evidenced, admitted by receipt, and surfaced to nobody
+### MEMORY-011 — A system memory is evidenced, admitted by receipt, contested by record, and surfaced to nobody
 
 Status: Current
 
@@ -1142,8 +1142,9 @@ compared, because a check constraint passes when it evaluates to NULL and an
 absent evidence list is exactly the hole the constraint exists to close.
 
 Admission is a receipt, never a field. A verdict is a row in
-`memory_admissions` — attributed to the steward who wrote it, dated, and
-append-only, with no `updated_at` and no path that updates one — and
+`memory_admissions` — attributed through `author_id` to the account that wrote
+it, dated, and append-only, with no `updated_at` and no path that updates one —
+and
 `OpenAgents.Memories.Admissions.status/1` derives the effective status from
 those records. The `admission` column on the candidate is the author's claim
 and nothing more, so a row that says `admitted` with no steward record behind
@@ -1155,19 +1156,58 @@ bootstrapped to the owner's account. Only the original author or a steward
 writes a superseding row on a system slug; anyone else is refused, and
 supersession is the only correction path there is.
 
-Neither path reads another account's memory. An admission record proves its
-candidate is a system row through the composite foreign key
+Disagreement is a record too. Any account may write a **challenge** against a
+system memory — slug `chl:<memory>`, role `challenge`, a ground, and optional
+evidence of its own — and a challenge that carries evidence suspends an
+admitted target until it is resolved. That is the fail-safe direction: a
+contested claim silently absent is cheaper than a poisoned claim silently
+present. An unevidenced challenge is recorded and changes nothing, so an empty
+evidence list is refused at the table rather than read as absence. Two
+resolutions, both steward-only: a **refutation** of one challenge (slug
+`ref:<challenge>`, role `refutation`), or a superseding row on the target's
+slug, which records a refutation of each open challenge in the same
+transaction so the resolution is a receipt rather than an inference. A
+refutation from a non-steward account is refused on the role, before the
+challenge is read. A reversal is a further challenge; nothing is ever edited.
+
+The derived status — `candidate`, `admitted`, `rejected`, or `suspended` —
+follows from the set of records and not from the order they arrived in. Every
+ordering the derivation uses is over `{inserted_at, id}`, which is data on the
+records, and resolution is set membership rather than a comparison of dates, so
+a refutation backfilled earlier than its challenge still resolves it and every
+permutation of one record set derives one answer.
+
+One account's open evidenced challenges suspend at most 25% of the admitted
+store, rounded up; the earliest by `{inserted_at, id}` take effect and the rest
+queue with no recall effect. Stated without overstatement: with one server and
+no anonymous publisher there is no forged attribution, so this bounds a
+prolific or systematically wrong challenger rather than defending against an
+attack, and it is a bound on the store rather than on the per-message recall
+pool of specification section 7.2, which does not exist until recall reads this
+bucket.
+
+None of these paths reads another account's memory. An admission or challenge
+record proves its target is a system row through the composite foreign key
 `(memory_id, memory_bucket) -> memories (id, bucket)` rather than through a
-lookup, and a correction authorizes inside the `UPDATE` predicate — the actor's
-own `user_id` or the steward role — so a caller with no standing is refused
-without learning that the row exists. MEMORY-010's rule that every query rooted
-at `OpenAgents.Memories.Memory` names `user_id` holds unchanged, and the AST
-proof reads this module too.
+lookup; a refutation is held to a challenge against the memory it restores by
+the composite foreign key
+`(challenge_id, memory_id, challenge_role) -> (id, memory_id, role)`, which is
+why `challenge_role` carries the literal the check constraint pins; and a
+correction authorizes inside the `UPDATE` predicate — the actor's own `user_id`
+or the steward role — so a caller with no standing is refused without learning
+that the row exists. MEMORY-010's rule that every query rooted at
+`OpenAgents.Memories.Memory` names `user_id` holds unchanged, and the AST proof
+reads this module too.
 
 Nothing surfaces. `OpenAgents.Memories.recall/3` reads the `user` and `learned`
 buckets, named as a predicate in the query rather than filtered out of its
 result, and no session sees a system memory — not another account's, and not
-its own author's. That is deliberate and it is the whole reason this invariant
+its own author's, and not one of any derived status: admitted, suspended, and
+challenged rows all reach the same number of turns. A challenged memory nobody
+can see is still a coherent state; the point of recording the challenge is that
+a wrong admitted claim has a path other than editing someone else's row, and
+that a contested claim is marked before an eligibility filter exists to read
+the mark. That is deliberate and it is the whole reason this invariant
 can stand beside MEMORY-001 and MEMORY-010 rather than amending them: an
 admitted row read into every account's turn is cross-account recall by
 construction, so surfacing the bucket is a privacy decision with an eligibility
@@ -1176,10 +1216,12 @@ evidenced, and admitted but recalled by nobody is a coherent state; a quietly
 widened recall predicate is not.
 
 Evidence: `OpenAgents.Memories.Admissions`, `OpenAgents.Memories.Admission`,
-`OpenAgents.Memories.Memory`, the `memories_system_shape` and
-`memory_admissions_shape` constraints and the composite foreign key
-`memory_admissions_memory_fkey`, and
-`test/openagents/memories/system_memory_test.exs`.
+`OpenAgents.Memories.Memory`, `OpenAgents.Memories.Evidence`, the
+`memories_system_shape` and `memory_admissions_shape` constraints and the
+composite foreign keys `memory_admissions_memory_fkey` and
+`memory_admissions_challenge_fkey`,
+`test/openagents/memories/system_memory_test.exs`, and
+`test/openagents/memories/challenge_test.exs`.
 
 ### PRIVACY-001 — Secret-bearing profile memory is rejected, never scrub-stored
 
@@ -3320,14 +3362,17 @@ sentence:
   `OpenAgents.ProfileMemory.forget_active/2`, which supersedes rather than
   deletes, so a retraction is another entry in the audit trail the same
   surface renders and never a row that quietly stops existing.
-- Admitting or rejecting a candidate system memory, and correcting an admitted
-  one, through `OpenAgents.Memories.Admissions` (MEMORY-011). Only a steward
-  admits, and the steward set is this allowlist, bootstrapped to the owner's
-  account. The write appends: an admission record is inserted and never
-  updated, and a correction supersedes rather than edits, so a reversal is a
-  second record beside the first rather than a verdict that quietly changed.
-  The authority buys no read — the operator sees no memory of another account
-  through this module.
+- Admitting or rejecting a candidate system memory, refuting a challenge
+  against one, and correcting an admitted one, through
+  `OpenAgents.Memories.Admissions` (MEMORY-011). Only a steward admits and only
+  a steward refutes, and the steward set is this allowlist, bootstrapped to the
+  owner's account. Challenging is the one path here that needs no authority:
+  any account may record that an admitted claim is wrong, which is the whole
+  reason the record exists. The write appends: every record is inserted and
+  never updated, and a correction supersedes rather than edits, so a reversal
+  is a second record beside the first rather than a verdict that quietly
+  changed. The authority buys no read — the operator sees no memory of another
+  account through this module.
 - Recording Gym runs and trials under `POST /api/v1/gym/runs`, the lifecycle
   routes `POST /api/v1/gym/runs/start`, `POST /api/v1/gym/runs/:id/trials`,
   and `PATCH /api/v1/gym/runs/:id`
@@ -6076,7 +6121,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | MEMORY-008 | `test/openagents/experience_memory_test.exs` |
 | MEMORY-009 | `test/openagents/graph_memory_test.exs` |
 | MEMORY-010 | `test/openagents/memories_test.exs`, `test/openagents_web/controllers/memory_controller_test.exs`, `test/openagents_web/controllers/responses_controller_test.exs` |
-| MEMORY-011 | `test/openagents/memories/system_memory_test.exs` |
+| MEMORY-011 | `test/openagents/memories/system_memory_test.exs`, `test/openagents/memories/challenge_test.exs` |
 | PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | TURN-001 | `test/openagents/conversations_test.exs` |
 | TURN-002 | `test/openagents/conversations_test.exs` |

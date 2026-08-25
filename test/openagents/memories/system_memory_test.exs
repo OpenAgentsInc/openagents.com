@@ -289,7 +289,7 @@ defmodule OpenAgents.Memories.SystemMemoryTest do
 
       assert record.slug == "adm:" <> memory.id
       assert record.role == "admission"
-      assert record.steward_id == admitting.id
+      assert record.author_id == admitting.id
       assert Admissions.status(memory) == "admitted"
     end
 

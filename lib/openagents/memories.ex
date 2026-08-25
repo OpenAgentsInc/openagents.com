@@ -49,7 +49,8 @@ defmodule OpenAgents.Memories do
   nothing should — a store that fills itself is a store nobody trusts.
   `learned` memories come from server-side consolidation over thread events.
   `system` memories are what the network as a whole has learned, and they pass
-  an evidence-backed admission gate before they mean anything
+  an evidence-backed admission gate before they mean anything, and can be
+  challenged and resolved by further records afterwards
   (`OpenAgents.Memories.Admissions`). `recall/3` reads the first two only.
 
   ## Corrections supersede
@@ -231,8 +232,9 @@ defmodule OpenAgents.Memories do
   cut excluded is counted rather than dropped in silence.
 
   The `system` bucket is not read here, by anyone, including its own author.
-  A system memory is stored and admitted (`OpenAgents.Memories.Admissions`) and
-  surfaced to nobody: an admitted row reaches every account's turn or none, and
+  A system memory is stored, admitted, and contestable
+  (`OpenAgents.Memories.Admissions`) and surfaced to nobody, whatever status
+  its records derive: an admitted row reaches every account's turn or none, and
   the first is cross-account recall, which MEMORY-001 and MEMORY-010 forbid.
   The bucket list is a predicate in the query rather than a filter applied to
   its results, so widening it is a deliberate edit to the recall issue's

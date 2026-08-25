@@ -46,6 +46,7 @@ defmodule OpenAgents.Memories.Memory do
   import Ecto.Changeset
 
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Memories.Evidence
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -60,8 +61,6 @@ defmodule OpenAgents.Memories.Memory do
   @slug_prefix "sys:"
   @tiers ~w(ledger glass)
   @admissions ~w(candidate admitted rejected)
-  @evidence_kinds ~w(receipt memory url)
-  @evidence_refs 20
 
   schema "memories" do
     belongs_to :user, User
@@ -113,7 +112,7 @@ defmodule OpenAgents.Memories.Memory do
 
   @doc "The kinds of evidence a system memory may cite."
   @spec evidence_kinds() :: [String.t()]
-  def evidence_kinds, do: @evidence_kinds
+  def evidence_kinds, do: Evidence.kinds()
 
   @doc "The prefix every system slug carries."
   @spec slug_prefix() :: String.t()
@@ -182,7 +181,7 @@ defmodule OpenAgents.Memories.Memory do
     |> validate_length(:entity, min: 1, max: @slug_characters, count: :graphemes)
     |> validate_inclusion(:tier, @tiers)
     |> validate_inclusion(:admission, @admissions)
-    |> validate_evidence_refs()
+    |> Evidence.validate(:evidence_refs)
   end
 
   defp refuse_system_fields(changeset) do
@@ -195,70 +194,6 @@ defmodule OpenAgents.Memories.Memory do
         end
     end)
   end
-
-  # A system memory without evidence is an assertion, and assertions do not
-  # enter the shared bucket. The list is required, non-empty, and every entry
-  # names a kind, a ref, and a digest — the digest so the evidence behind an
-  # admitted claim cannot be swapped afterwards.
-  defp validate_evidence_refs(changeset) do
-    case get_change(changeset, :evidence_refs, get_field(changeset, :evidence_refs)) do
-      nil ->
-        changeset
-
-      [] ->
-        add_error(changeset, :evidence_refs, "must name at least one piece of evidence")
-
-      refs when is_list(refs) and length(refs) > @evidence_refs ->
-        add_error(
-          changeset,
-          :evidence_refs,
-          "names more than #{@evidence_refs} pieces of evidence"
-        )
-
-      refs when is_list(refs) ->
-        if Enum.all?(refs, &evidence_ref?/1) do
-          put_change(changeset, :evidence_refs, Enum.map(refs, &normalize_ref/1))
-        else
-          add_error(
-            changeset,
-            :evidence_refs,
-            "each entry needs a kind of #{Enum.join(@evidence_kinds, ", ")}, a ref, and a digest"
-          )
-        end
-
-      _not_a_list ->
-        add_error(changeset, :evidence_refs, "must be a list")
-    end
-  end
-
-  defp evidence_ref?(ref) when is_map(ref) do
-    kind(ref) in @evidence_kinds and present?(entry(ref, "ref", :ref)) and
-      present?(entry(ref, "digest", :digest))
-  end
-
-  defp evidence_ref?(_ref), do: false
-
-  defp normalize_ref(ref) do
-    %{
-      "kind" => kind(ref),
-      "ref" => String.trim(entry(ref, "ref", :ref)),
-      "digest" => String.trim(entry(ref, "digest", :digest))
-    }
-  end
-
-  defp kind(ref), do: entry(ref, "kind", :kind)
-
-  # A caller writes `%{"kind" => …}` over the API and `%{kind: …}` in Elixir,
-  # and both mean the same evidence ref.
-  defp entry(ref, string_key, atom_key) do
-    case Map.get(ref, string_key, Map.get(ref, atom_key)) do
-      value when is_binary(value) -> value
-      _absent -> nil
-    end
-  end
-
-  defp present?(value) when is_binary(value), do: String.trim(value) != ""
-  defp present?(_value), do: false
 
   @doc "Points a memory at the memory that replaced it."
   @spec supersede_changeset(t(), t()) :: Ecto.Changeset.t()

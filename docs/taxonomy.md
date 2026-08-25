@@ -325,6 +325,16 @@ never read from the candidate. Recall does not read this bucket: a system
 memory is stored, evidenced, and admitted, and surfaced to no session yet
 (MEMORY-011).
 
+**Challenge** and **refutation** — the two other records in that table. A
+*challenge* is any account's statement that an admitted system memory is wrong;
+one carrying evidence of its own is an *evidenced challenge*, and only an
+evidenced challenge suspends its target. A *refutation* is a steward's
+resolution of one challenge. Say "suspended" for the status an open evidenced
+challenge derives, not "rejected" — a rejection is a steward's verdict on a
+candidate, and a suspension is a claim that was admitted and is now contested.
+Say "queued" for a challenge held back by the flood cap: it is recorded and
+attributed, and it has no effect on any status.
+
 ### Threads
 
 A **thread** is the unit of agent work. Everything in this section describes a

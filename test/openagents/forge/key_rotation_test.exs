@@ -250,7 +250,7 @@ defmodule OpenAgents.Forge.KeyRotationTest do
       )
     end
 
-    test "the machine pairing vault reads the GitHub vault's active key (#192)" do
+    test "a GitHub key rotation does not orphan the machine pairing vault (#192)" do
       first = Base.encode64(:crypto.strong_rand_bytes(32))
       second = Base.encode64(:crypto.strong_rand_bytes(32))
 
@@ -261,11 +261,14 @@ defmodule OpenAgents.Forge.KeyRotationTest do
           sealed
         end)
 
-      # Rotating the GitHub key — the documented procedure, performed in the
-      # documented order — orphans this envelope, because the machine vault
-      # carries no key id and consults no keyring. The blast radius is the ten
-      # minutes of unclaimed pairings the lifetime allows, which is why this
-      # is filed rather than treated as an incident.
+      # The machine vault now has its own dedicated key
+      # (`:machine_token_encryption_key`) and a decrypt-side fallback to the
+      # GitHub keyring (#192, VAULT-001). A pairing record sealed under the
+      # machine token key stays readable across a GitHub key rotation because
+      # the rotation does not touch the machine vault's dedicated key. The
+      # fallback covers historical records sealed while the runtime bridge
+      # still mapped the machine key to the GitHub active key; the retired key
+      # in `github_token_decryption_keys` opens those.
       with_env(
         [
           github_token_encryption_key: second,
@@ -273,7 +276,7 @@ defmodule OpenAgents.Forge.KeyRotationTest do
           github_token_decryption_keys: %{"first" => first}
         ],
         fn ->
-          assert {:error, :token_unsealable} = MachineVault.open(sealed)
+          assert {:ok, "smct_pairing"} = MachineVault.open(sealed)
         end
       )
     end

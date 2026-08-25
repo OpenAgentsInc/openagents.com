@@ -233,8 +233,9 @@ The forge holds several key-like secrets and they rotate differently:
   differ:
   - `OpenAgents.Accounts.TokenVault` (GitHub tokens) rotates without loss:
     the envelope names its key, the retired key joins
-    `GITHUB_TOKEN_DECRYPTION_KEYS_JSON`, and `rotate_github_tokens!/0` rewraps
-    every row under the active key.
+    `GITHUB_TOKEN_DECRYPTION_KEYS_JSON`, and
+    `OpenAgents.Accounts.rotate_github_tokens!/0` rewraps every row under the
+    active key.
   - `OpenAgents.Machines.TokenVault` (pairing tokens,
     `MACHINE_TOKEN_ENCRYPTION_KEY`) rotates with bounded loss: at most one
     ten-minute window of unclaimed pairings becomes unreadable, and a person

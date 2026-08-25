@@ -20,6 +20,19 @@ sha=${1:-}
 
 project=openagentsgemini
 registry=us-central1-docker.pkg.dev/openagents-staging-20260820/openagents-staging/openagents
+
+# One release at a time. Two runs rolling the same three nodes can take down
+# more than one at once, which is an outage rather than a rolling replacement.
+# The lock is a directory because mkdir is atomic on every filesystem this
+# runs on, and it carries the pid and sha so a stale one names its owner.
+lock_dir=${TMPDIR:-/tmp}/openagents-release.lock
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  echo "a release is already running: $(cat "$lock_dir/owner" 2>/dev/null || echo 'unknown')" >&2
+  echo "if that is stale, remove $lock_dir and run again" >&2
+  exit 1
+fi
+echo "pid=$$ sha=${1:-} started=$(date -u +%FT%TZ)" > "$lock_dir/owner"
+trap 'rm -rf "$lock_dir"' EXIT INT TERM
 # The automation service account: the interactive account hits Workspace
 # reauthentication and cannot refresh in a headless run.
 CLOUDSDK_CONFIG=${CLOUDSDK_CONFIG:-/Users/christopherdavid/work/.secrets/gcloud-sa-config}
@@ -169,11 +182,52 @@ startup=$(mktemp)
 sed "s|__IMAGE_DIGEST__|$digest|g" "$(dirname "$0")/fleet-startup.template.sh" > "$startup"
 grep -q '__IMAGE_DIGEST__' "$startup" && { echo "startup template not fully filled" >&2; exit 1; }
 
+# Restarting a node that already serves this release is not a no-op: the
+# startup runner stops the container and brings it back, so the node answers
+# 502 for the length of that restart. Re-running a release that had already
+# rolled is what took production down for a window, and the roll looked
+# harmless in the log because the metadata write reported "No change
+# requested" while the restart happened anyway.
+#
+# So a node is rolled only when it actually needs rolling: either its metadata
+# does not yet pin this digest, or it is not serving this revision. Both have
+# to be already true to skip it, because a node can serve the right revision
+# from a hand restart while its metadata still pins the old digest, and that
+# node would revert on its next reboot.
+rolled=0
+skipped=0
+
 for entry in $nodes; do
   instance=${entry%%:*}
   zone=${entry##*:}
   echo "--> $instance ($zone)"
 
+  pinned=$(gcloud compute instances describe "$instance" --zone="$zone" \
+    --project="$project" \
+    --format="value(metadata.items.filter(\"key:startup-script\").extract(value))" 2>/dev/null |
+    grep -c "$digest" || true)
+  serving=$(health_of "$instance" "$zone")
+
+  if [ "$pinned" != "0" ] && [ "$serving" = "$sha" ]; then
+    echo "    already on $sha with this digest pinned; not restarting"
+    skipped=$((skipped + 1))
+    continue
+  fi
+
+  # Never take a node down while another is already down. The roll is only
+  # safe because the rest of the fleet is serving; without this a second node
+  # can go before the first is back, and two of three down is an outage.
+  for other in $nodes; do
+    other_instance=${other%%:*}
+    other_zone=${other##*:}
+    [ "$other_instance" = "$instance" ] && continue
+    if [ -z "$(health_of "$other_instance" "$other_zone")" ]; then
+      echo "$other_instance is not answering; refusing to restart $instance too" >&2
+      exit 1
+    fi
+  done
+
+  rolled=$((rolled + 1))
   gcloud compute instances add-metadata "$instance" --zone="$zone" \
     --project="$project" --metadata-from-file=startup-script="$startup" >/dev/null
   on_node "$instance" "$zone" 'sudo google_metadata_script_runner startup >/tmp/roll.log 2>&1 &'
@@ -193,6 +247,8 @@ for entry in $nodes; do
   echo "    healthy on $sha"
 done
 rm -f "$startup"
+
+echo "rolled $rolled node(s), skipped $skipped already on $sha"
 
 echo "==> settle"
 settle=$(mktemp)

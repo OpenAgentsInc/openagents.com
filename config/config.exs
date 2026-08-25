@@ -249,6 +249,14 @@ config :openagents,
     dimensions: 64,
     top_k: 12
   ],
+  plugin_discovery: [
+    embeddings_enabled: false,
+    provider: OpenAgents.Memory.OpenAIEmbeddings,
+    model_id: "text-embedding-3-small",
+    model_version: "2024-01",
+    dimensions: 64,
+    top_k: 12
+  ],
   # The shipped tool catalog. It is a zero base, deliberately small.
   #
   # A tool ships only when it meets every admission criterion in

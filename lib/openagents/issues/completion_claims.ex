@@ -567,7 +567,20 @@ defmodule OpenAgents.Issues.CompletionClaims do
   # grade at all has been answered by the stored policy. It reads Markdown ATX
   # headings and nothing else: a section is present when its heading exists and
   # some non-blank line follows it before the next heading.
-  defp sections(body) when is_binary(body) do
+  @doc """
+  The accepted-outcome sections `body` states, as `%{section => lines | nil}`.
+
+  This is the one reader of an issue's four sections. `OUTCOME-001` grades a
+  claim against them and `OpenAgents.Issues.WorkScope` bounds an attempt by
+  them, and both call here rather than parsing headings again: a second parser
+  could disagree about whether an issue is scoped, and then an attempt could
+  buy a budget for work that can never be accepted.
+
+  A section the body does not state is `nil`, never an empty list, so "absent"
+  and "present but empty" stay distinguishable.
+  """
+  @spec sections(String.t() | nil) :: %{atom() => [String.t()] | nil}
+  def sections(body) when is_binary(body) do
     lines = String.split(body, ~r/\r?\n/)
 
     @section_headings
@@ -576,7 +589,7 @@ defmodule OpenAgents.Issues.CompletionClaims do
     end)
   end
 
-  defp sections(_body), do: %{}
+  def sections(_body), do: %{}
 
   defp section_body(lines, headings) do
     lines

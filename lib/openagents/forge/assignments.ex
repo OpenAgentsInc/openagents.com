@@ -5,6 +5,16 @@ defmodule OpenAgents.Forge.Assignments do
   Assignment credentials are digest-only and authenticate as an `:assignment`
   forge principal. Their repository and branch scope is read from the durable
   assignment snapshot, never from request metadata.
+
+  ## The issue is the bound
+
+  `create/1` is the one admission point for agent work on an issue, reached by
+  the issue page and by `POST /api/v1/.../assignments` alike, so it is where
+  `OpenAgents.Issues.WorkScope` applies. The objective and the wall clock come
+  from the issue: a caller that supplies neither gets the issue's, and a caller
+  that supplies a deadline may narrow the issue's bound but never widen it.
+  Bounded work means bounded by the requested outcome, not by whoever asked for
+  it.
   """
 
   import Ecto.Query
@@ -14,7 +24,7 @@ defmodule OpenAgents.Forge.Assignments do
   alias OpenAgents.Box.ConversationBox
   alias OpenAgents.BoxRuns
   alias OpenAgents.Forge.{Assignment, AssignmentCredential, AssignmentCredentialVault}
-  alias OpenAgents.Issues.{Evidence, Issue}
+  alias OpenAgents.Issues.{Evidence, Issue, WorkScope}
   alias OpenAgents.Repo
   alias OpenAgents.Conversations
   alias OpenAgents.Repositories.Repository
@@ -51,7 +61,32 @@ defmodule OpenAgents.Forge.Assignments do
          {:ok, assignment, plaintext} <-
            persist_assignment(target_kind, target, repository, issue, branch, principal, attrs) do
       _ = announce(assignment)
-      start_target(assignment, target, target_kind, plaintext, attrs, owner, conversation)
+
+      start_target(
+        assignment,
+        target,
+        target_kind,
+        plaintext,
+        scoped(attrs, issue, assignment.branch),
+        owner,
+        conversation
+      )
+    end
+  end
+
+  # The issue writes the objective when the caller does not. A caller that
+  # supplies one is still bounded — by the branch its credential is scoped to,
+  # by the repository the issue lives in, and by the wall clock `deadline/3`
+  # already took from the issue — but the common case is that nobody should be
+  # composing a second version of what the issue already says.
+  #
+  # The branch comes from the persisted attempt rather than from the request,
+  # because that is the ref the credential was minted for. A prompt that named
+  # any other would be telling an agent to push where it cannot.
+  defp scoped(attrs, issue, branch) do
+    case attrs[:prompt] || attrs["prompt"] do
+      prompt when is_binary(prompt) and prompt != "" -> attrs
+      _absent -> Map.put(attrs, "prompt", WorkScope.objective(issue, branch))
     end
   end
 
@@ -149,13 +184,29 @@ defmodule OpenAgents.Forge.Assignments do
   def attempts_for_issue(%Issue{id: id}, viewer), do: attempts_for_issue(id, viewer)
 
   def attempts_for_issue(issue_id, viewer) when is_integer(issue_id) do
+    issue_id
+    |> attempt_records_for_issue()
+    |> Enum.map(&attempt_summary(&1, viewer))
+    |> Enum.reject(&is_nil/1)
+  end
+
+  @doc """
+  The attempt rows for `issue`, oldest first, with their consent links loaded.
+
+  Unprojected, so a caller that has to clamp a *different* record against an
+  attempt's real tier can do so. Every caller that shows an attempt to a reader
+  still goes through `attempt_summary/2`; this exists for records that hang off
+  an attempt and carry a second gate of their own, such as an ATIF trace.
+  """
+  @spec attempt_records_for_issue(Issue.t() | integer()) :: [Assignment.t()]
+  def attempt_records_for_issue(%Issue{id: id}), do: attempt_records_for_issue(id)
+
+  def attempt_records_for_issue(issue_id) when is_integer(issue_id) do
     Assignment
     |> where([assignment], assignment.issue_id == ^issue_id)
     |> order_by([assignment], asc: assignment.admitted_at, asc: assignment.id)
     |> preload([:artifact_link, :work_job])
     |> Repo.all()
-    |> Enum.map(&attempt_summary(&1, viewer))
-    |> Enum.reject(&is_nil/1)
   end
 
   @doc """
@@ -459,7 +510,7 @@ defmodule OpenAgents.Forge.Assignments do
     Repo.transaction(fn ->
       now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
       id = Ecto.UUID.generate()
-      deadline = deadline(attrs, now)
+      deadline = deadline(attrs, issue, now)
       secret = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
       plaintext = @prefix <> id <> "." <> secret
 
@@ -735,15 +786,28 @@ defmodule OpenAgents.Forge.Assignments do
   defp idempotency_key(attrs),
     do: attrs[:idempotency_key] || attrs["idempotency_key"] || Ecto.UUID.generate()
 
-  defp deadline(attrs, now) do
+  # Three ceilings, and the deadline is the earliest of them: the deployment's
+  # own TTL, the wall clock the issue's scope buys, and whatever the caller
+  # asked for. A caller may narrow — a short run on a well-understood issue is
+  # a reasonable thing to ask for — and a caller may not widen, because then
+  # the bound would come from whoever pressed the button rather than from the
+  # outcome that was requested.
+  defp deadline(attrs, issue, now) do
     configured = attrs[:deadline_at] || attrs["deadline_at"]
     ttl = Application.get_env(:openagents, :box_api, [])[:ttl_seconds] || 3_600
-    maximum = DateTime.add(now, ttl, :second)
+
+    maximum =
+      earlier(
+        DateTime.add(now, ttl, :second),
+        DateTime.add(now, WorkScope.wall_clock_ms(issue), :millisecond)
+      )
 
     if match?(%DateTime{}, configured) and DateTime.compare(configured, maximum) == :lt,
       do: configured,
       else: maximum
   end
+
+  defp earlier(left, right), do: if(DateTime.compare(left, right) == :lt, do: left, else: right)
 
   defp claim_error(changeset) do
     if Enum.any?(changeset.errors, fn {field, _} -> field == :issue_id end),

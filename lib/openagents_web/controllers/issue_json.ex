@@ -48,8 +48,27 @@ defmodule OpenAgentsWeb.IssueJSON do
     %{
       threads: Enum.map(activity.threads, &thread_json(&1, url_base)),
       receipts: Enum.map(activity.receipts, &receipt_json/1),
-      releases: releases_json(Map.get(activity, :releases))
+      releases: releases_json(Map.get(activity, :releases)),
+      traces: Enum.map(Map.get(activity, :traces) || [], &trace_json/1)
     }
+  end
+
+  # The trace half of the activity answer, and the narrowest of the four.
+  # `OpenAgents.Issues.TraceDisclosure` has already decided which fields this
+  # reader may have, so the renderer takes what it was given and adds nothing:
+  # a field absent here is a field the schedule withheld, and no rung of that
+  # schedule carries a step of the trajectory.
+  defp trace_json(trace) do
+    Map.take(trace, [
+      :id,
+      :assignment_id,
+      :tier,
+      :schema_version,
+      :step_count,
+      :recorded_at,
+      :digest,
+      :byte_size
+    ])
   end
 
   # The release half of the activity answer. `receipts` matches a receipt to

@@ -6,9 +6,9 @@ defmodule OpenAgents.Transparency.WorkDisclosureTest do
   anything.
 
   **The schedule is exhaustive.** Every column of `forge_assignments`,
-  `work_jobs`, and `issue_evidence` is either the source of exactly one
-  scheduled field or a member of that family's never list. A new column is a
-  failure here until somebody decides which, so the schedule cannot quietly
+  `work_jobs`, `issue_evidence`, and `traces` is either the source of exactly
+  one scheduled field or a member of that family's never list. A new column is
+  a failure here until somebody decides which, so the schedule cannot quietly
   fall behind the schema it describes.
 
   **The rungs discriminate on a repository nothing else gates.** Every tier
@@ -34,6 +34,7 @@ defmodule OpenAgents.Transparency.WorkDisclosureTest do
   alias OpenAgents.Repo
   alias OpenAgents.Repositories
   alias OpenAgents.Transparency
+  alias OpenAgents.Traces.Trace
   alias OpenAgents.Transparency.{ArtifactLink, WorkDisclosure}
   alias OpenAgents.Work.Job
 
@@ -64,7 +65,8 @@ defmodule OpenAgents.Transparency.WorkDisclosureTest do
     @schema_for %{
       attempt: Assignment,
       work_job: Job,
-      evidence: EvidenceEntry
+      evidence: EvidenceEntry,
+      trace: Trace
     }
 
     for {family, schema} <- @schema_for do

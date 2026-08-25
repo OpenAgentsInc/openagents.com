@@ -56,7 +56,7 @@ defmodule OpenAgents.Transparency.WorkDisclosure do
   alias OpenAgents.Transparency
   alias OpenAgents.Transparency.ArtifactLink
 
-  @families ~w(attempt work_job evidence)a
+  @families ~w(attempt work_job evidence trace)a
 
   # ── attempt (forge_assignments) ─────────────────────────────────────────
   #
@@ -223,27 +223,93 @@ defmodule OpenAgents.Transparency.WorkDisclosure do
     :artifact_link_id
   ]
 
-  # The schema column each projection field is read from. Three fields are not
+  # ── trace (traces) ──────────────────────────────────────────────────────
+  #
+  # An uploaded ATIF trajectory of one attempt. This is the family with the
+  # emptiest ladder, and deliberately so.
+  #
+  # An ATIF document is the whole run: every prompt, every assistant message,
+  # every tool call's raw arguments, and every tool result. That is precisely
+  # the material the `work_job` never list withholds — `goal`, `context_hint`,
+  # and `delegation` are withheld because they restate the contents of a
+  # repository in a place the repository's own gate does not cover, and a
+  # trajectory restates far more of it than any of the three. So **no rung
+  # publishes the document**, not even to the account that uploaded it. `glass`
+  # here is not "the owner may read the steps"; the owner reads their own
+  # document through their own account, and this schedule governs what an issue
+  # discloses about it.
+  #
+  # What the ladder does publish is the existence and the shape of a
+  # trajectory, which is the disclosure that has value on an issue: a reader
+  # learns that the work was recorded, how long it ran, and — at `ledger` — the
+  # digest by which a holder of the bytes can prove they hold these bytes.
+  @trace %{
+    id: :pulse,
+    # `ATIF-v1.7` or the like. A format name, and the existence disclosure.
+    schema_version: :pulse,
+    # How many steps the trajectory has. A count of work, the same class of
+    # fact as `work_job.tool_call_count`, and the reason it sits a rung lower
+    # is that it says nothing about a repository at all.
+    step_count: :pulse,
+    recorded_at: :pulse,
+    # A digest addresses content. TRANSPARENCY-001 puts shas at `:l2`, and this
+    # is a sha of a document. It is also the only field that does anything
+    # outside this page: a reader who obtained the bytes through the owner's
+    # own export can prove they are the bytes this attempt recorded.
+    digest: :ledger,
+    byte_size: :ledger
+  }
+
+  @trace_never [
+    # The uploader. TRANSPARENCY-001 publishes a principal's kind, never its
+    # id, and here even the kind is already known: a trace is bound only by the
+    # account that requested the attempt.
+    :user_id,
+    # The consent that gates this projection. The tier is the gate, not a field
+    # the gate discloses — the same reason `transparency_tier` is never on the
+    # attempt.
+    :visibility,
+    # The attempt is projected as its own family, gated on its own fields.
+    :assignment_id
+  ]
+
+  # `document` is the source column of two scheduled fields and of no third,
+  # exactly as `requesting_principal` is the source of `requester_kind` and of
+  # nothing else. The column is read; the document is not published. Every rung
+  # of this family takes a bounded fact *about* the trajectory and none takes a
+  # step out of it, which is what `project/3` enforces by name rather than by
+  # intention.
+
+  # The schema column each projection field is read from. Five fields are not
   # columns: `requester_kind` is the kind half of `requesting_principal`,
-  # `budget` is the bounds half of `budget_snapshot`, and the evidence edge
-  # renames two columns. Naming the source column is what lets the enumeration
-  # be exact — every column of the three tables is either the source of one
-  # scheduled field or a member of the never list, never both and never
-  # neither.
+  # `budget` is the bounds half of `budget_snapshot`, the evidence edge renames
+  # two columns, and the trace's `schema_version` and `step_count` are read
+  # out of the document it never publishes. Naming the source column is what
+  # lets the enumeration be exact — every column of the four tables is either
+  # the source of one scheduled field or a member of the never list, never both
+  # and never neither.
   @attempt_columns %{requester_kind: :requesting_principal}
   @work_job_columns %{budget: :budget_snapshot}
   @evidence_columns %{commit: :commit_sha, recorded_at: :inserted_at}
+  @trace_columns %{schema_version: :document, step_count: :document, recorded_at: :inserted_at}
 
-  @schedule %{attempt: @attempt, work_job: @work_job, evidence: @evidence}
+  @schedule %{
+    attempt: @attempt,
+    work_job: @work_job,
+    evidence: @evidence,
+    trace: @trace
+  }
   @columns %{
     attempt: @attempt_columns,
     work_job: @work_job_columns,
-    evidence: @evidence_columns
+    evidence: @evidence_columns,
+    trace: @trace_columns
   }
   @never %{
     attempt: @attempt_never,
     work_job: @work_job_never,
-    evidence: @evidence_never
+    evidence: @evidence_never,
+    trace: @trace_never
   }
 
   @doc "The families this schedule covers."

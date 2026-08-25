@@ -463,6 +463,103 @@ defmodule OpenAgentsWeb.IssueShowLiveTest do
     assert html =~ "system"
   end
 
+  # ── #10: the issue page shows the evidence, not only the work ───────────
+  #
+  # `OUTCOME-001` says an accepted outcome "explains which receipt satisfied
+  # each acceptance criterion, so the issue page can show the mapping". The
+  # verdict was durable and graded before this, and nowhere on the page. These
+  # cover the rail that renders it, the release link, and the ATIF trace line
+  # — which says a trajectory exists and never shows one.
+
+  test "an issue with no evidence has no evidence section at all", %{conn: conn} do
+    issue = issue!(%{"title" => "Nothing has happened"})
+
+    {:ok, view, _html} = live(conn, path(issue))
+
+    refute has_element?(view, "#issue-evidence")
+  end
+
+  test "the work form says what bound the attempt, and why", %{conn: conn} do
+    issue = issue!(%{"title" => "Unscoped", "body" => "Make it better."})
+
+    {:ok, _view, html} = live(conn, path(issue))
+
+    assert html =~ "does not state its"
+    assert html =~ "acceptance criteria"
+    assert html =~ "no claim against it can be accepted"
+  end
+
+  test "a scoped issue says it buys the full hour", %{conn: conn} do
+    issue =
+      issue!(%{
+        "title" => "Scoped",
+        "body" => """
+        ## Problem
+
+        A bound that comes from the caller is not a bound.
+
+        ## Scope
+
+        One admission point.
+
+        ## Acceptance criteria
+
+        - The wall clock comes from the issue.
+
+        ## Success metrics
+
+        An unscoped issue cannot buy an hour.
+        """
+      })
+
+    {:ok, _view, html} = live(conn, path(issue))
+
+    assert html =~ "states every section an accepted outcome needs"
+  end
+
+  test "the evidence rail says a trajectory exists and never shows one", %{conn: conn} do
+    issue = issue!(%{"title" => "Recorded"})
+    attempt = record_attempt(issue, "agent/trace", -60, %{state: "completed"})
+
+    owner = OpenAgents.Repo.get!(Accounts.User, attempt.requesting_principal["id"])
+
+    {:ok, _trace, :created} =
+      OpenAgents.Traces.store(
+        owner,
+        %{
+          "schema_version" => "ATIF-v1.7",
+          "steps" => [%{"step_id" => 1, "message" => "SECRET-TRAJECTORY-CONTENT"}]
+        },
+        assignment_id: attempt.id,
+        visibility: "ledger"
+      )
+
+    {:ok, view, html} = live(conn, path(issue))
+
+    assert has_element?(view, "#issue-evidence")
+    assert html =~ "An agent trajectory of 1 step was recorded"
+    assert html =~ "contents are not published here"
+
+    refute html =~ "SECRET-TRAJECTORY-CONTENT"
+  end
+
+  test "a trace the uploader did not consent to publishing stays off the page", %{conn: conn} do
+    issue = issue!(%{"title" => "Withheld"})
+    attempt = record_attempt(issue, "agent/dark", -60, %{state: "completed"})
+    owner = OpenAgents.Repo.get!(Accounts.User, attempt.requesting_principal["id"])
+
+    {:ok, _trace, :created} =
+      OpenAgents.Traces.store(
+        owner,
+        %{"schema_version" => "ATIF-v1.7", "steps" => []},
+        assignment_id: attempt.id
+      )
+
+    {:ok, view, _html} = live(conn, path(issue))
+
+    refute has_element?(view, "#issue-evidence")
+  end
+
   defp repository do
     OpenAgents.Repositories.get_by_path!("OpenAgentsInc", "openagents.com")
   end

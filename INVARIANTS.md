@@ -5330,6 +5330,32 @@ number, title, and body rather than typed beside it, so what the agent was
 asked to do and what the issue asked for cannot drift. The body is clamped well
 inside the 8,000-byte prompt bound rather than refused for being long.
 
+**The scope and the limits are the issue's, at the admission rather than at a
+surface.** The objective moved out of `IssueShowLive` into
+`OpenAgents.Issues.WorkScope`, which `Assignments.create/1` applies, so the API
+route gets what the page always had: a caller that supplies no prompt gets the
+issue's, and the prompt names the branch the attempt was actually admitted on
+rather than the one that was suggested.
+
+The wall clock is read from the issue too. `OUTCOME-001` says a claim against
+an issue that does not state its problem, scope, acceptance criteria, and
+success metrics is `incomplete` and can never be accepted — so an unscoped
+issue cannot buy delivery, because no amount of agent time on it can produce a
+graded outcome. It buys a short exploratory window instead; an issue that
+states all four buys the full hour. The deadline is the earliest of that
+window, the deployment's TTL, and whatever the caller asked for: narrowing is
+admitted, widening is not, because a bound the requester can raise is a
+suggestion.
+
+The bound outlives the request. It becomes `timeout_ms` on the delegation, then
+`wall_clock_ms` in `work_jobs.budget_snapshot`, which is the `budget` field
+`OUTCOME-001` grades the attempt's binding against — so the issue's own scope
+is what the attempt is later held to, through records rather than through a
+parameter that was true once. The four sections are read by
+`OpenAgents.Issues.CompletionClaims.sections/1`, the grader's own parser: a
+second one could disagree about whether an issue is scoped, and then an attempt
+could buy a budget for work its own grader would refuse.
+
 **The target's own declarations decide, never the request.** The working
 directory is chosen from the computer's `roots` and the agent from its probed
 `acp_agents`; a value outside either is replaced by one the computer declared
@@ -5397,13 +5423,70 @@ and a crafted event cancels nothing. An attempt that started and never finished
 renders as started and nothing more: the timeline invents no terminal event.
 
 Evidence: `OpenAgentsWeb.IssueShowLive`, `OpenAgents.Forge.Assignments`,
-`OpenAgents.ComputerAgentJobs`,
+`OpenAgents.Issues.WorkScope`, `OpenAgents.ComputerAgentJobs`,
 `test/openagents_web/live/issue_start_work_live_test.exs`,
-`test/openagents_web/live/issue_live_work_test.exs`, and
+`test/openagents_web/live/issue_live_work_test.exs`,
+`test/openagents/issues/work_scope_test.exs`, and
 `test/openagents/forge/assignment_test.exs`.
 
 (Amended 2026-08-24, issue #147: an attempt was narrated in prose and shown
 without moving. It is now shown, live, and narrated nowhere.)
+
+(Amended 2026-08-25, issue #10: the objective was read from the issue on the
+page and from the caller in the API, and the wall clock came from the caller on
+both. Both now come from the issue at the admission, and a caller may narrow
+the bound but not widen it.)
+
+### ISSUE-005 — An issue says an agent trajectory exists and never publishes one
+
+Status: Current
+
+An ATIF trace is the whole run: every prompt, every assistant message, every
+tool call's raw arguments, every tool result.
+`OpenAgents.Transparency.WorkDisclosure` already refuses `work_jobs.goal`,
+`context_hint`, and `delegation` because publishing them would restate the
+contents of a repository in a place the repository's own gate does not cover,
+and a trajectory restates more of it than all three. So the `trace` family's
+schedule stops at the digest.
+
+**No rung returns the document.** `pulse` publishes that a trajectory exists,
+its schema version, its step count, and when it was recorded. `ledger` adds the
+digest — by which a holder of the bytes can prove they hold *these* bytes — and
+the size. `glass` adds nothing. Not for an operator, and not for the account
+that uploaded it: an owner reads their own document through their own account,
+and this schedule governs what an *issue* discloses. `document` is the source
+column of two counted facts and of no third, which
+`OpenAgents.Transparency.WorkDisclosureTest` enforces against the live schema
+in both directions.
+
+This is therefore not a readback, and must not be mistaken for one. `EXIT-001`
+publishes to anonymous callers that `POST /api/v1/traces` accepts an upload and
+no route reads one back. That gap stays open and stays disclosed.
+
+**Two gates, and both must pass.** *Consent* is `traces.visibility`, which the
+uploader sets and which defaults to `dark`; a `dark` trace is invisible on an
+issue to everyone, an operator included, and no viewer's own rung raises it.
+*Repository access* is applied first by `OpenAgents.Issues.Activity`, exactly
+as it is to receipts: a reader who cannot read the repository sees no traces
+however widely the uploader consented, because consenting to publish your own
+trajectory is not consenting to publish which attempts ran in somebody else's
+private repository. The effective tier is the lower of the two and is then
+clamped again by the viewer, so adding a gate can only remove fields.
+
+**The binding is checked, not believed.** A trace names the attempt it is a
+trajectory of, never the issue: the attempt already records which issue and
+which repository it was admitted against, so the issue gains its traces and the
+repository gate gains something to act on without the issue holding a second
+work record. Only the account named as the attempt's requesting principal may
+bind, and any other is refused with `trace_assignment_forbidden` rather than
+having the field dropped — a caller that believed it was filing evidence should
+not be told it succeeded.
+
+Evidence: `OpenAgents.Issues.TraceDisclosure`, `OpenAgents.Traces`,
+`OpenAgents.Transparency.WorkDisclosure`,
+`test/openagents/issues/trace_disclosure_test.exs`,
+`test/openagents/transparency/work_disclosure_test.exs`, and
+`test/openagents_web/live/issue_show_live_test.exs`.
 
 ### CAPACITY-001 — Capacity is a bounded, owner-safe quantity projection
 
@@ -5783,4 +5866,5 @@ contract; the invariant prose above defines the assertion, not the filename.
 | FORUM-001 | `test/openagents/forum/legacy_surface_test.exs`, `test/openagents_web/live/forum_live_test.exs`, `test/openagents_web/route_authority_test.exs`, `test/openagents_web/sidebar_state_test.exs` |
 | ISSUE-002 | `test/openagents/issues/task_list_test.exs`, `test/openagents/issues/task_references_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |
 | ISSUE-003 | `test/openagents/issues/evidence_test.exs`, `test/openagents_web/controllers/issue_controller_test.exs` |
-| ISSUE-004 | `test/openagents_web/live/issue_live_work_test.exs`, `test/openagents_web/live/issue_start_work_live_test.exs` |
+| ISSUE-004 | `test/openagents_web/live/issue_live_work_test.exs`, `test/openagents_web/live/issue_start_work_live_test.exs`, `test/openagents/issues/work_scope_test.exs` |
+| ISSUE-005 | `test/openagents/issues/trace_disclosure_test.exs`, `test/openagents/transparency/work_disclosure_test.exs`, `test/openagents_web/live/issue_show_live_test.exs` |

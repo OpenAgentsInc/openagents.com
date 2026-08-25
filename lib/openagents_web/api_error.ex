@@ -110,7 +110,13 @@ defmodule OpenAgentsWeb.ApiError do
     # what it lost to rather than fetching again.
     "run_already_graded" => {409, "This run is already graded"},
     "recipe_digest_conflict" => {409, "That recipe digest already names another run"},
-    "trace_body_too_large" => {413, "The trace body is larger than the maximum allowed size"}
+    "trace_body_too_large" => {413, "The trace body is larger than the maximum allowed size"},
+    # Binding a trace to an attempt is an authority claim, so a caller that
+    # names somebody else's attempt is refused rather than having the binding
+    # dropped: it should not be told the trajectory was filed as evidence when
+    # it was not.
+    "trace_assignment_forbidden" =>
+      {403, "Only the account that requested an attempt may bind a trace to it"}
   }
 
   @doc """

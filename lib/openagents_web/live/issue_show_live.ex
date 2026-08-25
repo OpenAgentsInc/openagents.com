@@ -45,6 +45,9 @@ defmodule OpenAgentsWeb.IssueShowLive do
   alias OpenAgents.Issues.Comment
   alias OpenAgents.Issues.TaskReferences
   alias OpenAgents.Issues.Issue
+  alias OpenAgents.Issues.Activity
+  alias OpenAgents.Issues.CompletionClaims
+  alias OpenAgents.Issues.WorkScope
   alias OpenAgents.Labels
   alias OpenAgents.Machines
   alias OpenAgents.Markdown
@@ -479,7 +482,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
   # The branch is never the default or a protected one — `Assignments` refuses
   # both — so the suggestion names the issue it is for.
   defp branch_or_default(branch, _issue) when is_binary(branch) and branch != "", do: branch
-  defp branch_or_default(_branch, issue), do: "agent/issue-#{issue.number}"
+  defp branch_or_default(_branch, issue), do: WorkScope.branch(issue)
 
   # The one attempt that may be live per issue, per
   # `forge_assignments_one_active_issue_index`. Naming it is what turns a
@@ -503,7 +506,7 @@ defmodule OpenAgentsWeb.IssueShowLive do
         "branch" => params["branch"],
         "agent_id" => params["agent_id"],
         "cwd" => params["cwd"],
-        "prompt" => objective(issue, params["branch"]),
+        "prompt" => WorkScope.objective(issue, params["branch"]),
         "requesting_user" => user,
         "requesting_principal" => user
       }
@@ -537,24 +540,6 @@ defmodule OpenAgentsWeb.IssueShowLive do
 
   # The objective comes from the issue, not from free text typed beside it, so
   # what the agent was asked to do and what the issue asked for cannot drift.
-  # `ComputerAgentJobs` bounds a prompt at 8,000 bytes, so the body is clamped
-  # well inside that rather than refused for being long.
-  defp objective(issue, branch) do
-    body = issue.body || ""
-    body = if byte_size(body) > 6_000, do: binary_part(body, 0, 6_000), else: body
-
-    """
-    Do the work issue ##{issue.number} describes, and nothing beyond it.
-
-    Title: #{issue.title}
-
-    #{body}
-
-    Commit your work on the branch `#{branch}`, which is the only branch you     are authorized to write. Push it when the work is done.
-    """
-    |> String.trim()
-  end
-
   # Every refusal the admission already returns, said as itself. A generic
   # failure here would hide the one fact that tells someone what to do next.
   defp refusal(:assignment_issue_claimed, socket) do
@@ -688,9 +673,65 @@ defmodule OpenAgentsWeb.IssueShowLive do
     |> assign(:form, to_form(Issues.change_issue(issue)))
     |> assign(:events, timeline(issue, comments, attempts, references, syncs, base))
     |> assign(:subscribed?, subscribed?(issue, socket.assigns.current_user))
+    |> assign(:activity, Activity.for_issue(issue, socket.assigns.current_user))
+    |> assign(:claims, CompletionClaims.for_issue(issue))
+    |> assign(:scope, WorkScope.for_issue(issue))
     |> assign(:now, DateTime.utc_now())
     |> arm_tick()
   end
+
+  # ── the evidence a reader can act on ────────────────────────────────────
+  #
+  # The page shows the same assembly the activity endpoint returns, read
+  # through the same functions with the same viewer, so the two cannot come
+  # apart. Nothing here is a second store: releases are computed from the
+  # commit graph, receipts are reached from the issue's own closing
+  # references, traces are projected through their own two gates, and the
+  # verdict is the row `OUTCOME-001` already wrote.
+
+  defp released_in(%{releases: %{released_in: %{} = release}}), do: release
+  defp released_in(_activity), do: nil
+
+  defp receipt_families(%{receipts: receipts}) do
+    receipts
+    |> Enum.frequencies_by(& &1.family)
+    |> Enum.sort_by(&elem(&1, 0))
+  end
+
+  defp receipt_families(_activity), do: []
+
+  defp visible_traces(%{traces: traces}) when is_list(traces), do: traces
+  defp visible_traces(_activity), do: []
+
+  # The verdict a reader needs is the most recent one. Earlier verdicts stay on
+  # the record and are read through the API; repeating every attempt's grade in
+  # the rail would bury the one that decided whether the issue closed.
+  defp latest_claim([]), do: nil
+  defp latest_claim(claims), do: List.last(claims)
+
+  defp claim_tone(%{state: "accepted"}), do: "success"
+  defp claim_tone(%{state: "not_applicable"}), do: "muted"
+  defp claim_tone(_claim), do: "warning"
+
+  defp claim_sentence(%{state: "accepted", closed: true}),
+    do: "An accepted outcome closed this issue."
+
+  defp claim_sentence(%{state: "accepted"}),
+    do:
+      "An outcome was accepted. This repository has not opted in to verified closing, " <>
+        "so the issue stays open for a person to decide."
+
+  defp claim_sentence(%{state: "not_applicable"}),
+    do: "Graded as outside the gate: human work, or a repository with agents disabled."
+
+  defp claim_sentence(%{state: state}), do: "The last claim graded #{state}."
+
+  defp short_sha(sha) when is_binary(sha), do: binary_part(sha, 0, min(byte_size(sha), 7))
+  defp short_sha(_sha), do: ""
+
+  defp section_word(:acceptance_criteria), do: "acceptance criteria"
+  defp section_word(:success_metrics), do: "success metrics"
+  defp section_word(section), do: to_string(section)
 
   # The clock is armed only while an attempt is live, so an issue nobody is
   # working on costs no timer at all, and only on the transition into a live
@@ -934,6 +975,27 @@ defmodule OpenAgentsWeb.IssueShowLive do
           <section :if={@can_write or @live_attempt} id="issue-work" class="properties-panel__group">
             <h3 class="properties-panel__heading">Agent work</h3>
 
+            <%!-- The bound an attempt inherits, said before anyone starts one.
+            An unscoped issue is worth naming here rather than at grading time:
+            `OUTCOME-001` refuses a claim against it, so the sentence is what
+            turns a later `incomplete` into something a person could have
+            fixed first. See `OpenAgents.Issues.WorkScope`. --%>
+            <p :if={@can_write} class="properties-panel__none" id="issue-work-bound">
+              <%= if @scope.scoped? do %>
+                This issue states every section an accepted outcome needs, so an attempt on it
+                runs for up to an hour.
+              <% else %>
+                This issue does not state its {Enum.map_join(
+                  @scope.missing_sections,
+                  ", ",
+                  &section_word/1
+                )}, so no claim against it can be accepted and an attempt runs for {div(
+                  @scope.wall_clock_ms,
+                  60_000
+                )} minutes.
+              <% end %>
+            </p>
+
             <div :if={@live_attempt} id="issue-work-live">
               <p class="properties-panel__none">
                 Work is <span id="issue-work-state">{@live_attempt.state}</span>{live_attempt_branch(
@@ -996,6 +1058,62 @@ defmodule OpenAgentsWeb.IssueShowLive do
                 Start work
               </.button>
             </.form>
+          </section>
+
+          <%!-- What happened to this issue, as records rather than as prose.
+          Every line is reachable through
+          `GET /api/v1/repos/:owner/:repo/issues/:n/activity` for the same
+          reader, because both read `OpenAgents.Issues.Activity` with the same
+          viewer. The section is absent when the issue has no evidence at all,
+          rather than present and empty. --%>
+          <section
+            :if={
+              released_in(@activity) || receipt_families(@activity) != [] ||
+                visible_traces(@activity) != [] || latest_claim(@claims)
+            }
+            id="issue-evidence"
+            class="properties-panel__group"
+          >
+            <h3 class="properties-panel__heading">Evidence</h3>
+
+            <p :if={claim = latest_claim(@claims)} id="issue-evidence-claim">
+              <.badge data-tone={claim_tone(claim)}>{claim.state}</.badge>
+              <span class="properties-panel__none">{claim_sentence(claim)}</span>
+            </p>
+
+            <p :if={release = released_in(@activity)} id="issue-evidence-release">
+              <span class="properties-panel__none">
+                Shipped in the release at <code>{short_sha(release.sha)}</code>, promoted {Calendar.strftime(
+                  release.promoted_at,
+                  "%Y-%m-%d"
+                )}.
+              </span>
+            </p>
+
+            <p
+              :for={{family, count} <- receipt_families(@activity)}
+              id={"issue-evidence-receipt-#{family}"}
+              class="properties-panel__none"
+            >
+              {count} {family} {if count == 1, do: "receipt", else: "receipts"}
+            </p>
+
+            <%!-- An issue says a trajectory exists. It never shows one: the
+            steps carry prompts, tool arguments, and tool results, which the
+            repository's own gate exists to withhold. See
+            `OpenAgents.Issues.TraceDisclosure`. --%>
+            <p
+              :for={trace <- visible_traces(@activity)}
+              id={"issue-evidence-trace-#{trace.id}"}
+              class="properties-panel__none"
+            >
+              An agent trajectory of {trace.step_count} {if trace.step_count == 1,
+                do: "step",
+                else: "steps"} was recorded<%= if trace[:digest] do %>
+                , as <code>{short_sha(String.replace_prefix(trace.digest, "sha256:", ""))}</code>
+              <% end %>. Its
+              contents are not published here.
+            </p>
           </section>
 
           <%!-- Outside the properties panel on purpose. Everything in that

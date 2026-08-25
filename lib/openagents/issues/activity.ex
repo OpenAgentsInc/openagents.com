@@ -19,28 +19,40 @@ defmodule OpenAgents.Issues.Activity do
   release's revision contains the issue's commits. It reads the same closing
   references this module already reads, so the two halves of the answer can
   never disagree about which commits the issue claims.
+
+  `traces` answers the fourth question — what the agent actually did — and
+  answers it deliberately narrowly. It is the ATIF trajectories uploaded
+  against this issue's attempts, projected through
+  `OpenAgents.Issues.TraceDisclosure`, which publishes that a trajectory exists
+  and never publishes one. Both gates apply: the uploader's consent, which
+  defaults to withholding, and the repository authority already checked here.
   """
 
   alias OpenAgents.Accounts.User
   alias OpenAgents.Forge
-  alias OpenAgents.Issues.{ClosingReferences, Issue, Releases}
+  alias OpenAgents.Forge.Assignments
+  alias OpenAgents.Issues.{ClosingReferences, Issue, Releases, TraceDisclosure}
   alias OpenAgents.Repositories
   alias OpenAgents.Repositories.Repository
   alias OpenAgents.Threads
+  alias OpenAgents.Transparency.WorkDisclosure
 
   @doc """
-  The threads, receipts, and releases that name `issue` and that `reader` may
-  read.
+  The threads, receipts, releases, and traces that name `issue` and that
+  `reader` may read.
 
-  Returns `%{threads: [...], receipts: [...], releases: %{...}}`. An issue with
-  no closing references or no matching receipts returns an empty `:receipts`
-  list, an issue with no readable threads returns an empty `:threads` list, and
-  an issue no release carried returns `OpenAgents.Issues.Releases.empty/0`.
+  Returns `%{threads: [...], receipts: [...], releases: %{...}, traces:
+  [...]}`. An issue with no closing references or no matching receipts returns
+  an empty `:receipts` list, an issue with no readable threads returns an empty
+  `:threads` list, an issue no release carried returns
+  `OpenAgents.Issues.Releases.empty/0`, and an issue whose attempts recorded no
+  trace a reader may see returns an empty `:traces` list.
   """
   @spec for_issue(Issue.t(), User.t() | nil) :: %{
           threads: [Threads.Thread.t()],
           receipts: [map()],
-          releases: Releases.t()
+          releases: Releases.t(),
+          traces: [TraceDisclosure.projection()]
         }
   def for_issue(%Issue{} = issue, %User{} = reader), do: do_for_issue(issue, reader)
   def for_issue(%Issue{} = issue, _reader), do: do_for_issue(issue, nil)
@@ -50,15 +62,26 @@ defmodule OpenAgents.Issues.Activity do
     repository = visible_repository(issue, reader)
     threads = if reader, do: Threads.list_for_issue(issue, reader), else: []
 
-    {receipts, releases} =
+    {receipts, releases, traces} =
       if repository do
         {issue |> ClosingReferences.for_issue() |> receipts_for_references(repository),
-         Releases.for_issue(repository, issue)}
+         Releases.for_issue(repository, issue), traces_for_issue(issue, repository, reader)}
       else
-        {[], Releases.empty()}
+        {[], Releases.empty(), []}
       end
 
-    %{threads: threads, receipts: receipts, releases: releases}
+    %{threads: threads, receipts: receipts, releases: releases, traces: traces}
+  end
+
+  # The attempts are read unclamped and then thrown away: what a reader gets is
+  # the trace projection, and the attempt itself is published by
+  # `Assignments.attempt_summary/2` on its own family. Reading them whole here
+  # is what lets `TraceDisclosure` clamp against the attempt's real tier rather
+  # than against an already-clamped shadow of it.
+  defp traces_for_issue(%Issue{} = issue, %Repository{} = repository, reader) do
+    issue
+    |> Assignments.attempt_records_for_issue()
+    |> TraceDisclosure.for_attempts(WorkDisclosure.viewer(repository, reader))
   end
 
   defp visible_repository(%Issue{repository_id: repository_id}, reader) do

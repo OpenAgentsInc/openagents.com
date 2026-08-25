@@ -387,6 +387,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "account did with a model is its threads, which export whole."
     },
     %{
+      family: :response,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "The OpenResponses surface. It answers a request and records " <>
+          "nothing — no model is consulted, no row is written — so there is " <>
+          "no record for an account to take away. This classification is " <>
+          "true of the stub and must be revisited the day a real loop " <>
+          "stands behind the route and starts recording what it was asked."
+    },
+    %{
       family: :gym,
       api?: true,
       status: :not_user_data,

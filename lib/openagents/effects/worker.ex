@@ -97,6 +97,10 @@ defmodule OpenAgents.Effects.Worker do
         {:ok, _effect} = Effects.complete(effect)
         :ok
 
+      {:ok, %{} = result} ->
+        {:ok, _effect} = Effects.complete(effect, result)
+        :ok
+
       {:ok, _result} ->
         {:ok, _effect} = Effects.complete(effect)
         :ok

@@ -206,9 +206,21 @@ defmodule OpenAgents.Effects do
   therefore reports success without contradicting the record.
   """
   @spec complete(Effect.t() | String.t()) :: {:ok, Effect.t()} | {:error, :not_found}
-  def complete(%Effect{id: id}), do: complete(id)
+  def complete(%Effect{id: id}), do: complete(id, nil)
 
-  def complete(id) when is_binary(id) do
+  def complete(id) when is_binary(id), do: complete(id, nil)
+
+  @doc """
+  Record that an effect's handler succeeded, with an optional result payload.
+
+  A handler that reached a terminal outcome without an external result can pass
+  `nil`; a handler that produced an explicit result map can record it. The same
+  idempotency rule applies: a completed effect returns its existing row.
+  """
+  @spec complete(Effect.t() | String.t(), map() | nil) :: {:ok, Effect.t()} | {:error, :not_found}
+  def complete(%Effect{id: id}, result), do: complete(id, result)
+
+  def complete(id, result) when is_binary(id) do
     now = DateTime.utc_now()
 
     {_count, updated} =
@@ -219,6 +231,7 @@ defmodule OpenAgents.Effects do
           lease_owner: nil,
           lease_expires_at: nil,
           last_error: nil,
+          result: result,
           completed_at: now,
           updated_at: now
         ]

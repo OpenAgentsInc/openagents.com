@@ -41,6 +41,7 @@ defmodule OpenAgents.Effects.Effect do
     field :lease_owner, :string
     field :lease_expires_at, :utc_datetime_usec
     field :last_error, :string
+    field :result, :map
 
     field :claimed_at, :utc_datetime_usec
     field :completed_at, :utc_datetime_usec
@@ -66,7 +67,8 @@ defmodule OpenAgents.Effects.Effect do
       :source_sequence,
       :idempotency_key,
       :maximum_attempts,
-      :available_at
+      :available_at,
+      :result
     ])
     |> validate_required([
       :kind,

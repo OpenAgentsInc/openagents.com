@@ -12,7 +12,8 @@ defmodule OpenAgents.Effects.Registry do
   """
 
   @default_handlers %{
-    "work.launch_worker" => OpenAgents.Effects.Handlers.WorkLaunch
+    "work.launch_worker" => OpenAgents.Effects.Handlers.WorkLaunch,
+    "email.delivery" => OpenAgents.Effects.Handlers.EmailDelivery
   }
 
   @doc "Every admitted effect kind and its handler."

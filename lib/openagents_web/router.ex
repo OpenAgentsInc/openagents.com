@@ -185,6 +185,7 @@ defmodule OpenAgentsWeb.Router do
       live "/status", NetworkStatusLive, :index
       live "/changelog", ChangelogLive, :index
       live "/leaderboard", LeaderboardLive, :index
+      live "/coder", CoderLive, :index
 
       # Forum reads are public: the context's readability predicates decide
       # what an anonymous reader sees, and posting still requires an account.

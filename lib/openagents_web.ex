@@ -19,7 +19,7 @@ defmodule OpenAgentsWeb do
 
   def static_paths,
     do:
-      ~w(assets fonts images favicon.ico favicon-32x32.png favicon-16x16.png apple-touch-icon.png robots.txt)
+      ~w(assets fonts images favicon.ico favicon-32x32.png favicon-16x16.png apple-touch-icon.png robots.txt install.sh)
 
   @doc """
   Prefixes for static files that are served under a digested name.
@@ -34,7 +34,7 @@ defmodule OpenAgentsWeb do
   It only widens what may be served to names that begin this way; a file still
   has to exist in `priv/static` to be sent.
   """
-  def static_prefixes, do: ~w(favicon apple-touch-icon robots)
+  def static_prefixes, do: ~w(favicon apple-touch-icon robots install)
 
   @doc """
   `Plug.Static` options for this application's endpoint.

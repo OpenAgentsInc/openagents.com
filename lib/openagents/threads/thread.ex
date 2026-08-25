@@ -19,6 +19,7 @@ defmodule OpenAgents.Threads.Thread do
   import Ecto.Changeset
 
   alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.Issues.Issue
   alias OpenAgents.Threads.Event
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -59,6 +60,7 @@ defmodule OpenAgents.Threads.Thread do
     field :report_type, :string
     has_many :events, Event, foreign_key: :thread_id
     belongs_to :parent, __MODULE__, foreign_key: :parent_thread_id
+    belongs_to :issue, Issue, type: :id
     timestamps()
   end
 
@@ -122,7 +124,8 @@ defmodule OpenAgents.Threads.Thread do
       :permission_profile,
       :repository,
       :visibility,
-      :parent_thread_id
+      :parent_thread_id,
+      :issue_id
     ])
     |> put_change(:owner_visitor_id, owner_visitor_id)
     |> put_change(:status, "open")
@@ -143,6 +146,7 @@ defmodule OpenAgents.Threads.Thread do
     |> validate_inclusion(:visibility, @visibilities)
     |> foreign_key_constraint(:owner_visitor_id)
     |> foreign_key_constraint(:parent_thread_id)
+    |> foreign_key_constraint(:issue_id)
     |> check_constraint(:parent_thread_id, name: :threads_no_self_parent)
     |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:objective, name: :threads_objective_bound_check)

@@ -97,11 +97,14 @@ defmodule OpenAgentsWeb.IssueJSON do
   end
 
   defp put_extension(json, issue, assigns) do
+    url_base = url_base(assigns)
+
     extension =
       %{}
       |> put_dependencies(Map.get(assigns, :dependencies), issue)
       |> put_progress(Map.get(assigns, :progress), issue)
       |> put_work(Map.get(assigns, :work), issue)
+      |> put_threads(Map.get(assigns, :threads), issue, url_base)
       |> put_evidence(Map.get(assigns, :evidence), issue)
       |> put_completion_claims(Map.get(assigns, :completion_claims), issue)
 
@@ -129,6 +132,27 @@ defmodule OpenAgentsWeb.IssueJSON do
 
   defp put_work(extension, attempts, issue) when is_map(attempts) do
     Map.put(extension, :work, attempts |> Map.get(issue.id, []) |> Enum.map(&attempt_json/1))
+  end
+
+  defp put_threads(extension, nil, _issue, _url_base), do: extension
+
+  defp put_threads(extension, threads, issue, url_base) when is_map(threads) do
+    Map.put(
+      extension,
+      :threads,
+      threads |> Map.get(issue.id, []) |> Enum.map(&thread_json(&1, url_base))
+    )
+  end
+
+  defp thread_json(thread, url_base) do
+    %{
+      id: thread.id,
+      status: thread.status,
+      visibility: thread.visibility,
+      inserted_at: thread.inserted_at,
+      updated_at: thread.updated_at,
+      url: "#{url_base}/api/v1/threads/#{thread.id}"
+    }
   end
 
   defp put_evidence(extension, nil, _issue), do: extension

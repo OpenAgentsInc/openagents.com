@@ -12,6 +12,7 @@ defmodule OpenAgentsWeb.IssueController do
   alias OpenAgents.Agents.Agent
   alias OpenAgents.PullRequests
   alias OpenAgents.Repositories
+  alias OpenAgents.Threads
   alias OpenAgents.Transparency.WorkDisclosure
   alias OpenAgentsWeb.ApiError
 
@@ -37,6 +38,7 @@ defmodule OpenAgentsWeb.IssueController do
         work: Assignments.attempts_for_issues(issues, viewer(repository, reader)),
         evidence: Evidence.for_issues(issues, viewer(repository, reader)),
         completion_claims: CompletionClaims.for_issues(issues),
+        threads: threads_by_issue(issues, reader),
         pagination: %{
           page: Issues.parse_page(params["page"]),
           per_page: Issues.per_page(),
@@ -295,7 +297,8 @@ defmodule OpenAgentsWeb.IssueController do
         pull_requests: PullRequests.markers_by_issue_id([issue]),
         work: work(issue, repository, reader),
         evidence: evidence(issue, repository, reader),
-        completion_claims: completion_claims(issue)
+        completion_claims: completion_claims(issue),
+        threads: threads_by_issue([issue], reader)
       )
     else
       {:error, :not_found} -> not_found(conn)
@@ -374,6 +377,14 @@ defmodule OpenAgentsWeb.IssueController do
     do: Issues.progress_map([issue], reader)
 
   defp progress(%Issue{} = issue, _reader), do: Issues.progress_map([issue])
+
+  # Threads are the durable work record, and an issue lists the ones that name
+  # it through the same read authority the thread surface already enforces.
+  defp threads_by_issue(issues, %OpenAgents.Accounts.User{} = reader) when is_list(issues) do
+    Map.new(issues, &{&1.id, Threads.list_for_issue(&1, reader)})
+  end
+
+  defp threads_by_issue(_issues, _reader), do: %{}
 
   # The extension namespace is discoverable from the response itself, so a
   # client never has to infer which OpenAgents fields this deployment sends.

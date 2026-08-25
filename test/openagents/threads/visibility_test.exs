@@ -17,6 +17,8 @@ defmodule OpenAgents.Threads.VisibilityTest do
   alias OpenAgents.Threads.Thread
   alias OpenAgents.Transparency
 
+  import OpenAgents.IssuesFixtures
+
   defp owner(key), do: github_user("thread-visibility-#{key}")
 
   defp event_types(thread) do
@@ -171,6 +173,48 @@ defmodule OpenAgents.Threads.VisibilityTest do
 
       assert {:ok, export} = AccountExport.build(user)
       assert [%{"visibility" => "dark"}] = export["threads"]["records"]
+    end
+  end
+
+  describe "issue references" do
+    test "a thread can name an issue and remain unnamed" do
+      user = owner("issue-link")
+      repository = repository_fixture()
+      issue = issue_fixture(repository, title: "Linked issue")
+
+      assert {:ok, named} =
+               Threads.open(user, "Work for the issue", issue_id: issue.id)
+
+      assert named.issue_id == issue.id
+
+      assert {:ok, unnamed} = Threads.open(user, "Work with no issue")
+      assert is_nil(unnamed.issue_id)
+    end
+
+    test "list_for_issue returns only threads the reader may read" do
+      repository = repository_fixture()
+      issue = issue_fixture(repository, title: "Issue with threads")
+      owner = owner("issue-owner")
+      stranger = owner("issue-stranger")
+
+      {:ok, dark} =
+        Threads.open(owner, "Owner-only thread", issue_id: issue.id)
+
+      {:ok, ledger} =
+        Threads.open(owner, "Ledger thread",
+          issue_id: issue.id,
+          visibility: "ledger"
+        )
+
+      owner_threads = Threads.list_for_issue(issue, owner) |> Enum.map(& &1.id)
+      assert dark.id in owner_threads
+      assert ledger.id in owner_threads
+
+      stranger_threads =
+        Threads.list_for_issue(issue, stranger) |> Enum.map(& &1.id)
+
+      refute dark.id in stranger_threads
+      assert ledger.id in stranger_threads
     end
   end
 end

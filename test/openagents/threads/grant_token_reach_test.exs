@@ -61,6 +61,7 @@ defmodule OpenAgents.Threads.GrantTokenReachTest do
     {:latest_grant, 1} => :thread_struct,
     {:list_events, 1} => :thread_struct,
     {:list_events, 2} => :thread_struct,
+    {:list_for_issue, 2} => :list_by_issue,
     {:list_for_user, 1} => :scoped_by_owner,
     {:list_for_user, 2} => :scoped_by_owner,
     {:maximum_event_batch, 0} => :no_thread,

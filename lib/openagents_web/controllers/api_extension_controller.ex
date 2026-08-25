@@ -54,6 +54,27 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     }
   }
 
+  @thread %{
+    "type" => "object",
+    "description" =>
+      "One thread that named this issue. A thread is the durable work " <>
+        "record; it is listed here, not stored on the issue.",
+    "properties" => %{
+      "id" => %{"type" => "string"},
+      "status" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Threads.Thread.statuses()
+      },
+      "visibility" => %{
+        "type" => "string",
+        "enum" => OpenAgents.Threads.Thread.visibilities()
+      },
+      "inserted_at" => %{"type" => "string"},
+      "updated_at" => %{"type" => "string"},
+      "url" => %{"type" => "string"}
+    }
+  }
+
   @work_attempt %{
     "type" => "object",
     "description" =>
@@ -295,6 +316,14 @@ defmodule OpenAgentsWeb.ApiExtensionController do
               "only what the attempt already publishes on the issue: target, " <>
               "state, branch, exact commit, and timestamps. Prompts, " <>
               "conversations, reports, and credentials stay out."
+        },
+        "threads" => %{
+          "type" => "array",
+          "items" => @thread,
+          "description" =>
+            "Every thread that named this issue and that the reader may read, " <>
+              "newest first. A thread is the durable work record; it is " <>
+              "listed here, not stored as a second work record on the issue."
         },
         "evidence" => %{
           "type" => "array",

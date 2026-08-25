@@ -76,6 +76,7 @@ defmodule OpenAgents.Threads do
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference
   alias OpenAgents.Inference.{Credit, Grant, Models}
+  alias OpenAgents.Issues.Issue
   alias OpenAgents.Repo
   alias OpenAgents.Threads.Event
   alias OpenAgents.Threads.Thread
@@ -164,7 +165,8 @@ defmodule OpenAgents.Threads do
       reasoning_effort:
         OpenRouter.reasoning_effort(Keyword.get(options, :reasoning, @default_reasoning)),
       permission_profile: Keyword.get(options, :permission_profile, @default_permission_profile),
-      parent_thread_id: parent_id
+      parent_thread_id: parent_id,
+      issue_id: Keyword.get(options, :issue_id)
     }
 
     Multi.new()
@@ -325,9 +327,7 @@ defmodule OpenAgents.Threads do
   not invent an anonymous one (THREAD-002).
   """
   @spec fetch_readable(User.t(), String.t()) :: {:ok, Thread.t(), :owner | :reader} | :error
-  def fetch_readable(%User{id: user_id}, thread_id) when is_binary(thread_id) do
-    wide = Thread.wide_visibilities()
-
+  def fetch_readable(%User{} = user, thread_id) when is_binary(thread_id) do
     with {:ok, id} <- Ecto.UUID.cast(thread_id),
          {%Thread{} = thread, owner_user_id} <-
            Repo.one(
@@ -335,11 +335,11 @@ defmodule OpenAgents.Threads do
                join: v in Visitor,
                on: v.id == t.owner_visitor_id,
                where: t.id == ^id,
-               where: v.user_id == ^user_id or t.visibility in ^wide,
                select: {t, v.user_id}
              )
+             |> readable_for(user)
            ) do
-      {:ok, thread, if(owner_user_id == user_id, do: :owner, else: :reader)}
+      {:ok, thread, if(owner_user_id == user.id, do: :owner, else: :reader)}
     else
       _unreadable -> :error
     end
@@ -367,6 +367,32 @@ defmodule OpenAgents.Threads do
     )
     |> in_repository(Keyword.get(options, :repository))
     |> Repo.all()
+  end
+
+  @doc """
+  The threads that name `issue` and that `reader` may read, newest first.
+
+  A thread is returned when the reader is its owner or the thread's
+  visibility is a wide tier, because a thread's transcript is private until
+  its owner says otherwise (THREAD-002).
+  """
+  @spec list_for_issue(Issue.t(), User.t()) :: [Thread.t()]
+  def list_for_issue(%Issue{id: issue_id}, %User{} = reader) do
+    from(t in Thread,
+      join: v in Visitor,
+      on: v.id == t.owner_visitor_id,
+      where: t.issue_id == ^issue_id,
+      order_by: [desc: t.inserted_at, desc: t.id],
+      limit: ^@maximum_listed
+    )
+    |> readable_for(reader)
+    |> Repo.all()
+  end
+
+  defp readable_for(query, %User{id: user_id}) do
+    wide = Thread.wide_visibilities()
+
+    where(query, [t, v], v.user_id == ^user_id or t.visibility in ^wide)
   end
 
   defp in_repository(query, repository) when is_binary(repository),
@@ -677,8 +703,6 @@ defmodule OpenAgents.Threads do
     end
   end
 
-  @doc "How many threads one account may hold open at once, or `nil` for no limit."
-  @spec maximum_open_per_account() :: pos_integer() | nil
   @doc """
   What a thread has spent, summed across every grant it has ever held.
 
@@ -710,8 +734,11 @@ defmodule OpenAgents.Threads do
     usage =
       Enum.reduce(grants, %{}, fn {_calls, usage}, acc ->
         Enum.reduce(usage || %{}, acc, fn
-          {key, value}, inner when is_integer(value) -> Map.update(inner, key, value, &(&1 + value))
-          {_key, _value}, inner -> inner
+          {key, value}, inner when is_integer(value) ->
+            Map.update(inner, key, value, &(&1 + value))
+
+          {_key, _value}, inner ->
+            inner
         end)
       end)
 
@@ -722,6 +749,8 @@ defmodule OpenAgents.Threads do
     }
   end
 
+  @doc "How many threads one account may hold open at once, or `nil` for no limit."
+  @spec maximum_open_per_account() :: pos_integer() | nil
   def maximum_open_per_account, do: setting(:maximum_open_threads_per_account, nil)
 
   @doc "How many threads this account currently holds open."

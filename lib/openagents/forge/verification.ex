@@ -37,6 +37,16 @@ defmodule OpenAgents.Forge.Verification do
   * `anchor_unreachable` — the caller supplied an anchor for a sequence this
     log does not have, or for an entry that carries no link.
 
+  Three more findings come before any of that, because a check of the wrong
+  repository is worse than no check. The caller names a repository by storage
+  key or by name, `OpenAgents.Forge.RepoRef` resolves the two apart, and a
+  reference that settles on no single repository stops there:
+  `repository_not_found`, `repository_name_ambiguous` for a name two
+  repositories answer to, and `repository_lookup_unavailable` when the lookup
+  a name needs could not be made. None of them builds a path out of the string,
+  which is what made an absent repository report `wal_unreadable` — the finding
+  that means "your log is gone" — for a log that was never there (issue #190).
+
   What this cannot do is stated as plainly as what it can. Content addressing
   and the chain make tampering *evident*, not *impossible*. An operator who
   rewrites an entry, its key, the index, and every link after it produces a
@@ -53,7 +63,7 @@ defmodule OpenAgents.Forge.Verification do
   only an operator who serves something other than what was pushed.
   """
 
-  alias OpenAgents.Forge.{ReceiptRepository, Repos, WAL}
+  alias OpenAgents.Forge.{RepoRef, Repos, WAL}
 
   @internal_ref_prefix "refs/internal/"
 
@@ -65,8 +75,8 @@ defmodule OpenAgents.Forge.Verification do
 
   @typedoc "The verification outcome for one repository."
   @type report :: %{
-          repo: String.t(),
-          storage_key: String.t() | nil,
+          repo: RepoRef.ref(),
+          storage_key: RepoRef.storage_key() | nil,
           entries: non_neg_integer(),
           findings: [finding()],
           head: anchor() | nil,
@@ -75,6 +85,15 @@ defmodule OpenAgents.Forge.Verification do
 
   @doc """
   Verify one repository's served state against its WAL.
+
+  `repo_ref` is either a storage key or a name — the `openagents.com` or
+  `OpenAgentsInc/openagents.com` a person actually has. `OpenAgents.Forge.RepoRef`
+  resolves the two apart, and the report names both what was asked for
+  (`:repo`) and the key that was checked (`:storage_key`), so the mapping is
+  visible rather than assumed. A name that names no repository, or two, is a
+  finding — `repository_not_found` or `repository_name_ambiguous` — and never a
+  path built out of the name, which is what made an absent repository look
+  half-alive (issue #190).
 
   Returns `{:ok, report}` when the two agree and `{:error, report}` when they
   do not. The report always carries the findings list so a caller can render
@@ -92,46 +111,45 @@ defmodule OpenAgents.Forge.Verification do
   `:chained_from`, the first sequence that carries a link. Entries before that
   sequence predate the chain and are not covered by it.
   """
-  @spec verify(String.t(), keyword()) :: {:ok, report()} | {:error, report()}
-  def verify(repo_or_path, opts \\ []) when is_binary(repo_or_path) and is_list(opts) do
-    {repo, storage_key} = resolve_repo_or_path(repo_or_path)
-
-    if is_nil(storage_key) do
-      report(repo, nil, [], [finding("repository_not_found", %{"repo" => repo})])
-    else
-      case WAL.read_index(storage_key) do
-        {:ok, _generation, index} ->
-          entries = WAL.entries(index)
-
-          findings =
-            sequence_findings(entries) ++
-              entry_findings(storage_key, entries) ++
-              ref_findings(storage_key, index) ++
-              object_findings(storage_key, entries) ++
-              reachability_findings(storage_key, index) ++
-              chain_findings(entries) ++
-              anchor_findings(entries, normalize_anchor(opts[:anchor]))
-
-          report(repo, storage_key, entries, findings)
-
-        {:error, reason} ->
-          report(repo, storage_key, [], [
-            finding("wal_unreadable", %{"reason" => inspect(reason)})
-          ])
-      end
+  @spec verify(RepoRef.ref(), keyword()) :: {:ok, report()} | {:error, report()}
+  def verify(repo_ref, opts \\ []) when is_binary(repo_ref) and is_list(opts) do
+    case RepoRef.storage_key(repo_ref) do
+      {:ok, storage_key} -> verify_storage_key(repo_ref, storage_key, opts)
+      {:error, reason} -> report(repo_ref, nil, [], [resolution_finding(repo_ref, reason)])
     end
   end
 
-  defp resolve_repo_or_path(repo) when is_binary(repo) do
-    if String.contains?(repo, "/") do
-      case ReceiptRepository.resolve(repo) do
-        %{storage_key: storage_key} -> {repo, storage_key}
-        nil -> {repo, nil}
-      end
-    else
-      {repo, repo}
+  defp verify_storage_key(repo_ref, storage_key, opts) do
+    case WAL.read_index(storage_key) do
+      {:ok, _generation, index} ->
+        entries = WAL.entries(index)
+
+        findings =
+          sequence_findings(entries) ++
+            entry_findings(storage_key, entries) ++
+            ref_findings(storage_key, index) ++
+            object_findings(storage_key, entries) ++
+            reachability_findings(storage_key, index) ++
+            chain_findings(entries) ++
+            anchor_findings(entries, normalize_anchor(opts[:anchor]))
+
+        report(repo_ref, storage_key, entries, findings)
+
+      {:error, reason} ->
+        report(repo_ref, storage_key, [], [
+          finding("wal_unreadable", %{"reason" => inspect(reason)})
+        ])
     end
   end
+
+  defp resolution_finding(repo_ref, :ambiguous_name),
+    do: finding("repository_name_ambiguous", %{"repo" => repo_ref})
+
+  defp resolution_finding(repo_ref, :repository_lookup_unavailable),
+    do: finding("repository_lookup_unavailable", %{"repo" => repo_ref})
+
+  defp resolution_finding(repo_ref, _not_found),
+    do: finding("repository_not_found", %{"repo" => repo_ref})
 
   defp report(repo, storage_key, entries, findings) do
     report = %{

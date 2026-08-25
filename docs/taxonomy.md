@@ -59,6 +59,17 @@ set of content-addressed, chained entry objects per repository, and it is the
 only ref authority. PostgreSQL holds projections of it — push receipts — never
 refs. A push is a receipt, not a deployment.
 
+**Repository name and storage key** — two strings for one repository, and never
+interchangeable. The **name** is what a person has: `openagents.com`, or the
+`owner/name` path they clone, which is what `OpenAgents.Forge.Repos.allowed_repos/0`
+lists and what a build or deploy receipt records. It is unique only inside a
+namespace. The **storage key** is `Repository.storage_key`: opaque, unique
+across the forge, and the single path segment the WAL keeps a log under and a
+node keeps a bare repository under. Say which one you mean, and resolve a name
+with `OpenAgents.Forge.RepoRef` before it reaches a path — a name is a legal
+path segment, so using one as a key silently builds a directory that projects
+nothing, which is what issue #190 found on the live node.
+
 **MirrorWatch** — the component that exports accepted `main` commits from the
 forge to GitHub. GitHub is a mirror only; nothing on GitHub can affect what
 the forge serves.

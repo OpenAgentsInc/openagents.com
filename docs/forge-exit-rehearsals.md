@@ -200,11 +200,22 @@ any document, so it refutes a rewrite only for a reader who kept a copy.
 
 ### Steps
 
-1. On the forge host, with no database available:
+1. On the forge host:
 
    ```sh
-   bin/openagents rpc 'OpenAgents.Forge.Verification.verify("{storage_key}") |> IO.inspect()'
+   bin/openagents rpc 'OpenAgents.Forge.Verification.verify("OpenAgentsInc/openagents.com") |> IO.inspect()'
    ```
+
+   The argument is the repository you clone — an `owner/name` path, or the
+   name `OpenAgents.Forge.Repos.allowed_repos/0` lists.
+   `OpenAgents.Forge.RepoRef` resolves it to the storage key the log is kept
+   under, and the report names both, so you can see which repository was
+   checked. A storage key still works and is the reference to use with no
+   database available: resolving a *name* is the one step that reads the
+   `repositories` table, and a key resolves against the WAL alone. A name that
+   names no repository here, or two, is reported as `repository_not_found` or
+   `repository_name_ambiguous` rather than checked as if it were a key
+   (issue #190).
 
 2. Expect `findings: []`. Each non-empty finding names one disagreement:
    `entry_object_missing`, `entry_digest_mismatch`, `entry_sequence_broken`,
@@ -214,7 +225,7 @@ any document, so it refutes a rewrite only for a reader who kept a copy.
 3. Anchor the check against a link you remember from an earlier run:
 
    ```sh
-   bin/openagents rpc 'OpenAgents.Forge.Verification.verify("{storage_key}", anchor: %{seq: 41, link: "…"}) |> IO.inspect()'
+   bin/openagents rpc 'OpenAgents.Forge.Verification.verify("OpenAgentsInc/openagents.com", anchor: %{seq: 41, link: "…"}) |> IO.inspect()'
    ```
 
    A rewritten prefix reports `anchor_mismatch`. Without the anchor argument
@@ -246,6 +257,19 @@ assumed: `OpenAgents.Forge.WAL` exports `chain_link/2` and `entry_link/1`, and
 `OpenAgents.Forge.Verification` exports `verify/2` beside `verify/1`.
 `GET /api/v1/repos/OpenAgentsInc/openagents.com/pushes` answers `200` and
 serves the same head link and `chained_from` the verifier reports.
+
+**Amended 2026-08-25 (issue #190).** Step 1 above used to say `{storage_key}`,
+and the obvious value to substitute — the name
+`OpenAgents.Forge.Repos.allowed_repos/0` returns, `openagents.com` — was not
+one. It went into a path, the path held a bare repository that projects no log,
+and the report was `wal_unreadable`: the finding that means "your write-ahead
+log is missing", for a repository whose log is intact under the key
+`ecd89cf6-f602-479f-9f47-266307345aaa`. `OpenAgents.Forge.RepoRef` now resolves
+a name to a key before anything is read, so the step works with the name an
+operator has, and a name that settles on no repository is
+`repository_not_found` rather than an empty repository that looks half-alive.
+The stale `openagents.com.git` bare repository on the live node is untouched by
+that change: it is operator state, and removing it is an operator's decision.
 
 The bound in this rehearsal's own preamble still holds, with one correction:
 an anchor **is** published now, at

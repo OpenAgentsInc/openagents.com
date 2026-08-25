@@ -4487,11 +4487,33 @@ projection of that record. Whether the projection still matches is therefore a
 question with an answer, and `OpenAgents.Forge.Verification` computes it from
 the WAL and the repository alone.
 
-The verifier accepts either a `Repository.storage_key` or an `owner/name` path.
-An `owner/name` path is resolved to a storage key through the same repository
-mapping the serving path uses, and only the resolved key is checked against the
-WAL. The report names both the requested path and the resolved key so an operator
-sees the mapping.
+The verifier accepts a repository *name* — `openagents.com`, or the
+`owner/name` path a person clones — or a `Repository.storage_key`.
+`OpenAgents.Forge.RepoRef` is the one place the two are told apart, and it
+answers in a fixed order: a string under which the WAL holds a log is a storage
+key and resolves to itself, reaching no database; anything else is a name and
+is resolved through the same repository mapping the serving path uses,
+namespace aliases included. Only the resolved key is checked against the WAL,
+and the report names both the requested reference and the resolved key so an
+operator sees the mapping.
+
+A reference that settles on no single repository stops there, and stops with a
+finding that says so: `repository_not_found`, `repository_name_ambiguous` for a
+name two repositories answer to, or `repository_lookup_unavailable` when the
+lookup a name needs could not be made. None of them turns the string into a
+path. That is the difference this rule now carries: before it, a name went
+straight into a path segment, and a name whose repository was stored under a
+different key reported `wal_unreadable` — the finding that means the log is
+gone — about a log that was intact. `Repos.allowed_repos/0` returns names, so
+the list an operator reads before verifying is a list of references the
+verifier accepts.
+
+(Amended 2026-08-25, issue #190: the live forge's first repository is stored
+under an opaque key while its configured name is `openagents.com`, so the
+documented first step of rehearsal 2 verified nothing and said the log was
+missing. `REPOSITORY-001`'s sentence about that repository keeping the
+historical `openagents.com` key describes the migration's seed and no longer
+describes the live row.)
 
 Independence here is structural, not a promise: the WAL-and-repository check
 itself reaches no database, because a verifier that queried PostgreSQL for the
@@ -4529,8 +4551,10 @@ cache. This proves that divergence between the WAL and what is served is
 detectable. The first is about replay; the second is about detection, and
 neither substitutes for the other.
 
-Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.WAL`,
-`OpenAgents.Forge.Repos`, and `test/openagents/forge/independence_test.exs`.
+Evidence: `OpenAgents.Forge.Verification`, `OpenAgents.Forge.RepoRef`,
+`OpenAgents.Forge.WAL`, `OpenAgents.Forge.Repos`,
+`test/openagents/forge/independence_test.exs`, and
+`test/openagents/forge/repo_ref_test.exs`.
 
 ### EXIT-003 — Recovery comes from the WAL, and the mirror is strictly lossy
 

@@ -29,7 +29,7 @@ defmodule OpenAgents.Forge.Pushes do
 
   alias OpenAgents.{Analytics, Repositories}
   alias OpenAgents.Accounts.User
-  alias OpenAgents.Forge.{GitHTTP, PushReceipt, Repos, Sync, WAL}
+  alias OpenAgents.Forge.{GitHTTP, PushReceipt, RepoRef, Repos, Sync, WAL}
   alias OpenAgents.Issues.ClosingReferences
   alias OpenAgents.Repo
   alias OpenAgents.Repositories.Repository
@@ -463,14 +463,17 @@ defmodule OpenAgents.Forge.Pushes do
     end
   end
 
-  @doc "Resolve a configured repository name or storage key to its bare-cache storage key."
-  def mirror_storage_key(repo) when is_binary(repo) do
-    storage_key_for_storage_key(repo) || storage_key_for_name(repo) || repo
-  rescue
-    _database_unavailable -> repo
-  end
+  @doc """
+  Resolve a configured repository name or storage key to its bare-cache
+  storage key.
 
-  def mirror_storage_key(repo), do: repo
+  One name for the resolution every caller needs, so a name is turned into a
+  key in one place: `OpenAgents.Forge.RepoRef.storage_key_or_ref/1`. A string
+  that settles on no repository is returned unchanged, which is what a mirror
+  push and a cache warm need — both act on a bare repository that may be keyed
+  by the string itself.
+  """
+  def mirror_storage_key(repo), do: RepoRef.storage_key_or_ref(repo)
 
   @doc "Return the logical and canonical repository keys used by derived push receipts."
   def receipt_repo_keys(repo) when is_binary(repo) do
@@ -479,22 +482,6 @@ defmodule OpenAgents.Forge.Pushes do
   end
 
   def receipt_repo_keys(repo), do: [repo]
-
-  defp storage_key_for_storage_key(storage_key) do
-    Repo.one(
-      from repository in Repository,
-        where: repository.storage_key == ^storage_key,
-        select: repository.storage_key
-    )
-  end
-
-  defp storage_key_for_name(name) do
-    Repo.one(
-      from repository in Repository,
-        where: repository.name == ^name,
-        select: repository.storage_key
-    )
-  end
 
   defp repository_name(storage_key) when is_binary(storage_key) do
     Repo.one(

@@ -16,6 +16,7 @@ defmodule OpenAgents.Tools.Repository do
   inside its root before any filesystem call.
   """
 
+  alias OpenAgents.Forge.RepoRef
   alias OpenAgents.Forge.Repos
   alias OpenAgents.Forge.Sync
 
@@ -35,8 +36,24 @@ defmodule OpenAgents.Tools.Repository do
     )
   end
 
-  @doc "The forge repo the coding lane edits."
+  @doc """
+  The *name* of the forge repository the coding lane edits.
+
+  A name, not a storage key: receipts and targets record this string, and
+  anything that reaches the disk resolves it first with `storage_key/0`.
+  """
   def repo, do: @repo
+
+  @doc """
+  The storage key the coding lane's repository is stored under.
+
+  `repo/0` is a name and the forge keys durable state by
+  `Repository.storage_key`, so the two are only the same string for a
+  repository old enough to predate the split. Cloning from the name's path
+  instead of the key's is how a workspace came to be cut from a bare
+  repository projecting nothing (issue #190).
+  """
+  def storage_key, do: RepoRef.storage_key_or_ref(@repo)
 
   @doc "This job's clone directory (may not exist yet)."
   def workspace_dir("work-job:" <> job_id), do: Path.join(jobs_dir(), "job-" <> job_id)
@@ -54,8 +71,9 @@ defmodule OpenAgents.Tools.Repository do
     if File.dir?(Path.join(dir, ".git")) do
       {:ok, dir}
     else
-      Sync.ensure_fresh(@repo)
-      bare = Repos.bare_path(@repo)
+      storage_key = storage_key()
+      Sync.ensure_fresh(storage_key)
+      bare = Repos.bare_path(storage_key)
       File.mkdir_p!(jobs_dir())
 
       case System.cmd("git", ["clone", "--quiet", bare, dir], stderr_to_stdout: true) do

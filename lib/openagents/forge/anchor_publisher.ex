@@ -44,9 +44,18 @@ defmodule OpenAgents.Forge.AnchorPublisher do
 
   def handle_info(_message, state), do: {:noreply, state}
 
+  @doc false
+  defp publish_impl do
+    Application.get_env(:openagents, :forge_anchor_publish_impl, Anchor)
+  end
+
   @doc "One publication pass. Public so a test can drive it without the timer."
   def publish do
-    case Anchor.publish() do
+    do_publish(publish_impl())
+  end
+
+  defp do_publish(anchor_mod) do
+    case anchor_mod.publish() do
       {:ok, anchor} ->
         {:ok, anchor}
 

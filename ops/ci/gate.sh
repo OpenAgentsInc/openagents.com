@@ -3,7 +3,7 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
-required_stages='compile production_compile precommit cluster javascript direct_transaction relup_topology relup version_chain interrupted_install rolling_replacement contracts staging_infra release_smoke'
+required_stages='compile production_compile precommit enumeration_proofs cluster javascript direct_transaction relup_topology relup version_chain interrupted_install rolling_replacement contracts staging_infra release_smoke'
 mode=${1:-run}
 
 if [ "$(git -C "$repo_root" rev-parse --is-inside-work-tree 2>/dev/null || true)" != "true" ]; then
@@ -114,6 +114,7 @@ cd "$repo_root"
 run_stage compile env MIX_ENV=test mix compile --warnings-as-errors
 run_stage production_compile env MIX_ENV=prod mix compile --warnings-as-errors
 run_stage precommit env MIX_ENV=test mix precommit
+run_stage enumeration_proofs env MIX_ENV=test sh ops/ci/enumeration-proofs.sh
 run_stage cluster env MIX_ENV=test mix test --warnings-as-errors --only cluster
 run_stage javascript env MIX_ENV=test npm --prefix assets test
 run_stage direct_transaction env MIX_ENV=test mix test --warnings-as-errors \
@@ -172,6 +173,7 @@ cat >"$receipt_temp" <<EOF
     "compile": {"status": "passed", "duration_seconds": $compile_duration_seconds},
     "production_compile": {"status": "passed", "duration_seconds": $production_compile_duration_seconds},
     "precommit": {"status": "passed", "duration_seconds": $precommit_duration_seconds},
+    "enumeration_proofs": {"status": "passed", "duration_seconds": $enumeration_proofs_duration_seconds},
     "cluster": {"status": "passed", "duration_seconds": $cluster_duration_seconds},
     "javascript": {"status": "passed", "duration_seconds": $javascript_duration_seconds},
     "direct_transaction": {"status": "passed", "duration_seconds": $direct_transaction_duration_seconds},

@@ -36,6 +36,11 @@ prose() {
   mix cmd elixir ops/ci/docs-check.exs
 }
 
+enumeration_proofs() {
+  echo "precommit: running enumeration proofs"
+  sh ops/ci/enumeration-proofs.sh
+}
+
 sh ops/dev/install-push-guard.sh --ensure
 
 # Everything this change touches: the working tree against HEAD, plus anything
@@ -79,3 +84,4 @@ EOF_PATHS
 
 echo "precommit: prose only (${changed//$'\n'/, }) — running the checks that read prose."
 prose
+enumeration_proofs

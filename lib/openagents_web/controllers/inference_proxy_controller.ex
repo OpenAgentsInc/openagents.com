@@ -97,7 +97,8 @@ defmodule OpenAgentsWeb.InferenceProxyController do
       instructions: join_text(system),
       input: Enum.flat_map(turns, &input_message/1),
       tool_definitions: tool_definitions(body["tools"]),
-      tool_outputs: tool_outputs(turns)
+      tool_outputs: tool_outputs(turns),
+      max_output: model.max_output
     }
 
     if request.input == [] do

@@ -151,6 +151,8 @@ if config_env() == :dev do
   config :openagents, :openai_api_key, optional_text.("OPENAI_API_KEY")
   config :openagents, :openrouter_api_key, optional_text.("OPENROUTER_API_KEY")
   config :openagents, :gemini_api_key, optional_text.("GEMINI_API_KEY")
+
+  config :openagents, :vercel_gateway_api_key, optional_text.("AI_GATEWAY_API_KEY")
   config :openagents, :box_api_key, optional_text.("BOX_API_KEY")
 end
 

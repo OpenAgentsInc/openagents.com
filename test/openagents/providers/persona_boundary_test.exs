@@ -65,6 +65,7 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
   @adapters %{
     OpenAgents.Providers.OpenAI => :outbound_http,
     OpenAgents.Providers.OpenRouter => :outbound_http,
+    OpenAgents.Providers.VercelGateway => :outbound_http,
     OpenAgents.Providers.RecordingTestProvider => :in_process,
     OpenAgents.Providers.Test => :in_process,
     OpenAgents.Providers.UnconfiguredTestProvider => :in_process,
@@ -99,6 +100,7 @@ defmodule OpenAgents.Providers.PersonaBoundaryTest do
     OpenAgents.Conversations => :pins_a_composed_request,
     OpenAgents.Providers.OpenAI => :adapter,
     OpenAgents.Providers.OpenRouter => :adapter,
+    OpenAgents.Providers.VercelGateway => :adapter,
     OpenAgents.Providers.RecordingTestProvider => :adapter,
     OpenAgents.Providers.Test => :adapter,
     OpenAgents.Providers.Request => :the_struct_itself

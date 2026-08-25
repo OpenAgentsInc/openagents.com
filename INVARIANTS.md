@@ -1180,10 +1180,21 @@ is the list of models a grant may name, and it keeps the id a client asks for
 grants that already name the model. The adapter for each model is read from
 configuration, so no caller holds a compile-time dependency on one.
 
+A third lane, `OpenAgents.Providers.VercelGateway`, reaches models through
+Vercel's AI Gateway rather than a vendor directly. It speaks the same chat
+completions the OpenRouter adapter does, so it reuses that adapter's request
+building and stream decoding and differs only in endpoint, credential, and the
+provider it pins. The pin is the point: Gemini is served there by both `google`
+and `vertex`, and only `vertex` spends this account's Google credits, so
+`vercel_gateway_providers` names the provider set and an unpinned fallback
+cannot quietly spend money instead.
+
 Evidence: `OpenAgents.Providers.ProviderEvent`, `OpenAgents.Providers.OpenAI`,
 `OpenAgents.Providers.OpenAI.StreamDecoderTest`,
 `OpenAgents.Providers.OpenRouter`,
 `OpenAgents.Providers.OpenRouter.StreamDecoderTest`,
+`OpenAgents.Providers.VercelGateway`,
+`OpenAgents.Providers.VercelGatewayTest`,
 `OpenAgents.Inference.ModelsTest`, `OpenAgents.Providers.Test`,
 `OpenAgents.TurnProviderEventsTest`, and `OpenAgents.DependencyBoundaryTest`.
 

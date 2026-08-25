@@ -35,7 +35,7 @@ defmodule OpenAgents.InferenceTest do
       {:ok, grant, token} = Inference.mint(input)
 
       assert grant.status == "active"
-      assert grant.model_id == Application.fetch_env!(:openagents, :openai_model)
+      assert grant.model_id == OpenAgents.Inference.Models.default_id()
       assert String.starts_with?(token, "sig_")
       assert grant.max_calls > 0
       # Only the digest is stored; the token is not recoverable from the row.

@@ -83,4 +83,31 @@ defmodule OpenAgents.Providers.OpenRouterTest do
 
     Enum.map_join(frames, "", &("data: " <> Jason.encode!(&1) <> "\n\n")) <> "data: [DONE]\n\n"
   end
+
+  describe "how many tokens the answer may take" do
+    test "comes from the model's catalog entry, not a literal in this module" do
+      # Ox Alpha is a reasoning model: its thinking is charged against this
+      # allowance before a word of the answer is. Hardcoded at 4,096, a child
+      # agent with a real task spent the whole budget reasoning and returned an
+      # empty 200 after three minutes, which read as the proxy having failed.
+      request = %Request{
+        model_id: "stealth/ox-alpha",
+        instructions: "Be brief.",
+        input: [%{role: "user", content: "hello"}],
+        max_output: 64_000
+      }
+
+      assert OpenRouter.request_payload(request)[:max_tokens] == 64_000
+    end
+
+    test "defaults to a figure a caller that names none still works on" do
+      request = %Request{
+        model_id: "stealth/ox-alpha",
+        instructions: "Be brief.",
+        input: [%{role: "user", content: "hello"}]
+      }
+
+      assert OpenRouter.request_payload(request)[:max_tokens] == 4_096
+    end
+  end
 end

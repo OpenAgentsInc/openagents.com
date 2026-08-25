@@ -175,8 +175,16 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       assert body["code"] == "model_unavailable"
       assert Map.has_key?(body["errors"], "model")
-      # The refusal names what is currently available.
-      assert body["message"] =~ OpenAgents.Inference.Models.default_id()
+
+      # The refusal names what is currently available. Unconfiguring this lane
+      # takes every model on it, which is more than one now, so the check is
+      # that each surviving model is named rather than that the default is —
+      # the default may be on the lane that just went dark.
+      available =
+        Enum.filter(OpenAgents.Inference.Models.all(), &OpenAgents.Inference.Models.available?/1)
+
+      assert available != []
+      for model <- available, do: assert(body["message"] =~ model.id)
     end
 
     test "a model the proxy cannot route is refused, naming the field", %{conn: conn} do

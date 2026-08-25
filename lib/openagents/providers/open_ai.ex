@@ -84,7 +84,7 @@ defmodule OpenAgents.Providers.OpenAI do
       input: input_items(request),
       tools: Enum.map(request.tool_definitions, &tool_definition/1),
       parallel_tool_calls: false,
-      max_output_tokens: 4_096,
+      max_output_tokens: request.max_output,
       stream: true
     }
     |> maybe_put(:previous_response_id, request.previous_response_id)

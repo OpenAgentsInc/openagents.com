@@ -37,15 +37,15 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
   end
 
   test "a lane without a configured credential is listed unavailable, not omitted", %{conn: conn} do
-    previous = Application.get_env(:openagents, :openrouter_provider)
+    # The OpenAI lane, because the default now sits on the OpenRouter one and
+    # this test is about a lane going dark *without* taking the default with
+    # it: "served here, not currently configured" has to be distinguishable
+    # from "not served here" while the deployment still answers.
+    previous = Application.get_env(:openagents, :provider)
 
-    Application.put_env(
-      :openagents,
-      :openrouter_provider,
-      OpenAgents.Providers.UnconfiguredTestProvider
-    )
+    Application.put_env(:openagents, :provider, OpenAgents.Providers.UnconfiguredTestProvider)
 
-    on_exit(fn -> Application.put_env(:openagents, :openrouter_provider, previous) end)
+    on_exit(fn -> Application.put_env(:openagents, :provider, previous) end)
 
     body =
       conn
@@ -58,8 +58,10 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
     # availability changes.
     assert Enum.map(body["models"], & &1["id"]) == Models.ids()
 
-    ox_alpha = Enum.find(body["models"], &(&1["id"] == "ox-alpha"))
-    assert ox_alpha["availability"] == "unavailable"
+    luna =
+      Enum.find(body["models"], &(&1["id"] == Application.fetch_env!(:openagents, :openai_model)))
+
+    assert luna["availability"] == "unavailable"
 
     default_entry = Enum.find(body["models"], &(&1["id"] == body["default"]))
     assert default_entry["availability"] == "available"

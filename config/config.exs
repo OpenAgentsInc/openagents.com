@@ -110,6 +110,7 @@ config :openagents,
   voice_compaction_input_token_threshold: 16_000,
   provider: OpenAgents.Providers.OpenAI,
   openrouter_provider: OpenAgents.Providers.OpenRouter,
+  vercel_gateway_provider: OpenAgents.Providers.VercelGateway,
   openai_model: "gpt-5.6-luna",
   openai_api_key: nil,
   openrouter_api_key: nil,
@@ -122,25 +123,60 @@ config :openagents,
   # `provider` names a lane whose adapter module and credential are configured
   # separately, so no secret lives here; a lane whose credential is absent is
   # listed as unavailable, never silently substituted. `max_output` is the
-  # per-call output cap the proxy's adapters actually send (4,096 tokens);
+  # per-call output cap the proxy's adapters send for that model, and
   # `context_window` is the ceiling this deployment publishes for the lane.
+  #
+  # Gemini 3.7 Flash leads, so it is what a caller that names none gets: fast,
+  # a million tokens of context, and steady enough to hold a conversation.
+  #
+  # Ox Alpha is what delegated children run on. It is built for sustained
+  # agentic coding, which is what a child is given, and where it stalls the
+  # cost is one child rather than the conversation — a session opened on it
+  # answered "sup" with nothing at all, and a child's first request returned an
+  # empty 200 after three minutes.
+  #
+  # Luna is the backup, and is what answers where the OpenRouter credential is
+  # not configured and neither of the two above can be served.
   model_catalog: [
+    %{
+      id: "gemini-3.7-flash",
+      # Through the Vercel gateway, pinned to Vertex, so the call lands on
+      # Google's hardware and spends this account's Google credits. OpenRouter
+      # serves the same model and that lane worked, but its credits are not
+      # these credits.
+      provider: :vercel_gateway,
+      provider_model: "google/gemini-3.7-flash",
+      context_window: 1_048_576,
+      max_output: 65_536
+    },
+    %{
+      id: "ox-alpha",
+      provider: :openrouter,
+      provider_model: {:config, :openrouter_model},
+      # A million, per the model's own listing. The 256,000 here was a guess
+      # made before there was a page to read.
+      context_window: 1_000_000,
+      # Ox Alpha is a reasoning model, and its thinking is charged against this
+      # allowance before a single word of the answer is. At 4,096 a child agent
+      # with a real task spent the whole budget reasoning and returned an empty
+      # 200 after three minutes, which read as the proxy having failed.
+      max_output: 64_000
+    },
     %{
       id: {:config, :openai_model},
       provider: :openai,
       provider_model: {:config, :openai_model},
       context_window: 272_000,
       max_output: 4_096
-    },
-    %{
-      id: "ox-alpha",
-      provider: :openrouter,
-      provider_model: {:config, :openrouter_model},
-      context_window: 256_000,
-      max_output: 4_096
     }
   ],
   gemini_api_key: nil,
+  vercel_gateway_api_key: nil,
+  # Pin the gateway to Vertex for every model it serves here. The same Gemini
+  # slug is also served by `google` — the Generative Language endpoint, which
+  # is not where this account's credits are — and a silent fallback there would
+  # spend money beside a balance already paid for.
+  vercel_gateway_providers: ["vertex"],
   gemini_model: "gemini-3.7-flash",
   box_api_key: nil,
   box_api: [

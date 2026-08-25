@@ -203,7 +203,7 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert error["served"] == OpenAgents.Inference.Models.ids()
 
     # The grant's model_id stays Sarah's configured model, never the body's.
-    assert grant.model_id == Application.fetch_env!(:openagents, :openai_model)
+    assert grant.model_id == OpenAgents.Inference.Models.default_id()
   end
 
   test "a body naming a served model other than the grant's is refused, never substituted",
@@ -314,12 +314,17 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
   describe "routing the grant's model" do
     setup do
-      previous = Application.get_env(:openagents, :openrouter_provider)
-      Application.put_env(:openagents, :openrouter_provider, RecordingTestProvider)
+      # Both routed lanes, because these tests are about which model string
+      # reaches a provider and the models are spread across them: Ox Alpha on
+      # OpenRouter, Gemini on the gateway.
+      lanes = [:openrouter_provider, :vercel_gateway_provider]
+      previous = Map.new(lanes, &{&1, Application.get_env(:openagents, &1)})
+
+      for lane <- lanes, do: Application.put_env(:openagents, lane, RecordingTestProvider)
       Application.put_env(:openagents, :test_recording_provider_observer, self())
 
       on_exit(fn ->
-        Application.put_env(:openagents, :openrouter_provider, previous)
+        for {lane, value} <- previous, do: Application.put_env(:openagents, lane, value)
         Application.delete_env(:openagents, :test_recording_provider_observer)
       end)
     end
@@ -391,13 +396,22 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
       assert output.output == %{"content" => "hello"}
     end
 
-    test "a default grant stays on the default lane", %{conn: conn} do
+    test "a default grant is called with the default model's own vendor string", %{conn: conn} do
+      # This once asserted the default lane was *not* the recorded one, which
+      # only held while the default sat on the other adapter. What it was
+      # checking is that a grant naming no model is routed as its own catalog
+      # entry says — the vendor string, not the public id — and that survives
+      # the default moving between lanes.
       %{token: token} = grant("default-lane")
 
       conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
 
       assert conn.status == 200
-      refute_received {:recorded_request, _id, _request}
+      assert_received {:recorded_request, "test.recording_provider", request}
+
+      {:ok, default} = OpenAgents.Inference.Models.fetch(OpenAgents.Inference.Models.default_id())
+      assert request.model_id == default.provider_model
+      refute request.model_id == default.id
     end
 
     test "a grant naming a model the proxy cannot route is refused", %{conn: conn} do
@@ -405,10 +419,24 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
       # A grant's model column is immutable and the mint refuses an unroutable
       # name, so the only way here is the routed set changing underneath a live
-      # grant — a model withdrawn after it was issued.
-      configured = Application.fetch_env!(:openagents, :openai_model)
-      Application.put_env(:openagents, :openai_model, "#{configured}-withdrawn")
-      on_exit(fn -> Application.put_env(:openagents, :openai_model, configured) end)
+      # grant — a model withdrawn after it was issued. Withdrawn by taking it
+      # out of the catalog, rather than by renaming one lane's configured
+      # model, so the test says what it means whichever model leads.
+      granted = OpenAgents.Inference.Models.default_id()
+      catalog = Application.fetch_env!(:openagents, :model_catalog)
+
+      Application.put_env(
+        :openagents,
+        :model_catalog,
+        Enum.reject(catalog, fn entry ->
+          case entry.id do
+            {:config, key} -> Application.fetch_env!(:openagents, key) == granted
+            id -> id == granted
+          end
+        end)
+      )
+
+      on_exit(fn -> Application.put_env(:openagents, :model_catalog, catalog) end)
 
       conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
 

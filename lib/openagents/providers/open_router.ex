@@ -25,6 +25,9 @@ defmodule OpenAgents.Providers.OpenRouter do
 
   @endpoint "https://openrouter.ai/api/v1/chat/completions"
 
+  @doc false
+  def endpoint, do: @endpoint
+
   @impl true
   def id, do: "openrouter.chat_completions"
 
@@ -63,19 +66,24 @@ defmodule OpenAgents.Providers.OpenRouter do
     end
   end
 
+  @doc false
+  def post(api_key, request, options), do: request(api_key, request, options)
+
   defp request(api_key, %Request{} = request, options) do
     request_options = Keyword.get(options, :request_options, [])
 
     base_options = [
       auth: {:bearer, api_key},
       headers: [{"accept", "text/event-stream"}],
-      json: request_payload(request),
+      json: Map.merge(request_payload(request), Keyword.get(options, :payload_extra, %{})),
       into: :self,
       receive_timeout: 120_000,
       retry: false
     ]
 
-    case Req.post(@endpoint, Keyword.merge(base_options, request_options)) do
+    endpoint = Keyword.get(options, :endpoint, @endpoint)
+
+    case Req.post(endpoint, Keyword.merge(base_options, request_options)) do
       {:ok, response} ->
         {:ok, response}
 
@@ -94,7 +102,7 @@ defmodule OpenAgents.Providers.OpenRouter do
       messages: messages(request),
       stream: true,
       stream_options: %{include_usage: true},
-      max_tokens: 4_096
+      max_tokens: request.max_output
     }
     |> maybe_put_tools(request.tool_definitions)
   end
@@ -190,6 +198,9 @@ defmodule OpenAgents.Providers.OpenRouter do
       }
     }
   end
+
+  @doc false
+  def consume(response, on_event), do: consume_response(response, on_event)
 
   defp consume_response(%Req.Response{status: status, body: body}, on_event)
        when status in 200..299 do

@@ -38,7 +38,8 @@ defmodule OpenAgents.Inference.Models do
   # and the test environment swaps adapters without touching it.
   @provider_lanes %{
     openai: :provider,
-    openrouter: :openrouter_provider
+    openrouter: :openrouter_provider,
+    vercel_gateway: :vercel_gateway_provider
   }
 
   @type t :: %{

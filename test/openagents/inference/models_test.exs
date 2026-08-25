@@ -4,13 +4,24 @@ defmodule OpenAgents.Inference.ModelsTest do
   alias OpenAgents.Chat.OpenRouter
   alias OpenAgents.Inference.Models
 
-  test "the default model is the configured one, served by the configured adapter" do
+  test "the default is the catalog's first entry, served by that lane's adapter" do
     default = Models.default()
 
-    assert default.id == Application.fetch_env!(:openagents, :openai_model)
-    assert default.provider_model == default.id
-    assert default.adapter == Application.fetch_env!(:openagents, :provider)
+    # Gemini 3.7 Flash leads: a caller that names no model is holding a
+    # conversation, and that is what this deployment answers one with.
+    assert default.id == "gemini-3.7-flash"
+    assert default.provider_model == "google/gemini-3.7-flash"
+    assert default.adapter == Application.fetch_env!(:openagents, :openrouter_provider)
     assert Models.default_id() == default.id
+    assert Models.default_id() == hd(Models.ids())
+  end
+
+  test "the OpenAI lane is still served, as the backup it now is" do
+    configured = Application.fetch_env!(:openagents, :openai_model)
+
+    assert {:ok, luna} = Models.fetch(configured)
+    assert luna.provider_model == luna.id
+    assert luna.adapter == Application.fetch_env!(:openagents, :provider)
   end
 
   test "ox-alpha publishes a public id and routes the vendor string" do
@@ -75,5 +86,33 @@ defmodule OpenAgents.Inference.ModelsTest do
     end
 
     assert Models.available_ids() == Models.ids()
+  end
+
+  describe "the answer allowance a model publishes" do
+    test "Ox Alpha's is large enough for a model that reasons before it answers" do
+      # Its thinking is charged against the same allowance as its answer. At
+      # 4,096 a child agent with a real task spent the whole budget reasoning
+      # and returned nothing, after three minutes, on a 200.
+      {:ok, ox} = Models.fetch("ox-alpha")
+
+      assert ox.max_output >= 32_000
+      assert ox.context_window >= 1_000_000
+    end
+
+    test "the published catalog carries it, so a client is not guessing" do
+      entry = Enum.find(Models.catalog(), &(&1["id"] == "ox-alpha"))
+
+      assert entry["max_output"] == 64_000
+    end
+
+    test "Gemini is routed through the gateway, on the slug the gateway knows" do
+      # Not `gemini-3.7-flash`, which is what a caller asks for. The gateway
+      # resolves `creator/model` slugs, and it is pinned to Vertex so the call
+      # spends this account's Google credits.
+      {:ok, gemini} = Models.fetch("gemini-3.7-flash")
+
+      assert gemini.provider == :vercel_gateway
+      assert gemini.provider_model == "google/gemini-3.7-flash"
+    end
   end
 end

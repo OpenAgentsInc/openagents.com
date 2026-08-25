@@ -4237,10 +4237,19 @@ projection of that record. Whether the projection still matches is therefore a
 question with an answer, and `OpenAgents.Forge.Verification` computes it from
 the WAL and the repository alone.
 
-Independence here is structural, not a promise: a verifier that queried
-PostgreSQL would be asking the operator to confirm the operator. The proof reads
-the module's compiled import table and fails on a call into `OpenAgents.Repo`,
-Ecto, or Postgrex, so the property cannot decay through an added convenience.
+The verifier accepts either a `Repository.storage_key` or an `owner/name` path.
+An `owner/name` path is resolved to a storage key through the same repository
+mapping the serving path uses, and only the resolved key is checked against the
+WAL. The report names both the requested path and the resolved key so an operator
+sees the mapping.
+
+Independence here is structural, not a promise: the WAL-and-repository check
+itself reaches no database, because a verifier that queried PostgreSQL for the
+log or the bare repository would be asking the operator to confirm the operator.
+The `owner/name` resolution does query the repository table, but it is a
+separate, exercised step. The proof reads the module's compiled import table and
+fails on a call into `OpenAgents.Repo`, Ecto, or Postgrex, so the property
+cannot decay through an added convenience.
 
 Five disagreements are distinct findings, and each is exercised by breaking it.
 An entry the store cannot produce is `entry_object_missing`. An entry whose

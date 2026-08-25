@@ -180,6 +180,31 @@ defmodule OpenAgents.Forge.IndependenceTest do
         refute match?("Postgrex" <> _rest, inspect(module))
       end
     end
+
+    test "an owner/name path resolves to the same report as its storage key", context do
+      seed_history!(context)
+
+      assert {:ok, by_key} = Verification.verify(context.repo)
+      assert {:ok, by_name} = Verification.verify("exit-owner/demo")
+
+      assert by_name.repo == "exit-owner/demo"
+      assert by_name.storage_key == context.repo
+      assert by_key.entries == by_name.entries
+      assert by_key.head == by_name.head
+      assert by_key.findings == []
+      assert by_name.findings == []
+    end
+
+    test "an unknown owner/name returns a repository_not_found finding", _context do
+      {:error, result} = Verification.verify("exit-owner/no-such-repo")
+
+      assert result.repo == "exit-owner/no-such-repo"
+      assert result.storage_key == nil
+      assert result.entries == 0
+
+      assert [%{code: "repository_not_found", detail: %{"repo" => "exit-owner/no-such-repo"}}] =
+               result.findings
+    end
   end
 
   ## ── EXIT-005: each entry commits to the entry before it ────────────────

@@ -53,7 +53,7 @@ defmodule OpenAgents.Forge.Verification do
   only an operator who serves something other than what was pushed.
   """
 
-  alias OpenAgents.Forge.{Repos, WAL}
+  alias OpenAgents.Forge.{ReceiptRepository, Repos, WAL}
 
   @internal_ref_prefix "refs/internal/"
 
@@ -66,6 +66,7 @@ defmodule OpenAgents.Forge.Verification do
   @typedoc "The verification outcome for one repository."
   @type report :: %{
           repo: String.t(),
+          storage_key: String.t() | nil,
           entries: non_neg_integer(),
           findings: [finding()],
           head: anchor() | nil,
@@ -92,30 +93,50 @@ defmodule OpenAgents.Forge.Verification do
   sequence predate the chain and are not covered by it.
   """
   @spec verify(String.t(), keyword()) :: {:ok, report()} | {:error, report()}
-  def verify(storage_key, opts \\ []) when is_binary(storage_key) and is_list(opts) do
-    case WAL.read_index(storage_key) do
-      {:ok, _generation, index} ->
-        entries = WAL.entries(index)
+  def verify(repo_or_path, opts \\ []) when is_binary(repo_or_path) and is_list(opts) do
+    {repo, storage_key} = resolve_repo_or_path(repo_or_path)
 
-        findings =
-          sequence_findings(entries) ++
-            entry_findings(storage_key, entries) ++
-            ref_findings(storage_key, index) ++
-            object_findings(storage_key, entries) ++
-            reachability_findings(storage_key, index) ++
-            chain_findings(entries) ++
-            anchor_findings(entries, normalize_anchor(opts[:anchor]))
+    if is_nil(storage_key) do
+      report(repo, nil, [], [finding("repository_not_found", %{"repo" => repo})])
+    else
+      case WAL.read_index(storage_key) do
+        {:ok, _generation, index} ->
+          entries = WAL.entries(index)
 
-        report(storage_key, entries, findings)
+          findings =
+            sequence_findings(entries) ++
+              entry_findings(storage_key, entries) ++
+              ref_findings(storage_key, index) ++
+              object_findings(storage_key, entries) ++
+              reachability_findings(storage_key, index) ++
+              chain_findings(entries) ++
+              anchor_findings(entries, normalize_anchor(opts[:anchor]))
 
-      {:error, reason} ->
-        report(storage_key, [], [finding("wal_unreadable", %{"reason" => inspect(reason)})])
+          report(repo, storage_key, entries, findings)
+
+        {:error, reason} ->
+          report(repo, storage_key, [], [
+            finding("wal_unreadable", %{"reason" => inspect(reason)})
+          ])
+      end
     end
   end
 
-  defp report(storage_key, entries, findings) do
+  defp resolve_repo_or_path(repo) when is_binary(repo) do
+    if String.contains?(repo, "/") do
+      case ReceiptRepository.resolve(repo) do
+        %{storage_key: storage_key} -> {repo, storage_key}
+        nil -> {repo, nil}
+      end
+    else
+      {repo, repo}
+    end
+  end
+
+  defp report(repo, storage_key, entries, findings) do
     report = %{
-      repo: storage_key,
+      repo: repo,
+      storage_key: storage_key,
       entries: length(entries),
       findings: findings,
       head: head(entries),

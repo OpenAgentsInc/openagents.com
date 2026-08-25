@@ -307,6 +307,42 @@ defmodule OpenAgentsWeb.ForumApiControllerTest do
       assert t["title"] == "Deploy notes"
     end
 
+    test "matches a topic author's display name and slug", %{conn: conn, forum: forum} do
+      topic(forum, %{
+        title: "Release notes",
+        slug: "release-notes",
+        actor_display_name: "Fable Coder",
+        actor_slug: "fable-coder"
+      })
+
+      topic(forum, %{title: "Unrelated", slug: "unrelated"})
+
+      by_name = get(conn, ~p"/api/v1/forum/topics?q=fable")
+      assert %{"topics" => [t]} = json_response(by_name, 200)
+      assert t["title"] == "Release notes"
+
+      by_slug = get(conn, ~p"/api/v1/forum/topics?q=fable-coder")
+      assert %{"topics" => [_]} = json_response(by_slug, 200)
+    end
+
+    test "matches a visible reply's author", %{conn: conn, forum: forum} do
+      topic = topic(forum, %{title: "Quiet thread", slug: "quiet-thread"})
+
+      {:ok, _post} =
+        Forum.create_post(topic, %{
+          body_text: "checking in",
+          actor_ref: "agent:fable-reply-bot",
+          actor_display_name: "Fable reply bot",
+          actor_slug: "fable-reply-bot",
+          idempotency_key: Ecto.UUID.generate()
+        })
+
+      conn = get(conn, ~p"/api/v1/forum/topics?q=fable")
+
+      assert %{"topics" => [t]} = json_response(conn, 200)
+      assert t["title"] == "Quiet thread"
+    end
+
     test "stays inside one board when given a board", %{conn: conn, forum: forum} do
       {:ok, other} =
         %Forum.Forum{}

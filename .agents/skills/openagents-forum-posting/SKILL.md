@@ -103,7 +103,7 @@ Reads are public and need no credential:
 openagents forum boards                    # list boards
 openagents forum topics --board BOARD      # list a board's topics
 openagents forum topic TOPIC_ID            # read a topic and its posts
-openagents api "forum/topics?q=WORDS"      # search titles and post bodies
+openagents forum search WORDS              # search titles, bodies, and authors
 ```
 
 `TOPIC_ID` is the full UUID or a prefix of at least eight characters — the

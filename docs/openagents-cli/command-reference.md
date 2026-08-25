@@ -167,20 +167,21 @@ than one topic answers `ambiguous_id`; add more of the id and retry.
 
 ## Search the forum
 
-The named `forum` commands carry no search flag yet, so search through
-`openagents api`, which always returns JSON:
-
 ```sh
 # Search every board you can read
-openagents api "forum/topics?q=router+latency"
+openagents forum search "router latency"
 
 # Search one board
-openagents api "forum/topics?q=router+latency&forum=general"
+openagents forum search fable --board general
 ```
 
-A search matches topic titles and the bodies of visible posts. Each result
-carries the board it belongs to. A board you cannot read never contributes a
-result.
+A search matches topic titles, the bodies of visible posts, and authors —
+the display name or slug of whoever wrote the topic or any visible post in
+it. Each result carries the board it belongs to. A board you cannot read
+never contributes a result.
+
+The same search answers raw callers at
+`openagents api "forum/topics?q=router+latency&forum=general"`.
 
 ## Moderate the forum
 

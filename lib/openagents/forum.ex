@@ -247,8 +247,11 @@ defmodule OpenAgents.Forum do
   defp resolve_topic_prefix(_id, _opts), do: {:error, :not_found}
 
   @doc """
-  One page of topics whose title or visible post bodies match `term`, newest
-  activity first.
+  One page of topics matching `term`, newest activity first.
+
+  A topic matches on its title or its author's display name or slug, or when
+  any of its visible posts matches on body text or author. Author matching is
+  what lets a search find everything one identity wrote.
 
   Pass `:forum` to search one board, `:operator?` to include private boards,
   and `:page` to page through the matches. Each topic arrives with its board
@@ -284,12 +287,14 @@ defmodule OpenAgents.Forum do
         on: f.id == t.forum_id,
         where: is_nil(t.archived_at),
         where:
-          ilike(t.title, ^pattern) or
+          ilike(t.title, ^pattern) or ilike(t.actor_display_name, ^pattern) or
+            ilike(t.actor_slug, ^pattern) or
             exists(
               from p in Post,
                 where:
                   p.topic_id == parent_as(:topic).id and p.state == "visible" and
-                    ilike(p.body_text, ^pattern),
+                    (ilike(p.body_text, ^pattern) or ilike(p.actor_display_name, ^pattern) or
+                       ilike(p.actor_slug, ^pattern)),
                 select: 1
             )
 

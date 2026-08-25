@@ -617,6 +617,15 @@ defmodule OpenAgentsWeb.Router do
     post "/threads/:thread_id/grants", ThreadController, :mint
   end
 
+  # The bootstrap read for a box client: it needs a conversation id before it
+  # can address any box route, and this is the only conversation read a
+  # `box:control` token can reach.
+  scope "/api/v1", OpenAgentsWeb do
+    pipe_through :box_control_api
+
+    get "/conversation", ConversationController, :show
+  end
+
   scope "/api/v1/conversations/:conversation_id/boxes", OpenAgentsWeb do
     pipe_through :box_control_api
 

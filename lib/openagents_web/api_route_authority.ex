@@ -207,6 +207,11 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v1/threads/:thread_id/grants" => {:required_bearer, :thread, :envelope},
       "get /api/v1/capacity" => {:required_bearer, :capacity, :legacy},
       "post /api/v1/capacity/matches" => {:required_bearer, :capacity, :legacy},
+      # The bootstrap read for a box client. It answers a conversation, but it
+      # belongs to the box family because that is the only reason it exists:
+      # every other box route is addressed by conversation id, and this is
+      # where a client that holds only `box:control` learns its own.
+      "get /api/v1/conversation" => {:required_bearer, :box, :legacy},
       "get /api/v1/conversations/:conversation_id/boxes" => {:required_bearer, :box, :legacy},
       "post /api/v1/conversations/:conversation_id/boxes" => {:required_bearer, :box, :legacy},
       "post /api/v1/conversations/:conversation_id/boxes/fanout" =>

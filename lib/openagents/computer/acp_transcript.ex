@@ -2,8 +2,8 @@ defmodule OpenAgents.Computer.AcpTranscript do
   @moduledoc """
   Decodes the controller's framed ACP progress stream into a human transcript.
 
-  The live rail (`.DelegationLog` in `chat_live.ex`) already splits this wire
-  format — record separator `0x1E` starts a frame, fields split on unit
+  The wire format frames structured tool events inside the plain text stream:
+  record separator `0x1E` starts a frame, and its fields split on unit
   separator `0x1F`. Durable job reports used to post the raw bytes. This
   module is the server-side decoder so a timeout or completion never writes
   `Ttoolu_…0executeVGVybWluYWw=` into the conversation.

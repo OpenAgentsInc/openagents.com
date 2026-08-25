@@ -102,7 +102,11 @@ defmodule OpenAgentsWeb.ChatLiveTest do
              "#chat-actions-menu a#export-atif[href='/data/export/atif'][download]"
            )
 
-    assert has_element?(view, "#sidebar #sidebar-sections")
+    # Chat's own sections region held one thing, the work projection, and went
+    # with it when `/chat` was zero-based. What chat still contributes to the
+    # sidebar is the conversation's data action, covered by the reset test
+    # below.
+    refute has_element?(view, "#sidebar #sidebar-sections")
 
     # Identity is the command bar's, once, rather than a second account
     # control in a second footer.

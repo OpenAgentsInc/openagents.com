@@ -247,8 +247,9 @@ defmodule OpenAgents.Work do
   @doc """
   The most recent jobs for a conversation, newest first, bounded.
 
-  A read-only sidebar projection over the durable job rows; live updates ride
-  the existing `{:work_job_updated, job}` broadcasts rather than polling.
+  A read-only projection over the durable job rows, read by the tools that
+  answer "what have you been working on"; live consumers ride the existing
+  `{:work_job_updated, job}` broadcasts rather than polling.
   """
   def recent_jobs(%Conversation{id: conversation_id}, limit)
       when is_integer(limit) and limit > 0 do

@@ -12,11 +12,9 @@ defmodule OpenAgentsWeb.ChatLive do
   }
 
   alias OpenAgents.Analytics.Chat, as: ChatAnalytics
-  alias OpenAgents.ComputerActivity
   alias OpenAgents.Conversations.Message
   alias OpenAgents.Voice.Config, as: VoiceConfig
   alias OpenAgents.Voice.Recordings
-  alias OpenAgents.Work
   alias OpenAgentsWeb.ToolActivity
   alias OpenAgentsWeb.UI
 
@@ -59,16 +57,6 @@ defmodule OpenAgentsWeb.ChatLive do
 
   import OpenAgentsWeb.AI.Reasoning, only: [tool: 1, tool_header: 1, tool_content: 1]
 
-  # The sidebar's calls and work sections are bounded projections, not
-  # unbounded lists: the last eight of each, recomputed on the same PubSub
-  # broadcasts that drive the transcript.
-  @sidebar_section_limit 8
-
-  # One live delegation panel at a time: a newer delegation supersedes the
-  # current one, which collapses to a summary line. Superseded summaries are a
-  # bounded ephemeral list, cleared on dismiss.
-  @delegation_summary_limit 3
-
   @impl true
   def mount(_params, _session, %{assigns: %{current_user: current_user}} = socket) do
     {:ok, conversation} = Conversations.ensure_conversation(current_user)
@@ -82,8 +70,6 @@ defmodule OpenAgentsWeb.ChatLive do
       :ok = Conversations.subscribe(conversation)
       :ok = ProfileMemory.subscribe(owner)
       :ok = Voice.subscribe(conversation)
-      :ok = Work.subscribe(conversation.id)
-      :ok = ComputerActivity.subscribe(conversation.id)
 
       Analytics.capture("chat_opened", Analytics.distinct_id(current_user))
     end
@@ -101,17 +87,12 @@ defmodule OpenAgentsWeb.ChatLive do
       |> assign(:voice_enabled?, voice_config.enabled?)
       |> assign(:recording_config, Recordings.config())
       |> assign(:voice_session, voice_session)
-      |> assign(:recent_jobs, Work.recent_jobs(conversation, @sidebar_section_limit))
       |> assign(:tool_activity, tool_activity(active_turn, voice_session))
       |> assign(:message_activity, message_activity(messages))
-      |> assign(:job_rollups, Conversations.list_work_job_rollups_by_message(messages))
       |> assign(:composer_error, nil)
       |> assign(:form, composer_form())
       |> assign(:live_voice_items, MapSet.new())
       |> assign(:paced_voice_items, MapSet.new())
-      |> assign(:delegation, nil)
-      |> assign(:delegation_summaries, [])
-      |> assign(:rail_collapsed, false)
       |> stream(:messages, messages)
 
     {:ok, socket}
@@ -131,11 +112,6 @@ defmodule OpenAgentsWeb.ChatLive do
 
   def handle_event("cancel_turn", _params, socket) do
     _cancel_result = Turns.cancel(socket.assigns.active_turn.id)
-    {:noreply, socket}
-  end
-
-  def handle_event("cancel_delegation", _params, socket) do
-    _cancel = OpenAgents.Work.cancel_active_delegations(socket.assigns.conversation.id)
     {:noreply, socket}
   end
 
@@ -162,33 +138,8 @@ defmodule OpenAgentsWeb.ChatLive do
         :message_activity,
         Map.merge(socket.assigns.message_activity, message_activity(messages))
       )
-      |> assign(
-        :job_rollups,
-        Map.merge(
-          socket.assigns.job_rollups,
-          Conversations.list_work_job_rollups_by_message(messages)
-        )
-      )
 
     {:noreply, socket}
-  end
-
-  # The live delegation panel is ephemeral: dismissing it clears the whole
-  # projection. The durable event header in the transcript stays the record.
-  def handle_event("dismiss_delegation", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:delegation, nil)
-     |> assign(:delegation_summaries, [])}
-  end
-
-  # Collapse state is a server assign, not a client attribute toggle: the rail
-  # re-renders on every streamed chunk, so a DOM-only `data-collapsed` snapped
-  # back open on the next patch. Holding it here keeps the rail collapsed until
-  # the reader expands it again. It is deliberately not persisted: the rail is
-  # a view of what is happening now, so every visit starts open.
-  def handle_event("toggle_rail", _params, socket) do
-    {:noreply, assign(socket, :rail_collapsed, !socket.assigns.rail_collapsed)}
   end
 
   @impl true
@@ -197,7 +148,6 @@ defmodule OpenAgentsWeb.ChatLive do
      socket
      |> capture_assistant_message(message)
      |> clear_live_voice_item(message.provider_item_id)
-     |> refresh_job_rollup(message)
      |> stream_insert(:messages, message)}
   end
 
@@ -295,107 +245,6 @@ defmodule OpenAgentsWeb.ChatLive do
   end
 
   def handle_info({:voice_session_updated, _other_session}, socket), do: {:noreply, socket}
-
-  # Job lifecycle broadcasts (create, running, terminal) refresh the sidebar's
-  # bounded work section; the terminal broadcast also carries the report
-  # message id that turns a row into a jump-to-report anchor.
-  def handle_info(
-        {:work_job_updated, %{conversation_id: conversation_id}},
-        %{assigns: %{conversation: %{id: conversation_id}}} = socket
-      ) do
-    {:noreply,
-     assign(
-       socket,
-       :recent_jobs,
-       Work.recent_jobs(socket.assigns.conversation, @sidebar_section_limit)
-     )}
-  end
-
-  def handle_info({:work_job_updated, _other_job}, socket), do: {:noreply, socket}
-
-  # ── Live delegation projection (OpenAgents.ComputerActivity) ────────────────────
-  # A bounded ephemeral projection of one streamed computer delegation. Only
-  # one live panel at a time: a newer delegation supersedes the current one,
-  # which collapses to a bounded summary line. Nothing here is persisted; the
-  # durable tool-step outcome remains the record, and a reload mid-delegation
-  # degrades to the quiet tool-activity status (chunks with no matching start
-  # are ignored rather than reconstructed).
-
-  def handle_info({:computer_live_started, event}, socket) do
-    summaries =
-      case socket.assigns.delegation do
-        nil ->
-          socket.assigns.delegation_summaries
-
-        superseded ->
-          Enum.take(
-            [delegation_summary(superseded) | socket.assigns.delegation_summaries],
-            @delegation_summary_limit
-          )
-      end
-
-    {:noreply,
-     socket
-     |> assign(:delegation, %{
-       ref: event.ref,
-       kind: event.kind,
-       machine_name: event.machine_name,
-       agent_id: event.agent_id,
-       started_at: event.started_at,
-       state: :running,
-       status: "running",
-       stop_reason: "",
-       duration_ms: nil,
-       truncated?: false
-     })
-     |> assign(:delegation_summaries, summaries)}
-  end
-
-  # Chunk text never enters an assign: it is pushed to the log hooks, which
-  # append it client-side. The server-side caps in OpenAgents.ComputerActivity
-  # bound what can ever arrive here.
-  def handle_info({:computer_live_chunk, %{ref: ref, text: text}}, socket) do
-    case socket.assigns.delegation do
-      %{ref: ^ref, state: :running} ->
-        {:noreply, push_event(socket, "delegation:chunk", %{ref: ref, text: text})}
-
-      _stale_or_absent ->
-        {:noreply, socket}
-    end
-  end
-
-  def handle_info({:computer_live_truncated, %{ref: ref}}, socket) do
-    case socket.assigns.delegation do
-      %{ref: ^ref} = delegation ->
-        {:noreply, assign(socket, :delegation, %{delegation | truncated?: true})}
-
-      _stale_or_absent ->
-        {:noreply, socket}
-    end
-  end
-
-  def handle_info({:computer_live_terminal, %{ref: ref} = event}, socket) do
-    case socket.assigns.delegation do
-      %{ref: ^ref} = delegation ->
-        {:noreply,
-         assign(socket, :delegation, %{
-           delegation
-           | state: :terminal,
-             status: event.status,
-             stop_reason: event.stop_reason,
-             duration_ms: event.duration_ms
-         })}
-
-      _superseded_or_absent ->
-        summaries =
-          Enum.map(socket.assigns.delegation_summaries, fn
-            %{ref: ^ref} = summary -> %{summary | status: event.status}
-            summary -> summary
-          end)
-
-        {:noreply, assign(socket, :delegation_summaries, summaries)}
-    end
-  end
 
   def handle_info({:voice_tool_activity_updated, session_id, _step_id}, socket) do
     case socket.assigns.voice_session do
@@ -773,41 +622,6 @@ defmodule OpenAgentsWeb.ChatLive do
   defp status_label("cancelled"), do: "STOPPED"
   defp status_label(_status), do: nil
 
-  # A deep-work report message just landed: pull its bounded rollup projection
-  # so the row can render as a "Worked for <duration>" header.
-  defp refresh_job_rollup(socket, %Message{work_job_id: job_id} = message)
-       when is_binary(job_id) do
-    assign(
-      socket,
-      :job_rollups,
-      Map.merge(
-        socket.assigns.job_rollups,
-        Conversations.list_work_job_rollups_by_message([message])
-      )
-    )
-  end
-
-  defp refresh_job_rollup(socket, _message), do: socket
-
-  defp rollup_title(%{started_at: started_at, completed_at: completed_at}) do
-    case ToolActivity.duration(started_at, completed_at) do
-      nil -> "Worked"
-      duration -> "Worked for #{duration}"
-    end
-  end
-
-  # Job statuses mapped onto the existing status hues; never hidden.
-  defp rollup_status(%{status: "completed"}), do: "succeeded"
-  defp rollup_status(%{status: "failed"}), do: "failed"
-  defp rollup_status(%{status: "interrupted"}), do: "interrupted"
-  defp rollup_status(%{status: "budget_exhausted"}), do: "unavailable"
-  defp rollup_status(_rollup), do: "unavailable"
-
-  defp rollup_status_note(%{status: "completed"}), do: nil
-
-  defp rollup_status_note(%{status: status}),
-    do: status |> String.upcase() |> String.replace("_", " ")
-
   defp message_status_variant("streaming"), do: :info
   defp message_status_variant(_status), do: :warning
 
@@ -845,11 +659,7 @@ defmodule OpenAgentsWeb.ChatLive do
       </:title_menu>
 
       <:sidebar_extra>
-        <.chat_sidebar_rows
-          current_user={@current_user}
-          reset_enabled?={@reset_enabled?}
-          recent_jobs={@recent_jobs}
-        />
+        <.chat_sidebar_rows current_user={@current_user} reset_enabled?={@reset_enabled?} />
       </:sidebar_extra>
 
       <div id="openagents-app" class="chat-shell">
@@ -898,7 +708,6 @@ defmodule OpenAgentsWeb.ChatLive do
                     message={message}
                     paced_items={@paced_voice_items}
                     activity={Map.get(@message_activity, message.id, [])}
-                    rollup={Map.get(@job_rollups, message.id)}
                   />
                 </div>
 
@@ -921,12 +730,6 @@ defmodule OpenAgentsWeb.ChatLive do
                     activity={activity}
                   />
                 </section>
-
-                <%!-- Below the desktop breakpoint the live delegation projection
-                      renders inline at the transcript tail on the event-header
-                      expansion pattern, instead of as a rail. One projection,
-                      two placements; the stylesheet shows exactly one. --%>
-                <.delegation_inline :if={false and @delegation} delegation={@delegation} />
               </.conversation_content>
             </.conversation>
           </div>
@@ -967,20 +770,6 @@ defmodule OpenAgentsWeb.ChatLive do
             />
           </footer>
         </main>
-
-        <%!-- Desktop only (≥1280px): the work rail, the shell's second column.
-              The chat column keeps one job — transcript above, composer pinned
-              under it — and everything about running work moves out here, where
-              a streamed log has the width to be read. Below the breakpoint the
-              rail is gone and the same two projections render in the navigation
-              sidebar and at the transcript tail. --%>
-        <.chat_rail
-          :if={false and (@recent_jobs != [] or @delegation != nil or @delegation_summaries != [])}
-          recent_jobs={@recent_jobs}
-          delegation={@delegation}
-          summaries={@delegation_summaries}
-          collapsed={@rail_collapsed}
-        />
       </div>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".TranscriptScroll">
@@ -1112,178 +901,6 @@ defmodule OpenAgentsWeb.ChatLive do
         }
       </script>
 
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".DelegationLog">
-        // Record/unit separators frame structured tool events inside the plain
-        // text stream (see sarah-computer-controller AcpAgent.renderUpdate).
-        // A frame is one line beginning with RS whose fields split on US;
-        // everything else is agent prose. This hook renders frames as
-        // collapsible tool cards and notes, and prose as text — never HTML.
-        const RS = String.fromCharCode(30)
-        const US = String.fromCharCode(31)
-
-        const decode64 = (value) => {
-          try {
-            return new TextDecoder().decode(Uint8Array.from(atob(value), (c) => c.charCodeAt(0)))
-          } catch {
-            return ""
-          }
-        }
-
-        export default {
-          mounted() {
-            this.buffer = ""
-            this.tools = new Map()
-            this.prose = null
-            this.handleEvent("delegation:chunk", ({ ref, text }) => {
-              if (this.el.dataset.ref !== ref) return
-              const follow =
-                this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < 40
-              this.ingest(text)
-              if (follow) this.el.scrollTop = this.el.scrollHeight
-            })
-          },
-
-          // Flush prose immediately; hold only an incomplete trailing frame.
-          ingest(text) {
-            this.buffer += text
-            while (this.buffer.length > 0) {
-              if (this.buffer[0] === RS) {
-                const nl = this.buffer.indexOf("\n")
-                if (nl === -1) break
-                const line = this.buffer.slice(1, nl)
-                this.buffer = this.buffer.slice(nl + 1)
-                this.renderFrame(line)
-              } else {
-                const next = this.buffer.indexOf(RS)
-                const chunk = next === -1 ? this.buffer : this.buffer.slice(0, next)
-                this.buffer = next === -1 ? "" : this.buffer.slice(next)
-                this.appendProse(chunk)
-              }
-            }
-          },
-
-          appendProse(text) {
-            if (text === "") return
-            if (!this.prose || this.prose.parentNode !== this.el || this.el.lastChild !== this.prose) {
-              this.prose = document.createElement("span")
-              this.prose.className = "deleg-prose"
-              this.el.appendChild(this.prose)
-            }
-            this.prose.appendChild(document.createTextNode(text))
-          },
-
-          renderFrame(line) {
-            const fields = line.split(US)
-            if (fields[0] === "T") {
-              this.renderTool(fields)
-            } else if (fields[0] === "N") {
-              this.renderNote(fields)
-            }
-            this.prose = null
-          },
-
-          // T | id | phase(0 start,1 done,2 failed) | kind | b64 title | b64 detail
-          renderTool([, id, phase, kind, b64title, b64detail]) {
-            const title = decode64(b64title || "")
-            const detail = decode64(b64detail || "")
-            let card = this.tools.get(id)
-            if (!card) {
-              card = this.buildTool(id, kind, title, detail)
-              this.tools.set(id, card)
-              this.el.appendChild(card.root)
-            }
-            if (phase === "1" || phase === "2") {
-              card.root.dataset.status = phase === "1" ? "succeeded" : "failed"
-              if (detail !== "") {
-                card.out.textContent = detail
-                card.out.hidden = false
-              }
-            }
-          },
-
-          buildTool(id, kind, title, command) {
-            const root = document.createElement("details")
-            root.className = "deleg-tool"
-            root.dataset.status = "running"
-            root.dataset.kind = kind || "other"
-
-            const summary = document.createElement("summary")
-            summary.className = "deleg-tool__summary"
-            const dot = document.createElement("span")
-            dot.className = "deleg-tool__dot"
-            const label = document.createElement("span")
-            label.className = "deleg-tool__label"
-            label.textContent = this.kindLabel(kind) || title || "tool"
-            summary.appendChild(dot)
-            summary.appendChild(label)
-            if (command !== "") {
-              const inline = document.createElement("code")
-              inline.className = "deleg-tool__inline"
-              inline.textContent = command
-              summary.appendChild(inline)
-            }
-
-            const body = document.createElement("div")
-            body.className = "deleg-tool__body"
-            const cmd = document.createElement("pre")
-            cmd.className = "deleg-tool__cmd"
-            cmd.textContent = command !== "" ? "$ " + command : title
-            const out = document.createElement("pre")
-            out.className = "deleg-tool__out"
-            out.hidden = true
-            body.appendChild(cmd)
-            body.appendChild(out)
-
-            root.appendChild(summary)
-            root.appendChild(body)
-            return { root, out }
-          },
-
-          kindLabel(kind) {
-            const labels = {
-              execute: "Terminal",
-              read: "Read",
-              edit: "Edit",
-              search: "Search",
-              fetch: "Fetch",
-              think: "Think",
-              move: "Move",
-              delete: "Delete"
-            }
-            return labels[kind] || ""
-          },
-
-          // N | b64 text | tone(info|warn|error)
-          renderNote([, b64text, tone]) {
-            const note = document.createElement("div")
-            note.className = "deleg-note"
-            note.dataset.tone = tone || "info"
-            note.textContent = decode64(b64text || "")
-            this.el.appendChild(note)
-          }
-        }
-      </script>
-
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".DelegationClock">
-        export default {
-          // Elapsed time ticks client-side from the broadcast start instant,
-          // so the server never re-renders just to move a clock.
-          mounted() {
-            this.tick()
-            this.timer = setInterval(() => this.tick(), 1000)
-          },
-          destroyed() { clearInterval(this.timer) },
-          tick() {
-            const started = Date.parse(this.el.dataset.startedAt)
-            if (Number.isNaN(started)) return
-            const total = Math.max(0, Math.floor((Date.now() - started) / 1000))
-            const minutes = Math.floor(total / 60)
-            const seconds = total % 60
-            this.el.textContent = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
-          }
-        }
-      </script>
-
       <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalTime">
         export default {
           // Server timestamps render in UTC; the browser is the only place
@@ -1306,36 +923,15 @@ defmodule OpenAgentsWeb.ChatLive do
 
   attr :current_user, :map, required: true
   attr :reset_enabled?, :boolean, required: true
-  attr :recent_jobs, :list, required: true
 
   # The conversation's own rows, contributed to the application sidebar. The
-  # shared destinations live there directly; what is left here is the work
-  # projection and the conversation's data action. Rows are the
-  # stretched-anchor pattern: the hit control owns the whole row and the
-  # accessible name, the visible content beneath is pointer-transparent, and
-  # any future trailing control floats back above it at its own z-index.
+  # shared destinations live there directly; what is left here is the
+  # conversation's data action. Rows are the stretched-anchor pattern: the hit
+  # control owns the whole row and the accessible name, the visible content
+  # beneath is pointer-transparent, and any future trailing control floats back
+  # above it at its own z-index.
   defp chat_sidebar_rows(assigns) do
     ~H"""
-    <%!-- Calls and work: bounded, durable-backed projections (last eight
-            each), refreshed by the same PubSub broadcasts that drive the
-            transcript. A row whose evidence is a durable transcript message is
-            a stretched anchor to it; a row with no target is stated, not
-            linked. Empty sections keep their labels and say so honestly. --%>
-    <div id="sidebar-sections" class="sidebar-sections">
-      <%!-- The narrow-viewport placement of the work projection. Above 1280px
-      the work rail beside the transcript states it instead, so the stylesheet
-      hides this one; one projection, two placements, exactly one shown. --%>
-      <section
-        :if={false and @recent_jobs != []}
-        id="sidebar-work"
-        class="sidebar-section chat-sidebar-work"
-        aria-label="Work"
-      >
-        <h2 class="sidebar-section-label scroll-edge-hairline">WORK</h2>
-        <.work_rows id_prefix="sidebar-job" recent_jobs={@recent_jobs} />
-      </section>
-    </div>
-
     <%!-- Admin moved to the sidebar footer, where it is one row for an
     operator on every page rather than a row that only exists on chat. What
     stays here is the conversation's own data action. --%>
@@ -1362,358 +958,6 @@ defmodule OpenAgentsWeb.ChatLive do
         </span>
       </.form>
     </nav>
-    """
-  end
-
-  attr :id_prefix, :string, required: true
-  attr :recent_jobs, :list, required: true
-
-  # The work projection's rows, shared by its two placements. Only the DOM id
-  # prefix differs, because both placements are in the document at once and the
-  # stylesheet — not the server — decides which one the viewport shows.
-  defp work_rows(assigns) do
-    ~H"""
-    <.sidebar_status_row
-      :for={job <- @recent_jobs}
-      id={"#{@id_prefix}-#{job.id}"}
-      target_message_id={job.report_message_id}
-      dot_state={job_dot_state(job)}
-      title={job_title(job)}
-      meta={job_meta(job)}
-      data-status={job.status}
-    />
-    """
-  end
-
-  attr :id, :string, required: true
-  attr :target_message_id, :any, default: nil
-  attr :dot_state, :string, required: true
-  attr :title, :string, required: true
-  attr :meta, :string, required: true
-  attr :rest, :global
-
-  # Devin's two-line variant on the same __menu-item base: a bounded title line
-  # over a text-12 muted meta line, led by an 8px status dot that reinforces —
-  # never replaces — the meta words. When the row has durable transcript
-  # evidence, the stretched hit target is a plain fragment anchor to that
-  # message's DOM id, so the browser scrolls the transcript natively; when it
-  # has none, the row is stated rather than dressed up as a link.
-  defp sidebar_status_row(assigns) do
-    ~H"""
-    <div
-      id={@id}
-      class={[
-        "sidebar-row",
-        "sidebar-row--two-line",
-        is_nil(@target_message_id) && "sidebar-row--static"
-      ]}
-      {@rest}
-    >
-      <a
-        :if={@target_message_id}
-        href={"#messages-#{@target_message_id}"}
-        class="sidebar-row__hit"
-        aria-label={"#{@title} — #{@meta}"}
-      ></a>
-      <span class="sidebar-row__content">
-        <.status_indicator class="sidebar-row__dot" state={@dot_state} label={@meta} decorative />
-        <span class="sidebar-row__lines">
-          <span class="sidebar-row__title">{@title}</span>
-          <span class="sidebar-row__meta">{@meta}</span>
-        </span>
-      </span>
-    </div>
-    """
-  end
-
-  # ── Sidebar section row projections ─────────────────────────────────────────
-  # The dot vocabulary maps job lifecycle to the existing status hues: blue
-  # for a running job, green for completed, gold for interrupted/budget
-  # attention, red for failure (DESIGN.md).
-  defp job_dot_state(%{status: "completed"}), do: "succeeded"
-  defp job_dot_state(%{status: "failed"}), do: "failed"
-
-  defp job_dot_state(%{status: status}) when status in ~w(interrupted budget_exhausted),
-    do: "attention"
-
-  defp job_dot_state(_job), do: "running"
-
-  defp job_title(%{goal: goal}) when is_binary(goal) do
-    excerpt = String.slice(goal, 0, 80)
-    if excerpt == goal, do: goal, else: excerpt <> "…"
-  end
-
-  defp job_meta(%{status: "budget_exhausted"}), do: "Budget exhausted"
-  defp job_meta(%{status: status}), do: String.capitalize(status)
-
-  # ── Live delegation projection helpers ──────────────────────────────────────
-
-  defp delegation_summary(delegation) do
-    %{
-      ref: delegation.ref,
-      kind: delegation.kind,
-      machine_name: delegation.machine_name,
-      agent_id: delegation.agent_id,
-      status: if(delegation.state == :terminal, do: delegation.status, else: "running")
-    }
-  end
-
-  # The subject is data, not copy: the delegated agent's id when the
-  # controller ran one, otherwise the request kind.
-  defp delegation_subject(%{agent_id: agent_id}) when agent_id not in [nil, ""], do: agent_id
-  defp delegation_subject(%{kind: kind}), do: kind
-
-  # Controller statuses map onto the step-outcome vocabulary and its hues,
-  # exactly as OpenAgents.Tools.ComputerAgent maps the durable outcome: anything
-  # unrecognized is stated as failed, never hidden.
-  defp delegation_indicator_state("running"), do: "running"
-  defp delegation_indicator_state("completed"), do: "succeeded"
-  defp delegation_indicator_state("refused"), do: "refused"
-  defp delegation_indicator_state("unavailable"), do: "unavailable"
-  defp delegation_indicator_state("cancelled"), do: "cancelled"
-  defp delegation_indicator_state(_timeout_failed_or_unknown), do: "failed"
-
-  defp delegation_status_word(status),
-    do: status |> delegation_indicator_state() |> String.upcase()
-
-  defp delegation_duration(milliseconds) when is_integer(milliseconds) and milliseconds >= 0,
-    do: duration_label(div(milliseconds, 1000))
-
-  defp delegation_duration(_unknown), do: nil
-
-  defp duration_label(seconds) when seconds < 0, do: nil
-  defp duration_label(seconds) when seconds < 60, do: "#{seconds}s"
-
-  defp duration_label(seconds) when seconds < 3600,
-    do: "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
-
-  defp duration_label(seconds), do: "#{div(seconds, 3600)}h #{seconds |> rem(3600) |> div(60)}m"
-
-  attr :recent_jobs, :list, required: true
-  attr :delegation, :map, default: nil
-  attr :summaries, :list, required: true
-  attr :collapsed, :boolean, default: false
-
-  # The work rail: the chat surface's right-hand column on wide screens, and
-  # the only place running work is stated there. It carries two projections —
-  # the bounded work list, and the live delegation (issue #85) — and neither is
-  # chrome or authority: the transcript's durable event headers remain the
-  # record. The rail scrolls on its own so the transcript never moves for it,
-  # and the rolling log is owned by the .DelegationLog hook
-  # (phx-update="ignore"), so chunk text never rides an assign.
-  defp chat_rail(assigns) do
-    ~H"""
-    <aside
-      id="chat-rail"
-      class="chat-rail"
-      data-collapsed={to_string(@collapsed)}
-      aria-label="Work"
-    >
-      <header class="chat-rail__header">
-        <h2 class="chat-rail__label">WORK</h2>
-        <.button
-          id="chat-rail-toggle"
-          variant={:ghost}
-          size={:sm}
-          class="chat-rail__toggle"
-          aria-label="Toggle work panel"
-          aria-expanded={to_string(!@collapsed)}
-          aria-controls="chat-rail-body"
-          phx-click="toggle_rail"
-        >
-          <.icon name="sidebar-collapse-right" class="chat-rail__glyph-collapse" />
-          <.icon name="sidebar-open-right" class="chat-rail__glyph-expand" />
-        </.button>
-      </header>
-
-      <div id="chat-rail-body" class="chat-rail__body">
-        <%!-- The wide-viewport placement of the work projection; the navigation
-              sidebar states it below the breakpoint. --%>
-        <%!-- No accessible name of its own: the rail's own heading already
-              names it, and a second "Work" landmark inside a "Work" one only
-              adds a level for a screen reader to walk through. --%>
-        <section :if={@recent_jobs != []} id="rail-work" class="rail-section">
-          <.work_rows id_prefix="rail-job" recent_jobs={@recent_jobs} />
-        </section>
-
-        <section
-          :if={@delegation != nil or @summaries != []}
-          id="delegation-rail"
-          class="rail-section delegation-rail"
-          aria-label="Live delegation"
-        >
-          <h3 class="rail-section__label">LIVE DELEGATION</h3>
-          <div
-            :if={@delegation && @delegation.state == :running}
-            id="delegation-live"
-            class="delegation-live"
-            data-status="running"
-          >
-            <div class="delegation-live__header">
-              <.status_indicator state="running" label="RUNNING" />
-              <span class="delegation-live__computer">{@delegation.machine_name}</span>
-              <span class="delegation-live__subject">{delegation_subject(@delegation)}</span>
-              <time
-                id={"delegation-elapsed-#{@delegation.ref}"}
-                class="delegation-live__elapsed"
-                datetime={DateTime.to_iso8601(@delegation.started_at)}
-                data-started-at={DateTime.to_iso8601(@delegation.started_at)}
-                phx-hook=".DelegationClock"
-                phx-update="ignore"
-              ></time>
-              <.button
-                id="cancel-delegation"
-                variant={:ghost}
-                size={:xs}
-                class="delegation-live__cancel"
-                aria-label="Cancel delegation"
-                phx-click="cancel_delegation"
-              >
-                <.icon name="stop" />
-              </.button>
-            </div>
-            <div
-              id={"delegation-log-rail-#{@delegation.ref}"}
-              class="delegation-log"
-              data-ref={@delegation.ref}
-              phx-hook=".DelegationLog"
-              phx-update="ignore"
-            >
-            </div>
-            <.badge :if={@delegation.truncated?} variant={:dim} class="delegation-truncated">
-              TRUNCATED
-            </.badge>
-          </div>
-
-          <.delegation_summary_row
-            :if={@delegation && @delegation.state == :terminal}
-            id="delegation-terminal"
-            delegation={@delegation}
-          >
-            <.button
-              id="delegation-dismiss"
-              variant={:ghost}
-              size={:xs}
-              class="delegation-summary__dismiss"
-              aria-label="Dismiss"
-              phx-click="dismiss_delegation"
-            >
-              <.icon name="x" />
-            </.button>
-          </.delegation_summary_row>
-
-          <.delegation_summary_row
-            :for={summary <- @summaries}
-            id={"delegation-summary-#{summary.ref}"}
-            delegation={summary}
-            class="delegation-summary--superseded"
-          />
-        </section>
-      </div>
-    </aside>
-    """
-  end
-
-  attr :id, :string, required: true
-  attr :delegation, :map, required: true
-  attr :class, :any, default: nil
-  slot :inner_block
-
-  # A finished (or superseded) delegation as one bounded summary line: status
-  # dot reinforcing the status word, computer and subject, then stop reason and
-  # duration when the terminal carried them.
-  defp delegation_summary_row(assigns) do
-    ~H"""
-    <div
-      id={@id}
-      class={["delegation-summary", @class]}
-      data-status={delegation_indicator_state(@delegation.status)}
-    >
-      <.status_indicator
-        class="delegation-summary__dot"
-        state={delegation_indicator_state(@delegation.status)}
-        label={delegation_status_word(@delegation.status)}
-        decorative
-      />
-      <span class="delegation-summary__lines">
-        <span class="delegation-summary__title">
-          {@delegation.machine_name} · {delegation_subject(@delegation)}
-        </span>
-        <span class="delegation-summary__meta">
-          {delegation_status_word(@delegation.status)}<span :if={
-            Map.get(@delegation, :stop_reason) not in [nil, ""]
-          }> · {@delegation.stop_reason}</span><span :if={
-            duration = delegation_duration(Map.get(@delegation, :duration_ms))
-          }> · {duration}</span>
-        </span>
-      </span>
-      {render_slot(@inner_block)}
-    </div>
-    """
-  end
-
-  attr :delegation, :map, required: true
-
-  # Narrow-viewport variant of the same projection: an expandable section on
-  # the E1 event-header pattern at the transcript tail, with the live log in
-  # the expansion. The stylesheet hides it at the desktop breakpoint, where
-  # the rail takes over.
-  defp delegation_inline(assigns) do
-    ~H"""
-    <section id="delegation-inline" class="delegation-inline" aria-label="Live delegation">
-      <.event_header
-        id="delegation-inline-header"
-        status={delegation_indicator_state(@delegation.status)}
-        title={"#{@delegation.machine_name} · #{delegation_subject(@delegation)}"}
-        status_note={
-          if(@delegation.state == :terminal, do: delegation_status_word(@delegation.status))
-        }
-        timestamp={@delegation.started_at}
-      >
-        <div class="delegation-inline__details">
-          <div
-            :if={@delegation.state == :running}
-            id={"delegation-log-inline-#{@delegation.ref}"}
-            class="delegation-log"
-            data-ref={@delegation.ref}
-            phx-hook=".DelegationLog"
-            phx-update="ignore"
-          >
-          </div>
-          <.button
-            :if={@delegation.state == :running}
-            id="cancel-delegation-inline"
-            variant={:ghost}
-            size={:xs}
-            aria-label="Cancel delegation"
-            phx-click="cancel_delegation"
-          >
-            <.icon name="stop" />
-          </.button>
-          <.badge :if={@delegation.truncated?} variant={:dim} class="delegation-truncated">
-            TRUNCATED
-          </.badge>
-          <p :if={@delegation.state == :terminal} class="delegation-inline__outcome">
-            {delegation_status_word(@delegation.status)}<span :if={
-              @delegation.stop_reason not in [nil, ""]
-            }> · {@delegation.stop_reason}</span><span :if={
-              duration = delegation_duration(@delegation.duration_ms)
-            }> · {duration}</span>
-          </p>
-          <.button
-            :if={@delegation.state == :terminal}
-            id="delegation-inline-dismiss"
-            variant={:ghost}
-            size={:xs}
-            class="delegation-summary__dismiss"
-            aria-label="Dismiss"
-            phx-click="dismiss_delegation"
-          >
-            <.icon name="x" />
-          </.button>
-        </div>
-      </.event_header>
-    </section>
     """
   end
 
@@ -1786,7 +1030,6 @@ defmodule OpenAgentsWeb.ChatLive do
   attr :message, :map, required: true
   attr :paced_items, :any, required: true
   attr :activity, :list, default: []
-  attr :rollup, :map, default: nil
 
   # The transcript's asymmetry carries the roles (DESIGN.md, Message row): a
   # person's message is a right-aligned tinted bubble, Sarah's is bare
@@ -1809,15 +1052,8 @@ defmodule OpenAgentsWeb.ChatLive do
     assigns =
       assigns
       |> assign(:paced?, paced? and written?)
-      |> assign(:report?, assigns.rollup != nil and written?)
-      |> assign(
-        :prose?,
-        written? and not paced? and markdown?(assigns.message)
-      )
-      |> assign(
-        :plain?,
-        written? and not paced? and not markdown?(assigns.message)
-      )
+      |> assign(:prose?, written? and not paced? and markdown?(assigns.message))
+      |> assign(:plain?, written? and not paced? and not markdown?(assigns.message))
       |> assign(:streaming?, assigns.message.status == "streaming")
 
     ~H"""
@@ -1888,32 +1124,6 @@ defmodule OpenAgentsWeb.ChatLive do
       <.badge :if={@message.modality == "voice"} variant={:dim} class="message-provenance">
         VOICE TRANSCRIPT{if @message.interrupted, do: " / INTERRUPTED", else: ""}
       </.badge>
-      <%!-- A deep-work report renders as a rollup header: how long the job
-            worked and how its steps ended, expanding to the report itself. --%>
-      <.event_header
-        :if={false and @rollup}
-        id={"job-rollup-#{@id}"}
-        status={rollup_status(@rollup)}
-        title={rollup_title(@rollup)}
-        status_note={rollup_status_note(@rollup)}
-        timestamp={@rollup.completed_at}
-        class="job-rollup"
-      >
-        <:chips>
-          <.badge :if={@rollup.succeeded_count > 0} variant={:success}>
-            {@rollup.succeeded_count} SUCCEEDED
-          </.badge>
-          <.badge :if={@rollup.refused_count > 0} variant={:warning}>
-            {@rollup.refused_count} REFUSED
-          </.badge>
-        </:chips>
-        <.message_content
-          :if={@report?}
-          class="message-content message-markdown"
-          text={@message.content}
-          streaming={@streaming?}
-        />
-      </.event_header>
       <.message_content
         :if={@prose?}
         class="message-content message-markdown"

@@ -44,13 +44,13 @@ defmodule OpenAgentsWeb.ComputerAgentJobsControllerTest do
     assert payload["cwd"] == @root
     assert payload["prompt"] == "Reply with the word connected and make no changes."
 
+    # `/chat` is zero-based: a running delegation states nothing live there, so
+    # the API surface is what carries the job while it runs. The absence is
+    # asserted so a re-introduced live panel is caught here too.
     _state = :sys.get_state(view.pid)
-    assert has_element?(view, "#delegation-live", "codex-api-box")
-    assert has_element?(view, "#delegation-live", "codex")
+    refute has_element?(view, "#delegation-live")
 
     FakeController.chunk(caller, request_id, "connected")
-    assert_push_event(view, "delegation:chunk", %{text: "connected"}, 1_000)
-
     job_ref = monitor_job!(job_id)
 
     FakeController.exit(caller, request_id, %{

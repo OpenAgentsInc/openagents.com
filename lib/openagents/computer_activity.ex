@@ -5,11 +5,12 @@ defmodule OpenAgents.ComputerActivity do
   While `OpenAgents.Computer` collects a delegation's streamed output, this module
   re-broadcasts a bounded projection of the stream over PubSub on the computer
   owner's conversation topic — the delegation start, each bounded chunk, and
-  the typed terminal — so the chat interface can show the remote agent working
-  while it works. PubSub is a low-latency projection and never the data
-  authority: nothing broadcast here is persisted, a missed broadcast loses
-  nothing durable, and the durable record remains the terminal tool-step
-  outcome. A reload mid-delegation degrades to status-only.
+  the typed terminal — so a surface can show the remote agent working while it
+  works. No surface subscribes today: `/chat` is zero-based and states no live
+  delegation, so the projection currently runs with no consumer beyond its own
+  tests. PubSub is a low-latency projection and never the data authority:
+  nothing broadcast here is persisted, a missed broadcast loses nothing
+  durable, and the durable record remains the terminal tool-step outcome.
 
   The topic is owner-scoped by construction: Sarah is a one-conversation
   product, delegations require the `browser_conversation` scope of the computer

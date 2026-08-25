@@ -531,13 +531,6 @@ body.sidebar-open {
   text-overflow: ellipsis;
 }
 
-.sidebar-sections {
-  position: relative;
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-}
-
 .sidebar-section {
   position: relative;
   /* A section heading needs air above it or it reads as one more row in the

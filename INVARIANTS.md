@@ -3376,7 +3376,8 @@ Evidence: `OpenAgents.Conversations.list_tool_step_activity/1`,
 `OpenAgents.ComputerActivity`, `OpenAgentsWeb.ChatLive`, tool activity tests in
 `OpenAgentsWeb.ChatLiveTest`, `OpenAgentsWeb.ToolActivityTest`,
 `OpenAgents.ComputerActivityTest` (whose exact live-event key sets pin the
-ephemeral projection), `OpenAgentsWeb.ChatDelegationRailTest`, and the
+ephemeral projection), `OpenAgentsWeb.ChatWorkSurfacesAbsentTest` (which pins
+that `/chat` renders none of it), and the
 projection enumeration in `OpenAgentsWeb.ToolActivityProjectionTest`.
 
 ### UI-003 — Product surfaces render only through the sanctioned component library

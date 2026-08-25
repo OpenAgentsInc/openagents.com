@@ -844,61 +844,6 @@ defmodule OpenAgents.Conversations do
     )
   end
 
-  @doc """
-  Deep-work rollups for a page of the transcript, keyed by the report message
-  the job produced.
-
-  A `work_jobs` report message renders as a "Worked for <duration>" event
-  header, so the transcript needs the job's terminal shape — status, duration,
-  and step-outcome counts — as a read-only projection beside the message. Only
-  bounded durable fields are selected; a job that has not completed carries no
-  rollup and its report renders as an ordinary message.
-  """
-  def list_work_job_rollups_by_message(messages) when is_list(messages) do
-    job_ids =
-      messages
-      |> Enum.filter(&(&1.role == "assistant" and is_binary(&1.work_job_id)))
-      |> Enum.map(&{&1.work_job_id, &1.id})
-      |> Map.new()
-
-    case Map.keys(job_ids) do
-      [] ->
-        %{}
-
-      ids ->
-        step_counts =
-          from(step in OpenAgents.Work.JobStep,
-            where: step.work_job_id in ^ids,
-            group_by: [step.work_job_id, step.status],
-            select: {step.work_job_id, step.status, count(step.id)}
-          )
-          |> Repo.all()
-          |> Enum.group_by(&elem(&1, 0), fn {_job_id, status, count} -> {status, count} end)
-          |> Map.new(fn {job_id, pairs} -> {job_id, Map.new(pairs)} end)
-
-        from(job in OpenAgents.Work.Job,
-          where: job.id in ^ids and not is_nil(job.completed_at),
-          select: %{
-            id: job.id,
-            status: job.status,
-            error_code: job.error_code,
-            tool_call_count: job.tool_call_count,
-            started_at: job.started_at,
-            completed_at: job.completed_at
-          }
-        )
-        |> Repo.all()
-        |> Map.new(fn job ->
-          counts = Map.get(step_counts, job.id, %{})
-
-          {Map.fetch!(job_ids, job.id),
-           job
-           |> Map.put(:succeeded_count, Map.get(counts, "succeeded", 0))
-           |> Map.put(:refused_count, Map.get(counts, "refused", 0))}
-        end)
-    end
-  end
-
   def append_assistant_delta(%Turn{} = turn, delta) when is_binary(delta) do
     maximum_bytes = Application.fetch_env!(:openagents, :maximum_message_bytes)
 

@@ -28,14 +28,20 @@ that reads as executable.
 | Rehearsal | Executable proof | Performed against the live forge |
 | --- | --- | --- |
 | 1. Restore a repository and its work history | `EXIT-004`, `EXIT-001` | 2026-08-23 — **failed**, see #179; steps 1 and 2 re-run 2026-08-25 and passed |
-| 2. Detect a forged, missing, reordered, or mismatched receipt | `EXIT-002`, `EXIT-005` | Steps 1 and 3 performed 2026-08-25 |
-| 3. Mirror divergence | `EXIT-003` | No |
-| 4. Key rotation | None | No |
-| 5. Operator loss | `EXIT-003` | No |
-| 6. Partial export | `EXIT-001` | No |
+| 2. Detect a forged, missing, reordered, or mismatched receipt | `EXIT-002`, `EXIT-005` | 2026-08-25 — steps 1 and 3 pass; step 2 is local only; **new defect #251**, and #190 still reproduces |
+| 3. Mirror divergence | `EXIT-003` | 2026-08-25 — steps 1 and 2 pass and confirm #188; step 3 is local only |
+| 4. Key rotation | `test/openagents/forge/key_rotation_test.exs` | 2026-08-25 — passes in the test process; **new defect #253** |
+| 5. Operator loss | `EXIT-003` | 2026-08-25 — recovery passes in the test process; the WAL remains unobtainable, now measured |
+| 6. Partial export | `EXIT-001` | 2026-08-25 — passes against the live forge; **new defect #252**, found red on `main` and since classified |
 
-Four of the six have never been run outside the test suite, which #180 carries.
-That is the honest state.
+Every row now names a date and a result.
+`docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` records what running
+rehearsals 2 through 6 produced, and which half of each ran against the live
+forge rather than against a forge a test process builds. Three steps mutate
+state — rehearsal 2's tampering, rehearsal 3's rebuild, and any rotation in
+rehearsal 4 — so they were performed locally and are labeled local there. A
+rehearsal that cannot safely run its destructive step against production has a
+permanent gap, and that record says so rather than implying the step was taken.
 
 ## Release re-check, 2026-08-25
 
@@ -291,6 +297,17 @@ false`. A consistent rewrite is refuted only for a reader who kept a copy of
 that document or a receipt line; nobody is attesting to it on the operator's
 behalf, and #151 carries the witness.
 
+**Step 2 has been performed only locally, and step 1 found a defect.** The
+later pass recorded in `docs/2026-08-25-forge-exit-rehearsals-2-to-6.md`
+verified the same log against the anchor the forge had already published, ran
+step 2's tampering against a forge the test process builds rather than against
+production, and ran step 1 on all three fleet nodes at once. The nodes gave
+three different answers: the WAL is shared and the projection is node-local, so
+a node that has not replayed an entry yet reports `served_refs_diverged` and
+`object_missing`, which are the findings that mean tampering. #251 carries it,
+and it blocks #179's scheduled verification pass. #190 also still reproduces:
+`OpenAgents.Forge.Repos.allowed_repos/0` returns a name `verify/2` cannot use.
+
 ## 3. Mirror divergence
 
 **Proves:** the GitHub mirror is never an input to recovery, and divergence is
@@ -308,9 +325,11 @@ reported rather than reconciled silently.
    git ls-remote https://github.com/{owner}/{repo}.git refs/heads/main
    ```
 
-2. A difference is expected whenever the forge is ahead. Automatic mirroring is
-   not configured, so GitHub stays at whatever was last pushed to it.
-   `OpenAgents.Forge.MirrorWatch` publishes freshness on `/status`.
+2. A difference is expected whenever the forge is ahead. A mirror **is**
+   configured for `openagents.com` — `OPENAGENTS_FORGE_MIRROR_URLS_JSON` sets
+   it, and #188 corrected the contracts that said otherwise — so read
+   `forge.mirror` on `/status`, which `OpenAgents.Forge.MirrorWatch`
+   publishes, rather than assuming GitHub is frozen.
 
 3. Confirm the divergence changes nothing about authority. Rebuild from the WAL
    and check the head is unchanged:
@@ -327,10 +346,34 @@ reported rather than reconciled silently.
    returns `:ok` on success and a typed error when the WAL cannot produce a
    servable projection. `EXIT-003` turns red if a mirror input is added.
 
+### Result, 2026-08-25
+
+**Steps 1 and 2 pass against the live forge.** Both remotes advertise the same
+twenty-five refs, byte for byte, with `refs/heads/main` at
+`e57f5ea8b1666ccb69fc4c626f54cf41b34a0ebe` on each, and the node reports
+`openagents.com` as the one configured mirror.
+
+Identical ref maps are not identical history, and the gap is #188's. A full
+clone of each side: the forge serves 423 commits on `main`, `git fsck` clean,
+grafted at five `shallow` boundaries with `eda094c6` as its root; GitHub serves
+730, `git fsck` clean, rooted at `a352f78e`. The 307-commit difference is on
+the mirror and in no WAL. For everything pushed since the seed the forge is
+canonical and the mirror is lossy; for everything before it the relation is
+inverted, which is what #188 asks the contracts to say.
+
+**Step 3 was not run against production.** `rebuild/1` discards a projection,
+and a rehearsal must be read-only against the forge people push to. Its
+behavior was exercised locally instead, by three tests in
+`test/openagents/forge/independence_test.exs`. Whether it succeeds against the
+live 423-commit projection is untested.
+`docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` records both halves.
+
 ## 4. Key rotation
 
-**Proves:** nothing yet. This rehearsal is written and has never been
-performed.
+**Proves:** that no rotation invalidates an already-issued receipt, and that a
+rotation performed in the wrong order is refused rather than silently
+invalidating history. `test/openagents/forge/key_rotation_test.exs` is the
+proof, and the rehearsal was performed on 2026-08-25.
 
 The forge holds several key-like secrets and they rotate differently:
 
@@ -369,8 +412,11 @@ The forge holds several key-like secrets and they rotate differently:
     `MACHINE_TOKEN_ENCRYPTION_KEY`) rotates with bounded loss: at most one
     ten-minute window of unclaimed pairings becomes unreadable, and a person
     retries the pairing. There is no keyring because no record outlives the
-    window. Rotating the GitHub key no longer touches this vault; #192
-    records that it once did, silently.
+    window. The code no longer reaches the GitHub key, which is #192's fix,
+    but production has not provisioned `MACHINE_TOKEN_ENCRYPTION_KEY`, so the
+    boot bridge in `config/runtime.exs` still configures this vault with the
+    GitHub vault's active key. Until that secret is set, a GitHub key rotation
+    does move this vault's key. #253 carries it.
   - `OpenAgents.Voice.RecordingVault` (call audio,
     `VOICE_RECORDING_ENCRYPTION_KEY`) rotates with permanent loss: one key,
     no key id, no keyring, so recordings sealed under the retired key never
@@ -381,10 +427,30 @@ The forge holds several key-like secrets and they rotate differently:
 every already-issued receipt verifiable, and that a rotation performed in the
 wrong order is refused rather than silently invalidating history.
 
+### Result, 2026-08-25
+
+**Both halves pass in the test process.** A forge receipt depends on no key —
+the WAL chain link is unkeyed and reproducible from the entry alone, and the
+verifier is compiled against no secret and no vault — so no rotation can
+invalidate one. The reputation issuer key's ordering rule refuses a backward
+retirement and names the attestation it would have unverified, refuses one
+earlier than a silent key's activation, and refuses one beyond the clock-skew
+allowance. Each vault's rotation outcome is proven separately. Twelve tests,
+all green.
+
+**No key was rotated against production.** The live half is an inventory read
+without printing key material, and it found one gap: `VOICE_RECORDING_ENCRYPTION_KEY`
+is set and distinct, but `MACHINE_TOKEN_ENCRYPTION_KEY` is unset, so the
+pairing vault runs on the GitHub vault's key (#253). It also found that the
+GitHub retired keyring is empty and no reputation issuer key is admitted, so
+neither rotation has ever run here.
+`docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` records the inventory.
+
 ## 5. Operator loss
 
-**Proves:** nothing yet outside `EXIT-003`, which shows recovery comes from the
-WAL and never from the mirror.
+**Proves:** that the source and the receipts come back from the WAL alone.
+`test/openagents/forge/independence_test.exs` proves it in a test process, and
+the rehearsal was performed on 2026-08-25.
 
 **What a rehearsal must establish:** that a second operator, starting from the
 WAL and the exported metadata alone, brings the forge back without treating
@@ -395,6 +461,25 @@ depends on rehearsal 4.
 **What no rehearsal here can establish:** that a second operator can obtain the
 WAL at all. It lives in storage the current operator controls, and this
 repository contains nothing that changes that.
+
+### Result, 2026-08-25
+
+**Recovery passes in the test process**, through the three tests rehearsal 3's
+step 3 names: the WAL rebuilds the repository and re-derives receipts a
+database lost, the rebuild path reads no mirror, and the mirror restores source
+without restoring the push record.
+
+**The limit above is now measured rather than asserted, and it is stronger than
+it reads.** The WAL adapter is `OpenAgents.Forge.WAL.Gcs` against one bucket in
+the operator's own cloud project, with uniform bucket-level access, so reaching
+it needs a grant only the current operator can make. That bucket has no object
+versioning; soft delete retains a deleted object for seven days and nothing
+longer. So the storage keeps no history of itself, and an operator who rewrote
+an entry a week ago leaves no earlier copy in it. The only commitment outside
+that bucket is the anchor at `/.well-known/openagents-forge-anchor.json`,
+served by the same operator and witnessed by nobody (#151). A reader who kept a
+copy of it can refute a later rewrite; a second operator starting from scratch
+cannot.
 
 ## 6. Partial export
 
@@ -413,6 +498,35 @@ returning a shorter document that reads as complete.
 3. Compare against `OpenAgents.DataRights.ExportInventory`, which `EXIT-001`
    enforces against the surface in both directions, and against the same
    counts published at `GET /api/status` under `independence.export`.
+
+### Result, 2026-08-25
+
+**Step 3 passes against the live forge.** `GET /api/status` publishes 35
+families — 24 portable, 0 partial, 1 blocked, 10 not user data — with the
+`trace` family as the one declared gap, and the deployed ledger reports the
+same split and no drift.
+
+**Step 3 fails against `main`.** The same comparison, run in the test suite,
+reports `unclassified: [:response]`: `POST /api/v1/responses` reached the route
+authority without a ledger entry. That is `EXIT-001`'s
+derived coverage failing the build, which is what it is for. #252 carries the
+decision it forced: the stub records nothing, so the family is
+`not_user_data`, and the entry says it is revisited when a provider stands
+behind the route.
+
+**Steps 1 and 2 pass, exercised through the route against a local forge**
+rather than a live session. The document carries a `bounds` map of fourteen
+caps, ten `*_truncated` flags across five collections, and a `"not_included"`
+list naming four families with a mechanism and a reason each. The sealed
+variant returns an `age-encryption.org/v1` body that decrypts to the same
+bounds.
+
+**One flag was observed positive, and no committed test does that.** Every
+`*_truncated` assertion in the suite is a `refute`, so the claim this rehearsal
+exists to check had no proof that could fail for it. A Box run of 70,000 bytes
+exports 65,536 with `output_truncated: true` and `output_byte_size: 70000`. The
+observation lives in `docs/2026-08-25-forge-exit-rehearsals-2-to-6.md` rather
+than in a test, so the proof gap remains.
 
 ## What these rehearsals do not cover
 

@@ -1,85 +1,171 @@
 defmodule OpenAgentsWeb.ResponsesController do
   @moduledoc """
-  The OpenResponses surface, opening as a stub.
+  The OpenResponses surface, answered by real inference.
 
   `POST /api/v1/responses` takes an OpenResponses request — `input` as a
-  string or a list of items — and answers with one completed assistant
-  message reading `Acknowledged.` No model is consulted and nothing is
-  recorded. The route exists so the coder's turn loop can move onto the
-  OpenResponses shape before a provider stands behind it.
+  string or a list of items, optional `instructions`, optional
+  `max_output_tokens`, optional catalog `model` — and answers from the
+  model's provider. The default model is `gemini-3.7-flash`.
 
   Both of the specification's answer shapes are served. Without `stream`,
   the non-streaming response object. With `"stream": true`, server-sent
   events carrying the semantic sequence — `response.created`,
-  `response.output_item.added`, `response.content_part.added`,
-  `response.output_text.delta`, the matching `done` events, and
-  `response.completed` — each numbered by `sequence_number`, so a client
-  built against this stub is built against the real event grammar. The text
-  arrives in more than one delta on purpose: a client that concatenates
-  deltas is proven here, not on the first provider.
+  `response.output_item.added`, `response.content_part.added`, a
+  `response.output_text.delta` per provider delta (and
+  `response.reasoning_summary_text.delta` where the model thinks out loud),
+  the matching `done` events, and `response.completed` — each numbered by
+  `sequence_number` and flushed as it happens, so the client reads tokens
+  while the provider is still writing them. A provider failure after the
+  stream has opened arrives as `response.failed`, which is the
+  specification's shape for exactly that.
 
-  This codebase already speaks OpenResponses as a client
-  (`OpenAgents.Providers.OpenAI` at `/v1/responses` upstream); this is the
-  first time it answers as one.
+  The system prompt is deliberately minimal: the caller's `instructions`
+  when given, one sentence otherwise. This surface adds no context of its
+  own — what the coder wants the model to know arrives in the request.
+
+  This codebase has long spoken OpenResponses as a client
+  (`OpenAgents.Providers.OpenAI` at `/v1/responses` upstream); this is where
+  it answers as one.
   """
 
   use OpenAgentsWeb, :controller
 
+  alias OpenAgents.Inference.Models
+  alias OpenAgents.Providers.Request
   alias OpenAgentsWeb.ApiError
 
-  @answer "Acknowledged."
+  @default_model "gemini-3.7-flash"
+  @default_instructions "You are OpenAgents Coder. Answer directly and concisely."
 
-  @doc "Answers any OpenResponses request with one acknowledged message."
   def create(conn, params) do
-    case params["input"] do
-      input when is_binary(input) and input != "" -> respond(conn, params)
-      [_ | _] -> respond(conn, params)
-      _missing -> ApiError.validation_failed(conn, %{"input" => ["is required"]})
-    end
-  end
+    with {:ok, input} <- input_of(params),
+         {:ok, model} <- model_of(params),
+         :ok <- serving(model) do
+      request = build_request(model, input, params)
 
-  defp respond(conn, params) do
-    response = response_object(params)
-
-    if params["stream"] == true do
-      stream(conn, response)
+      if params["stream"] == true do
+        stream(conn, model, request)
+      else
+        collect(conn, model, request)
+      end
     else
-      json(conn, response)
+      {:error, :input_missing} ->
+        ApiError.validation_failed(conn, %{"input" => ["is required"]})
+
+      {:error, {:model_not_served, requested}} ->
+        ApiError.validation_failed(conn, %{"model" => ["`#{requested}` is not in the catalog"]})
+
+      {:error, :model_unavailable} ->
+        ApiError.refuse(conn, "model_unavailable")
     end
   end
 
-  # The whole semantic sequence for one message, numbered and in order. Built
-  # complete rather than emitted from a loop: the stub's answer is known, and
-  # a list the whole of which is visible here is a list a reader can check
-  # against the specification event by event.
-  defp stream(conn, response) do
-    [message] = response["output"]
-    part = %{"type" => "output_text", "text" => "", "annotations" => []}
-    added = %{message | "status" => "in_progress", "content" => []}
-    base = %{"item_id" => message["id"], "output_index" => 0, "content_index" => 0}
+  # ── request shape ────────────────────────────────────────────────────────
 
-    events =
-      [
-        {"response.created", %{"response" => %{response | "status" => "in_progress"}}},
-        {"response.output_item.added", %{"output_index" => 0, "item" => added}},
-        {"response.content_part.added", Map.put(base, "part", part)},
-        {"response.output_text.delta", Map.put(base, "delta", "Acknow")},
-        {"response.output_text.delta", Map.put(base, "delta", "ledged.")},
-        {"response.output_text.done", Map.put(base, "text", @answer)},
-        {"response.content_part.done", Map.put(base, "part", %{part | "text" => @answer})},
-        {"response.output_item.done", %{"output_index" => 0, "item" => message}},
-        {"response.completed", %{"response" => response}}
-      ]
-      |> Enum.with_index()
-      |> Enum.map(fn {{type, payload}, sequence} ->
-        data =
-          payload
-          |> Map.put("type", type)
-          |> Map.put("sequence_number", sequence)
-          |> Jason.encode!()
+  defp input_of(params) do
+    case params["input"] do
+      input when is_binary(input) and input != "" ->
+        {:ok, [%{role: "user", content: input}]}
 
-        "event: #{type}\ndata: #{data}\n\n"
-      end)
+      [_ | _] = items ->
+        {:ok, Enum.flat_map(items, &item_message/1)}
+
+      _missing ->
+        {:error, :input_missing}
+    end
+  end
+
+  # One OpenResponses input item as a provider message. Text rides in
+  # `content` as a string or as `input_text`/`output_text` blocks; anything
+  # else contributes nothing rather than failing the request.
+  defp item_message(%{"role" => role} = item) when role in ["user", "assistant", "system"] do
+    case item_text(item["content"]) do
+      "" -> []
+      text -> [%{role: role, content: text}]
+    end
+  end
+
+  defp item_message(_item), do: []
+
+  defp item_text(content) when is_binary(content), do: content
+
+  defp item_text(blocks) when is_list(blocks) do
+    blocks
+    |> Enum.map(fn
+      %{"text" => text} when is_binary(text) -> text
+      _other -> ""
+    end)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n")
+  end
+
+  defp item_text(_other), do: ""
+
+  defp model_of(params) do
+    case params["model"] do
+      absent when absent in [nil, ""] ->
+        case Models.fetch(@default_model) do
+          {:ok, model} -> {:ok, model}
+          :error -> {:error, {:model_not_served, @default_model}}
+        end
+
+      named when is_binary(named) ->
+        case Models.fetch(named) do
+          {:ok, model} -> {:ok, model}
+          :error -> {:error, {:model_not_served, named}}
+        end
+
+      _not_a_string ->
+        {:error, {:model_not_served, "a non-string model"}}
+    end
+  end
+
+  defp serving(model) do
+    if Models.available?(model), do: :ok, else: {:error, :model_unavailable}
+  end
+
+  defp build_request(model, input, params) do
+    {system, turns} = Enum.split_with(input, &(&1.role == "system"))
+
+    instructions =
+      case params["instructions"] do
+        text when is_binary(text) and text != "" -> text
+        _absent -> joined_or_default(system)
+      end
+
+    max_output =
+      case params["max_output_tokens"] do
+        tokens when is_integer(tokens) and tokens > 0 -> min(tokens, model.max_output)
+        _absent -> model.max_output
+      end
+
+    %Request{
+      model_id: model.provider_model,
+      instructions: instructions,
+      input: turns,
+      max_output: max_output
+    }
+  end
+
+  defp joined_or_default([]), do: @default_instructions
+  defp joined_or_default(system), do: Enum.map_join(system, "\n\n", & &1.content)
+
+  # ── streaming ────────────────────────────────────────────────────────────
+
+  # Each provider delta becomes one OpenResponses event, flushed as it
+  # arrives. The adapter runs in this process and pushes through the
+  # callback synchronously, so the chunk is on the wire before the provider
+  # writes the next one — this surface streams for real, where the
+  # chat-completions proxy deliberately buffers.
+  #
+  # The callback cannot rebind outer variables, so the small amount of turn
+  # state — the sequence number, the accumulated text — lives in the process
+  # dictionary of this request's own process, scoped to this function.
+  defp stream(conn, model, request) do
+    response_id = "resp_" <> identifier()
+    message_id = "msg_" <> identifier()
+    base = %{"item_id" => message_id, "output_index" => 0, "content_index" => 0}
+    started = shell(response_id, model_name(model), "in_progress", [])
 
     conn =
       conn
@@ -87,41 +173,192 @@ defmodule OpenAgentsWeb.ResponsesController do
       |> put_resp_header("cache-control", "no-store")
       |> send_chunked(200)
 
-    Enum.reduce_while(events, conn, fn frame, conn ->
-      case chunk(conn, frame) do
-        {:ok, conn} -> {:cont, conn}
-        {:error, _closed} -> {:halt, conn}
+    Process.put(:responses_seq, 0)
+    Process.put(:responses_text, [])
+    Process.put(:responses_usage, %{})
+    # The conn rides the process dictionary too: `chunk/2` returns the conn
+    # that carries what has been sent — on the test adapter, literally the
+    # accumulated body — and a closure cannot rebind the outer variable.
+    Process.put(:responses_conn, conn)
+
+    emit = fn type, payload ->
+      sequence = Process.get(:responses_seq)
+      Process.put(:responses_seq, sequence + 1)
+
+      data =
+        payload
+        |> Map.put("type", type)
+        |> Map.put("sequence_number", sequence)
+        |> Jason.encode!()
+
+      case chunk(Process.get(:responses_conn), "event: #{type}\ndata: #{data}\n\n") do
+        {:ok, sent} -> Process.put(:responses_conn, sent)
+        {:error, _closed} -> :ok
       end
-    end)
+
+      :ok
+    end
+
+    emit.("response.created", %{"response" => started})
+
+    emit.("response.output_item.added", %{
+      "output_index" => 0,
+      "item" => message(message_id, "in_progress", [])
+    })
+
+    emit.("response.content_part.added", Map.put(base, "part", text_part("")))
+
+    result =
+      model.adapter.stream(request, fn
+        {:text_delta, text} when is_binary(text) and text != "" ->
+          Process.put(:responses_text, [Process.get(:responses_text), text])
+          emit.("response.output_text.delta", Map.put(base, "delta", text))
+
+        {:reasoning_delta, text} when is_binary(text) and text != "" ->
+          emit.("response.reasoning_summary_text.delta", Map.put(base, "delta", text))
+
+        {:usage, usage} when is_map(usage) ->
+          Process.put(:responses_usage, usage)
+          :ok
+
+        _other ->
+          :ok
+      end)
+
+    text = IO.iodata_to_binary(Process.get(:responses_text))
+    usage = Process.get(:responses_usage)
+
+    case result do
+      :ok ->
+        completed =
+          shell(response_id, model_name(model), "completed", [
+            message(message_id, "completed", [text_part(text)])
+          ])
+          |> Map.put("usage", usage_view(usage))
+
+        emit.("response.output_text.done", Map.put(base, "text", text))
+        emit.("response.content_part.done", Map.put(base, "part", text_part(text)))
+
+        emit.("response.output_item.done", %{
+          "output_index" => 0,
+          "item" => message(message_id, "completed", [text_part(text)])
+        })
+
+        emit.("response.completed", %{"response" => completed})
+
+      {:error, reason} ->
+        failed =
+          started
+          |> Map.put("status", "failed")
+          |> Map.put("error", %{
+            "code" => "provider_failed",
+            "message" => "the provider did not finish: #{inspect(reason)}"
+          })
+
+        emit.("response.failed", %{"response" => failed})
+    end
+
+    Process.get(:responses_conn)
   end
 
-  defp response_object(params) do
+  # ── non-streaming ────────────────────────────────────────────────────────
+
+  defp collect(conn, model, request) do
+    parent = self()
+    result = model.adapter.stream(request, fn event -> send(parent, {:responses_event, event}) end)
+    events = drain([])
+
+    text =
+      events
+      |> Enum.map(fn
+        {:text_delta, delta} -> delta
+        _other -> ""
+      end)
+      |> IO.iodata_to_binary()
+
+    usage =
+      Enum.find_value(events, %{}, fn
+        {:usage, map} when is_map(map) -> map
+        _other -> nil
+      end)
+
+    case result do
+      :ok ->
+        response_id = "resp_" <> identifier()
+        message_id = "msg_" <> identifier()
+
+        json(
+          conn,
+          shell(response_id, model_name(model), "completed", [
+            message(message_id, "completed", [text_part(text)])
+          ])
+          |> Map.put("usage", usage_view(usage))
+        )
+
+      {:error, reason} ->
+        json(
+          conn,
+          shell("resp_" <> identifier(), model_name(model), "failed", [])
+          |> Map.put("error", %{
+            "code" => "provider_failed",
+            "message" => "the provider did not answer: #{inspect(reason)}"
+          })
+        )
+    end
+  end
+
+  defp drain(acc) do
+    receive do
+      {:responses_event, event} -> drain([event | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  # ── the response object ──────────────────────────────────────────────────
+
+  defp shell(id, model_name, status, output) do
     %{
-      "id" => "resp_" <> identifier(),
+      "id" => id,
       "object" => "response",
       "created_at" => System.os_time(:second),
-      "status" => "completed",
-      "model" => model_of(params),
-      "output" => [
-        %{
-          "type" => "message",
-          "id" => "msg_" <> identifier(),
-          "role" => "assistant",
-          "status" => "completed",
-          "content" => [
-            %{"type" => "output_text", "text" => @answer, "annotations" => []}
-          ]
-        }
-      ],
+      "status" => status,
+      "model" => model_name,
+      "output" => output,
       "error" => nil,
       "usage" => %{"input_tokens" => 0, "output_tokens" => 0, "total_tokens" => 0}
     }
   end
 
-  # Echoed when the caller named one, and the product name when not: no vendor
-  # default leaks out of a route no vendor stands behind.
-  defp model_of(%{"model" => model}) when is_binary(model) and model != "", do: model
-  defp model_of(_params), do: "openagents-coder"
+  defp message(id, status, content) do
+    %{
+      "type" => "message",
+      "id" => id,
+      "role" => "assistant",
+      "status" => status,
+      "content" => content
+    }
+  end
+
+  defp usage_view(usage) do
+    input = whole(usage["input_tokens"])
+    output = whole(usage["output_tokens"])
+
+    %{
+      "input_tokens" => input,
+      "output_tokens" => output,
+      "total_tokens" => whole(usage["total_tokens"]) || (input || 0) + (output || 0)
+    }
+    |> Map.new(fn {key, value} -> {key, value || 0} end)
+  end
+
+  defp whole(value) when is_integer(value) and value >= 0, do: value
+  defp whole(_value), do: nil
+
+  defp text_part(text),
+    do: %{"type" => "output_text", "text" => text, "annotations" => []}
+
+  defp model_name(model), do: model.id
 
   defp identifier, do: Base.encode16(:crypto.strong_rand_bytes(12), case: :lower)
 end

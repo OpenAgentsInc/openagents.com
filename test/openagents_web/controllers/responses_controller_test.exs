@@ -1,85 +1,148 @@
 defmodule OpenAgentsWeb.ResponsesControllerTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  use OpenAgentsWeb.ConnCase, async: false
 
-  test "answers an anonymous caller while it is a stub", %{conn: conn} do
-    conn = post(conn, ~p"/api/v1/responses", %{input: "hello"})
+  alias OpenAgents.Providers.{FailingTestProvider, RecordingTestProvider, UnconfiguredTestProvider}
 
-    assert %{"status" => "completed"} = json_response(conn, 200)
+  # The default model rides the Vercel gateway lane; swapping the lane's
+  # adapter is how a test decides what "real inference" answers with.
+  defp swap_lane(adapter) do
+    previous = Application.get_env(:openagents, :vercel_gateway_provider)
+    Application.put_env(:openagents, :vercel_gateway_provider, adapter)
+    on_exit(fn -> Application.put_env(:openagents, :vercel_gateway_provider, previous) end)
   end
 
-  test "acknowledges a string input in the OpenResponses shape", %{conn: conn} do
-    conn =
-      conn
-      |> put_chat_api_token("responses-ack")
-      |> post(~p"/api/v1/responses", %{input: "hello there"})
-
-    assert %{
-             "object" => "response",
-             "status" => "completed",
-             "model" => "openagents-coder",
-             "output" => [message]
-           } = json_response(conn, 200)
-
-    assert %{
-             "type" => "message",
-             "role" => "assistant",
-             "status" => "completed",
-             "content" => [%{"type" => "output_text", "text" => "Acknowledged."}]
-           } = message
-  end
-
-  test "acknowledges an item-list input and echoes the model", %{conn: conn} do
-    conn =
-      conn
-      |> put_chat_api_token("responses-items")
-      |> post(~p"/api/v1/responses", %{
-        model: "anything",
-        input: [%{role: "user", content: [%{type: "input_text", text: "hi"}]}]
-      })
-
-    assert %{"model" => "anything", "output" => [_]} = json_response(conn, 200)
-  end
-
-  test "refuses a request with no input, in the envelope", %{conn: conn} do
-    conn =
-      conn
-      |> put_chat_api_token("responses-empty")
-      |> post(~p"/api/v1/responses", %{})
-
-    body = json_response(conn, 422)
-    assert body["code"] == "validation_failed"
-    assert body["errors"] == %{"input" => ["is required"]}
-  end
-
-  test "streams the semantic event sequence when asked to", %{conn: conn} do
-    conn =
-      conn
-      |> put_chat_api_token("responses-stream")
-      |> post(~p"/api/v1/responses", %{input: "hello", stream: true})
-
-    assert [type] = get_resp_header(conn, "content-type")
-    assert type =~ "text/event-stream"
-    body = response(conn, 200)
-
-    # The grammar, in order, each event numbered.
-    for {event, at} <- Enum.with_index(~w(
-          response.created
-          response.output_item.added
-          response.content_part.added
-          response.output_text.delta
-          response.output_text.delta
-          response.output_text.done
-          response.content_part.done
-          response.output_item.done
-          response.completed
-        )) do
-      assert body =~ "event: " <> event
-      assert body =~ ~s("sequence_number":#{at})
+  describe "the non-streaming response object" do
+    setup do
+      swap_lane(RecordingTestProvider)
+      :ok
     end
 
-    # The text arrives in pieces a client must concatenate.
-    assert body =~ ~s("delta":"Acknow")
-    assert body =~ ~s("delta":"ledged.")
-    refute body =~ ~s("delta":"Acknowledged.")
+    test "answers an anonymous caller from the provider", %{conn: conn} do
+      conn = post(conn, ~p"/api/v1/responses", %{input: "hello"})
+
+      assert %{
+               "object" => "response",
+               "status" => "completed",
+               "model" => "gemini-3.7-flash",
+               "output" => [message],
+               "usage" => %{"input_tokens" => 4, "output_tokens" => 8, "total_tokens" => 12}
+             } = json_response(conn, 200)
+
+      assert %{
+               "type" => "message",
+               "role" => "assistant",
+               "status" => "completed",
+               "content" => [%{"type" => "output_text", "text" => "Recorded."}]
+             } = message
+    end
+
+    test "carries the caller's instructions and input items to the provider", %{conn: conn} do
+      Application.put_env(:openagents, :test_recording_provider_observer, self())
+      on_exit(fn -> Application.delete_env(:openagents, :test_recording_provider_observer) end)
+
+      conn =
+        post(conn, ~p"/api/v1/responses", %{
+          instructions: "Answer in French.",
+          input: [
+            %{role: "user", content: [%{type: "input_text", text: "bonjour"}]},
+            %{role: "assistant", content: "salut"},
+            %{role: "user", content: "encore"}
+          ],
+          max_output_tokens: 128
+        })
+
+      assert json_response(conn, 200)
+      assert_receive {:recorded_request, _id, request}
+      assert request.instructions == "Answer in French."
+      assert request.max_output == 128
+
+      assert request.input == [
+               %{role: "user", content: "bonjour"},
+               %{role: "assistant", content: "salut"},
+               %{role: "user", content: "encore"}
+             ]
+    end
+
+    test "reports a provider failure as a failed response object", %{conn: conn} do
+      swap_lane(FailingTestProvider)
+
+      conn = post(conn, ~p"/api/v1/responses", %{input: "hello"})
+
+      assert %{"status" => "failed", "error" => %{"code" => "provider_failed"}} =
+               json_response(conn, 200)
+    end
+  end
+
+  describe "streaming" do
+    setup do
+      swap_lane(RecordingTestProvider)
+      :ok
+    end
+
+    test "streams the semantic event sequence around the provider's deltas", %{conn: conn} do
+      conn = post(conn, ~p"/api/v1/responses", %{input: "hello", stream: true})
+
+      assert [type] = get_resp_header(conn, "content-type")
+      assert type =~ "text/event-stream"
+      body = response(conn, 200)
+
+      for {event, at} <- Enum.with_index(~w(
+            response.created
+            response.output_item.added
+            response.content_part.added
+            response.output_text.delta
+            response.output_text.done
+            response.content_part.done
+            response.output_item.done
+            response.completed
+          )) do
+        assert body =~ "event: " <> event
+        assert body =~ ~s("sequence_number":#{at})
+      end
+
+      assert body =~ ~s("delta":"Recorded.")
+      assert body =~ ~s("text":"Recorded.")
+      assert body =~ ~s("input_tokens":4)
+      refute body =~ "Acknowledged"
+    end
+
+    test "a provider failure mid-stream arrives as response.failed", %{conn: conn} do
+      swap_lane(FailingTestProvider)
+
+      conn = post(conn, ~p"/api/v1/responses", %{input: "hello", stream: true})
+      body = response(conn, 200)
+
+      assert body =~ ~s("delta":"half an ")
+      assert body =~ "event: response.failed"
+      assert body =~ ~s("code":"provider_failed")
+      refute body =~ "response.completed"
+    end
+  end
+
+  describe "refusals, in the envelope" do
+    test "a request with no input", %{conn: conn} do
+      swap_lane(RecordingTestProvider)
+      conn = post(conn, ~p"/api/v1/responses", %{})
+
+      body = json_response(conn, 422)
+      assert body["code"] == "validation_failed"
+      assert body["errors"] == %{"input" => ["is required"]}
+    end
+
+    test "a model outside the catalog", %{conn: conn} do
+      swap_lane(RecordingTestProvider)
+      conn = post(conn, ~p"/api/v1/responses", %{input: "hi", model: "gpt-9-imaginary"})
+
+      body = json_response(conn, 422)
+      assert body["errors"]["model"] == ["`gpt-9-imaginary` is not in the catalog"]
+    end
+
+    test "a lane with no configured credential", %{conn: conn} do
+      swap_lane(UnconfiguredTestProvider)
+      conn = post(conn, ~p"/api/v1/responses", %{input: "hi"})
+
+      body = json_response(conn, 503)
+      assert body["code"] == "model_unavailable"
+    end
   end
 end

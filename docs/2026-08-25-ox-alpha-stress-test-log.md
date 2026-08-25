@@ -167,3 +167,103 @@ tree the site runs:
    (`GET /api/v1/user` returns no `conversation_id`).
 3. `BOX_API_KEY` provider credential configuration in production, verifiable
    only after 1 and 2.
+
+## 7. Cloud Box 2-way fan-out: live results (2026-08-25, after unblock)
+
+The three blockers in section 6 were cleared the same day: the `BOX_API_KEY`
+provider credential was set in production, a `box:control`-scoped API token
+was minted from **Settings → API tokens**, and the owner's conversation UUID
+was supplied directly. The CLI consumed the scoped token through its
+`OPENAGENTS_TOKEN` environment override; all commands below are real
+`openagents box` invocations run from monorepo source at `6f575f466a`.
+
+### Fan-out and provisioning (criterion a: demonstrated live)
+
+`openagents box fanout --count 2 --labels ox-alpha-1,ox-alpha-2
+--conversation <uuid> --json` returned plan
+`f6e8b333-0508-4615-825d-52df9dd2b59b`: 2 requested, 2 admitted, 0 queued,
+`budgeted: false`, `effective_limits.conversation_active_limit: 2`. Both VMs
+reached `idle` / setup `done` within ~10 seconds of the request. The plan is
+durable: `GET .../boxes/fanout/f6e8b333-...` re-serves it after the boxes
+stopped.
+
+| Label | Box ID | Provider host | Admitted at |
+| --- | --- | --- | --- |
+| ox-alpha-1 | `bx_8af5ehkj` | `box-node-67cd03d983815f97` | 19:37:03Z |
+| ox-alpha-2 | `bx_xsv6tr39` | `agents-server-one-1787686473-313447` | 19:37:08Z |
+
+Distinct hostnames confirm the two sandboxes landed on different provider
+hosts. Box images carry git 2.43, node v24.19, npm, bun, and codex on
+Ubuntu (4 vCPU, 8 GB); `opencode` is not installed.
+
+### Isolated clones and asynchronous runs (criterion b: partially demonstrated)
+
+Each box ran a durable background run (`openagents box run <box_id>
+--conversation <uuid> '<script>'`) that cloned the repository from the forge
+(`git clone --depth 1 https://openagents.com/OpenAgentsInc/openagents.com.git`)
+into its own sandbox and reported timings and the head revision. The two runs
+executed concurrently (19:43:09.3–14.5Z and 19:43:10.3–16.2Z) and both
+resolved `HEAD` to production main `40dbd832`, proving isolated per-box clones
+served by the forge.
+
+| Run ID | Box | State | Exit | Wall | Clone |
+| --- | --- | --- | --- | --- | --- |
+| `0c0f2de0-ce47-4377-a9fb-f0743d95d9d6` | bx_8af5ehkj | completed | 0 | 5 s | 5 s |
+| `202d391c-77d6-4ba1-91fd-8b8063bc5db8` | bx_xsv6tr39 | completed | 0 | 6 s | 6 s |
+
+Not demonstrated: an actual Ox Alpha model turn on a box. `opencode` is not in
+the box image and no inference-credential lane exists for boxes yet; placing
+the account token inside a run command would persist a secret in the durable
+run record, so it was not attempted. Tokens generated on boxes: 0.
+
+### Output logs and receipts (criterion c: output demonstrated; push receipts blocked)
+
+Run output is durable server-side:
+`GET .../boxes/:box_id/runs/:run_id/output` returns the full log (`box_host`,
+timings, `head_revision`) with offsets after run completion, and `box runs
+list` / `runs view` re-serve every run record, including the failed attempts
+below.
+
+Push receipts could not be exercised. The credentialed lane —
+`POST .../boxes/:box_id/assignments` (`OpenAgents.Forge.Assignments`), which
+injects a branch-scoped forge credential so the box can push — failed
+deterministically on dispatch, twice per box (initial + one retry):
+
+| Assignment | Branch | Run | Failure |
+| --- | --- | --- | --- |
+| `9c328eca` | `box/ox-alpha-1-issue-255` | `78bf8a79` | `box_response_invalid` |
+| `1879b291` | `box/ox-alpha-2-issue-188` | `686c33be` | `box_response_invalid` |
+| `e35d1c88` (retry) | `box/ox-alpha-1-issue-255` | `4c91167c` | `box_response_invalid` |
+| `40392ea6` (retry) | `box/ox-alpha-2-issue-188` | `fc347327` | `box_response_invalid` |
+
+Evidence points at the provider seam: the identical script dispatched without
+a credential completes normally, but the credentialed dispatch — the only
+variant that adds an `env` field (`OPENAGENTS_FORGE_TOKEN`) to the provider
+`/commands` request and a credential-setup preamble to the wrapper — comes
+back without a parseable PID (`Box.Client.dispatch_pid/1` refuses), and box
+forensics show the run root directory was never created, so the wrapper never
+executed. The likely cause is the provider command API not honoring the `env`
+parameter. Follow-up belongs with openagents#58 / a provider-API check, not
+with the fanout substrate.
+
+One CLI defect surfaced: `openagents box runs output` prints an empty string
+because `BoxClient.runOutput` reads the response's `output` key as text while
+the server returns a nested object (`{"output": {"output": ...}}`). The raw
+route returns the log correctly.
+
+### Cleanup
+
+Both boxes were stopped (`openagents box stop`), observed `archiving` with
+slots released. Peak concurrent boxes: 2 of the 2-box cap; `--budgeted` never
+used.
+
+### Acceptance criteria after the live run
+
+1. Multi-box dispatch provisions/queues up to the cap: **demonstrated live**
+   (2 requested, 2 admitted, 0 queued, cap honored, durable plan).
+2. Isolated repo clones and asynchronous execution per box: **demonstrated
+   live** for clones and concurrent durable runs; **Ox Alpha model turns
+   remain undemonstrated** (no `opencode`/inference lane in the box image).
+3. Output logs, tokens, and push receipts on the server: **output logs
+   demonstrated live**; tokens not applicable (no model turn); **push
+   receipts blocked** by the credentialed-dispatch failure above.

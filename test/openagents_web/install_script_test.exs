@@ -197,4 +197,120 @@ defmodule OpenAgentsWeb.InstallScriptTest do
     assert script =~ "${BASE_URL_PRIMARY}/${CHANNEL}",
            "the installer never reads the channel pointer"
   end
+
+  # The Rust binary implements a strict subset of the TypeScript CLI's
+  # commands, so taking the `openagents` name swaps a fraction of the CLI in
+  # underneath every script, agent tool call, and `openagents` tool that
+  # invokes it by name — and the failure surfaces far from the cause, as
+  # `unrecognized subcommand` from something that always worked. See
+  # openagents#90.
+  #
+  # These run the installer's own shell, rather than grepping it. A test that
+  # only greps passes the moment someone writes the same bug a different way.
+  describe "the `openagents` name" do
+    test "is never written by an install" do
+      script = File.read!(@script)
+
+      refute script =~ ~s(ln -sf "$link_target" "$BIN_DIR/openagents"),
+             "the installer links the openagents name at the Rust binary"
+
+      refute script =~ ~s($candidate/openagents),
+             "the installer puts the openagents name on PATH"
+    end
+
+    test "is reclaimed when an earlier install took it, and only then" do
+      tmp = Path.join(System.tmp_dir!(), "oa-reclaim-#{System.unique_integer([:positive])}")
+      bin = Path.join(tmp, "bin")
+      downloads = Path.join(tmp, "downloads")
+      File.mkdir_p!(bin)
+      File.mkdir_p!(downloads)
+
+      binary = Path.join(downloads, "openagents-macos-aarch64")
+      File.write!(binary, "#!/bin/sh\n")
+
+      # What a previous install left behind, and what must go.
+      File.ln_s!("../downloads/openagents-macos-aarch64", Path.join(bin, "openagents"))
+
+      # Someone else's `openagents`, which must survive untouched.
+      other = Path.join(tmp, "real-openagents")
+      File.write!(other, "#!/bin/sh\n")
+      File.ln_s!(other, Path.join(bin, "openagents-real"))
+
+      script = File.read!(@script)
+
+      # The function working proves nothing if the install path never calls it.
+      assert script =~ ~r/^\s+reclaim_openagents_name$/m,
+             "reclaim_openagents_name is defined and never called"
+
+      body = extract_function(script, "reclaim_openagents_name")
+
+      runner = Path.join(tmp, "run.sh")
+
+      File.write!(runner, """
+      BIN_DIR="#{bin}"
+      DOWNLOAD_DIR="#{downloads}"
+      HOME="#{tmp}"
+      #{body}
+      reclaim_openagents_name
+      """)
+
+      assert {_out, 0} = System.cmd("sh", [runner], stderr_to_stdout: true)
+
+      refute File.exists?(Path.join(bin, "openagents")),
+             "the link an earlier install left is still shadowing the CLI"
+
+      assert File.exists?(Path.join(bin, "openagents-real")),
+             "an openagents we did not install was removed"
+
+      assert File.exists?(binary), "the binary itself was removed with the link"
+
+      File.rm_rf!(tmp)
+    end
+
+    test "a shell alias named oa is reported, since it beats PATH and is invisible to `command -v`" do
+      pattern = shadow_pattern(File.read!(@script))
+
+      tmp = Path.join(System.tmp_dir!(), "oa-rc-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp)
+      rc = Path.join(tmp, "rc")
+
+      File.write!(rc, """
+      export PATH="/usr/bin:$PATH"
+      alias oa="node ~/old/cli.js"
+      alias oat="a different command"
+      oa() { echo hi; }
+      function oa { echo hi; }
+      alias openagents="not this one"
+      # alias oa=commented out
+      """)
+
+      {out, _} = System.cmd("sh", ["-c", "grep -Ens '#{pattern}' '#{rc}' || true"])
+
+      lines =
+        out |> String.split("\n", trim: true) |> Enum.map(&List.first(String.split(&1, ":")))
+
+      assert lines == ["2", "4", "5"],
+             "the shadow check found #{inspect(lines)}; it must catch the three ways `oa` is " <>
+               "defined and leave `oat`, `openagents`, and a comment alone"
+
+      File.rm_rf!(tmp)
+    end
+  end
+
+  # Pull one shell function out of the installer so a test can run the real
+  # thing rather than a restatement of it.
+  defp extract_function(script, name) do
+    script
+    |> String.split("\n")
+    |> Enum.drop_while(&(!String.starts_with?(&1, "#{name}() {")))
+    |> Enum.take_while(&(&1 != "}"))
+    |> Kernel.++(["}"])
+    |> Enum.join("\n")
+  end
+
+  # The ERE the installer greps the shell rc file with.
+  defp shadow_pattern(script) do
+    [_, pattern] = Regex.run(~r/grep -Eqs '([^']+)'/, script)
+    pattern
+  end
 end

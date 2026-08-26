@@ -13,13 +13,13 @@ defmodule OpenAgentsWeb.ComputersLive do
   @presence_refresh_ms 15_000
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     socket =
       socket
       |> stream_configure(:computers, dom_id: &"computer-#{&1.id}")
       |> assign(:page_title, "Computers · Sarah")
       |> assign(:controller_enabled?, Computer.enabled?())
-      |> assign(:pairing_form, to_form(%{"code" => ""}, as: :pairing))
+      |> assign(:pairing_form, to_form(%{"code" => prefilled_code(params)}, as: :pairing))
       |> assign(:pairing_error, nil)
       |> assign(:operation_success, nil)
       |> assign(:subscribed_computer_ids, MapSet.new())
@@ -33,6 +33,23 @@ defmodule OpenAgentsWeb.ComputersLive do
     if connected?(socket), do: schedule_presence_refresh()
     {:ok, socket}
   end
+
+  # A pairing link may carry its code, the way `/device` does. Without this the
+  # code has to be read off the agent's terminal and retyped, and three pairing
+  # attempts expired unapproved because of it. Only the shape a code can have is
+  # accepted, so a crafted link cannot put arbitrary text in the field.
+  defp prefilled_code(params) when is_map(params) do
+    case params["user_code"] || params["code"] do
+      code when is_binary(code) ->
+        normalized = code |> String.trim() |> String.upcase()
+        if Regex.match?(~r/\A[A-Z0-9]{4}-[A-Z0-9]{4}\z/, normalized), do: normalized, else: ""
+
+      _ ->
+        ""
+    end
+  end
+
+  defp prefilled_code(_), do: ""
 
   @impl true
   def handle_event("approve_pairing", _params, %{assigns: %{controller_enabled?: false}} = socket) do
@@ -352,8 +369,8 @@ defmodule OpenAgentsWeb.ComputersLive do
                 <div>
                   <h2>Pair a computer</h2>
                   <p>
-                    Run <code>sarah-computer-controller pair</code> on the computer, then enter
-                    its one-time code. Codes expire after ten minutes.
+                    Run <code>oa computer pair</code> on the computer, then enter its one-time
+                    code. Codes expire after ten minutes.
                   </p>
                 </div>
               </div>

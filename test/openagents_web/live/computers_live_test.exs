@@ -173,4 +173,52 @@ defmodule OpenAgentsWeb.ComputersLiveTest do
 
     pairing
   end
+
+  describe "the pairing form is usable" do
+    # Three attempts to pair expired unapproved during one working session,
+    # partly because this form was hard to fill: `computers-pairing__form` was a
+    # two-column grid with three children, so the checkbox landed beside the
+    # code label and the button wrapped underneath into the same cell — the
+    # words "Approve pairing" rendered through the checkbox text. See #112.
+    test "names the command that actually produces a code", %{conn: conn} do
+      conn = log_in_github_user(conn, "computers-command")
+      {:ok, _view, html} = live(conn, ~p"/computers")
+
+      assert html =~ "oa computer pair"
+
+      refute html =~ "sarah-computer-controller",
+             "the page tells the reader to run a command that does not exist"
+    end
+
+    test "prefills a code carried in the link, the way /device does", %{conn: conn} do
+      conn = log_in_github_user(conn, "computers-prefill")
+      {:ok, view, _html} = live(conn, ~p"/computers?user_code=M6YF-BP8Q")
+
+      assert has_element?(view, ~s(#pairing-form input[value="M6YF-BP8Q"])),
+             "the code in the link did not reach the field, so it has to be retyped"
+    end
+
+    test "lower case in the link still fills the field", %{conn: conn} do
+      conn = log_in_github_user(conn, "computers-prefill-case")
+      {:ok, view, _html} = live(conn, ~p"/computers?user_code=m6yf-bp8q")
+
+      assert has_element?(view, ~s(#pairing-form input[value="M6YF-BP8Q"]))
+    end
+
+    test "only a code-shaped value is prefilled", %{conn: conn} do
+      conn = log_in_github_user(conn, "computers-prefill-junk")
+      {:ok, view, _html} = live(conn, ~p"/computers?user_code=<script>alert(1)</script>")
+
+      # A crafted link must not put arbitrary text in front of the reader as
+      # though the server had issued it.
+      assert has_element?(view, ~s(#pairing-form input[value=""]))
+    end
+
+    test "no link, no prefill", %{conn: conn} do
+      conn = log_in_github_user(conn, "computers-prefill-none")
+      {:ok, view, _html} = live(conn, ~p"/computers")
+
+      assert has_element?(view, ~s(#pairing-form input[value=""]))
+    end
+  end
 end

@@ -352,11 +352,36 @@
     font-size: 1.25rem;
   }
 
+  /* One row per control.
+   *
+   * This was `minmax(0, 1fr) auto` — two columns for three children, so the
+   * checkbox landed beside the code label and the button wrapped underneath
+   * into the same cell, rendering "Approve pairing" through the checkbox text.
+   * The form was hard to fill and the button hard to hit, on the one page
+   * where a person approves a computer. */
   .computers-pairing__form {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+  }
+
+  .computers-pairing__form .btn {
+    justify-self: start;
+  }
+
+  /* The checkbox and its words on one line, aligned to each other rather than
+     stretched across the row. */
+  .computers-pairing__field label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.35;
+  }
+
+  .computers-pairing__field input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin: 0;
   }
 
   .computers-pairing__field {

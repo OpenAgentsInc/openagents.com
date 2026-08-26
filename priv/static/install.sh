@@ -1,18 +1,36 @@
-#!/bin/bash
+#!/bin/sh
 #
 # OpenAgents CLI installer — https://openagents.com/install.sh
 #
 # Usage:
-#   curl -fsSL https://openagents.com/install.sh | bash            # latest stable
-#   curl -fsSL https://openagents.com/install.sh | bash -s 0.1.0   # specific version
+#   curl -fsSL https://openagents.com/install.sh | sh            # latest stable
+#   curl -fsSL https://openagents.com/install.sh | sh -s 0.1.0   # specific version
 #
 # Windows: run under Git for Windows / MSYS2 Bash; WSL uses the Linux binary.
+#
+# This is POSIX shell, not bash, and the difference is the point. The musl
+# builds exist for Alpine above all, and Alpine ships no bash: piping this into
+# `bash` there fails before the first line runs, with an error about the shell
+# rather than about anything the reader did. `sh` is on every system this
+# installs to. Piping into `bash` still works and every published form of the
+# command keeps working, so nothing that already ran stops running.
+#
+# What that costs: no `[[ ]]`, no `=~`, and no arrays. Version matching goes
+# through `is_version` below, and the parallel download tracks its background
+# jobs in a space-separated string.
 
 set -e
 
 TARGET="$1"
 
-if [[ -n "$TARGET" ]] && [[ ! "$TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$ ]]; then
+# The grammar the release publishes under, and the same one `ops/release-cli.sh`
+# and `oa update` apply. A version one of them accepts and another rejects is a
+# release nobody can ask for.
+is_version() {
+    printf '%s' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$'
+}
+
+if [ -n "$TARGET" ] && ! is_version "$TARGET"; then
     echo "Invalid version format: $TARGET (expected X.Y.Z or X.Y.Z-suffix)" >&2
     exit 1
 fi
@@ -60,16 +78,19 @@ download_file_parallel() {
     local chunk_size=$(( (size + n - 1) / n ))
     local tmpdir
     tmpdir=$(mktemp -d 2>/dev/null) || { download_file "$url" "$output"; return; }
-    local pids=() i start end
-    for i in $(seq 0 $((n - 1))); do
+    # A space-separated list rather than an array: `wait` takes one pid at a
+    # time either way, and this is the part of bash the script does without.
+    local pids="" i=0 start end
+    while [ "$i" -lt "$n" ]; do
         start=$((i * chunk_size))
         end=$((start + chunk_size - 1))
         [ $end -ge $size ] && end=$((size - 1))
         curl -fsSL -r "${start}-${end}" -o "${tmpdir}/$(printf 'chunk.%03d' "$i")" "$url" &
-        pids+=($!)
+        pids="$pids $!"
+        i=$((i + 1))
     done
     local all_ok=true pid
-    for pid in "${pids[@]}"; do
+    for pid in $pids; do
         wait "$pid" || all_ok=false
     done
     if [ "$all_ok" = true ] && cat "${tmpdir}"/chunk.* > "$output" 2>/dev/null; then
@@ -112,12 +133,87 @@ if [ "$os" = "macos" ] && [ "$arch" = "x86_64" ]; then
     fi
 fi
 
+# Which C library, on Linux. Two Linux builds exist per architecture because a
+# glibc-linked executable does not run on a musl system: the kernel reports the
+# missing interpreter as "no such file or directory" against a file that
+# plainly exists, which is one of the least legible errors a first install can
+# produce.
+#
+# The test is not "which distribution is this". Distribution detection needs
+# files a minimal image may not carry, and `ldd` disagrees with itself across
+# implementations -- GNU's prints a version banner to stdout and exits 0, musl's
+# prints "musl libc" to stderr, and BusyBox's does neither. The question that
+# actually decides the answer is narrower: is the glibc dynamic loader this
+# artifact would ask for present on the system?
+#
+# The gnu artifact is dynamically linked and names that loader in its
+# PT_INTERP. The musl artifact is statically linked and names no interpreter at
+# all, so it runs anywhere. A system with the loader can run either and gets
+# gnu; a system without it can only run musl. That reads correctly on Alpine,
+# on a distroless or BusyBox-only image with no `ldd` to ask, on a Debian host
+# that happens to have the `musl` package installed, and on NixOS, where the
+# loader lives in the Nix store and the static build is genuinely the right
+# answer. Every way this test can be wrong sends the reader to the artifact
+# that still runs.
+#
+# $1 is the architecture; $2 is a filesystem root to search under, empty for
+# the real one, so the choice can be exercised against a fixture.
+linux_libc() {
+    libc_arch="$1"
+    libc_root="$2"
+
+    case "$libc_arch" in
+        x86_64)
+            loaders="/lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+            ;;
+        aarch64)
+            loaders="/lib/ld-linux-aarch64.so.1 /lib64/ld-linux-aarch64.so.1 /lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+            ;;
+        *)
+            echo "gnu"
+            return
+            ;;
+    esac
+
+    for loader in $loaders; do
+        if [ -e "${libc_root}${loader}" ]; then
+            # A system whose own `ldd` identifies as musl is musl even with a
+            # glibc compatibility loader installed beside it, and that is the
+            # one case where the loader alone would answer wrongly in the
+            # direction that does not run.
+            if [ -z "$libc_root" ] && command -v ldd >/dev/null 2>&1; then
+                case "$(ldd --version 2>&1 || true)" in
+                    *musl*) echo "musl"; return ;;
+                esac
+            fi
+            echo "gnu"
+            return
+        fi
+    done
+
+    echo "musl"
+}
+
+libc=""
+if [ "$os" = "linux" ]; then
+    libc="$(linux_libc "$arch" "")"
+fi
+
 BASE_URL_PRIMARY="https://openagents.com/releases"
 DOWNLOAD_DIR="$HOME/.openagents/downloads"
 BIN_DIR="${OPENAGENTS_BIN_DIR:-$HOME/.openagents/bin}"
 mkdir -p "$DOWNLOAD_DIR" "$BIN_DIR"
 
 platform="${os}-${arch}"
+
+# The glibc Linux artifact keeps the unsuffixed name it has always had, so
+# every installer already in circulation keeps resolving. musl is the addition
+# and carries the suffix.
+if [ "$libc" = "musl" ]; then
+    platform="${platform}-musl"
+    echo "musl libc detected; installing the statically linked build." >&2
+fi
+
 CHANNEL="${OPENAGENTS_CHANNEL:-stable}"
 
 # A channel is a pointer file naming the version it currently means, so
@@ -129,10 +225,11 @@ else
     version="$(download_file "${BASE_URL_PRIMARY}/${CHANNEL}" "" 2>/dev/null | tr -d '[:space:]')" || version=""
     if [ -z "$version" ]; then
         echo "Could not resolve the '${CHANNEL}' channel from ${BASE_URL_PRIMARY}/${CHANNEL}." >&2
-        echo "Pass a version explicitly: curl -fsSL https://openagents.com/install.sh | bash -s X.Y.Z" >&2
+        echo "Pass a version explicitly: curl -fsSL https://openagents.com/install.sh | sh -s X.Y.Z" >&2
+        echo "Or follow another channel: OPENAGENTS_CHANNEL=beta" >&2
         exit 1
     fi
-    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$ ]]; then
+    if ! is_version "$version"; then
         echo "The '${CHANNEL}' channel returned something that is not a version: ${version}" >&2
         exit 1
     fi

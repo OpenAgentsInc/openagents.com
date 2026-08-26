@@ -179,6 +179,29 @@ defmodule OpenAgentsWeb.ReleaseControllerTest do
     end
   end
 
+  test "every platform the installer can ask for is admitted", %{conn: conn} do
+    Req.Test.stub(__MODULE__, fn upstream ->
+      Plug.Conn.send_resp(upstream, 200, "bytes")
+    end)
+
+    # The musl artifacts carry two more hyphens than any name that existed when
+    # the allowlist was written. A pattern tightened later without them in mind
+    # would 404 every Alpine install while every other platform kept working.
+    for platform <- [
+          "macos-aarch64",
+          "macos-x86_64",
+          "linux-x86_64",
+          "linux-x86_64-musl",
+          "linux-aarch64",
+          "linux-aarch64-musl",
+          "windows-x86_64"
+        ] do
+      name = "openagents-0.1.0-rc.2-#{platform}"
+
+      assert get(conn, ~p"/releases/#{name}").status == 200, "#{name} was refused"
+    end
+  end
+
   test "a deeper path names no object, and the reserved slug is what answers", %{conn: conn} do
     Req.Test.stub(__MODULE__, fn _upstream ->
       flunk("a multi-segment path reached the bucket")

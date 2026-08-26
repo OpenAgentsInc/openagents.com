@@ -18,6 +18,28 @@ defmodule OpenAgentsWeb.InstallScriptTest do
 
   @script Path.join([File.cwd!(), "priv", "static", "install.sh"])
 
+  defp libc(source, arch, root) do
+    {output, 0} =
+      System.cmd("bash", ["-c", ". #{source}; linux_libc #{arch} #{root}"],
+        stderr_to_stdout: true
+      )
+
+    String.trim(output)
+  end
+
+  defp fixture(dir, name, paths) do
+    root = Path.join(dir, name)
+    File.mkdir_p!(root)
+
+    Enum.each(paths, fn path ->
+      absolute = Path.join(root, path)
+      File.mkdir_p!(Path.dirname(absolute))
+      File.write!(absolute, "")
+    end)
+
+    root
+  end
+
   test "the installer is served under the name the published command uses" do
     assert "install.sh" in OpenAgentsWeb.static_paths(),
            "`install.sh` is not in static_paths/0, so /install.sh is a 404"
@@ -28,6 +50,22 @@ defmodule OpenAgentsWeb.InstallScriptTest do
 
   test "the script parses" do
     assert {_output, 0} = System.cmd("bash", ["-n", @script], stderr_to_stdout: true)
+  end
+
+  test "the script needs no shell Alpine does not ship" do
+    # The musl builds exist for Alpine above all, and Alpine ships no bash.
+    # `curl … | bash` there fails before the first line runs, with an error
+    # about the shell rather than about anything the reader did. So this is
+    # POSIX shell, and these are the three things that would quietly make it
+    # bash again.
+    assert {_output, 0} = System.cmd("sh", ["-n", @script], stderr_to_stdout: true)
+
+    script = File.read!(@script)
+    body = String.replace(script, ~r/^#.*$/m, "")
+
+    refute body =~ "[[", "`[[ ]]` is a bash conditional"
+    refute body =~ "=~", "`=~` is a bash regex match"
+    refute body =~ ~r/\[@\]/, "an array expansion is bash-only"
   end
 
   test "nothing is installed without a checksum that matches" do
@@ -55,6 +93,91 @@ defmodule OpenAgentsWeb.InstallScriptTest do
 
     refute script =~ ~r/^\s*cp\s+"\$HOME\/\.openagents\/bin/m,
            "the installer reinstalls whatever is already on disk"
+  end
+
+  describe "libc detection" do
+    # `linux_libc` is extracted from the served script and run against fixture
+    # roots, so these assert the code readers actually receive rather than a
+    # copy of it. The choice matters more than most: a glibc binary on a musl
+    # system fails at exec with "no such file or directory" naming a file that
+    # is plainly there, and nothing in that message points at the installer.
+    setup do
+      script = File.read!(@script)
+
+      [function] = Regex.run(~r/^linux_libc\(\).*?^\}/ms, script)
+
+      dir = Path.join(System.tmp_dir!(), "install-libc-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      source = Path.join(dir, "linux_libc.sh")
+      File.write!(source, function)
+
+      {:ok, source: source, dir: dir}
+    end
+
+    test "a present glibc loader means the dynamically linked build runs", context do
+      root = fixture(context.dir, "glibc", ["lib64/ld-linux-x86-64.so.2"])
+
+      assert libc(context.source, "x86_64", root) == "gnu"
+    end
+
+    test "a multiarch glibc loader counts too", context do
+      root = fixture(context.dir, "multiarch", ["lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"])
+
+      assert libc(context.source, "x86_64", root) == "gnu"
+    end
+
+    test "no glibc loader means only the static build runs", context do
+      root = fixture(context.dir, "alpine", ["lib/ld-musl-x86_64.so.1"])
+
+      assert libc(context.source, "x86_64", root) == "musl"
+    end
+
+    test "an image carrying no libc at all still resolves to the static build", context do
+      root = fixture(context.dir, "bare", [])
+
+      assert libc(context.source, "x86_64", root) == "musl"
+      assert libc(context.source, "aarch64", root) == "musl"
+    end
+
+    test "a glibc host with the musl package installed is still glibc", context do
+      # Debian's `musl` package drops a musl loader onto a glibc system. The
+      # question is which artifact runs, not which loaders exist, and both do.
+      root =
+        fixture(context.dir, "both", [
+          "lib64/ld-linux-x86-64.so.2",
+          "lib/ld-musl-x86_64.so.1"
+        ])
+
+      assert libc(context.source, "x86_64", root) == "gnu"
+    end
+
+    test "each architecture is judged by its own loader", context do
+      root = fixture(context.dir, "arm", ["lib/ld-linux-aarch64.so.1"])
+
+      assert libc(context.source, "aarch64", root) == "gnu"
+
+      # The x86_64 loader is absent from this root, and an architecture's
+      # verdict must not be borrowed from another's.
+      assert libc(context.source, "x86_64", root) == "musl"
+    end
+
+    test "an architecture with no musl build asks for the glibc one", context do
+      root = fixture(context.dir, "riscv", [])
+
+      assert libc(context.source, "riscv64", root) == "gnu"
+    end
+  end
+
+  test "the musl platform is named the way the release publishes it" do
+    script = File.read!(@script)
+
+    assert script =~ ~s(platform="${platform}-musl"),
+           "the installer detects musl and then asks for the same artifact anyway"
+
+    refute script =~ ~s(platform="${os}-${arch}-${libc}"),
+           "the glibc artifact is renamed, which breaks every installer already in circulation"
   end
 
   test "the channel resolves a version rather than hardcoding one" do

@@ -15,8 +15,36 @@ configuration file. Open a new shell, then confirm the installation:
 openagents --help
 ```
 
-Run the same command again to update. The CLI does not include an
-`openagents update` command.
+## Update
+
+```sh
+openagents update
+```
+
+The command resolves the same channel the installer resolves, compares the
+version it names against the running binary, and stops there when they agree.
+Otherwise it downloads the new artifact, fetches `SHA256SUMS-<version>` over a
+separate request, refuses anything it cannot verify, and replaces the binary in
+place. `openagents self-update` is the same command.
+
+Ask what the channel names without installing anything:
+
+```sh
+openagents update --check
+```
+
+Follow a different channel, or install one exact version:
+
+```sh
+openagents update --channel beta
+openagents update --version 0.1.0-rc.2
+```
+
+`--force` reinstalls the version already running, which is how you repair a
+binary you suspect is damaged.
+
+Running the installer again does the same job and is the right choice when the
+binary cannot start at all.
 
 ## Install a specific version
 
@@ -44,6 +72,11 @@ A channel is a pointer that moves, so the version you get today is not the
 version you get next month. Pass an explicit version when you need the answer
 to stay the same.
 
+`beta` names the current release candidate. `stable` does not resolve yet:
+it starts naming a version when the first release is cut, and until then the
+installer says so and stops rather than guessing. Until that happens, pass a
+version or follow `beta`.
+
 ## Choose where the binary lands
 
 The installer links `openagents` and `oa` into `~/.openagents/bin`. Set
@@ -61,12 +94,32 @@ The downloaded binary itself always lands in `~/.openagents/downloads`.
 | --- | --- |
 | macOS on Apple silicon | `macos-aarch64` |
 | macOS on Intel | `macos-x86_64` |
-| Linux on x86-64 | `linux-x86_64` |
-| Linux on ARM64 | `linux-aarch64` |
+| Linux on x86-64, glibc | `linux-x86_64` |
+| Linux on x86-64, musl | `linux-x86_64-musl` |
+| Linux on ARM64, glibc | `linux-aarch64` |
+| Linux on ARM64, musl | `linux-aarch64-musl` |
 | Windows on x86-64 | `windows-x86_64` |
 
 On Apple silicon, a shell running under Rosetta reports an Intel processor. The
 installer detects that and installs the native `macos-aarch64` build anyway.
+
+On Linux, the installer picks between the two C library builds by looking for
+the glibc dynamic loader for your architecture. A system that has it can run
+the dynamically linked build and receives it. A system that does not — Alpine,
+a distroless or BusyBox image, NixOS — receives the statically linked musl
+build, which depends on no loader at all. Distributions are never named or
+guessed at, and the check needs no tools beyond the shell, so it holds on
+images that carry neither `ldd` nor a release file.
+
+On Alpine and other minimal Linux images, pipe the installer into `sh`. The
+script is POSIX shell, and those images ship no `bash`:
+
+```sh
+curl -fsSL https://openagents.com/install.sh | sh
+```
+
+`bash` works everywhere it exists, so either form is fine on a system that has
+it.
 
 On Windows, run the installer under Git for Windows or MSYS2 Bash. It installs
 `openagents.exe` and `oa.exe`. Under WSL, use the Linux build: WSL is Linux, and

@@ -9,7 +9,7 @@ defmodule OpenAgents.Repositories.Namespace do
   @timestamps_opts [type: :utc_datetime_usec]
   @reserved_slugs ~w(
     admin api assets auth changelog chat components computers controller data dev device docs git og
-    health healthz leaderboard machines memory repositories sarah settings status voice
+    health healthz leaderboard machines memory releases repositories sarah settings status voice
   )
 
   def reserved_slugs, do: @reserved_slugs

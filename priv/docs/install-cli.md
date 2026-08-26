@@ -1,11 +1,110 @@
 # Install the OpenAgents CLI
 
-The npm package is `@openagentsinc/cli`. It provides the `openagents` command
-and requires Node.js 20 or later.
+The CLI is a single native binary. Install it with the installer script:
 
-## Install globally with npm
+```sh
+curl -fsSL https://openagents.com/install.sh | bash
+```
 
-Install the CLI globally when you use it regularly:
+The installer detects your operating system and processor, downloads the
+matching build, verifies its SHA-256 checksum, and links `openagents` and `oa`
+into `~/.openagents/bin`. It also adds that directory to `PATH` in your shell
+configuration file. Open a new shell, then confirm the installation:
+
+```sh
+openagents --help
+```
+
+Run the same command again to update. The CLI does not include an
+`openagents update` command.
+
+## Install a specific version
+
+Pass a version to the script when a script or qualification run must be
+reproducible:
+
+```sh
+curl -fsSL https://openagents.com/install.sh | bash -s 0.1.0-rc.1
+```
+
+The version must read as `X.Y.Z` or `X.Y.Z-suffix`. The installer refuses
+anything else before it downloads.
+
+## Choose a channel
+
+Without a version, the installer resolves a channel to the version that channel
+currently names. `stable` is the default. Set `OPENAGENTS_CHANNEL` to follow a
+different one:
+
+```sh
+curl -fsSL https://openagents.com/install.sh | OPENAGENTS_CHANNEL=beta bash
+```
+
+A channel is a pointer that moves, so the version you get today is not the
+version you get next month. Pass an explicit version when you need the answer
+to stay the same.
+
+## Choose where the binary lands
+
+The installer links `openagents` and `oa` into `~/.openagents/bin`. Set
+`OPENAGENTS_BIN_DIR` to link them somewhere already on your `PATH`:
+
+```sh
+curl -fsSL https://openagents.com/install.sh | OPENAGENTS_BIN_DIR="$HOME/.local/bin" bash
+```
+
+The downloaded binary itself always lands in `~/.openagents/downloads`.
+
+## Supported platforms
+
+| Platform | Build |
+| --- | --- |
+| macOS on Apple silicon | `macos-aarch64` |
+| macOS on Intel | `macos-x86_64` |
+| Linux on x86-64 | `linux-x86_64` |
+| Linux on ARM64 | `linux-aarch64` |
+| Windows on x86-64 | `windows-x86_64` |
+
+On Apple silicon, a shell running under Rosetta reports an Intel processor. The
+installer detects that and installs the native `macos-aarch64` build anyway.
+
+On Windows, run the installer under Git for Windows or MSYS2 Bash. It installs
+`openagents.exe` and `oa.exe`. Under WSL, use the Linux build: WSL is Linux, and
+`uname -s` reports it as such.
+
+## What the installer verifies
+
+The installer downloads `SHA256SUMS-<version>` separately from the artifact and
+compares the artifact against the entry that names it. It refuses to install
+when the sums file is missing, when it names no entry for your platform, when
+the checksums disagree, or when neither `shasum` nor `sha256sum` is available.
+The bytes are never made executable before the comparison succeeds.
+
+macOS builds are signed with an Apple Developer ID certificate and notarized by
+Apple, so Gatekeeper admits them without a right-click override.
+
+The installer has no local fallback. It installs what it downloaded or it fails
+and says so.
+
+## Verify a download by hand
+
+Download the artifact and its sums file, then compare them yourself:
+
+```sh
+curl -fsSLO https://openagents.com/releases/openagents-0.1.0-rc.1-macos-aarch64
+curl -fsSLO https://openagents.com/releases/SHA256SUMS-0.1.0-rc.1
+shasum -a 256 openagents-0.1.0-rc.1-macos-aarch64
+grep openagents-0.1.0-rc.1-macos-aarch64 SHA256SUMS-0.1.0-rc.1
+```
+
+The two hexadecimal digests must match exactly. On Linux, use `sha256sum` in
+place of `shasum -a 256`.
+
+## Install with npm instead
+
+The npm package is `@openagentsinc/cli`. It provides the same `openagents`
+command and requires Node.js 20 or later. Use it when you already manage your
+tools with npm:
 
 ```sh
 npm install --global @openagentsinc/cli
@@ -24,8 +123,6 @@ Install the latest release again when you want to update:
 ```sh
 npm install --global @openagentsinc/cli@latest
 ```
-
-The CLI does not include an `openagents update` command.
 
 ## Run one command with npx
 
@@ -187,7 +284,7 @@ accepts `profile` or `api_url` and never stores credentials.
 
 ## Configure Git authentication
 
-After you install the CLI globally, configure only the current Git repository:
+After you install the CLI, configure only the current Git repository:
 
 ```sh
 openagents auth setup-git --local

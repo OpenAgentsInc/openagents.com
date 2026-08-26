@@ -478,6 +478,15 @@ config :openagents,
   forge_wal_anchor_interval_ms: 3_600_000,
   forge_wal_dir: nil,
   forge_wal_bucket: nil,
+  # The bucket behind `/releases/<name>`. It grants every object to `allUsers`,
+  # so the proxy needs no credential — the name is deployment policy, not a
+  # secret, and it has a default so a development server serves the same
+  # artifacts production does.
+  releases_bucket: "openagentsgemini-cli-releases",
+  # The seam `test/openagents_web/controllers/release_controller_test.exs`
+  # stubs. Empty everywhere else, so the request options the controller builds
+  # are the ones that reach the bucket.
+  releases_request_options: [],
   forge_gcs_token_provider: nil,
   forge_rolling_provider: nil,
   # Hot-load allowlist: MODULE names, not repo paths. An entry ending in `.`

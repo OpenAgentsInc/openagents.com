@@ -21,6 +21,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/",
     "/status",
     "/changelog",
+    "/coder",
     "/leaderboard",
     "/components",
     "/components/icons",
@@ -636,6 +637,13 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   defp policy(%{plug: OpenAgentsWeb.NotFoundController, verb: verb}) when verb in [:get, :head],
     do: declaration(:public_read, "anonymous", "published:not-found", false)
+
+  # CLI release downloads. Public by construction: the route proxies a bucket
+  # that already grants every object to `allUsers`, so it withholds nothing a
+  # direct storage URL would hand over, and it only ever reads. It exists to
+  # give the artifacts one durable name, not to gate them.
+  defp policy(%{path: "/releases" <> _rest, verb: verb}) when verb in [:get, :head],
+    do: declaration(:public_read, "anonymous", "published:cli-release", false)
 
   defp policy(%{path: path, verb: verb}) do
     cond do

@@ -574,6 +574,9 @@ if config_env() == :prod and runtime_role == :web do
     forge_wal_adapter: forge_wal_adapter,
     forge_wal_dir: required_text.("OPENAGENTS_FORGE_WAL_DIR"),
     forge_wal_bucket: optional_text.("OPENAGENTS_FORGE_WAL_BUCKET"),
+    releases_bucket:
+      optional_text.("OPENAGENTS_RELEASES_BUCKET") ||
+        Application.fetch_env!(:openagents, :releases_bucket),
     ra_enabled: ra_enabled,
     ra_data_dir: required_text.("OPENAGENTS_RA_DATA_DIR"),
     ra_expected_size: parse_integer.("OPENAGENTS_RA_EXPECTED_SIZE", 1..100),

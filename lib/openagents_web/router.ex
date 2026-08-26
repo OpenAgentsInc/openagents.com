@@ -925,6 +925,20 @@ defmodule OpenAgentsWeb.Router do
     get "/v/:version/forum/t/:id", OgImageController, :forum_topic
   end
 
+  # CLI release downloads. No pipeline: `:browser` accepts only HTML and would
+  # refuse an installer asking for `application/octet-stream`, while `:api`
+  # accepts only JSON and would refuse a browser. The route is public by
+  # construction — it proxies a world-readable bucket — so there is no session
+  # or bearer for a pipeline to establish.
+  #
+  # One segment, not `/*path`. The bucket is flat, so a deeper path names no
+  # object; and `releases` is a reserved slug, which already gives every deeper
+  # path a `NotFoundController` route below. A glob here would shadow that
+  # route entirely and the compiler would say so.
+  scope "/releases", OpenAgentsWeb do
+    get "/:name", ReleaseController, :show
+  end
+
   # Keep repository-shaped routes last. Every fixed product, API, operator,
   # Git, and development route above wins before a GitHub-backed namespace can
   # be interpreted from the first path segment.

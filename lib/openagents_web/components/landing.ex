@@ -150,11 +150,6 @@ defmodule OpenAgentsWeb.UI.Landing do
   def hero(assigns) do
     ~H"""
     <.section class={["hero", @class]} rule={@rule}>
-      <%!-- The lede's own light. This used to live inside the figure block, so
-      commenting the figure out took the glow with it and left the headline
-      sitting on flat ink. It belongs to the words. --%>
-      <.glow variant={:center} class="hero__glow appear-zoom appear--delay-2" />
-
       <div class="hero__lede">
         <div :if={@eyebrow != []} class="hero__eyebrow appear">{render_slot(@eyebrow)}</div>
         <h1 class="hero__title appear">

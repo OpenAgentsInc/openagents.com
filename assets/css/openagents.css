@@ -5142,18 +5142,6 @@
 }
 
 @layer components {
-  /* The hero's own light, behind the words rather than behind a figure. Placed
-     under the lede and pushed back, so it lifts the headline without washing
-     it: the text sits above it at z-index 1 through `.landing-section__inner`. */
-  .hero__glow {
-    top: 38%;
-    z-index: 0;
-    /* A quarter. At full it lit the headline from behind hard enough to read as
-       a light source in the page rather than depth behind it; at half it was
-       still brighter than the words in front of it. */
-    --glow-scale: 0.125;
-  }
-
   /* Two edges of one line. The copyright says who owns this and the note says
      how it is licensed; centring them together reads as one run-on sentence. */
   .landing-footer__bar {

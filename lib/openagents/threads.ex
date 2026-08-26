@@ -97,7 +97,8 @@ defmodule OpenAgents.Threads do
   `OpenAgents.Inference.Models.default_id/0`, `high` reasoning, and the
   `read_only` permission profile; a caller may narrow or widen only within the
   admitted vocabulary. The thread's model is the model its grant pins, so a
-  caller that opens a thread on `ox-alpha` gets authority for `ox-alpha`.
+  caller that opens a thread on `glm-5.3-flash` gets authority for
+  `glm-5.3-flash`.
 
   Admission is where the ceiling lives. Elapsed authority is reaped first, so a
   slot held by an abandoned thread is released before the count is taken, and

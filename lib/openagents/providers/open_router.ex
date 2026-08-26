@@ -2,8 +2,11 @@ defmodule OpenAgents.Providers.OpenRouter do
   @moduledoc """
   OpenRouter chat-completions adapter for the inference proxy.
 
-  This is the second provider the proxy can reach, and it exists so a grant can
-  pin Ox Alpha: `OpenAgents.Inference.Models` names which model each provider
+  No catalog entry names this lane today — both admitted models are served
+  through the Vercel gateway — but the gateway adapter speaks this wire format
+  and delegates its request building and stream decoding here, so this module
+  is on the path of every proxied call. It also remains a lane a catalog entry
+  may name: `OpenAgents.Inference.Models` names which model each provider
   serves, and the proxy dispatches on the grant's model rather than on one
   compiled-in module.
 

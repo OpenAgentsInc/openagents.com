@@ -1,9 +1,13 @@
 defmodule OpenAgentsWeb.ThreadShowLiveTest do
-  use OpenAgentsWeb.ConnCase, async: true
+  # `async: false` because the unpriced-lane test below rewrites
+  # `:model_catalog`, which every process in the node reads.
+  use OpenAgentsWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
 
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Threads
+  alias OpenAgents.UnpricedLane
 
   defp signed_in(conn, user), do: Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
@@ -119,9 +123,13 @@ defmodule OpenAgentsWeb.ThreadShowLiveTest do
   describe "the budget card's cost cell" do
     test "an unpriced lane shows the word, never a dollar figure", %{conn: conn} do
       owner = github_user("thread-show-unpriced")
-      luna = Application.fetch_env!(:openagents, :openai_model)
 
-      {:ok, thread} = Threads.open(owner, "Run the unpriced lane", model: luna)
+      # `gpt-5.6-luna` was the shipped unpriced lane until it was withdrawn.
+      previous = UnpricedLane.admit!()
+      on_exit(fn -> UnpricedLane.restore(previous) end)
+      unpriced = UnpricedLane.id()
+
+      {:ok, thread} = Threads.open(owner, "Run the unpriced lane", model: unpriced)
       {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
 
       {:ok, _metered} =
@@ -145,7 +153,13 @@ defmodule OpenAgentsWeb.ThreadShowLiveTest do
 
       {:ok, view, _html} = live(signed_in(conn, owner), ~p"/threads/#{thread.id}")
 
-      assert view |> element("#thread-budget-cost") |> render() =~ "$1.25"
+      # A million input tokens costs exactly the default lane's per-million
+      # rate, rendered in dollars.
+      dollars = Models.default().pricing.input_per_million_tokens / 1_000_000
+
+      assert view |> element("#thread-budget-cost") |> render() =~
+               "$#{:erlang.float_to_binary(dollars, decimals: 2)}"
+
       assert view |> element("#thread-budget-cost-note") |> render() =~ "not a bill"
     end
 

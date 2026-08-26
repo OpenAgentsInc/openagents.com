@@ -1,11 +1,11 @@
 defmodule OpenAgentsWeb.ChatConsoleLive do
   @moduledoc """
-  The Ox Alpha console, reachable at `/chat` by operators only.
+  The GLM 5.3 Flash console, reachable at `/chat` by operators only.
 
-  The console drives one Ox Alpha conversation per operator account. It sends
-  every request to OpenRouter from the server, so the provider credential never
-  reaches the browser, and it prefers the Responses API, using chat completions
-  only when a provider cannot serve Responses.
+  The console drives one GLM 5.3 Flash conversation per operator account. It
+  sends every request to OpenRouter from the server, so the provider credential
+  never reaches the browser, and it prefers the Responses API, using chat
+  completions only when a provider cannot serve Responses.
 
   It shares the AI Elements components with Sarah's transcript at `/sarah` and
   shares none of her state: no persona, no voice, no work queue, and no
@@ -23,7 +23,7 @@ defmodule OpenAgentsWeb.ChatConsoleLive do
   alias OpenAgentsWeb.LiveRefresh
 
   @suggestions [
-    "Summarize what the Ox Alpha stress fleet measures today.",
+    "Summarize what the stress fleet measures today.",
     "Draft a checklist for a cloud-computer stress run.",
     "Explain the difference between a push and a deploy here.",
     "Write a short status update for the current fleet work."

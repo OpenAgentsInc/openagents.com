@@ -261,7 +261,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     assert stale["error"]["code"] == "publication_receipt_stale"
   end
 
-  test "Ox Alpha completes an approved pull request through the Responses tool loop", %{
+  test "GLM 5.3 Flash completes an approved pull request through the Responses tool loop", %{
     context: context,
     publication: publication
   } do
@@ -304,7 +304,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
             "id" => "resp_open_pr",
             "object" => "response",
             "status" => "in_progress",
-            "model" => "stealth/ox-alpha",
+            "model" => "z-ai/glm-5.3-flash",
             "output" => []
           }
         }) <>
@@ -314,7 +314,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
               "id" => "resp_open_pr",
               "object" => "response",
               "status" => "in_progress",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => []
             }
           }) <>
@@ -382,7 +382,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
               "id" => "resp_open_pr",
               "object" => "response",
               "status" => "completed",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => provider_output
             }
           }) <> "data: [DONE]\n\n"
@@ -430,7 +430,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
             "response" => %{
               "object" => "response",
               "status" => "completed",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => [
                 %{
                   "type" => "message",
@@ -460,7 +460,7 @@ defmodule OpenAgents.Tools.OpenPullRequestTest do
     assert {:ok, %{"assistant_content" => "I opened the approved draft pull request."}} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [
                    %{"role" => "user", "content" => "Open the approved publication."}
                  ]

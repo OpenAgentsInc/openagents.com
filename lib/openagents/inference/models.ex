@@ -15,8 +15,8 @@ defmodule OpenAgents.Inference.Models do
   client selects from what is actually served instead of guessing.
 
   Two names appear per model and they are not the same name. The `id` is what
-  a client asks for and what the grant publishes — `ox-alpha`. The
-  `provider_model` is what the provider is called with — `stealth/ox-alpha`.
+  a client asks for and what the grant publishes — `glm-5.3-flash`. The
+  `provider_model` is what the provider is called with — `zai/glm-5.3-flash`.
   Keeping them apart is what lets the routed vendor string change without
   invalidating grants that already name the model. A catalog entry may write
   either name as `{:config, key}` to follow a runtime-configurable value.
@@ -108,9 +108,11 @@ defmodule OpenAgents.Inference.Models do
   @doc """
   The model with this id, or `:error`.
 
-  A thread opened before this list existed carries the vendor string
-  (`stealth/ox-alpha`) in its `model` column, so a vendor spelling resolves to
-  the model it routes rather than leaving those threads unable to mint.
+  A thread opened before this list existed carries a vendor string rather than
+  a public id in its `model` column, so a vendor spelling (`zai/glm-5.3-flash`)
+  resolves to the model it routes rather than leaving those threads unable to
+  mint. A vendor string this catalog no longer routes does not resolve: a
+  withdrawn model is withdrawn, not quietly replaced with a survivor.
   """
   @spec fetch(String.t() | nil) :: {:ok, t()} | :error
   def fetch(id) when is_binary(id) do

@@ -19,18 +19,25 @@ defmodule OpenAgentsWeb.CreditControllerTest do
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Repo
   alias OpenAgents.Threads
+  alias OpenAgents.UnpricedLane
 
   # `put_chat_api_token/2` mints the token for this account, so naming the key
   # the same way is how a test reaches the user behind the credential it sent.
   defp account(key), do: github_user("api-token-" <> key)
 
   defp output_tokens_costing(microusd) do
-    div(
-      microusd * 1_000,
-      Application.fetch_env!(:openagents, :inference_output_price_microusd_per_ktoken)
-    )
+    div(microusd * 1_000_000, Models.default().pricing.output_per_million_tokens)
+  end
+
+  # `gpt-5.6-luna` was the shipped unpriced lane until it was withdrawn. What it
+  # demonstrated is unchanged, so the lane is admitted for one test at a time.
+  defp admit_unpriced_lane do
+    previous = UnpricedLane.admit!()
+    on_exit(fn -> UnpricedLane.restore(previous) end)
+    UnpricedLane.id()
   end
 
   defp minted(visitor_id) do
@@ -75,13 +82,15 @@ defmodule OpenAgentsWeb.CreditControllerTest do
     assert body["credit"]["complete"] == true
   end
 
-  # The path the coder's own lane is on today. The figure does not move, and
-  # the response has to say why rather than leave the client to discover it.
+  # No lane this deployment admits is unpriced any more, but a call the
+  # gateway's fallback chain answers with a model outside the catalog still
+  # records no cost. The figure does not move, and the response has to say why
+  # rather than leave the client to discover it.
   test "an unpriced call leaves the remainder still and says so", %{conn: conn} do
     owner = "credit-unpriced" |> account() |> Conversations.ensure_owner_visitor()
-    luna = Application.fetch_env!(:openagents, :openai_model)
+    unpriced = admit_unpriced_lane()
 
-    {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Run the unpriced lane", model: luna)
+    {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Run the unpriced lane", model: unpriced)
     {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
     {:ok, _metered} = Inference.record_usage(grant, %{"output_tokens" => 500_000})
 

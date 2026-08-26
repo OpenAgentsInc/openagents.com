@@ -10,6 +10,15 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
   alias OpenAgents.Inference.Models
+  alias OpenAgents.UnpricedLane
+
+  # No shipped lane is unpriced since `gpt-5.6-luna` was withdrawn, so the
+  # tests that read the unpriced projection admit a lane of their own.
+  defp admit_unpriced_lane do
+    previous = UnpricedLane.admit!()
+    on_exit(fn -> UnpricedLane.restore(previous) end)
+    :ok
+  end
 
   test "the catalog lists every served model in its typed shape", %{conn: conn} do
     body =
@@ -49,10 +58,12 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
   end
 
   test "a lane without a configured credential is listed unavailable, not omitted", %{conn: conn} do
-    # The OpenAI lane, because the default now sits on the OpenRouter one and
-    # this test is about a lane going dark *without* taking the default with
-    # it: "served here, not currently configured" has to be distinguishable
-    # from "not served here" while the deployment still answers.
+    # A lane on the OpenAI adapter, because both shipped models sit on the
+    # Vercel gateway and this test is about a lane going dark *without* taking
+    # the default with it: "served here, not currently configured" has to be
+    # distinguishable from "not served here" while the deployment still
+    # answers.
+    :ok = admit_unpriced_lane()
     previous = Application.get_env(:openagents, :provider)
 
     Application.put_env(:openagents, :provider, OpenAgents.Providers.UnconfiguredTestProvider)
@@ -70,10 +81,9 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
     # availability changes.
     assert Enum.map(body["models"], & &1["id"]) == Models.ids()
 
-    luna =
-      Enum.find(body["models"], &(&1["id"] == Application.fetch_env!(:openagents, :openai_model)))
+    dark = Enum.find(body["models"], &(&1["id"] == UnpricedLane.id()))
 
-    assert luna["availability"] == "unavailable"
+    assert dark["availability"] == "unavailable"
 
     default_entry = Enum.find(body["models"], &(&1["id"] == body["default"]))
     assert default_entry["availability"] == "available"
@@ -108,7 +118,7 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
     end
 
     test "an unpriced model has no pricing key", %{conn: conn} do
-      luna_id = Application.fetch_env!(:openagents, :openai_model)
+      :ok = admit_unpriced_lane()
 
       body =
         conn
@@ -116,12 +126,12 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
         |> get(~p"/api/v1/models")
         |> json_response(200)
 
-      luna = Enum.find(body["models"], &(&1["id"] == luna_id))
-      refute Map.has_key?(luna, "pricing")
+      unpriced = Enum.find(body["models"], &(&1["id"] == UnpricedLane.id()))
+      refute Map.has_key?(unpriced, "pricing")
     end
 
     test "every entry says in one word whether its price can be trusted", %{conn: conn} do
-      luna_id = Application.fetch_env!(:openagents, :openai_model)
+      :ok = admit_unpriced_lane()
 
       body =
         conn
@@ -137,7 +147,8 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
                &(&1["pricing_basis"] in ~w(declared provisional unpriced))
              )
 
-      assert Enum.find(body["models"], &(&1["id"] == luna_id))["pricing_basis"] == "unpriced"
+      assert Enum.find(body["models"], &(&1["id"] == UnpricedLane.id()))["pricing_basis"] ==
+               "unpriced"
 
       gemini = Enum.find(body["models"], &(&1["id"] == "gemini-3.7-flash"))
       assert gemini["pricing_basis"] == "provisional"

@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ChatConsoleTest do
   @moduledoc """
-  `/chat` is the operator-only Ox Alpha console.
+  `/chat` is the operator-only GLM 5.3 Flash console.
 
   The gate is worth its own file because it fails in two quiet directions: a
   missing plug lets a signed-in non-operator read the page, and a missing
@@ -41,7 +41,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
 
     assert has_element?(view, "#chat-console-transcript")
     assert has_element?(view, "#chat-console-empty")
-    assert has_element?(view, "#chat-console-model", "Ox Alpha")
+    assert has_element?(view, "#chat-console-model", "GLM 5.3 Flash")
     assert has_element?(view, "#chat-console-operator-notice", "Operator-only console")
     assert has_element?(view, "#chat-console-token-list", "No tokens yet")
     refute has_element?(view, "#chat-console-token-total")
@@ -61,7 +61,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
 
     html = view |> element("#chat-console-suggestion-0") |> render_click()
 
-    assert html =~ "Ox Alpha stress fleet measures"
+    assert html =~ "stress fleet measures"
   end
 
   test "a turn in flight can be stopped", %{conn: conn} do
@@ -100,7 +100,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "chat.completion",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "provider" => "Stealth",
          "request_id" => "gen-123",
@@ -124,7 +124,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
     {:ok, view, _html} = live(conn, ~p"/chat")
 
     metadata = "#chat-console-response-metadata-#{run_id}"
-    assert has_element?(view, metadata, "Ox Alpha")
+    assert has_element?(view, metadata, "GLM 5.3 Flash")
     assert has_element?(view, metadata, "lane Stealth")
     assert has_element?(view, metadata, "request gen-123")
     assert has_element?(view, metadata, "ms")
@@ -152,7 +152,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "reasoning_summary" => "Weighing the fleet.",
          "usage" => %{
@@ -190,7 +190,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "usage" => %{"input_tokens" => 24, "output_tokens" => 8, "total_tokens" => 32}
        }}
@@ -220,7 +220,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "usage" => %{
            "input_tokens" => 24,
@@ -261,7 +261,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "usage" => %{
            "input_tokens" => 24,
@@ -279,7 +279,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "Two boxes are queued.",
          "reasoning_summary" => "Weighing the queue.",
          "usage" => %{
@@ -328,7 +328,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "reasoning_summary" => "Weighing the fleet.",
          "usage" => %{
@@ -377,7 +377,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
       {:ok,
        %{
          "object" => "response",
-         "model" => "stealth/ox-alpha",
+         "model" => "z-ai/glm-5.3-flash",
          "assistant_content" => "The fleet is idle.",
          "usage" => %{"input_tokens" => 24, "output_tokens" => 8}
        }}
@@ -481,7 +481,7 @@ defmodule OpenAgentsWeb.ChatConsoleTest do
 
     # The backend is named, not the gateway behind it, so a turn answered by a
     # second backend cannot report the first one as the thing that failed.
-    assert has_element?(view, ~s([role="alert"]), "Ox Alpha is not configured")
+    assert has_element?(view, ~s([role="alert"]), "GLM 5.3 Flash is not configured")
     assert has_element?(view, ~s(#chat_message), "Draft the release notes.")
   end
 

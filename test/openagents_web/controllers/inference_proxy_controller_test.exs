@@ -214,30 +214,30 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
     conn =
       post_chat(conn, token, %{
-        "model" => "ox-alpha",
+        "model" => "gemini-3.7-flash",
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
 
     assert conn.status == 422
     error = Jason.decode!(conn.resp_body)["error"]
     assert error["code"] == "model_mismatch"
-    assert error["requested"] == "ox-alpha"
+    assert error["requested"] == "gemini-3.7-flash"
     assert error["granted"] == OpenAgents.Inference.Models.default_id()
     assert error["served"] == OpenAgents.Inference.Models.ids()
   end
 
   test "the vendor spelling of the grant's model is the same name, not a mismatch",
        %{conn: conn} do
-    %{token: token} = grant("model-vendor-spelling", model_id: "ox-alpha")
+    %{token: token} = grant("model-vendor-spelling", model_id: "glm-5.3-flash")
 
     conn =
       post_chat(conn, token, %{
-        "model" => OpenAgents.Chat.OpenRouter.default_model(),
+        "model" => "zai/glm-5.3-flash",
         "messages" => [%{"role" => "user", "content" => "hi"}]
       })
 
     assert conn.status == 200
-    assert get_resp_header(conn, "x-openagents-model") == ["ox-alpha"]
+    assert get_resp_header(conn, "x-openagents-model") == ["glm-5.3-flash"]
   end
 
   test "a grant on a lane without a credential is refused before any provider call",
@@ -245,17 +245,17 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     # Minted while the lane was configured; the credential goes away under a
     # live grant. The UnconfiguredTestProvider raises from `stream/2`, so a
     # 503 here also proves no provider was called.
-    %{token: token} = grant("model-lane-unavailable", model_id: "ox-alpha")
+    %{token: token} = grant("model-lane-unavailable", model_id: "glm-5.3-flash")
 
-    previous = Application.get_env(:openagents, :openrouter_provider)
+    previous = Application.get_env(:openagents, :vercel_gateway_provider)
 
     Application.put_env(
       :openagents,
-      :openrouter_provider,
+      :vercel_gateway_provider,
       OpenAgents.Providers.UnconfiguredTestProvider
     )
 
-    on_exit(fn -> Application.put_env(:openagents, :openrouter_provider, previous) end)
+    on_exit(fn -> Application.put_env(:openagents, :vercel_gateway_provider, previous) end)
 
     conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
 
@@ -316,9 +316,10 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
   describe "routing the grant's model" do
     setup do
-      # Both routed lanes, because these tests are about which model string
-      # reaches a provider and the models are spread across them: Ox Alpha on
-      # OpenRouter, Gemini on the gateway.
+      # Both routed lanes. Every admitted model is on the gateway today, but
+      # these tests are about which model string reaches a provider, and
+      # swapping only the lane a model happens to sit on would stop proving
+      # that the moment the catalog moves one.
       lanes = [:openrouter_provider, :vercel_gateway_provider]
       previous = Map.new(lanes, &{&1, Application.get_env(:openagents, &1)})
 
@@ -331,19 +332,22 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
       end)
     end
 
-    test "an ox-alpha grant reaches the OpenRouter lane with the vendor model", %{conn: conn} do
-      %{token: token} = grant("ox-alpha", model_id: "ox-alpha")
+    test "a glm-5.3-flash grant reaches the gateway lane with the vendor model", %{conn: conn} do
+      %{token: token} = grant("glm-5.3-flash", model_id: "glm-5.3-flash")
 
       conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
 
       assert conn.status == 200
       assert_received {:recorded_request, "test.recording_provider", request}
-      assert request.model_id == OpenAgents.Chat.OpenRouter.default_model()
+
+      # The gateway's slug, not the public id and not OpenRouter's `z-ai/`
+      # spelling of the same model.
+      assert request.model_id == "zai/glm-5.3-flash"
     end
 
     test "tool declarations, a replayed call, and its output reach the provider intact",
          %{conn: conn} do
-      %{token: token} = grant("tool-fidelity", model_id: "ox-alpha")
+      %{token: token} = grant("tool-fidelity", model_id: "glm-5.3-flash")
 
       conn =
         post_chat(conn, token, %{

@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
       %{
         "suite" => "terminal-bench@2.0",
         "agent" => "openagents-coder",
-        "model" => "ox-alpha",
+        "model" => "glm-5.3-flash",
         "tasks_total" => 10,
         "tasks_passed" => 7,
         "recipe_digest" => @digest
@@ -104,7 +104,7 @@ defmodule OpenAgentsWeb.GymRunControllerTest do
       %{
         "suite" => "terminal-bench@2.0",
         "agent" => "openagents-coder",
-        "model" => "ox-alpha",
+        "model" => "glm-5.3-flash",
         "lane" => "proxy",
         "tasks_total" => 5
       },

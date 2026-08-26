@@ -18,8 +18,10 @@ defmodule OpenAgents.Inference.CreditTest do
   alias OpenAgents.DataRights
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Repo
   alias OpenAgents.Threads
+  alias OpenAgents.UnpricedLane
 
   defp account(key) do
     key |> github_user() |> Conversations.ensure_owner_visitor()
@@ -33,10 +35,15 @@ defmodule OpenAgents.Inference.CreditTest do
   # Cost is priced from tokens by `OpenAgents.Inference`, never taken from a
   # caller, so spend is stated here in the output tokens that price to it.
   defp output_tokens_costing(microusd) do
-    div(
-      microusd * 1_000,
-      Application.fetch_env!(:openagents, :inference_output_price_microusd_per_ktoken)
-    )
+    div(microusd * 1_000_000, Models.default().pricing.output_per_million_tokens)
+  end
+
+  # `gpt-5.6-luna` was the shipped unpriced lane until it was withdrawn. What it
+  # demonstrated is unchanged, so the lane is admitted for one test at a time.
+  defp admit_unpriced_lane do
+    previous = UnpricedLane.admit!()
+    on_exit(fn -> UnpricedLane.restore(previous) end)
+    UnpricedLane.id()
   end
 
   # A grant names exactly one fence, so spend is recorded through a real
@@ -223,9 +230,11 @@ defmodule OpenAgents.Inference.CreditTest do
   describe "spend the deployment has no price for" do
     test "an unpriced call draws nothing down, and the balance says so" do
       owner = account("credit-unpriced")
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      unpriced = admit_unpriced_lane()
 
-      {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Run the unpriced lane", model: luna)
+      {:ok, thread} =
+        Threads.open(%Visitor{id: owner.id}, "Run the unpriced lane", model: unpriced)
+
       {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
       {:ok, _metered} = Inference.record_usage(grant, %{"output_tokens" => 500_000})
 
@@ -259,9 +268,9 @@ defmodule OpenAgents.Inference.CreditTest do
 
     test "a grant that never bought anything is not counted as unpriced spend" do
       owner = account("credit-idle")
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      unpriced = admit_unpriced_lane()
 
-      {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Mint and stop", model: luna)
+      {:ok, thread} = Threads.open(%Visitor{id: owner.id}, "Mint and stop", model: unpriced)
       {:ok, _fenced, _grant, _token} = Threads.mint_grant(thread)
 
       assert Credit.unpriced_calls(owner.id) == 0

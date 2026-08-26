@@ -7,7 +7,7 @@ defmodule OpenAgents.Providers.OpenRouterTest do
 
   defp request do
     %Request{
-      model_id: "stealth/ox-alpha",
+      model_id: "z-ai/glm-5.3-flash",
       instructions: "Remain OpenAgents.",
       input: [%{role: "user", content: "Say hello."}]
     }
@@ -46,7 +46,7 @@ defmodule OpenAgents.Providers.OpenRouterTest do
              )
 
     assert_received {:outbound, ["Bearer sentinel-openrouter-key"], body}
-    assert Jason.decode!(body)["model"] == "stealth/ox-alpha"
+    assert Jason.decode!(body)["model"] == "z-ai/glm-5.3-flash"
 
     assert events == [
              {:response_started, "gen-1"},
@@ -86,12 +86,12 @@ defmodule OpenAgents.Providers.OpenRouterTest do
 
   describe "how many tokens the answer may take" do
     test "comes from the model's catalog entry, not a literal in this module" do
-      # Ox Alpha is a reasoning model: its thinking is charged against this
+      # GLM 5.3 Flash is a reasoning model: its thinking is charged against this
       # allowance before a word of the answer is. Hardcoded at 4,096, a child
       # agent with a real task spent the whole budget reasoning and returned an
       # empty 200 after three minutes, which read as the proxy having failed.
       request = %Request{
-        model_id: "stealth/ox-alpha",
+        model_id: "z-ai/glm-5.3-flash",
         instructions: "Be brief.",
         input: [%{role: "user", content: "hello"}],
         max_output: 64_000
@@ -102,7 +102,7 @@ defmodule OpenAgents.Providers.OpenRouterTest do
 
     test "defaults to a figure a caller that names none still works on" do
       request = %Request{
-        model_id: "stealth/ox-alpha",
+        model_id: "z-ai/glm-5.3-flash",
         instructions: "Be brief.",
         input: [%{role: "user", content: "hello"}]
       }

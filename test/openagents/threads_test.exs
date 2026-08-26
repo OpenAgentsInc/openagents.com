@@ -7,10 +7,12 @@ defmodule OpenAgents.ThreadsTest do
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Repo
   alias OpenAgents.Threads
   alias OpenAgents.Threads.Event
   alias OpenAgents.Threads.Thread
+  alias OpenAgents.UnpricedLane
 
   defp owner(key), do: github_user("thread-#{key}")
 
@@ -582,13 +584,20 @@ defmodule OpenAgents.ThreadsTest do
       set_config(:thread_grant_max_total_tokens, nil)
       user = owner("child-cost")
       {:ok, parent, grant, _token} = Threads.open_and_mint(user, "Parent")
-      {:ok, spent} = Inference.record_usage(grant, %{"output_tokens" => 1000})
-      assert spent.usage["estimated_cost_microusd"] == 10_000
+
+      # Output tokens priced at the default lane's own output rate, so the
+      # arithmetic below follows the catalog rather than restating it.
+      rate = Models.default().pricing.output_per_million_tokens
+      output = 20_000
+      cost = div(output * rate, 1_000_000)
+
+      {:ok, spent} = Inference.record_usage(grant, %{"output_tokens" => output})
+      assert spent.usage["estimated_cost_microusd"] == cost
 
       {:ok, _child, child_grant, _token} =
         Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
 
-      assert child_grant.max_cost_microusd == 90_000
+      assert child_grant.max_cost_microusd == 100_000 - cost
     end
   end
 
@@ -677,9 +686,9 @@ defmodule OpenAgents.ThreadsTest do
   # measurement rather than as the absence of one.
   describe "what a thread spent, when the deployment has no price for it" do
     test "a thread on an unpriced model reports an unknown cost, never a zero" do
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      unpriced = admit_unpriced_lane()
       user = owner("spend-unpriced")
-      {:ok, thread} = Threads.open(user, "Run the coder's own lane", model: luna)
+      {:ok, thread} = Threads.open(user, "Run the coder's own lane", model: unpriced)
       {:ok, _fenced, grant, _token} = Threads.mint_grant(thread)
 
       {:ok, metered} =
@@ -698,7 +707,7 @@ defmodule OpenAgents.ThreadsTest do
       assert spend.cost.microusd == nil
       assert spend.cost.basis == "unpriced"
       assert spend.cost.unpriced_calls == 1
-      assert spend.cost.unpriced_models == [luna]
+      assert spend.cost.unpriced_models == [unpriced]
     end
 
     test "a thread on a priced model reports a total, labelled by its basis" do
@@ -708,14 +717,16 @@ defmodule OpenAgents.ThreadsTest do
 
       spend = Threads.spend(thread)
 
-      assert spend.cost.microusd == 1_250_000
-      assert spend.cost.priced_microusd == 1_250_000
+      rate = Models.default().pricing.input_per_million_tokens
+
+      assert spend.cost.microusd == rate
+      assert spend.cost.priced_microusd == rate
       assert spend.cost.basis == "provisional"
       assert spend.cost.unpriced_models == []
     end
 
     test "one unpriced grant makes the whole session's total unknown, and names why" do
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      unpriced = admit_unpriced_lane()
       user = owner("spend-mixed")
       {:ok, thread, first, _token} = Threads.open_and_mint(user, "Start priced")
       {:ok, _} = Inference.record_usage(first, %{"input_tokens" => 1_000_000})
@@ -724,7 +735,7 @@ defmodule OpenAgents.ThreadsTest do
       # session whose grants ran on different lanes is exactly the case a total
       # has to survive honestly.
       {:ok, _revoked} = Inference.revoke(first)
-      {:ok, second, _token} = unpriced_grant_for(thread, luna)
+      {:ok, second, _token} = unpriced_grant_for(thread, unpriced)
       {:ok, _} = Inference.record_usage(second, %{"input_tokens" => 50_000})
 
       spend = Threads.spend(thread)
@@ -732,25 +743,34 @@ defmodule OpenAgents.ThreadsTest do
       assert spend.cost.microusd == nil
       # Nothing measured is thrown away — the priced half is still reported,
       # just not as the answer to "what did this cost".
-      assert spend.cost.priced_microusd == 1_250_000
+      assert spend.cost.priced_microusd == Models.default().pricing.input_per_million_tokens
       assert spend.cost.basis == "unpriced"
-      assert spend.cost.unpriced_models == [luna]
+      assert spend.cost.unpriced_models == [unpriced]
     end
 
     test "a grant that was minted and never called does not make the total unknown" do
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      unpriced = admit_unpriced_lane()
       user = owner("spend-idle-unpriced")
       {:ok, thread, first, _token} = Threads.open_and_mint(user, "Priced work")
       {:ok, _} = Inference.record_usage(first, %{"input_tokens" => 1_000_000})
 
       {:ok, _revoked} = Inference.revoke(first)
-      {:ok, _idle, _token} = unpriced_grant_for(thread, luna)
+      {:ok, _idle, _token} = unpriced_grant_for(thread, unpriced)
 
       spend = Threads.spend(thread)
 
       assert spend.grants == 2
-      assert spend.cost.microusd == 1_250_000
+      assert spend.cost.microusd == Models.default().pricing.input_per_million_tokens
       assert spend.cost.unpriced_calls == 0
+    end
+
+    # `gpt-5.6-luna` was the shipped unpriced lane until it was withdrawn. The
+    # invariant it demonstrated did not go with it, so the lane is admitted
+    # here for the length of one test instead.
+    defp admit_unpriced_lane do
+      previous = UnpricedLane.admit!()
+      on_exit(fn -> UnpricedLane.restore(previous) end)
+      UnpricedLane.id()
     end
 
     # A thread holds at most one active grant, so a second lane is reached the

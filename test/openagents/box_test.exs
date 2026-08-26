@@ -90,7 +90,7 @@ defmodule OpenAgents.BoxTest do
         {:ok, raw, conn} = Plug.Conn.read_body(conn)
         payload = Jason.decode!(raw)
         assert payload["noEnv"] == true
-        assert payload["setupScript"] =~ "openrouter/stealth/ox-alpha"
+        assert payload["setupScript"] =~ "openrouter/z-ai/glm-5.3-flash"
 
         Req.Test.json(conn, box_body(%{"state" => "provisioning", "setupStatus" => "pending"}))
       end)

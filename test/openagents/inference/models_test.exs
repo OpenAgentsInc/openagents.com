@@ -1,40 +1,46 @@
 defmodule OpenAgents.Inference.ModelsTest do
   use ExUnit.Case, async: true
 
-  alias OpenAgents.Chat.OpenRouter
   alias OpenAgents.Inference.Models
 
   test "the default is the catalog's first entry, served by that lane's adapter" do
     default = Models.default()
 
-    # Gemini 3.7 Flash leads: a caller that names no model is holding a
-    # conversation, and that is what this deployment answers one with.
-    assert default.id == "gemini-3.7-flash"
-    assert default.provider_model == "google/gemini-3.7-flash"
-    assert default.adapter == Application.fetch_env!(:openagents, :openrouter_provider)
+    # GLM 5.3 Flash leads: a caller that names no model is holding a
+    # conversation, and that is what this deployment answers one with. It is
+    # reached on the gateway's own slug, not on the id a caller asks for.
+    assert default.id == "glm-5.3-flash"
+    assert default.provider == :vercel_gateway
+    assert default.provider_model == "zai/glm-5.3-flash"
+    assert default.adapter == Application.fetch_env!(:openagents, :vercel_gateway_provider)
     assert Models.default_id() == default.id
     assert Models.default_id() == hd(Models.ids())
   end
 
-  test "the OpenAI lane is still served, as the backup it now is" do
-    configured = Application.fetch_env!(:openagents, :openai_model)
+  test "a withdrawn model is not served, so nothing can be minted against it" do
+    # `gpt-5.6-luna` and `ox-alpha` were both admitted here until they were
+    # withdrawn at owner direction. Withdrawal is what this asserts: the names
+    # do not resolve, so `OpenAgents.Inference.mint/1` refuses a grant that
+    # pins one and the proxy refuses a grant minted before the withdrawal.
+    #
+    # `ox-alpha` is the interesting one. It was `stealth/ox-alpha`, the
+    # pre-launch name of the model now admitted as `glm-5.3-flash`, and
+    # OpenRouter answers that slug with a 404 saying so. Resolving the old name
+    # to the new entry would be a silent substitution of exactly the kind
+    # PROVIDER-002 forbids, so it does not resolve at all.
+    assert Models.fetch(Application.fetch_env!(:openagents, :openai_model)) == :error
+    assert Models.fetch("ox-alpha") == :error
+    assert Models.fetch("stealth/ox-alpha") == :error
 
-    assert {:ok, luna} = Models.fetch(configured)
-    assert luna.provider_model == luna.id
-    assert luna.adapter == Application.fetch_env!(:openagents, :provider)
-  end
-
-  test "ox-alpha publishes a public id and routes the vendor string" do
-    assert {:ok, model} = Models.fetch("ox-alpha")
-    assert model.id == "ox-alpha"
-    assert model.provider_model == OpenRouter.default_model()
-    refute model.id == model.provider_model
-    assert model.adapter == Application.fetch_env!(:openagents, :openrouter_provider)
+    # OpenRouter's spelling of the live model is not this deployment's lane
+    # either: the catalog reaches it through the Vercel gateway.
+    assert Models.fetch("z-ai/glm-5.3-flash") == :error
   end
 
   test "the vendor spelling resolves to the same model" do
-    assert {:ok, model} = Models.fetch(OpenRouter.default_model())
-    assert model.id == "ox-alpha"
+    assert {:ok, model} = Models.fetch("zai/glm-5.3-flash")
+    assert model.id == "glm-5.3-flash"
+    refute model.id == model.provider_model
   end
 
   test "every routed model is listed once, and only routed models are" do
@@ -42,7 +48,7 @@ defmodule OpenAgents.Inference.ModelsTest do
 
     assert ids == Enum.uniq(ids)
     assert Models.default_id() in ids
-    assert "ox-alpha" in ids
+    assert ids == ["glm-5.3-flash", "gemini-3.7-flash"]
     assert Enum.map(Models.all(), & &1.id) == ids
     assert Models.fetch("attacker/gpt-9-ultra") == :error
     assert Models.fetch(nil) == :error
@@ -101,20 +107,33 @@ defmodule OpenAgents.Inference.ModelsTest do
   end
 
   describe "the answer allowance a model publishes" do
-    test "Ox Alpha's is large enough for a model that reasons before it answers" do
-      # Its thinking is charged against the same allowance as its answer. At
-      # 4,096 a child agent with a real task spent the whole budget reasoning
-      # and returned nothing, after three minutes, on a 200.
-      {:ok, ox} = Models.fetch("ox-alpha")
+    test "GLM 5.3 Flash's is large enough for a model that reasons before it answers" do
+      # Its thinking is charged against this allowance before a word of the
+      # answer is. At 256 tokens a request spent 243 of them reasoning and the
+      # answer was cut off mid-word on `finish_reason: "length"`, which reads
+      # to a caller as the model having failed.
+      {:ok, glm} = Models.fetch("glm-5.3-flash")
 
-      assert ox.max_output >= 32_000
-      assert ox.context_window >= 1_000_000
+      assert glm.max_output == 131_000
+      assert glm.context_window == 1_000_000
     end
 
     test "the published catalog carries it, so a client is not guessing" do
-      entry = Enum.find(Models.catalog(), &(&1["id"] == "ox-alpha"))
+      entry = Enum.find(Models.catalog(), &(&1["id"] == "glm-5.3-flash"))
 
-      assert entry["max_output"] == 64_000
+      assert entry["max_output"] == 131_000
+      assert entry["context_window"] == 1_000_000
+    end
+
+    test "GLM 5.3 Flash is routed through the gateway, on the slug the gateway knows" do
+      # `zai/glm-5.3-flash`, not `glm-5.3-flash`, which is what a caller asks
+      # for. The gateway resolves it to z.ai against this account's BYOK z.ai
+      # credentials, so the call spends those rather than OpenRouter's, which
+      # serves the same model as `z-ai/glm-5.3-flash`.
+      {:ok, glm} = Models.fetch("glm-5.3-flash")
+
+      assert glm.provider == :vercel_gateway
+      assert glm.provider_model == "zai/glm-5.3-flash"
     end
 
     test "Gemini is routed through the gateway, on the slug the gateway knows" do
@@ -138,18 +157,32 @@ defmodule OpenAgents.Inference.ModelsTest do
       assert pricing["cached_input_per_million_tokens"] == 100_000
     end
 
-    test "an unpriced model has no pricing key in the public catalog" do
-      luna_id = Application.fetch_env!(:openagents, :openai_model)
-      luna = Enum.find(Models.catalog(), &(&1["id"] == luna_id))
+    test "the default's rates are provisional, so nothing may bill from them" do
+      glm = Enum.find(Models.catalog(), &(&1["id"] == "glm-5.3-flash"))
 
-      refute Map.has_key?(luna, "pricing")
+      assert glm["pricing"]["id"] == "placeholder.glm-5.3-flash.v1"
+      assert glm["pricing"]["input_per_million_tokens"] == 150_000
+      assert glm["pricing"]["output_per_million_tokens"] == 500_000
+      assert glm["pricing"]["cached_input_per_million_tokens"] == 30_000
+
+      # Read off the gateway's own listing, which still is not an operator
+      # declaring them (METER-001).
+      assert glm["pricing_basis"] == "provisional"
+      assert glm["pricing"]["basis"] == "provisional"
     end
 
-    test "the resolved model carries pricing, or nil when none is declared" do
-      assert %{pricing: %{input_per_million_tokens: 1_250_000}} = Models.default()
+    test "every published lane carries a pricing block, because every one is priced" do
+      for entry <- Models.catalog() do
+        assert Map.has_key?(entry, "pricing")
+        assert entry["pricing_basis"] == "provisional"
+      end
+    end
+
+    test "the resolved model carries pricing, and a withdrawn one resolves to nothing" do
+      assert %{pricing: %{input_per_million_tokens: 150_000}} = Models.default()
 
       luna_id = Application.fetch_env!(:openagents, :openai_model)
-      assert {:ok, %{pricing: nil}} = Models.fetch(luna_id)
+      assert Models.fetch(luna_id) == :error
     end
   end
 end

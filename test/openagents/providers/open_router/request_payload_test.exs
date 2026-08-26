@@ -5,7 +5,7 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
 
   test "carries the provider model, the system text, and the turns in order" do
     request = %Request{
-      model_id: "stealth/ox-alpha",
+      model_id: "z-ai/glm-5.3-flash",
       instructions: "  Remain OpenAgents.  ",
       input: [
         %{role: "user", content: "Write a file."},
@@ -16,7 +16,7 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
 
     payload = OpenRouter.request_payload(request)
 
-    assert payload.model == "stealth/ox-alpha"
+    assert payload.model == "z-ai/glm-5.3-flash"
     assert payload.stream == true
     assert payload.stream_options == %{include_usage: true}
     refute Map.has_key?(payload, :tools)
@@ -33,7 +33,7 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
 
   test "sends no system message when the request has no instructions" do
     request = %Request{
-      model_id: "stealth/ox-alpha",
+      model_id: "z-ai/glm-5.3-flash",
       instructions: "",
       input: [%{role: "user", content: "Hello."}]
     }
@@ -45,7 +45,7 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
 
   test "maps tool definitions to chat-completions functions" do
     request = %Request{
-      model_id: "stealth/ox-alpha",
+      model_id: "z-ai/glm-5.3-flash",
       instructions: "",
       input: [%{role: "user", content: "Search."}],
       tool_definitions: [
@@ -72,7 +72,7 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
 
   test "replays an assistant tool call and its output faithfully" do
     request = %Request{
-      model_id: "stealth/ox-alpha",
+      model_id: "z-ai/glm-5.3-flash",
       instructions: "",
       input: [
         %{role: "user", content: "Read the file."},
@@ -116,7 +116,7 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
 
   test "carries a tool output as a labelled user turn" do
     request = %Request{
-      model_id: "stealth/ox-alpha",
+      model_id: "z-ai/glm-5.3-flash",
       instructions: "",
       input: [%{role: "user", content: "Search."}],
       tool_outputs: [

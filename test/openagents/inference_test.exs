@@ -4,8 +4,10 @@ defmodule OpenAgents.InferenceTest do
 
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Machines
   alias OpenAgents.Repo
+  alias OpenAgents.UnpricedLane
 
   defp scope(key) do
     owner = github_user("inf-#{key}")
@@ -44,9 +46,10 @@ defmodule OpenAgents.InferenceTest do
     end
 
     test "pins a named model, publishing the public id rather than the vendor one" do
-      {:ok, grant, _token} = Inference.mint(Map.put(scope("mint-ox"), :model_id, "ox-alpha"))
+      {:ok, grant, _token} =
+        Inference.mint(Map.put(scope("mint-named"), :model_id, "glm-5.3-flash"))
 
-      assert grant.model_id == "ox-alpha"
+      assert grant.model_id == "glm-5.3-flash"
     end
 
     test "refuses a model the proxy cannot route, naming only the model" do
@@ -201,19 +204,29 @@ defmodule OpenAgents.InferenceTest do
           "cache_read_input_tokens" => cache_read
         })
 
+      pricing = Models.default().pricing
+
       expected =
-        ((input - cache_read) * 1_250_000 + cache_read * 100_000 + output * 10_000_000)
+        ((input - cache_read) * pricing.input_per_million_tokens +
+           cache_read * pricing.cached_input_per_million_tokens +
+           output * pricing.output_per_million_tokens)
         |> div(1_000_000)
 
       assert metered.usage["estimated_cost_microusd"] == expected
       # The record names the table it was priced against, so the figure can be
       # dereferenced rather than trusted (METER-001).
-      assert metered.usage["pricing_id"] == "placeholder.gemini-3.7-flash.v1"
+      assert metered.usage["pricing_id"] == pricing.id
     end
 
     test "an unpriced model records no estimated cost — and no zero" do
-      luna_id = Application.fetch_env!(:openagents, :openai_model)
-      {:ok, grant, _token} = Inference.mint(Map.put(scope("usage-unpriced"), :model_id, luna_id))
+      # `gpt-5.6-luna` was the shipped unpriced lane until it was withdrawn.
+      # The behaviour it demonstrated is unchanged, so the lane is admitted
+      # here for the length of this test rather than shipped for everyone.
+      previous = UnpricedLane.admit!()
+      on_exit(fn -> UnpricedLane.restore(previous) end)
+
+      {:ok, grant, _token} =
+        Inference.mint(Map.put(scope("usage-unpriced"), :model_id, UnpricedLane.id()))
 
       {:ok, metered} =
         Inference.record_usage(grant, %{

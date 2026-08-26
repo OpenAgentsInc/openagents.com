@@ -11,8 +11,18 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Repo
   alias OpenAgents.Threads
+  alias OpenAgents.UnpricedLane
+
+  # `gpt-5.6-luna` was the shipped unpriced lane until it was withdrawn. What it
+  # demonstrated is unchanged, so the lane is admitted for one test at a time.
+  defp admit_unpriced_lane do
+    previous = UnpricedLane.admit!()
+    on_exit(fn -> UnpricedLane.restore(previous) end)
+    UnpricedLane.id()
+  end
 
   describe "POST /api/v1/threads" do
     test "opens a thread and returns a grant that names it", %{conn: conn} do
@@ -132,14 +142,14 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     test "a caller may open a thread on another routed model", %{conn: conn} do
       body =
         conn
-        |> put_chat_api_token("thread-ox-alpha")
+        |> put_chat_api_token("thread-glm-5.3-flash")
         |> post(~p"/api/v1/threads", %{
           "objective" => "Delegate the edit.",
-          "model" => "ox-alpha"
+          "model" => "glm-5.3-flash"
         })
         |> json_response(201)
 
-      assert body["grant"]["model"] == "ox-alpha"
+      assert body["grant"]["model"] == "glm-5.3-flash"
     end
 
     test "a thread names the default model when its caller names none", %{conn: conn} do
@@ -154,22 +164,28 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
     test "a catalog model whose provider is not configured is refused, never substituted",
          %{conn: conn} do
-      previous = Application.get_env(:openagents, :openrouter_provider)
+      # Both shipped models sit on the Vercel gateway, so taking that lane down
+      # takes the whole catalog with it and the refusal would have nothing left
+      # to name. A lane on a second adapter is admitted first, which is what
+      # makes "refused, never substituted" a claim with teeth: there is another
+      # model available and the request still does not get it.
+      _survivor = admit_unpriced_lane()
+      previous = Application.get_env(:openagents, :vercel_gateway_provider)
 
       Application.put_env(
         :openagents,
-        :openrouter_provider,
+        :vercel_gateway_provider,
         OpenAgents.Providers.UnconfiguredTestProvider
       )
 
-      on_exit(fn -> Application.put_env(:openagents, :openrouter_provider, previous) end)
+      on_exit(fn -> Application.put_env(:openagents, :vercel_gateway_provider, previous) end)
 
       body =
         conn
         |> put_chat_api_token("thread-unavailable-model")
         |> post(~p"/api/v1/threads", %{
           "objective" => "Ask for the unconfigured lane.",
-          "model" => "ox-alpha"
+          "model" => "glm-5.3-flash"
         })
         |> json_response(503)
 
@@ -280,10 +296,12 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       grant = Repo.get_by!(Grant, thread_id: opened["thread"]["id"])
       allowance = Credit.allowance(grant.owner_visitor_id)
-      price = Application.fetch_env!(:openagents, :inference_output_price_microusd_per_ktoken)
+      rate = Models.default().pricing.output_per_million_tokens
 
       {:ok, _metered} =
-        Inference.record_usage(grant, %{"output_tokens" => div(allowance, price) * 1_000})
+        Inference.record_usage(grant, %{
+          "output_tokens" => div(allowance * 1_000_000, rate)
+        })
 
       assert Credit.remaining(grant.owner_visitor_id) == 0
 
@@ -1483,14 +1501,14 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
   # so it is where an unpriced lane has to stop looking like a free one.
   describe "reporting cost the deployment cannot price" do
     test "a thread on an unpriced model reports a null cost, not a zero", %{conn: conn} do
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      unpriced = admit_unpriced_lane()
       authenticated = put_chat_api_token(conn, "thread-cost-unpriced")
 
       created =
         authenticated
         |> post(~p"/api/v1/threads", %{
           "objective" => "Run the coder's own lane.",
-          "model" => luna
+          "model" => unpriced
         })
         |> json_response(201)
 
@@ -1508,7 +1526,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert is_nil(body["thread"]["spend"]["cost"]["microusd"])
       assert body["thread"]["spend"]["cost"]["basis"] == "unpriced"
       assert body["thread"]["spend"]["cost"]["unpriced_calls"] == 1
-      assert body["thread"]["spend"]["cost"]["unpriced_models"] == [luna]
+      assert body["thread"]["spend"]["cost"]["unpriced_models"] == [unpriced]
 
       # And the same refusal on the grant: no cost spent, no cost remainder.
       assert body["grant"]["pricing"]["basis"] == "unpriced"
@@ -1533,16 +1551,20 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       grant = Repo.get_by!(Grant, thread_id: id)
       {:ok, _spent} = Inference.record_usage(grant, %{"input_tokens" => 1_000_000})
 
+      # A million input tokens costs exactly the default lane's per-million
+      # rate, whatever the catalog's head happens to be.
+      rate = Models.default().pricing.input_per_million_tokens
+
       body = authenticated |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
 
-      assert body["thread"]["spend"]["cost"]["microusd"] == 1_250_000
+      assert body["thread"]["spend"]["cost"]["microusd"] == rate
       assert body["thread"]["spend"]["cost"]["basis"] == "provisional"
       assert body["thread"]["spend"]["cost"]["unpriced_models"] == []
 
       # Priced is not the same as billable: these are placeholder rates.
       assert body["grant"]["pricing"]["basis"] == "provisional"
       assert body["grant"]["pricing"]["billable"] == false
-      assert body["grant"]["spent"]["cost_microusd"] == 1_250_000
+      assert body["grant"]["spent"]["cost_microusd"] == rate
     end
   end
 end

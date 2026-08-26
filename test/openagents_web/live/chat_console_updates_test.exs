@@ -1,6 +1,6 @@
 defmodule OpenAgentsWeb.ChatConsoleUpdatesTest do
   @moduledoc """
-  The Ox Alpha console as a live surface (#159, following #154).
+  The GLM 5.3 Flash console as a live surface (#159, following #154).
 
   The console renders `AccountTurns.list_messages/1`, a projection of
   `account_chat_runs`. Those writes never create a `Conversations.Message` and

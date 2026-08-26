@@ -448,12 +448,20 @@ defmodule OpenAgents.Box do
   # OPENROUTER_API_KEY environment variable natively, so the setup script
   # never touches the credential.
   #
+  # This is the one lane that still buys inference from OpenRouter rather than
+  # through the Vercel gateway, and it is a deliberate temporary exception:
+  # OpenCode speaks to OpenRouter itself, so it needs OpenRouter's own spelling
+  # of the model (`z-ai/glm-5.3-flash`, hyphenated, where the gateway writes
+  # `zai/glm-5.3-flash`). OpenRouter charges slightly more for the same model.
+  # Moving this lane onto the gateway is the intended destination and a
+  # separate change.
+  #
   # The order matters. The whole script runs under `set -euo pipefail`, so the
   # configuration is written first: an install that fails on a bad network day
   # then costs the binary and nothing else, and a later manual install finds
-  # the model already pointed at Ox Alpha.
+  # the model already pointed at GLM 5.3 Flash.
   defp setup_script do
-    model = Application.get_env(:openagents, :openrouter_model, "stealth/ox-alpha")
+    model = Application.get_env(:openagents, :openrouter_model, "z-ai/glm-5.3-flash")
 
     configuration =
       Jason.encode!(%{

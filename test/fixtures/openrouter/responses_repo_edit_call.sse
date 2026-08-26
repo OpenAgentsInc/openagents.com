@@ -10,6 +10,6 @@ data: {"type":"response.function_call_arguments.done","response_id":"resp_repo_e
 
 data: {"type":"response.output_item.done","response_id":"resp_repo_edit","output_index":1,"item":{"type":"function_call","id":"fc_repo_edit","call_id":"call_repo_edit","name":"edit","arguments":"{\"path\":\"notes.txt\",\"old_string\":\"beta\",\"new_string\":\"gamma\"}","status":"completed"}}
 
-data: {"type":"response.completed","response":{"id":"resp_repo_edit","object":"response","status":"completed","model":"stealth/ox-alpha","output":[{"type":"reasoning","id":"rs_repo_edit","status":"completed","summary":[{"type":"summary_text","text":"Apply the exact replacement to the new draft."}],"encrypted_content":"encrypted-repo-edit"},{"type":"function_call","id":"fc_repo_edit","call_id":"call_repo_edit","name":"edit","arguments":"{\"path\":\"notes.txt\",\"old_string\":\"beta\",\"new_string\":\"gamma\"}","status":"completed"}]}}
+data: {"type":"response.completed","response":{"id":"resp_repo_edit","object":"response","status":"completed","model":"z-ai/glm-5.3-flash","output":[{"type":"reasoning","id":"rs_repo_edit","status":"completed","summary":[{"type":"summary_text","text":"Apply the exact replacement to the new draft."}],"encrypted_content":"encrypted-repo-edit"},{"type":"function_call","id":"fc_repo_edit","call_id":"call_repo_edit","name":"edit","arguments":"{\"path\":\"notes.txt\",\"old_string\":\"beta\",\"new_string\":\"gamma\"}","status":"completed"}]}}
 
 data: [DONE]

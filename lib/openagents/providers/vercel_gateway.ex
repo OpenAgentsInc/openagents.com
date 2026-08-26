@@ -27,8 +27,8 @@ defmodule OpenAgents.Providers.VercelGateway do
   models Vercel tries if the primary model fails.
 
   That list is why this lane reports `substitutable?/0` as true: a call for
-  `google/gemini-3.7-flash` can be answered by `openai/gpt-5.6-luna` and still
-  return 200, so the model that was asked for is not evidence of the model that
+  `google/gemini-3.7-flash` can be answered by `zai/glm-5.3` and still return
+  200, so the model that was asked for is not evidence of the model that
   answered. The response's `model` field is, and the chat-completions decoder
   reads it back as `{:model_served, name}` so the call is priced and attributed
   against the lane that served it rather than the lane that was requested
@@ -61,8 +61,8 @@ defmodule OpenAgents.Providers.VercelGateway do
 
   True exactly while a fallback list is configured. `providerOptions.gateway.models`
   is an instruction to Vercel to try another model when the primary fails, so a
-  request for `google/gemini-3.7-flash` can be answered by `openai/gpt-5.6-luna`
-  and return 200. The host reads the serving model back off the response; this
+  request for `google/gemini-3.7-flash` can be answered by `zai/glm-5.3` and
+  return 200. The host reads the serving model back off the response; this
   says what its silence means, because a lane that cannot be substituted for
   needs no disclosure to be attributed correctly.
   """

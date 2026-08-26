@@ -14,12 +14,21 @@ defmodule OpenAgentsWeb.ModelCatalogLiveTest do
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Inference.Models
+  alias OpenAgents.UnpricedLane
 
   defp signed_in(conn, user), do: Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
   defp reader(conn, handle), do: signed_in(conn, github_user(handle))
 
-  defp unpriced_id, do: Application.fetch_env!(:openagents, :openai_model)
+  defp unpriced_id, do: UnpricedLane.id()
+
+  # No shipped lane is unpriced since `gpt-5.6-luna` was withdrawn, so the
+  # tests that read the unpriced rendering admit a lane of their own.
+  defp admit_unpriced_lane do
+    previous = UnpricedLane.admit!()
+    on_exit(fn -> UnpricedLane.restore(previous) end)
+    :ok
+  end
 
   test "every model this deployment serves has a row", %{conn: conn} do
     {:ok, view, _html} = live(reader(conn, "model-catalog-rows"), ~p"/models")
@@ -32,6 +41,7 @@ defmodule OpenAgentsWeb.ModelCatalogLiveTest do
   end
 
   test "an unpriced lane shows the word, never a zero", %{conn: conn} do
+    :ok = admit_unpriced_lane()
     id = unpriced_id()
     {:ok, view, _html} = live(reader(conn, "model-catalog-unpriced"), ~p"/models")
 
@@ -62,16 +72,21 @@ defmodule OpenAgentsWeb.ModelCatalogLiveTest do
 
   test "the billable notice is derived from the catalog, not written into the page",
        %{conn: conn} do
+    :ok = admit_unpriced_lane()
     previous = Application.fetch_env!(:openagents, :model_catalog)
 
     declared =
-      List.update_at(previous, 0, fn entry ->
-        Map.put(entry, :pricing, %{
-          id: "declared.test.v1",
-          source: :declared,
-          input_per_million_tokens: 3_000_000,
-          output_per_million_tokens: 15_000_000
-        })
+      Enum.map(previous, fn
+        %{id: "gemini-3.7-flash"} = entry ->
+          Map.put(entry, :pricing, %{
+            id: "declared.test.v1",
+            source: :declared,
+            input_per_million_tokens: 3_000_000,
+            output_per_million_tokens: 15_000_000
+          })
+
+        entry ->
+          entry
       end)
 
     Application.put_env(:openagents, :model_catalog, declared)

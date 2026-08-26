@@ -235,7 +235,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
 
   setup {Req.Test, :verify_on_exit!}
 
-  test "sends an OpenRouter-compatible Ox Alpha request with a free fallback" do
+  test "sends an OpenRouter-compatible GLM 5.3 Flash request with a free fallback" do
     Req.Test.expect(__MODULE__, fn conn ->
       assert conn.request_path == "/api/v1/chat/completions"
       assert ["Bearer test-openrouter-key"] = Plug.Conn.get_req_header(conn, "authorization")
@@ -248,7 +248,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
       assert String.starts_with?(referer, "http")
 
       assert %{
-               "model" => "stealth/ox-alpha",
+               "model" => "z-ai/glm-5.3-flash",
                "messages" => [%{"role" => "user", "content" => "Hello"}]
              } = conn.body_params
 
@@ -272,7 +272,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok, completion} =
              OpenRouter.complete(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "models" => ["openrouter/free"],
                  "messages" => [%{"role" => "user", "content" => "Hello"}]
                },
@@ -290,7 +290,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:error, :rate_limited} =
              OpenRouter.complete(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "models" => ["openrouter/free"],
                  "messages" => [%{"role" => "user", "content" => "Hello"}]
                },
@@ -367,14 +367,14 @@ defmodule OpenAgents.Chat.OpenRouterTest do
         sse(%{
           "id" => "gen-metadata",
           "object" => "chat.completion.chunk",
-          "model" => "stealth/ox-alpha",
+          "model" => "z-ai/glm-5.3-flash",
           "provider" => "Stealth",
           "choices" => [%{"index" => 0, "delta" => %{"content" => "Measured"}}]
         }) <>
           sse(%{
             "id" => "gen-metadata",
             "object" => "chat.completion.chunk",
-            "model" => "stealth/ox-alpha",
+            "model" => "z-ai/glm-5.3-flash",
             "choices" => [],
             "usage" => %{
               "prompt_tokens" => 12,
@@ -407,7 +407,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
       body =
         sse(%{
           "object" => "chat.completion.chunk",
-          "model" => "stealth/ox-alpha",
+          "model" => "z-ai/glm-5.3-flash",
           "choices" => [%{"index" => 0, "delta" => %{"content" => "Quiet"}}]
         }) <> "data: [DONE]\n\n"
 
@@ -433,7 +433,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
                Plug.Conn.get_req_header(conn, "x-openrouter-categories")
 
       assert %{
-               "model" => "stealth/ox-alpha",
+               "model" => "z-ai/glm-5.3-flash",
                "reasoning" => %{
                  "effort" => "max",
                  "exclude" => false,
@@ -481,7 +481,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
             "response" => %{
               "id" => "resp_test",
               "object" => "response",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => [
                 %{
                   "type" => "reasoning",
@@ -514,7 +514,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok,
             %{
               "object" => "response",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "assistant_message_id" => "msg_test",
               "assistant_content" => "Hello world",
               "reasoning_summary" => "Checked the prior context.",
@@ -531,7 +531,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
             }} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "models" => ["openrouter/free"],
                  "reasoning" => "max",
                  "messages" => [
@@ -575,7 +575,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
           "type" => "response.completed",
           "response" => %{
             "object" => "response",
-            "model" => "stealth/ox-alpha",
+            "model" => "z-ai/glm-5.3-flash",
             "output" => [
               %{
                 "type" => "message",
@@ -596,7 +596,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok, %{"assistant_content" => "Continued"}} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [
                    %{"role" => "user", "content" => "Think"},
                    %{
@@ -641,7 +641,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
         sse(%{
           "id" => "gen-stream",
           "object" => "chat.completion.chunk",
-          "model" => "stealth/ox-alpha",
+          "model" => "z-ai/glm-5.3-flash",
           "choices" => [%{"index" => 0, "delta" => %{"content" => "Fallback"}}]
         }) <> "data: [DONE]\n\n"
 
@@ -652,10 +652,10 @@ defmodule OpenAgents.Chat.OpenRouterTest do
 
     parent = self()
 
-    assert {:ok, %{"object" => "chat.completion", "model" => "stealth/ox-alpha"}} =
+    assert {:ok, %{"object" => "chat.completion", "model" => "z-ai/glm-5.3-flash"}} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [
                    %{"role" => "user", "content" => "Hello"},
                    %{
@@ -695,7 +695,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
              "The selected model does not support this tool definition."}} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [%{"role" => "user", "content" => "Hello"}]
                },
                fn _event -> :ok end,
@@ -747,13 +747,13 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok,
             %{
               "object" => "response",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "assistant_message_id" => "msg_streamed",
               "assistant_content" => "Streaming works."
             }} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [%{"role" => "user", "content" => "Hello"}]
                },
                fn _event -> :ok end,
@@ -816,7 +816,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
             }} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [%{"role" => "user", "content" => "Hello"}]
                },
                &send(parent, {:openrouter_event, &1}),
@@ -900,7 +900,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
             "type" => "response.completed",
             "response" => %{
               "object" => "response",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => [
                 %{
                   "type" => "message",
@@ -930,7 +930,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok, %{"assistant_content" => "OpenAgents is an agent platform."}} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [%{"role" => "user", "content" => "Summarize the README."}]
                },
                &send(parent, {:openrouter_event, &1}),
@@ -986,7 +986,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
             "type" => "response.completed",
             "response" => %{
               "object" => "response",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => [
                 %{
                   "type" => "message",
@@ -1022,7 +1022,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok, %{"usage" => usage} = completion} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [%{"role" => "user", "content" => "Summarize the README."}]
                },
                &send(parent, {:openrouter_event, &1}),
@@ -1083,7 +1083,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
               "id" => "resp_repo_final",
               "object" => "response",
               "status" => "completed",
-              "model" => "stealth/ox-alpha",
+              "model" => "z-ai/glm-5.3-flash",
               "output" => [
                 %{
                   "type" => "message",
@@ -1124,7 +1124,7 @@ defmodule OpenAgents.Chat.OpenRouterTest do
     assert {:ok, %{"assistant_content" => "The file now contains alpha gamma."}} =
              OpenRouter.stream(
                %{
-                 "model" => "stealth/ox-alpha",
+                 "model" => "z-ai/glm-5.3-flash",
                  "messages" => [
                    %{
                      "role" => "user",
@@ -1264,7 +1264,10 @@ defmodule OpenAgents.Chat.OpenRouterTest do
 
   defp stream_hello do
     OpenRouter.stream(
-      %{"model" => "stealth/ox-alpha", "messages" => [%{"role" => "user", "content" => "Hello"}]},
+      %{
+        "model" => "z-ai/glm-5.3-flash",
+        "messages" => [%{"role" => "user", "content" => "Hello"}]
+      },
       fn _event -> :ok end,
       api_key: "test-openrouter-key",
       request_options: [plug: {Req.Test, __MODULE__}]

@@ -499,7 +499,8 @@ defmodule OpenAgents.Chat.AccountTurns do
   # output list is not a Gemini turn and vice versa, so a conversation that
   # switches backends replays only the turns the chosen backend produced rather
   # than handing one provider another's transcript shape. A row written before
-  # backends were named is an Ox Alpha turn, which is what its `NULL` means.
+  # backends were named is an Ox Alpha turn — GLM 5.3 Flash under its
+  # pre-launch name — which is what its `NULL` means.
   defp provider_history(conversation_id, excluded_run_id, backend) do
     default_id = Backends.default_id()
 
@@ -605,12 +606,12 @@ defmodule OpenAgents.Chat.AccountTurns do
 
   defp usage_view(_counts, _completion), do: nil
 
-  # Ox Alpha reports a reasoning count of zero for turns it plainly reasoned
-  # through, so that zero measures nothing the turn did and the turn reports no
-  # reasoning count rather than a count of none. The call is made here, against
-  # the same stored reasoning the transcript renders, so a row written before
-  # this rule reads the same way as one written after it and no stored count is
-  # ever rewritten.
+  # GLM 5.3 Flash reports a reasoning count of zero for turns it plainly
+  # reasoned through, so that zero measures nothing the turn did and the turn
+  # reports no reasoning count rather than a count of none. The call is made
+  # here, against the same stored reasoning the transcript renders, so a row
+  # written before this rule reads the same way as one written after it and no
+  # stored count is ever rewritten.
   defp reasoning_view(0, completion), do: if(reasoned?(completion), do: nil, else: 0)
   defp reasoning_view(count, _completion), do: count
 

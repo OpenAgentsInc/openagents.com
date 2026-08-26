@@ -36,8 +36,9 @@ defmodule OpenAgentsWeb.ThreadController do
   caller states which model it wants is the thread it opens, and the response
   publishes the model the grant carries. Admitting it at the door is what lets
   a coding session run its own turns on one model and its delegated children on
-  another: it opens a second thread on `ox-alpha` and gets authority for
-  `ox-alpha`, with its own budget, rather than borrowing the first thread's.
+  another: it opens a second thread on `gemini-3.7-flash` and gets authority
+  for `gemini-3.7-flash`, with its own budget, rather than borrowing the first
+  thread's.
 
   The exception is the `local` lane, and it is an exception to the grant, not
   to the record. `"lane": "local"` opens a transcript-only thread: the model is

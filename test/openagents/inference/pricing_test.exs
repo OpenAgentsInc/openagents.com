@@ -13,6 +13,10 @@ defmodule OpenAgents.Inference.PricingTest do
 
   alias OpenAgents.Inference.Pricing
 
+  # A name the catalog does not route. `gpt-5.6-luna` was an admitted lane with
+  # no rates until it was withdrawn; now it is unpriced for the stronger reason
+  # that it is not served at all, and either way it is what `unpriced` looks
+  # like from the outside.
   defp unpriced_model_id, do: Application.fetch_env!(:openagents, :openai_model)
 
   describe "the basis of a catalog pricing map" do
@@ -139,17 +143,20 @@ defmodule OpenAgents.Inference.PricingTest do
       bases = Enum.map(OpenAgents.Inference.Models.catalog(), & &1["pricing_basis"])
 
       assert "declared" not in bases
-      assert "unpriced" in bases
       assert "provisional" in bases
     end
 
-    test "the unpriced lane publishes no pricing block, and says so in one word" do
-      luna =
-        OpenAgents.Inference.Models.catalog()
-        |> Enum.find(&(&1["id"] == unpriced_model_id()))
+    test "every shipped lane carries rates, so none of them reads as unpriced" do
+      # This was not true while `gpt-5.6-luna` was admitted, and it is the one
+      # thing that changed when it was withdrawn. `unpriced` did not stop being
+      # reachable — a gateway fallback that answers with a model this catalog
+      # does not admit still produces it, which is what
+      # `OpenAgentsWeb.InferenceProxyFallbackTest` proves — but no model a
+      # caller may select is in that state.
+      bases = Enum.map(OpenAgents.Inference.Models.catalog(), & &1["pricing_basis"])
 
-      refute Map.has_key?(luna, "pricing")
-      assert luna["pricing_basis"] == "unpriced"
+      assert "unpriced" not in bases
+      assert Pricing.basis(unpriced_model_id()) == "unpriced"
     end
 
     test "a priced lane publishes its table and its basis beside the rates" do

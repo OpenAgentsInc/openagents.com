@@ -17,7 +17,7 @@ defmodule OpenAgentsWeb.GymLiveTest do
         "suite" => suite,
         "agent" => "openagents-coder",
         "agent_version" => "0.3.5",
-        "model" => "ox-alpha",
+        "model" => "glm-5.3-flash",
         "lane" => "proxy",
         "tasks_total" => 10,
         "tasks_passed" => 8,
@@ -73,7 +73,7 @@ defmodule OpenAgentsWeb.GymLiveTest do
         Gym.start_run(%{
           "suite" => "terminal-bench@2.0",
           "agent" => "openagents-coder",
-          "model" => "ox-alpha",
+          "model" => "glm-5.3-flash",
           "lane" => "proxy",
           "tasks_total" => 2
         })

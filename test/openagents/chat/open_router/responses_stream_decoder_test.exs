@@ -52,7 +52,7 @@ defmodule OpenAgents.Chat.OpenRouter.ResponsesStreamDecoderTest do
             "id" => "resp_test",
             "object" => "response",
             "status" => "completed",
-            "model" => "stealth/ox-alpha"
+            "model" => "z-ai/glm-5.3-flash"
           }
         })
 

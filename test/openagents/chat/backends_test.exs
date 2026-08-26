@@ -28,8 +28,8 @@ defmodule OpenAgents.Chat.BackendsTest do
   end
 
   test "no preference resolves to the default, an unknown name does not" do
-    assert {:ok, %{id: "ox-alpha"}} = Backends.fetch(nil)
-    assert {:ok, %{id: "ox-alpha"}} = Backends.fetch("")
+    assert {:ok, %{id: "glm-5.3-flash"}} = Backends.fetch(nil)
+    assert {:ok, %{id: "glm-5.3-flash"}} = Backends.fetch("")
 
     # A caller that asked for one model and was quietly served another has no
     # way to tell, so an unknown name refuses rather than falling back.

@@ -369,7 +369,7 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
       end
     end
 
-    assert {:ok, %{"id" => first_id, "model" => "ox-alpha"}} =
+    assert {:ok, %{"id" => first_id, "model" => "glm-5.3-flash"}} =
              AccountTurns.submit(user, "First.", subscriber: self(), streamer: recorder.("ox"))
 
     assert_receive {:request, "ox", _first_request}
@@ -385,7 +385,7 @@ defmodule OpenAgents.Chat.AccountTurnsTest do
     assert_receive {:request, "gemini", gemini_request}
     assert_receive {:account_chat_completed, ^second_id, {:ok, _completion}}
 
-    # Gemini sees its own first turn and nothing from the Ox Alpha lane.
+    # Gemini sees its own first turn and nothing from the GLM 5.3 Flash lane.
     assert gemini_request["messages"] == [%{"role" => "user", "content" => "Second."}]
     assert gemini_request["model"] == "gemini-3.7-flash"
 

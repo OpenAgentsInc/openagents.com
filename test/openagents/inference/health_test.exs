@@ -39,8 +39,8 @@ defmodule OpenAgents.Inference.HealthTest do
     end
 
     test "a failure with no upstream status reports none rather than inventing one" do
-      for _ <- 1..Health.degraded_after(), do: Health.record_failure("ox-alpha", nil)
-      assert Health.status("ox-alpha") == {:degraded, nil}
+      for _ <- 1..Health.degraded_after(), do: Health.record_failure("glm-5.3-flash", nil)
+      assert Health.status("glm-5.3-flash") == {:degraded, nil}
     end
 
     test "lanes are tracked apart" do

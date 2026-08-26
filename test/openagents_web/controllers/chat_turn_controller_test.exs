@@ -193,7 +193,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
   describe "backend selection" do
     test "a turn names the backend it went to, whether or not it chose one", %{conn: conn} do
       for {sent, expected} <- [
-            {%{}, "ox-alpha"},
+            {%{}, "glm-5.3-flash"},
             {%{"model" => "gemini-3.7-flash"}, "gemini-3.7-flash"}
           ] do
         key = "chat-backend-" <> expected
@@ -232,7 +232,7 @@ defmodule OpenAgentsWeb.ChatTurnControllerTest do
         |> post(~p"/api/v1/chat/turns", %{"message" => "Hello.", "model" => ""})
         |> json_response(202)
 
-      assert response["turn"]["model"] == "ox-alpha"
+      assert response["turn"]["model"] == "glm-5.3-flash"
     end
   end
 end

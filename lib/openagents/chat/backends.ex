@@ -23,11 +23,11 @@ defmodule OpenAgents.Chat.Backends do
 
   @backends [
     %{
-      id: "ox-alpha",
-      label: "Ox Alpha",
+      id: "glm-5.3-flash",
+      label: "GLM 5.3 Flash",
       adapter: OpenRouter,
       model: nil,
-      description: "Ox Alpha through OpenRouter. The default when a turn names no backend.",
+      description: "GLM 5.3 Flash through OpenRouter. The default when a turn names no backend.",
       free: false
     },
     %{
@@ -42,7 +42,10 @@ defmodule OpenAgents.Chat.Backends do
     }
   ]
 
-  @default_id "ox-alpha"
+  # `ox-alpha` was this same model under its pre-launch name, and OpenRouter
+  # now answers that slug with a 404 saying so, so this is a rename rather than
+  # a substitution.
+  @default_id "glm-5.3-flash"
 
   @type t :: %{
           id: String.t(),

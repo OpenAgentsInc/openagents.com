@@ -114,7 +114,12 @@ config :openagents,
   openai_model: "gpt-5.6-luna",
   openai_api_key: nil,
   openrouter_api_key: nil,
-  openrouter_model: "stealth/ox-alpha",
+  # The OpenRouter spelling of GLM 5.3 Flash. `stealth/ox-alpha` was this same
+  # model under its pre-launch name, and OpenRouter now answers that slug with
+  # a 404 that says so. Note the hyphen: OpenRouter writes the creator
+  # `z-ai`, the Vercel gateway writes it `zai`, and the two are not
+  # interchangeable.
+  openrouter_model: "z-ai/glm-5.3-flash",
   # The typed model catalog (`OpenAgents.Inference.Models`, PROVIDER-002):
   # every model this deployment serves, in the order a client should offer
   # them; the first entry is the default. `id` is the public name a caller
@@ -134,29 +139,103 @@ config :openagents,
   # (including omitting it) for a working figure. `OpenAgents.Inference.Pricing`
   # reads that word, and only `:declared` is billable (METER-001).
   #
-  # Every rate below is a placeholder written to make the system run. None of
-  # them was read off a provider's price page, so all of them say `:placeholder`
-  # and nothing may bill from a cost they produced. Replacing them is an owner
-  # action: enter the provider's real rates and set `source: :declared` in the
-  # same edit.
+  # Every rate below is a placeholder: no operator has declared any of them, so
+  # all of them say `:placeholder` and nothing may bill from a cost they
+  # produced. Replacing them is an owner action: enter the provider's rates and
+  # set `source: :declared` in the same edit.
   #
-  # A model with no `pricing` key records no estimated cost at all — not a
-  # zero. `gpt-5.6-luna` is that model and it is the lane the coder runs on, so
-  # the account's metered spend is a floor rather than a total until it has
-  # rates. Every read surface says `unpriced` rather than `$0.00`.
+  # The GLM 5.3 Flash figures are the ones to be careful with. Its posted rates
+  # on 2026-08-26 were $0.075 in, $0.25 out, and $0.015 cached in per million
+  # tokens — a limited-time half-price offer that ends 2026-09-09 16:00 UTC,
+  # after which list price is $0.15, $0.50, and $0.03. The entry carries list
+  # price, because a figure that silently doubles in two weeks is worse than
+  # one that is honestly high, and because neither figure is declared either
+  # way. The Gemini figures were written to make the system run and were not
+  # read off any price page.
   #
-  # Gemini 3.7 Flash leads, so it is what a caller that names none gets: fast,
-  # a million tokens of context, and steady enough to hold a conversation.
+  # A model with no `pricing` key records no estimated cost at all — not a zero
+  # — and its usage records stamp `pricing_id: "unpriced"`. No entry below is in
+  # that state now that `gpt-5.6-luna` has been withdrawn, but the state is
+  # still reached: a call the gateway's fallback chain rescues is answered by a
+  # model this catalog does not admit and therefore has no rates. Every read
+  # surface says `unpriced` rather than `$0.00`.
   #
-  # Ox Alpha is what delegated children run on. It is built for sustained
-  # agentic coding, which is what a child is given, and where it stalls the
-  # cost is one child rather than the conversation — a session opened on it
-  # answered "sup" with nothing at all, and a child's first request returned an
-  # empty 200 after three minutes.
+  # This list is exactly two models, and a caller may spend nothing else. A
+  # model absent from it cannot be minted a grant (`OpenAgents.Inference.mint/1`
+  # refuses the name) and cannot be called on a grant minted before it was
+  # withdrawn (`OpenAgentsWeb.InferenceProxyController` refuses
+  # `model_unavailable`). Withdrawing an entry is therefore a real withdrawal
+  # rather than a hidden one.
   #
-  # Luna is the backup, and is what answers where the OpenRouter credential is
-  # not configured and neither of the two above can be served.
+  # GLM 5.3 Flash leads, so it is what a caller that names none gets: a million
+  # tokens of context, and cheap enough per token to hold an ordinary
+  # conversation on a model that reasons before it answers. Its thinking is
+  # charged against `max_output` before a word of the answer is — a 256-token
+  # allowance was spent 243 tokens deep in reasoning and the answer was cut off
+  # mid-word on `finish_reason: "length"` — so the allowance below is the
+  # ceiling the gateway publishes for the lane rather than a modest figure.
+  #
+  # `ox-alpha`, which used to be listed here on the OpenRouter lane, was this
+  # same model under its pre-launch name. OpenRouter now answers
+  # `stealth/ox-alpha` with a 404 saying so, which is why it is gone rather
+  # than demoted: there was never a second model to keep. The old public id
+  # deliberately does not resolve to the new entry — silently answering a
+  # withdrawn name with a survivor is what PROVIDER-002 forbids.
+  #
+  # Gemini 3.7 Flash is second: fast, a million tokens of context, and steady
+  # enough to hold a conversation. It led this list until GLM 5.3 Flash was
+  # added.
+  #
+  # Both entries are on `:vercel_gateway`, and that is a single point of failure
+  # this file no longer papers over. `gpt-5.6-luna` used to be the third entry
+  # and the backup that answered when neither of the others could be served.
+  # It is withdrawn from this list and nothing replaced it, so if the gateway
+  # itself is unreachable this deployment serves no model at all: both lanes
+  # report `unavailable` and neither is substituted for the other.
+  #
+  # `vercel_gateway_fallback_models` below is a different list and it still ends
+  # with `openai/gpt-5.6-luna`, deliberately. That is the gateway's own ordered
+  # chain, tried inside a single call when the requested model fails, and it is
+  # not a menu: nobody selects a model from it. Luna sitting last in it is the
+  # backstop of a backstop. Withdrawing Luna from this catalog means no caller
+  # can choose it; it does not mean the gateway may never fall back to it.
+  #
+  # A call the chain rescues is still attributed honestly. The adapter reads the
+  # serving model back off the response, so a call answered by a model this
+  # catalog does not admit records no price at all — `pricing_id: "unpriced"` —
+  # rather than being charged at the rates of the model that was asked for
+  # (METER-001, PROVIDER-002).
   model_catalog: [
+    %{
+      id: "glm-5.3-flash",
+      # Through the Vercel gateway, which resolves the slug to z.ai and calls
+      # it with the BYOK z.ai credentials this account holds there. The
+      # `providerOptions.gateway.order` pin below names Vertex, which does not
+      # serve this model; the gateway reports `"planningReasoning":"BYOK
+      # credentials available for: zai"` and routes to z.ai anyway, so the pin
+      # costs this lane nothing.
+      provider: :vercel_gateway,
+      provider_model: "zai/glm-5.3-flash",
+      # A million, per z.ai's listing and the gateway's. OpenRouter publishes
+      # 1,048,576 for the same model; a million is the smaller of the two and
+      # the number the serving lane states.
+      context_window: 1_000_000,
+      # The gateway's published ceiling for this lane. It has to be large: the
+      # model reasons against this allowance, so a small one is spent thinking
+      # and the caller is handed a truncated answer on a 200.
+      max_output: 131_000,
+      # Placeholder: list price ($0.15 in, $0.50 out, $0.03 cached in, per
+      # million tokens), not the half-price offer running until 2026-09-09
+      # 16:00 UTC. Rates an operator has not declared, so nothing may bill from
+      # them until `source` says `:declared`.
+      pricing: %{
+        id: "placeholder.glm-5.3-flash.v1",
+        source: :placeholder,
+        input_per_million_tokens: 150_000,
+        output_per_million_tokens: 500_000,
+        cached_input_per_million_tokens: 30_000
+      }
+    },
     %{
       id: "gemini-3.7-flash",
       # Through the Vercel gateway, pinned to Vertex, so the call lands on
@@ -177,41 +256,6 @@ config :openagents,
         output_per_million_tokens: 10_000_000,
         cached_input_per_million_tokens: 100_000
       }
-    },
-    %{
-      id: "ox-alpha",
-      provider: :openrouter,
-      provider_model: {:config, :openrouter_model},
-      # A million, per the model's own listing. The 256,000 here was a guess
-      # made before there was a page to read.
-      context_window: 1_000_000,
-      # Ox Alpha is a reasoning model, and its thinking is charged against this
-      # allowance before a single word of the answer is. At 4,096 a child agent
-      # with a real task spent the whole budget reasoning and returned an empty
-      # 200 after three minutes, which read as the proxy having failed.
-      max_output: 64_000,
-      # Placeholder: the operator must set real provider rates and flip `source`
-      # to `:declared` before anything bills from this. This entry does not
-      # declare a cached-input rate.
-      pricing: %{
-        id: "placeholder.ox-alpha.v1",
-        source: :placeholder,
-        input_per_million_tokens: 500_000,
-        output_per_million_tokens: 2_000_000
-      }
-    },
-    %{
-      id: {:config, :openai_model},
-      provider: :openai,
-      provider_model: {:config, :openai_model},
-      context_window: 272_000,
-      max_output: 4_096
-      # This entry deliberately omits `pricing`, so a grant pinned to it records
-      # no estimated cost rather than a made-up zero. Its usage records stamp
-      # `pricing_id: "unpriced"`, `Threads.spend/1` refuses to total a session
-      # that touched it, and the thread page shows the word instead of a
-      # figure. Giving this lane real rates is the single highest-value edit in
-      # this file: it is where the coder's spend actually goes.
     }
   ],
   gemini_api_key: nil,
@@ -221,7 +265,15 @@ config :openagents,
   # where this account's credits are — but the fallback models are not on
   # Vertex, so Vercel may try other providers for them.
   vercel_gateway_providers: ["vertex"],
+  # The gateway's ordered fallback chain, tried within one call when the
+  # requested model fails. `zai/glm-5.3-flash` leads it because it is the only
+  # entry this deployment also admits in `:model_catalog`: a rescued call that
+  # lands on an admitted model is priced and attributed normally, and every
+  # other entry here records no price at all. `openai/gpt-5.6-luna` stays last
+  # at owner direction — it is the backstop of a backstop, reachable only
+  # automatically and selectable by nobody.
   vercel_gateway_fallback_models: [
+    "zai/glm-5.3-flash",
     "zai/glm-5.3",
     "zai/glm-5.2",
     "openai/gpt-5.6-luna"
@@ -466,8 +518,6 @@ config :openagents,
   # column; only account creation reads this.
   account_credit_microusd: 20_000_000,
   visitor_credit_microusd: 2_000_000,
-  inference_input_price_microusd_per_ktoken: 1_250,
-  inference_output_price_microusd_per_ktoken: 10_000,
   forge_enabled: false,
   forge_boot_converge_enabled: false,
   forge_deploy_lane_enabled: false,

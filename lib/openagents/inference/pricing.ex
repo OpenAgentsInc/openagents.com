@@ -3,11 +3,14 @@ defmodule OpenAgents.Inference.Pricing do
   What a metered call cost, and on whose authority.
 
   Metering that prices some lanes at zero is worse than no metering: it reports
-  a number, and the number is wrong. `gpt-5.6-luna` is the lane the coder
-  actually runs on and this deployment has never been told its rates, so a
-  surface that read a missing cost as zero would have shown `$0.00` beside a
-  session that spent real money — and shown it in the same typeface as a figure
-  that was measured.
+  a number, and the number is wrong. This deployment ran for a long time with
+  `gpt-5.6-luna` admitted and its rates never entered, so a surface that read a
+  missing cost as zero would have shown `$0.00` beside a session that spent
+  real money — and shown it in the same typeface as a figure that was measured.
+  Every admitted model carries rates now, and none of them is declared, so the
+  live case for a selectable model is `provisional`. `unpriced` is not dead
+  code: a call the gateway's fallback chain answers with a model the catalog
+  does not admit reaches it, and so would any entry added without rates.
 
   So a cost is never a bare integer here. Every metered usage record carries a
   `pricing_id` naming the rate table it was priced against, and the id resolves

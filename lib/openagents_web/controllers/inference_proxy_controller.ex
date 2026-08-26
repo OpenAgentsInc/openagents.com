@@ -21,7 +21,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   What answered is read back off the response rather than assumed from the
   request. One lane can substitute: the Vercel AI Gateway is configured with a
   fallback model list, so a call for `google/gemini-3.7-flash` can be served by
-  `openai/gpt-5.6-luna` and still return 200. The serving model therefore
+  `zai/glm-5.3` and still return 200. The serving model therefore
   decides three things — the name attributed on the response, the lane whose
   health is recorded, and the rate table the usage record is priced against
   (METER-001). A substitutable lane whose response discloses no model is

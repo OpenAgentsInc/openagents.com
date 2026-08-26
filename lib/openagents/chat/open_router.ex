@@ -3,8 +3,8 @@ defmodule OpenAgents.Chat.OpenRouter do
   Server-side OpenRouter Responses adapter for the `/chat` console.
 
   The adapter keeps the OpenRouter credential and HTTP transport on the server.
-  It requests Ox Alpha and uses chat completions only when a provider does not
-  support Responses. It returns normalized failures without provider
+  It requests GLM 5.3 Flash and uses chat completions only when a provider does
+  not support Responses. It returns normalized failures without provider
   credentials or response bodies, and it separates the failures an operator can
   retry — a rate limit, an unavailable provider, an interrupted stream, and a
   malformed stream — from the ones a retry cannot fix.
@@ -14,8 +14,11 @@ defmodule OpenAgents.Chat.OpenRouter do
 
   @chat_completions_endpoint "https://openrouter.ai/api/v1/chat/completions"
   @responses_endpoint "https://openrouter.ai/api/v1/responses"
-  @default_model "stealth/ox-alpha"
-  @model_label "Ox Alpha"
+  # `stealth/ox-alpha` was GLM 5.3 Flash under its pre-launch name; OpenRouter
+  # answers that slug with a 404 now. Note the hyphen: OpenRouter writes the
+  # creator `z-ai` and the Vercel gateway writes it `zai`.
+  @default_model "z-ai/glm-5.3-flash"
+  @model_label "GLM 5.3 Flash"
   @maximum_tool_rounds 6
   @tool_instructions """
   Ground every repository claim in repository tool output. Never claim that a file or directory exists unless a tool result confirms it. Use list_repository_directory before guessing a path, and use the returned paths exactly. Do not retry the same failed repository, path, and ref combination. If a read fails, list its parent directory once or tell the user that the requested content is unavailable.

@@ -262,7 +262,7 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
   # Every chat-completions chunk names the model that produced it, and that
   # name is not always the one the request asked for: the Vercel AI Gateway is
   # configured with a fallback list, so a call for `google/gemini-3.7-flash`
-  # can come back served by `openai/gpt-5.6-luna`. Reading the field back is
+  # can come back served by `zai/glm-5.3`. Reading the field back is
   # the only way the host learns which lane to price and attribute the call
   # against, so it is carried out as an event rather than dropped.
   #

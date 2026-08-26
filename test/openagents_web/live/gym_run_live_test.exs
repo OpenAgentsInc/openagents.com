@@ -22,7 +22,7 @@ defmodule OpenAgentsWeb.GymRunLiveTest do
             "suite" => "terminal-bench@2.0",
             "agent" => "openagents-coder",
             "agent_version" => "0.3.5",
-            "model" => "ox-alpha",
+            "model" => "glm-5.3-flash",
             "lane" => "proxy",
             "tasks_total" => 3
           },
@@ -66,7 +66,7 @@ defmodule OpenAgentsWeb.GymRunLiveTest do
 
       assert html =~ "terminal-bench@2.0"
       assert html =~ "openagents-coder"
-      assert html =~ "ox-alpha"
+      assert html =~ "glm-5.3-flash"
       assert view |> element("#gym-run-status") |> render() =~ "running"
       assert has_element?(view, "#gym-run-trials-empty")
 

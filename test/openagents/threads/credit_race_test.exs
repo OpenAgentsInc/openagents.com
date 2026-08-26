@@ -28,6 +28,7 @@ defmodule OpenAgents.Threads.CreditRaceTest do
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
+  alias OpenAgents.Inference.Models
   alias OpenAgents.Repo
   alias OpenAgents.Threads
   alias OpenAgents.Threads.Thread
@@ -182,10 +183,7 @@ defmodule OpenAgents.Threads.CreditRaceTest do
   # Cost is priced from tokens by `OpenAgents.Inference`, never taken from a
   # caller, so spend is stated here in the output tokens that price to it.
   defp output_tokens_costing(microusd) do
-    div(
-      microusd * 1_000,
-      Application.fetch_env!(:openagents, :inference_output_price_microusd_per_ktoken)
-    )
+    div(microusd * 1_000_000, Models.default().pricing.output_per_million_tokens)
   end
 
   defp cap(limit) do

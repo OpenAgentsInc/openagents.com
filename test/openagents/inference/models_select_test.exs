@@ -27,7 +27,8 @@ defmodule OpenAgents.Inference.ModelsSelectTest do
 
     selected = Models.select()
     refute selected.id == default
-    assert selected.id == "ox-alpha"
+    assert selected.id == "gemini-3.7-flash"
+    assert selected.id == Enum.at(Models.ids(), 1)
   end
 
   test "select returns the default when all configured lanes are degraded, not the first one" do

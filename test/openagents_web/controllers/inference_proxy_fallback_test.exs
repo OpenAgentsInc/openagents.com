@@ -109,7 +109,7 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       # rescued by a fallback did not answer, and recording it healthy is the
       # same class of lie that #238 fixed: every call to a dead lane would keep
       # reporting `available` forever, because the fallback kept rescuing it.
-      luna = Application.fetch_env!(:openagents, :openai_model)
+      luna = "openai/gpt-5.6-luna"
       serve_as(luna)
       {:ok, gemini} = Models.fetch(@gemini)
 
@@ -119,7 +119,10 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       end
 
       assert Models.availability(gemini) == "degraded"
-      assert Health.status(luna) == {:healthy, nil}
+
+      # Nothing is recorded for the lane that actually answered either. It is
+      # not a model this deployment admits, so there is no lane to credit.
+      assert Health.status(luna) == {:unknown, nil}
     end
 
     test "makes the thread's cost unpriced, and names the lane that made it so", %{conn: _conn} do
@@ -127,7 +130,10 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       # by an unpriced fallback reports no total at all rather than a total at
       # the requested model's rates.
       user = github_user("fallback-thread")
-      {:ok, thread, grant, _token} = Threads.open_and_mint(user, "Fallback lane")
+
+      {:ok, thread, grant, _token} =
+        Threads.open_and_mint(user, "Fallback lane", model: @gemini)
+
       assert grant.model_id == @gemini
 
       {:ok, _metered} =
@@ -204,7 +210,9 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       # Two rate tables, one accumulated sum. Charging it at either rate would
       # be a guess, so the record says so and prices nothing.
       user = github_user("fallback-mixed")
-      {:ok, _thread, grant, _token} = Threads.open_and_mint(user, "Mixed lanes")
+
+      {:ok, _thread, grant, _token} =
+        Threads.open_and_mint(user, "Mixed lanes", model: @gemini)
 
       {:ok, first} = Inference.record_usage(grant, %{"input_tokens" => 1_000}, :requested)
       assert first.usage["served_model"] == @gemini

@@ -25,6 +25,31 @@ Two invariants govern everything:
 - **One immutable image digest.** Deployment identity is a `sha256:` digest,
   never a mutable tag.
 
+## The short path
+
+Steps 5, 7, and 8 — promote, roll, and settle — are driven by one script:
+
+```sh
+ops/deploy/release-to-production.sh <full-sha>
+```
+
+It reads the gate receipt rather than rerunning the gate, resolves the image
+by digest, promotes and waits for the forge to write a complete build receipt,
+replaces one node at a time, and settles the target. It refuses rather than
+guesses: no passing gate receipt, an image whose embedded revision is not the
+Git SHA, or a node that returns on the wrong revision each stop it where it
+stands, because a half-rolled fleet that reports success is worse than one that
+stops. It also skips a node that already serves the SHA with the digest
+pinned, because restarting such a node serves `502` for the length of the
+restart for no gain.
+
+If it refuses, do not work around the refusal. Read what it refused on.
+
+The script does not run the release gate (step 2), build the image (step 3),
+or run the migration job (step 6). Do those first. The remaining sections
+describe what the script automates, and what to do when a step needs to be
+driven by hand.
+
 ## 0. One-time workstation prerequisites
 
 The gate fails fast when any of these is missing. Set them up once per
@@ -61,12 +86,27 @@ machine:
 
 ## 1. Pick the candidate
 
-1. Work from a clean worktree: `git status --porcelain` prints nothing.
+1. Work from a clean worktree. Both the gate and the image build check
+   `git status --porcelain --untracked-files=all`, so an untracked file stops
+   them just as a modified one does. A long-lived checkout collects logs, PID
+   files, and other agents' worktree directories, and none of it is yours to
+   move or delete. Add those paths to `.git/info/exclude` instead: nothing is
+   moved, modified, or committed, and only your own `git status` changes.
+   Restore the file when the deploy is done. Before doing that, confirm the
+   paths cannot reach the image — the `Dockerfile` copies `VERSION`,
+   `mix.exs`, `mix.lock`, `config/`, `priv`, `lib`, `rel`, and `assets`, and
+   nothing else.
 2. The candidate is the exact SHA of forge `main`. Fetch and confirm
-   `git rev-parse HEAD` equals `git rev-parse origin/main`.
+   `git rev-parse HEAD` equals `git rev-parse openagents/main`. The forge
+   remote is `openagents`; `origin` is the GitHub mirror.
 3. If you have local commits, push them first: `git push openagents HEAD:main`
    (never GitHub; the push guard refuses non-forge pushes).
 4. Record the full SHA. It appears in every later step.
+
+`main` advancing while you deploy does not invalidate a candidate you have
+already gated, built, and rolled. It means the commits that landed after it
+are not deployed. Say so in the report rather than implying the fleet runs the
+tip.
 
 ## 2. Run the release gate
 
@@ -89,24 +129,37 @@ commit whose gate did not complete.
 
 ## 3. Build and publish the immutable image
 
-```sh
-ops/deploy/build-image.sh openagents:<full-sha>
-```
-
-The script verifies the gate receipt (`ops/ci/gate.sh --verify`), builds the
-`final` Docker target for `linux/amd64`, boots the packaged release to check
-that the embedded `OpenAgents.BuildInfo.revision()` equals the SHA, and writes
-a receipt to `.git/openagents/images/<sha>.json`.
-
-Publish to Artifact Registry and capture the **registry** digest — the digest
-printed by `docker push` is the deployment identity, not the local image ID:
+On an Apple Silicon workstation, build on Cloud Build:
 
 ```sh
-docker tag <local-digest> us-central1-docker.pkg.dev/openagents-staging-20260820/openagents-staging/openagents:<full-sha>
-docker push us-central1-docker.pkg.dev/openagents-staging-20260820/openagents-staging/openagents:<full-sha>
+ops/deploy/build-image-cloud.sh <full-sha>
 ```
 
-Record the pushed `sha256:` digest.
+Cloud Build workers are native `amd64`, so both the build and the packaged
+revision check run for real. The script refuses before it spends a build if the
+worktree is not at the exact SHA, if the worktree is not clean, or if the tag
+already exists. That last refusal matters: tags in this repository are
+immutable, so a wrong image cannot be replaced and the SHA is unusable
+forever. The script builds the `final` target, asserts that the packaged
+`OpenAgents.BuildInfo.revision()` equals the SHA, and pushes to Artifact
+Registry itself. No separate `docker push` step is needed.
+
+`ops/deploy/build-image.sh` does the same work locally, and on a native
+`amd64` machine it is still the shorter path. Do not reach for it on Apple
+Silicon. It boots the `linux/amd64` image to check the packaged revision, that
+boot runs under emulation, and the Erlang VM cannot start there. It dies at
+kernel start with `failed_to_start_child,user,nouser`, which is reproducible on
+the bare `hexpm/elixir` base image and unaffected by `-noinput` or `TERM=dumb`.
+A cached layer can hide this until the Docker cache is cleared.
+
+Record the published `sha256:` digest — it is the deployment identity, not the
+local image ID:
+
+```sh
+gcloud artifacts docker images describe \
+  us-central1-docker.pkg.dev/openagents-staging-20260820/openagents-staging/openagents:<full-sha> \
+  --format='value(image_summary.digest)' --project openagentsgemini
+```
 
 ## 4. Confirm runtime secrets and environment
 
@@ -279,6 +332,44 @@ Run exactly one migration job for the release; nodes must not race it.
 lineage bridge first, and require the lineage classification and integrity
 checks to pass before touching the fleet.
 
+Fill the startup template with the digest you published and run its
+`migrate-now` subcommand on one node. This runs the release's own
+`OpenAgents.Release.migrate()` in a throwaway container against the new image,
+and leaves the node's running container alone:
+
+```sh
+sed "s|__IMAGE_DIGEST__|<digest>|g" ops/deploy/fleet-startup.template.sh > /tmp/startup.sh
+gcloud compute scp /tmp/startup.sh sarah-fleet-1:/tmp/startup.sh \
+  --zone us-central1-a --project openagentsgemini
+gcloud compute ssh sarah-fleet-1 --zone us-central1-a --project openagentsgemini \
+  --tunnel-through-iap --command="sudo bash /tmp/startup.sh migrate-now"
+```
+
+Invoke it as `sudo bash /tmp/startup.sh`, not `sudo /tmp/startup.sh`. The
+node mounts `/tmp` `noexec`, so executing the file directly fails with
+`Permission denied` and says nothing about why.
+
+The fleet also sets `OPENAGENTS_MIGRATE_ON_BOOT=true`, so the first replaced
+node would migrate during boot anyway, serialized by the same advisory lock
+(RELEASE-001). Running the job first is still worth the extra step: it puts
+the schema change before the roll, where you can verify it while the fleet is
+still serving the previous release and nothing has been disturbed.
+
+Verify what the migration wrote, rather than reading its exit status. A
+migration that reports success can still have written the wrong values, and a
+data-bearing migration is the one place where that is expensive and silent.
+Query the affected rows directly:
+
+```sh
+docker exec openagents /app/bin/openagents rpc 'Code.eval_file("/tmp/check.exs")'
+```
+
+For a column added with a backfill, check three things: the row values the
+backfill was supposed to write, the column's `is_nullable` and
+`column_default` in `information_schema.columns`, and any constraint the
+migration created. Capture the same counts before the migration runs so the
+after-state has something to be compared against.
+
 ## 7. Rolling replacement
 
 `OpenAgents.Forge.RollingReplacement.run/2` replaces one node at a time. Its
@@ -329,14 +420,30 @@ and keeps every recorded observation.
 
 Do not report success without all of the following:
 
-- `/status` and `/api/status` return the exact SHA and image digest.
-- All three nodes report the same revision and digest; `beam=3`, `raft=3`,
-  quorum holds.
+- `/status` and `/api/status` return the exact SHA as `revision`. Neither
+  renders the image digest, so read the digest from the settled target's
+  `details.rolling_authority`, which records the authorized digest and the
+  identity each node was observed at. In `/api/status`, every entry of `nodes`
+  reporting `boot.reason: "image_matches_live"` is the node-level statement
+  that it runs the authorized digest, because boot convergence admits against
+  the published identity rather than the SHA alone.
+- All three nodes report the same revision; `beam=3` and quorum holds.
+  `raft` is `0` while `OPENAGENTS_FEATURE_RA` is `false`, which is the current
+  fleet setting — do not read `raft=0` as a failed roll.
 - All three backends of `sarah-backend` are healthy.
-- The migration appears in `schema_migrations`.
+- The migration appears in `schema_migrations`, and its data effects are
+  verified per step 6 rather than assumed from its exit status.
 - Login, a typed chat turn, and a durable reload work.
 - Issues, git clone/fetch, and a read-only computer job work.
 - New configuration is live without exposing secret values.
+- Any static asset the release changed is verified from the **served bytes**,
+  not from the repository. Fetch it and compare its hash against the file at
+  the deployed SHA:
+
+  ```sh
+  curl -fsS https://openagents.com/install.sh | shasum -a 256
+  shasum -a 256 priv/static/install.sh
+  ```
 
 ## Load balancer health check
 

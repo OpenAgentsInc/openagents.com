@@ -545,11 +545,17 @@ defmodule OpenAgentsWeb.HomeLive do
         It closes with a rule rather than running straight into the feature
         grid, so the claim and the way to act on it read as one band. --%>
         <Landing.hero
-          title="Introducing"
-          title_muted="Coder."
+          title="Coder."
+          title_lead="Introducing"
           description="Your all-in-one coding agent."
           rule
         >
+          <%!-- Commented out rather than deleted, and for the same reason as
+          the figure below: the shape is right and what it announces does not
+          exist yet. A pill is a link, and one that opens a post nobody has
+          written spends the reader's attention and returns none of it.
+          Restore it when there is a post to point at.
+
           <:eyebrow>
             <Landing.announce
               lead="Coder is here"
@@ -557,12 +563,19 @@ defmodule OpenAgentsWeb.HomeLive do
               navigate={~p"/coder"}
             />
           </:eyebrow>
+          --%>
 
           <:command>
             <Landing.install_command id="home-install-command" command={@install_command} />
           </:command>
 
-          <:note>Every new account starts with $20 of credit.</:note>
+          <%!-- Two lines, not one sentence. The first is what the reader gets
+          and the second is what it costs them to get it, and running them
+          together would let the second read as a condition on the credit
+          rather than on the account. --%>
+          <:note>
+            Every new account starts with $20 of credit.<br />Login with GitHub required.
+          </:note>
 
           <:links>
             <.button navigate={~p"/docs"} variant={:ghost} size={:sm} class="hero__link">

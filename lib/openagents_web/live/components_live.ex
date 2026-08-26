@@ -1660,14 +1660,14 @@ defmodule OpenAgentsWeb.ComponentsLive do
       </div>
 
       <p class="text-sm text-base-content/60">
-        A second headline tone, a command to run, a note qualifying it, and quiet links
-        under everything else. The muted line always breaks on its own, so the split
-        between the claim and its object is a decision rather than a wrap.
+        A muted run ahead of the headline, a command to run, a note qualifying it, and
+        quiet links under everything else. Putting the quiet half first means the eye
+        lands on the name rather than on the word announcing it.
       </p>
       <div class="demo-frame">
         <Landing.hero
-          title="Introducing"
-          title_muted="Coder."
+          title="Coder."
+          title_lead="Introducing"
           description="Your all-in-one coding agent."
         >
           <:eyebrow>

@@ -3454,11 +3454,12 @@
     text-wrap: balance;
   }
 
-  /* Its own line, always. The second tone is the object of the sentence, and a
-     headline that breaks it mid-phrase on one viewport and not another reads
-     as a wrap rather than as a decision. */
-  .hero__title-muted {
-    display: block;
+  /* Inline and quiet, ahead of the name it introduces. The word space is a
+     margin rather than a literal space in the template: HEEx collapses
+     whitespace between an interpolation and its neighbour, so a space typed
+     there is not one you can rely on. */
+  .hero__title-lead {
+    margin-inline-end: 0.25em;
     color: var(--text-muted);
   }
 

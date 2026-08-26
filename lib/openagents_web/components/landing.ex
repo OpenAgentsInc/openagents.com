@@ -121,10 +121,10 @@ defmodule OpenAgentsWeb.UI.Landing do
   The figure is a slot rather than an image attribute, so a page can put a live
   surface in the frame instead of a screenshot of one.
 
-  `title_muted` is a second headline line in the muted tier. Two tones over two
-  lines is what separates the claim from its object -- the setup is not the
-  point, the name is -- and doing it with an attribute keeps the break out of
-  the caller's markup, where a `<br>` would fight `text-wrap: balance`.
+  `title_lead` is a muted run set inline before the headline. Two tones on one
+  line is what separates the setup from the claim -- "Introducing" is grammar,
+  the product name is the point -- and putting the quiet half first means the
+  eye lands on the name rather than on the word announcing it.
 
   Below the actions sit three quieter rows, in the order a reader needs them: a
   `command` to run, a `note` qualifying it, and `links` to what the band did
@@ -136,7 +136,7 @@ defmodule OpenAgentsWeb.UI.Landing do
   needs the division, and one whose next band is a figure does not.
   """
   attr :title, :string, required: true
-  attr :title_muted, :string, default: nil, doc: "a second headline line, in the muted tier"
+  attr :title_lead, :string, default: nil, doc: "a muted run set inline before the headline"
   attr :description, :string, default: nil
   attr :rule, :boolean, default: false, doc: "draw the closing hairline"
   attr :class, :any, default: nil
@@ -158,7 +158,7 @@ defmodule OpenAgentsWeb.UI.Landing do
       <div class="hero__lede">
         <div :if={@eyebrow != []} class="hero__eyebrow appear">{render_slot(@eyebrow)}</div>
         <h1 class="hero__title appear">
-          {@title}<span :if={@title_muted} class="hero__title-muted">{@title_muted}</span>
+          <span :if={@title_lead} class="hero__title-lead">{@title_lead}</span>{@title}
         </h1>
         <p :if={@description} class="hero__description appear appear--delay-1">
           {@description}

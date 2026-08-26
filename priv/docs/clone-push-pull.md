@@ -16,12 +16,6 @@ Choose a destination directory:
 openagents repo clone OWNER/REPOSITORY ./local-directory
 ```
 
-For a one-time clone without a global installation:
-
-```sh
-npx --yes @openagentsinc/cli@latest repo clone OWNER/REPOSITORY
-```
-
 The command retrieves the server-provided clone URL and invokes Git without
 putting the token in the URL or process arguments. It scopes the OpenAgents
 credential helper to the selected API origin for that clone process.
@@ -37,18 +31,17 @@ git clone https://openagents.com/OWNER/REPOSITORY.git
 Public repositories support anonymous clone and fetch. Private repositories
 require an authorized credential.
 
-Before you use standard Git with a private repository, install the CLI globally
-and configure the helper in the worktree:
+Before you use standard Git with a private repository, configure the helper in
+the worktree:
 
 ```sh
-npm install --global @openagentsinc/cli
 cd existing-worktree
 openagents auth setup-git --local
 ```
 
-Do not run `auth setup-git` through `npx`. The saved helper calls
-`openagents`, and the temporary `npx` executable is unavailable after that
-command exits.
+The helper configuration refers to the `openagents` executable by path, so
+install it where it stays: the installer links it into `~/.openagents/bin` and
+puts that directory on your `PATH`.
 
 Use global setup only when you want every local repository to use the helper
 for the selected OpenAgents origin:

@@ -10,12 +10,35 @@ defmodule OpenAgentsWeb.CoderLiveTest do
   test "the page offers the published install command", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/coder")
 
-    assert html =~ "npm i -g @openagentsinc/cli"
+    assert html =~ "curl -fsSL https://openagents.com/install.sh | sh"
 
-    # The binary release was withdrawn — artifacts and every channel pointer
-    # deleted — so the curl command can only fail, and the build it installed
-    # printed fabricated data. Offering it is worse than offering nothing.
-    refute html =~ "install.sh"
+    # This assertion used to run the other way. The binary release had been
+    # withdrawn — artifacts and every channel pointer deleted — so the curl
+    # command could only fail, and `npm i -g @openagentsinc/cli` was what the
+    # page handed out instead. The release is back, `install.sh` is what the
+    # documentation and the homepage publish, and the npm package is a
+    # different program answering to the same name: two of them on one `PATH`
+    # broke `git push` machine-wide (issue #260).
+    refute html =~ "@openagentsinc/cli"
+  end
+
+  test "every row of the frame is the same width", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/coder")
+
+    # The box is drawn in text, so a row that does not match the others shows
+    # as a broken side. It was typed for a 49-column interior while the command
+    # row came to 35, and nothing noticed until the command changed length.
+    # It is composed from the command now, and this is what holds that.
+    [frame] = Regex.run(~r{<pre[^>]*>(.*?)</pre>}s, html, capture: :all_but_first)
+
+    widths =
+      frame
+      |> String.replace(~r{<[^>]+>}, "")
+      |> String.split("\n")
+      |> Enum.map(&String.length/1)
+      |> Enum.uniq()
+
+    assert length(widths) == 1, "frame rows differ in width: #{inspect(widths)}"
   end
 
   test "the page adds no stylesheet of its own", %{conn: conn} do

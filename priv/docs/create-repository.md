@@ -46,13 +46,6 @@ repository continues provisioning on the server. While it waits, the CLI
 writes the current lifecycle state, elapsed time, and a five-second heartbeat
 to standard error.
 
-For one command without a global install, prefix the same arguments with the
-package name:
-
-```sh
-npx --yes @openagentsinc/cli@latest repo create my-project
-```
-
 ## Attach an existing local project
 
 Create the remote repository and attach it to an existing Git worktree:
@@ -77,10 +70,9 @@ remote attachment fails, the remote repository still exists.
 
 ## Push the first commit
 
-Install the CLI globally before configuring persistent Git authentication:
+Configure persistent Git authentication in the worktree, then push:
 
 ```sh
-npm install --global @openagentsinc/cli
 cd existing-worktree
 openagents auth setup-git --local
 git push -u origin HEAD

@@ -8,17 +8,99 @@ defmodule OpenAgentsWeb.CoderLive do
   that needs a second one needs a decision rather than an escape hatch. The
   colours come from the CSS variables that system already defines, with literal
   fallbacks, which is what the page was really relying on.
+
+  The command it prints is the installer. `@openagentsinc/cli` is a different
+  program answering to the same name, and this page was the last surface still
+  handing it out.
+
+  The frame is built rather than typed, and the command sets its width rather
+  than being fitted into it. Typed, it was significant whitespace inside a
+  template: the box was drawn for a 49-column interior, the command row came to
+  35, and the box had been rendering with one short side since long before the
+  command changed. `phx-no-format` does not save a typed box either — the HEEx
+  formatter re-indents the text inside a multi-line tag whichever way that
+  attribute is set, which puts four spaces down the left of every row but the
+  first. Composed here, the padding is arithmetic against one interior width and
+  the template holds a single interpolation.
   """
   use OpenAgentsWeb, :live_view
 
-  @cmd "npm i -g @openagentsinc/cli"
+  @cmd "curl -fsSL https://openagents.com/install.sh | sh"
+
+  # Three spaces between the frame and the hint, and the hint carries one space
+  # of its own on each side, which is the gap the copy confirmation replaces.
+  @outer 3
+  @interior @outer + String.length(@cmd) + 2 + @outer
+
+  # The wordmark and the two noise rows were drawn for a 49-column interior.
+  # Each keeps the padding it was drawn with and gains the difference.
+  @drawn_for 49
+  @side div(@interior - @drawn_for, 2)
+
+  @wordmark [
+    {5, "██████╗ ██████╗ ██████╗ ███████╗██████╗", 5},
+    {4, "██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗", 4},
+    {4, "██║     ██║   ██║██║  ██║█████╗  ██████╔╝", 4},
+    {4, "██║     ██║   ██║██║  ██║██╔══╝  ██╔══██╗", 4},
+    {4, "╚██████╗╚██████╔╝██████╔╝███████╗██║  ██║", 4},
+    {5, "╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝", 4}
+  ]
+
+  @noise_top "000111011001000110000101001000101000010000101100010110010"
+  @noise_bottom "111110001011000001010000000000001000100110001110101101001"
+
+  @dim ~s|<span style="color: var(--foreground2, #666);">|
+  @cyan ~s|<span class="font-bold text-cyan-400" style="color: #56b6c2;">|
+  @close "</span>"
+
+  @title " OpenAgents "
+  @rule @interior - String.length(@title)
+
+  @frame Enum.join(
+           [
+             @dim <>
+               "┌" <>
+               String.duplicate("─", div(@rule, 2)) <>
+               @close <>
+               @title <>
+               @dim <> String.duplicate("─", @rule - div(@rule, 2)) <> "┐" <> @close,
+             @dim <> "│" <> @close <> @noise_top <> @dim <> "│" <> @close,
+             @dim <> "│" <> String.duplicate(" ", @interior) <> "│" <> @close
+           ] ++
+             Enum.map(@wordmark, fn {lead, glyphs, trail} ->
+               @dim <>
+                 "│" <>
+                 @close <>
+                 String.duplicate(" ", lead + @side) <>
+                 @cyan <>
+                 glyphs <>
+                 @close <>
+                 String.duplicate(" ", trail + @side) <> @dim <> "│" <> @close
+             end) ++
+             [
+               @dim <> "│" <> String.duplicate(" ", @interior) <> "│" <> @close,
+               @dim <>
+                 "│" <>
+                 @close <>
+                 String.duplicate(" ", @outer) <>
+                 ~s|<span id="copy-hint" style="color: var(--foreground1, #ccc);"> | <>
+                 @cmd <>
+                 " " <>
+                 @close <>
+                 String.duplicate(" ", @outer) <> @dim <> "│" <> @close,
+               @dim <> "│" <> @close <> @noise_bottom <> @dim <> "│" <> @close,
+               @dim <> "└" <> String.duplicate("─", @interior) <> "┘" <> @close
+             ],
+           "\n"
+         )
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
      |> assign(:page_title, "OpenAgents Coder")
-     |> assign(:cmd, @cmd)}
+     |> assign(:cmd, @cmd)
+     |> assign(:frame, @frame)}
   end
 
   @impl true
@@ -38,21 +120,7 @@ defmodule OpenAgentsWeb.CoderLive do
         <pre
           class="font-mono text-xs sm:text-sm md:text-base leading-none select-none pointer-events-none"
           style="margin: 0; color: var(--foreground0, #fff); -webkit-user-select: none; user-select: none;"
-        >
-          <span style="color: var(--foreground2, #666);">┌──────────────────</span> OpenAgents <span style="color: var(--foreground2, #666);">───────────────────┐</span>
-          <span style="color: var(--foreground2, #666);">│</span>0001110110010001100001010010001010000100001011000<span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│                                                 │</span>
-          <span style="color: var(--foreground2, #666);">│</span>     <span class="font-bold text-cyan-400" style="color: #56b6c2;">██████╗ ██████╗ ██████╗ ███████╗██████╗</span>     <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│</span>    <span class="font-bold text-cyan-400" style="color: #56b6c2;">██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗</span>    <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│</span>    <span class="font-bold text-cyan-400" style="color: #56b6c2;">██║     ██║   ██║██║  ██║█████╗  ██████╔╝</span>    <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│</span>    <span class="font-bold text-cyan-400" style="color: #56b6c2;">██║     ██║   ██║██║  ██║██╔══╝  ██╔══██╗</span>    <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│</span>    <span class="font-bold text-cyan-400" style="color: #56b6c2;">╚██████╗╚██████╔╝██████╔╝███████╗██║  ██║</span>    <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│</span>     <span class="font-bold text-cyan-400" style="color: #56b6c2;">╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝</span>    <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│                                                 │</span>
-          <span style="color: var(--foreground2, #666);">│</span>   <span id="copy-hint" style="color: var(--foreground1, #ccc);"> <%= @cmd %> </span>   <span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">│</span>1111100010110000010100000000000010001001100011101<span style="color: var(--foreground2, #666);">│</span>
-          <span style="color: var(--foreground2, #666);">└─────────────────────────────────────────────────┘</span>
-        </pre>
+        >{raw(@frame)}</pre>
       </div>
     </div>
     """

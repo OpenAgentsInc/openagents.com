@@ -13,7 +13,7 @@ for those resources.
 Install the CLI and sign in to the profile you intend to use:
 
 ```sh
-npm install --global @openagentsinc/cli@latest
+curl -fsSL https://openagents.com/install.sh | sh
 openagents auth login
 openagents auth status
 ```

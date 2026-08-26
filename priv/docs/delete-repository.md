@@ -24,12 +24,6 @@ Pass `--yes` as explicit confirmation:
 openagents repo delete OWNER/REPOSITORY --yes
 ```
 
-You can run the same one-time command through `npx`:
-
-```sh
-npx --yes @openagentsinc/cli@latest repo delete OWNER/REPOSITORY --yes
-```
-
 The command also supports `--repo OWNER/REPOSITORY`. When you omit the name,
 the CLI infers it from an exact OpenAgents `origin` remote.
 

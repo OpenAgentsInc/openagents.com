@@ -28,7 +28,8 @@ the grant removed entirely.
 Run `openagents auth login` to start a browser-assisted device flow. You review
 and approve that request while signed in to the site. The CLI receives an
 OpenAgents API token, not your GitHub token. See [Install the
-CLI](/docs/install-cli) for npm and `npx` instructions.
+CLI](/docs/install-cli) for the installer, release channels, and where the
+binary lands.
 
 In a headless process, the command returns the authorization URL and user code
 immediately. After you approve the request, the agent runs `openagents auth

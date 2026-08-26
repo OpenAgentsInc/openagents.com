@@ -71,38 +71,33 @@ time, and a five-second heartbeat to standard error while it waits. Pass
 `--wait-timeout 0` to return after the server accepts the durable import.
 A client timeout does not cancel the server-side import.
 
-## Import once with npx
+## Pin a version for a qualification run
 
-Run the same import without a global installation:
-
-```sh
-npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
-```
-
-Pin the package version for a reproducible qualification run:
+A release channel is a pointer that moves, so an import you run today and the
+same import next month can run under different builds. Install one exact
+version when a qualification run has to stay reproducible:
 
 ```sh
-npx --yes @openagentsinc/cli@0.2.1 \
-  --profile staging \
+curl -fsSL https://openagents.com/install.sh | sh -s 0.0.2
+openagents --profile staging \
   repo import OWNER/REPOSITORY \
   --private \
   --wait-timeout 300
 ```
 
-You can use `npx` for the import and the CLI-managed clone. Install the CLI
-globally before you run `auth setup-git`, because a persistent Git helper
-cannot call the temporary executable after `npx` exits.
+## Import from a headless agent
 
-In a headless agent process, start the resumable login before the import:
+In a headless process, start the resumable login before the import:
 
 ```sh
-npx --yes @openagentsinc/cli@latest --json auth login
+openagents --json auth login
 # The agent shows you the URL and code. After you approve the request:
-npx --yes @openagentsinc/cli@latest --json auth login --resume
+openagents --json auth login --resume
 ```
 
 The first command returns immediately, so the agent does not need streaming
-shell output.
+shell output. The agent never receives your GitHub credential or the issued
+OpenAgents token.
 
 ## Import a large repository
 

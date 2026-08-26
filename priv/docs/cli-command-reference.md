@@ -8,9 +8,12 @@ named command yet.
 openagents <subcommand> [flags]
 ```
 
+`openagents`, `coder`, and `oa` are three names for one binary, so every
+command on this page runs under any of them. Run it bare and it starts a coder
+session instead. See [Install the CLI](/docs/install-cli).
+
 Run `openagents <command> --help` for the reference that matches your installed
-version. When you use `npx`, replace the `openagents` prefix with
-`npx --yes @openagentsinc/cli@latest`.
+version.
 
 ## Use global flags
 
@@ -28,7 +31,7 @@ Place shared flags before the subcommand:
 
 ```sh
 openagents --profile staging --json repo list
-npx --yes @openagentsinc/cli@latest --profile staging --json repo list
+oa --profile staging --json repo list
 ```
 
 Setting `NO_COLOR` also disables ANSI output.
@@ -49,9 +52,6 @@ Setting `NO_COLOR` also disables ANSI output.
 
 `auth git-credential` is an internal Git-helper endpoint. Do not invoke it
 directly.
-
-Do not run either `auth setup-git` form through `npx`. Install the CLI globally
-before you save a persistent helper configuration.
 
 ## Create a repository
 
@@ -287,10 +287,17 @@ and terminates its child Git process.
 ## Know which commands are unavailable
 
 This release does not provide named `issue` or `project` commands, repository
-mirroring, pull-request commands, ruleset commands, SSH-key commands, or a
-self-update command. Use `openagents api` for the implemented Issues and
-Projects routes, and use only commands shown by the installed version's
-`--help` output.
+mirroring, pull-request commands, ruleset commands, or SSH-key commands. Use
+`openagents api` for the implemented Issues and Projects routes, and use only
+commands shown by the installed version's `--help` output.
+
+## Update the binary
+
+`openagents update` resolves the release channel, compares the version it names
+against the running binary, and replaces the binary in place when they differ.
+`openagents self-update` is the same command. See
+[Install the CLI](/docs/install-cli) for channels, pinned versions, and what
+the update verifies.
 
 ## Next steps
 

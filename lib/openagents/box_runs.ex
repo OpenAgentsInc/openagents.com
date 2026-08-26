@@ -80,9 +80,16 @@ defmodule OpenAgents.BoxRuns do
            end
          end) do
       {:ok, cancelled_run} ->
-        if Run.terminal?(cancelled_run),
-          do: {:ok, cancelled_run},
-          else: cancel_worker(cancelled_run)
+        # The locked read inside the transaction returns a bare row, so both
+        # branches below hand back a run whose `:conversation_box` is unloaded.
+        # Every caller projects `run.conversation_box`, so preload here as
+        # `start_run/6`, `list_runs/2`, and `get_run/3` already do.
+        result =
+          if Run.terminal?(cancelled_run),
+            do: {:ok, cancelled_run},
+            else: cancel_worker(cancelled_run)
+
+        with {:ok, run} <- result, do: {:ok, Repo.preload(run, :conversation_box)}
 
       {:error, reason} ->
         {:error, reason}

@@ -162,6 +162,92 @@ defmodule OpenAgentsWeb.BoxRunControllerTest do
            }
   end
 
+  test "cancelling a running run answers with the run, not a crash", %{conn: conn} do
+    user = github_user("api-token-box-run-cancel")
+    {:ok, conversation} = Conversations.ensure_conversation(user)
+    box = insert_box(conversation.id, "bx_8bhkse3n")
+
+    run =
+      insert_run(conversation.id, box.id, user.id, "cancel-running", state: "running", pid: 4242)
+
+    worker = start_supervised!({OpenAgents.BoxRunServer, run.id})
+    ref = Process.monitor(worker)
+    _ = :sys.get_state(worker)
+
+    Req.Test.expect(__MODULE__, fn request ->
+      assert request.body_params["command"] =~ "kill"
+      Req.Test.json(request, %{"stdout" => "OA_CANCELLED=1\n"})
+    end)
+
+    response =
+      conn
+      |> put_box_api_token("box-run-cancel")
+      |> post(
+        "/api/v1/conversations/#{conversation.id}/boxes/#{box.box_id}/runs/#{run.id}/cancel"
+      )
+      |> json_response(202)
+
+    assert response["run"]["id"] == run.id
+    assert response["run"]["box_id"] == box.box_id
+    assert response["run"]["command"] == "echo worker"
+    assert response["run"]["cancellation_requested_at"]
+
+    assert_receive {:DOWN, ^ref, :process, ^worker, :normal}
+    assert Repo.get!(Run, run.id).cancellation_requested_at
+  end
+
+  test "cancelling an already finished run answers with the run", %{conn: conn} do
+    user = github_user("api-token-box-run-cancel-done")
+    {:ok, conversation} = Conversations.ensure_conversation(user)
+    box = insert_box(conversation.id, "bx_8bhkse3p")
+    run = insert_run(conversation.id, box.id, user.id, "cancel-done", state: "completed")
+
+    response =
+      conn
+      |> put_box_api_token("box-run-cancel-done")
+      |> post(
+        "/api/v1/conversations/#{conversation.id}/boxes/#{box.box_id}/runs/#{run.id}/cancel"
+      )
+      |> json_response(202)
+
+    assert response["run"]["id"] == run.id
+    assert response["run"]["box_id"] == box.box_id
+    assert response["run"]["state"] == "completed"
+  end
+
+  defp insert_box(conversation_id, box_id) do
+    %ConversationBox{}
+    |> ConversationBox.changeset(%{
+      conversation_id: conversation_id,
+      box_id: box_id,
+      state: "ready",
+      setup_status: "done"
+    })
+    |> Repo.insert!()
+  end
+
+  defp insert_run(conversation_id, box_pk, user_id, key, options) do
+    id = Ecto.UUID.generate()
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    state = Keyword.fetch!(options, :state)
+
+    %Run{id: id}
+    |> Run.changeset(%{
+      conversation_id: conversation_id,
+      conversation_box_id: box_pk,
+      requesting_principal: %{"type" => "user", "id" => user_id},
+      command: "echo worker",
+      idempotency_key: key,
+      state: state,
+      pid: Keyword.get(options, :pid),
+      run_directory: "$HOME/.openagents/box-runs/users/#{user_id}/#{id}",
+      admitted_at: now,
+      dispatch_attempted_at: now,
+      deadline_at: DateTime.add(now, 60, :second)
+    })
+    |> Repo.insert!()
+  end
+
   defp restore_env(key, nil), do: Application.delete_env(:openagents, key)
   defp restore_env(key, value), do: Application.put_env(:openagents, key, value)
 end

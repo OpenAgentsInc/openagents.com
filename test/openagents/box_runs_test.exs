@@ -283,6 +283,9 @@ defmodule OpenAgents.BoxRunsTest do
 
     assert {:ok, requested} = BoxRuns.cancel(run)
     assert requested.cancellation_requested_at
+    # Every caller projects the box the run belongs to, so `cancel/1` owes them
+    # the association its siblings already preload.
+    assert %ConversationBox{box_id: "bx_8bhkse3n"} = requested.conversation_box
 
     Req.Test.expect(__MODULE__, fn request ->
       assert request.body_params["command"] =~ "forge-credential"

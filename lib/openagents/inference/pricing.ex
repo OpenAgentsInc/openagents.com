@@ -2,8 +2,8 @@ defmodule OpenAgents.Inference.Pricing do
   @moduledoc """
   What a metered call cost, and on whose authority.
 
-  Metering that prices some lanes at zero is worse than no metering: it reports
-  a number, and the number is wrong. This deployment ran for a long time with
+  Metering that prices an unknown lane at zero is worse than no metering: it
+  reports a number, and the number is wrong. This deployment ran for a long time with
   `gpt-5.6-luna` admitted and its rates never entered, so a surface that read a
   missing cost as zero would have shown `$0.00` beside a session that spent
   real money — and shown it in the same typeface as a figure that was measured.
@@ -28,10 +28,9 @@ defmodule OpenAgents.Inference.Pricing do
 
   `unpriced` is not an error state and it is not a free lane. It is the
   deployment saying it does not know what a call cost, which is a different
-  fact from the call having cost nothing, and the distinction survives all the
-  way to the read surfaces. Turning it into a number is an owner action —
-  entering real rates in `config :openagents, :model_catalog` — not something
-  this module may guess at.
+  fact from the call having cost nothing. A declared zero rate is a measured
+  free lane; an absent rate remains unknown. The distinction survives all the
+  way to the read surfaces.
 
   The `pricing_id` convention is `OpenAgents.Voice.Usage`'s, so
   `OpenAgents.DataRights.AtifExport` reads inference usage and voice usage with

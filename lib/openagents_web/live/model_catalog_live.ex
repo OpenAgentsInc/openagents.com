@@ -20,8 +20,8 @@ defmodule OpenAgentsWeb.ModelCatalogLive do
   `Unpriced`, never `$0.00` — the deployment not knowing what a call cost is a
   different fact from the call having cost nothing. And a rate this deployment
   wrote to make itself run is labelled `provisional`, so nobody reads a working
-  figure as a price. Today that is every rate in the catalog, and the page says
-  so at the top rather than leaving a reader to infer it column by column.
+  figure as a price. The Coder Free lane declares zero rates because its router
+  only selects free models; the other listed rates remain provisional.
 
   Availability is `Models.availability/1`, the same word the endpoint
   publishes, refreshed on a slow tick: a page about what a lane costs that

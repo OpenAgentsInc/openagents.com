@@ -4,10 +4,9 @@ defmodule OpenAgentsWeb.ModelCatalogLiveTest do
   (#200, METER-001).
 
   The endpoint answered the CLI; nothing rendered the catalog for a human. What
-  matters here is not that the page exists but that it carries the same absence
-  the endpoint does: an unpriced lane shows the word rather than `$0.00`, and a
-  deployment with no declared rates says so at the top instead of presenting a
-  column of working figures as a price list.
+  matters here is not that the page exists but that it carries the same pricing
+  truth as the endpoint does: an unpriced lane shows the word rather than
+  `$0.00`, while the declared Coder Free router shows its zero rate.
   """
   use OpenAgentsWeb.ConnCase, async: false
 
@@ -64,10 +63,13 @@ defmodule OpenAgentsWeb.ModelCatalogLiveTest do
              "placeholder.gemini-3.7-flash.v1"
   end
 
-  test "the page says nothing is billable while no lane declares its rates", %{conn: conn} do
-    {:ok, view, _html} = live(reader(conn, "model-catalog-not-billable"), ~p"/models")
+  test "the declared free router is billable at zero", %{conn: conn} do
+    {:ok, view, _html} = live(reader(conn, "model-catalog-free"), ~p"/models")
 
-    assert has_element?(view, "#model-catalog-not-billable")
+    refute has_element?(view, "#model-catalog-not-billable")
+    assert view |> element(~s([id="model-basis-openrouter/free"])) |> render() =~ "declared"
+    assert view |> element(~s([id="model-input-rate-openrouter/free"])) |> render() =~ "$0.00"
+    assert view |> element(~s([id="model-output-rate-openrouter/free"])) |> render() =~ "$0.00"
   end
 
   test "the billable notice is derived from the catalog, not written into the page",

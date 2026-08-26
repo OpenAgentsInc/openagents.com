@@ -136,23 +136,19 @@ defmodule OpenAgents.Inference.PricingTest do
   end
 
   describe "the catalog this deployment actually ships" do
-    test "no lane claims declared rates, because none has been given any" do
-      # The moment an operator enters real rates and sets `source: :declared`,
-      # this test fails and whoever did it has to say so here. That is the
-      # point: turning a lane billable is a decision, not a config typo.
+    test "only the free router claims declared zero rates" do
       bases = Enum.map(OpenAgents.Inference.Models.catalog(), & &1["pricing_basis"])
 
-      assert "declared" not in bases
+      free_router =
+        Enum.find(OpenAgents.Inference.Models.catalog(), &(&1["id"] == "openrouter/free"))
+
+      assert Enum.count(bases, &(&1 == "declared")) == 1
       assert "provisional" in bases
+      assert free_router["pricing"]["input_per_million_tokens"] == 0
+      assert free_router["pricing"]["output_per_million_tokens"] == 0
     end
 
-    test "every shipped lane carries rates, so none of them reads as unpriced" do
-      # This was not true while `gpt-5.6-luna` was admitted, and it is the one
-      # thing that changed when it was withdrawn. `unpriced` did not stop being
-      # reachable — a gateway fallback that answers with a model this catalog
-      # does not admit still produces it, which is what
-      # `OpenAgentsWeb.InferenceProxyFallbackTest` proves — but no model a
-      # caller may select is in that state.
+    test "every shipped lane carries rates, so none reads as unpriced" do
       bases = Enum.map(OpenAgents.Inference.Models.catalog(), & &1["pricing_basis"])
 
       assert "unpriced" not in bases

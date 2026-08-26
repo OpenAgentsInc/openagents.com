@@ -160,7 +160,7 @@ config :openagents,
   # model this catalog does not admit and therefore has no rates. Every read
   # surface says `unpriced` rather than `$0.00`.
   #
-  # This list is exactly two models, and a caller may spend nothing else. A
+  # This list is exactly three models, and a caller may spend nothing else. A
   # model absent from it cannot be minted a grant (`OpenAgents.Inference.mint/1`
   # refuses the name) and cannot be called on a grant minted before it was
   # withdrawn (`OpenAgentsWeb.InferenceProxyController` refuses
@@ -186,12 +186,10 @@ config :openagents,
   # enough to hold a conversation. It led this list until GLM 5.3 Flash was
   # added.
   #
-  # Both entries are on `:vercel_gateway`, and that is a single point of failure
-  # this file no longer papers over. `gpt-5.6-luna` used to be the third entry
-  # and the backup that answered when neither of the others could be served.
-  # It is withdrawn from this list and nothing replaced it, so if the gateway
-  # itself is unreachable this deployment serves no model at all: both lanes
-  # report `unavailable` and neither is substituted for the other.
+  # The first two entries are on `:vercel_gateway`. `openrouter/free` is the
+  # independent Coder Free lane, and it remains available when the gateway is
+  # unavailable. OpenRouter limits that router to free models, so its declared
+  # per-token rates are zero even though the selected provider model can vary.
   #
   # `vercel_gateway_fallback_models` below is a different list and it still ends
   # with `openai/gpt-5.6-luna`, deliberately. That is the gateway's own ordered
@@ -255,6 +253,24 @@ config :openagents,
         input_per_million_tokens: 1_250_000,
         output_per_million_tokens: 10_000_000,
         cached_input_per_million_tokens: 100_000
+      }
+    },
+    %{
+      # The Coder Free lane resolves this exact fallback after checking for a
+      # deployment-specific preferred free model. OpenRouter selects a current
+      # free model behind this router id, so callers cannot be promised one
+      # vendor context window. Its route only selects zero-price models.
+      id: "openrouter/free",
+      provider: :openrouter,
+      provider_model: "openrouter/free",
+      context_window: 32_768,
+      max_output: 8_192,
+      pricing: %{
+        id: "declared.openrouter-free.v1",
+        source: :declared,
+        input_per_million_tokens: 0,
+        output_per_million_tokens: 0,
+        cached_input_per_million_tokens: 0
       }
     }
   ],

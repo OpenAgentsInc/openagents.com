@@ -48,7 +48,7 @@ defmodule OpenAgents.Inference.ModelsTest do
 
     assert ids == Enum.uniq(ids)
     assert Models.default_id() in ids
-    assert ids == ["glm-5.3-flash", "gemini-3.7-flash"]
+    assert ids == ["glm-5.3-flash", "gemini-3.7-flash", "openrouter/free"]
     assert Enum.map(Models.all(), & &1.id) == ids
     assert Models.fetch("attacker/gpt-9-ultra") == :error
     assert Models.fetch(nil) == :error
@@ -171,10 +171,18 @@ defmodule OpenAgents.Inference.ModelsTest do
       assert glm["pricing"]["basis"] == "provisional"
     end
 
-    test "every published lane carries a pricing block, because every one is priced" do
+    test "the free router declares its zero price" do
+      free_router = Enum.find(Models.catalog(), &(&1["id"] == "openrouter/free"))
+
+      assert free_router["pricing"]["id"] == "declared.openrouter-free.v1"
+      assert free_router["pricing"]["input_per_million_tokens"] == 0
+      assert free_router["pricing"]["output_per_million_tokens"] == 0
+      assert free_router["pricing_basis"] == "declared"
+    end
+
+    test "each catalog lane carries a pricing block" do
       for entry <- Models.catalog() do
         assert Map.has_key?(entry, "pricing")
-        assert entry["pricing_basis"] == "provisional"
       end
     end
 

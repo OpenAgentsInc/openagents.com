@@ -257,7 +257,11 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
     on_exit(fn -> Application.put_env(:openagents, :vercel_gateway_provider, previous) end)
 
-    conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "hi"}]})
+    conn =
+      post_chat(conn, token, %{
+        "model" => "glm-5.3-flash",
+        "messages" => [%{"role" => "user", "content" => "hi"}]
+      })
 
     assert conn.status == 503
     assert Jason.decode!(conn.resp_body)["error"]["code"] == "model_unavailable"

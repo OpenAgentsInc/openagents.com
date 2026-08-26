@@ -46,9 +46,9 @@ defmodule OpenAgents.Inference.Models do
   }
 
   @type pricing :: %{
-          required(:input_per_million_tokens) => pos_integer(),
-          required(:output_per_million_tokens) => pos_integer(),
-          optional(:cached_input_per_million_tokens) => pos_integer()
+          required(:input_per_million_tokens) => non_neg_integer(),
+          required(:output_per_million_tokens) => non_neg_integer(),
+          optional(:cached_input_per_million_tokens) => non_neg_integer()
         }
 
   @type t :: %{

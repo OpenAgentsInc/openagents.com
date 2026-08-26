@@ -388,7 +388,16 @@ defmodule OpenAgentsWeb.ResponsesControllerTest do
              |> json_response(200)
 
       assert_receive {:recorded_request, _id, request}
-      assert request.instructions == "You are OpenAgents Coder. Answer directly and concisely."
+
+      # What this test is about: no memory rides along for a caller we do not
+      # recognize. `[From memory: ` is the marker the recognized-caller tests
+      # above assert the presence of.
+      refute request.instructions =~ "[From memory: "
+
+      # It is still the default prompt, asserted by the properties that prompt
+      # exists to hold rather than by its prose. Pinning the whole string made
+      # this test fail for a prompt edit that had nothing to do with memory.
+      assert request.instructions =~ "You are OpenAgents Coder."
     end
 
     # The dev lane reaches this route with credentials this endpoint knows

@@ -213,8 +213,8 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
     assert has_element?(view, "#repository-cli")
     assert has_element?(view, "#repository-cli-copy-0")
     assert has_element?(view, ~s(a[href="/docs/openagents-cli"]))
-    assert html =~ "curl -fsSL https://openagents.com/install.sh | bash"
     assert html =~ "npm i -g @openagentsinc/cli"
+    refute html =~ "install.sh"
     assert html =~ "openagents auth login"
     assert html =~ "openagents auth setup-git --local"
     assert html =~ "/&lt;owner&gt;/&lt;name&gt;.git"

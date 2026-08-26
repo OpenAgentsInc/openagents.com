@@ -10,7 +10,12 @@ defmodule OpenAgentsWeb.CoderLiveTest do
   test "the page offers the published install command", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/coder")
 
-    assert html =~ "curl -fsSL https://openagents.com/install.sh | bash"
+    assert html =~ "npm i -g @openagentsinc/cli"
+
+    # The binary release was withdrawn — artifacts and every channel pointer
+    # deleted — so the curl command can only fail, and the build it installed
+    # printed fabricated data. Offering it is worse than offering nothing.
+    refute html =~ "install.sh"
   end
 
   test "the page adds no stylesheet of its own", %{conn: conn} do

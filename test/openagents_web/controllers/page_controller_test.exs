@@ -10,6 +10,12 @@ defmodule OpenAgentsWeb.PageControllerTest do
     html = conn |> get(~p"/") |> html_response(200)
 
     assert html =~ ~s(id="home-install-command")
-    assert html =~ "curl -fsSL https://openagents.com/install.sh | bash"
+    assert html =~ "npm i -g @openagentsinc/cli"
+
+    # The binary release was withdrawn: its artifacts and every channel pointer
+    # were deleted, so this command can only fail now, and it shipped commands
+    # that printed fabricated data. A page that still offers it is worse than a
+    # page with no install command at all.
+    refute html =~ "install.sh"
   end
 end

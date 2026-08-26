@@ -1,5 +1,14 @@
 # Install the OpenAgents CLI
 
+> **The `curl | sh` installer and the standalone binaries are withdrawn.**
+> The 0.1.0 binary release was published and then removed: its CLI shipped
+> commands that printed fabricated data as though it were real. Install with
+> npm until a release is cut from a build that has been verified end to end.
+>
+> ```sh
+> npm i -g @openagentsinc/cli
+> ```
+
 The CLI is a single native binary. Install it with the installer script:
 
 ```sh

@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.CoderLive do
   """
   use OpenAgentsWeb, :live_view
 
-  @cmd "curl -fsSL https://openagents.com/install.sh | bash"
+  @cmd "npm i -g @openagentsinc/cli"
 
   @impl true
   def mount(_params, _session, socket) do

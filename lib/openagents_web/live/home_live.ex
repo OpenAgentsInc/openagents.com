@@ -507,7 +507,7 @@ defmodule OpenAgentsWeb.HomeLive do
               id="home-install-command"
               class="w-full max-w-xl overflow-x-auto rounded-md border border-border bg-card px-4 py-3 text-left font-mono text-sm whitespace-nowrap text-foreground"
             >
-              curl -fsSL https://openagents.com/install.sh | bash
+              npm i -g @openagentsinc/cli
             </code>
             <.link navigate={~p"/docs/install-cli"} class="text-sm text-muted-foreground underline">
               Other ways to install

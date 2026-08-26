@@ -61,7 +61,15 @@ defmodule OpenAgentsWeb.InstallScriptTest do
     assert {_output, 0} = System.cmd("sh", ["-n", @script], stderr_to_stdout: true)
 
     script = File.read!(@script)
-    body = String.replace(script, ~r/^#.*$/m, "")
+
+    body =
+      script
+      |> String.replace(~r/^#.*$/m, "")
+      # `[[:space:]]` and its siblings are POSIX character classes. They are
+      # valid in `sh` and in POSIX `grep -E`, busybox included, and they
+      # contain `[[` without being a bash conditional. Drop them before
+      # looking for one, or the check below fails on correct POSIX code.
+      |> String.replace(~r/\[\[:[a-z]+:\]\]/, "")
 
     refute body =~ "[[", "`[[ ]]` is a bash conditional"
     refute body =~ "=~", "`=~` is a bash regex match"

@@ -47,6 +47,13 @@ defmodule OpenAgentsWeb.HomeLive do
   alias OpenAgentsWeb.UI.Landing
 
   @repo "openagents.com"
+
+  # The one line the landing page asks a reader to run. It is the command
+  # `priv/docs/install-cli.md` documents and the script
+  # `priv/static/install.sh` serves, so the page cannot advertise an installer
+  # this site does not hand out.
+  @install_command "curl -fsSL https://openagents.com/install.sh | sh"
+
   @feed_limit 8
   @project_limit 6
   @post_limit 6
@@ -63,7 +70,10 @@ defmodule OpenAgentsWeb.HomeLive do
        |> assign(:changed_repositories, MapSet.new())
        |> assign_dashboard()}
     else
-      {:ok, assign(socket, :device_user_code, device_user_code(params))}
+      {:ok,
+       socket
+       |> assign(:device_user_code, device_user_code(params))
+       |> assign(:install_command, @install_command)}
     end
   end
 
@@ -526,20 +536,50 @@ defmodule OpenAgentsWeb.HomeLive do
       <div class="landing-page">
         <Landing.layout_lines />
 
+        <%!-- The band leads with the product a reader can have in one command,
+        not with the platform behind it. The install line is the only action
+        here on purpose: signing in is what the command bar is for, and a hero
+        that offers two ways to start makes the reader choose before they know
+        enough to choose well.
+
+        It closes with a rule rather than running straight into the feature
+        grid, so the claim and the way to act on it read as one band. --%>
         <Landing.hero
-          title="The Agent Forge"
-          description="Purpose-built for planning and shipping issues. Designed for the agent era."
+          title="Introducing"
+          title_muted="Coder."
+          description="Your all-in-one coding agent."
+          rule
         >
-          <:actions>
-            <.github_login id="home-cta-signin" size={:lg} />
-            <%!-- Quieter than the action beside it. `variant` defaults to
-            `:primary`, so two filled buttons sat side by side stating that
-            both were the thing to do, which leaves a reader picking rather
-            than proceeding. --%>
-            <.button navigate={~p"/docs"} variant={:secondary} size={:lg}>
-              Read the docs
+          <:eyebrow>
+            <Landing.announce
+              lead="Coder is here"
+              detail="Install it in one command"
+              navigate={~p"/coder"}
+            />
+          </:eyebrow>
+
+          <:command>
+            <Landing.install_command id="home-install-command" command={@install_command} />
+          </:command>
+
+          <:note>Every new account starts with $20 of credit.</:note>
+
+          <:links>
+            <.button navigate={~p"/docs"} variant={:ghost} size={:sm} class="hero__link">
+              Read the docs <.icon name="chevron-right" />
             </.button>
-          </:actions>
+            <.button navigate={~p"/changelog"} variant={:ghost} size={:sm} class="hero__link">
+              Changelog <.icon name="chevron-right" />
+            </.button>
+            <.button
+              navigate={~p"/OpenAgentsInc/openagents.com"}
+              variant={:ghost}
+              size={:sm}
+              class="hero__link"
+            >
+              Open source <.icon name="chevron-right" />
+            </.button>
+          </:links>
 
           <%!-- Commented out rather than deleted: the frame is right, what goes
           in it is not. An empty browser chrome captioned with the domain shows

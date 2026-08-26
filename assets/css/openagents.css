@@ -3417,8 +3417,28 @@
 
   /* ── Hero ───────────────────────────────────────────────────────────────── */
 
+  /* Weighted to the top. A landing page opens on nothing but the claim, and
+     equal padding above and below sets it mid-band, where it reads as one item
+     in a list rather than as the first thing on the page. */
+  .hero {
+    padding-block: 128px 64px;
+  }
+
+  @media (min-width: 640px) {
+    .hero {
+      padding-block: 160px 96px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .hero {
+      padding-block-start: 192px;
+    }
+  }
+
   .hero__lede {
     display: flex;
+    max-width: 48rem;
     flex-direction: column;
     align-items: center;
     gap: 24px;
@@ -3426,20 +3446,27 @@
   }
 
   .hero__title {
-    max-width: 20ch;
     color: var(--text-primary);
-    font-size: clamp(2.5rem, 1.4rem + 5vw, 5.5rem);
-    font-weight: 600;
-    letter-spacing: -0.035em;
-    line-height: 1.05;
+    font-size: clamp(2.25rem, 1.45rem + 2.6vw, 3.75rem);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
     text-wrap: balance;
   }
 
-  .hero__description {
-    max-width: 46rem;
+  /* Its own line, always. The second tone is the object of the sentence, and a
+     headline that breaks it mid-phrase on one viewport and not another reads
+     as a wrap rather than as a decision. */
+  .hero__title-muted {
+    display: block;
     color: var(--text-muted);
-    font-size: clamp(1rem, 0.94rem + 0.3vw, 1.25rem);
-    line-height: 1.55;
+  }
+
+  .hero__description {
+    max-width: 36rem;
+    color: var(--text-muted);
+    font-size: clamp(1rem, 0.94rem + 0.3vw, 1.125rem);
+    line-height: 1.625;
     text-wrap: balance;
   }
 
@@ -3448,6 +3475,226 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: 12px;
+  }
+
+  /* The frame sets its own width from the command inside it, so it ends where
+     the command does rather than spanning the measure. It still has to be able
+     to shrink: on a narrow viewport the command scrolls inside the frame. */
+  .hero__command {
+    max-width: 100%;
+  }
+
+  /* Tight to the command it qualifies rather than on the lede's 24px rhythm:
+     it is a footnote to the frame above it, not the next thing in the band. */
+  .hero__command + .hero__note {
+    margin-block-start: -12px;
+  }
+
+  .hero__note {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+
+  .hero__links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  /* Quieter than a secondary action and quieter than body text: these are for
+     a reader the band did not answer, and at full contrast they compete with
+     the command, which is the one thing the band is asking for. */
+  .hero__link.btn {
+    gap: 2px;
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .hero__link.btn:hover {
+    color: var(--text-primary);
+  }
+
+  .hero__link .icon {
+    color: inherit;
+    opacity: 0.7;
+  }
+
+  /* ── Announcement pill ──────────────────────────────────────────────────── */
+
+  .announce {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+    padding: 5px 5px 5px 10px;
+    background: color-mix(in oklab, var(--ink-surface) 60%, transparent);
+    backdrop-filter: blur(6px);
+    text-decoration: none;
+    transition:
+      border-color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
+  }
+
+  .announce:hover {
+    border-color: var(--line-strong);
+    background: var(--ink-surface);
+  }
+
+  /* The band's only accent. It is what makes the pill findable before it is
+     read, which is the whole reason an announcement sits above a headline. */
+  .announce__tag {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid color-mix(in oklab, var(--accent-bright) 45%, transparent);
+    border-radius: 999px;
+    padding: 2px 7px;
+    color: var(--accent-bright);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .announce__text {
+    font-size: 0.8125rem;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .announce__lead {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .announce__separator {
+    color: var(--text-dim);
+  }
+
+  .announce__detail {
+    color: var(--text-muted);
+    transition: color var(--motion-fast) var(--ease);
+  }
+
+  .announce:hover .announce__detail {
+    color: var(--text-body);
+  }
+
+  .announce__glyph {
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--wash-hover);
+    color: var(--icon-tertiary);
+    font-size: 0.625rem;
+    transition:
+      background-color var(--motion-fast) var(--ease),
+      color var(--motion-fast) var(--ease);
+  }
+
+  .announce:hover .announce__glyph {
+    background: var(--wash-selected);
+    color: var(--icon-primary);
+  }
+
+  /* On a narrow viewport the detail is the half that goes: the tag and the
+     claim are the announcement, and the rest is elaboration that would
+     otherwise push the pill wider than the screen. */
+  @media (max-width: 480px) {
+    .announce__separator,
+    .announce__detail {
+      display: none;
+    }
+  }
+
+  /* ── Install command ────────────────────────────────────────────────────── */
+
+  .install-command {
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
+    transition: border-color var(--motion-fast) var(--ease);
+  }
+
+  .install-command:hover {
+    border-color: var(--line-strong);
+  }
+
+  .install-command__button {
+    position: relative;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    text-align: left;
+  }
+
+  @media (min-width: 640px) {
+    .install-command__button {
+      font-size: 0.875rem;
+    }
+  }
+
+  /* Scrolls rather than wraps, and fades out under the glyph, so a command too
+     long for the viewport reads as continuing rather than as truncated. */
+  .install-command__text {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    /* Wider than the fade, so a command that fits ends before the gradient
+       starts. At 28px the tail of every command was dimmed as though it had
+       been truncated, when nothing was being cut off at all. */
+    padding-inline-end: 56px;
+    color: var(--text-body);
+    scrollbar-width: none;
+    white-space: nowrap;
+    mask-image: linear-gradient(to right, black calc(100% - 48px), transparent calc(100% - 32px));
+  }
+
+  .install-command__text::-webkit-scrollbar {
+    display: none;
+  }
+
+  .install-command__prompt {
+    margin-inline-end: 0.5ch;
+    color: var(--text-dim);
+  }
+
+  .install-command__glyph {
+    position: absolute;
+    inset-inline-end: 16px;
+    display: inline-flex;
+    color: var(--icon-tertiary);
+    transition: color var(--motion-fast) var(--ease);
+  }
+
+  .install-command__button:hover .install-command__glyph {
+    color: var(--icon-primary);
+  }
+
+  .install-command__button[data-copied="true"] .install-command__glyph {
+    color: var(--success);
+  }
+
+  .install-command__done,
+  .install-command__button[data-copied="true"] .install-command__idle {
+    display: none;
+  }
+
+  .install-command__button[data-copied="true"] .install-command__done {
+    display: inline-flex;
   }
 
   .hero__figure {

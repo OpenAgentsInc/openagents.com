@@ -1658,6 +1658,75 @@ defmodule OpenAgentsWeb.ComponentsLive do
           </:figure>
         </Landing.hero>
       </div>
+
+      <p class="text-sm text-base-content/60">
+        A second headline tone, a command to run, a note qualifying it, and quiet links
+        under everything else. The muted line always breaks on its own, so the split
+        between the claim and its object is a decision rather than a wrap.
+      </p>
+      <div class="demo-frame">
+        <Landing.hero
+          title="Introducing"
+          title_muted="Coder."
+          description="Your all-in-one coding agent."
+        >
+          <:eyebrow>
+            <Landing.announce lead="Coder is here" detail="Install it in one command" href="#" />
+          </:eyebrow>
+          <:command>
+            <Landing.install_command
+              id="demo-hero-install-command"
+              command="curl -fsSL https://openagents.com/install.sh | sh"
+            />
+          </:command>
+          <:note>Every new account starts with $20 of credit.</:note>
+          <:links>
+            <UI.button href="#" variant={:ghost} size={:sm} class="hero__link">
+              Read the docs <UI.icon name="chevron-right" />
+            </UI.button>
+            <UI.button href="#" variant={:ghost} size={:sm} class="hero__link">
+              Changelog <UI.icon name="chevron-right" />
+            </UI.button>
+          </:links>
+        </Landing.hero>
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-announce"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        Three registers on one line — a tag, the claim, a detail — because an
+        announcement set at a single weight is indistinguishable from a caption. The tag
+        carries the band's only accent, which is what makes the pill findable before it
+        is read. Below 480px the detail drops rather than widening the pill past the
+        screen.
+      </p>
+      <div class="demo-frame flex flex-wrap items-center justify-center gap-3">
+        <Landing.announce lead="Coder is here" detail="Install it in one command" href="#" />
+        <Landing.announce tag="Beta" lead="Computers" glyph={nil} href="#" />
+      </div>
+    </div>
+    """
+  end
+
+  defp component_demo(%{item: %{slug: "landing-install-command"}} = assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p class="text-sm text-base-content/60">
+        The whole frame is the control, not a button beside it: the command is there to
+        be taken rather than read, and a small target next to a long piece of text asks
+        the reader to aim at the smaller of the two. A command wider than the frame
+        scrolls and fades out under the glyph instead of wrapping.
+      </p>
+      <div class="demo-frame flex justify-center">
+        <Landing.install_command
+          id="demo-install-command"
+          command="curl -fsSL https://openagents.com/install.sh | sh"
+        />
+      </div>
     </div>
     """
   end

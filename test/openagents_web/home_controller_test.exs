@@ -7,9 +7,11 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     response = get(conn, ~p"/")
     html = html_response(response, 200)
 
-    # OpenAgents deliberately ships its own landing page ("The Agent Forge"),
-    # not Sarah's. These assertions match the current product identity.
-    assert html =~ "The Agent Forge"
+    # OpenAgents deliberately ships its own landing page, not Sarah's. The
+    # band above the fold is the Coder pitch; these assertions match the
+    # current product identity.
+    assert html =~ "Introducing"
+    assert html =~ "Your all-in-one coding agent."
     assert html =~ ~s(action="/auth/github?github_tools=enabled")
     assert html =~ "Log in with GitHub"
 
@@ -30,7 +32,7 @@ defmodule OpenAgentsWeb.HomeControllerTest do
 
     # Someone who has signed in has already been sold. The same route shows the
     # state of the work instead: open issues, projects, and what shipped.
-    refute html =~ "The Agent Forge"
+    refute html =~ "Your all-in-one coding agent."
     assert html =~ "Open issues"
     assert html =~ "Latest from the changelog"
     assert html =~ ~s(class="dashboard")

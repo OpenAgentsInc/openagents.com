@@ -120,17 +120,36 @@ defmodule OpenAgentsWeb.UI.Landing do
 
   The figure is a slot rather than an image attribute, so a page can put a live
   surface in the frame instead of a screenshot of one.
+
+  `title_muted` is a second headline line in the muted tier. Two tones over two
+  lines is what separates the claim from its object -- the setup is not the
+  point, the name is -- and doing it with an attribute keeps the break out of
+  the caller's markup, where a `<br>` would fight `text-wrap: balance`.
+
+  Below the actions sit three quieter rows, in the order a reader needs them: a
+  `command` to run, a `note` qualifying it, and `links` to what the band did
+  not say. Each is a slot rather than an attribute because all three carry
+  markup -- a copy control, an emphasis, a set of destinations.
+
+  `rule` passes through, because whether a hero closes with a hairline depends
+  on what follows it: a band that opens straight into a section of its own
+  needs the division, and one whose next band is a figure does not.
   """
   attr :title, :string, required: true
+  attr :title_muted, :string, default: nil, doc: "a second headline line, in the muted tier"
   attr :description, :string, default: nil
+  attr :rule, :boolean, default: false, doc: "draw the closing hairline"
   attr :class, :any, default: nil
   slot :eyebrow
   slot :actions
+  slot :command, doc: "one command to run, usually install_command/1"
+  slot :note, doc: "a line qualifying the command"
+  slot :links, doc: "quiet destinations, set beneath everything else"
   slot :figure
 
   def hero(assigns) do
     ~H"""
-    <.section class={["hero", @class]} rule={false}>
+    <.section class={["hero", @class]} rule={@rule}>
       <%!-- The lede's own light. This used to live inside the figure block, so
       commenting the figure out took the glow with it and left the headline
       sitting on flat ink. It belongs to the words. --%>
@@ -138,12 +157,21 @@ defmodule OpenAgentsWeb.UI.Landing do
 
       <div class="hero__lede">
         <div :if={@eyebrow != []} class="hero__eyebrow appear">{render_slot(@eyebrow)}</div>
-        <h1 class="hero__title appear">{@title}</h1>
+        <h1 class="hero__title appear">
+          {@title}<span :if={@title_muted} class="hero__title-muted">{@title_muted}</span>
+        </h1>
         <p :if={@description} class="hero__description appear appear--delay-1">
           {@description}
         </p>
         <div :if={@actions != []} class="hero__actions appear appear--delay-2">
           {render_slot(@actions)}
+        </div>
+        <div :if={@command != []} class="hero__command appear appear--delay-2">
+          {render_slot(@command)}
+        </div>
+        <p :if={@note != []} class="hero__note appear appear--delay-3">{render_slot(@note)}</p>
+        <div :if={@links != []} class="hero__links appear appear--delay-3">
+          {render_slot(@links)}
         </div>
       </div>
 
@@ -152,6 +180,108 @@ defmodule OpenAgentsWeb.UI.Landing do
         <div class="hero__figure-inner appear appear--delay-3">{render_slot(@figure)}</div>
       </div>
     </.section>
+    """
+  end
+
+  @doc """
+  A pill announcing one thing, above a hero's headline.
+
+  Three registers on one line -- a tag, the claim, a detail -- because an
+  announcement set at a single weight is indistinguishable from a caption. The
+  tag carries the only accent colour in the band, which is what makes the pill
+  findable before it is read.
+
+  It is a link. A pill that announces something and then does nothing when
+  pressed spends a reader's attention and returns none of it, so `navigate`,
+  `patch`, or `href` is required.
+  """
+  attr :tag, :any, default: "New", doc: "the leading badge; nil to omit"
+  attr :lead, :string, required: true, doc: "what is being announced"
+  attr :detail, :string, default: nil, doc: "the quieter half of the line"
+  attr :glyph, :any, default: "play-sm", doc: "the trailing glyph; nil to omit"
+  attr :class, :any, default: nil
+  attr :rest, :global, include: ~w(navigate patch href target rel)
+
+  def announce(assigns) do
+    ~H"""
+    <.link class={["announce", @class]} {@rest}>
+      <span :if={@tag} class="announce__tag">{@tag}</span>
+      <span class="announce__text">
+        <span class="announce__lead">{@lead}</span><span
+          :if={@detail}
+          class="announce__separator"
+          aria-hidden="true"
+        >&nbsp;&bull;&nbsp;</span><span :if={@detail} class="announce__detail">{@detail}</span>
+      </span>
+      <span :if={@glyph} class="announce__glyph" aria-hidden="true">
+        <UI.icon name={@glyph} />
+      </span>
+    </.link>
+    """
+  end
+
+  @doc """
+  One shell command, framed, and copied to the clipboard when pressed.
+
+  The whole frame is the control rather than a button beside it: the command is
+  not there to be read character by character, it is there to be taken, and a
+  small target next to a long piece of text asks the reader to aim at the
+  smaller of the two.
+
+  A command too long for the viewport scrolls inside the frame and fades out
+  under the glyph rather than wrapping, so the band keeps one line of monospace
+  at every width. The confirmation lives on the element as `data-copied`,
+  because it is presentational and per-visitor and the server has no stake in
+  it.
+  """
+  attr :id, :string, required: true
+  attr :command, :string, required: true
+  attr :prompt, :string, default: "$", doc: "the shell prompt drawn before the command"
+  attr :label, :string, default: "Copy the install command"
+  attr :class, :any, default: nil
+
+  def install_command(assigns) do
+    ~H"""
+    <div class={["install-command", @class]}>
+      <button
+        id={@id}
+        type="button"
+        class="install-command__button"
+        data-copied="false"
+        data-copy-text={@command}
+        aria-label={@label}
+        phx-hook=".CopyCommand"
+      >
+        <code class="install-command__text">
+          <span class="install-command__prompt" aria-hidden="true">{@prompt}</span>{@command}
+        </code>
+        <span class="install-command__glyph" aria-hidden="true">
+          <UI.icon name="copy" class="install-command__idle" />
+          <UI.icon name="check" class="install-command__done" />
+        </span>
+      </button>
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyCommand">
+      export default {
+        mounted() {
+          this.el.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(this.el.dataset.copyText)
+            } catch (_error) {
+              return
+            }
+            this.el.dataset.copied = "true"
+            clearTimeout(this.resetTimer)
+            this.resetTimer = setTimeout(() => {
+              this.el.dataset.copied = "false"
+            }, 1600)
+          })
+        },
+        destroyed() {
+          clearTimeout(this.resetTimer)
+        }
+      }
+    </script>
     """
   end
 

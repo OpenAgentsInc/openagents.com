@@ -350,6 +350,20 @@ defmodule OpenAgentsWeb.ComponentCatalog do
           summary: "Eyebrow, headline, prose, actions, and a lit figure."
         },
         %{
+          slug: "landing-announce",
+          title: "Announcement",
+          icon: "notification-bell",
+          source: "OpenAgentsWeb.UI.Landing.announce/1",
+          summary: "Tag, claim, and detail in one pill above a headline."
+        },
+        %{
+          slug: "landing-install-command",
+          title: "Install command",
+          icon: "terminal",
+          source: "OpenAgentsWeb.UI.Landing.install_command/1",
+          summary: "One shell command, framed, copied when pressed."
+        },
+        %{
           slug: "landing-glow",
           title: "Glow",
           icon: "sun",

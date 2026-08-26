@@ -1295,6 +1295,74 @@ composite foreign keys `memory_admissions_memory_fkey` and
 `test/openagents/memories/challenge_test.exs`, and
 `test/openagents/memories/system_recall_test.exs`.
 
+### MEMORY-012 — A promoted claim has one live home, and the boundary is drawn where it crosses
+
+Status: Current
+
+The knowledge base owns what the project has reviewed and decided; system
+memory owns what the network has observed and can evidence. A stance is
+editorial and a memory row is evidentiary, and specification section 8 keeps the
+two from becoming rival stores of one claim with two rules: promotion drains
+memory into the knowledge base, and the knowledge base wins a recall collision.
+
+**Promotion is where the boundary is enforced, and it is the only place it can
+be.** The knowledge base is retrieved in the client from a corpus compiled into
+a WebAssembly plugin; memory recall runs on this server inside
+`POST /api/v1/responses`, and the two notes reach the model through different
+fields of the same request. No process holds both. A precedence rule between
+them needs a decidable test for "the same claim", and two rails that retrieve by
+different methods over different corpora share no identifier unless somebody
+records one. **A memory and a stance are the same claim exactly when a promotion
+tombstone on that memory names that stance** — a steward's recorded judgment,
+never an overlap of prose. Nothing else is a collision here, so a memory that
+shares a stance's vocabulary, or quotes its id, is a different claim and keeps
+its place in recall.
+
+Given that link, precedence needs no second mechanism. `promote/3` writes a
+superseding row on the claim's slug — a **promotion tombstone** — and points the
+old row at it, so the claim is no longer live and the chain is kept rather than
+deleted. The tombstone carries the stance id, a body this server composes rather
+than the caller, and `admission: "candidate"`, which is all it can ever hold: no
+admission, challenge, or refutation may name a promotion tombstone, refused by
+the composite foreign key `(memory_id, memory_promoted) -> memories (id,
+promoted)` with the literal `false` pinned by `memory_admissions_shape`, the
+same device `challenge_role` uses. `promoted` is generated from `stance`, so it
+cannot disagree with it. Recall surfaces live rows whose derived status is
+admitted (specification 7.1), so neither half of a promoted claim can reach a
+note by any route, and the reviewed stance is its one live home.
+
+"A tombstone whose body names the stance" is a shape rather than a habit:
+`position(stance in body) > 0` is part of `memories_system_shape`, so a
+tombstone pointing nowhere is unrepresentable rather than merely unwritten by
+the code that exists today. A stance id is lowercase words joined by hyphens, as
+the corpus writes them, and a `user` or `learned` row carrying one is refused in
+both directions the way the other system columns are.
+
+Only a steward promotes. Promotion records the outcome of a review, and the
+review is the knowledge base's authority; an author draining their own claim
+into the corpus would assert the review rather than record it. A promotion is a
+steward's correction on the target's slug, so it resolves the target's open
+challenges in the same transaction, as any steward correction does
+(MEMORY-011).
+
+Two things are deliberately not enforced, and calling them enforced would be
+worse than leaving them open. **An unlinked coincidence** — a stance and an
+admitted memory a reader would call one claim, with no promotion between them —
+is not suppressed, because no decidable test separates it from two claims that
+merely share words; a similarity threshold shipped as "the knowledge base wins"
+would read as a guarantee while dropping true memories on a false positive,
+and duplication is the benign failure where suppression is the destructive one.
+The honest answer to a real duplicate is to promote it. **A fresh claim written
+on a promoted slug** is not refused either: draining by slug would take a read
+of `memories` across accounts, which is the predicate MEMORY-010 exists to keep
+out of this store.
+
+Evidence: `OpenAgents.Memories.Promotions`, `OpenAgents.Memories.Memory`, the
+`memories_system_shape` stance clauses, the generated `memories.promoted`
+column, the composite foreign key `memory_admissions_promotion_fkey`,
+`docs/memory/knowledge-base-boundary.md`, and
+`test/openagents/memories/promotion_test.exs`.
+
 ### PRIVACY-001 — Secret-bearing profile memory is rejected, never scrub-stored
 
 Status: Current
@@ -3445,6 +3513,14 @@ sentence:
   is a second record beside the first rather than a verdict that quietly
   changed. The authority buys no read — the operator sees no memory of another
   account through this module.
+- Promoting an admitted system memory to a knowledge-base stance, through
+  `OpenAgents.Memories.Promotions` (MEMORY-012). Only a steward promotes,
+  because a promotion records the outcome of a review rather than asserts one,
+  and the steward set is this same allowlist. The write appends: the promotion
+  is a superseding tombstone on the claim's slug, so the claim, its evidence,
+  and its admission record all stay readable underneath it. The authority buys
+  no read here either — the target is named by id and refused as absent when it
+  is not a live system row.
 - Recording Gym runs and trials under `POST /api/v1/gym/runs`, the lifecycle
   routes `POST /api/v1/gym/runs/start`, `POST /api/v1/gym/runs/:id/trials`,
   and `PATCH /api/v1/gym/runs/:id`
@@ -6194,6 +6270,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | MEMORY-009 | `test/openagents/graph_memory_test.exs` |
 | MEMORY-010 | `test/openagents/memories_test.exs`, `test/openagents_web/controllers/memory_controller_test.exs`, `test/openagents_web/controllers/responses_controller_test.exs` |
 | MEMORY-011 | `test/openagents/memories/system_memory_test.exs`, `test/openagents/memories/challenge_test.exs`, `test/openagents/memories/system_recall_test.exs` |
+| MEMORY-012 | `test/openagents/memories/promotion_test.exs` |
 | PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | TURN-001 | `test/openagents/conversations_test.exs` |
 | TURN-002 | `test/openagents/conversations_test.exs` |

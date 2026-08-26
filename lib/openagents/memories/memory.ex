@@ -32,6 +32,11 @@ defmodule OpenAgents.Memories.Memory do
   records, so a row that says `admitted` with no steward record behind it still
   reads as a candidate.
 
+  A system row may also carry a `stance`, and one that does is a **promotion
+  tombstone**: the claim was promoted to a reviewed knowledge-base stance, this
+  row supersedes the claim, and its body names the stance that replaced it. See
+  `OpenAgents.Memories.Promotions`.
+
   `superseded_by_id` is how a correction lands. The replacement is a new row
   and the old row points at it, so the store keeps the chain rather than
   overwriting the mistake. Nothing here updates `body`: a memory's text is
@@ -61,6 +66,10 @@ defmodule OpenAgents.Memories.Memory do
   @slug_prefix "sys:"
   @tiers ~w(ledger glass)
   @admissions ~w(candidate admitted rejected)
+  @stance_characters 200
+  # A knowledge-base stance id: lowercase words joined by hyphens, as the
+  # corpus writes them (`earning-bitcoin`, `coder-tiers`).
+  @stance_format ~r/^[a-z0-9]+(-[a-z0-9]+)*$/
 
   schema "memories" do
     belongs_to :user, User
@@ -77,6 +86,18 @@ defmodule OpenAgents.Memories.Memory do
     field :as_of, :date
     field :admission, :string
     field :evidence_refs, {:array, :map}
+
+    # The knowledge-base stance this claim was promoted to. A row carrying one
+    # is a promotion tombstone: the claim's live home is the reviewed stance,
+    # and this row exists to say so. Null on every other row.
+    field :stance, :string
+
+    # Whether this row is a promotion tombstone. PostgreSQL generates it from
+    # `stance`, so it cannot disagree; it exists as a column because a foreign
+    # key can reference one and an expression cannot. Read back after a write,
+    # never written.
+    field :promoted, :boolean, read_after_writes: true
+
     # The generated `tsvector` the lexical stand-in ranks over. PostgreSQL
     # writes it; nothing here reads it back, so it never rides a select.
     field :search_vector, :string, load_in_query: false
@@ -123,6 +144,20 @@ defmodule OpenAgents.Memories.Memory do
   @spec evidence_kinds() :: [String.t()]
   def evidence_kinds, do: Evidence.kinds()
 
+  @doc """
+  Whether this row is a promotion tombstone.
+
+  A tombstone is a pointer at a reviewed stance, not a claim of its own: no
+  admission, challenge, or refutation may name one, and nothing can admit it, so
+  it reaches no session's recall.
+  """
+  @spec promoted?(t()) :: boolean()
+  def promoted?(%__MODULE__{stance: stance}), do: is_binary(stance)
+
+  @doc "The longest stance id the store accepts, in characters."
+  @spec stance_characters() :: pos_integer()
+  def stance_characters, do: @stance_characters
+
   @doc "The prefix every system slug carries."
   @spec slug_prefix() :: String.t()
   def slug_prefix, do: @slug_prefix
@@ -152,12 +187,14 @@ defmodule OpenAgents.Memories.Memory do
       :tier,
       :as_of,
       :admission,
-      :evidence_refs
+      :evidence_refs,
+      :stance
     ])
     |> update_change(:body, &trim/1)
     |> update_change(:source_ref, &trim/1)
     |> update_change(:slug, &trim/1)
     |> update_change(:entity, &trim/1)
+    |> update_change(:stance, &trim/1)
     |> validate_required([:bucket, :body])
     |> validate_inclusion(:bucket, @buckets)
     |> validate_length(:body, min: 1, max: @body_characters, count: :graphemes)
@@ -191,17 +228,52 @@ defmodule OpenAgents.Memories.Memory do
     |> validate_inclusion(:tier, @tiers)
     |> validate_inclusion(:admission, @admissions)
     |> Evidence.validate(:evidence_refs)
+    |> validate_stance()
+  end
+
+  # A stance is optional — most system rows carry none — but a row that names
+  # one is a promotion tombstone, and both halves of that shape are checked
+  # here and again at the table. `position(stance in body) > 0` is the database
+  # half of "a tombstone whose body names the stance"; this is the half that can
+  # explain itself to the caller.
+  defp validate_stance(changeset) do
+    case get_field(changeset, :stance) do
+      nil ->
+        changeset
+
+      stance ->
+        changeset
+        |> validate_length(:stance, min: 1, max: @stance_characters, count: :graphemes)
+        |> validate_format(:stance, @stance_format,
+          message: "must be a knowledge-base stance id, in lowercase words joined by hyphens"
+        )
+        |> validate_body_names(stance)
+    end
+  end
+
+  defp validate_body_names(changeset, stance) do
+    body = get_field(changeset, :body)
+
+    if is_binary(body) and String.contains?(body, stance) do
+      changeset
+    else
+      add_error(changeset, :body, "must name the stance this claim was promoted to")
+    end
   end
 
   defp refuse_system_fields(changeset) do
-    Enum.reduce([:slug, :entity, :tier, :as_of, :admission, :evidence_refs], changeset, fn
-      field, acc ->
-        if is_nil(get_field(acc, field)) do
-          acc
-        else
-          add_error(acc, field, "belongs only to a system memory")
-        end
-    end)
+    Enum.reduce(
+      [:slug, :entity, :tier, :as_of, :admission, :evidence_refs, :stance],
+      changeset,
+      fn
+        field, acc ->
+          if is_nil(get_field(acc, field)) do
+            acc
+          else
+            add_error(acc, field, "belongs only to a system memory")
+          end
+      end
+    )
   end
 
   @doc "Points a memory at the memory that replaced it."

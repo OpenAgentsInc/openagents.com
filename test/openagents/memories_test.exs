@@ -328,7 +328,13 @@ defmodule OpenAgents.MemoriesTest do
       # out, so a caller with no standing learns nothing from the refusal.
       "lib/openagents/memories/admissions.ex",
       # The system bucket's read path, which names no account at all.
-      "lib/openagents/memories/system_recall.ex"
+      "lib/openagents/memories/system_recall.ex",
+      # Promotion holds no query of its own — it composes a tombstone and hands
+      # it to `supersede/3` — and it is named here so that a lookup added
+      # beside it, by slug or by stance, has to carry the account boundary or
+      # fail. Draining a claim by slug would be exactly such a lookup
+      # (MEMORY-012).
+      "lib/openagents/memories/promotions.ex"
     ]
 
     # MEMORY-001's amendment, written as a budget. Two queries in the plane

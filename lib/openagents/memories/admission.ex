@@ -39,8 +39,15 @@ defmodule OpenAgents.Memories.Admission do
   `user` or `learned` row without reading `memories` at all, which is how these
   paths stay clear of the account boundary MEMORY-010 draws.
 
+  `memory_promoted` is always the literal `false`, and the composite foreign key
+  `(memory_id, memory_promoted) -> memories (id, promoted)` is what refuses a
+  record naming a promotion tombstone. A tombstone is a pointer at a reviewed
+  knowledge-base stance, not a claim: there is nothing to admit, nothing to
+  challenge, and the knowledge base's own dispute path is a documentation
+  change. See `OpenAgents.Memories.Promotions`.
+
   `challenge_role` is always the literal `challenge` on a refutation and null
-  elsewhere. It exists so the second composite foreign key,
+  elsewhere. It exists so the third composite foreign key,
   `(challenge_id, memory_id, challenge_role) -> (id, memory_id, role)`, can
   insist that a refutation names a challenge — and one against the same memory
   it claims to restore. PostgreSQL will not put a literal in a foreign key, so
@@ -65,6 +72,7 @@ defmodule OpenAgents.Memories.Admission do
   schema "memory_admissions" do
     belongs_to :memory, Memory
     field :memory_bucket, :string, default: "system"
+    field :memory_promoted, :boolean, default: false
     belongs_to :author, User
     belongs_to :challenge, __MODULE__
     field :challenge_role, :string
@@ -169,6 +177,7 @@ defmodule OpenAgents.Memories.Admission do
     |> update_change(:ground, &trim/1)
     |> put_change(:role, role)
     |> put_change(:memory_bucket, "system")
+    |> put_change(:memory_promoted, false)
   end
 
   defp validate_shape(changeset) do
@@ -183,6 +192,13 @@ defmodule OpenAgents.Memories.Admission do
     |> foreign_key_constraint(:memory_id,
       name: :memory_admissions_memory_fkey,
       message: "names no system memory"
+    )
+    # The second composite key. A promotion tombstone is a pointer at a reviewed
+    # stance rather than a claim, so no record may name one, and the refusal is
+    # the foreign key rather than a read of the row.
+    |> foreign_key_constraint(:memory_id,
+      name: :memory_admissions_promotion_fkey,
+      message: "names a promoted memory, which is a tombstone rather than a claim"
     )
     |> check_constraint(:verdict, name: :memory_admissions_shape)
     |> check_constraint(:evidence_refs,

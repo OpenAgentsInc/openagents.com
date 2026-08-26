@@ -335,6 +335,23 @@ candidate, and a suspension is a claim that was admitted and is now contested.
 Say "queued" for a challenge held back by the flood cap: it is recorded and
 attributed, and it has no effect on any status.
 
+**Stance** — a reviewed editorial position in the knowledge base, which lives in
+`OpenAgentsInc/openagents` at `plugins/knowledge-base/kb/stances.json` and is
+retrieved in the client. A stance is what the project has reviewed and decided;
+a system memory is what the network has observed and can evidence. Say "stance"
+only for the knowledge-base record and never for a memory row, and name a stance
+by its corpus `id` — lowercase words joined by hyphens.
+
+**Promotion** and **promotion tombstone** — a *promotion* is a steward draining
+a stabilized system memory into a stance: the claim becomes a reviewed position
+and stops being a live memory. The superseding row it leaves behind is a
+*promotion tombstone*, and it names the stance in its body. Say "promotion
+tombstone" in full — a bare "tombstone" means the portable-export tombstone in
+`OpenAgents.Memory.Portability`, which is a different thing. A promotion is the
+one place the knowledge-base boundary is enforced, so do not describe recall as
+preferring the knowledge base: it does not compare the two rails
+(`docs/memory/knowledge-base-boundary.md`, MEMORY-012).
+
 ### Threads
 
 A **thread** is the unit of agent work. Everything in this section describes a

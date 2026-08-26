@@ -248,6 +248,47 @@ defmodule OpenAgents.Repositories do
     end
   end
 
+  @doc "One active namespace by slug or alias, or `nil` when no such namespace exists."
+  def get_namespace_by_slug(slug) when is_binary(slug) do
+    get_namespace_by_slug!(slug)
+  rescue
+    Ecto.NoResultsError -> nil
+  end
+
+  @doc """
+  Creates a repository in an already-resolved namespace of either kind.
+
+  `create_user_repository/3` and `create_organization_repository/4` each name
+  one kind because the GitHub-compatible route they serve names one kind. This
+  one takes whichever namespace resolving an owner produced, so the caller does
+  not have to know the kind before it asks.
+
+  A user namespace that belongs to somebody else is refused here as well as at
+  resolution. The check costs one comparison and closes the gap between the
+  two callers this function will eventually have.
+  """
+  def create_namespace_repository(
+        %User{} = user,
+        %Namespace{} = namespace,
+        attrs,
+        idempotency_key
+      )
+      when is_map(attrs) and is_binary(idempotency_key) do
+    if namespace.kind == "user" and namespace.owner_user_id != user.id do
+      {:error, :namespace_not_allowed}
+    else
+      create_repository_transaction(
+        user,
+        namespace,
+        attrs,
+        nil,
+        "create",
+        "empty",
+        idempotency_key
+      )
+    end
+  end
+
   def create_user_repository(%User{} = user, attrs, idempotency_key)
       when is_map(attrs) and is_binary(idempotency_key) do
     with {:ok, namespace} <- ensure_user_namespace(user) do

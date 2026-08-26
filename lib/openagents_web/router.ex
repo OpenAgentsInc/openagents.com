@@ -801,6 +801,7 @@ defmodule OpenAgentsWeb.Router do
 
     get "/user", ForgeUserController, :show
     get "/user/repos", RepositoryController, :index
+    post "/repos", RepositoryController, :create
     post "/user/repos", RepositoryController, :create_user
     post "/orgs/:org/repos", RepositoryController, :create_organization
     delete "/repos/:owner/:repo", RepositoryController, :delete

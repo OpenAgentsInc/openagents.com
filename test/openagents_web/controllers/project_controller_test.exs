@@ -1333,6 +1333,48 @@ defmodule OpenAgentsWeb.ProjectControllerTest do
       assert Projects.get_project_by_number!(repository(), project.number)
     end
 
+    test "a public repository's board refuses a non-member's PATCH and DELETE" do
+      # A public repository is the case the private-repository tests cannot
+      # reach: the outsider can see the board, so a 404 here has to come from
+      # write authority rather than from visibility. Without that separation, a
+      # delete route with no authorization check would still pass the private
+      # tests.
+      owner = github_user("project-public-owner", "publius")
+
+      repository =
+        repository_with_member_fixture(owner, %{
+          owner: "PublicProjectOrg",
+          name: "public-projects",
+          visibility: "public"
+        })
+
+      {:ok, project} =
+        Projects.create_project(repository, %{"title" => "Public roadmap"}, owner)
+
+      {:ok, project} = Projects.update_project(project, %{"archived" => true}, owner)
+
+      path = ~p"/api/v1/repos/PublicProjectOrg/public-projects/projectsV2/#{project.number}"
+      list_path = ~p"/api/v1/repos/PublicProjectOrg/public-projects/projectsV2?archived=true"
+      mallory = put_forge_api_token(build_conn(), "project-public-outsider", "mallory")
+
+      # The outsider really can read the board. The refusal below is therefore
+      # about writing, not about seeing.
+      assert %{"projects" => before_write} =
+               mallory |> get(list_path) |> json_response(200)
+
+      assert Enum.map(before_write, & &1["number"]) == [project.number]
+      assert json_response(get(mallory, path), 200)["title"] == "Public roadmap"
+
+      assert mallory |> patch(path, %{title: "Mine now"}) |> api_error_code(404) == "not_found"
+      assert mallory |> delete(path) |> api_error_code(404) == "not_found"
+
+      assert %{"projects" => after_write} =
+               mallory |> get(list_path) |> json_response(200)
+
+      assert Enum.map(after_write, & &1["number"]) == [project.number]
+      assert Projects.get_project_by_number!(repository, project.number).title == "Public roadmap"
+    end
+
     test "an archived project stays out of the default list and returns on request", %{
       conn: conn
     } do

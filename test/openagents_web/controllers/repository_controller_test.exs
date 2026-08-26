@@ -202,6 +202,84 @@ defmodule OpenAgentsWeb.RepositoryControllerTest do
              |> json_response(422)
   end
 
+  test "POST /api/v1/repos creates under a named personal owner", %{conn: conn} do
+    user = github_user("repository-api-owner-route-self", "namedowner")
+
+    response =
+      conn
+      |> authorize(user)
+      |> put_req_header("idempotency-key", "owner-route-self")
+      |> post(~p"/api/v1/repos", %{owner: "namedowner", name: "Named-Thing", private: true})
+
+    assert %{"full_name" => "namedowner/named-thing", "owner" => owner} =
+             json_response(response, 202)
+
+    assert owner["login"] == "namedowner"
+    assert Repositories.get_by_path!("namedowner", "named-thing")
+  end
+
+  test "POST /api/v1/repos matches a named personal owner without regard to case", %{conn: conn} do
+    user = github_user("repository-api-owner-route-case", "MixedCaseOwner")
+
+    assert %{"full_name" => "MixedCaseOwner/cased"} =
+             conn
+             |> authorize(user)
+             |> put_req_header("idempotency-key", "owner-route-case")
+             |> post(~p"/api/v1/repos", %{owner: "mixedcaseowner", name: "cased"})
+             |> json_response(202)
+
+    assert Repositories.get_by_path!("mixedcaseowner", "cased")
+  end
+
+  test "POST /api/v1/repos without an owner uses the caller's own namespace", %{conn: conn} do
+    user = github_user("repository-api-owner-route-default", "defaultowner")
+
+    assert %{"full_name" => "defaultowner/implied"} =
+             conn
+             |> authorize(user)
+             |> put_req_header("idempotency-key", "owner-route-default")
+             |> post(~p"/api/v1/repos", %{name: "implied"})
+             |> json_response(202)
+  end
+
+  test "POST /api/v1/repos refuses another person's namespace", %{conn: conn} do
+    caller = github_user("repository-api-owner-route-caller", "intruder")
+    stranger = github_user("repository-api-owner-route-stranger", "bystander")
+
+    # The stranger's namespace has to exist for the refusal to be about
+    # authority rather than about an unknown name.
+    assert {:ok, _namespace} = Repositories.ensure_user_namespace(stranger)
+
+    assert %{"code" => "namespace_not_allowed"} =
+             conn
+             |> authorize(caller)
+             |> put_req_header("idempotency-key", "owner-route-stranger")
+             |> post(~p"/api/v1/repos", %{owner: "bystander", name: "not-yours"})
+             |> json_response(403)
+
+    assert_raise Ecto.NoResultsError, fn ->
+      Repositories.get_by_path!("bystander", "not-yours")
+    end
+  end
+
+  test "POST /api/v1/repos rejects an owner that is not a namespace name", %{conn: conn} do
+    user = github_user("repository-api-owner-route-invalid", "shapeowner")
+
+    assert %{"code" => "invalid_repository"} =
+             conn
+             |> authorize(user)
+             |> put_req_header("idempotency-key", "owner-route-invalid")
+             |> post(~p"/api/v1/repos", %{owner: "shape owner/nested", name: "wrong"})
+             |> json_response(422)
+  end
+
+  test "POST /api/v1/repos requires a bearer token" do
+    assert build_conn()
+           |> put_req_header("idempotency-key", "owner-route-anonymous")
+           |> post(~p"/api/v1/repos", %{owner: "anyone", name: "anything"})
+           |> response(401)
+  end
+
   test "DELETE /api/v1/repos/:owner/:repo removes an owned repository and its storage", %{
     conn: conn
   } do

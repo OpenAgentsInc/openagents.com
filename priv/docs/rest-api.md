@@ -27,6 +27,7 @@ the API origin, load your stored credential, and return JSON.
 ```text
 GET    /api/v1/user
 GET    /api/v1/user/repos
+POST   /api/v1/repos
 POST   /api/v1/user/repos
 POST   /api/v1/orgs/:org/repos
 GET    /api/v1/repos/:owner/:repo
@@ -35,6 +36,12 @@ POST   /api/v1/user/repos/imports
 POST   /api/v1/orgs/:org/repos/imports
 GET    /api/v1/repository-imports/:id
 ```
+
+`POST /api/v1/repos` takes an `owner` field and resolves it here, so a caller
+that was handed `OWNER/NAME` does not have to decide whether `OWNER` is a
+person or an organization before it picks a route. Omit `owner` and the
+repository lands in your own namespace. `POST /api/v1/user/repos` and
+`POST /api/v1/orgs/:org/repos` stay as the GitHub-compatible spellings.
 
 Repository writes require an `Idempotency-Key` header. The published
 [`openagents.repositories.v1` contract](/api/contracts/repositories-v1.json)

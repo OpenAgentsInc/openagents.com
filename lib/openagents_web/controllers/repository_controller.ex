@@ -7,6 +7,35 @@ defmodule OpenAgentsWeb.RepositoryController do
   alias OpenAgents.Repositories.GitHubProjection
   alias OpenAgentsWeb.RepositoryJSON
 
+  @doc """
+  Creates a repository under a named owner of either kind.
+
+  `POST /api/v1/user/repos` and `POST /api/v1/orgs/{org}/repos` make the caller
+  choose a route by the kind of owner, and a caller handed `OWNER/NAME` knows
+  only that an owner was named. Guessing the kind from the shape of the
+  argument sends a personal namespace to the organization route. This route
+  takes the owner as a parameter and resolves the kind here, so no client has
+  to guess.
+
+  `owner` defaults to the authenticated login. Everything else — the
+  idempotency key, the attributes, the response — matches the two routes it
+  stands in for.
+  """
+  def create(conn, params) do
+    user = conn.assigns.current_user
+
+    with {:ok, idempotency_key} <- idempotency_key(conn),
+         {:ok, attrs} <- repository_attrs(params),
+         {:ok, owner} <- requested_owner(params, user),
+         {:ok, namespace} <- GitHubProjection.authorized_namespace(user, owner),
+         {:ok, repository, replay_state} <-
+           Repositories.create_namespace_repository(user, namespace, attrs, idempotency_key) do
+      render_repository(conn, repository, user, replay_state)
+    else
+      {:error, reason} -> render_error(conn, reason)
+    end
+  end
+
   def create_user(conn, params) do
     with {:ok, idempotency_key} <- idempotency_key(conn),
          {:ok, attrs} <- repository_attrs(params),
@@ -130,6 +159,20 @@ defmodule OpenAgentsWeb.RepositoryController do
       {:error, :invalid_repository}
     end
   end
+
+  defp requested_owner(%{"owner" => owner}, _user) when is_binary(owner) do
+    case namespace_key(owner) do
+      {:ok, _key} -> {:ok, owner}
+      {:error, _reason} -> {:error, :invalid_repository}
+    end
+  end
+
+  defp requested_owner(%{"owner" => _owner}, _user), do: {:error, :invalid_repository}
+
+  defp requested_owner(_params, %{github_login: login}) when is_binary(login),
+    do: {:ok, login}
+
+  defp requested_owner(_params, _user), do: {:error, :namespace_not_allowed}
 
   defp idempotency_key(conn) do
     case get_req_header(conn, "idempotency-key") do

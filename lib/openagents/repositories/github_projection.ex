@@ -3,6 +3,7 @@ defmodule OpenAgents.Repositories.GitHubProjection do
 
   alias OpenAgents.{Accounts, GitHub, GitHubOAuth, Repositories}
   alias OpenAgents.Accounts.User
+  alias OpenAgents.Repositories.Namespace
 
   @maximum_organization_pages 10
 
@@ -48,6 +49,45 @@ defmodule OpenAgents.Repositories.GitHubProjection do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc """
+  Resolves one named owner to a namespace the caller may create repositories in.
+
+  An owner is either a personal namespace or an organization, and the name
+  alone does not say which. Deciding here is what lets a client pass along the
+  owner it was given instead of guessing at the kind and picking a route on
+  the guess.
+
+  The caller's own login resolves without asking GitHub: the token already
+  authenticates that identity, so a personal repository does not depend on a
+  retained GitHub token the way an organization repository does. Another
+  person's namespace is refused outright rather than asked about, because
+  GitHub cannot answer "is this login an organization you administer" for a
+  login that is a person.
+  """
+  def authorized_namespace(%User{} = user, requested_slug) when is_binary(requested_slug) do
+    if own_login?(user, requested_slug) do
+      Repositories.ensure_user_namespace(user)
+    else
+      user_id = user.id
+
+      case Repositories.get_namespace_by_slug(requested_slug) do
+        %Namespace{kind: "user", owner_user_id: ^user_id} = namespace ->
+          {:ok, namespace}
+
+        %Namespace{kind: "user"} ->
+          {:error, :namespace_not_allowed}
+
+        _absent_or_organization ->
+          authorized_organization(user, requested_slug)
+      end
+    end
+  end
+
+  defp own_login?(%User{github_login: login}, requested_slug) when is_binary(login),
+    do: String.downcase(login) == String.downcase(requested_slug)
+
+  defp own_login?(_user, _requested_slug), do: false
 
   def authorized_organization(%User{} = user, requested_slug) when is_binary(requested_slug) do
     with {:ok, token} <- retained_token(user),

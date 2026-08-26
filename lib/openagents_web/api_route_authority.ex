@@ -291,6 +291,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
         {:required_bearer, :milestone, :envelope},
       "patch /api/v1/repos/:owner/:repo/projectsV2/:project_number/items/:item_id" =>
         {:required_bearer, :project, :envelope},
+      "post /api/v1/repos" => {:required_bearer, :repository, :legacy},
       "post /api/v1/orgs/:org/repos" => {:required_bearer, :repository, :legacy},
       "post /api/v1/orgs/:org/repos/imports" => {:required_bearer, :repository, :legacy},
       "post /api/v1/repos/:owner/:repo/pulls" => {:required_bearer, :pull_request, :legacy},

@@ -5151,7 +5151,7 @@
     /* A quarter. At full it lit the headline from behind hard enough to read as
        a light source in the page rather than depth behind it; at half it was
        still brighter than the words in front of it. */
-    --glow-scale: 0.25;
+    --glow-scale: 0.125;
   }
 
   /* Two edges of one line. The copyright says who owns this and the note says

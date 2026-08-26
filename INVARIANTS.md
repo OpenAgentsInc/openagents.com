@@ -777,6 +777,49 @@ conversation or user is refused, and no API offers a cross-conversation or
 unscoped fallback. GitHub identity establishes account continuity but does not
 turn conversation evidence into verified facts about a person.
 
+**One exception, and it is named here rather than discovered later: the
+`system` memory bucket.** An admitted system memory (MEMORY-011) is written by
+one account and read into every account's turn. That is cross-account recall by
+construction, it cannot be reconciled with the rule above, and it is the point
+of the bucket rather than a side effect of one, so it is admitted as an
+amendment to this invariant instead of being smuggled past it. Four bounds make
+it an exception rather than a hole:
+
+* **It lives in one module.** `OpenAgents.Memories.SystemRecall` and the one
+  shared ranking query in `OpenAgents.Memories.Retrieval.Lexical` are the only
+  reads in either memory plane that name no account. Both are enumerated by
+  name, so a second unscoped query fails the enumeration until somebody adds it
+  there on purpose.
+* **It is off unless an operator turns it on.**
+  `OPENAGENTS_FEATURE_SYSTEM_MEMORY_RECALL` sets
+  `:memory_recall, :system_bucket_enabled`, which is `false` in
+  `config/config.exs` and declared `false` in both the production
+  (`ops/deploy/fleet-startup.template.sh`) and staging
+  (`ops/staging/gate-5-profile.sh`) profiles. With it off no query in that
+  module runs, and `user` and `learned` recall is byte for byte what it was
+  before the bucket had a recall path at all.
+* **An eligibility filter replaces the scope predicate, and it is a predicate.**
+  MEMORY-004's discipline holds through the exception rather than around it:
+  what stands in for `user_id` is `bucket = 'system'`, `superseded_by_id IS
+  NULL`, `tier IN ('ledger','glass')`, and membership of the id set
+  `OpenAgents.Memories.Admissions.statuses/0` derived as `admitted`. A
+  candidate, a rejected row, a suspended row, and a sub-`ledger` row are absent
+  from the read rather than filtered out of its result, and a row's own
+  `admission` column — the author's claim about their own row — is read by
+  nothing (system-memory specification section 7.1).
+* **Per-source caps bound it at ranking time.** At most 25% of one message's
+  ranked candidate pool comes from a single account, by a stable round-robin
+  over accounts in rank order; at most one memory per account and two in total
+  attach to a note; and system rows spend the same per-turn character budget as
+  the account's own, so a note that quotes the network is no longer than one
+  that does not (section 7.2). What the caps exclude is not counted into the
+  note's `dropped` line, because that count would tell every account how large
+  the shared store is.
+
+Nothing else gains an unscoped read from this. Every other query in both planes
+still names `conversation_id` or `user_id`, and the enumerations below are what
+prove it.
+
 The recall APIs are enumerable rather than remembered. Recall reaches
 PostgreSQL only through the backend `:recall_search_backend` names in
 `config/config.exs`, so the backends are the population, and each backend's
@@ -789,8 +832,10 @@ fails until this contract accounts for it.
 
 Evidence: `OpenAgents.Memory.RecallSnapshot`, `OpenAgents.Memory.LexicalRecall`,
 `OpenAgents.Memory.HybridRecall`, cross-scope tests in
-`OpenAgents.Memory.LexicalRecallTest`, and the entry-point enumeration in
-`OpenAgents.Memory.ScopeBoundaryTest`.
+`OpenAgents.Memory.LexicalRecallTest`, the entry-point enumeration in
+`OpenAgents.Memory.ScopeBoundaryTest`, and, for the amendment,
+`OpenAgents.Memories.SystemRecall`, `test/openagents/memories/system_recall_test.exs`,
+and the unscoped-query enumeration in `test/openagents/memories_test.exs`.
 
 ### MEMORY-002 — Recalled history is classified evidence, not current profile truth
 
@@ -1074,9 +1119,17 @@ Scope is a database predicate, never an application filter. Every Ecto query
 rooted at `OpenAgents.Memories.Memory` names `user_id`, in the context and in
 every retrieval backend that reads PostgreSQL, and the queries are read from
 each module's own source AST rather than remembered, so a query added beside
-the scoped ones fails until it carries its scope. No read offers a cross-account
-or unscoped fallback, and a memory of another account is refused as absent
-rather than as forbidden.
+the scoped ones fails until it carries its scope. A memory of another account
+is refused as absent rather than as forbidden.
+
+The `system` bucket is the one exception, amended into MEMORY-001 rather than
+assumed here. Its two queries — the eligibility read in
+`OpenAgents.Memories.SystemRecall` and the shared ranking query in
+`OpenAgents.Memories.Retrieval.Lexical` — name no account, and the enumeration
+admits exactly those two by module and by count: each must name the `system`
+bucket in place of `user_id`, and a third unscoped query fails until somebody
+declares it. The `user` and `learned` buckets keep the unamended rule, and they
+keep it whether the system flag is on or off.
 
 Writes are explicit. Nothing infers a memory from what a turn contained: a row
 exists because a caller asked for it through `POST /api/v1/memories`.
@@ -1199,29 +1252,48 @@ that the row exists. MEMORY-010's rule that every query rooted at
 `OpenAgents.Memories.Memory` names `user_id` holds unchanged, and the AST proof
 reads this module too.
 
-Nothing surfaces. `OpenAgents.Memories.recall/3` reads the `user` and `learned`
-buckets, named as a predicate in the query rather than filtered out of its
-result, and no session sees a system memory — not another account's, and not
-its own author's, and not one of any derived status: admitted, suspended, and
-challenged rows all reach the same number of turns. A challenged memory nobody
-can see is still a coherent state; the point of recording the challenge is that
-a wrong admitted claim has a path other than editing someone else's row, and
-that a contested claim is marked before an eligibility filter exists to read
-the mark. That is deliberate and it is the whole reason this invariant
-can stand beside MEMORY-001 and MEMORY-010 rather than amending them: an
-admitted row read into every account's turn is cross-account recall by
-construction, so surfacing the bucket is a privacy decision with an eligibility
-filter of its own, not a ranking change. A system memory that is stored,
-evidenced, and admitted but recalled by nobody is a coherent state; a quietly
-widened recall predicate is not.
+Surfacing is a decision an operator makes, not a state the store drifts into.
+`OpenAgents.Memories.recall/3` reads the `user` and `learned` buckets, named as
+a predicate in the query rather than filtered out of its result, and it reads
+the `system` bucket only when `:memory_recall, :system_bucket_enabled` is on.
+That switch is `false` in `config/config.exs` and declared `false` in the
+production and staging profiles, so on every deployment that has not made the
+decision no session sees a system memory — not another account's, not its own
+author's, and not one of any derived status. This is the decision MEMORY-001's
+amendment records, and the reason it is a decision is that an admitted row read
+into every account's turn is cross-account recall by construction rather than a
+ranking change.
+
+When the switch is on, `OpenAgents.Memories.SystemRecall` is the whole of what
+surfaces. Only rows the admission records derived as `admitted` are eligible:
+candidates, rejected rows, and rows suspended by an open evidenced challenge
+reach no turn, and neither does a superseded row or one below the `ledger`
+tier. The filter is the query rather than a pass over its result. Per-source
+caps bound the rest — 25% of one message's ranked pool per account by stable
+round-robin, one memory per account and two in total per note — so an account
+that wrote most of the admitted store still does not own a note. Every step is
+deterministic: a total read order, the ranking module's stable tie-breaks, and
+a round-robin that consults nothing else, so equal inputs give equal notes.
+
+A note names what it is quoting. A system line reads
+`[From memory: (system, as of <date>, <status>)] <body>`: the bucket, the
+`as_of` date that dates the claim rather than the insert time that orders the
+chain, and the status the admission records derived — never the `admission`
+column, which is what the author claimed about their own row. A reader can tell
+a network claim from their own, and can see how old it is.
+
+Recall degrades to silence, never to an error. An empty store, an unreadable
+one, and an unavailable ranking backend each surface nothing and fail no turn.
 
 Evidence: `OpenAgents.Memories.Admissions`, `OpenAgents.Memories.Admission`,
-`OpenAgents.Memories.Memory`, `OpenAgents.Memories.Evidence`, the
+`OpenAgents.Memories.Memory`, `OpenAgents.Memories.SystemRecall`,
+`OpenAgents.Memories.Note`, `OpenAgents.Memories.Evidence`, the
 `memories_system_shape` and `memory_admissions_shape` constraints and the
 composite foreign keys `memory_admissions_memory_fkey` and
 `memory_admissions_challenge_fkey`,
-`test/openagents/memories/system_memory_test.exs`, and
-`test/openagents/memories/challenge_test.exs`.
+`test/openagents/memories/system_memory_test.exs`,
+`test/openagents/memories/challenge_test.exs`, and
+`test/openagents/memories/system_recall_test.exs`.
 
 ### PRIVACY-001 — Secret-bearing profile memory is rejected, never scrub-stored
 
@@ -6111,7 +6183,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DATA-001 | `test/openagents/conversations_test.exs` |
 | DATA-002 | `test/openagents/accounts_test.exs`, `test/openagents/conversations_test.exs` |
 | DATA-003 | `test/openagents/conversations_test.exs` |
-| MEMORY-001 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
+| MEMORY-001 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/memory/scope_boundary_test.exs`, `test/openagents/memories/system_recall_test.exs` |
 | MEMORY-002 | `test/openagents/memory/evidence_test.exs`, `test/openagents/turn_memory_evidence_journeys_test.exs` |
 | MEMORY-003 | `test/openagents/profile_memory_test.exs` |
 | MEMORY-004 | `test/openagents/memory/lexical_recall_test.exs`, `test/openagents/tools/conversation_recall_tools_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
@@ -6121,7 +6193,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | MEMORY-008 | `test/openagents/experience_memory_test.exs` |
 | MEMORY-009 | `test/openagents/graph_memory_test.exs` |
 | MEMORY-010 | `test/openagents/memories_test.exs`, `test/openagents_web/controllers/memory_controller_test.exs`, `test/openagents_web/controllers/responses_controller_test.exs` |
-| MEMORY-011 | `test/openagents/memories/system_memory_test.exs`, `test/openagents/memories/challenge_test.exs` |
+| MEMORY-011 | `test/openagents/memories/system_memory_test.exs`, `test/openagents/memories/challenge_test.exs`, `test/openagents/memories/system_recall_test.exs` |
 | PRIVACY-001 | `test/openagents/memory/policy_and_redaction_test.exs`, `test/openagents/memory/scope_boundary_test.exs` |
 | TURN-001 | `test/openagents/conversations_test.exs` |
 | TURN-002 | `test/openagents/conversations_test.exs` |

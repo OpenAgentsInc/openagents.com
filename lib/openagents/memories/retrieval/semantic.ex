@@ -53,6 +53,23 @@ defmodule OpenAgents.Memories.Retrieval.Semantic do
     _error -> :error
   end
 
+  # This backend issues no query at all, so the shared pool costs it nothing
+  # but a predicate on the candidates: only `system` rows are scored, which
+  # keeps an account-scoped row out of the shared ranking even if a caller
+  # assembled the list wrongly. The eligibility filter narrowed the list before
+  # it arrived (`OpenAgents.Memories.SystemRecall`).
+  @impl true
+  def score_shared(query, candidates) do
+    with true <- available?(),
+         {:ok, vector} <- embed(query) do
+      {:ok, cosines(vector, Enum.filter(candidates, &(&1.bucket == "system")))}
+    else
+      _unavailable -> :error
+    end
+  rescue
+    _error -> :error
+  end
+
   @doc """
   The embedding to store on a new memory, or `nil` when the rail is off.
 

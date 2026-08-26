@@ -88,7 +88,7 @@ defmodule OpenAgents.Memories do
 
   alias Ecto.Multi
   alias OpenAgents.Accounts.User
-  alias OpenAgents.Memories.{Memory, Recall, Retrieval}
+  alias OpenAgents.Memories.{Memory, Recall, Retrieval, SystemRecall}
   alias OpenAgents.Memories.Retrieval.Semantic
   alias OpenAgents.Repo
 
@@ -229,16 +229,24 @@ defmodule OpenAgents.Memories do
   account holds is ranked against it; `user` memories are kept regardless of
   score and `learned` ones only above the backend's floor; the result is cut to
   `maximum_attached` memories and `maximum_attached_characters`, and what the
-  cut excluded is counted rather than dropped in silence.
+  cut excluded is counted rather than dropped in silence. That read names
+  `user_id`, and it is the whole of what this function does unless an operator
+  says otherwise.
 
-  The `system` bucket is not read here, by anyone, including its own author.
-  A system memory is stored, admitted, and contestable
-  (`OpenAgents.Memories.Admissions`) and surfaced to nobody, whatever status
-  its records derive: an admitted row reaches every account's turn or none, and
-  the first is cross-account recall, which MEMORY-001 and MEMORY-010 forbid.
-  The bucket list is a predicate in the query rather than a filter applied to
-  its results, so widening it is a deliberate edit to the recall issue's
-  eligibility filter and not something a ranking change can do by accident.
+  The `system` bucket is the one exception, and it is off by default. When
+  `:memory_recall, :system_bucket_enabled` is on, `OpenAgents.Memories.SystemRecall`
+  appends what the network has learned: rows a steward's records derived as
+  `admitted`, at or above the `ledger` tier, live, and unsuspended, capped at
+  one per writing account and two per note, spending whatever the account's own
+  memories left of the character budget. Those rows are cross-account by
+  design — that is the point of the bucket, and it is why the switch exists.
+  With it off, this function does what it did before the bucket had a recall
+  path at all, byte for byte.
+
+  System rows never consume the account's count budget and are never counted
+  into `dropped`. `dropped` tells a reader their own store was larger than the
+  turn; a count of network claims that did not fit would tell them how large
+  the shared store is, which is a fact about other accounts.
 
   Never raises. An unreadable store or an unavailable backend recalls nothing.
   """
@@ -256,9 +264,9 @@ defmodule OpenAgents.Memories do
         if memory.bucket == "user" or score > floor, do: [memory], else: []
       end)
 
-    {kept, dropped} = bound(eligible, opts)
+    {kept, dropped, remaining} = bound(eligible, opts)
 
-    %Recall{memories: kept, dropped: dropped, backend: backend}
+    %Recall{memories: kept ++ shared(query, remaining), dropped: dropped, backend: backend}
   rescue
     _error -> %Recall{memories: [], dropped: 0, backend: :lexical}
   end
@@ -283,11 +291,15 @@ defmodule OpenAgents.Memories do
   # Count first, size second, and the count of what neither admitted. Taking
   # the highest-ranked memories until the character budget is spent keeps the
   # note about this turn rather than about whichever memory is longest.
+  #
+  # What is left of the character budget travels out with the result, because
+  # the system bucket spends the same budget rather than one of its own: a note
+  # that quotes the network is no longer than a note that does not.
   defp bound(memories, opts) do
     count = Keyword.get(opts, :maximum_attached, maximum_attached())
     characters = Keyword.get(opts, :maximum_attached_characters, maximum_attached_characters())
 
-    {kept, _left} =
+    {kept, left} =
       memories
       |> Enum.take(count)
       |> Enum.reduce({[], characters}, fn memory, {kept, remaining} ->
@@ -297,7 +309,17 @@ defmodule OpenAgents.Memories do
       end)
 
     kept = Enum.reverse(kept)
-    {kept, length(memories) - length(kept)}
+    {kept, length(memories) - length(kept), left}
+  end
+
+  # The cross-account half, and nothing at all unless an operator turned it on.
+  # `SystemRecall.pool/1` answers `[]` with the flag off without issuing a
+  # query, so this is a no-op on every deployment that has not made the
+  # decision (MEMORY-001).
+  defp shared(query, remaining) do
+    query
+    |> SystemRecall.pool()
+    |> SystemRecall.attachable(remaining)
   end
 
   defp scope(%User{id: user_id}, opts) do

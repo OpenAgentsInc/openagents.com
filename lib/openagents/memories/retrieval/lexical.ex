@@ -66,6 +66,20 @@ defmodule OpenAgents.Memories.Retrieval.Lexical do
     _error -> :error
   end
 
+  @impl true
+  def score_shared(query, candidates) do
+    text = prepare(query)
+    ids = Enum.map(candidates, & &1.id)
+
+    if text == "" or ids == [] do
+      {:ok, %{}}
+    else
+      {:ok, shared(text, ids)}
+    end
+  rescue
+    _error -> :error
+  end
+
   # `user_id` is the scope predicate, and it is written here rather than
   # inherited from the candidate ids (MEMORY-010). The id list narrows the
   # read; it does not bound it, and a caller that assembled that list wrongly
@@ -73,6 +87,33 @@ defmodule OpenAgents.Memories.Retrieval.Lexical do
   defp ranked(user_id, text, ids) do
     from(memory in Memory,
       where: memory.user_id == ^user_id,
+      where: is_nil(memory.superseded_by_id),
+      where: memory.id in ^ids,
+      where: fragment("? @@ websearch_to_tsquery('english', ?)", memory.search_vector, ^text),
+      select: {
+        memory.id,
+        fragment(
+          "ts_rank_cd(?, websearch_to_tsquery('english', ?), 32)",
+          memory.search_vector,
+          ^text
+        )
+      }
+    )
+    |> Repo.all()
+    |> Map.new(fn {id, rank} -> {id, rank / 1} end)
+  end
+
+  # The shared bucket's ranking query, and the one query in this module that
+  # names no account. `bucket` is what stands in its place, which is
+  # MEMORY-001's amendment written as a predicate rather than as a filter over
+  # the result: a caller who assembled the candidate ids wrongly still cannot
+  # reach an account-scoped row through this read. The caller narrowed those
+  # ids to admitted, live, `ledger`-or-above rows before it got here
+  # (`OpenAgents.Memories.SystemRecall`); this query re-states the two
+  # predicates it can state cheaply rather than trusting the list alone.
+  defp shared(text, ids) do
+    from(memory in Memory,
+      where: memory.bucket == "system",
       where: is_nil(memory.superseded_by_id),
       where: memory.id in ^ids,
       where: fragment("? @@ websearch_to_tsquery('english', ?)", memory.search_vector, ^text),

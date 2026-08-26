@@ -272,6 +272,7 @@ if config_env() == :prod and runtime_role == :web do
   shadow_enabled = feature.("SHADOW_PROGRAMS")
   tool_embeddings_enabled = feature.("TOOL_EMBEDDINGS")
   memory_embeddings_enabled = feature.("MEMORY_EMBEDDINGS")
+  system_memory_recall_enabled = feature.("SYSTEM_MEMORY_RECALL")
   computers_enabled = feature.("COMPUTERS")
   conversation_reset_enabled = feature.("CONVERSATION_RESET")
   incident_fixer_enabled = feature.("INCIDENT_FIXER")
@@ -390,10 +391,15 @@ if config_env() == :prod and runtime_role == :web do
     |> Application.fetch_env!(:tool_discovery)
     |> Keyword.put(:embeddings_enabled, tool_embeddings_enabled)
 
+  # `system_bucket_enabled` is the one switch in this file that widens who a
+  # row can reach rather than how well it is ranked. It is declared `false` in
+  # `ops/deploy/fleet-startup.template.sh`, so production reads the `user` and
+  # `learned` buckets and nothing else until an operator turns it on.
   memory_recall =
     :openagents
     |> Application.fetch_env!(:memory_recall)
     |> Keyword.put(:embeddings_enabled, memory_embeddings_enabled)
+    |> Keyword.put(:system_bucket_enabled, system_memory_recall_enabled)
 
   forge_repos = parse_csv.("OPENAGENTS_FORGE_REPOSITORIES")
   forge_owner = required_text.("OPENAGENTS_FORGE_OWNER")

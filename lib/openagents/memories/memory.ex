@@ -80,6 +80,13 @@ defmodule OpenAgents.Memories.Memory do
     # The generated `tsvector` the lexical stand-in ranks over. PostgreSQL
     # writes it; nothing here reads it back, so it never rides a select.
     field :search_vector, :string, load_in_query: false
+
+    # What `OpenAgents.Memories.Admissions` derived for this row, carried so a
+    # note can print the status a steward's receipts produce rather than the
+    # `admission` field the author claimed. Virtual on purpose: a derived
+    # status has no column, because a column is exactly the thing an author
+    # could write for themselves.
+    field :derived_status, :string, virtual: true
     belongs_to :superseded_by, __MODULE__, foreign_key: :superseded_by_id
     timestamps()
   end
@@ -91,13 +98,15 @@ defmodule OpenAgents.Memories.Memory do
   def buckets, do: @buckets
 
   @doc """
-  The buckets recall reads.
+  The buckets account-scoped recall reads.
 
-  `system` is stored and admitted but surfaced to nobody. Reading an admitted
-  system row into every account's turn is cross-account recall by construction,
-  which MEMORY-001 and MEMORY-010 forbid, so widening this list is a privacy
-  decision rather than a ranking change. It belongs to the recall issue that
-  owns the eligibility filter, not to the store.
+  `system` is not one of them and never becomes one. Reading an admitted system
+  row into every account's turn is cross-account recall by construction, so it
+  cannot ride the query that names `user_id`; it has a plane of its own in
+  `OpenAgents.Memories.SystemRecall`, under an eligibility filter that replaces
+  the scope predicate and a feature flag that is off by default (MEMORY-001).
+  Widening this list would surface the bucket without either one, so it stays
+  two buckets long.
   """
   @spec recallable_buckets() :: [String.t()]
   def recallable_buckets, do: @recallable_buckets

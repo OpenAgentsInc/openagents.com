@@ -294,8 +294,19 @@ config :openagents,
   # target retrieval backend; with it off, recall runs on the lexical stand-in.
   # The three bounds are the store's ceiling per account and the per-turn
   # ceilings on how much memory may reach the model.
+  #
+  # `system_bucket_enabled` is the cross-account switch, and it is off here and
+  # in production. With it off, recall reads the `user` and `learned` buckets
+  # and nothing else, exactly as it did before the system bucket existed. With
+  # it on, an admitted system memory written by one account reaches every
+  # account's turn under the eligibility filter and the caps in
+  # `OpenAgents.Memories.SystemRecall` (MEMORY-001, MEMORY-011).
+  # `maximum_system_pool` bounds the ranked candidate pool the per-source cap
+  # is a share of.
   memory_recall: [
     embeddings_enabled: false,
+    system_bucket_enabled: false,
+    maximum_system_pool: 40,
     provider: OpenAgents.Memory.OpenAIEmbeddings,
     model_id: "text-embedding-3-small",
     model_version: "2024-01",

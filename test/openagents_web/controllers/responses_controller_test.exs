@@ -254,6 +254,126 @@ defmodule OpenAgentsWeb.ResponsesControllerTest do
     end
   end
 
+  # MEMORY-001's amendment, at the surface it changes. Recall is server-side,
+  # so the network's memory reaches the model with no tool in the request and
+  # no client plumbing at all — and it reaches it only where an operator turned
+  # the switch on.
+  describe "recall for the system bucket" do
+    setup do
+      swap_lane(RecordingTestProvider)
+      Application.put_env(:openagents, :test_recording_provider_observer, self())
+      previous = Application.get_env(:openagents, :memory_recall) || []
+
+      on_exit(fn ->
+        Application.delete_env(:openagents, :test_recording_provider_observer)
+        Application.put_env(:openagents, :memory_recall, previous)
+      end)
+
+      %{settings: previous}
+    end
+
+    defp surfacing(settings, enabled?) do
+      Application.put_env(
+        :openagents,
+        :memory_recall,
+        Keyword.put(settings, :system_bucket_enabled, enabled?)
+      )
+    end
+
+    # The steward set is the operator allowlist of GitHub numeric IDs, and the
+    # owner's account is in it by definition, so this needs no configuration
+    # change.
+    defp steward do
+      github_id = 14_167_547
+
+      {:ok, user} =
+        OpenAgents.Accounts.upsert_github_user(%{
+          github_id: github_id,
+          github_login: "AtlantisPleb",
+          github_avatar_url: "https://avatars.githubusercontent.com/u/#{github_id}?v=4"
+        })
+
+      user
+    end
+
+    defp system_candidate(author) do
+      OpenAgents.Memories.create(author, %{
+        "bucket" => "system",
+        "slug" => "sys:gateway-402-retired-model",
+        "body" => "A 402 from the inference gateway usually means the model was retired.",
+        "tier" => "ledger",
+        "as_of" => ~D[2026-08-25],
+        "admission" => "candidate",
+        "evidence_refs" => [
+          %{"kind" => "receipt", "ref" => "receipt:4f1c", "digest" => "sha256:9ab3"}
+        ]
+      })
+    end
+
+    test "attaches an admitted memory another account wrote, with no tool in the request",
+         %{conn: conn, settings: settings} do
+      surfacing(settings, true)
+
+      author = github_user("responses-system-author")
+      {:ok, memory} = system_candidate(author)
+
+      {:ok, _record} =
+        OpenAgents.Memories.Admissions.record(steward(), memory.id, %{
+          "verdict" => "admitted",
+          "ground" => "The receipt supports the claim."
+        })
+
+      conn = put_chat_api_token(conn, "responses-system-reader")
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "the inference gateway returned 402"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      assert request.instructions =~ "[From memory: (system, as of 2026-08-25, admitted)]"
+      assert request.instructions =~ "the model was retired"
+      assert request.tool_definitions == []
+    end
+
+    test "attaches nothing for a candidate", %{conn: conn, settings: settings} do
+      surfacing(settings, true)
+
+      author = github_user("responses-system-candidate-author")
+      {:ok, _memory} = system_candidate(author)
+
+      conn = put_chat_api_token(conn, "responses-system-candidate-reader")
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "the inference gateway returned 402"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      refute request.instructions =~ "From memory"
+    end
+
+    test "and nothing at all with the switch off", %{conn: conn, settings: settings} do
+      surfacing(settings, false)
+
+      author = github_user("responses-system-off-author")
+      {:ok, memory} = system_candidate(author)
+
+      {:ok, _record} =
+        OpenAgents.Memories.Admissions.record(steward(), memory.id, %{
+          "verdict" => "admitted",
+          "ground" => "The receipt supports the claim."
+        })
+
+      conn = put_chat_api_token(conn, "responses-system-off-reader")
+
+      assert conn
+             |> post(~p"/api/v1/responses", %{input: "the inference gateway returned 402"})
+             |> json_response(200)
+
+      assert_receive {:recorded_request, _id, request}
+      refute request.instructions =~ "From memory"
+    end
+  end
+
   describe "an unrecognized caller is unchanged" do
     setup do
       swap_lane(RecordingTestProvider)

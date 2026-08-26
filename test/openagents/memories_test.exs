@@ -326,18 +326,52 @@ defmodule OpenAgents.MemoriesTest do
       # — a steward correcting a network claim — and it does so as a predicate
       # inside the `UPDATE`, naming `user_id` beside the role. Nothing is read
       # out, so a caller with no standing learns nothing from the refusal.
-      "lib/openagents/memories/admissions.ex"
+      "lib/openagents/memories/admissions.ex",
+      # The system bucket's read path, which names no account at all.
+      "lib/openagents/memories/system_recall.ex"
     ]
 
-    test "every query rooted at the memory plane names user_id" do
+    # MEMORY-001's amendment, written as a budget. Two queries in the plane
+    # name no account — the system bucket's eligibility read and its shared
+    # ranking query — and each of them must name the `system` bucket in place
+    # of `user_id`. Declaring the count by module is what makes a third
+    # unscoped query fail here: it is admitted by name and by number, never by
+    # shape, so nothing widens by resembling something that already did.
+    @unscoped_queries %{
+      "lib/openagents/memories/retrieval/lexical.ex" => 1,
+      "lib/openagents/memories/system_recall.ex" => 1
+    }
+
+    test "every query rooted at the memory plane names user_id, or the system bucket" do
       for path <- @scoped_modules, query <- memory_queries(path) do
-        assert names_user_id?(query),
+        assert names_user_id?(query) or names_system_bucket?(query),
                """
-               A query in #{path} is rooted at `Memory` and does not name
-               `user_id`. MEMORY-010 requires the account boundary to be a
-               database predicate. Add the column, or amend the invariant.
+               A query in #{path} is rooted at `Memory` and names neither
+               `user_id` nor the `system` bucket. MEMORY-010 requires the
+               account boundary to be a database predicate, and MEMORY-001's
+               amendment admits exactly one substitute for it. Add the column,
+               or amend the invariant.
 
                #{Macro.to_string(query)}
+               """
+      end
+    end
+
+    test "and no more queries name no account than the amendment declares" do
+      for path <- @scoped_modules do
+        declared = Map.get(@unscoped_queries, path, 0)
+
+        found =
+          path
+          |> memory_queries()
+          |> Enum.count(&(not names_user_id?(&1)))
+
+        assert found == declared,
+               """
+               #{path} has #{found} query or queries rooted at `Memory` that
+               name no account, and MEMORY-001's amendment declares #{declared}.
+               Every one of them reads across the account boundary. Declare it
+               here on purpose, and amend MEMORY-001 to say why, or scope it.
                """
       end
     end
@@ -371,6 +405,18 @@ defmodule OpenAgents.MemoriesTest do
          do: true
 
     defp rooted_at_memory?(_node), do: false
+
+    # `memory.bucket == "system"` in a query. The literal is required: a query
+    # comparing `bucket` to a bound variable could be handed any bucket at all,
+    # which is the account boundary back where it started.
+    defp names_system_bucket?(query) do
+      query
+      |> Macro.prewalker()
+      |> Enum.any?(fn
+        {:==, _, [{{:., _, [_, :bucket]}, _, _}, "system"]} -> true
+        _other -> false
+      end)
+    end
 
     # `memory.user_id` in a query, or `user_id:` in a repo call's clauses.
     defp names_user_id?(query) do

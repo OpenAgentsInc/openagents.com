@@ -37,6 +37,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   require Logger
 
+  alias OpenAgents.Analytics
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Models
   alias OpenAgents.Providers.{Request, ToolDefinition, ToolOutput}
@@ -196,6 +197,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   # ── run + translate ─────────────────────────────────────────────────────
 
   defp run(conn, grant, model, request) do
+    selection = selection_properties(grant, model, request, conn.body_params)
+    Analytics.capture("inference_model_selected", analytics_distinct_id(grant), selection)
+
     parent = self()
 
     # The provider pushes events synchronously; capture them to this process's
@@ -217,6 +221,17 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         # header and every chunk's `model` field — so a client renders what
         # answered, not what it assumed (PROVIDER-002).
         label = model_label(model, served)
+
+        Analytics.capture(
+          "inference_model_served",
+          analytics_distinct_id(grant),
+          Map.merge(selection, %{
+            "served_model" => label,
+            "served_model_disclosed" => served != :unresolved,
+            "outcome" => "served",
+            "usage_reported" => usage != %{}
+          })
+        )
 
         conn
         |> put_resp_content_type("text/event-stream")
@@ -241,6 +256,17 @@ defmodule OpenAgentsWeb.InferenceProxyController do
             if(status == nil, do: "", else: " upstream_status=#{status}")
         )
 
+        Analytics.capture(
+          "inference_model_failed",
+          analytics_distinct_id(grant),
+          Map.merge(selection, %{
+            "outcome" => "provider_failed",
+            "reason_code" => class,
+            "upstream_status" => status,
+            "usage_reported" => usage != %{}
+          })
+        )
+
         refuse(conn, {:provider_failed, class, status})
     end
   end
@@ -255,6 +281,42 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   defp meter(grant, usage, _served) when usage == %{}, do: {:ok, grant}
   defp meter(grant, usage, served), do: Inference.record_usage(grant, usage, served)
+
+  # This is the complete non-secret selection record for one provider call.
+  # It deliberately excludes the bearer grant, prompts, instructions, and tool
+  # arguments. The grant's visitor id becomes the analytics distinct id only;
+  # it is not an event property.
+  defp selection_properties(grant, model, request, body) do
+    requested = Map.get(body, "model")
+
+    %{
+      "selection_schema" => "inference_model_selection.v1",
+      "selection_surface" => "inference_proxy",
+      "requested_model" => requested,
+      "requested_model_present" => is_binary(requested) and requested != "",
+      "grant_model" => grant.model_id,
+      "selected_model" => model.id,
+      "provider" => Atom.to_string(model.provider),
+      "provider_model" => model.provider_model,
+      "model_availability" => Models.availability(model),
+      "model_available" => Models.available?(model),
+      "adapter_substitutable" => substitutable?(model.adapter),
+      "request_model" => request.model_id,
+      "max_output_tokens" => request.max_output,
+      "input_message_count" => length(request.input),
+      "tool_definition_count" => length(request.tool_definitions),
+      "tool_output_count" => length(request.tool_outputs),
+      "grant_call_count_before" => grant.call_count,
+      "grant_max_calls" => grant.max_calls,
+      "grant_max_total_tokens" => grant.max_total_tokens,
+      "grant_max_cost_microusd" => grant.max_cost_microusd,
+      "grant_has_thread_fence" => is_binary(grant.thread_id),
+      "grant_has_conversation_fence" => is_binary(grant.conversation_id)
+    }
+  end
+
+  defp analytics_distinct_id(grant),
+    do: Analytics.distinct_id("visitor_" <> grant.owner_visitor_id)
 
   # Which model actually served this call.
   #

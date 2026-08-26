@@ -9,6 +9,31 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
   alias OpenAgents.Providers.RecordingTestProvider
   alias OpenAgents.Repo
 
+  defmodule AnalyticsSink do
+    def capture(event, distinct_id, properties) do
+      send(:inference_proxy_analytics_test, {:analytics, event, distinct_id, properties})
+      :ok
+    end
+  end
+
+  setup do
+    Process.register(self(), :inference_proxy_analytics_test)
+    original_token = Application.get_env(:openagents, :posthog_project_token)
+    original_sink = Application.get_env(:openagents, :analytics_sink)
+    Application.put_env(:openagents, :posthog_project_token, "phc_test_token")
+    Application.put_env(:openagents, :analytics_sink, AnalyticsSink)
+
+    on_exit(fn ->
+      if is_nil(original_token),
+        do: Application.delete_env(:openagents, :posthog_project_token),
+        else: Application.put_env(:openagents, :posthog_project_token, original_token)
+
+      if is_nil(original_sink),
+        do: Application.delete_env(:openagents, :analytics_sink),
+        else: Application.put_env(:openagents, :analytics_sink, original_sink)
+    end)
+  end
+
   defp grant(key, options \\ []) do
     owner = github_user("proxy-#{key}")
     {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(owner)
@@ -56,6 +81,7 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
 
   test "a valid grant proxies a chat completion and meters usage", %{conn: conn} do
     %{grant: grant, token: token} = grant("ok")
+    {:ok, default} = Models.fetch(Models.default_id())
 
     conn =
       post_chat(conn, token, %{
@@ -105,6 +131,23 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert metered.call_count == 1
     assert metered.usage["total_tokens"] == 12
     assert metered.usage["estimated_cost_microusd"] > 0
+
+    assert_receive {:analytics, "inference_model_selected", distinct_id, selected}
+    assert distinct_id =~ "visitor_"
+    assert selected["selection_schema"] == "inference_model_selection.v1"
+    assert selected["requested_model"] == Models.default_id()
+    assert selected["grant_model"] == Models.default_id()
+    assert selected["selected_model"] == Models.default_id()
+    assert selected["provider_model"] == default.provider_model
+    assert selected["input_message_count"] == 1
+    assert selected["tool_definition_count"] == 0
+    assert selected["tool_output_count"] == 0
+    assert selected["grant_has_conversation_fence"]
+    refute selected["grant_has_thread_fence"]
+
+    assert_receive {:analytics, "inference_model_served", ^distinct_id, served}
+    assert served["served_model"] == Models.default_id()
+    assert served["outcome"] == "served"
   end
 
   test "a reasoning stream survives translation as delta.reasoning", %{conn: conn} do

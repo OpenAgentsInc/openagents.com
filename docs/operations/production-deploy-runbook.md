@@ -358,17 +358,27 @@ still serving the previous release and nothing has been disturbed.
 Verify what the migration wrote, rather than reading its exit status. A
 migration that reports success can still have written the wrong values, and a
 data-bearing migration is the one place where that is expensive and silent.
-Query the affected rows directly:
-
-```sh
-docker exec openagents /app/bin/openagents rpc 'Code.eval_file("/tmp/check.exs")'
-```
+Query the affected rows directly.
 
 For a column added with a backfill, check three things: the row values the
 backfill was supposed to write, the column's `is_nullable` and
 `column_default` in `information_schema.columns`, and any constraint the
-migration created. Capture the same counts before the migration runs so the
-after-state has something to be compared against.
+migration created.
+
+```sh
+docker exec openagents /app/bin/openagents rpc 'OpenAgents.Repo.query!("SELECT count(*) FROM <table> WHERE <column> IS NULL") |> IO.inspect()'
+
+docker exec openagents /app/bin/openagents rpc 'OpenAgents.Repo.query!("SELECT is_nullable, column_default FROM information_schema.columns WHERE table_name = $1 AND column_name = $2", ["<table>", "<column>"]) |> IO.inspect()'
+
+docker exec openagents /app/bin/openagents rpc 'OpenAgents.Repo.query!("SELECT c.conname, pg_get_constraintdef(c.oid) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE t.relname = $1", ["<table>"]) |> IO.inspect()'
+```
+
+Write the query out rather than staging a script and evaluating it. A step that
+tells you to run a file it never shows you is a step you have to invent, and
+what you invent is what goes unreviewed.
+
+Capture the same counts before the migration runs so the after-state has
+something to be compared against.
 
 ## 7. Rolling replacement
 

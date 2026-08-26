@@ -534,6 +534,196 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
     end
   end
 
+  describe "POST /api/v1/threads/:thread_id/report" do
+    setup %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-report")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{"objective" => "Answer, then say so."})
+        |> json_response(201)
+
+      %{
+        authenticated: authenticated,
+        id: created["thread"]["id"],
+        token: created["grant"]["token"]
+      }
+    end
+
+    test "a thread that reported is recorded as having reported, not cancelled", %{
+      authenticated: conn,
+      id: id,
+      token: token
+    } do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "succeeded",
+          "report" => "The answer is 4."
+        })
+        |> json_response(200)
+
+      assert body["thread"]["status"] == "succeeded"
+      assert body["thread"]["error_code"] == nil
+      assert body["thread"]["report"] == "The answer is 4."
+      assert body["thread"]["report_type"] == "outcome"
+
+      # Reporting revokes, exactly as cancelling does: authority does not
+      # outlive the thread's end (THREAD-001).
+      assert {:error, :grant_revoked} = Inference.resolve(token)
+      assert body["grant"]["status"] == "revoked"
+    end
+
+    test "the server never guesses the outcome: a report with no status is refused", %{
+      authenticated: conn,
+      id: id
+    } do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{"report" => "Something happened."})
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert body["errors"]["status"] != nil
+
+      assert conn
+             |> get(~p"/api/v1/threads/#{id}")
+             |> json_response(200)
+             |> get_in([
+               "thread",
+               "status"
+             ]) == "open"
+    end
+
+    test "a run that failed cannot be recorded as a success", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "succeeded",
+          "report" => "It worked.",
+          "error_code" => "max_steps"
+        })
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert body["errors"]["error_code"] != nil
+    end
+
+    test "a failure has to name why", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "failed",
+          "report" => "It did not work."
+        })
+        |> json_response(422)
+
+      assert body["code"] == "validation_failed"
+      assert body["errors"]["error_code"] != nil
+    end
+
+    test "a failed run is recorded as failed, with its reason", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "failed",
+          "report" => "The turn budget ran out before an answer.",
+          "error_code" => "max_steps"
+        })
+        |> json_response(200)
+
+      assert body["thread"]["status"] == "failed"
+      assert body["thread"]["error_code"] == "max_steps"
+      assert body["thread"]["report_type"] == "failure"
+    end
+
+    test "an interrupted run reports as cancelled, naming the interruption", %{
+      authenticated: conn,
+      id: id
+    } do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "cancelled",
+          "report" => "The operator interrupted the session.",
+          "error_code" => "interrupted"
+        })
+        |> json_response(200)
+
+      assert body["thread"]["status"] == "cancelled"
+      assert body["thread"]["error_code"] == "interrupted"
+    end
+
+    test "a status outside the terminal three is refused", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "open",
+          "report" => "Still going."
+        })
+        |> json_response(422)
+
+      assert body["errors"]["status"] != nil
+    end
+
+    test "a blank report is refused", %{authenticated: conn, id: id} do
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{"status" => "succeeded", "report" => "   "})
+        |> json_response(422)
+
+      assert body["errors"]["report"] != nil
+    end
+
+    test "an at-least-once client may resend the same report", %{authenticated: conn, id: id} do
+      report = %{"status" => "succeeded", "report" => "The answer is 4."}
+
+      assert conn |> post(~p"/api/v1/threads/#{id}/report", report) |> json_response(200)
+      body = conn |> post(~p"/api/v1/threads/#{id}/report", report) |> json_response(200)
+
+      assert body["thread"]["status"] == "succeeded"
+    end
+
+    test "a second, different report is refused rather than overwriting the first", %{
+      authenticated: conn,
+      id: id
+    } do
+      assert conn
+             |> post(~p"/api/v1/threads/#{id}/report", %{
+               "status" => "succeeded",
+               "report" => "The answer is 4."
+             })
+             |> json_response(200)
+
+      body =
+        conn
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "failed",
+          "report" => "Actually it broke.",
+          "error_code" => "max_steps"
+        })
+        |> json_response(422)
+
+      assert body["code"] == "thread_terminal"
+
+      standing = conn |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
+      assert standing["thread"]["status"] == "succeeded"
+    end
+
+    test "another account cannot report on a thread it did not open", %{conn: conn, id: id} do
+      body =
+        conn
+        |> put_chat_api_token("thread-report-stranger")
+        |> post(~p"/api/v1/threads/#{id}/report", %{
+          "status" => "succeeded",
+          "report" => "Not mine."
+        })
+        |> json_response(404)
+
+      assert body["code"] == "not_found"
+    end
+  end
+
   describe "spending a thread's grant" do
     test "the grant reaches the model exactly as a conversation-fenced one does", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-spend")
@@ -996,7 +1186,52 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
       assert {:error, :grant_revoked} = Inference.resolve(old_token)
     end
 
-    test "a terminal thread refuses with thread_terminal", %{conn: conn} do
+    test "a thread that reported can be resumed: the re-grant reopens it", %{conn: conn} do
+      authenticated = put_chat_api_token(conn, "thread-remint-reported")
+
+      created =
+        authenticated
+        |> post(~p"/api/v1/threads", %{"objective" => "Report, exit, come back."})
+        |> json_response(201)
+
+      id = created["thread"]["id"]
+
+      assert authenticated
+             |> post(~p"/api/v1/threads/#{id}/report", %{
+               "status" => "succeeded",
+               "report" => "The answer is 4."
+             })
+             |> json_response(200)
+
+      body = authenticated |> post(~p"/api/v1/threads/#{id}/grants") |> json_response(201)
+
+      assert body["thread"]["status"] == "open"
+      assert body["thread"]["error_code"] == nil
+      assert body["thread"]["generation"] == 2
+      assert {:ok, _usable} = Inference.resolve(body["grant"]["token"])
+
+      # What the thread reported before is in the transcript, so resuming
+      # loses nothing.
+      events =
+        authenticated
+        |> get(~p"/api/v1/threads/#{id}/events")
+        |> json_response(200)
+        |> Map.fetch!("events")
+
+      reopened = Enum.find(events, &(&1["event_type"] == "thread.reopened"))
+      assert reopened["payload"]["report"] == "The answer is 4."
+      assert reopened["payload"]["status"] == "succeeded"
+
+      # And the resumed session can append its turns again.
+      assert authenticated
+             |> post(~p"/api/v1/threads/#{id}/events", %{
+               "event_type" => "turn.user",
+               "payload" => %{"text" => "and again?"}
+             })
+             |> json_response(201)
+    end
+
+    test "a cancelled thread refuses with thread_terminal", %{conn: conn} do
       authenticated = put_chat_api_token(conn, "thread-remint-terminal")
 
       created =

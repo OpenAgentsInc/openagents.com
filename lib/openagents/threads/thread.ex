@@ -28,6 +28,8 @@ defmodule OpenAgents.Threads.Thread do
 
   @statuses ~w(open succeeded failed cancelled)
   @terminal_statuses ~w(succeeded failed cancelled)
+  @succeeded "succeeded"
+  @cancelled "cancelled"
   @permission_profiles ~w(read_only workspace_write)
   @reasoning_efforts ~w(none minimal low medium high max)
   @objective_bytes 32_768
@@ -126,6 +128,21 @@ defmodule OpenAgents.Threads.Thread do
   def open?(%__MODULE__{status: "open"}), do: true
   def open?(%__MODULE__{}), do: false
 
+  @doc "The status a thread takes when its report names no outcome to disagree with."
+  def succeeded, do: @succeeded
+
+  @doc """
+  Whether `thread` was cancelled — the one end that cannot be reopened.
+
+  A cancelled thread was disposed of on purpose: `DELETE /api/v1/threads/{id}`
+  is the verb, and a caller that used it asked for the thread to be over.
+  Every other end is a state the work reached, and a later session may be
+  granted authority on it again (THREAD-001).
+  """
+  @spec cancelled?(t()) :: boolean()
+  def cancelled?(%__MODULE__{status: @cancelled}), do: true
+  def cancelled?(%__MODULE__{}), do: false
+
   @doc """
   The immutable capture at open time. `owner_visitor_id`, `status`,
   `generation`, and `started_at` are set by the context, never cast from a
@@ -199,7 +216,20 @@ defmodule OpenAgents.Threads.Thread do
     |> check_constraint(:event_count, name: :threads_event_count_nonnegative_check)
   end
 
-  @doc "The terminal receipt. A thread ends once and carries a typed report when it does."
+  @doc """
+  The terminal receipt. A thread ends once and carries a typed report when it
+  does.
+
+  The status and the error code have to agree, and the agreement is checked
+  here rather than at each caller: `succeeded` means the thread carries no
+  error code, and every other terminal status has to name one. Without that
+  rule a caller could file an interrupted run, a failed one, or one that ran
+  out of steps as `succeeded`, and the durable record would read as the
+  opposite of what happened — which is the same class of bug as recording a
+  session that answered correctly as `cancelled` (issue #106). The database
+  refuses the same pair (`threads_terminal_outcome_check`), so no writer that
+  skips this changeset can file one either.
+  """
   def terminal_changeset(%__MODULE__{} = thread, attributes) do
     thread
     |> cast(attributes, [
@@ -217,9 +247,58 @@ defmodule OpenAgents.Threads.Thread do
     |> validate_format(:report_digest, ~r/\Asha256:[0-9a-f]{64}\z/)
     |> validate_length(:report_type, max: 80)
     |> validate_length(:error_code, max: 80)
+    |> validate_outcome()
     |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:report, name: :threads_report_bound_check)
     |> check_constraint(:report_type, name: :threads_report_type_bound_check)
+    |> check_constraint(:error_code, name: :threads_terminal_outcome_check)
+    |> check_constraint(:completed_at, name: :threads_terminal_shape_check)
+  end
+
+  defp validate_outcome(changeset) do
+    status = get_field(changeset, :status)
+    error_code = get_field(changeset, :error_code)
+
+    cond do
+      status == @succeeded and present?(error_code) ->
+        add_error(
+          changeset,
+          :error_code,
+          "must be empty on a thread that succeeded; name the status the outcome actually had"
+        )
+
+      status in @terminal_statuses and status != @succeeded and not present?(error_code) ->
+        add_error(changeset, :error_code, "is required on a thread that did not succeed")
+
+      true ->
+        changeset
+    end
+  end
+
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
+
+  @doc """
+  Reopen a thread that ended, so a later session can be granted authority on it
+  again.
+
+  A thread that reported is the thing `oa coder --resume` comes back to, and a
+  grant cannot be minted for a terminal thread (THREAD-001). Reopening clears
+  the terminal columns, which the shape constraint requires of an open row, and
+  `OpenAgents.Threads.mint_grant/1` writes the report it is clearing into the
+  transcript first, so nothing the thread reported is lost. Cancelling is the
+  one end this does not undo: it is a disposal, not a pause.
+  """
+  def reopen_changeset(%__MODULE__{} = thread) do
+    thread
+    |> change(%{
+      status: "open",
+      report: nil,
+      report_digest: nil,
+      report_type: nil,
+      error_code: nil,
+      completed_at: nil
+    })
+    |> check_constraint(:status, name: :threads_status_check)
     |> check_constraint(:completed_at, name: :threads_terminal_shape_check)
   end
 end

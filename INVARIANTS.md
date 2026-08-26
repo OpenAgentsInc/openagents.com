@@ -2631,8 +2631,45 @@ conversation, and a thread is not one.
 - **Authority does not outlive the thread.** Every terminal transition
   (`OpenAgents.Threads.finish/2`, `OpenAgents.Threads.cancel/2`) revokes the
   thread's active grants inside the transaction that writes the terminal row,
-  and `mint_grant/1` refuses a thread that is not open. Deleting a thread — or
-  the account, under the DATA-004 cascade — deletes its grants with it.
+  so no terminal thread ever holds a live grant. Deleting a thread — or the
+  account, under the DATA-004 cascade — deletes its grants with it.
+
+  Amended 2026-08-26 (issue #106): a thread that reported can be granted
+  again, and being granted again is what reopens it.
+  `OpenAgents.Threads.mint_grant/1` used to refuse every thread that was not
+  open, which made the two halves of the contract contradict each other the
+  moment a client started ending its threads honestly: every honest end is
+  terminal, so a session could keep a thread resumable only by never saying
+  what it did. `oa coder --resume` was refused before it reached the
+  transcript it exists to replay. The mint now reopens a reported thread
+  inside its own transaction — the report is written to the transcript as
+  `thread.reopened`, the terminal columns clear, the admission cap is taken
+  again under the same owner lock, and the generation advances — so the thread
+  holding authority is an open thread at every instant, and reopening loses
+  nothing that was recorded. A **cancelled** thread stays refused
+  `:thread_terminal`: `DELETE` is a disposal, and a caller that used it asked
+  for the thread to be over. A local-lane thread stays refused
+  `:thread_local_lane` in every state.
+- **A terminal thread says what happened, and cannot say two things.** Added
+  2026-08-26 (issue #106). `POST /api/v1/threads/{id}/report` routes
+  `finish/2`, which had no route and no caller in `lib/` — so `DELETE` was the
+  only way to end a thread, and 31 of one account's 50 most recent threads
+  read `cancelled` with "The thread was cancelled before it reported." for
+  sessions that answered correctly and exited 0. The record said the opposite
+  of what happened. The mirror of that bug is worse, so the outcome is stated
+  rather than inferred and the statement has to be internally consistent: the
+  route requires an explicit `status` from the terminal three and never
+  defaults to `succeeded`, and `succeeded` carries no `error_code` while
+  `failed` and `cancelled` must each name one.
+  `OpenAgents.Threads.Thread.terminal_changeset/2` refuses a pair that
+  disagrees and `threads_terminal_outcome_check` refuses it again in the
+  database, so a run that failed, was interrupted, or exhausted its steps
+  cannot be filed as a success by any writer. Reporting revokes exactly as
+  cancelling does. A resent identical report is answered rather than refused,
+  because a client retrying a call it never saw the answer to is not reporting
+  twice; a *different* second report is refused `thread_terminal`, because a
+  thread reports once and the standing report is not overwritten by a later
+  claim.
 - **A local-lane thread holds no authority, ever.** Added 2026-08-25 (issue
   #243). `threads.lane` admits `thread` and `local` by check constraint,
   defaulting to `thread` — the granted lane every earlier thread came
@@ -6303,7 +6340,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | WORK-001 | `test/openagents/work_job_test.exs`, `test/openagents/deep_work_tool_loop_test.exs` |
 | SELF-EDIT-001 | `test/openagents/tools/repository_mutation_tools_test.exs`, `test/openagents/coding_job_test.exs`, `test/openagents/dependency_boundary_test.exs` |
 | SCV-001 | `test/openagents/scv/deployments_test.exs`, `test/openagents/dependency_boundary_test.exs` |
-| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs`, `test/openagents/threads/local_lane_test.exs` |
+| THREAD-001 | `test/openagents/threads/grant_fence_test.exs`, `test/openagents/threads/grant_token_reach_test.exs`, `test/openagents/threads_test.exs`, `test/openagents/threads/credit_race_test.exs`, `test/openagents/threads/local_lane_test.exs`, `test/openagents_web/controllers/thread_controller_test.exs` |
 | THREAD-002 | `test/openagents/threads/visibility_test.exs`, `test/openagents_web/thread_visibility_test.exs`, `test/openagents/threads/grant_token_reach_test.exs` |
 | THREAD-003 | `test/openagents/threads_test.exs`, `test/openagents/threads/visibility_test.exs` |
 | OUTCOME-001 | `test/openagents/accepted_outcome_test.exs`, `test/openagents/issues/completion_claims_test.exs`, `test/openagents_web/controllers/issue_completion_claim_controller_test.exs` |

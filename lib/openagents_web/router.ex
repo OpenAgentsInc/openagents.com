@@ -647,6 +647,7 @@ defmodule OpenAgentsWeb.Router do
     get "/threads", ThreadController, :index
     get "/threads/:thread_id", ThreadController, :show
     delete "/threads/:thread_id", ThreadController, :delete
+    post "/threads/:thread_id/report", ThreadController, :report
     get "/threads/:thread_id/events", ThreadController, :events
     post "/threads/:thread_id/events", ThreadController, :record
     post "/threads/:thread_id/grants", ThreadController, :mint

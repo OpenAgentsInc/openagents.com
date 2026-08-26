@@ -456,6 +456,10 @@ defmodule OpenAgentsWeb.ApiExtensionController do
         "GET /api/v1/models",
         "POST /api/v1/threads",
         "GET /api/v1/threads/{thread_id}",
+        "GET /api/v1/threads/{thread_id}/events",
+        "POST /api/v1/threads/{thread_id}/events",
+        "POST /api/v1/threads/{thread_id}/report",
+        "POST /api/v1/threads/{thread_id}/grants",
         "DELETE /api/v1/threads/{thread_id}"
       ],
       "parameters" => %{
@@ -549,6 +553,29 @@ defmodule OpenAgentsWeb.ApiExtensionController do
             "balance, and an account with nothing left is refused " <>
             "`credit_exhausted`. Authority that passes `expires_at` stops " <>
             "being live and stops holding a slot, with or without a request."
+      },
+      "ending" => %{
+        "description" =>
+          "A thread ends one of two ways, and they are not interchangeable. " <>
+            "POST /api/v1/threads/{thread_id}/report says what the thread did " <>
+            "and revokes its authority; DELETE /api/v1/threads/{thread_id} " <>
+            "cancels a thread that never reported and revokes the same way. A " <>
+            "session that answered and exited 0 must report, or its permanent " <>
+            "record reads as a cancellation. The report body names `status` — " <>
+            "required, one of the terminal statuses, never assumed — and " <>
+            "`report`, with optional `report_type` and `usage`. `status` and " <>
+            "`error_code` must agree: `succeeded` carries no error code, and " <>
+            "`failed` or `cancelled` must name one, so a run that failed " <>
+            "cannot be filed as a success. Resending an identical report is " <>
+            "answered; a different second report is refused `thread_terminal`.",
+        "statuses" => OpenAgents.Threads.Thread.terminal_statuses(),
+        "resume" =>
+          "A thread that reported is not finished with. POST " <>
+            "/api/v1/threads/{thread_id}/grants reopens it, records what it " <>
+            "reported in the transcript as `thread.reopened`, and returns " <>
+            "fresh authority under a new generation, so a later session can " <>
+            "replay the transcript and carry on. A cancelled thread is refused " <>
+            "`thread_terminal`: cancelling is a disposal, not a pause."
       },
       "grant" => %{
         "description" =>

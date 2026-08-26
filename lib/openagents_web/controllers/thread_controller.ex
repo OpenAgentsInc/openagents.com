@@ -1,6 +1,7 @@
 defmodule OpenAgentsWeb.ThreadController do
   @moduledoc """
-  The door to a thread: open one, read what it has spent, revoke it.
+  The door to a thread: open one, read what it has spent, say what it did,
+  revoke it.
 
   A thread is the unit of agent work (`docs/taxonomy.md`), and its grant is the
   only way a client reaches a model without holding a provider key. So these
@@ -17,6 +18,12 @@ defmodule OpenAgentsWeb.ThreadController do
   - **Revocation does not wait to be asked.** `DELETE` revokes immediately, and
     every request first retires the account's elapsed authority, so a grant
     past its expiry stops being live whether or not anyone presents it.
+  - **Ending honestly is a different act from being cancelled.**
+    `POST /report` writes what the thread did and revokes; `DELETE` writes a
+    cancellation and revokes. A session that answered and exited 0 has to be
+    able to say so, or its permanent record says the opposite of what happened
+    (issue #106) — and a session that failed has to be unable to claim it
+    succeeded, which is the same bug pointed the other way.
   - **Disclosure is opt-in and narrow.** A thread opens `dark` — owner-only —
     unless the caller names a wider transparency tier, and a tier this surface
     cannot enforce is refused with `thread_visibility_unsupported`. A wider
@@ -168,6 +175,82 @@ defmodule OpenAgentsWeb.ThreadController do
     end)
   end
 
+  @doc """
+  Say what the thread did, and end it.
+
+  This is the route a session calls when its work is over and it has something
+  to say about it. Without it the only way to end a thread was `DELETE`, which
+  writes `cancelled` and the sentence "The thread was cancelled before it
+  reported." — so a session that answered correctly and exited 0 was recorded
+  as a cancellation, and 31 of one account's 50 most recent threads read that
+  way (issue #106). The record said the opposite of what happened.
+
+  The outcome is the caller's to state, and stating it is mandatory. A body
+  with no `status` is refused rather than filed as a success: the server did
+  not run the turns and has no way to know whether they answered anything, and
+  a default of `succeeded` would be the same bug pointed the other way — a run
+  that failed, was interrupted, or exhausted its steps recorded as having
+  worked. The status and the error code have to agree: `succeeded` carries no
+  error code, and `failed` or `cancelled` has to name one. Both halves are
+  refused by `OpenAgents.Threads.Thread.terminal_changeset/2` and by
+  `threads_terminal_outcome_check`, so no client and no future caller can file
+  a pair that disagrees.
+
+  Ending revokes, exactly as `DELETE` does — authority does not outlive the
+  thread (THREAD-001) — and the response carries the revoked grant so a client
+  reads what the session spent in the same answer that ends it.
+
+  A resent identical report is answered rather than refused, so a client that
+  retries a timed-out call is not told its own report failed. A *different*
+  second report is refused `thread_terminal`: a thread reports once, and the
+  standing report is not overwritten by a later claim.
+
+  A thread that reported is not finished with. `POST /grants` reopens it and
+  hands back fresh authority, which is what `oa coder --resume` needs; see
+  `mint/2`.
+  """
+  def report(conn, %{"thread_id" => thread_id} = params) do
+    with_thread(conn, thread_id, fn thread ->
+      case outcome(params) do
+        {:ok, result} -> file_report(conn, thread, result)
+        {:refused, field, message} -> ApiError.validation_failed(conn, %{field => [message]})
+      end
+    end)
+  end
+
+  defp file_report(conn, thread, result) do
+    case Threads.finish(thread, result) do
+      {:ok, finished} ->
+        render_thread(conn, :ok, finished)
+
+      {:error, :thread_terminal} ->
+        replay_or_refuse(conn, thread, result)
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        ApiError.changeset(conn, changeset)
+    end
+  end
+
+  # A client that retried a call it never saw the answer to is not reporting
+  # twice; it is asking whether its one report landed. So an identical resend
+  # is answered with the standing thread, and only a report that says something
+  # different is refused.
+  defp replay_or_refuse(conn, thread, result) do
+    if thread.report == Map.fetch!(result, :report) and
+         thread.status == Map.fetch!(result, :status) do
+      render_thread(conn, :ok, thread)
+    else
+      sentence =
+        "This thread is #{thread.status} and has already reported. " <>
+          "A thread reports once; open another thread instead."
+
+      ApiError.refuse(conn, "thread_terminal",
+        message: sentence,
+        errors: %{"thread" => [sentence]}
+      )
+    end
+  end
+
   def delete(conn, %{"thread_id" => thread_id}) do
     with_thread(conn, thread_id, fn thread ->
       # Cancelling revokes the thread's authority inside the transaction that
@@ -181,13 +264,29 @@ defmodule OpenAgentsWeb.ThreadController do
     end)
   end
 
+  @doc """
+  Re-mint a thread's authority: the resume door.
+
+  Re-minting is the resume fence — it revokes every active grant, bumps the
+  generation, and hands back fresh authority on the same thread, so a resumed
+  session can never race a zombie of its former self (THREAD-001). The
+  plaintext token exists exactly once, in this response, like the one
+  `POST /api/v1/threads` returns.
+
+  A thread that reported is reopened here rather than refused. Every honest end
+  is terminal, so refusing every terminal thread meant a client could keep a
+  thread resumable only by never saying what it did — the transcript would be
+  there and no session could be granted authority to continue it. What it
+  reported is written into the transcript as `thread.reopened` before the
+  terminal columns clear, so reopening loses nothing.
+
+  A cancelled thread is refused `thread_terminal`. `DELETE` is a disposal, and
+  a caller that used it asked for the thread to be over; resuming it would make
+  cancellation mean nothing. A local-lane thread is refused `thread_lane_local`
+  in every state: it can never hold authority at all.
+  """
   def mint(conn, %{"thread_id" => thread_id}) do
     with_thread(conn, thread_id, fn thread ->
-      # Re-minting is the resume fence: it revokes every active grant, bumps
-      # the generation, and hands back fresh authority on the same thread, so
-      # a resumed session can never race a zombie of its former self
-      # (THREAD-001). The plaintext token exists exactly once, in this
-      # response, like the one `POST /api/v1/threads` returns.
       case Threads.mint_grant(thread) do
         {:ok, minted, grant, token} ->
           conn
@@ -197,8 +296,9 @@ defmodule OpenAgentsWeb.ThreadController do
 
         {:error, :thread_terminal} ->
           sentence =
-            "This thread is #{thread.status} and holds no authority to re-mint. " <>
-              "Open another thread instead."
+            "This thread was cancelled, so it holds no authority to re-mint and " <>
+              "cannot be resumed. Open another thread instead. A thread that " <>
+              "reported its outcome can be resumed here; a cancelled one is over."
 
           ApiError.refuse(conn, "thread_terminal",
             message: sentence,
@@ -216,6 +316,9 @@ defmodule OpenAgentsWeb.ThreadController do
             message: sentence,
             errors: %{"thread" => [sentence]}
           )
+
+        {:error, :thread_quota_reached} ->
+          quota_reached(conn)
 
         {:error, :credit_exhausted} ->
           credit_exhausted(conn)
@@ -523,6 +626,105 @@ defmodule OpenAgentsWeb.ThreadController do
     {:refused, "events[#{index}]", "#{inspect(event)} is not an object."}
   end
 
+  # What a thread reports, read from the body with nothing inferred. Every
+  # refusal here is a 422 naming its field: the alternative is guessing, and a
+  # guess that lands on `succeeded` is the mirror of the bug this route exists
+  # to fix (issue #106).
+  defp outcome(params) do
+    with {:ok, status} <- terminal_status(params),
+         {:ok, report} <- terminal_report(params),
+         {:ok, error_code} <- error_code(params, status),
+         {:ok, report_type} <- report_type(params),
+         {:ok, usage} <- usage(params) do
+      {:ok,
+       %{
+         status: status,
+         report: report,
+         error_code: error_code,
+         usage: usage
+       }
+       |> put_present(:report_type, report_type)}
+    end
+  end
+
+  defp put_present(map, _key, nil), do: map
+  defp put_present(map, key, value), do: Map.put(map, key, value)
+
+  defp terminal_status(%{"status" => status}) when is_binary(status) do
+    if status in Thread.terminal_statuses() do
+      {:ok, status}
+    else
+      {:refused, "status",
+       "must be one of #{Enum.join(Thread.terminal_statuses(), ", ")}, naming how the thread ended"}
+    end
+  end
+
+  defp terminal_status(_params) do
+    {:refused, "status",
+     "is required: name how the thread ended, one of " <>
+       "#{Enum.join(Thread.terminal_statuses(), ", ")}. The server does not assume a run " <>
+       "succeeded because it stopped."}
+  end
+
+  defp terminal_report(%{"report" => report}) when is_binary(report) do
+    case String.trim(report) do
+      "" -> {:refused, "report", "cannot be blank"}
+      _present -> {:ok, report}
+    end
+  end
+
+  defp terminal_report(_params), do: {:refused, "report", "is required"}
+
+  # A success that names an error code and a failure that names none are both
+  # refused, because the durable record has to say one thing about what
+  # happened rather than two.
+  defp error_code(params, status) do
+    given = params |> Map.get("error_code") |> blank_to_nil()
+
+    cond do
+      not is_nil(Map.get(params, "error_code")) and not is_binary(Map.get(params, "error_code")) ->
+        {:refused, "error_code", "must be a string"}
+
+      status == Thread.succeeded() and given != nil ->
+        {:refused, "error_code",
+         "must be empty on a thread that succeeded; report the status the run actually had"}
+
+      status != Thread.succeeded() and given == nil ->
+        {:refused, "error_code", "is required on a thread that did not succeed: name why"}
+
+      true ->
+        {:ok, given}
+    end
+  end
+
+  defp report_type(%{"report_type" => report_type}) when is_binary(report_type) do
+    case String.trim(report_type) do
+      "" -> {:refused, "report_type", "cannot be blank"}
+      trimmed when byte_size(trimmed) > 80 -> {:refused, "report_type", "is longer than 80 bytes"}
+      _present -> {:ok, report_type}
+    end
+  end
+
+  defp report_type(%{"report_type" => value}) when not is_nil(value) do
+    {:refused, "report_type", "must be a string"}
+  end
+
+  defp report_type(_params), do: {:ok, nil}
+
+  defp usage(%{"usage" => usage}) when is_map(usage), do: {:ok, usage}
+  defp usage(%{"usage" => nil}), do: {:ok, %{}}
+  defp usage(%{"usage" => _other}), do: {:refused, "usage", "must be an object"}
+  defp usage(_params), do: {:ok, %{}}
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      _present -> value
+    end
+  end
+
+  defp blank_to_nil(_value), do: nil
+
   defp event_type(%{"event_type" => event_type}) when is_binary(event_type) do
     if String.trim(event_type) == "" do
       {:refused, "event_type", "The event type names what happened and cannot be blank."}
@@ -780,6 +982,7 @@ defmodule OpenAgentsWeb.ThreadController do
       "generation" => thread.generation,
       "event_count" => thread.event_count,
       "report" => thread.report,
+      "report_type" => thread.report_type,
       "error_code" => thread.error_code,
       "started_at" => stamp(thread.started_at),
       "completed_at" => stamp(thread.completed_at),

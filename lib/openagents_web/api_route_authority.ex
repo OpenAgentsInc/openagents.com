@@ -205,6 +205,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "get /api/v1/threads" => {:required_bearer, :thread, :envelope},
       "get /api/v1/threads/:thread_id" => {:required_bearer, :thread, :envelope},
       "delete /api/v1/threads/:thread_id" => {:required_bearer, :thread, :envelope},
+      "post /api/v1/threads/:thread_id/report" => {:required_bearer, :thread, :envelope},
       "get /api/v1/threads/:thread_id/events" => {:required_bearer, :thread, :envelope},
       "post /api/v1/threads/:thread_id/events" => {:required_bearer, :thread, :envelope},
       "post /api/v1/threads/:thread_id/grants" => {:required_bearer, :thread, :envelope},

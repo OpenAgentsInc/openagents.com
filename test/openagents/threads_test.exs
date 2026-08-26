@@ -141,6 +141,67 @@ defmodule OpenAgents.ThreadsTest do
       assert cancelled.status == "cancelled"
       assert cancelled.error_code == "cancelled"
     end
+
+    test "a report that names an outcome carries it, error code and all" do
+      user = owner("finish-failed")
+      {:ok, thread} = Threads.open(user, "Run out of steps")
+
+      assert {:ok, failed} =
+               Threads.finish(thread, %{
+                 status: "failed",
+                 report: "The turn budget ran out before an answer.",
+                 report_type: "failure",
+                 error_code: "max_steps"
+               })
+
+      assert failed.status == "failed"
+      assert failed.error_code == "max_steps"
+    end
+
+    test "a success cannot carry an error code" do
+      user = owner("finish-incoherent-success")
+      {:ok, thread} = Threads.open(user, "Claim both")
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Threads.finish(thread, %{
+                 status: "succeeded",
+                 report: "It worked.",
+                 error_code: "max_steps"
+               })
+
+      assert %{error_code: [_ | _]} = errors_on(changeset)
+      assert Threads.get_for_user(user, thread.id).status == "open"
+    end
+
+    test "a failure has to name why, so nothing ends unexplained" do
+      user = owner("finish-incoherent-failure")
+      {:ok, thread} = Threads.open(user, "Fail silently")
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Threads.finish(thread, %{status: "failed", report: "It did not work."})
+
+      assert %{error_code: [_ | _]} = errors_on(changeset)
+      assert Threads.get_for_user(user, thread.id).status == "open"
+    end
+
+    test "the coherence rule is the database's too, not only the changeset's" do
+      user = owner("finish-coherence-db")
+      {:ok, thread} = Threads.open(user, "Write around the changeset")
+
+      assert_raise Postgrex.Error, fn ->
+        Repo.update_all(
+          from(t in Thread, where: t.id == ^thread.id),
+          set: [
+            status: "succeeded",
+            report: "It worked.",
+            report_digest: "sha256:" <> String.duplicate("0", 64),
+            report_type: "outcome",
+            error_code: "max_steps",
+            completed_at: DateTime.utc_now()
+          ]
+        )
+      end
+    end
   end
 
   describe "mint_grant/1 — the thread fence" do
@@ -183,7 +244,66 @@ defmodule OpenAgents.ThreadsTest do
 
       assert Threads.active_grants(finished) == []
       assert {:error, :grant_revoked} = Inference.resolve(token)
-      assert {:error, :thread_terminal} = Threads.mint_grant(finished)
+    end
+
+    test "a cancelled thread is refused: cancelling is the end that means it" do
+      user = owner("cancelled-no-remint")
+      {:ok, thread} = Threads.open(user, "Cancel then resume")
+      {:ok, thread, _grant, _token} = Threads.mint_grant(thread)
+      {:ok, cancelled} = Threads.cancel(thread)
+
+      assert {:error, :thread_terminal} = Threads.mint_grant(cancelled)
+      assert Threads.get_for_user(user, thread.id).status == "cancelled"
+    end
+
+    test "a thread that reported is re-granted by reopening it, and keeps its report" do
+      user = owner("remint-reported")
+      {:ok, thread} = Threads.open(user, "Report then resume")
+      {:ok, thread, _grant, first_token} = Threads.mint_grant(thread)
+      {:ok, finished} = Threads.finish(thread, %{report: "It worked.", report_type: "outcome"})
+
+      assert {:ok, resumed, grant, token} = Threads.mint_grant(finished)
+
+      assert resumed.status == "open"
+      assert resumed.report == nil
+      assert resumed.report_digest == nil
+      assert resumed.report_type == nil
+      assert resumed.error_code == nil
+      assert resumed.completed_at == nil
+      assert resumed.generation == 2
+
+      assert grant.thread_id == thread.id
+      assert {:ok, %Grant{status: "active"}} = Inference.resolve(token)
+      assert {:error, :grant_revoked} = Inference.resolve(first_token)
+
+      # Nothing is lost by reopening: the report the thread carried moves into
+      # the transcript, which is the durable record either way.
+      reopened =
+        resumed |> Threads.list_events() |> Enum.find(&(&1.event_type == "thread.reopened"))
+
+      assert reopened.payload["status"] == "succeeded"
+      assert reopened.payload["report"] == "It worked."
+      assert reopened.payload["error_code"] == nil
+
+      # And the transcript accepts the resumed session's turns.
+      assert {:ok, _appended} = Threads.record_event(resumed, "turn.user", %{"text" => "again"})
+    end
+
+    test "a failed thread resumes too: failing is a state of the work, not a disposal" do
+      user = owner("remint-failed")
+      {:ok, thread} = Threads.open(user, "Fail then resume")
+      {:ok, thread, _grant, _token} = Threads.mint_grant(thread)
+
+      {:ok, failed} =
+        Threads.finish(thread, %{
+          status: "failed",
+          report: "The turn budget ran out.",
+          error_code: "max_steps"
+        })
+
+      assert {:ok, resumed, _grant, _token} = Threads.mint_grant(failed)
+      assert resumed.status == "open"
+      assert resumed.error_code == nil
     end
 
     test "deleting a thread deletes its authority" do

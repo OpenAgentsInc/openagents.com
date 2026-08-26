@@ -400,9 +400,23 @@ binds to it: an inference grant names a thread or a conversation, never both
 and never neither (THREAD-001). The context is `OpenAgents.Threads`, the record
 is `OpenAgents.Threads.Thread`, and the transcript entry is
 `OpenAgents.Threads.Event`. A caller opens one with `POST /api/v1/threads`,
-reads what it has spent with `GET /api/v1/threads/{thread_id}`, and revokes it
-with `DELETE /api/v1/threads/{thread_id}`, all behind the `chat:account` scope
-and served by `OpenAgentsWeb.ThreadController`. A thread opened with
+reads what it has spent with `GET /api/v1/threads/{thread_id}`, ends it with
+`POST /api/v1/threads/{thread_id}/report`, and cancels it with
+`DELETE /api/v1/threads/{thread_id}`, all behind the `chat:account` scope
+and served by `OpenAgentsWeb.ThreadController`.
+
+**Report versus cancel** — the two ways a thread ends, and they say different
+things. To **report** is to say what the thread did: the caller names the
+outcome (`succeeded`, `failed`, or `cancelled`) and the sentence that goes with
+it, and the record carries that. To **cancel** is to end a thread that never
+reported; `DELETE` writes `cancelled` with the error code `cancelled` and the
+sentence "The thread was cancelled before it reported." Do not write "cancel"
+for a session that finished its work, and do not write "finish" or "complete"
+for a `DELETE` — the whole point of the pair is that a session that answered
+correctly is not recorded as an abandonment (issue #106). To **resume** is to
+ask for authority on a thread that already reported: `POST /grants` reopens it,
+records `thread.reopened` in the transcript, and grants a new generation. A
+cancelled thread cannot be resumed, because cancelling is a disposal. A thread opened with
 `"lane": "local"` is transcript-only: its model is the vendor string a local
 runtime serves, and it is never granted authority — the server records the run
 without paying for it (THREAD-001, issue #243). The CLI that stops writing to

@@ -728,33 +728,50 @@ defmodule OpenAgents.Threads do
   tokens, or cost, is refused `:parent_authority_exhausted` rather than minted
   authority it cannot use.
 
-  A local-lane thread is refused `:thread_local_lane` the way a terminal
-  thread is refused `:thread_terminal`. Its model is a vendor string a local
-  runtime serves, not an admitted catalog id, so a grant naming it would be
-  authority no provider here can honor — and the lane's whole contract is that
-  it holds none (issue #243). The refusal is what keeps the no-provider-key
-  and metering invariants true by construction rather than by review.
+  A local-lane thread is refused `:thread_local_lane`. Its model is a vendor
+  string a local runtime serves, not an admitted catalog id, so a grant naming
+  it would be authority no provider here can honor — and the lane's whole
+  contract is that it holds none (issue #243). The refusal is what keeps the
+  no-provider-key and metering invariants true by construction rather than by
+  review.
+
+  This is also the resume door. A thread that reported is reopened here: its
+  report is written into the transcript as `thread.reopened`, the terminal
+  columns clear, the account's admission cap is taken again, and the thread is
+  granted fresh authority under a new generation. Without that, a client that
+  ends its thread honestly could never come back to it — every honest end is
+  terminal, and `mint_grant/1` used to refuse every terminal thread — so
+  `oa coder --resume` would be refused before it could replay anything, and the
+  only way to keep a thread resumable would be never to say what it did (issue
+  #106). A cancelled thread is the exception, refused `:thread_terminal`:
+  `DELETE` is a disposal, and a caller that used it asked for the thread to be
+  over.
 
   This is the fence. In one transaction: the thread is locked and refused
-  unless it is open, every active grant naming it is revoked, `generation` is
-  bumped, and a fresh grant is minted against the thread — never against a
-  conversation. Returns the plaintext token exactly once.
+  unless it can hold authority, every active grant naming it is revoked, a
+  thread that had reported is reopened, `generation` is bumped, and a fresh
+  grant is minted against the thread — never against a conversation. Returns
+  the plaintext token exactly once.
   """
   @spec mint_grant(Thread.t()) ::
           {:ok, Thread.t(), Grant.t(), String.t()}
           | {:error,
              :thread_terminal
              | :thread_local_lane
+             | :thread_quota_reached
              | :credit_exhausted
              | :parent_authority_exhausted
              | Ecto.Changeset.t()}
   def mint_grant(%Thread{} = thread) do
     Repo.transaction(fn ->
       case locked(thread.id) do
-        %Thread{status: "open", lane: "local"} ->
+        %Thread{lane: "local"} ->
           Repo.rollback(:thread_local_lane)
 
-        %Thread{status: "open"} = current ->
+        %Thread{status: "cancelled"} ->
+          Repo.rollback(:thread_terminal)
+
+        %Thread{} = current ->
           # Concurrent mints for one account serialize on the owner row
           # (locked after the thread row, always in that order), so each mint
           # reads the metered remainder at its own turn rather than from a
@@ -763,7 +780,8 @@ defmodule OpenAgents.Threads do
           _serialized = lock_owner(Repo, current.owner_visitor_id)
           _revoked = Inference.revoke_active_for_thread(current.id)
 
-          with {:ok, fenced} <- current |> Thread.generation_changeset() |> Repo.update(),
+          with {:ok, reopened} <- reopen(current),
+               {:ok, fenced} <- reopened |> Thread.generation_changeset() |> Repo.update(),
                {:ok, ceilings} <- grant_ceilings(fenced),
                {:ok, grant, token} <-
                  Inference.mint(%{
@@ -777,9 +795,6 @@ defmodule OpenAgents.Threads do
           else
             {:error, reason} -> Repo.rollback(reason)
           end
-
-        _terminal ->
-          Repo.rollback(:thread_terminal)
       end
     end)
     |> case do
@@ -788,20 +803,81 @@ defmodule OpenAgents.Threads do
     end
   end
 
+  # An open thread is already where a mint needs it. A thread that reported is
+  # reopened first: its report moves into the transcript, the terminal columns
+  # clear, and the account's admission cap is taken again, because a reopened
+  # thread holds an open thread's slot and an open thread's grant. Called
+  # inside `mint_grant/1`'s transaction, after the owner row is locked, so the
+  # count is the same serialized count `open/3` takes (issue #195).
+  defp reopen(%Thread{status: "open"} = thread), do: {:ok, thread}
+
+  defp reopen(%Thread{} = thread) do
+    ceiling = maximum_open_per_account()
+
+    if ceiling != nil and open_count(thread.owner_visitor_id) >= ceiling do
+      {:error, :thread_quota_reached}
+    else
+      with {:ok, _event} <-
+             insert_event(
+               thread,
+               "thread.reopened",
+               reopened_payload(thread),
+               DateTime.utc_now()
+             ),
+           {:ok, counted} <-
+             thread
+             |> Thread.event_count_changeset(thread.event_count + 1)
+             |> Repo.update() do
+        counted |> Thread.reopen_changeset() |> Repo.update()
+      end
+    end
+  end
+
+  # Reopening clears the terminal columns, so what the thread reported is
+  # written into the transcript on the way past. The transcript is the durable
+  # record either way, and this is what makes reopening lossless: a reader can
+  # still see that the thread reported, what it said, and when.
+  defp reopened_payload(%Thread{} = thread) do
+    %{
+      "status" => thread.status,
+      "report" => thread.report,
+      "report_type" => thread.report_type,
+      "error_code" => thread.error_code,
+      "completed_at" => thread.completed_at && DateTime.to_iso8601(thread.completed_at),
+      "generation" => thread.generation
+    }
+  end
+
   @doc """
   End a thread with its bounded, typed report, revoking its authority in the
   same transaction. Idempotent refusal on an already-terminal thread.
+
+  This is how a thread says what it did. `cancel/2` is how it says it was
+  disposed of before saying anything, and the two are not interchangeable: a
+  session that answered and exited 0 recorded as a cancellation says the
+  opposite of what happened (issue #106). Its mirror is worse, so the outcome
+  and the error code have to agree — `succeeded` carries no error code, and
+  `failed` or `cancelled` has to name one. `Thread.terminal_changeset/2`
+  refuses the pairs that disagree and `threads_terminal_outcome_check` refuses
+  them again in the database.
+
+  The status defaults to `succeeded` for an in-process caller that has already
+  decided the work succeeded. `POST /api/v1/threads/{id}/report` takes no such
+  default: a client states the outcome or is refused, because the server has no
+  way to know whether a turn it did not run answered anything.
   """
   @spec finish(Thread.t(), map()) ::
           {:ok, Thread.t()} | {:error, :thread_terminal | Ecto.Changeset.t()}
   def finish(%Thread{} = thread, result) when is_map(result) do
     report = Map.get(result, :report) || Map.get(result, "report") || ""
+    status = Map.get(result, :status) || Map.get(result, "status") || Thread.succeeded()
 
     attributes = %{
-      status: Map.get(result, :status) || Map.get(result, "status") || "succeeded",
+      status: status,
       report: report,
       report_digest: digest(report),
-      report_type: Map.get(result, :report_type) || Map.get(result, "report_type") || "outcome",
+      report_type:
+        Map.get(result, :report_type) || Map.get(result, "report_type") || report_type(status),
       usage: Map.get(result, :usage) || Map.get(result, "usage") || %{},
       error_code: Map.get(result, :error_code) || Map.get(result, "error_code"),
       completed_at: DateTime.utc_now()
@@ -809,6 +885,12 @@ defmodule OpenAgents.Threads do
 
     terminate(thread, attributes)
   end
+
+  # The report's type follows the outcome it reports unless the caller names
+  # one, so a failure is not filed under the word a success uses.
+  defp report_type("failed"), do: "failure"
+  defp report_type("cancelled"), do: "cancelled"
+  defp report_type(_succeeded), do: "outcome"
 
   @doc "Cancel a thread, revoking its authority in the same transaction."
   @spec cancel(Thread.t(), String.t()) ::

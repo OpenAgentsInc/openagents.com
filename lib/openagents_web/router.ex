@@ -74,6 +74,14 @@ defmodule OpenAgentsWeb.Router do
     plug OpenAgentsWeb.Plugs.AmbientApiTokenAuth, scope: "chat:account"
   end
 
+  # OpenResponses surface. The client can ask for `text/event-stream`
+  # (streaming) or `application/json` (non-streaming), so this pipeline does
+  # not pin `accepts` to a single format.
+  pipeline :openresponses_api do
+    plug OpenAgentsWeb.Plugs.RequestOrigin
+    plug OpenAgentsWeb.Plugs.AmbientApiTokenAuth, scope: "chat:account"
+  end
+
   pipeline :box_control_api do
     plug :accepts, ["json"]
     plug OpenAgentsWeb.Plugs.RequestOrigin
@@ -511,7 +519,7 @@ defmodule OpenAgentsWeb.Router do
   # grants nothing and refuses nobody; see
   # `OpenAgentsWeb.Plugs.AmbientApiTokenAuth`.
   scope "/api/v1", OpenAgentsWeb do
-    pipe_through :ambient_account_api
+    pipe_through :openresponses_api
 
     post "/responses", ResponsesController, :create
   end

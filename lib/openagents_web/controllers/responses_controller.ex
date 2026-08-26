@@ -494,7 +494,27 @@ defmodule OpenAgentsWeb.ResponsesController do
       "model" => model_name,
       "output" => output,
       "error" => nil,
-      "usage" => %{"input_tokens" => 0, "output_tokens" => 0, "total_tokens" => 0}
+      "tools" => [],
+      "tool_choice" => "none",
+      "truncation" => "disabled",
+      "parallel_tool_calls" => false,
+      "text" => %{"format" => %{"type" => "text"}},
+      "top_p" => 1.0,
+      "presence_penalty" => 0.0,
+      "frequency_penalty" => 0.0,
+      "top_logprobs" => 0,
+      "temperature" => 1.0,
+      "store" => false,
+      "background" => false,
+      "service_tier" => "auto",
+      "metadata" => %{},
+      "usage" => %{
+        "input_tokens" => 0,
+        "output_tokens" => 0,
+        "total_tokens" => 0,
+        "input_tokens_details" => %{"cached_tokens" => 0},
+        "output_tokens_details" => %{"reasoning_tokens" => 0}
+      }
     }
   end
 
@@ -525,13 +545,16 @@ defmodule OpenAgentsWeb.ResponsesController do
   defp usage_view(usage) do
     input = whole(usage["input_tokens"])
     output = whole(usage["output_tokens"])
+    cached = whole(usage["cached_tokens"]) || 0
+    reasoning = whole(usage["reasoning_tokens"]) || 0
 
     %{
-      "input_tokens" => input,
-      "output_tokens" => output,
-      "total_tokens" => whole(usage["total_tokens"]) || (input || 0) + (output || 0)
+      "input_tokens" => input || 0,
+      "output_tokens" => output || 0,
+      "total_tokens" => whole(usage["total_tokens"]) || (input || 0) + (output || 0),
+      "input_tokens_details" => %{"cached_tokens" => cached},
+      "output_tokens_details" => %{"reasoning_tokens" => reasoning}
     }
-    |> Map.new(fn {key, value} -> {key, value || 0} end)
   end
 
   defp whole(value) when is_integer(value) and value >= 0, do: value

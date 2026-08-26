@@ -22,6 +22,38 @@ defmodule OpenAgents.DeviceAuthorizations do
   @interval_seconds 5
   @maximum_create_attempts 3
 
+  # The alphabet `random_user_code/0` draws from. `I`, `O`, `0`, and `1` are
+  # absent on purpose: a code is read off one screen and typed into another.
+  @user_code_alphabet "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  @user_code_pattern ~r/\A[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}\z/
+
+  @doc """
+  Casts a caller-supplied user code to the exact shape this module mints.
+
+  `get_pending_by_user_code/1` can be handed anything and answers `nil`, which
+  is the right answer for a lookup. It is the wrong answer for anything that
+  puts the value back into a URL, a page, or a session, because "no such
+  authorization" and "not a code at all" are then indistinguishable.
+
+  This is that second question, and it is asked wherever a code the browser
+  sent goes on to build something. The pattern is anchored with `\\A` and
+  `\\z` rather than `^` and `$`, so a trailing newline cannot smuggle a second
+  line past it, and it admits only the thirty-two characters and one hyphen
+  above — never a path, a host, a scheme, a quote, or a tag.
+
+  Trimming and upcasing come first, so a code retyped in lowercase is the same
+  code. A letter this alphabet excludes is not silently corrected to one it
+  admits: `i` upcases to `I`, which is not in the set, and is refused.
+  """
+  @spec cast_user_code(term()) :: {:ok, String.t()} | :error
+  def cast_user_code(code) when is_binary(code) do
+    normalized = normalize_user_code(code)
+
+    if Regex.match?(@user_code_pattern, normalized), do: {:ok, normalized}, else: :error
+  end
+
+  def cast_user_code(_code), do: :error
+
   def create(scopes \\ ApiTokens.default_scopes())
 
   def create(scopes) when is_list(scopes), do: create(scopes, @maximum_create_attempts)
@@ -214,7 +246,7 @@ defmodule OpenAgents.DeviceAuthorizations do
   end
 
   defp random_user_code do
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    alphabet = @user_code_alphabet
 
     8
     |> :crypto.strong_rand_bytes()

@@ -6,8 +6,21 @@ defmodule OpenAgentsWeb.UserAuth do
   import Plug.Conn
 
   alias OpenAgents.Accounts
+  alias OpenAgents.DeviceAuthorizations
 
   @session_key "user_id"
+
+  # Read back by `OpenAgentsWeb.AuthController.callback/2`. Both ends go
+  # through `DeviceAuthorizations.cast_user_code/1`, so nothing but a code this
+  # application mints ever reaches it or leaves it.
+  @device_session_key "device_user_code"
+
+  # The path is written out because a route pattern cannot be a `~p` sigil.
+  # `OpenAgentsWeb.RouteAuthority` classifies the same literal.
+  @device_path "/device"
+
+  @doc "The session key carrying a device authorization across the sign-in."
+  def device_session_key, do: @device_session_key
 
   def put_no_store(conn, _options), do: put_resp_header(conn, "cache-control", "no-store")
 
@@ -30,11 +43,53 @@ defmodule OpenAgentsWeb.UserAuth do
       do: conn
 
   def require_authenticated_user(conn, _options) do
+    {conn, sign_in_path} = remember_device_authorization(conn)
+
     conn
     |> put_resp_header("cache-control", "no-store")
-    |> Phoenix.Controller.redirect(to: ~p"/")
+    |> Phoenix.Controller.redirect(to: sign_in_path)
     |> halt()
   end
+
+  # `/device` is the one authenticated route a reader reaches before they have
+  # a session here: a terminal sent them, and the code it printed is in the
+  # link. Bouncing them to the public root and forgetting the code turns one
+  # intent into two errands — sign in, then go and find the code again — which
+  # is what issue #129 is about.
+  #
+  # So the code is remembered in the session on the way out.
+  # `OpenAgentsWeb.AuthController.callback/2` reads it back after the OAuth
+  # round trip and returns the reader to the approval with the code already in
+  # hand, so approving is the next click. Carrying it in the session rather
+  # than in the sign-in form means every sign-in control returns them —
+  # the landing page's and the command bar's alike — instead of only the one
+  # that was threaded with the code.
+  #
+  # It rides in the URL as well, but only so the landing page can say what the
+  # sign-in is for. The session is the authority; the parameter is display.
+  #
+  # Only a code travels, never a path. `cast_user_code/1` admits exactly the
+  # shape this application mints, so a crafted `?user_code=` carrying a host, a
+  # path, a newline, or markup is refused here and the reader lands on the
+  # public root exactly as they did before. This is the only place in the
+  # sign-out path that builds a redirect from anything the browser sent, and it
+  # builds one of two constants either way.
+  defp remember_device_authorization(%{request_path: @device_path} = conn) do
+    conn = Plug.Conn.fetch_query_params(conn)
+
+    case DeviceAuthorizations.cast_user_code(conn.query_params["user_code"]) do
+      {:ok, code} ->
+        {put_session(conn, @device_session_key, code), ~p"/?user_code=#{code}"}
+
+      # Reaching the device page without a usable code says the reader is not
+      # mid-flow with the one we may have remembered earlier. Drop it rather
+      # than let it decide where a later sign-in lands.
+      :error ->
+        {delete_session(conn, @device_session_key), ~p"/"}
+    end
+  end
+
+  defp remember_device_authorization(conn), do: {conn, ~p"/"}
 
   def require_admin_user(conn, _options) do
     if Accounts.admin?(conn.assigns[:current_user]) do

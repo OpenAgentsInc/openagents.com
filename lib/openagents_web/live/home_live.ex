@@ -53,7 +53,7 @@ defmodule OpenAgentsWeb.HomeLive do
   @changelog_limit 5
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     if socket.assigns[:current_user] do
       if connected?(socket), do: subscribe()
 
@@ -63,9 +63,27 @@ defmodule OpenAgentsWeb.HomeLive do
        |> assign(:changed_repositories, MapSet.new())
        |> assign_dashboard()}
     else
-      {:ok, socket}
+      {:ok, assign(socket, :device_user_code, device_user_code(params))}
     end
   end
+
+  # A reader who arrives here from `/device` was sent by their terminal, not by
+  # a link to a product. `OpenAgentsWeb.UserAuth` puts the terminal's code in
+  # the URL on the way past so this page can say what the sign-in is for; the
+  # session it also wrote is what actually returns them afterwards, so this
+  # value decides what is rendered and nothing else.
+  #
+  # It is cast rather than read. The parameter is printed on the page, so
+  # admitting only the shape this application mints is what keeps a crafted
+  # link from putting its own words in OpenAgents's mouth.
+  defp device_user_code(params) when is_map(params) do
+    case OpenAgents.DeviceAuthorizations.cast_user_code(params["user_code"]) do
+      {:ok, code} -> code
+      :error -> nil
+    end
+  end
+
+  defp device_user_code(_not_mounted_at_router), do: nil
 
   # Every panel here already had a publisher or has one now, so the dashboard
   # can stop being a snapshot of the moment it was opened. The messages carry
@@ -448,6 +466,51 @@ defmodule OpenAgentsWeb.HomeLive do
           </section>
         </aside>
       </div>
+    </Layouts.app>
+    """
+  end
+
+  # A reader mid-way through authorizing a terminal is not here to be sold the
+  # product; they are here because a sign-in stands between them and one
+  # approval. Showing them the landing page would be the third screen in a row
+  # that does not mention what they are actually doing, so this says it: the
+  # terminal, its code, and where the sign-in puts them next.
+  #
+  # None of the sign-in controls need the code threaded through them. It is in
+  # the session already, so the command bar's control returns the reader to the
+  # approval exactly as this one does.
+  def render(%{device_user_code: code} = assigns) when is_binary(code) do
+    ~H"""
+    <Layouts.app
+      flash={@flash}
+      sidebar_sections={assigns[:sidebar_sections]}
+      current_scope={@current_scope}
+    >
+      <main id="device-sign-in" class="mx-auto w-full max-w-lg space-y-8 px-4 py-16">
+        <.header>
+          Sign in to authorize your terminal
+          <:subtitle>
+            Your terminal is waiting on this code. Signing in brings you straight back to
+            the approval — you will not need to enter it again.
+          </:subtitle>
+        </.header>
+
+        <.card>
+          <div class="space-y-6">
+            <div>
+              <p class="text-sm text-muted-foreground">Code shown in your terminal</p>
+              <code id="device-sign-in-code" class="text-2xl font-semibold tracking-widest">
+                {@device_user_code}
+              </code>
+            </div>
+            <p class="text-sm text-muted-foreground">
+              Check that it matches before you approve. OpenAgents signs you in through GitHub;
+              your GitHub token stays here and never reaches the terminal.
+            </p>
+            <.github_login id="device-signin" size={:lg} />
+          </div>
+        </.card>
+      </main>
     </Layouts.app>
     """
   end

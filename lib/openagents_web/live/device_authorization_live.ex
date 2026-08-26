@@ -92,7 +92,16 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
               <code class="text-2xl font-semibold tracking-widest">{@form[:user_code].value}</code>
             </div>
             <div>
-              <p class="font-medium">Requested access</p>
+              <%!-- Approving is a grant, and a grant with no named grantee is a
+              reflex rather than a decision. The CLI is what this application
+              knows is asking: it is the only client that mints a device
+              authorization, and `DeviceAuthorizations.claim/3` names the token
+              it walks away with "OpenAgents CLI". Which computer it is running
+              on is not recorded, so this does not claim to say. --%>
+              <p class="font-medium">The OpenAgents CLI is asking to act as you</p>
+              <p class="mt-1 text-sm text-muted-foreground">
+                Approving gives it these permissions, and no others:
+              </p>
               <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
                 <li :for={scope <- @authorization.scopes} class="flex items-baseline gap-2">
                   <code>{scope}</code>
@@ -104,7 +113,9 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
                 only if you started this login yourself.
               </p>
               <p class="mt-3 text-sm text-muted-foreground">
-                The CLI never receives your GitHub token.
+                The CLI never receives your GitHub token. This request expires {expires_in(
+                  @authorization
+                )}; after that the terminal has to ask again.
               </p>
             </div>
             <div class="flex flex-wrap justify-end gap-3">
@@ -146,6 +157,16 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
   end
 
   defp code_form(user_code), do: to_form(%{"user_code" => user_code}, as: :device)
+
+  # Rendered once at mount and not counted down. A ticking clock would make the
+  # page a timer, and the window is ten minutes: what the reader needs is that
+  # there is one, not the second it lands on.
+  defp expires_in(%{expires_at: expires_at}) do
+    case DateTime.diff(expires_at, DateTime.utc_now(), :second) do
+      seconds when seconds <= 60 -> "in under a minute"
+      seconds -> "in about #{div(seconds + 30, 60)} minutes"
+    end
+  end
 
   defp scope_description("forge:write"),
     do: "Create and manage repositories, issues, and pull requests as you."

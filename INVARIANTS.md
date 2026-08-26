@@ -279,9 +279,33 @@ session and requires each to refuse. The two OAuth entries are in that class
 and refuse the same way — an anonymous request reaches them and leaves with an
 `auth_error` and no session.
 
+Amended 2026-08-26 (issue #129): a refusal at `/device` remembers the terminal
+code in the browser session and returns the reader to the approval after the
+OAuth round trip, so one intent costs one sign-in rather than two. The refusal
+itself is unchanged — no session, no approval, and the code alone grants
+nothing — but two of its outputs now depend on a value the browser sent: where
+the redirect points, and what the landing page prints.
+
+That value is admitted by exactly one function.
+`OpenAgents.DeviceAuthorizations.cast_user_code/1` returns `{:ok, code}` only
+for the eight-character alphabet this application mints, anchored so no second
+line can follow, and every place that puts the value into a URL, a session, or
+a page casts it rather than trusting an earlier cast. Anything else — a host, a
+scheme-relative URL, a path, a CRLF, markup, a query-string list — leaves the
+reader on the bare public root with nothing remembered, which is where the
+refusal put them before this existed. The proof is adversarial and enumerates
+the crafted forms rather than asserting the happy path.
+
+What this does not do: name the computer that is asking. Nothing in the device
+authorization records one, so the approval page names the client and the
+scopes, which are what the application actually knows.
+
 Evidence: `OpenAgents.GitHubOAuth`, `OpenAgents.Accounts`, `OpenAgentsWeb.AuthController`,
+`OpenAgentsWeb.UserAuth.require_authenticated_user/2`,
+`OpenAgents.DeviceAuthorizations.cast_user_code/1`,
 `OpenAgentsWeb.Endpoint.session_options/0`, `OpenAgents.GitHubOAuthTest`,
-`OpenAgents.AccountsTest`, `OpenAgentsWeb.AuthControllerTest`, and
+`OpenAgents.AccountsTest`, `OpenAgentsWeb.AuthControllerTest`,
+`OpenAgentsWeb.DeviceSignInReturnTest`, and
 `OpenAgentsWeb.AuthenticatedRouteGateTest`.
 
 ### IDENTITY-002 — Conversation lookup never accepts a client database ID
@@ -6272,7 +6296,7 @@ contract; the invariant prose above defines the assertion, not the filename.
 | DEGRADE-001 | `test/openagents/program_artifacts_test.exs`, `test/openagents/turn_provenance_test.exs` |
 | PROGRAM-002 | `test/openagents/shadow_programs_test.exs` |
 | PROGRAM-003 | `test/openagents/program_lifecycle_test.exs` |
-| IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs` |
+| IDENTITY-001 | `test/openagents/github_oauth_test.exs`, `test/openagents_web/auth_controller_test.exs`, `test/openagents_web/device_sign_in_return_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs` |
 | IDENTITY-002 | `test/openagents_web/auth_gate_test.exs`, `test/openagents_web/authenticated_route_gate_test.exs`, `test/openagents_web/live_view_scope_test.exs` |
 | IDENTITY-003 | `test/openagents/memory_portability_test.exs` |
 | IDENTITY-004 | `test/openagents/agents_test.exs`, `test/openagents_web/controllers/agent_controller_test.exs` |

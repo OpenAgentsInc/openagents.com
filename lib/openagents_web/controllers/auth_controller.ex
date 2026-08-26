@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.AuthController do
   use OpenAgentsWeb, :controller
 
-  alias OpenAgents.{Accounts, Analytics, GitHubOAuth, Repositories}
+  alias OpenAgents.{Accounts, Analytics, DeviceAuthorizations, GitHubOAuth, Repositories}
 
   @attempt_session_key "github_oauth_attempt"
   @identity_session_key "posthog_identity"
@@ -26,6 +26,11 @@ defmodule OpenAgentsWeb.AuthController do
   def callback(conn, %{"code" => code, "state" => state}) do
     attempt = get_session(conn, @attempt_session_key)
     verifier = if is_map(attempt), do: attempt["verifier"]
+
+    # Read before the session is cleared below, because clearing it is what
+    # takes the remembered device code away.
+    landing = landing_path(get_session(conn, OpenAgentsWeb.UserAuth.device_session_key()))
+
     conn = delete_session(conn, @attempt_session_key)
 
     with :ok <- GitHubOAuth.consume_attempt(attempt, state),
@@ -44,7 +49,7 @@ defmodule OpenAgentsWeb.AuthController do
       |> put_session("user_id", active_user.id)
       |> put_session(@identity_session_key, identity(active_user))
       |> put_resp_header("cache-control", "no-store")
-      |> redirect(to: ~p"/sarah")
+      |> redirect(to: landing)
     else
       {:error, :banned} -> auth_failure(conn, "banned")
       {:error, _reason} -> auth_failure(conn, "failed")
@@ -90,6 +95,29 @@ defmodule OpenAgentsWeb.AuthController do
         |> put_flash(:error, "GitHub tools could not be disconnected. Try again.")
         |> put_resp_header("cache-control", "no-store")
         |> redirect(to: ~p"/sarah")
+    end
+  end
+
+  # Where a completed sign-in lands.
+  #
+  # A reader who came from `/device` is halfway through authorizing a terminal,
+  # not starting a session at the dashboard. `OpenAgentsWeb.UserAuth` remembers
+  # the terminal's code when it bounces them here, and this returns them to the
+  # approval with the code still in hand, so approving is the next click rather
+  # than a fresh errand.
+  #
+  # The code is cast a second time on the way out. The session is signed, so
+  # this is not defending against a forged cookie; it is keeping one rule —
+  # only a value this application mints ever becomes part of a URL — true at
+  # every place that builds one, rather than true here because it happened to
+  # be checked somewhere else.
+  #
+  # Nothing writes the key back. It has done its work, and `clear_session/1`
+  # above takes it with the rest.
+  defp landing_path(code) do
+    case DeviceAuthorizations.cast_user_code(code) do
+      {:ok, code} -> ~p"/device?user_code=#{code}"
+      :error -> ~p"/sarah"
     end
   end
 

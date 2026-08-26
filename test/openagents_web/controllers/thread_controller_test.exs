@@ -293,9 +293,16 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
         |> json_response(402)
 
       assert body["code"] == "credit_exhausted"
-      assert body["message"] =~ "$100.00"
+
+      # The account's own allowance, not a deployment-wide figure: it is
+      # recorded per account, so the refusal names what this one was granted.
+      # Read from the same source the refusal reads, because a hard-coded
+      # dollar amount here would go red the next time the grant changes without
+      # anything being wrong.
+      granted = "$#{:erlang.float_to_binary(allowance / 1_000_000, decimals: 2)}"
+      assert body["message"] =~ granted
       assert [message] = body["errors"]["credit"]
-      assert message =~ "$100.00"
+      assert message =~ granted
     end
 
     test "the cap counts one account's threads, never another's", %{conn: conn} do

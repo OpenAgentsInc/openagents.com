@@ -4,6 +4,7 @@ defmodule OpenAgents.Accounts do
   import Ecto.Query
 
   alias OpenAgents.Accounts.{OAuthAttempt, TokenVault, User}
+  alias OpenAgents.Inference.Credit
   alias OpenAgents.Repo
 
   @oauth_attempt_retention_seconds 86_400
@@ -22,6 +23,15 @@ defmodule OpenAgents.Accounts do
 
     %User{}
     |> User.github_changeset(attributes)
+    # The credit a new account is granted, written once at creation. The
+    # `on_conflict` replacement list below deliberately omits it, so a sign-in
+    # by an account that already exists carries its own allowance forward
+    # rather than being re-granted the current figure — which is what makes
+    # "new accounts get $20" different from "every account now has $20".
+    |> Ecto.Changeset.put_change(
+      :credit_allowance_microusd,
+      Credit.new_account_allowance()
+    )
     |> Repo.insert(
       on_conflict:
         {:replace,

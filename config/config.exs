@@ -455,9 +455,16 @@ config :openagents,
   thread_grant_ttl_seconds: nil,
   # The inference credit an account draws its threads against. Signing in is
   # what raises it: a visitor holding only a browser key gets the same figure a
-  # single thread used to get, and an account with a user behind it gets $100 to
+  # single thread used to get, and an account with a user behind it gets $20 to
   # spend across every thread it opens.
-  account_credit_microusd: 100_000_000,
+  #
+  # This figure is the default a *new* account is created with, not the
+  # allowance every account holds. The allowance lives on `users` as
+  # `credit_allowance_microusd`, so lowering this number re-prices the next
+  # signup rather than every account that already exists — the accounts created
+  # while it read $100 still hold $100. `OpenAgents.Inference.Credit` reads the
+  # column; only account creation reads this.
+  account_credit_microusd: 20_000_000,
   visitor_credit_microusd: 2_000_000,
   inference_input_price_microusd_per_ktoken: 1_250,
   inference_output_price_microusd_per_ktoken: 10_000,

@@ -11,11 +11,20 @@ defmodule OpenAgents.Inference.Credit do
   bounded threads.
 
   So the credit is the account's, and a thread draws against it. Signing in is
-  what buys the difference: `account_credit_microusd` for an account with a
-  user behind it, `visitor_credit_microusd` for a browser that has not signed
-  in. `remaining/1` is the allowance minus everything the account's grants have
-  metered, and a thread is minted for exactly that, so one thread may spend the
-  whole balance and the next is refused rather than handed a fresh ceiling.
+  what buys the difference: an account with a user behind it holds the
+  allowance recorded on that user, and a browser that has not signed in holds
+  `visitor_credit_microusd`. `remaining/1` is the allowance minus everything
+  the account's grants have metered, and a thread is minted for exactly that,
+  so one thread may spend the whole balance and the next is refused rather than
+  handed a fresh ceiling.
+
+  The account allowance is a column rather than a constant because "what a new
+  account is granted" and "what this account holds" are two questions and a
+  constant can only answer one. `account_credit_microusd` in config is the
+  first — the figure `new_account_allowance/0` returns and account creation
+  writes onto the row. `users.credit_allowance_microusd` is the second, and it
+  is what `allowance/1` reads. Lowering the config figure re-prices the next
+  signup and leaves every existing account holding what it was granted.
 
   Spend is read from the grants themselves rather than kept in a second
   counter. `OpenAgents.Inference.record_usage/2` is the one writer of
@@ -26,6 +35,8 @@ defmodule OpenAgents.Inference.Credit do
 
   import Ecto.Query
 
+  alias OpenAgents.Accounts.User
+  alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Visitor
   alias OpenAgents.Inference.Grant
   alias OpenAgents.Inference.Pricing
@@ -35,17 +46,32 @@ defmodule OpenAgents.Inference.Credit do
   What this account may spend in total, in microUSD.
 
   Signing in raises it, which is the whole point: an account with a user behind
-  it holds `account_credit_microusd`, and a visitor that has only a browser key
-  holds `visitor_credit_microusd`.
+  it holds whatever `users.credit_allowance_microusd` records for that account,
+  and a visitor that has only a browser key holds `visitor_credit_microusd`.
+
+  The account figure is read from the row rather than from config, so two
+  accounts can hold different allowances — which is what "new accounts are
+  granted $20 and existing ones keep $100" means. A visitor root whose user row
+  has somehow lost its allowance falls back to the visitor figure rather than
+  to the new-account grant, because handing an unreadable account the current
+  promotional figure is how a grant gets handed out twice.
   """
   @spec allowance(String.t()) :: non_neg_integer()
   def allowance(visitor_id) when is_binary(visitor_id) do
-    if signed_in?(visitor_id), do: account_allowance(), else: visitor_allowance()
+    case account_allowance(visitor_id) do
+      microusd when is_integer(microusd) -> microusd
+      nil -> visitor_allowance()
+    end
   end
 
-  @doc "What a signed-in account may spend in total, in microUSD."
-  @spec account_allowance() :: non_neg_integer()
-  def account_allowance, do: setting(:account_credit_microusd, 100_000_000)
+  @doc """
+  What a new account is granted, in microUSD.
+
+  Read once, at account creation, and written onto the row. It is not what any
+  particular account holds: ask `allowance/1` for that.
+  """
+  @spec new_account_allowance() :: non_neg_integer()
+  def new_account_allowance, do: setting(:account_credit_microusd, 20_000_000)
 
   @doc "What a browser that has not signed in may spend in total, in microUSD."
   @spec visitor_allowance() :: non_neg_integer()
@@ -139,8 +165,80 @@ defmodule OpenAgents.Inference.Credit do
     }
   end
 
-  defp signed_in?(visitor_id) do
-    Repo.exists?(from v in Visitor, where: v.id == ^visitor_id and not is_nil(v.user_id))
+  @doc """
+  What this account has been granted and what it has spent of it, at once.
+
+  One read for a client that renders a balance, and the honest shape of it:
+  `remaining_microusd` alone would be a figure a reader could watch not move
+  while a coder ran all day on an unpriced lane. `unpriced_calls` and
+  `complete?` travel with it so the reader can tell "this account has spent
+  $1.60" from "this account has spent at least nothing that anyone priced".
+  """
+  @spec account_credit(User.t()) :: %{
+          allowance_microusd: non_neg_integer(),
+          spent_microusd: non_neg_integer(),
+          remaining_microusd: non_neg_integer(),
+          unpriced_calls: non_neg_integer(),
+          complete?: boolean()
+        }
+  def account_credit(%User{} = user) do
+    user
+    |> Conversations.ensure_owner_visitor()
+    |> Map.fetch!(:id)
+    |> balance()
+  end
+
+  @doc """
+  Take erased spend out of the allowance, so a deletion does not refund it.
+
+  Spend is summed from the account's grants, and those grants hang off the
+  visitor root that `OpenAgents.DataRights.delete/3` removes — so the moment an
+  account exercises its deletion right, `spent/1` reads zero again. The user row
+  survives that deletion by design (DATA-004), which is what stops a second
+  signup from being a second $20; nothing stopped the *same* row from being
+  handed its whole balance back, once per deletion, for as long as the account
+  cared to repeat it.
+
+  The fix keeps the arithmetic rather than adding a counter to it: whatever the
+  erased grants had metered is subtracted from the allowance, so
+  `allowance - spent` is the same number a moment after the deletion as a
+  moment before it. The account loses nothing it had left and recovers nothing
+  it had spent.
+  """
+  @spec absorb_erased_spend(Ecto.UUID.t(), Ecto.UUID.t()) :: non_neg_integer()
+  def absorb_erased_spend(user_id, visitor_id)
+      when is_binary(user_id) and is_binary(visitor_id) do
+    case spent(visitor_id) do
+      0 ->
+        0
+
+      erased ->
+        {1, nil} =
+          Repo.update_all(
+            from(user in User,
+              where: user.id == ^user_id,
+              update: [
+                set: [
+                  credit_allowance_microusd:
+                    fragment("GREATEST(? - ?, 0)", user.credit_allowance_microusd, ^erased)
+                ]
+              ]
+            ),
+            []
+          )
+
+        erased
+    end
+  end
+
+  defp account_allowance(visitor_id) do
+    Repo.one(
+      from visitor in Visitor,
+        join: user in User,
+        on: user.id == visitor.user_id,
+        where: visitor.id == ^visitor_id,
+        select: user.credit_allowance_microusd
+    )
   end
 
   defp setting(key, default), do: Application.get_env(:openagents, key, default)

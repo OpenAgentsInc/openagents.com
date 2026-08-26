@@ -185,7 +185,12 @@ defmodule OpenAgentsWeb.ApiExtensionGovernanceTest do
     # The cost figure is the account's credit rather than a per-thread cap, so
     # the document publishes the allowances and the mint reports the remainder.
     refute Map.has_key?(limits["grant"], "max_cost_microusd")
-    assert limits["credit"]["account_microusd"] == Credit.account_allowance()
+    # The published figure is what a new account is granted. It is no longer
+    # what every account holds — the allowance is recorded per account — and
+    # the document says so, pointing a caller at `GET /api/v1/credit` for its
+    # own.
+    assert limits["credit"]["account_microusd"] == Credit.new_account_allowance()
+    assert limits["credit"]["description"] =~ "GET /api/v1/credit"
     assert limits["credit"]["visitor_microusd"] == Credit.visitor_allowance()
 
     created =

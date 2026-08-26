@@ -642,6 +642,11 @@ defmodule OpenAgentsWeb.Router do
     # the thread scope because it names what a thread grant can be minted for.
     get "/models", ModelCatalogController, :index
 
+    # What a thread is minted against. Same scope for the same reason: the
+    # caller who can open a thread is the caller who reads what is left to
+    # open one with.
+    get "/credit", CreditController, :show
+
     post "/threads", ThreadController, :create
     post "/traces", TraceController, :create
     get "/threads", ThreadController, :index

@@ -234,21 +234,4 @@ defmodule OpenAgentsWeb.InstallScriptTest do
              "the installer still claims it installs oa only"
     end
   end
-
-  # Pull one shell function out of the installer so a test can run the real
-  # thing rather than a restatement of it.
-  defp extract_function(script, name) do
-    script
-    |> String.split("\n")
-    |> Enum.drop_while(&(!String.starts_with?(&1, "#{name}() {")))
-    |> Enum.take_while(&(&1 != "}"))
-    |> Kernel.++(["}"])
-    |> Enum.join("\n")
-  end
-
-  # The ERE the installer greps the shell rc file with.
-  defp shadow_pattern(script) do
-    [_, pattern] = Regex.run(~r/grep -Eqs '([^']+)'/, script)
-    pattern
-  end
 end

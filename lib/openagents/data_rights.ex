@@ -14,6 +14,7 @@ defmodule OpenAgents.DataRights do
     SourceMembership
   }
 
+  alias OpenAgents.Inference.Credit
   alias OpenAgents.Memories.Memory
   alias OpenAgents.Memory.SemanticDerivativeReceipt
   alias OpenAgents.{Accounts, ApiTokens, Conversations, ProfileMemory, Repo}
@@ -161,6 +162,15 @@ defmodule OpenAgents.DataRights do
       # They are removed here, explicitly, in the same transaction.
       {_deleted_memories, nil} =
         Repo.delete_all(from(memory in Memory, where: memory.user_id == ^user_id))
+
+      # The visitor root carries the account's inference grants, and spend is
+      # summed from those grants rather than kept in a counter — so deleting it
+      # erases the record of what this account spent as well as the data it
+      # asked to have removed. The allowance absorbs the difference before the
+      # row goes, which leaves the account exactly the credit it had left and
+      # keeps the deletion right from doubling as a way to refill it. See
+      # `OpenAgents.Inference.Credit.absorb_erased_spend/2`.
+      _erased_microusd = Credit.absorb_erased_spend(user_id, visitor_id)
 
       Repo.delete!(owner)
 

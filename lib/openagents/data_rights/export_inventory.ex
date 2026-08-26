@@ -285,6 +285,20 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "so the export ledger now reaches what the deletion cascade always did."
     },
     %{
+      family: :credit,
+      api?: true,
+      status: :portable,
+      mechanism: "GET /api/v1/credit",
+      proof: {:test, "test/openagents_web/controllers/credit_controller_test.exs"},
+      issue: nil,
+      note:
+        "The account's own inference money: what it was granted, what its " <>
+          "grants metered, what is left, and how much of that spend carries no " <>
+          "price. One read, scoped to the caller, so the account gets the whole " <>
+          "record rather than a projection of it. The grants the spend is summed " <>
+          "from leave with the threads that hold them."
+    },
+    %{
       family: :memory,
       api?: true,
       status: :portable,

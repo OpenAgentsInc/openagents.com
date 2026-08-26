@@ -9,12 +9,16 @@ defmodule OpenAgents.Inference.CreditTest do
 
   use OpenAgents.DataCase, async: false
 
+  import Ecto.Query
   import OpenAgentsWeb.ConnCase, only: [github_user: 1]
 
+  alias OpenAgents.Accounts.User
   alias OpenAgents.Conversations
   alias OpenAgents.Conversations.Visitor
+  alias OpenAgents.DataRights
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
+  alias OpenAgents.Repo
   alias OpenAgents.Threads
 
   defp account(key) do
@@ -46,6 +50,106 @@ defmodule OpenAgents.Inference.CreditTest do
   test "signing in raises the allowance to the account credit" do
     assert Credit.allowance(account("credit-signed-in").id) ==
              Application.fetch_env!(:openagents, :account_credit_microusd)
+  end
+
+  # The allowance moved off the config constant and onto the account, so that
+  # "a new account is granted $20" could stop meaning "every account is now
+  # capped at $20". These three tests are what that distinction rests on.
+  describe "the allowance is the account's own" do
+    test "a new account is created holding the configured new-account grant" do
+      user = github_user("credit-new-account")
+
+      assert user.credit_allowance_microusd == Credit.new_account_allowance()
+
+      assert Credit.allowance(Conversations.ensure_owner_visitor(user).id) ==
+               Credit.new_account_allowance()
+    end
+
+    test "an account holding more than the current grant keeps it" do
+      user = github_user("credit-grandfathered")
+      owner = Conversations.ensure_owner_visitor(user)
+
+      # What an account created before the grant was lowered looks like. The
+      # migration writes exactly this figure across every row that already
+      # existed; here it is set directly so the read is what is under test.
+      {1, nil} =
+        Repo.update_all(
+          from(u in User, where: u.id == ^user.id),
+          set: [credit_allowance_microusd: 100_000_000]
+        )
+
+      assert Credit.allowance(owner.id) == 100_000_000
+      refute Credit.allowance(owner.id) == Credit.new_account_allowance()
+      assert Credit.remaining(owner.id) == 100_000_000
+    end
+
+    test "signing in again does not re-grant the credit" do
+      user = github_user("credit-returning")
+      owner = Conversations.ensure_owner_visitor(user)
+
+      {1, nil} =
+        Repo.update_all(
+          from(u in User, where: u.id == ^user.id),
+          set: [credit_allowance_microusd: 3_000_000]
+        )
+
+      # `github_user/1` is the upsert the OAuth callback runs, so this is a
+      # second sign-in by the same GitHub identity. It must not hand the
+      # account the new-account figure again.
+      same_user = github_user("credit-returning")
+
+      assert same_user.id == user.id
+      assert same_user.credit_allowance_microusd == 3_000_000
+      assert Credit.allowance(owner.id) == 3_000_000
+    end
+  end
+
+  # One GitHub identity holds one credited account: `users.github_id` carries a
+  # unique index, so a second signup on the same identity is the same row. The
+  # hole that leaves is deletion — `DataRights.delete/3` erases the visitor root
+  # the account's grants hang off, and spend is summed from those grants. The
+  # user row survives (DATA-004), so the allowance survives with it; without
+  # this, everything the account had spent would come back.
+  describe "deleting product data does not refund spend" do
+    test "the allowance absorbs what the erased grants had metered" do
+      user = github_user("credit-deletion")
+      owner = Conversations.ensure_owner_visitor(user)
+
+      {:ok, _metered} =
+        Inference.record_usage(minted(owner.id), %{
+          "output_tokens" => output_tokens_costing(4_000_000)
+        })
+
+      granted = Credit.allowance(owner.id)
+      assert Credit.spent(owner.id) == 4_000_000
+      left = Credit.remaining(owner.id)
+      assert left == granted - 4_000_000
+
+      {:ok, conversation} = Conversations.ensure_conversation(user)
+      conversation_owner = Conversations.get_conversation_owner!(conversation)
+      assert {:ok, :deleted} = DataRights.delete(user, conversation_owner, conversation)
+
+      # A fresh visitor root, so the erased grants are gone and `spent/1` reads
+      # zero again. What is left has to be the same number it was.
+      next = Conversations.ensure_owner_visitor(Repo.get!(User, user.id))
+      refute next.id == conversation_owner.id
+
+      assert Credit.spent(next.id) == 0
+      assert Credit.allowance(next.id) == granted - 4_000_000
+      assert Credit.remaining(next.id) == left
+    end
+
+    test "an account that spent nothing keeps its whole allowance" do
+      user = github_user("credit-deletion-unspent")
+      granted = Credit.allowance(Conversations.ensure_owner_visitor(user).id)
+
+      {:ok, conversation} = Conversations.ensure_conversation(user)
+      conversation_owner = Conversations.get_conversation_owner!(conversation)
+      assert {:ok, :deleted} = DataRights.delete(user, conversation_owner, conversation)
+
+      next = Conversations.ensure_owner_visitor(Repo.get!(User, user.id))
+      assert Credit.allowance(next.id) == granted
+    end
   end
 
   test "a visitor that has not signed in holds the visitor credit" do

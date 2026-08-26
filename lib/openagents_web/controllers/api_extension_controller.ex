@@ -604,18 +604,27 @@ defmodule OpenAgentsWeb.ApiExtensionController do
     }
   end
 
-  # The two allowances a caller can be minted against. A thread's
-  # `max_cost_microusd` is whichever of these applies minus what the account
-  # has already spent, so publishing the allowance describes the balance while
-  # publishing a per-thread number would describe nothing.
+  # The two figures a caller can be minted against. A thread's
+  # `max_cost_microusd` is whichever applies minus what the account has already
+  # spent, so publishing them describes the balance while publishing a
+  # per-thread number would describe nothing.
+  #
+  # `account_microusd` is what a *new* account is granted, not what every
+  # account holds: the allowance is recorded per account, so one created while
+  # the grant was larger still holds the larger figure. A caller that needs its
+  # own number reads `GET /api/v1/credit`, which is the only place the account's
+  # own allowance, spend, and remainder are stated.
   defp credit_allowances do
     %{
-      "account_microusd" => Credit.account_allowance(),
+      "account_microusd" => Credit.new_account_allowance(),
       "visitor_microusd" => Credit.visitor_allowance(),
       "description" =>
-        "A signed-in account draws against `account_microusd` and an " <>
-          "anonymous visitor against `visitor_microusd`, for the life of the " <>
-          "account rather than per thread. A thread's grant is minted for the " <>
+        "`account_microusd` is the credit a newly created account is granted " <>
+          "and `visitor_microusd` is what an anonymous visitor holds, for the " <>
+          "life of the account rather than per thread. An account's allowance " <>
+          "is recorded on the account, so an older one may hold more than " <>
+          "`account_microusd`: read `GET /api/v1/credit` for the caller's own " <>
+          "allowance, spend, and remainder. A thread's grant is minted for the " <>
           "remainder, so `grant.max_cost_microusd` in the mint response is " <>
           "what is left rather than a fixed cap.",
       "unpriced_lanes" =>

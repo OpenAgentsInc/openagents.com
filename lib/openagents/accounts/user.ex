@@ -25,6 +25,18 @@ defmodule OpenAgents.Accounts.User do
     field :public_leaderboard_opted_out, :boolean, default: false
     field :browser_key_hash, :binary
 
+    # The inference money this account holds, in microUSD. It is on the account
+    # rather than in config because the two are not the same question: config
+    # says what a new account is granted, and this says what this one holds.
+    # An account created when the grant was $100 still holds $100 after the
+    # grant became $20, and a later top-up is a write here rather than a new
+    # subsystem.
+    #
+    # Only the allowance is here. Spend is still summed from the grants' own
+    # `usage` by `OpenAgents.Inference.Credit.spent/1`, so this column can
+    # never disagree with a spend counter — there is no spend counter.
+    field :credit_allowance_microusd, :integer
+
     # The notification channel's address, and the proof its owner asked for it.
     # Nothing reads `notification_email` as a recipient on its own:
     # `OpenAgents.Notifications.EmailChannel.verified_address/1` is the one
@@ -73,6 +85,7 @@ defmodule OpenAgents.Accounts.User do
           github_token_rotated_at: DateTime.t() | nil,
           public_leaderboard_opted_out: boolean(),
           browser_key_hash: binary() | nil,
+          credit_allowance_microusd: non_neg_integer(),
           notification_email: String.t() | nil,
           notification_email_verified_at: DateTime.t() | nil,
           notification_email_code_digest: binary() | nil,

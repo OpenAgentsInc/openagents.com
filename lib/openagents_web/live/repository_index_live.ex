@@ -29,8 +29,7 @@ defmodule OpenAgentsWeb.RepositoryIndexLive do
   # they are interpolated rather than written into the template, where the HEEx
   # parser would read them as tags.
   @cli_steps [
-    %{command: "curl -fsSL https://openagents.com/install.sh | bash", note: "install"},
-    %{command: "npm i -g @openagentsinc/cli", note: "or install with npm"},
+    %{command: "npm i -g @openagentsinc/cli", note: "install"},
     %{command: "openagents auth login", note: "sign in"},
     %{command: "openagents repo create <name>", note: "create"},
     %{command: "openagents repo clone <owner>/<repo>", note: "clone"},

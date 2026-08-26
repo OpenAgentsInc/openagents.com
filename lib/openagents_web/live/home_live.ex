@@ -613,75 +613,99 @@ defmodule OpenAgentsWeb.HomeLive do
           --%>
         </Landing.hero>
 
-        <Landing.feature_grid title="Everything the work needs. Nothing it doesn't.">
-          <:item title="Issues" icon="file-document">
-            Plan, assign, label and close, over an API shaped after the one you already
-            use.
+        <Landing.feature_grid title="One agent, wired to the forge it ships from.">
+          <:item title="A session, or a command" icon="terminal">
+            Run it bare and it opens a coding session. Give it a command and it runs
+            that instead. Three names, one binary.
           </:item>
-          <:item title="Projects" icon="grid">
-            Group issues into work that has a beginning and an end.
+          <:item title="Where your code already is" icon="folder">
+            It reads files and runs shell commands in the checkout you are standing in,
+            on your machine, under your account.
           </:item>
-          <:item title="Milestones" icon="flag">
-            Dates and scope, stated where the work is rather than in another tool.
+          <:item title="Issues and projects" icon="file-document">
+            Read and write issues, labels, milestones, assignees, and projects from the
+            session, over the GitHub-shaped API this forge serves.
           </:item>
-          <:item title="Code" icon="code">
-            Browse repositories and commits beside the issues that changed them.
+          <:item title="Push, already authenticated" icon="branch">
+            One command installs a Git credential helper scoped to this origin. After
+            it, plain <code>git push</code> works, and every accepted push leaves a
+            receipt.
           </:item>
-          <:item title="Agents" icon="bolt">
-            Durable workers that pick up an issue and see it through.
+          <:item title="Sessions that survive" icon="memory-on-remember">
+            The transcript is written to the server as the session runs, so resuming
+            picks up where you stopped — on this machine or another one.
           </:item>
-          <:item title="Receipts" icon="check-circle">
-            Every run leaves evidence that can be read afterwards.
+          <:item title="Plugins in a sandbox" icon="plugin">
+            Extra tools ship as WebAssembly, mounted read-only and pinned to a digest.
+            Ask for one and the session loads it.
           </:item>
-          <:item title="Changelog" icon="text">
-            What shipped, generated from what actually shipped.
+          <:item title="Delegation" icon="robot">
+            Hand part of the work to a child agent, on a rented sandbox or on a machine
+            you paired yourself, and keep going.
           </:item>
-          <:item title="Status" icon="info">
-            The system's own account of whether it is working.
+          <:item title="Credit, not a bill" icon="credits">
+            Every call meters against one balance, and the session can tell you what is
+            left. No plan to pick, and no ceiling on how long a session runs.
           </:item>
         </Landing.feature_grid>
 
         <Landing.faq title="Questions">
-          <:item question="Is this the whole application?" open>
+          <:item question="What does that install command do?" open>
             <p>
-              Yes. The repository is AGPL-3.0, and every surface on this site is built
-              from the same component system documented in the component library.
+              It detects your operating system and processor, downloads the matching
+              build, fetches the checksum file separately, and refuses anything it
+              cannot verify — the bytes are never made executable before the
+              comparison succeeds. Then it links three names, <code>openagents</code>, <code>coder</code>, and <code>oa</code>, into <code>~/.openagents/bin</code>. macOS builds are signed and notarized, so
+              Gatekeeper admits them without a right-click override.
             </p>
           </:item>
-          <:item question="Does it work without JavaScript?">
+          <:item question="Do I need an account?">
             <p>
-              The marketing and documentation surfaces do. Menus are native popovers and
-              disclosures are native <code>&lt;details&gt;</code> elements, so navigation
-              works before any bundle has loaded.
+              Yes, and identity comes from GitHub — there is no separate
+              OpenAgents password. Signing in from the terminal runs the device flow: it prints a
+              code and a URL, you approve it in a browser, and the token lands in your
+              operating system's credential store. Your GitHub token stays here and
+              never reaches the terminal.
             </p>
           </:item>
-          <:item question="What does the API look like?">
+          <:item question="Which model answers?">
             <p>
-              It is shaped after GitHub's REST API and served under <code>/api/v1</code>. An existing client usually needs only a base URL
-              change.
+              One you picked, for the whole session. The
+              <.link navigate={~p"/models"}>models page</.link>
+              lists every model this deployment serves with its rates and context
+              window, and no call is ever answered by a different model than the one
+              you asked for.
+            </p>
+          </:item>
+          <:item question="Is this the whole application?">
+            <p>
+              Yes. The repository is AGPL-3.0, the forge Coder talks to is this site,
+              and every surface on it is built from the same component system
+              documented in the component library.
             </p>
           </:item>
         </Landing.faq>
 
         <Landing.cta
-          title="Start shipping."
-          description="Open an issue and let an agent pick it up."
+          title="Put it in your terminal."
+          description="One command, and the agent is where the work is."
         >
           <:actions>
-            <.button navigate={~p"/docs"} variant={:primary} size={:lg}>
-              Read the docs
+            <.button navigate={~p"/docs/install-cli"} variant={:primary} size={:lg}>
+              Install Coder
             </.button>
           </:actions>
         </Landing.cta>
 
         <Landing.landing_footer
-          tagline="Purpose-built for planning and shipping issues."
+          tagline="Your all-in-one coding agent, wired to the forge it ships from."
           copyright="© 2026 OpenAgents, Inc."
           note="AGPL-3.0. Every surface here is in the repository."
         >
-          <:column title="Product">
+          <:column title="Coder">
+            <.link navigate={~p"/docs/install-cli"}>Install</.link>
             <.link navigate={~p"/docs"}>Documentation</.link>
-            <.link navigate={~p"/docs/issues"}>Issues</.link>
+            <.link navigate={~p"/models"}>Models</.link>
           </:column>
           <:column title="Transparency">
             <.link navigate={~p"/changelog"}>Changelog</.link>

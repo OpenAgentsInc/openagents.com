@@ -303,13 +303,39 @@ fi
 rm -f "$sums_tmp"
 echo "  Verified sha256 ${actual}." >&2
 
+# This binary installs as `oa` and never as `openagents`.
+#
+# `openagents` is the TypeScript CLI, and it is the one scripts, agent tool
+# calls, and the coder's own `openagents` tool invoke by name. This binary
+# implements a strict subset of its commands, so taking that name silently
+# swaps a fraction of the CLI in underneath everything that calls it, and the
+# failure surfaces far from the cause -- `unrecognized subcommand 'reopen'`
+# from a script that has always worked. Taking the name is a parity claim, and
+# it is not one this binary can make yet. See openagents#90.
+#
+# A previous version of this installer did take it. Undo that here, and only
+# where the link points into our own install -- never touch an `openagents`
+# that resolves to something we did not put there.
+reclaim_openagents_name() {
+    for dir in "$BIN_DIR" "$HOME/.local/bin" "/usr/local/bin"; do
+        link="$dir/openagents"
+        [ -L "$link" ] || continue
+        target="$(readlink "$link" 2>/dev/null || true)"
+        case "$target" in
+            *"$(basename "$DOWNLOAD_DIR")"/openagents-*|"$BIN_DIR"/oa|"$BIN_DIR"/openagents|../*/openagents-*)
+                rm -f "$link" 2>/dev/null || true
+                echo "  Removed $link, which shadowed the openagents CLI." >&2
+                ;;
+        esac
+    done
+}
+
 if [ "$os" = "windows" ]; then
     mv -f "$binary_tmp" "$binary_path"
-    for bin_name in openagents.exe oa.exe; do
-        rm -f "$BIN_DIR/$bin_name.old" 2>/dev/null || true
-        cp -f "$binary_path" "$BIN_DIR/$bin_name" 2>/dev/null || true
-    done
-    echo "  Binary installed to $BIN_DIR/openagents.exe and $BIN_DIR/oa.exe." >&2
+    rm -f "$BIN_DIR/oa.exe.old" 2>/dev/null || true
+    cp -f "$binary_path" "$BIN_DIR/oa.exe" 2>/dev/null || true
+    rm -f "$BIN_DIR/openagents.exe" 2>/dev/null || true
+    echo "  Binary installed to $BIN_DIR/oa.exe." >&2
 else
     chmod +x "$binary_tmp"
     mv -f "$binary_tmp" "$binary_path"
@@ -319,9 +345,9 @@ else
     else
         link_target="$binary_path"
     fi
-    ln -sf "$link_target" "$BIN_DIR/openagents"
     ln -sf "$link_target" "$BIN_DIR/oa"
-    echo "  Binary linked to $BIN_DIR/openagents and $BIN_DIR/oa." >&2
+    reclaim_openagents_name
+    echo "  Binary linked to $BIN_DIR/oa." >&2
 fi
 
 path_has_dir() {
@@ -332,10 +358,8 @@ SYMLINK_CREATED=""
 if [ "$os" != "windows" ] && ! path_has_dir "$BIN_DIR"; then
     for candidate in "$HOME/.local/bin" "/usr/local/bin"; do
         if path_has_dir "$candidate" && [ -d "$candidate" ] && [ -w "$candidate" ]; then
-            ln -sf "$BIN_DIR/openagents" "$candidate/openagents"
             ln -sf "$BIN_DIR/oa" "$candidate/oa"
             SYMLINK_CREATED="$candidate"
-            echo "  Symlinked $candidate/openagents -> $BIN_DIR/openagents" >&2
             echo "  Symlinked $candidate/oa -> $BIN_DIR/oa" >&2
             break
         fi
@@ -379,6 +403,59 @@ export PATH="$HOME/.openagents/bin:$PATH"
     echo "  Updated $BIN_DIR in PATH in $config_file." >&2
 fi
 
+# Tell people when `oa` will not run what we just installed.
+#
+# Two ways that happens, and the installer can see both:
+#
+#   1. Another `oa` sits earlier on PATH.
+#   2. A shell alias or function named `oa` is defined in the rc file. This one
+#      is nastier: aliases and functions beat PATH in an interactive shell, the
+#      installer runs non-interactively so `command -v oa` cannot see them, and
+#      nothing about the running binary says which one answered. Grepping the
+#      rc file is the only way to catch it from here.
+#
+# Report, never edit. The alias may be deliberate, and silently rewriting
+# someone's shell config is worse than the shadowing.
+CONFLICTS=""
+
+installed_oa="$BIN_DIR/oa"
+[ "$os" = "windows" ] && installed_oa="$BIN_DIR/oa.exe"
+
+resolved_oa="$(command -v oa 2>/dev/null || true)"
+if [ -n "$resolved_oa" ]; then
+    resolved_real="$(cd "$(dirname "$resolved_oa")" 2>/dev/null && pwd -P)/$(basename "$resolved_oa")"
+    installed_real="$(cd "$(dirname "$installed_oa")" 2>/dev/null && pwd -P)/$(basename "$installed_oa")"
+    if [ -n "$SYMLINK_CREATED" ] && [ "$resolved_real" = "$SYMLINK_CREATED/oa" ]; then
+        : # our own symlink, which points at the binary we just installed
+    elif [ "$resolved_real" != "$installed_real" ]; then
+        CONFLICTS="yes"
+        echo "" >&2
+        echo "WARNING: 'oa' on your PATH is not what this installer just wrote." >&2
+        echo "  PATH resolves oa to: $resolved_oa" >&2
+        echo "  Installed here:      $installed_oa" >&2
+    fi
+fi
+
+if [ -n "$config_file" ] && [ -f "$config_file" ]; then
+    if grep -Eqs '^[[:space:]]*(alias[[:space:]]+oa=|oa[[:space:]]*\(\)|function[[:space:]]+oa\b)' "$config_file"; then
+        CONFLICTS="yes"
+        echo "" >&2
+        echo "WARNING: $config_file defines a shell alias or function named 'oa'." >&2
+        echo "  It takes precedence over PATH, so typing 'oa' will not run the" >&2
+        echo "  binary this installer wrote, and nothing in the output will say so." >&2
+        echo "  Remove it, rename it, or run $installed_oa by its full path." >&2
+        grep -Ens '^[[:space:]]*(alias[[:space:]]+oa=|oa[[:space:]]*\(\)|function[[:space:]]+oa\b)' "$config_file" \
+            | sed 's/^/    /' >&2
+    fi
+fi
+
 echo "" >&2
 echo "OpenAgents CLI $version installation complete!" >&2
-echo "Run 'openagents' or 'oa' to get started." >&2
+if [ -n "$CONFLICTS" ]; then
+    echo "Run '$installed_oa --version' to confirm which build answers." >&2
+else
+    echo "Run 'oa' to get started." >&2
+fi
+echo "" >&2
+echo "Note: this installs 'oa' only. The 'openagents' command is the separate" >&2
+echo "TypeScript CLI (npm i -g @openagentsinc/cli) and is left alone." >&2

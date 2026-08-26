@@ -220,7 +220,8 @@ defmodule OpenAgentsWeb.InstallScriptTest do
     test "says one line about what it installed, and names openagents" do
       script = File.read!(@script)
 
-      assert script =~ ~s(OpenAgents $version installed. Run 'openagents' to start.)
+      assert script =~
+               ~s(OpenAgents v$version installed. Run 'coder' to start Coder or 'openagents' to see CLI commands.)
 
       # The closing block used to carry a shadow warning, a PATH comparison and
       # a note about a different CLI. It was noise on a successful install.

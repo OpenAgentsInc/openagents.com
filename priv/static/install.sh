@@ -235,7 +235,7 @@ else
     fi
 fi
 
-echo "Installing OpenAgents CLI $version ($platform)..." >&2
+echo "Installing OpenAgents CLI v$version ($platform)..." >&2
 
 binary_path="$DOWNLOAD_DIR/openagents-$platform"
 artifact_base="${BASE_URL_PRIMARY}/openagents-${version}-${platform}"
@@ -382,4 +382,4 @@ export PATH="$HOME/.openagents/bin:$PATH"
 fi
 
 echo "" >&2
-echo "OpenAgents $version installed. Run 'openagents' to start." >&2
+echo "OpenAgents v$version installed. Run 'coder' to start Coder or 'openagents' to see CLI commands." >&2

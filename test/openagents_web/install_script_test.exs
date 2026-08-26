@@ -198,102 +198,40 @@ defmodule OpenAgentsWeb.InstallScriptTest do
            "the installer never reads the channel pointer"
   end
 
-  # The Rust binary implements a strict subset of the TypeScript CLI's
-  # commands, so taking the `openagents` name swaps a fraction of the CLI in
-  # underneath every script, agent tool call, and `openagents` tool that
-  # invokes it by name — and the failure surfaces far from the cause, as
-  # `unrecognized subcommand` from something that always worked. See
-  # openagents#90.
-  #
-  # These run the installer's own shell, rather than grepping it. A test that
-  # only greps passes the moment someone writes the same bug a different way.
-  describe "the `openagents` name" do
-    test "is never written by an install" do
+  describe "the name it installs" do
+    # This reverses the `oa`-only rule. That rule existed because the Rust
+    # binary answered a strict subset of the CLI's commands, so taking the
+    # `openagents` name swapped a fraction of the CLI in underneath every
+    # script that called it. That is no longer true: the shipped binary
+    # dispatches the whole command set and is the coder session besides.
+    test "installs openagents, coder, and oa for the same binary" do
       script = File.read!(@script)
 
-      refute script =~ ~s(ln -sf "$link_target" "$BIN_DIR/openagents"),
-             "the installer links the openagents name at the Rust binary"
+      assert script =~ ~s(ln -sf "$link_target" "$BIN_DIR/openagents"),
+             "the installer does not create the openagents name"
 
-      refute script =~ ~s($candidate/openagents),
-             "the installer puts the openagents name on PATH"
+      assert script =~ ~s(ln -sf "$link_target" "$BIN_DIR/coder"),
+             "the installer does not create the coder name"
+
+      assert script =~ ~s(ln -sf "$link_target" "$BIN_DIR/oa"),
+             "the installer does not create the oa alias"
     end
 
-    test "is reclaimed when an earlier install took it, and only then" do
-      tmp = Path.join(System.tmp_dir!(), "oa-reclaim-#{System.unique_integer([:positive])}")
-      bin = Path.join(tmp, "bin")
-      downloads = Path.join(tmp, "downloads")
-      File.mkdir_p!(bin)
-      File.mkdir_p!(downloads)
-
-      binary = Path.join(downloads, "openagents-macos-aarch64")
-      File.write!(binary, "#!/bin/sh\n")
-
-      # What a previous install left behind, and what must go.
-      File.ln_s!("../downloads/openagents-macos-aarch64", Path.join(bin, "openagents"))
-
-      # Someone else's `openagents`, which must survive untouched.
-      other = Path.join(tmp, "real-openagents")
-      File.write!(other, "#!/bin/sh\n")
-      File.ln_s!(other, Path.join(bin, "openagents-real"))
-
+    test "says one line about what it installed, and names openagents" do
       script = File.read!(@script)
 
-      # The function working proves nothing if the install path never calls it.
-      assert script =~ ~r/^\s+reclaim_openagents_name$/m,
-             "reclaim_openagents_name is defined and never called"
+      assert script =~ ~s(OpenAgents $version installed. Run 'openagents' to start.)
 
-      body = extract_function(script, "reclaim_openagents_name")
+      # The closing block used to carry a shadow warning, a PATH comparison and
+      # a note about a different CLI. It was noise on a successful install.
+      refute script =~ "TypeScript CLI",
+             "the installer talks about a different CLI"
 
-      runner = Path.join(tmp, "run.sh")
+      refute script =~ "npm i -g",
+             "the installer sends the reader somewhere else"
 
-      File.write!(runner, """
-      BIN_DIR="#{bin}"
-      DOWNLOAD_DIR="#{downloads}"
-      HOME="#{tmp}"
-      #{body}
-      reclaim_openagents_name
-      """)
-
-      assert {_out, 0} = System.cmd("sh", [runner], stderr_to_stdout: true)
-
-      refute File.exists?(Path.join(bin, "openagents")),
-             "the link an earlier install left is still shadowing the CLI"
-
-      assert File.exists?(Path.join(bin, "openagents-real")),
-             "an openagents we did not install was removed"
-
-      assert File.exists?(binary), "the binary itself was removed with the link"
-
-      File.rm_rf!(tmp)
-    end
-
-    test "a shell alias named oa is reported, since it beats PATH and is invisible to `command -v`" do
-      pattern = shadow_pattern(File.read!(@script))
-
-      tmp = Path.join(System.tmp_dir!(), "oa-rc-#{System.unique_integer([:positive])}")
-      File.mkdir_p!(tmp)
-      rc = Path.join(tmp, "rc")
-
-      File.write!(rc, """
-      export PATH="/usr/bin:$PATH"
-      alias oa="node ~/old/cli.js"
-      alias oat="a different command"
-      oa() { echo hi; }
-      function oa { echo hi; }
-      alias openagents="not this one"
-      # alias oa=commented out
-      """)
-
-      {out, _} = System.cmd("sh", ["-c", "grep -Ens '#{pattern}' '#{rc}' || true"])
-
-      lines =
-        out |> String.split("\n", trim: true) |> Enum.map(&List.first(String.split(&1, ":")))
-
-      assert lines == ["2", "4", "5"],
-             "the shadow check found #{inspect(lines)}; it must catch the three ways `oa` is " <>
-               "defined and leave `oat`, `openagents`, and a comment alone"
-
-      File.rm_rf!(tmp)
+      refute script =~ "installs 'oa' only",
+             "the installer still claims it installs oa only"
     end
   end
 

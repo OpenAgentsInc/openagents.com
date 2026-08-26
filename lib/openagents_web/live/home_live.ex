@@ -497,24 +497,6 @@ defmodule OpenAgentsWeb.HomeLive do
           --%>
         </Landing.hero>
 
-        <%!-- The shortest path from reading about it to holding it. Deliberately
-        quiet: one line under the hero rather than a third call to action
-        competing with the two above it. --%>
-        <Landing.section id="home-install">
-          <div class="flex flex-col items-center gap-3 text-center">
-            <p class="text-sm text-muted-foreground">Install the CLI</p>
-            <code
-              id="home-install-command"
-              class="w-full max-w-xl overflow-x-auto rounded-md border border-border bg-card px-4 py-3 text-left font-mono text-sm whitespace-nowrap text-foreground"
-            >
-              npm i -g @openagentsinc/cli
-            </code>
-            <.link navigate={~p"/docs/install-cli"} class="text-sm text-muted-foreground underline">
-              Other ways to install
-            </.link>
-          </div>
-        </Landing.section>
-
         <Landing.feature_grid title="Everything the work needs. Nothing it doesn't.">
           <:item title="Issues" icon="file-document">
             Plan, assign, label and close, over an API shaped after the one you already

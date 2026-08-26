@@ -6,16 +6,16 @@ defmodule OpenAgentsWeb.PageControllerTest do
     assert html_response(conn, 200) =~ "The Agent Forge"
   end
 
-  test "the landing page names the one command that installs the CLI", %{conn: conn} do
+  test "the landing page sells the forge, not a CLI install", %{conn: conn} do
     html = conn |> get(~p"/") |> html_response(200)
 
-    assert html =~ ~s(id="home-install-command")
-    assert html =~ "npm i -g @openagentsinc/cli"
-
-    # The binary release was withdrawn: its artifacts and every channel pointer
-    # were deleted, so this command can only fail now, and it shipped commands
-    # that printed fabricated data. A page that still offers it is worse than a
-    # page with no install command at all.
+    # The landing page carried an install command under the hero. It went
+    # through two wrong answers before this one: `curl … | bash`, withdrawn
+    # along with the binary release it installed, and then `npm i -g …`, which
+    # was a substitution when the instruction had been to remove it. The
+    # homepage is not where the CLI gets sold.
+    refute html =~ ~s(id="home-install")
     refute html =~ "install.sh"
+    refute html =~ "npm i -g"
   end
 end

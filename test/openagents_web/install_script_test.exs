@@ -217,11 +217,14 @@ defmodule OpenAgentsWeb.InstallScriptTest do
              "the installer does not create the oa alias"
     end
 
-    test "says one line about what it installed, and names openagents" do
+    test "starts Coder from the installed path after it finishes" do
       script = File.read!(@script)
 
-      assert script =~
-               ~s(OpenAgents v$version installed. Run 'coder' to start Coder or 'openagents' to see CLI commands.)
+      assert script =~ ~s(OpenAgents v$version installed.)
+      assert script =~ ~s(Loading Coder...)
+
+      assert script =~ ~s(exec "$coder_path" </dev/tty),
+             "the installer does not start Coder with terminal input"
 
       # The closing block used to carry a shadow warning, a PATH comparison and
       # a note about a different CLI. It was noise on a successful install.

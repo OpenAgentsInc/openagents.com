@@ -382,4 +382,13 @@ export PATH="$HOME/.openagents/bin:$PATH"
 fi
 
 echo "" >&2
-echo "OpenAgents v$version installed. Run 'coder' to start Coder or 'openagents' to see CLI commands." >&2
+echo "OpenAgents v$version installed." >&2
+echo "Loading Coder..." >&2
+
+coder_path="$BIN_DIR/coder"
+[ "$os" = "windows" ] && coder_path="${coder_path}.exe"
+
+# The installer usually runs from a pipe, so its standard input is exhausted
+# when this point runs. Give Coder the terminal so the newly installed session
+# can receive the reader's input.
+exec "$coder_path" </dev/tty

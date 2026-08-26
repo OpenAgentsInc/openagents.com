@@ -388,7 +388,7 @@ echo "Loading Coder..." >&2
 coder_path="$BIN_DIR/coder"
 [ "$os" = "windows" ] && coder_path="${coder_path}.exe"
 
-# The installer usually runs from a pipe, so its standard input is exhausted
-# when this point runs. Give Coder the terminal so the newly installed session
-# can receive the reader's input.
-exec "$coder_path" </dev/tty
+# The installer usually runs from a pipe. Coder detects the controlling
+# terminal and opens it for input itself; redirecting stdin here makes
+# Crossterm fail to initialize its macOS input reader.
+exec "$coder_path"

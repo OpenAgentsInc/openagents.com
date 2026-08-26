@@ -223,8 +223,11 @@ defmodule OpenAgentsWeb.InstallScriptTest do
       assert script =~ ~s(OpenAgents v$version installed.)
       assert script =~ ~s(Loading Coder...)
 
-      assert script =~ ~s(exec "$coder_path" </dev/tty),
-             "the installer does not start Coder with terminal input"
+      assert script =~ ~s(exec "$coder_path"),
+             "the installer does not start Coder after installation"
+
+      refute script =~ ~s(exec "$coder_path" </dev/tty),
+             "redirecting stdin breaks Coder's macOS input reader"
 
       # The closing block used to carry a shadow warning, a PATH comparison and
       # a note about a different CLI. It was noise on a successful install.

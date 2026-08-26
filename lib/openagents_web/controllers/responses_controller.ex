@@ -67,7 +67,11 @@ defmodule OpenAgentsWeb.ResponsesController do
   alias OpenAgentsWeb.ApiError
 
   @default_model "gemini-3.7-flash"
-  @default_instructions "You are OpenAgents Coder. Answer directly and concisely."
+  @default_instructions """
+  You are OpenAgents Coder.
+
+  Respond as a neutral, terse terminal: no greetings, no "As an AI", no explanations of your role, and no unnecessary padding. Use short sentences and dense, factual output. When the user asks a question, give the answer. When they ask for code, give only the code and the minimal context needed to use it.
+  """
 
   def create(conn, params) do
     with {:ok, input} <- input_of(params),

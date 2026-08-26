@@ -134,12 +134,29 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
 
   test "published CLI docs cover authentication, installation, imports, and API access" do
     assert {:ok, install} = DocsCatalog.render("install-cli")
-    assert install.markdown =~ "npm install --global @openagentsinc/cli"
-    assert install.markdown =~ "npx --yes @openagentsinc/cli@latest"
     assert install.markdown =~ "openagents auth login --resume"
     assert install.markdown =~ "returns immediately"
     assert install.markdown =~ "`OPENAGENTS_AGENT_TOKEN` is an internal agent-runtime credential"
-    assert install.markdown =~ "Do not run `auth setup-git` through `npx`"
+
+    # The installer links three names onto one binary, and the page must say all
+    # three: a reader who installed `openagents` and reads only about `oa` has no
+    # way to connect the two.
+    assert install.markdown =~ "`openagents`, `coder`, and `oa`"
+    assert install.markdown =~ "curl -fsSL https://openagents.com/install.sh | sh"
+
+    # The page must not send anyone to the npm package. It publishes a *different*
+    # program under the same `openagents` name, and having both on one PATH is not
+    # hypothetical: the 0.0.2 installer put the native binary ahead of the npm one
+    # and broke `git push` machine-wide, because only one of them implements
+    # `auth git-credential` correctly. A page that offers them as interchangeable
+    # installs of the same CLI is how someone ends up with both.
+    refute install.markdown =~ "npm install"
+    refute install.markdown =~ "npx"
+    refute install.markdown =~ "@openagentsinc/cli"
+
+    # The script is `#!/bin/sh`. Piping it to `bash` works, but telling people to
+    # is what the Alpine and BusyBox note exists to undo.
+    refute install.markdown =~ "install.sh | bash"
 
     assert {:ok, import} = DocsCatalog.render("import-github")
     assert import.markdown =~ "one-time copy"

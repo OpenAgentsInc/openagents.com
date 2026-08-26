@@ -1,27 +1,29 @@
 # Install the OpenAgents CLI
 
-> **The `curl | sh` installer and the standalone binaries are withdrawn.**
-> The 0.1.0 binary release was published and then removed: its CLI shipped
-> commands that printed fabricated data as though it were real. Install with
-> npm until a release is cut from a build that has been verified end to end.
->
-> ```sh
-> npm i -g @openagentsinc/cli
-> ```
-
 The CLI is a single native binary. Install it with the installer script:
 
 ```sh
-curl -fsSL https://openagents.com/install.sh | bash
+curl -fsSL https://openagents.com/install.sh | sh
 ```
 
 The installer detects your operating system and processor, downloads the
-matching build, verifies its SHA-256 checksum, and links `openagents` and `oa`
-into `~/.openagents/bin`. It also adds that directory to `PATH` in your shell
-configuration file. Open a new shell, then confirm the installation:
+matching build, verifies its SHA-256 checksum, and links three names —
+`openagents`, `coder`, and `oa` — into `~/.openagents/bin`. It also adds that
+directory to `PATH` in your shell configuration file. Open a new shell, then
+confirm the installation:
 
 ```sh
-openagents --help
+openagents --version
+```
+
+The three names are one binary. Run it bare and it starts a coder session; give
+it a command and it runs that command. So `openagents` and `coder` are two doors
+onto the same program, and `oa` is the short one:
+
+```sh
+coder                   # start a coder session
+openagents repo list    # run a command
+oa repo list            # the same command, less typing
 ```
 
 ## Update
@@ -46,7 +48,7 @@ Follow a different channel, or install one exact version:
 
 ```sh
 openagents update --channel beta
-openagents update --version 0.1.0-rc.2
+openagents update --version 0.0.2
 ```
 
 `--force` reinstalls the version already running, which is how you repair a
@@ -61,7 +63,7 @@ Pass a version to the script when a script or qualification run must be
 reproducible:
 
 ```sh
-curl -fsSL https://openagents.com/install.sh | bash -s 0.1.0-rc.1
+curl -fsSL https://openagents.com/install.sh | sh -s 0.0.2
 ```
 
 The version must read as `X.Y.Z` or `X.Y.Z-suffix`. The installer refuses
@@ -74,25 +76,29 @@ currently names. `stable` is the default. Set `OPENAGENTS_CHANNEL` to follow a
 different one:
 
 ```sh
-curl -fsSL https://openagents.com/install.sh | OPENAGENTS_CHANNEL=beta bash
+curl -fsSL https://openagents.com/install.sh | OPENAGENTS_CHANNEL=beta sh
 ```
 
 A channel is a pointer that moves, so the version you get today is not the
 version you get next month. Pass an explicit version when you need the answer
 to stay the same.
 
-`beta` names the current release candidate. `stable` does not resolve yet:
-it starts naming a version when the first release is cut, and until then the
-installer says so and stops rather than guessing. Until that happens, pass a
-version or follow `beta`.
+`stable` names the current release and is what you get by default. `beta` does
+not resolve at present: a channel that names no version makes the installer say
+so and stop rather than guess, so follow `beta` only when a release candidate is
+outstanding. Ask a channel what it names without installing anything:
+
+```sh
+curl -fsSL https://openagents.com/releases/stable
+```
 
 ## Choose where the binary lands
 
-The installer links `openagents` and `oa` into `~/.openagents/bin`. Set
-`OPENAGENTS_BIN_DIR` to link them somewhere already on your `PATH`:
+The installer links `openagents`, `coder`, and `oa` into `~/.openagents/bin`.
+Set `OPENAGENTS_BIN_DIR` to link them somewhere already on your `PATH`:
 
 ```sh
-curl -fsSL https://openagents.com/install.sh | OPENAGENTS_BIN_DIR="$HOME/.local/bin" bash
+curl -fsSL https://openagents.com/install.sh | OPENAGENTS_BIN_DIR="$HOME/.local/bin" sh
 ```
 
 The downloaded binary itself always lands in `~/.openagents/downloads`.
@@ -120,19 +126,14 @@ build, which depends on no loader at all. Distributions are never named or
 guessed at, and the check needs no tools beyond the shell, so it holds on
 images that carry neither `ldd` nor a release file.
 
-On Alpine and other minimal Linux images, pipe the installer into `sh`. The
-script is POSIX shell, and those images ship no `bash`:
-
-```sh
-curl -fsSL https://openagents.com/install.sh | sh
-```
-
-`bash` works everywhere it exists, so either form is fine on a system that has
-it.
+The script is POSIX shell, so `sh` runs it everywhere, including Alpine and
+other minimal images that ship no `bash`. `bash` also runs it on any system that
+has one, so either form works.
 
 On Windows, run the installer under Git for Windows or MSYS2 Bash. It installs
-`openagents.exe` and `oa.exe`. Under WSL, use the Linux build: WSL is Linux, and
-`uname -s` reports it as such.
+`openagents.exe`, `coder.exe`, and `oa.exe` as three copies rather than
+symlinks. Under WSL, use the Linux build: WSL is Linux, and `uname -s` reports
+it as such.
 
 ## What the installer verifies
 
@@ -153,71 +154,14 @@ and says so.
 Download the artifact and its sums file, then compare them yourself:
 
 ```sh
-curl -fsSLO https://openagents.com/releases/openagents-0.1.0-rc.1-macos-aarch64
-curl -fsSLO https://openagents.com/releases/SHA256SUMS-0.1.0-rc.1
-shasum -a 256 openagents-0.1.0-rc.1-macos-aarch64
-grep openagents-0.1.0-rc.1-macos-aarch64 SHA256SUMS-0.1.0-rc.1
+curl -fsSLO https://openagents.com/releases/openagents-0.0.2-macos-aarch64
+curl -fsSLO https://openagents.com/releases/SHA256SUMS-0.0.2
+shasum -a 256 openagents-0.0.2-macos-aarch64
+grep openagents-0.0.2-macos-aarch64 SHA256SUMS-0.0.2
 ```
 
 The two hexadecimal digests must match exactly. On Linux, use `sha256sum` in
 place of `shasum -a 256`.
-
-## Install with npm instead
-
-The npm package is `@openagentsinc/cli`. It provides the same `openagents`
-command and requires Node.js 20 or later. Use it when you already manage your
-tools with npm:
-
-```sh
-npm install --global @openagentsinc/cli
-npm list --global @openagentsinc/cli --depth=0
-openagents --help
-```
-
-`@openagentsinc/cli@0.2.1` contains an older embedded `--version` value and
-reports `0.1.7`. Use the npm package listing to verify that release until a
-later CLI release corrects the embedded value. Follow
-[`OpenAgentsInc/openagents` issue 1](/OpenAgentsInc/openagents/issues/1) for the
-correction.
-
-Install the latest release again when you want to update:
-
-```sh
-npm install --global @openagentsinc/cli@latest
-```
-
-## Run one command with npx
-
-Use `npx` when you want to run one CLI command without installing the package
-globally:
-
-```sh
-npx --yes @openagentsinc/cli@latest --help
-npx --yes @openagentsinc/cli@latest repo list
-```
-
-Pin the package version when a script or qualification run must be
-reproducible:
-
-```sh
-npx --yes @openagentsinc/cli@0.2.1 --help
-```
-
-Place every `openagents` argument after the package name:
-
-```sh
-npx --yes @openagentsinc/cli@latest --profile staging auth status
-npx --yes @openagentsinc/cli@latest repo import OWNER/REPOSITORY
-```
-
-`npx` works for authentication, repository creation, imports, listing,
-inspection, and cloning. The CLI stores an approved login in the same
-operating-system credential store that a global installation uses.
-
-Do not run `auth setup-git` through `npx`. That command writes a persistent Git
-helper configuration that calls `openagents`, but the temporary `npx`
-executable disappears after the command. Install the CLI globally before you
-configure a local or global Git helper.
 
 ## Sign in
 
@@ -246,14 +190,6 @@ Use `--headless` to force the resumable flow in an interactive terminal. Use
 `openagents --json auth login` and `openagents --json auth login --resume`
 when an agent needs structured output. The agent never receives your GitHub
 token or the issued OpenAgents token.
-
-The two-step flow also works without a global installation:
-
-```sh
-npx --yes @openagentsinc/cli@latest --json auth login
-# After approval:
-npx --yes @openagentsinc/cli@latest --json auth login --resume
-```
 
 The CLI stores the pending request in a private mode-`0600` local file. It
 removes the request after successful authorization or when it detects that the

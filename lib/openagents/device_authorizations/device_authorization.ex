@@ -11,6 +11,7 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
   schema "device_authorizations" do
     field :device_code_digest, :binary
     field :user_code_digest, :binary
+    field :device_name, :string
     field :state, :string, default: "pending"
     field :scopes, {:array, :string}, default: ["chat:account", "forge:write"]
     field :interval_seconds, :integer, default: 5
@@ -32,6 +33,7 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
     |> cast(attrs, [
       :device_code_digest,
       :user_code_digest,
+      :device_name,
       :expires_at,
       :interval_seconds,
       :scopes
@@ -47,6 +49,7 @@ defmodule OpenAgents.DeviceAuthorizations.DeviceAuthorization do
       :interval_seconds
     ])
     |> validate_number(:interval_seconds, greater_than_or_equal_to: 1, less_than_or_equal_to: 30)
+    |> validate_length(:device_name, max: 80)
     |> unique_constraint(:device_code_digest)
     |> unique_constraint(:user_code_digest)
     |> check_constraint(:state, name: :device_authorizations_state_check)

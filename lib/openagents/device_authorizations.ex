@@ -21,6 +21,7 @@ defmodule OpenAgents.DeviceAuthorizations do
   @ttl_seconds 600
   @interval_seconds 5
   @maximum_create_attempts 3
+  @maximum_device_name_length 80
 
   # The alphabet `random_user_code/0` draws from. `I`, `O`, `0`, and `1` are
   # absent on purpose: a code is read off one screen and typed into another.
@@ -54,11 +55,12 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def cast_user_code(_code), do: :error
 
-  def create(scopes \\ ApiTokens.default_scopes())
+  def create(scopes \\ ApiTokens.default_scopes(), device_name \\ nil)
 
-  def create(scopes) when is_list(scopes), do: create(scopes, @maximum_create_attempts)
+  def create(scopes, device_name) when is_list(scopes),
+    do: insert_authorization(scopes, normalize_device_name(device_name), @maximum_create_attempts)
 
-  def create(_scopes), do: {:error, :invalid_scopes}
+  def create(_scopes, _device_name), do: {:error, :invalid_scopes}
 
   def get_pending_by_user_code(user_code) when is_binary(user_code) do
     now = DateTime.utc_now()
@@ -95,9 +97,10 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def poll(_device_code), do: {:error, :access_denied}
 
-  defp create(_scopes, 0), do: {:error, :authorization_unavailable}
+  defp insert_authorization(_scopes, _device_name, 0),
+    do: {:error, :authorization_unavailable}
 
-  defp create(scopes, attempts_left) do
+  defp insert_authorization(scopes, device_name, attempts_left) do
     device_code = random_url_token(32)
     user_code = random_user_code()
     expires_at = DateTime.add(DateTime.utc_now(), @ttl_seconds, :second)
@@ -106,6 +109,7 @@ defmodule OpenAgents.DeviceAuthorizations do
     |> DeviceAuthorization.create_changeset(%{
       device_code_digest: digest(device_code),
       user_code_digest: digest(user_code),
+      device_name: device_name,
       expires_at: expires_at,
       interval_seconds: @interval_seconds,
       scopes: scopes
@@ -118,10 +122,25 @@ defmodule OpenAgents.DeviceAuthorizations do
       {:error, changeset} ->
         if Keyword.has_key?(changeset.errors, :device_code_digest) or
              Keyword.has_key?(changeset.errors, :user_code_digest),
-           do: create(scopes, attempts_left - 1),
+           do: insert_authorization(scopes, device_name, attempts_left - 1),
            else: {:error, changeset}
     end
   end
+
+  # A computer name is display metadata, not authority. Normalize it rather
+  # than letting a hostname with a control character or excessive length stop
+  # sign-in. HEEx escapes the remaining text when the approval page renders it.
+  defp normalize_device_name(name) when is_binary(name) do
+    name =
+      name
+      |> String.replace(~r/[\x00-\x1F\x7F]/u, " ")
+      |> String.trim()
+      |> String.slice(0, @maximum_device_name_length)
+
+    if name == "", do: nil, else: name
+  end
+
+  defp normalize_device_name(_name), do: nil
 
   defp transition(user_code, next_state, user_id, user) do
     now = DateTime.utc_now()

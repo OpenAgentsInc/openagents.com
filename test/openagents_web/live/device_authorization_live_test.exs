@@ -5,12 +5,24 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLiveTest do
 
   test "an authenticated user reviews and approves a matching terminal code", %{conn: conn} do
     user = github_user("device-live-approval", "device-live-owner")
-    {:ok, _authorization, _device_code, user_code} = OpenAgents.DeviceAuthorizations.create()
+
+    {:ok, _authorization, _device_code, user_code} =
+      OpenAgents.DeviceAuthorizations.create(
+        OpenAgents.ApiTokens.default_scopes(),
+        "Christopher's MacBook"
+      )
+
     conn = Plug.Test.init_test_session(conn, %{"user_id" => user.id})
 
     {:ok, view, _html} = live(conn, ~p"/device?user_code=#{user_code}")
 
     assert has_element?(view, "#device-authorization-review")
+
+    assert has_element?(
+             view,
+             "#device-requesting-computer[data-device-name=\"Christopher's MacBook\"]"
+           )
+
     assert has_element?(view, "#approve-device")
     refute has_element?(view, "#device-code-invalid")
 

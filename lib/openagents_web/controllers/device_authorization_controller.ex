@@ -6,7 +6,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationController do
   alias OpenAgents.{ApiTokens, DeviceAuthorizations}
 
   def create(conn, params) do
-    case DeviceAuthorizations.create(requested_scopes(params)) do
+    case DeviceAuthorizations.create(requested_scopes(params), params["device_name"]) do
       {:ok, authorization, device_code, user_code} ->
         verification_uri = OpenAgentsWeb.Endpoint.url() <> "/device"
 

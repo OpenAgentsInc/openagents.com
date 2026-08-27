@@ -93,12 +93,19 @@ defmodule OpenAgentsWeb.DeviceAuthorizationLive do
             </div>
             <div>
               <%!-- Approving is a grant, and a grant with no named grantee is a
-              reflex rather than a decision. The CLI is what this application
-              knows is asking: it is the only client that mints a device
-              authorization, and `DeviceAuthorizations.claim/3` names the token
-              it walks away with "OpenAgents CLI". Which computer it is running
-              on is not recorded, so this does not claim to say. --%>
-              <p class="font-medium">The OpenAgents CLI is asking to act as you</p>
+              reflex rather than a decision. The CLI supplies the computer name
+              for recognition; the server supplies the scopes and treats the
+              name as display metadata, never as authority. Older clients leave
+              it empty and are identified honestly as unnamed. --%>
+              <p
+                id="device-requesting-computer"
+                class="font-medium"
+                data-device-name={@authorization.device_name}
+              >
+                The OpenAgents CLI on
+                <span class="font-semibold">{@authorization.device_name || "an unnamed computer"}</span>
+                is asking to act as you
+              </p>
               <p class="mt-1 text-sm text-muted-foreground">
                 Approving gives it these permissions, and no others:
               </p>

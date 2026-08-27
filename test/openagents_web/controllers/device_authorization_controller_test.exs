@@ -5,7 +5,10 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
   alias OpenAgents.Repo
 
   test "a pending device authorization is digested and polling is paced", %{conn: conn} do
-    created = post(conn, ~p"/api/v1/device/authorizations", %{})
+    created =
+      post(conn, ~p"/api/v1/device/authorizations", %{
+        "device_name" => "Christopher's MacBook"
+      })
 
     assert %{
              "device_code" => device_code,
@@ -23,6 +26,7 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     assert get_resp_header(created, "cache-control") == ["no-store"]
 
     authorization = Repo.one!(DeviceAuthorization)
+    assert authorization.device_name == "Christopher's MacBook"
     refute authorization.device_code_digest == device_code
     refute authorization.user_code_digest == user_code
     refute inspect(authorization) =~ device_code
@@ -38,6 +42,20 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
 
     assert json_response(paced, 429) == %{"code" => "slow_down"}
     assert get_resp_header(paced, "cache-control") == ["no-store"]
+  end
+
+  test "a computer name is bounded and control characters cannot enter the approval", %{
+    conn: conn
+  } do
+    name = "  MacBook\nPro " <> String.duplicate("x", 100)
+
+    conn = post(conn, ~p"/api/v1/device/authorizations", %{"device_name" => name})
+
+    assert json_response(conn, 201)["user_code"]
+    authorization = Repo.one!(DeviceAuthorization)
+    assert authorization.device_name =~ "MacBook Pro"
+    refute authorization.device_name =~ "\n"
+    assert String.length(authorization.device_name) == 80
   end
 
   test "approval returns one PAT exactly once", %{conn: conn} do

@@ -43,7 +43,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     refute user.github_token_ciphertext =~ "ephemeral-github-token"
     assert {:ok, "ephemeral-github-token"} = Accounts.github_token(user)
     assert user.github_token_key_id == "test-2026-08"
-    assert user.github_token_scopes == ["repo", "read:org"]
+    assert user.github_token_scopes == ["user:email"]
     assert user.github_token_connected_at
 
     cookie = authenticated |> get_resp_header("set-cookie") |> Enum.join(";")
@@ -99,15 +99,15 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     assert get_session(callback, "user_id") == nil
   end
 
-  test "GitHub tools require an explicit retained-token choice", %{conn: conn} do
-    refused =
+  test "GitHub sign-in does not require repository-tool consent", %{conn: conn} do
+    started =
       conn
       |> init_test_session(%{})
       |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
       |> post(~p"/auth/github")
 
-    assert redirected_to(refused) == ~p"/?auth_error=consent_required"
-    assert get_session(refused, "github_oauth_attempt") == nil
+    assert redirected_to(started) =~ "https://github.com/login/oauth/authorize?"
+    assert get_session(started, "github_oauth_attempt")
   end
 
   test "disconnect revokes the GitHub grant and clears local token metadata", %{conn: conn} do
@@ -203,7 +203,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     conn
     |> init_test_session(%{})
     |> put_req_header("x-csrf-token", csrf_token)
-    |> post(~p"/auth/github?github_tools=enabled")
+    |> post(~p"/auth/github")
   end
 
   defp attempt_and_state(conn) do
@@ -218,7 +218,7 @@ defmodule OpenAgentsWeb.AuthControllerTest do
     Req.Test.expect(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
         "access_token" => "ephemeral-github-token",
-        "scope" => "repo,read:org"
+        "scope" => "user:email"
       })
     end)
 

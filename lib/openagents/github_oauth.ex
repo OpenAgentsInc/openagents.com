@@ -11,7 +11,8 @@ defmodule OpenAgents.GitHubOAuth do
   @default_attempt_ttl_seconds 600
   @github_api_version "2022-11-28"
   @user_agent "OpenAgents"
-  @required_scopes ["repo", "read:org"]
+  @requested_scopes ["user:email"]
+  @repository_scopes ["repo", "read:org"]
 
   @type attempt :: %{required(String.t()) => String.t() | integer()}
 
@@ -107,13 +108,13 @@ defmodule OpenAgents.GitHubOAuth do
 
   def revoke(_access_token), do: {:error, :invalid_token}
 
-  @doc "The exact OAuth scopes retained with each connected GitHub grant."
+  @doc "The exact OAuth scopes requested during GitHub sign-in."
   @spec requested_scopes() :: [String.t()]
-  def requested_scopes, do: @required_scopes
+  def requested_scopes, do: @requested_scopes
 
-  @doc "The only OAuth scopes admitted by the GitHub-backed namespace and import model."
+  @doc "The OAuth scopes required by the GitHub-backed namespace and import model."
   @spec required_scopes() :: [String.t()]
-  def required_scopes, do: @required_scopes
+  def required_scopes, do: @repository_scopes
 
   defp exchange_code(config, code, verifier) do
     request_options =
@@ -252,7 +253,7 @@ defmodule OpenAgents.GitHubOAuth do
   end
 
   defp validate_scope_configuration do
-    if Application.get_env(:openagents, :github_oauth_scopes) == @required_scopes,
+    if Application.get_env(:openagents, :github_oauth_scopes) == @requested_scopes,
       do: :ok,
       else: {:error, :github_oauth_scope_configuration_invalid}
   end

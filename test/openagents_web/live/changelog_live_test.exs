@@ -32,10 +32,11 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
     assert redirected_to(conn, 302) == ~p"/docs/changelog"
   end
 
-  test "the documentation changelog presents Coder 0.1", %{conn: conn} do
+  test "the documentation changelog presents Coder v0.1.0 with its release date", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/docs/changelog")
 
-    assert html =~ "Coder 0.1"
+    assert html =~ "Coder v0.1.0"
+    assert html =~ "Released August 26, 2026."
     assert html =~ "Choose how inference runs"
     assert html =~ "Delegate work"
   end

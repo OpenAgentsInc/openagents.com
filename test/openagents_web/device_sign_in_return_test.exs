@@ -68,7 +68,7 @@ defmodule OpenAgentsWeb.DeviceSignInReturnTest do
       landing
       |> recycle()
       |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
-      |> post(~p"/auth/github?github_tools=enabled")
+      |> post(~p"/auth/github")
 
     state = oauth_state(started)
     expect_github(4_129, "device-return-person")
@@ -109,7 +109,7 @@ defmodule OpenAgentsWeb.DeviceSignInReturnTest do
       conn
       |> init_test_session(%{})
       |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
-      |> post(~p"/auth/github?github_tools=enabled")
+      |> post(~p"/auth/github")
 
     state = oauth_state(started)
     expect_github(4_130, "ordinary-sign-in-person")
@@ -174,7 +174,7 @@ defmodule OpenAgentsWeb.DeviceSignInReturnTest do
         bounced
         |> recycle()
         |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
-        |> post(~p"/auth/github?github_tools=enabled")
+        |> post(~p"/auth/github")
 
       state = oauth_state(started)
       expect_github(4_131, "crafted-code-person")
@@ -231,7 +231,7 @@ defmodule OpenAgentsWeb.DeviceSignInReturnTest do
     Req.Test.expect(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
         "access_token" => "ephemeral-github-token",
-        "scope" => "repo,read:org"
+        "scope" => "user:email"
       })
     end)
 

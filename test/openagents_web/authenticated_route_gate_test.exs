@@ -18,9 +18,10 @@ defmodule OpenAgentsWeb.AuthenticatedRouteGateTest do
   refuse: a redirect to the public root, or `401` for the session-authenticated
   API routes that answer a client rather than a browser.
 
-  The two GitHub OAuth entries are in this class and refuse the same way. They
-  are where a person authenticates, so an anonymous request reaches them, but
-  it leaves with an `auth_error` and no session rather than with a page.
+  The GitHub callback is in this class and refuses an anonymous request that
+  does not carry a valid one-time OAuth attempt. The sign-in action is the
+  bounded public action that creates that attempt, so it is classified
+  separately.
 
   The websocket at `/live` is classified in the same class and is not
   dispatchable here; `OpenAgentsWeb.UserAuth.on_mount/4` gates it and

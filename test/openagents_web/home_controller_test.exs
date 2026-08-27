@@ -12,7 +12,7 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     # current product identity.
     assert html =~ "Introducing"
     assert html =~ "Your all-in-one coding agent."
-    assert html =~ ~s(action="/auth/github?github_tools=enabled")
+    assert html =~ ~s(action="/auth/github")
     assert html =~ "Log in with GitHub"
 
     # The scope disclosure was removed from the hero at the owner's direction.

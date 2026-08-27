@@ -45,6 +45,15 @@ defmodule OpenAgents.RuntimeConfigTest do
     refute encoded =~ "ecto://"
   end
 
+  test "GitHub sign-in accepts only the email scope" do
+    assert {:error, %{setting: :github_oauth_scopes}} =
+             staging_settings()
+             |> Map.put(:github_oauth_scopes, ["repo", "read:org"])
+             |> RuntimeConfig.validate()
+
+    assert {:ok, _config} = RuntimeConfig.validate(staging_settings())
+  end
+
   test "staging gates refuse features before their admission gate" do
     settings = staging_settings() |> put_nested(:voice, :enabled, true)
 

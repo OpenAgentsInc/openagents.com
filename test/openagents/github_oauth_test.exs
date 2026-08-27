@@ -7,7 +7,7 @@ defmodule OpenAgents.GitHubOAuthTest do
 
   setup do
     original_scopes = Application.fetch_env!(:openagents, :github_oauth_scopes)
-    Application.put_env(:openagents, :github_oauth_scopes, ["repo", "read:org"])
+    Application.put_env(:openagents, :github_oauth_scopes, ["user:email"])
 
     on_exit(fn ->
       Application.put_env(:openagents, :github_oauth_scopes, original_scopes)
@@ -22,7 +22,7 @@ defmodule OpenAgents.GitHubOAuthTest do
 
     assert query["client_id"] == "test-github-client-id"
     assert query["redirect_uri"] == "http://127.0.0.1:4002/auth/github/callback"
-    assert query["scope"] == "repo read:org"
+    assert query["scope"] == "user:email"
     assert query["state"] == attempt["state"]
     assert query["code_challenge_method"] == "S256"
     assert byte_size(query["code_challenge"]) == 43
@@ -65,7 +65,7 @@ defmodule OpenAgents.GitHubOAuthTest do
       Req.Test.json(conn, %{
         "access_token" => "short-lived-token",
         "token_type" => "bearer",
-        "scope" => "read:org,repo"
+        "scope" => "user:email"
       })
     end)
 
@@ -84,7 +84,7 @@ defmodule OpenAgents.GitHubOAuthTest do
 
     verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
 
-    assert {:ok, profile, access_token, ["repo", "read:org"]} =
+    assert {:ok, profile, access_token, ["user:email"]} =
              GitHubOAuth.exchange_and_fetch("github-code", verifier)
 
     assert access_token == "short-lived-token"
@@ -107,7 +107,7 @@ defmodule OpenAgents.GitHubOAuthTest do
       Req.Test.expect(__MODULE__, fn conn ->
         Req.Test.json(conn, %{
           "access_token" => "short-lived-token",
-          "scope" => "repo read:org"
+          "scope" => "user:email"
         })
       end)
 
@@ -140,7 +140,7 @@ defmodule OpenAgents.GitHubOAuthTest do
     Req.Test.expect(__MODULE__, fn conn ->
       Req.Test.json(conn, %{
         "access_token" => "provider-token",
-        "scope" => "repo,read:org"
+        "scope" => "user:email"
       })
     end)
 
@@ -157,7 +157,7 @@ defmodule OpenAgents.GitHubOAuthTest do
   end
 
   test "a missing or broadened granted scope fails before profile lookup" do
-    for scope <- [nil, "", "repo", "read:org", "read:user", "repo,read:org,admin:org"] do
+    for scope <- [nil, "", "repo", "read:org", "read:user", "user:email,repo"] do
       setup_req_test()
 
       Req.Test.expect(__MODULE__, fn conn ->
@@ -172,9 +172,9 @@ defmodule OpenAgents.GitHubOAuthTest do
     end
   end
 
-  test "the retained grant model requires exactly repository and organization read scopes" do
+  test "sign-in scope stays separate from repository authorization scopes" do
     assert GitHubOAuth.required_scopes() == ["repo", "read:org"]
-    assert GitHubOAuth.requested_scopes() == ["repo", "read:org"]
+    assert GitHubOAuth.requested_scopes() == ["user:email"]
   end
 
   defp setup_req_test do

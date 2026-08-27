@@ -8,40 +8,34 @@ Decision: [ADR 0004](decisions/0004-retain-scoped-github-access-tokens.md)
 
 ## Current contract
 
-GitHub serves two distinct roles:
+GitHub serves two distinct roles that use separate grants:
 
-1. OAuth establishes the local OpenAgents account identity from GitHub's
-   immutable numeric user ID.
-2. A retained access token authorizes server-side GitHub repository tools with
-   the user's delegated rights.
+1. Sign-in establishes the local OpenAgents account identity from GitHub's
+   immutable numeric user ID. It requests only `user:email`.
+2. A future repository authorization flow will request the separate rights
+   that server-side GitHub repository tools need.
 
-The application implements the second model only after the person chooses the
-button labeled **Sign in and enable GitHub tools** beside a retention
-disclosure. The callback stores the access token as versioned AES-256-GCM
-ciphertext in the local user row. It does not discard the token after reading
-the GitHub profile.
+The sign-in callback stores the email-scoped token as versioned AES-256-GCM
+ciphertext in the local user row. It does not authorize repository imports,
+organization membership checks, or other repository tools. Those operations
+continue to require the exact `repo,read:org` scope set and fail closed until a
+separate authorization flow supplies it.
 
-The OAuth app requests only `repo`. GitHub exposes public profile identity with
-no OAuth scope, so the redundant `read:user` scope is not requested. The
-repository tools need to read repositories the user authorizes, including
-private repositories. GitHub OAuth Apps do not offer read-only source-code
-access, so `repo` is the narrowest OAuth App scope that satisfies that feature
-even though the scope grants broad read/write repository and related project
-rights. The consent UI says so. OpenAgents exposes only its bounded read tools
-to this credential. A future GitHub App migration should replace this broad scope with
-fine-grained, repository-selected read permissions. See GitHub's
+GitHub exposes public profile identity without a scope. OpenAgents requests
+`user:email` so sign-in can access the account's email address without asking
+for repository access. A future GitHub App integration should use fine-grained,
+repository-selected permissions for repository tools. See GitHub's
 [OAuth scope reference](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
 and [authorization guidance](https://docs.github.com/en/apps/oauth-apps/using-oauth-apps/authorizing-oauth-apps).
 
 ## Implemented flow
 
-1. `POST /auth/github?github_tools=enabled` refuses a request that does not
-   carry the explicit tools choice, then creates a high-entropy state value, a PKCE S256
+1. `POST /auth/github` creates a high-entropy state value, a PKCE S256
    challenge, and a short-lived PostgreSQL OAuth-attempt row.
 2. The encrypted browser session carries only the attempt reference and PKCE
    verifier while GitHub handles authorization.
 3. `GET /auth/github/callback` consumes the attempt exactly once, exchanges the
-   code server-side, refuses missing or different granted scopes, and reads the
+   code server-side, refuses any grant other than `user:email`, and reads the
    GitHub `/user` projection server-side.
 4. `OpenAgents.Accounts` upserts the local account by numeric GitHub ID and
    refreshes the mutable login, name, and avatar projection.
@@ -49,7 +43,7 @@ and [authorization guidance](https://docs.github.com/en/apps/oauth-apps/using-oa
    envelope carrying the non-secret active key ID before the ciphertext is
    stored. The row also records scopes and connection/rotation timestamps.
 6. The authenticated session contains only the local user ID. Repository tools
-   unseal the token server-side when an explicit GitHub operation needs it.
+   reject the sign-in token because it does not contain their required scopes.
 7. `DELETE /logout` clears the browser session but intentionally does not
    revoke the retained GitHub grant.
 8. `DELETE /github/connection` authenticates the browser and uses the OAuth
@@ -80,11 +74,9 @@ Production-mode validation requires an HTTPS callback with the configured
 environment host. Tests use deterministic local configuration and fake Req
 responses; they do not require a live GitHub credential.
 
-Rows migrated from the pre-Gate-6 envelope retain `read:user,repo` metadata
-because that is the grant they actually received. Before staging admission,
-revoke those legacy grants and have their owners reconnect under `repo` only;
-do not rewrite metadata to claim a provider-side scope reduction that did not
-occur.
+Existing rows retain their recorded scope metadata because that is the grant
+they actually received. Do not rewrite metadata to claim a provider-side scope
+reduction that did not occur.
 
 ## Rotation and data rights
 

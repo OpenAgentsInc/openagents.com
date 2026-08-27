@@ -1,10 +1,10 @@
 # Changelog
 
-## Coder 0.1
+## Coder v0.1.0
 
-Released August 2026.
+Released August 26, 2026.
 
-Coder 0.1 brings interactive coding, model access, tools, delegation, and
+Coder v0.1.0 brings interactive coding, model access, tools, delegation, and
 durable session history into the OpenAgents CLI.
 
 ### Work in your terminal

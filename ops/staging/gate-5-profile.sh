@@ -15,7 +15,7 @@ set -eu
 : "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
 : "${SECRET_KEY_BASE:?SECRET_KEY_BASE is required}"
 
-export GITHUB_OAUTH_SCOPES="repo,read:org"
+export GITHUB_OAUTH_SCOPES="user:email"
 export GITHUB_REDIRECT_URI="https://staging.openagents.com/auth/github/callback"
 # Written as an explicit default rather than ${VAR:-{}}: POSIX expansion ends
 # at the first `}`, so a preset value came back corrupted with a trailing

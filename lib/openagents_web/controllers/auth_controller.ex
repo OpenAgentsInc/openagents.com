@@ -6,7 +6,7 @@ defmodule OpenAgentsWeb.AuthController do
   @attempt_session_key "github_oauth_attempt"
   @identity_session_key "posthog_identity"
 
-  def start(conn, %{"github_tools" => "enabled"}) do
+  def start(conn, _params) do
     case GitHubOAuth.begin_authorization() do
       {:ok, attempt, authorization_url} ->
         Analytics.capture("auth_started", Analytics.browser_distinct_id(conn))
@@ -20,8 +20,6 @@ defmodule OpenAgentsWeb.AuthController do
         auth_failure(conn, "unavailable")
     end
   end
-
-  def start(conn, _params), do: auth_failure(conn, "consent_required")
 
   def callback(conn, %{"code" => code, "state" => state}) do
     attempt = get_session(conn, @attempt_session_key)

@@ -150,7 +150,7 @@ arguments, repository URLs, receipts, or checked-in environment files.
 | Database | `OPENAGENTS_MIGRATE_ON_BOOT` | `true` in staging and production |
 | GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | OAuth application credentials for the selected environment |
 | GitHub | `GITHUB_REDIRECT_URI` | Exact HTTPS callback on `PHX_HOST` |
-| GitHub | `GITHUB_OAUTH_SCOPES` | Exactly `repo,read:org`; repository import needs retained repository access and organization creation needs membership access |
+| GitHub | `GITHUB_OAUTH_SCOPES` | Exactly `user:email`; sign-in does not request repository access |
 | GitHub | `OPENAGENTS_ADMIN_GITHUB_IDS` | Comma-separated immutable numeric GitHub IDs allowed to use operator surfaces; never use logins |
 | GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY` | Base64-encoded 32-byte key for the selected environment |
 | GitHub | `GITHUB_TOKEN_ENCRYPTION_KEY_ID` | Bounded active-key identifier prefixed with `development-`, `test-`, `staging-`, or `production-` to match the runtime |

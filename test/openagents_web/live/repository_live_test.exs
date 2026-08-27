@@ -250,7 +250,14 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
 
   test "one-time import picker creates an immutable GitHub import receipt", %{conn: conn} do
     user = github_user("repository-live-import", "import-owner")
-    assert {:ok, user} = Accounts.store_github_token(user, "gho_live_import")
+
+    assert {:ok, user} =
+             Accounts.store_github_token(
+               user,
+               "gho_live_import",
+               OpenAgents.GitHubOAuth.required_scopes()
+             )
+
     main_sha = String.duplicate("a", 40)
 
     Req.Test.stub(__MODULE__, &github_import_response(&1, user, main_sha))
@@ -283,7 +290,14 @@ defmodule OpenAgentsWeb.RepositoryLiveTest do
 
   test "one-time import picker defaults to the GitHub repository visibility", %{conn: conn} do
     user = github_user("repository-live-public-import", "import-owner")
-    assert {:ok, user} = Accounts.store_github_token(user, "gho_live_public_import")
+
+    assert {:ok, user} =
+             Accounts.store_github_token(
+               user,
+               "gho_live_public_import",
+               OpenAgents.GitHubOAuth.required_scopes()
+             )
+
     main_sha = String.duplicate("c", 40)
 
     Req.Test.stub(__MODULE__, fn github_conn ->

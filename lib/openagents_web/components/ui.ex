@@ -1443,7 +1443,7 @@ defmodule OpenAgentsWeb.UI do
   attr :size, :atom, values: [:default, :xs, :sm, :lg], default: :default
 
   attr :action, :string,
-    default: "/auth/github?github_tools=enabled",
+    default: "/auth/github",
     doc: "where the sign-in posts; the caller owns the route"
 
   attr :class, :any, default: nil

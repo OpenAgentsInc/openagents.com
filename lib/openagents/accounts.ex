@@ -332,6 +332,6 @@ defmodule OpenAgents.Accounts do
     do: Application.fetch_env!(:openagents, :github_oauth_scopes)
 
   defp valid_scopes?(scopes) do
-    scopes == configured_github_scopes()
+    scopes in [configured_github_scopes(), OpenAgents.GitHubOAuth.required_scopes()]
   end
 end

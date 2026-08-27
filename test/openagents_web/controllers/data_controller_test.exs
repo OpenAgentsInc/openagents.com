@@ -134,7 +134,7 @@ defmodule OpenAgentsWeb.DataControllerTest do
              "credential_exported" => false,
              "product_data_deletion" => "retained_until_explicit_disconnect",
              "rotated_at" => nil,
-             "scopes" => ["repo", "read:org"]
+             "scopes" => ["user:email"]
            }
 
     refute inspect(export) =~ "gho_export_sentinel"

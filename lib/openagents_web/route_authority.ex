@@ -9,6 +9,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
 
   @classes [
     :public_read,
+    :public_action,
     :authenticated_browser,
     :authenticated_api,
     :operator,
@@ -191,7 +192,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
          )
 
   defp policy(%{path: "/auth/github", verb: :post}),
-    do: declaration(:authenticated_browser, "explicit OAuth applicant", "identity:connect", true)
+    do: declaration(:public_action, "OAuth applicant", "identity:sign-in", true)
 
   defp policy(%{path: "/auth/github/callback"}),
     do: declaration(:authenticated_browser, "one-time OAuth attempt", "identity:connect", true)

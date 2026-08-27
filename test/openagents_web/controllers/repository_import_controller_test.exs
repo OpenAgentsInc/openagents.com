@@ -1,7 +1,7 @@
 defmodule OpenAgentsWeb.RepositoryImportControllerTest do
   use OpenAgentsWeb.ConnCase, async: false
 
-  alias OpenAgents.{Accounts, ApiTokens, Repo}
+  alias OpenAgents.{Accounts, ApiTokens, GitHubOAuth, Repo}
 
   setup {Req.Test, :verify_on_exit!}
 
@@ -19,7 +19,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
   test "POST /api/v1/user/repos/imports accepts one frozen GitHub snapshot", %{conn: conn} do
     user = github_user("repository-import-api", "octavia")
-    assert {:ok, user} = Accounts.store_github_token(user, "gho_import_fixture")
+    assert {:ok, user} = store_repository_grant(user, "gho_import_fixture")
     main_sha = String.duplicate("a", 40)
     tag_sha = String.duplicate("b", 40)
 
@@ -74,7 +74,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
   test "an import inherits the GitHub repository visibility when omitted", %{conn: conn} do
     user = github_user("repository-public-import-api", "octavia")
-    assert {:ok, user} = Accounts.store_github_token(user, "gho_public_import_fixture")
+    assert {:ok, user} = store_repository_grant(user, "gho_public_import_fixture")
     main_sha = String.duplicate("c", 40)
 
     expect_import_source(user, main_sha, nil, false)
@@ -92,7 +92,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
   test "organization creation requires an active GitHub administrator membership", %{conn: conn} do
     user = github_user("repository-org-api")
-    assert {:ok, user} = Accounts.store_github_token(user, "gho_org_fixture")
+    assert {:ok, user} = store_repository_grant(user, "gho_org_fixture")
 
     Req.Test.expect(__MODULE__, fn github_conn ->
       assert github_conn.request_path == "/user/memberships/orgs"
@@ -129,7 +129,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
       conn: conn
     } do
       user = github_user("repository-foreign-import", "octavia")
-      assert {:ok, user} = Accounts.store_github_token(user, "gho_foreign_fixture")
+      assert {:ok, user} = store_repository_grant(user, "gho_foreign_fixture")
 
       expect_foreign_source(String.duplicate("d", 40), false, "MIT")
 
@@ -156,7 +156,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
       conn: conn
     } do
       user = github_user("repository-mirror-api", "octavia")
-      assert {:ok, user} = Accounts.store_github_token(user, "gho_mirror_fixture")
+      assert {:ok, user} = store_repository_grant(user, "gho_mirror_fixture")
       main_sha = String.duplicate("e", 40)
 
       expect_foreign_source(main_sha, false, "MIT")
@@ -191,7 +191,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
     test "an upstream with no license records the absence rather than omitting it", %{conn: conn} do
       user = github_user("repository-unlicensed-mirror", "octavia")
-      assert {:ok, user} = Accounts.store_github_token(user, "gho_unlicensed_fixture")
+      assert {:ok, user} = store_repository_grant(user, "gho_unlicensed_fixture")
 
       expect_foreign_source(String.duplicate("f", 40), false, nil)
 
@@ -209,7 +209,7 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
     test "a private source cannot be mirrored", %{conn: conn} do
       user = github_user("repository-private-mirror", "octavia")
-      assert {:ok, user} = Accounts.store_github_token(user, "gho_private_mirror_fixture")
+      assert {:ok, user} = store_repository_grant(user, "gho_private_mirror_fixture")
 
       expect_foreign_source(String.duplicate("1", 40), true, "MIT")
 
@@ -236,6 +236,10 @@ defmodule OpenAgentsWeb.RepositoryImportControllerTest do
 
       assert %{"mirror" => false, "upstream" => nil} = json_response(response, 202)
     end
+  end
+
+  defp store_repository_grant(user, token) do
+    Accounts.store_github_token(user, token, GitHubOAuth.required_scopes())
   end
 
   defp expect_foreign_source(main_sha, private?, license) do

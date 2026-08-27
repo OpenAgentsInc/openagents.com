@@ -455,7 +455,7 @@ config :openagents,
     base_url: "https://api.github.com",
     request_options: []
   ],
-  github_oauth_scopes: ["repo", "read:org"],
+  github_oauth_scopes: ["user:email"],
   voice_recording: [
     enabled: false,
     timeslice_ms: 5_000,

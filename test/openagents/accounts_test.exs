@@ -77,7 +77,7 @@ defmodule OpenAgents.AccountsTest do
     assert {:ok, user} = Accounts.upsert_github_user(profile(501, "token-owner"))
 
     assert {:error, :invalid_token_scopes} =
-             Accounts.store_github_token(user, "gho_too_broad", ["read:user", "repo"])
+             Accounts.store_github_token(user, "gho_too_broad", ["user:email", "repo"])
 
     assert {:ok, connected} = Accounts.store_github_token(user, "gho_retained")
     assert connected.github_token_key_id == "test-2026-08"
@@ -93,6 +93,13 @@ defmodule OpenAgents.AccountsTest do
              end)
 
     assert disconnected.id == user.id
+
+    assert {:ok, repository_user} =
+             Accounts.upsert_github_user(profile(502, "repository-token-owner"))
+
+    assert {:ok, _repository_grant} =
+             Accounts.store_github_token(repository_user, "gho_repository", ["repo", "read:org"])
+
     assert disconnected.github_token_ciphertext == nil
     assert disconnected.github_token_scopes == []
     assert {:error, :github_token_missing} = Accounts.github_token(disconnected)

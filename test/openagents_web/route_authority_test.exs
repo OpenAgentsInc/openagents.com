@@ -23,6 +23,15 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
     end)
   end
 
+  test "GitHub sign-in is the bounded public identity action" do
+    route = route!(:post, "/auth/github")
+
+    assert route.class == :public_action
+    assert route.principal == "OAuth applicant"
+    assert route.scope == "identity:sign-in"
+    assert route.mutation
+  end
+
   test "public forge reads and bearer-authenticated forge writes are separate" do
     read = route!(:get, "/api/v1/repos/:owner/:repo/issues")
     write = route!(:post, "/api/v1/repos/:owner/:repo/issues")

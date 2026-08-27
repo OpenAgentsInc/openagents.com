@@ -59,7 +59,7 @@ export AI_GATEWAY_API_KEY="$(secret openagents-vercel-gateway-api-key)"
 
 export DATABASE_URL="ecto://sarah_app:${DB_PASSWORD}@127.0.0.1:5432/sarah"
 export DNS_CLUSTER_QUERY="sarah.fleet.internal"
-export GITHUB_OAUTH_SCOPES="repo,read:org"
+export GITHUB_OAUTH_SCOPES="user:email"
 export GITHUB_REDIRECT_URI="https://openagents.com/auth/github/callback"
 export GITHUB_TOKEN_DECRYPTION_KEYS_JSON="{}"
 export GITHUB_TOKEN_ENCRYPTION_KEY_ID="production-legacy-v1"
@@ -342,7 +342,6 @@ EOF
     exit 2
     ;;
 esac
-
 
 
 

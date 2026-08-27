@@ -273,39 +273,47 @@ defmodule OpenAgents.Forge.Browse do
     end
   end
 
-  @doc "Read the data for a file page after one cache-freshness check."
+  @doc "Read file-page data from one locked projection after one freshness check."
   def blob_page(repo, ref, path) do
     with :ok <- check(repo, ref),
          :ok <- check_path(path) do
-      _ = freshen(repo)
+      Sync.with_repo_lock(storage_key(repo), fn ->
+        _ = freshen(repo)
 
-      with {:ok, sha} <- resolve_commit_from_cache(repo, ref),
-           {:ok, blob} <- blob_from_cache(repo, sha, path) do
-        head = with {:ok, current} <- head_from_cache(repo), do: current
-        {:ok, %{sha: sha, head: head, blob: blob}}
-      end
+        with {:ok, sha} <- resolve_commit_from_cache(repo, ref) do
+          head = with {:ok, current} <- head_from_cache(repo), do: current
+
+          with {:ok, blob} <- blob_at_commit_from_cache(repo, sha, path) do
+            {:ok, %{sha: sha, head: head, blob: blob}}
+          end
+        end
+      end)
     end
   end
 
   defp blob_from_cache(repo, ref, path) do
     with {:ok, full} <- resolve_commit_from_cache(repo, ref) do
-      spec = full <> ":" <> path
+      blob_at_commit_from_cache(repo, full, path)
+    end
+  end
 
-      with {size_out, 0} <- git(repo, ["cat-file", "-s", spec]),
-           {size, _} <- Integer.parse(String.trim(size_out)),
-           {output, 0} <- git(repo, ["cat-file", "blob", spec]) do
-        content = truncate(output, @blob_cap)
+  defp blob_at_commit_from_cache(repo, commit, path) do
+    spec = commit <> ":" <> path
 
-        {:ok,
-         %{
-           content: content,
-           truncated: size > @blob_cap,
-           binary: binary_content?(content),
-           size: size
-         }}
-      else
-        _ -> {:error, :not_found}
-      end
+    with {size_out, 0} <- git(repo, ["cat-file", "-s", spec]),
+         {size, _} <- Integer.parse(String.trim(size_out)),
+         {output, 0} <- git(repo, ["cat-file", "blob", spec]) do
+      content = truncate(output, @blob_cap)
+
+      {:ok,
+       %{
+         content: content,
+         truncated: size > @blob_cap,
+         binary: binary_content?(content),
+         size: size
+       }}
+    else
+      _ -> {:error, :not_found}
     end
   end
 

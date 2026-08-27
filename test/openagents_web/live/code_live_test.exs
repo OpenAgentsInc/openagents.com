@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   import Phoenix.LiveViewTest
 
   alias OpenAgents.Forge.{DeployReceipt, Repos}
+  alias OpenAgents.Forge.WAL.Probe
   alias OpenAgents.Repo
 
   @audit_heading "Transparency audit fixture"
@@ -585,6 +586,27 @@ defmodule OpenAgentsWeb.CodeLiveTest do
   end
 
   describe "/code/:repo/blob/:ref/*path" do
+    test "performs one freshness barrier for a code blob request", %{conn: conn} do
+      previous_adapter = Application.fetch_env!(:openagents, :forge_wal_adapter)
+      previous_probe = Application.get_env(:openagents, :forge_wal_probe_pid)
+      Application.put_env(:openagents, :forge_wal_adapter, Probe)
+      Application.put_env(:openagents, :forge_wal_probe_pid, self())
+
+      on_exit(fn ->
+        Application.put_env(:openagents, :forge_wal_adapter, previous_adapter)
+
+        if previous_probe,
+          do: Application.put_env(:openagents, :forge_wal_probe_pid, previous_probe),
+          else: Application.delete_env(:openagents, :forge_wal_probe_pid)
+      end)
+
+      conn = get(conn, "/OpenAgentsInc/openagents.com/blob/main/docs/audit.md")
+      assert html_response(conn, 200)
+
+      assert_receive {Probe, :read_index, "openagents.com"}
+      refute_receive {Probe, :read_index, "openagents.com"}
+    end
+
     test "renders markdown as HTML, not source", %{conn: conn} do
       {:ok, _view, html} = live(conn, "/OpenAgentsInc/openagents.com/blob/main/docs/audit.md")
 

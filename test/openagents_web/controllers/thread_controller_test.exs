@@ -11,7 +11,7 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
-  alias OpenAgents.Inference.Models
+  alias OpenAgents.Inference.{Models, Pricing}
   alias OpenAgents.Repo
   alias OpenAgents.Threads
   alias OpenAgents.UnpricedLane
@@ -291,12 +291,16 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       opened =
         authenticated
-        |> post(~p"/api/v1/threads", %{"objective" => "Spend it all."})
+        |> post(~p"/api/v1/threads", %{
+          "objective" => "Spend it all.",
+          "model" => "gemini-3.7-flash"
+        })
         |> json_response(201)
 
       grant = Repo.get_by!(Grant, thread_id: opened["thread"]["id"])
       allowance = Credit.allowance(grant.owner_visitor_id)
-      rate = Models.default().pricing.output_per_million_tokens
+      {:ok, paid_model} = Models.fetch("gemini-3.7-flash")
+      rate = Pricing.effective_pricing(paid_model).output_per_million_tokens
 
       {:ok, _metered} =
         Inference.record_usage(grant, %{
@@ -1553,17 +1557,20 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       # A million input tokens costs exactly the default lane's per-million
       # rate, whatever the catalog's head happens to be.
-      rate = Models.default().pricing.input_per_million_tokens
+      pricing = Pricing.effective_pricing(Models.default())
+      rate = pricing.input_per_million_tokens
 
       body = authenticated |> get(~p"/api/v1/threads/#{id}") |> json_response(200)
 
       assert body["thread"]["spend"]["cost"]["microusd"] == rate
-      assert body["thread"]["spend"]["cost"]["basis"] == "provisional"
+      assert body["thread"]["spend"]["cost"]["basis"] == Pricing.basis_of(pricing)
       assert body["thread"]["spend"]["cost"]["unpriced_models"] == []
 
-      # Priced is not the same as billable: these are placeholder rates.
-      assert body["grant"]["pricing"]["basis"] == "provisional"
-      assert body["grant"]["pricing"]["billable"] == false
+      assert body["grant"]["pricing"]["basis"] == Pricing.basis_of(pricing)
+
+      assert body["grant"]["pricing"]["billable"] ==
+               (Pricing.basis_of(pricing) == "declared")
+
       assert body["grant"]["spent"]["cost_microusd"] == rate
     end
   end

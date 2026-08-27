@@ -1,7 +1,7 @@
 defmodule OpenAgents.Inference.ModelsTest do
   use ExUnit.Case, async: true
 
-  alias OpenAgents.Inference.Models
+  alias OpenAgents.Inference.{Models, Pricing}
 
   test "the default is the catalog's first entry, served by that lane's adapter" do
     default = Models.default()
@@ -157,18 +157,25 @@ defmodule OpenAgents.Inference.ModelsTest do
       assert pricing["cached_input_per_million_tokens"] == 100_000
     end
 
-    test "the default's rates are provisional, so nothing may bill from them" do
+    test "the default publishes its currently effective rate table" do
       glm = Enum.find(Models.catalog(), &(&1["id"] == "glm-5.3-flash"))
+      effective = Pricing.effective_pricing(Models.default())
 
-      assert glm["pricing"]["id"] == "placeholder.glm-5.3-flash.v1"
-      assert glm["pricing"]["input_per_million_tokens"] == 150_000
-      assert glm["pricing"]["output_per_million_tokens"] == 500_000
-      assert glm["pricing"]["cached_input_per_million_tokens"] == 30_000
+      assert glm["pricing"]["id"] == effective.id
 
-      # Read off the gateway's own listing, which still is not an operator
-      # declaring them (METER-001).
-      assert glm["pricing_basis"] == "provisional"
-      assert glm["pricing"]["basis"] == "provisional"
+      assert glm["pricing"]["input_per_million_tokens"] ==
+               effective.input_per_million_tokens
+
+      assert glm["pricing"]["output_per_million_tokens"] ==
+               effective.output_per_million_tokens
+
+      assert glm["pricing"]["cached_input_per_million_tokens"] ==
+               effective.cached_input_per_million_tokens
+
+      assert glm["pricing_basis"] == Pricing.basis_of(effective)
+      assert glm["pricing"]["basis"] == Pricing.basis_of(effective)
+      assert glm["pricing_promotion"]["ends_at"] == "2026-09-01T00:00:00Z"
+      assert glm["pricing_promotion"]["active"] == Pricing.promotion_active?(Models.default())
     end
 
     test "the free router declares its zero price" do

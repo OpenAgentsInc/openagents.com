@@ -1,10 +1,9 @@
 defmodule OpenAgentsWeb.ChangelogController do
   @moduledoc """
   `GET /api/changelog` — the machine-readable changelog
-  (schema `openagents.changelog.v1`), the superset of the public `/changelog`
-  page including receipt row ids so agents can cross-check every claim
-  against the receipt chain. Same posture as `/api/status`: public,
-  read-only, bounded, no identity state.
+  (schema `openagents.changelog.v1`), including receipt row ids so clients can
+  cross-check every claim against the receipt chain. Same posture as
+  `/api/status`: public, read-only, bounded, no identity state.
   """
 
   use OpenAgentsWeb, :controller

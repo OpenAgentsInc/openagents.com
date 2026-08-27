@@ -24,7 +24,6 @@ defmodule OpenAgentsWeb.HomeLiveUpdatesTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
 
-  alias OpenAgents.Changelog
   alias OpenAgents.Forum
   alias OpenAgents.Issues
   alias OpenAgents.Projects
@@ -39,9 +38,6 @@ defmodule OpenAgentsWeb.HomeLiveUpdatesTest do
   }
 
   setup %{conn: conn} do
-    :persistent_term.erase({OpenAgents.Changelog, :cache})
-    on_exit(fn -> :persistent_term.erase({OpenAgents.Changelog, :cache}) end)
-
     owner = github_user("home-live-owner")
     repository = ready_repository!(owner, "live-repository", "private")
 
@@ -195,41 +191,6 @@ defmodule OpenAgentsWeb.HomeLiveUpdatesTest do
     end
   end
 
-  describe "the changelog rail" do
-    test "an appended entry joins the rail", context do
-      {:ok, view, _html} = live(context.conn, ~p"/")
-
-      refute render(view) =~ "Moved the counts beside the issues they count"
-
-      {:ok, _entry} = record_entry!("d00dfeed", "Moved the counts beside the issues they count")
-
-      assert has_element?(
-               view,
-               ".changelog-rail__summary",
-               "Moved the counts beside the issues they count"
-             )
-    end
-
-    test "a client that reconnects reads the current ledger, not the cached one", context do
-      # The rail is served from a five-second cache, which is what a remounting
-      # client reads. Left in place it would hand a page that dropped and came
-      # back the ledger as it was.
-      {:ok, _view, _html} = live(context.conn, ~p"/")
-
-      {:ok, _entry} = record_entry!("feedbeef", "Landed while the client was away")
-
-      {:ok, reconnected, html} = live(context.conn, ~p"/")
-
-      assert html =~ "Landed while the client was away"
-
-      assert has_element?(
-               reconnected,
-               ".changelog-rail__summary",
-               "Landed while the client was away"
-             )
-    end
-  end
-
   describe "authorization" do
     test "a write in a repository the viewer cannot read moves nothing", context do
       stranger = github_user("home-live-stranger")
@@ -346,10 +307,9 @@ defmodule OpenAgentsWeb.HomeLiveUpdatesTest do
         end)
 
       # Which panels are stale is remembered beside the timer that fires them,
-      # so an issue burst never re-reads the forum, the ledger, or the projects.
+      # so an issue burst never re-reads the forum or the projects.
       refute Enum.any?(sql, &String.contains?(&1, ~s(FROM "forum_posts")))
       refute Enum.any?(sql, &String.contains?(&1, ~s(FROM "projects")))
-      refute Enum.any?(sql, &String.contains?(&1, ~s(FROM "changelog_entries")))
     end
   end
 
@@ -401,18 +361,6 @@ defmodule OpenAgentsWeb.HomeLiveUpdatesTest do
     |> LazyHTML.text()
     |> String.trim()
     |> String.to_integer()
-  end
-
-  defp record_entry!(prefix, summary) do
-    Changelog.record(%{
-      repo: "openagents.com",
-      sha: String.pad_trailing(prefix, 40, "0"),
-      summary: summary,
-      category: "ui",
-      source: "operator",
-      entry_at: DateTime.utc_now(),
-      visibility: "l2"
-    })
   end
 
   defp board!(slug, title, opts \\ []) do

@@ -144,7 +144,7 @@ defmodule OpenAgentsWeb.ThreadShowLiveTest do
       assert view |> element("#thread-budget-cost-note") |> render() =~ "unknown rather than zero"
     end
 
-    test "a priced lane shows the figure and says the rates are provisional", %{conn: conn} do
+    test "a declared priced lane shows the billable figure", %{conn: conn} do
       owner = github_user("thread-show-priced")
 
       {:ok, thread} = Threads.open(owner, "Run a lane with rates")
@@ -160,7 +160,8 @@ defmodule OpenAgentsWeb.ThreadShowLiveTest do
       assert view |> element("#thread-budget-cost") |> render() =~
                "$#{:erlang.float_to_binary(dollars, decimals: 2)}"
 
-      assert view |> element("#thread-budget-cost-note") |> render() =~ "not a bill"
+      assert has_element?(view, ~s(#thread-budget-cost[data-basis="declared"]))
+      refute has_element?(view, "#thread-budget-cost-note")
     end
 
     test "an unbounded ceiling reads as unbounded rather than blank", %{conn: conn} do

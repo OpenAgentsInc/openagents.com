@@ -7,7 +7,7 @@ defmodule OpenAgents.ThreadsTest do
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Credit
   alias OpenAgents.Inference.Grant
-  alias OpenAgents.Inference.Models
+  alias OpenAgents.Inference.{Models, Pricing}
   alias OpenAgents.Repo
   alias OpenAgents.Threads
   alias OpenAgents.Threads.Event
@@ -558,7 +558,10 @@ defmodule OpenAgents.ThreadsTest do
       assert spent.call_count == 2
 
       {:ok, _child, child_grant, _token} =
-        Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
+        Threads.open_and_mint(user, "Child",
+          parent_thread_id: parent.id,
+          model: "gemini-3.7-flash"
+        )
 
       assert child_grant.max_calls == 3
     end
@@ -583,19 +586,25 @@ defmodule OpenAgents.ThreadsTest do
       set_config(:thread_grant_max_calls, nil)
       set_config(:thread_grant_max_total_tokens, nil)
       user = owner("child-cost")
-      {:ok, parent, grant, _token} = Threads.open_and_mint(user, "Parent")
 
-      # Output tokens priced at the default lane's own output rate, so the
+      {:ok, parent, grant, _token} =
+        Threads.open_and_mint(user, "Parent", model: "gemini-3.7-flash")
+
+      # Output tokens priced at the paid lane's own output rate, so the
       # arithmetic below follows the catalog rather than restating it.
-      rate = Models.default().pricing.output_per_million_tokens
-      output = 20_000
+      {:ok, paid_model} = Models.fetch("gemini-3.7-flash")
+      rate = Pricing.effective_pricing(paid_model).output_per_million_tokens
+      output = 5_000
       cost = div(output * rate, 1_000_000)
 
       {:ok, spent} = Inference.record_usage(grant, %{"output_tokens" => output})
       assert spent.usage["estimated_cost_microusd"] == cost
 
       {:ok, _child, child_grant, _token} =
-        Threads.open_and_mint(user, "Child", parent_thread_id: parent.id)
+        Threads.open_and_mint(user, "Child",
+          parent_thread_id: parent.id,
+          model: "gemini-3.7-flash"
+        )
 
       assert child_grant.max_cost_microusd == 100_000 - cost
     end
@@ -717,11 +726,12 @@ defmodule OpenAgents.ThreadsTest do
 
       spend = Threads.spend(thread)
 
-      rate = Models.default().pricing.input_per_million_tokens
+      pricing = Pricing.effective_pricing(Models.default())
+      rate = pricing.input_per_million_tokens
 
       assert spend.cost.microusd == rate
       assert spend.cost.priced_microusd == rate
-      assert spend.cost.basis == "provisional"
+      assert spend.cost.basis == Pricing.basis_of(pricing)
       assert spend.cost.unpriced_models == []
     end
 
@@ -743,7 +753,9 @@ defmodule OpenAgents.ThreadsTest do
       assert spend.cost.microusd == nil
       # Nothing measured is thrown away — the priced half is still reported,
       # just not as the answer to "what did this cost".
-      assert spend.cost.priced_microusd == Models.default().pricing.input_per_million_tokens
+      assert spend.cost.priced_microusd ==
+               Pricing.effective_pricing(Models.default()).input_per_million_tokens
+
       assert spend.cost.basis == "unpriced"
       assert spend.cost.unpriced_models == [unpriced]
     end
@@ -760,7 +772,10 @@ defmodule OpenAgents.ThreadsTest do
       spend = Threads.spend(thread)
 
       assert spend.grants == 2
-      assert spend.cost.microusd == Models.default().pricing.input_per_million_tokens
+
+      assert spend.cost.microusd ==
+               Pricing.effective_pricing(Models.default()).input_per_million_tokens
+
       assert spend.cost.unpriced_calls == 0
     end
 

@@ -1,11 +1,6 @@
 defmodule OpenAgentsWeb.ChangelogLiveTest do
   @moduledoc """
-  The public changelog page and its API twin (#138, TRANSPARENCY-001):
-  opens without a session, shows the human layer with the receipt detail
-  expandable underneath, keeps the anonymous command bar free of account
-  controls, stays content-free of node internals, and serves the same
-  timeline as schema-versioned JSON at /api/changelog — 404 for a dark
-  repo.
+  The documentation changelog and the retained changelog API.
   """
 
   use OpenAgentsWeb.ConnCase, async: false
@@ -31,44 +26,18 @@ defmodule OpenAgentsWeb.ChangelogLiveTest do
     %{entry: entry}
   end
 
-  test "renders the entry's summary and category for a visitor with no session", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/changelog")
+  test "GET /changelog redirects to the documentation changelog", %{conn: conn} do
+    conn = get(conn, ~p"/changelog")
 
-    assert html =~ "Changelog"
-    assert html =~ "Moved the mic button test entry"
-    assert html =~ ~s(id="changelog-filter-ui")
+    assert redirected_to(conn, 302) == ~p"/docs/changelog"
   end
 
-  test "the detail expansion carries the sha and a link to the commit page", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/changelog")
+  test "the documentation changelog presents Coder 0.1", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/docs/changelog")
 
-    assert html =~ "abcdef1"
-    assert html =~ "/OpenAgentsInc/openagents.com/commit/abcdef1"
-  end
-
-  test "carries the shared command bar without account controls for a visitor", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/changelog")
-
-    # The shell supplies the one command bar; the page no longer builds a second.
-    refute html =~ ~s(class="command-bar")
-    refute html =~ ~s(id="account-bar-trigger")
-    refute html =~ ~s(id="return-to-conversation")
-  end
-
-  test "carries the shell sidebar when logged in", %{conn: conn} do
-    conn = log_in_chatting_user(conn, "changelog-header-browser")
-
-    {:ok, _view, html} = live(conn, ~p"/changelog")
-
-    # Chat is a sidebar row, so the page carries no chip back to it.
-    refute html =~ ~s(id="return-to-conversation")
-    assert html =~ ~s(href="/sarah")
-  end
-
-  test "publishes no node internals", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/changelog")
-
-    refute html =~ to_string(node())
+    assert html =~ "Coder 0.1"
+    assert html =~ "Choose how inference runs"
+    assert html =~ "Delegate work"
   end
 
   test "GET /api/changelog returns the schema-versioned projection", %{conn: conn} do

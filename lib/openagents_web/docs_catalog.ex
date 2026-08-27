@@ -222,7 +222,7 @@ defmodule OpenAgentsWeb.DocsCatalog do
     %{
       title: "Transparency",
       items: [
-        %{slug: "changelog", title: "Changelog", icon: "text", route: "/changelog"},
+        %{slug: "changelog", title: "Changelog", icon: "text", route: "/docs/changelog"},
         %{slug: "status", title: "Status", icon: "check-circle", route: "/status"},
         %{slug: "leaderboard", title: "Leaderboard", icon: "star", route: "/leaderboard"}
       ]

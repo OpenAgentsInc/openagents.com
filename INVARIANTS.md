@@ -4345,7 +4345,7 @@ published key set included), and `OpenAgentsWeb.NetworkStatusLiveTest`.
 
 Status: Current
 
-The public transparency surfaces — `/changelog`, `/api/changelog`, and the
+The public transparency surfaces — `/api/changelog` and the
 forge web UI (`/<owner>/<repo>`, `/<owner>/<repo>/commit/:sha`,
 `/<owner>/<repo>/tree/:ref/*path`, `/<owner>/<repo>/blob/:ref/*path` —
 addressed exactly like the GitHub URLs

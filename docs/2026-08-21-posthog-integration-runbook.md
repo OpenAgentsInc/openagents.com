@@ -228,6 +228,9 @@ Chat and delegated work:
 | `chat_stream_chunk` | streaming assistant deltas, throttled to one event per second per stream | `conversation_id`, `modality` |
 | `chat_tool_called` | `Turns.TurnServer` tool request; `tool_call_started` in `Chat.AccountTurns` | `tool_name`, `turn_id`, `conversation_id`; never arguments |
 | `chat_tokens_used` | once per turn at terminal state in `Turns.TurnServer` and `Chat.AccountTurns` | `input_tokens`, `output_tokens`, `model`, `provider`, `conversation_id`, `turn_id`, `outcome` |
+| `inference_model_selected` | inference proxy after grant and catalog admission, before the provider call | requested, granted, selected, provider, and provider model IDs; availability; substitution policy; effective pricing table, basis, rates, and promotion cutoff; request shape counts; grant budget ceilings and fence types; never bearer material, prompts, instructions, tool arguments, or provider credentials |
+| `inference_model_served` | successful inference proxy call | all selection properties plus effective served model, disclosure state, outcome, and whether the provider reported usage |
+| `inference_model_failed` | failed inference proxy provider call | all selection properties plus outcome, sanitized reason code, upstream status, and whether the provider reported usage |
 | `chat_turn_failed` | non-completed terminal turn in `ChatLive`; failed or cancelled run in `Chat.AccountTurns` | `reason`, `outcome`, `conversation_id`, `turn_id` |
 | `chat_voice_started` / `chat_voice_ended` | voice session lifecycle broadcasts in `ChatLive` | `conversation_id`; end adds `outcome`, `duration_ms` |
 | `memory_saved` | `ProfileMemory.remember_explicit` | `disposition`: `stored`, `already_active` |

@@ -24,6 +24,7 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     refute html =~ "One continuing conversation"
     refute html =~ ~s(href="/chat")
     refute html =~ "Account menu"
+    refute html =~ ~s(href="/changelog")
   end
 
   test "an authenticated account sees the dashboard, not the pitch", %{conn: conn} do
@@ -31,10 +32,11 @@ defmodule OpenAgentsWeb.HomeControllerTest do
     html = html_response(get(conn, ~p"/"), 200)
 
     # Someone who has signed in has already been sold. The same route shows the
-    # state of the work instead: open issues, projects, and what shipped.
+    # state of the work instead: open issues and projects.
     refute html =~ "Your all-in-one coding agent."
     assert html =~ "Open issues"
-    assert html =~ "Latest from the changelog"
+    refute html =~ "Latest from the changelog"
+    refute html =~ ~s(href="/changelog")
     assert html =~ ~s(class="dashboard")
   end
 

@@ -7,8 +7,8 @@ defmodule OpenAgents.Inference.Pricing do
   `gpt-5.6-luna` admitted and its rates never entered, so a surface that read a
   missing cost as zero would have shown `$0.00` beside a session that spent
   real money — and shown it in the same typeface as a figure that was measured.
-  Every admitted model carries rates now, and none of them is declared, so the
-  live case for a selectable model is `provisional`. `unpriced` is not dead
+  Every admitted model carries rates now. A time-bounded promotion can replace
+  a model's regular table until its exclusive UTC cutoff. `unpriced` is not dead
   code: a call the gateway's fallback chain answers with a model the catalog
   does not admit reaches it, and so would any entry added without rates.
 
@@ -16,8 +16,9 @@ defmodule OpenAgents.Inference.Pricing do
   `pricing_id` naming the rate table it was priced against, and the id resolves
   to one of three bases:
 
-    * `declared` — the operator entered the provider's published rates. This is
-      the only basis anything may bill from (`billable?/1`).
+    * `declared` — the operator entered the provider's published rates or a
+      promotional zero rate. This is the only basis anything may bill from
+      (`billable?/1`).
     * `provisional` — the deployment carries rates that were written to make
       the system run rather than read off a provider's price page, or rates
       whose table is unnamed. A cost is computed and labelled; no bill may
@@ -43,6 +44,40 @@ defmodule OpenAgents.Inference.Pricing do
   @unpriced "unpriced"
   @unattributed "unattributed"
 
+  @doc "The effective rate table for a model at the given UTC instant."
+  @spec effective_pricing(map(), DateTime.t()) :: map() | nil
+  def effective_pricing(model, now \\ pricing_now())
+
+  def effective_pricing(%{pricing: nil}, _now), do: nil
+
+  def effective_pricing(%{pricing: pricing}, %DateTime{} = now) do
+    case Map.get(pricing, :promotion) do
+      %{ends_at: %DateTime{} = ends_at} = promotion ->
+        if DateTime.compare(now, ends_at) == :lt do
+          Map.delete(promotion, :ends_at)
+        else
+          Map.delete(pricing, :promotion)
+        end
+
+      _absent ->
+        Map.delete(pricing, :promotion)
+    end
+  end
+
+  @doc "Whether a model's promotional rate table is active now."
+  @spec promotion_active?(map(), DateTime.t()) :: boolean()
+  def promotion_active?(model, now \\ pricing_now()) do
+    match?(%{pricing: %{promotion: %{ends_at: %DateTime{}}}}, model) and
+      pricing_id(effective_pricing(model, now)) != pricing_id(model.pricing)
+  end
+
+  @doc "The exclusive UTC cutoff for a model's promotion, when configured."
+  @spec promotion_ends_at(map()) :: DateTime.t() | nil
+  def promotion_ends_at(%{pricing: %{promotion: %{ends_at: %DateTime{} = ends_at}}}),
+    do: ends_at
+
+  def promotion_ends_at(_model), do: nil
+
   @doc "The `pricing_id` written for a lane with no declared rates."
   @spec unpriced() :: String.t()
   def unpriced, do: @unpriced
@@ -61,11 +96,11 @@ defmodule OpenAgents.Inference.Pricing do
 
   @doc "The basis for a model, by catalog id or resolved model."
   @spec basis(map() | String.t() | nil) :: String.t()
-  def basis(%{pricing: pricing}), do: basis_of(pricing)
+  def basis(%{pricing: _pricing} = model), do: model |> effective_pricing() |> basis_of()
 
   def basis(model_id) do
     case Models.fetch(model_id) do
-      {:ok, model} -> basis_of(model.pricing)
+      {:ok, model} -> basis(model)
       :error -> @unpriced
     end
   end
@@ -84,7 +119,7 @@ defmodule OpenAgents.Inference.Pricing do
   @spec pricing_id_for(String.t() | nil) :: String.t()
   def pricing_id_for(model_id) do
     case Models.fetch(model_id) do
-      {:ok, model} -> pricing_id(model.pricing)
+      {:ok, model} -> model |> effective_pricing() |> pricing_id()
       :error -> @unpriced
     end
   end
@@ -105,7 +140,7 @@ defmodule OpenAgents.Inference.Pricing do
   def price(usage, model_id) when is_map(usage) do
     pricing =
       case Models.fetch(model_id) do
-        {:ok, model} -> model.pricing
+        {:ok, model} -> effective_pricing(model)
         :error -> nil
       end
 
@@ -184,8 +219,20 @@ defmodule OpenAgents.Inference.Pricing do
   # DEREFERENCEABLE USAGE RECORD is the contract.
   defp declared_id?(id) do
     Enum.any?(Models.all(), fn model ->
-      pricing_id(model.pricing) == id and basis_of(model.pricing) == "declared"
+      Enum.any?(rate_tables(model.pricing), fn pricing ->
+        pricing_id(pricing) == id and basis_of(pricing) == "declared"
+      end)
     end)
+  end
+
+  defp rate_tables(nil), do: []
+
+  defp rate_tables(pricing) do
+    [Map.delete(pricing, :promotion)] ++
+      case Map.get(pricing, :promotion) do
+        %{} = promotion -> [Map.delete(promotion, :ends_at)]
+        _absent -> []
+      end
   end
 
   @doc """
@@ -205,4 +252,8 @@ defmodule OpenAgents.Inference.Pricing do
   defp integer(value) when is_integer(value), do: value
   defp integer(value) when is_float(value), do: trunc(value)
   defp integer(_value), do: 0
+
+  defp pricing_now do
+    Application.get_env(:openagents, :pricing_now, DateTime.utc_now())
+  end
 end

@@ -56,6 +56,38 @@ defmodule OpenAgents.Inference.PricingTest do
     end
   end
 
+  describe "the GLM free promotion" do
+    test "uses zero declared rates before the cutoff and regular rates at the cutoff" do
+      {:ok, glm} = OpenAgents.Inference.Models.fetch("glm-5.3-flash")
+
+      promotional = Pricing.effective_pricing(glm, ~U[2026-08-31 23:59:59.999999Z])
+      regular = Pricing.effective_pricing(glm, ~U[2026-09-01 00:00:00Z])
+
+      assert promotional.id == "declared.glm-5.3-flash.free-through-2026-08-31.v1"
+      assert promotional.source == :declared
+      assert promotional.input_per_million_tokens == 0
+      assert promotional.output_per_million_tokens == 0
+      assert promotional.cached_input_per_million_tokens == 0
+      assert Pricing.promotion_active?(glm, ~U[2026-08-31 23:59:59Z])
+
+      assert regular.id == "declared.glm-5.3-flash.v1"
+      assert regular.source == :declared
+      assert regular.input_per_million_tokens == 150_000
+      refute Pricing.promotion_active?(glm, ~U[2026-09-01 00:00:00Z])
+      assert Pricing.promotion_ends_at(glm) == ~U[2026-09-01 00:00:00Z]
+    end
+
+    test "the declared promotion remains billable as a zero-cost historical record" do
+      usage = %{
+        "pricing_id" => "declared.glm-5.3-flash.free-through-2026-08-31.v1",
+        "estimated_cost_microusd" => 0
+      }
+
+      assert Pricing.usage_basis(usage) == "declared"
+      assert Pricing.billable?(usage)
+    end
+  end
+
   describe "pricing one usage record" do
     test "an unpriced model writes no cost key — not a zero" do
       priced =
@@ -136,16 +168,20 @@ defmodule OpenAgents.Inference.PricingTest do
   end
 
   describe "the catalog this deployment actually ships" do
-    test "only the free router claims declared zero rates" do
+    test "declared tables publish the configured rates" do
       bases = Enum.map(OpenAgents.Inference.Models.catalog(), & &1["pricing_basis"])
 
       free_router =
         Enum.find(OpenAgents.Inference.Models.catalog(), &(&1["id"] == "openrouter/free"))
 
-      assert Enum.count(bases, &(&1 == "declared")) == 1
+      glm = Enum.find(OpenAgents.Inference.Models.catalog(), &(&1["id"] == "glm-5.3-flash"))
+
+      assert Enum.count(bases, &(&1 == "declared")) >= 2
       assert "provisional" in bases
       assert free_router["pricing"]["input_per_million_tokens"] == 0
       assert free_router["pricing"]["output_per_million_tokens"] == 0
+      assert glm["pricing"]["input_per_million_tokens"] == 150_000
+      assert glm["pricing"]["output_per_million_tokens"] == 500_000
     end
 
     test "every shipped lane carries rates, so none reads as unpriced" do

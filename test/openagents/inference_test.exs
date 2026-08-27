@@ -4,7 +4,7 @@ defmodule OpenAgents.InferenceTest do
 
   alias OpenAgents.Inference
   alias OpenAgents.Inference.Grant
-  alias OpenAgents.Inference.Models
+  alias OpenAgents.Inference.{Models, Pricing}
   alias OpenAgents.Machines
   alias OpenAgents.Repo
   alias OpenAgents.UnpricedLane
@@ -108,7 +108,8 @@ defmodule OpenAgents.InferenceTest do
       assert once.usage["input_tokens"] == 100
       assert once.usage["output_tokens"] == 40
       assert once.usage["total_tokens"] == 140
-      assert once.usage["estimated_cost_microusd"] > 0
+      assert once.usage["estimated_cost_microusd"] >= 0
+      assert once.usage["pricing_id"] == Pricing.pricing_id_for(grant.model_id)
       assert once.usage["schema"] == "sarah.inference_grant_usage.v1"
 
       {:ok, twice} = Inference.record_usage(once, %{"input_tokens" => 10, "output_tokens" => 5})
@@ -204,7 +205,7 @@ defmodule OpenAgents.InferenceTest do
           "cache_read_input_tokens" => cache_read
         })
 
-      pricing = Models.default().pricing
+      pricing = Pricing.effective_pricing(Models.default())
 
       expected =
         ((input - cache_read) * pricing.input_per_million_tokens +

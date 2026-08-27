@@ -190,24 +190,38 @@ defmodule OpenAgents.Inference.Models do
     default_id = default_id()
 
     Enum.map(all(), fn model ->
+      pricing = Pricing.effective_pricing(model)
+
       base = %{
         "id" => model.id,
         "provider" => Atom.to_string(model.provider),
         "context_window" => model.context_window,
         "max_output" => model.max_output,
         "availability" => availability(model),
-        "pricing_basis" => Pricing.basis_of(model.pricing),
+        "pricing_basis" => Pricing.basis_of(pricing),
         "default" => model.id == default_id
       }
 
-      case model.pricing do
-        nil ->
-          base
-
-        %{} = pricing ->
-          Map.put(base, "pricing", public_pricing(pricing))
-      end
+      base
+      |> maybe_put_pricing(pricing)
+      |> maybe_put_promotion(model, pricing)
     end)
+  end
+
+  defp maybe_put_pricing(base, nil), do: base
+  defp maybe_put_pricing(base, pricing), do: Map.put(base, "pricing", public_pricing(pricing))
+
+  defp maybe_put_promotion(base, model, pricing) do
+    case Pricing.promotion_ends_at(model) do
+      %DateTime{} = ends_at ->
+        Map.put(base, "pricing_promotion", %{
+          "active" => Pricing.pricing_id(pricing) != Pricing.pricing_id(model.pricing),
+          "ends_at" => DateTime.to_iso8601(ends_at)
+        })
+
+      nil ->
+        base
+    end
   end
 
   defp public_pricing(pricing) do

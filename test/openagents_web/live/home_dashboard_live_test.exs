@@ -6,8 +6,8 @@ defmodule OpenAgentsWeb.HomeDashboardLiveTest do
   across every repository they can read rather than one repository picked for
   them, that its counts agree with `/issues` and `/projects` because they are
   read the same way, that a repository the viewer cannot read is absent from
-  both the rows and the numbers, that each kind of emptiness explains itself,
-  and that a changelog row says what it is instead of rendering a bare time.
+  both the rows and the numbers, and that each kind of emptiness explains
+  itself.
   """
 
   use OpenAgentsWeb.ConnCase, async: false
@@ -15,8 +15,6 @@ defmodule OpenAgentsWeb.HomeDashboardLiveTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
 
-  alias OpenAgents.Changelog
-  alias OpenAgents.Forge.DeployReceipt
   alias OpenAgents.Issues
   alias OpenAgents.Projects
   alias OpenAgents.Repo
@@ -25,9 +23,6 @@ defmodule OpenAgentsWeb.HomeDashboardLiveTest do
   alias OpenAgents.Repositories.Repository
 
   setup %{conn: conn} do
-    :persistent_term.erase({OpenAgents.Changelog, :cache})
-    on_exit(fn -> :persistent_term.erase({OpenAgents.Changelog, :cache}) end)
-
     owner = github_user("home-dashboard-owner")
 
     # Private with a membership, so the same seeding proves both halves: the
@@ -160,55 +155,6 @@ defmodule OpenAgentsWeb.HomeDashboardLiveTest do
     refute html =~ "No open issues in the repositories you can read."
   end
 
-  describe "the changelog rail" do
-    test "renders each row's summary beside its time", context do
-      {:ok, _entry} =
-        Changelog.record(%{
-          repo: "openagents.com",
-          sha: String.pad_trailing("d00dfeed", 40, "0"),
-          summary: "Moved the counts beside the issues they count",
-          category: "ui",
-          source: "operator",
-          entry_at: DateTime.utc_now(),
-          visibility: "l2"
-        })
-
-      {:ok, view, _html} = live(context.conn, ~p"/")
-
-      assert has_element?(
-               view,
-               ".changelog-rail__summary",
-               "Moved the counts beside the issues they count"
-             )
-
-      assert every_row_says_something?(view)
-    end
-
-    test "states what a receipted deploy nobody wrote a note for is", context do
-      insert_deploy!(String.pad_trailing("beefcafe", 40, "0"))
-
-      {:ok, view, _html} = live(context.conn, ~p"/")
-
-      # The ledger's agent-layer rows carry no authored note. The rail used to
-      # render their time against an empty line, which is the defect.
-      assert has_element?(view, ".changelog-rail__summary", "Receipted deploy of beefcafe0000")
-      assert every_row_says_something?(view)
-    end
-  end
-
-  defp every_row_says_something?(view) do
-    document = view |> render() |> LazyHTML.from_fragment()
-
-    summaries =
-      document
-      |> LazyHTML.query(".changelog-rail__summary")
-      |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
-
-    times = document |> LazyHTML.query(".changelog-rail__when") |> Enum.count()
-
-    length(summaries) == times and summaries != [] and Enum.all?(summaries, &(&1 != ""))
-  end
-
   defp integer_at(view, selector) do
     view
     |> render()
@@ -235,22 +181,6 @@ defmodule OpenAgentsWeb.HomeDashboardLiveTest do
       )
 
     project
-  end
-
-  defp insert_deploy!(sha) do
-    {:ok, deploy} =
-      %DeployReceipt{}
-      |> DeployReceipt.changeset(%{
-        repo: "openagents.com",
-        sha: sha,
-        target_id: Ecto.UUID.generate(),
-        result: "live",
-        modules: ["Elixir.OpenAgents.Something"],
-        nodes: ["node-a"]
-      })
-      |> Repo.insert()
-
-    deploy
   end
 
   defp ready_repository!(owner, name, visibility) do

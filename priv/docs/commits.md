@@ -11,10 +11,12 @@ hundreds of files shows the list and truncates the diffs.
 ## Trailers
 
 Commits carry trailers identifying the agent session that produced them, where
-one did. This is what lets a change be traced from the [changelog](/changelog)
+one did. This is what lets a change be traced from the
+[machine-readable changelog](/api/changelog)
 back to the conversation that caused it.
 
 ## Deploy history
 
 Where a commit reached the fleet, its receipt chain is visible from the
-changelog: pushed, built, deployed, and how long each step took.
+machine-readable changelog: pushed, built, deployed, and how long each step
+took.

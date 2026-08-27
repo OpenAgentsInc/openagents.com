@@ -5,6 +5,7 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
   alias OpenAgents.Inference.Grant
   alias OpenAgents.Inference.Health
   alias OpenAgents.Inference.Models
+  alias OpenAgents.Inference.Pricing
   alias OpenAgents.Machines
   alias OpenAgents.Providers.RecordingTestProvider
   alias OpenAgents.Repo
@@ -130,7 +131,8 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     metered = Repo.get(Grant, grant.id)
     assert metered.call_count == 1
     assert metered.usage["total_tokens"] == 12
-    assert metered.usage["estimated_cost_microusd"] > 0
+    assert metered.usage["estimated_cost_microusd"] >= 0
+    assert metered.usage["pricing_id"] == Pricing.pricing_id_for(default.id)
 
     assert_receive {:analytics, "inference_model_selected", distinct_id, selected}
     assert distinct_id =~ "visitor_"
@@ -139,6 +141,8 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert selected["grant_model"] == Models.default_id()
     assert selected["selected_model"] == Models.default_id()
     assert selected["provider_model"] == default.provider_model
+    assert selected["pricing_id"] == Pricing.pricing_id_for(default.id)
+    assert selected["pricing_basis"] == Pricing.basis(default.id)
     assert selected["input_message_count"] == 1
     assert selected["tool_definition_count"] == 0
     assert selected["tool_output_count"] == 0

@@ -222,16 +222,23 @@ config :openagents,
       # model reasons against this allowance, so a small one is spent thinking
       # and the caller is handed a truncated answer on a 200.
       max_output: 131_000,
-      # Placeholder: list price ($0.15 in, $0.50 out, $0.03 cached in, per
-      # million tokens), not the half-price offer running until 2026-09-09
-      # 16:00 UTC. Rates an operator has not declared, so nothing may bill from
-      # them until `source` says `:declared`.
+      # The declared promotion makes this lane free until the exclusive UTC
+      # cutoff, after which pricing automatically returns to the regular table
+      # without another deployment.
       pricing: %{
-        id: "placeholder.glm-5.3-flash.v1",
-        source: :placeholder,
+        id: "declared.glm-5.3-flash.v1",
+        source: :declared,
         input_per_million_tokens: 150_000,
         output_per_million_tokens: 500_000,
-        cached_input_per_million_tokens: 30_000
+        cached_input_per_million_tokens: 30_000,
+        promotion: %{
+          id: "declared.glm-5.3-flash.free-through-2026-08-31.v1",
+          source: :declared,
+          ends_at: ~U[2026-09-01 00:00:00Z],
+          input_per_million_tokens: 0,
+          output_per_million_tokens: 0,
+          cached_input_per_million_tokens: 0
+        }
       }
     },
     %{

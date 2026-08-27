@@ -6,6 +6,11 @@ config :openagents, :repository_provisioner_enabled, false
 
 config :openagents, :runtime_environment, :test
 
+# Pin pricing at the promotion's exclusive cutoff so the general credit suite
+# continues to exercise paid-default behavior. Promotion boundary tests pass
+# explicit instants to `OpenAgents.Inference.Pricing.effective_pricing/2`.
+config :openagents, :pricing_now, ~U[2026-09-01 00:00:00Z]
+
 # Test fixtures create the forum boards each test needs; the seed migration
 # stays out of their way. See SeedGeneralForumBoard.
 config :openagents, :seed_forum_boards, false

@@ -3,7 +3,7 @@ defmodule OpenAgentsWeb.TransparencySurfaceTest do
   The executable enumeration behind TRANSPARENCY-001.
 
   TRANSPARENCY-001 states bounds that hold "at every level" and then lists the
-  surfaces it is about by hand: `/changelog`, `/api/changelog`, and three forge
+  surfaces it is about by hand: `/api/changelog` and three forge
   paths. `OpenAgents.Forge.VisibilityTest` proves the dial answers correctly and
   `OpenAgents.Forge.BrowseTest` proves the reads are bounded; neither can fail
   for a public surface nobody added to the list. When this file was written the
@@ -53,10 +53,9 @@ defmodule OpenAgentsWeb.TransparencySurfaceTest do
     {"get", "/:owner/:repo/pulls"} => :repository_readability
   }
 
-  # The two receipt-chain surfaces, which publish the changelog projection
-  # rather than repository content.
+  # The receipt-chain surface publishes the changelog projection rather than
+  # repository content.
   @changelog_surfaces %{
-    {"get", "/changelog"} => OpenAgentsWeb.ChangelogLive,
     {"get", "/api/changelog"} => OpenAgentsWeb.ChangelogController
   }
 

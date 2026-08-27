@@ -186,12 +186,12 @@ defmodule OpenAgentsWeb.Router do
     # canonical topic route. Unknown ids answer 404; the mirror is never read.
     get "/forum/topic/:id", LegacyForumController, :topic
     get "/forum/post/:id", LegacyForumController, :post
+    get "/changelog", LegacyChangelogController, :index
 
     live_session :public,
       on_mount: [{OpenAgentsWeb.UserAuth, :mount_current_user}] do
       live "/", HomeLive, :index
       live "/status", NetworkStatusLive, :index
-      live "/changelog", ChangelogLive, :index
       live "/leaderboard", LeaderboardLive, :index
       live "/coder", CoderLive, :index
 

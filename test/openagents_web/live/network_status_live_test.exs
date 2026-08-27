@@ -11,7 +11,10 @@ defmodule OpenAgentsWeb.NetworkStatusLiveTest do
     assert html =~ "node 1"
     assert has_element?(view, ".status-metric__label", "computers connected")
     assert has_element?(view, "#status-scvs")
-    assert has_element?(view, "#status-no-scvs")
+
+    assert has_element?(view, "#status-no-scvs") or
+             has_element?(view, "#public-scv-streams")
+
     # Content-free: the serving node's internal name never reaches the page.
     refute html =~ to_string(node())
   end

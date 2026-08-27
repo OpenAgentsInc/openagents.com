@@ -9,8 +9,7 @@ defmodule OpenAgentsWeb.HomeLive do
   Signed in, a marketing pitch is the wrong thing to show: the visitor has
   already been sold, and what they want is the state of the work. The same
   route renders a dashboard -- repositories, open issues, projects, what the
-  forum is discussing, and what shipped recently -- the way a code host's home
-  does.
+  forum is discussing -- the way a code host's home does.
 
   The dashboard describes the viewer's work across every repository they can
   read, not one repository chosen for them, and it says so by reading through
@@ -24,8 +23,8 @@ defmodule OpenAgentsWeb.HomeLive do
 
   It is also current. Every panel names a publisher and re-reads when it hears
   one, so an issue opened in another tab moves the count and the feed without a
-  refresh, and the same holds for a project, a repository, a forum post, and a
-  changelog entry. The announcements carry ids and nothing else: each panel
+  refresh, and the same holds for a project, a repository, and a forum post.
+  The announcements carry ids and nothing else: each panel
   re-reads through the same authorized read that filled it at mount, so a
   viewer can never be handed a row -- or a row counted into a number -- the
   database would have refused them. Bursts collapse into one re-read of only
@@ -38,15 +37,12 @@ defmodule OpenAgentsWeb.HomeLive do
   use OpenAgentsWeb, :live_view
 
   alias OpenAgents.Accounts
-  alias OpenAgents.Changelog
   alias OpenAgents.Forum
   alias OpenAgents.Issues
   alias OpenAgents.Projects
   alias OpenAgents.Repositories
   alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.UI.Landing
-
-  @repo "openagents.com"
 
   # The one line the landing page asks a reader to run. It is the command
   # `priv/docs/install-cli.md` documents and the script
@@ -57,7 +53,6 @@ defmodule OpenAgentsWeb.HomeLive do
   @feed_limit 8
   @project_limit 6
   @post_limit 6
-  @changelog_limit 5
 
   @impl true
   def mount(params, _session, socket) do
@@ -105,7 +100,6 @@ defmodule OpenAgentsWeb.HomeLive do
     :ok = Repositories.subscribe_all_projects()
     :ok = Repositories.subscribe_repository_changes()
     :ok = Forum.subscribe_posts()
-    :ok = Changelog.subscribe()
   end
 
   @impl true
@@ -128,11 +122,7 @@ defmodule OpenAgentsWeb.HomeLive do
   def handle_info(:live_refresh, socket),
     do: {:noreply, LiveRefresh.run(socket, &refresh_panel/2)}
 
-  def handle_info(message, socket) do
-    if Changelog.ledger_event?(message),
-      do: {:noreply, mark_stale(socket, :changelog)},
-      else: {:noreply, socket}
-  end
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   # One re-armed timer, shared with every other live surface through
   # `LiveRefresh`, so a burst of announcements costs one re-read rather than
@@ -143,7 +133,6 @@ defmodule OpenAgentsWeb.HomeLive do
   defp refresh_panel(socket, :issues), do: assign_issues(socket)
   defp refresh_panel(socket, :projects), do: assign_projects(socket)
   defp refresh_panel(socket, :posts), do: assign_posts(socket)
-  defp refresh_panel(socket, :changelog), do: assign_changelog(socket, refresh: true)
 
   defp refresh_panel(socket, :repositories) do
     socket.assigns.changed_repositories
@@ -178,7 +167,6 @@ defmodule OpenAgentsWeb.HomeLive do
     |> assign_issues()
     |> assign_projects()
     |> assign_posts()
-    |> assign_changelog()
     |> assign_repositories()
   end
 
@@ -223,14 +211,6 @@ defmodule OpenAgentsWeb.HomeLive do
     )
   end
 
-  # Mount reads the shared cache, because every signed-in page load would
-  # otherwise rebuild the projection and the cache exists to stop exactly that.
-  # A live refresh bypasses it, because a rail told the ledger moved and then
-  # handed the cached answer would render the state it was told had changed.
-  defp assign_changelog(socket, opts \\ []) do
-    assign(socket, :changelog, changelog_entries(opts))
-  end
-
   defp assign_repositories(socket) do
     repositories = Repositories.list_visible_repositories(socket.assigns.current_user)
 
@@ -238,37 +218,6 @@ defmodule OpenAgentsWeb.HomeLive do
     |> assign(:any_repository?, repositories != [])
     |> stream(:repositories, repositories)
   end
-
-  # The ledger is a bounded public projection and can legitimately refuse. An
-  # empty rail is the honest answer; the home page should not crash over it.
-  #
-  # Its agent-layer rows carry no authored note, which is what left the rail
-  # rendering a column of bare relative times. A row states what it is or it
-  # does not render.
-  defp changelog_entries(opts) do
-    case Changelog.timeline(@repo, opts) do
-      {:ok, rows} ->
-        rows
-        |> Enum.map(&%{entry_at: &1.entry_at, summary: changelog_summary(&1)})
-        |> Enum.reject(&is_nil(&1.summary))
-        |> Enum.take(@changelog_limit)
-
-      {:error, _reason} ->
-        []
-    end
-  end
-
-  defp changelog_summary(%{summary: summary}) when is_binary(summary) do
-    case String.trim(summary) do
-      "" -> nil
-      trimmed -> trimmed
-    end
-  end
-
-  defp changelog_summary(%{short_sha: short_sha}) when is_binary(short_sha),
-    do: "Receipted deploy of #{short_sha}"
-
-  defp changelog_summary(_row), do: nil
 
   @impl true
   def render(%{current_user: user} = assigns) when not is_nil(user) do
@@ -455,25 +404,6 @@ defmodule OpenAgentsWeb.HomeLive do
               No posts yet on the boards you can read.
             </p>
           </section>
-
-          <section class="panel" aria-labelledby="dashboard-changelog">
-            <header class="panel__header">
-              <h2 id="dashboard-changelog" class="panel__title">Latest from the changelog</h2>
-            </header>
-
-            <ol :if={@changelog != []} class="changelog-rail">
-              <li :for={entry <- @changelog}>
-                <p class="changelog-rail__when">{relative_time(entry.entry_at)}</p>
-                <p class="changelog-rail__summary">{entry.summary}</p>
-              </li>
-            </ol>
-
-            <p :if={@changelog == []} class="panel__empty">Nothing recorded yet.</p>
-
-            <.link navigate={~p"/changelog"} class="panel__more">
-              View changelog <.icon name="arrow-right" />
-            </.link>
-          </section>
         </aside>
       </div>
     </Layouts.app>
@@ -580,9 +510,6 @@ defmodule OpenAgentsWeb.HomeLive do
           <:links>
             <.button navigate={~p"/docs"} variant={:ghost} size={:sm} class="hero__link">
               Read the docs <.icon name="chevron-right" />
-            </.button>
-            <.button navigate={~p"/changelog"} variant={:ghost} size={:sm} class="hero__link">
-              Changelog <.icon name="chevron-right" />
             </.button>
             <.button
               navigate={~p"/OpenAgentsInc/openagents.com"}
@@ -708,7 +635,6 @@ defmodule OpenAgentsWeb.HomeLive do
             <.link navigate={~p"/models"}>Models</.link>
           </:column>
           <:column title="Transparency">
-            <.link navigate={~p"/changelog"}>Changelog</.link>
             <.link navigate={~p"/status"}>Status</.link>
             <.link navigate={~p"/leaderboard"}>Leaderboard</.link>
           </:column>

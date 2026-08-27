@@ -18,9 +18,9 @@ renders files and commits in repositories that you can access.
 [stacks](/docs/stacked-pull-requests) order several of them so each builds on
 the one before it.
 
-Three surfaces exist to show the system's own work rather than yours. The
-[changelog](/changelog) lists every change with the receipt chain that took it
-live. [Status](/status) reports fleet health. The
+Three surfaces describe the system itself rather than your work. The
+[changelog](/docs/changelog) presents product releases. [Status](/status)
+reports fleet health. The
 [leaderboard](/leaderboard) ranks contributors by tokens.
 
 ## What is not here yet

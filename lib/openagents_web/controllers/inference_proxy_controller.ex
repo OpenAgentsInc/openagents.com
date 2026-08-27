@@ -39,7 +39,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   alias OpenAgents.Analytics
   alias OpenAgents.Inference
-  alias OpenAgents.Inference.Models
+  alias OpenAgents.Inference.{Models, Pricing}
   alias OpenAgents.Providers.{Request, ToolDefinition, ToolOutput}
 
   def create(conn, _params) do
@@ -289,6 +289,8 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   # it is not an event property.
   defp selection_properties(grant, model, request, body) do
     requested = Map.get(body, "model")
+    pricing = Pricing.effective_pricing(model)
+    promotion_ends_at = Pricing.promotion_ends_at(model)
 
     %{
       "selection_schema" => "inference_model_selection.v1",
@@ -299,6 +301,16 @@ defmodule OpenAgentsWeb.InferenceProxyController do
       "selected_model" => model.id,
       "provider" => Atom.to_string(model.provider),
       "provider_model" => model.provider_model,
+      "pricing_id" => Pricing.pricing_id(pricing),
+      "pricing_basis" => Pricing.basis_of(pricing),
+      "pricing_promotion_active" =>
+        Pricing.pricing_id(pricing) != Pricing.pricing_id(model.pricing),
+      "pricing_promotion_ends_at" =>
+        if(promotion_ends_at, do: DateTime.to_iso8601(promotion_ends_at), else: nil),
+      "input_price_per_million_tokens" => pricing && pricing.input_per_million_tokens,
+      "output_price_per_million_tokens" => pricing && pricing.output_per_million_tokens,
+      "cached_input_price_per_million_tokens" =>
+        pricing && Map.get(pricing, :cached_input_per_million_tokens),
       "model_availability" => Models.availability(model),
       "model_available" => Models.available?(model),
       "adapter_substitutable" => substitutable?(model.adapter),

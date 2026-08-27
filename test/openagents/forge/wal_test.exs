@@ -2,6 +2,8 @@ defmodule OpenAgents.Forge.WALTest do
   use ExUnit.Case, async: false
   alias OpenAgents.Forge.WAL
 
+  setup {Req.Test, :verify_on_exit!}
+
   @repo "openagents.com"
 
   setup do
@@ -391,6 +393,11 @@ defmodule OpenAgents.Forge.WALTest do
   end
 
   describe "GCS adapter (offline)" do
+    setup do
+      OpenAgents.Forge.WAL.Gcs.reset_index_cache()
+      :ok
+    end
+
     test "returns :not_configured when no bucket is set" do
       previous = Application.fetch_env(:openagents, :forge_wal_bucket)
       Application.delete_env(:openagents, :forge_wal_bucket)
@@ -416,6 +423,43 @@ defmodule OpenAgents.Forge.WALTest do
                  "entries/00000000-0123456789ab",
                  "/tmp/entry"
                )
+    end
+
+    test "reuses a decoded index while the GCS generation is unchanged" do
+      previous_bucket = Application.fetch_env(:openagents, :forge_wal_bucket)
+      previous_provider = Application.fetch_env(:openagents, :forge_gcs_token_provider)
+      previous_options = Application.fetch_env(:openagents, :forge_gcs_request_options)
+
+      Application.put_env(:openagents, :forge_wal_bucket, "test-bucket")
+      Application.put_env(:openagents, :forge_gcs_token_provider, fn -> "test-token" end)
+
+      Application.put_env(:openagents, :forge_gcs_request_options, plug: {Req.Test, __MODULE__})
+
+      on_exit(fn ->
+        restore_env(:forge_wal_bucket, previous_bucket)
+        restore_env(:forge_gcs_token_provider, previous_provider)
+        restore_env(:forge_gcs_request_options, previous_options)
+      end)
+
+      index = WAL.new_index()
+
+      Req.Test.expect(__MODULE__, fn request ->
+        assert request.query_string == "fields=generation"
+        Req.Test.json(request, %{"generation" => "42"})
+      end)
+
+      Req.Test.expect(__MODULE__, fn request ->
+        assert request.query_string == "alt=media"
+        Req.Test.json(request, index)
+      end)
+
+      Req.Test.expect(__MODULE__, fn request ->
+        assert request.query_string == "fields=generation"
+        Req.Test.json(request, %{"generation" => "42"})
+      end)
+
+      assert {:ok, "42", ^index} = OpenAgents.Forge.WAL.Gcs.read_index(@repo)
+      assert {:ok, "42", ^index} = OpenAgents.Forge.WAL.Gcs.read_index(@repo)
     end
 
     test "object naming helpers" do

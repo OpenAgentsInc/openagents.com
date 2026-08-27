@@ -273,6 +273,20 @@ defmodule OpenAgents.Forge.Browse do
     end
   end
 
+  @doc "Read the data for a file page after one cache-freshness check."
+  def blob_page(repo, ref, path) do
+    with :ok <- check(repo, ref),
+         :ok <- check_path(path) do
+      _ = freshen(repo)
+
+      with {:ok, sha} <- resolve_commit_from_cache(repo, ref),
+           {:ok, blob} <- blob_from_cache(repo, sha, path) do
+        head = with {:ok, current} <- head_from_cache(repo), do: current
+        {:ok, %{sha: sha, head: head, blob: blob}}
+      end
+    end
+  end
+
   defp blob_from_cache(repo, ref, path) do
     with {:ok, full} <- resolve_commit_from_cache(repo, ref) do
       spec = full <> ":" <> path

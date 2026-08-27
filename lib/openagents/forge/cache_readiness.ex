@@ -53,4 +53,11 @@ defmodule OpenAgents.Forge.CacheReadiness do
     do: {:reply, %{"ready" => map_size(failures) == 0, "failures" => failures}, failures}
 
   def handle_call(:reset, _from, _failures), do: {:reply, :ok, %{}}
+
+  @impl true
+  def handle_info(
+        {:"ETS-TRANSFER", OpenAgents.Forge.WAL.Gcs.IndexCache, _owner, :wal_index_cache},
+        failures
+      ),
+      do: {:noreply, failures}
 end

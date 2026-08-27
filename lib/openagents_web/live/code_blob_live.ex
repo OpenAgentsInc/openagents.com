@@ -29,17 +29,15 @@ defmodule OpenAgentsWeb.CodeBlobLive do
       raise OpenAgentsWeb.PublicNotFoundError
     end
 
-    sha =
-      case Browse.resolve_commit(repository, ref) do
-        {:ok, sha} -> sha
+    %{sha: sha, head: head, blob: blob} =
+      case Browse.blob_page(repository, ref, path) do
+        {:ok, page} -> page
         _ -> raise OpenAgentsWeb.PublicNotFoundError
       end
 
     # Either the whole repo is browsable (:l3), or this is a published
     # document at the current head. A published path at an older ref is a
     # 404: publishing one document must not publish its history.
-    head = with {:ok, head} <- Browse.head(repository), do: head
-
     unless RepositoryAccess.allows_file?(
              repository,
              socket.assigns.current_user,
@@ -49,12 +47,6 @@ defmodule OpenAgentsWeb.CodeBlobLive do
            ) do
       raise OpenAgentsWeb.PublicNotFoundError
     end
-
-    blob =
-      case Browse.blob(repository, sha, path) do
-        {:ok, blob} -> blob
-        _ -> raise OpenAgentsWeb.PublicNotFoundError
-      end
 
     plain = Map.get(params, "plain") == "1"
 

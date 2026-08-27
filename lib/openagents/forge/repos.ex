@@ -283,4 +283,31 @@ defmodule OpenAgents.Forge.Repos do
       [stderr_to_stdout: true] ++ opts
     )
   end
+
+  @doc false
+  def git_with_stdin(git_dir, args, input, opts \\ []) when is_binary(input) do
+    input_path =
+      Path.join(
+        System.tmp_dir!(),
+        "forge-git-input-#{System.unique_integer([:positive])}-#{:erlang.phash2(self())}"
+      )
+
+    File.write!(input_path, input)
+
+    try do
+      System.cmd(
+        "sh",
+        [
+          "-c",
+          ~s(exec git "$@" < "$OPENAGENTS_GIT_INPUT"),
+          "sh",
+          "--git-dir",
+          git_dir | args
+        ],
+        [env: [{"OPENAGENTS_GIT_INPUT", input_path}], stderr_to_stdout: true] ++ opts
+      )
+    after
+      File.rm(input_path)
+    end
+  end
 end

@@ -201,6 +201,14 @@ defmodule OpenAgents.Forge.BrowseTest do
     end
   end
 
+  test "blob_page/3 returns a resolved revision, head, and blob together", %{second: second} do
+    assert {:ok, page} = Browse.blob_page("openagents.com", "main", "file.txt")
+
+    assert page.sha == second
+    assert page.head == second
+    assert page.blob.content == "hello world\n"
+  end
+
   test "readme/2 finds README.md at a ref" do
     assert {:ok, "README.md", blob} = Browse.readme("openagents.com", "main")
     assert blob.content =~ "Fixture readme."

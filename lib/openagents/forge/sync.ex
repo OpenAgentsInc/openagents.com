@@ -333,13 +333,26 @@ defmodule OpenAgents.Forge.Sync do
   end
 
   defp refs_materialized_at?(path, index) do
-    index
-    |> WAL.refs()
-    |> Map.values()
-    |> Enum.uniq()
-    |> Enum.all?(fn sha ->
-      match?({_output, 0}, Repos.git(path, ["cat-file", "-e", sha]))
-    end)
+    tips = index |> WAL.refs() |> Map.values() |> Enum.uniq()
+
+    case tips do
+      [] ->
+        true
+
+      tips ->
+        input = Enum.join(tips, "\n") <> "\n"
+
+        case Repos.git_with_stdin(path, ["cat-file", "--batch-check"], input) do
+          {output, 0} ->
+            lines = String.split(output, "\n", trim: true)
+
+            length(lines) == length(tips) and
+              Enum.all?(lines, &(not String.ends_with?(&1, " missing")))
+
+          _error ->
+            false
+        end
+    end
   end
 
   # Apply one WAL entry: materialize its objects, prove the objects it

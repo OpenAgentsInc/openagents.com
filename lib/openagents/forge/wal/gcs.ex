@@ -25,6 +25,7 @@ defmodule OpenAgents.Forge.WAL.Gcs do
   @storage_base "https://storage.googleapis.com"
   @metadata_token_url "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
   @token_cache_key {__MODULE__, :token}
+  @index_cache_table OpenAgents.Forge.WAL.Gcs.IndexCache
   @token_expiry_margin_seconds 60
   @stream_chunk_bytes 1_048_576
   @default_stream_timeout_ms 6 * 60 * 60 * 1_000
@@ -34,10 +35,18 @@ defmodule OpenAgents.Forge.WAL.Gcs do
     with {:ok, bucket} <- bucket() do
       name = index_object(repo)
 
-      with {:ok, generation} <- fetch_generation(bucket, name),
-           {:ok, raw} <- download(bucket, name),
-           {:ok, index} <- decode_index(raw) do
-        {:ok, generation, index}
+      with {:ok, generation} <- fetch_generation(bucket, name) do
+        case cached_index(repo, generation) do
+          {:ok, index} ->
+            {:ok, generation, index}
+
+          :miss ->
+            with {:ok, raw} <- download(bucket, name),
+                 {:ok, index} <- decode_index(raw) do
+              cache_index(repo, generation, index)
+              {:ok, generation, index}
+            end
+        end
       end
     end
   end
@@ -63,6 +72,7 @@ defmodule OpenAgents.Forge.WAL.Gcs do
              headers: auth_headers(token) ++ [{"content-type", "application/json"}]
            ) do
         {:ok, %Req.Response{status: 200, body: %{"generation" => generation}}} ->
+          cache_index(repo, generation, index)
           {:ok, generation}
 
         {:ok, %Req.Response{status: 412}} ->
@@ -149,8 +159,25 @@ defmodule OpenAgents.Forge.WAL.Gcs do
   def delete_repo(repo) do
     with {:ok, bucket} <- bucket(),
          {:ok, token} <- token() do
-      delete_prefix(bucket, prefix(repo), token)
+      case delete_prefix(bucket, prefix(repo), token) do
+        :ok ->
+          delete_cached_index(repo)
+          :ok
+
+        {:error, _reason} = error ->
+          error
+      end
     end
+  end
+
+  @doc false
+  def reset_index_cache do
+    case :ets.whereis(@index_cache_table) do
+      :undefined -> :ok
+      _table -> :ets.delete_all_objects(@index_cache_table)
+    end
+
+    :ok
   end
 
   ## Object naming (public so it is testable without a live bucket)
@@ -232,7 +259,7 @@ defmodule OpenAgents.Forge.WAL.Gcs do
     with {:ok, token} <- token() do
       url = object_url(bucket, name) <> "?" <> URI.encode_query(fields: "generation")
 
-      case Req.get(url, headers: auth_headers(token)) do
+      case Req.get(url, request_options(headers: auth_headers(token))) do
         {:ok, %Req.Response{status: 200, body: %{"generation" => generation}}} ->
           {:ok, generation}
 
@@ -252,13 +279,64 @@ defmodule OpenAgents.Forge.WAL.Gcs do
     with {:ok, token} <- token() do
       url = object_url(bucket, name) <> "?alt=media"
 
-      case Req.get(url, headers: auth_headers(token), decode_body: false) do
+      case Req.get(
+             url,
+             request_options(headers: auth_headers(token), decode_body: false)
+           ) do
         {:ok, %Req.Response{status: 200, body: body}} -> {:ok, body}
         {:ok, %Req.Response{status: 404}} -> {:error, :not_found}
         {:ok, %Req.Response{status: status, body: body}} -> {:error, {:gcs_error, status, body}}
         {:error, reason} -> {:error, reason}
       end
     end
+  end
+
+  defp cached_index(repo, generation) do
+    table = ensure_index_cache_table()
+
+    case :ets.lookup(table, repo) do
+      [{^repo, ^generation, index}] -> {:ok, index}
+      _other -> :miss
+    end
+  end
+
+  defp cache_index(repo, generation, index) do
+    :ets.insert(ensure_index_cache_table(), {repo, generation, index})
+    :ok
+  end
+
+  defp delete_cached_index(repo) do
+    case :ets.whereis(@index_cache_table) do
+      :undefined -> :ok
+      table -> :ets.delete(table, repo)
+    end
+  end
+
+  defp ensure_index_cache_table do
+    case :ets.whereis(@index_cache_table) do
+      :undefined ->
+        heir = Process.whereis(OpenAgents.Forge.CacheReadiness)
+
+        options =
+          [:named_table, :public, :set, read_concurrency: true] ++
+            if(is_pid(heir), do: [{:heir, heir, :wal_index_cache}], else: [])
+
+        try do
+          :ets.new(@index_cache_table, options)
+        rescue
+          ArgumentError -> @index_cache_table
+        end
+
+      table ->
+        table
+    end
+  end
+
+  defp request_options(options) do
+    Keyword.merge(
+      options,
+      Application.get_env(:openagents, :forge_gcs_request_options, [])
+    )
   end
 
   defp upload_file(bucket, name, path, size, token) do

@@ -23,9 +23,13 @@ defmodule OpenAgents.Providers.Request do
   """
   @type message_tool_call :: %{call_id: String.t(), name: String.t(), arguments: String.t()}
 
+  @type content_part ::
+          %{type: String.t(), text: String.t()}
+          | %{type: String.t(), image_url: %{url: String.t()}}
+
   @type message :: %{
           :role => String.t(),
-          :content => String.t(),
+          :content => String.t() | [content_part()],
           optional(:tool_calls) => [message_tool_call()]
         }
   @type t :: %__MODULE__{

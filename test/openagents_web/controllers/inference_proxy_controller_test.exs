@@ -449,6 +449,37 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
       assert output.output == %{"content" => "hello"}
     end
 
+    test "an inline image reaches the provider as multimodal content", %{conn: conn} do
+      %{token: token} = grant("image-input", model_id: "glm-5.3-flash")
+      image_url = "data:image/png;base64,iVBORw0KGgo="
+
+      conn =
+        post_chat(conn, token, %{
+          "messages" => [
+            %{
+              "role" => "user",
+              "content" => [
+                %{"type" => "text", "text" => "Describe this image."},
+                %{"type" => "image_url", "image_url" => %{"url" => image_url}}
+              ]
+            }
+          ]
+        })
+
+      assert conn.status == 200
+      assert_received {:recorded_request, "test.recording_provider", request}
+
+      assert request.input == [
+               %{
+                 role: "user",
+                 content: [
+                   %{type: "text", text: "Describe this image."},
+                   %{type: "image_url", image_url: %{url: image_url}}
+                 ]
+               }
+             ]
+    end
+
     test "a default grant is called with the default model's own vendor string", %{conn: conn} do
       # This once asserted the default lane was *not* the recorded one, which
       # only held while the default sat on the other adapter. What it was

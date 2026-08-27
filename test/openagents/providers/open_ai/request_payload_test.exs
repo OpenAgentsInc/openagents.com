@@ -114,4 +114,32 @@ defmodule OpenAgents.Providers.OpenAI.RequestPayloadTest do
              %{type: "function_call_output", call_id: "call_orphan", output: _output}
            ] = OpenAI.request_payload(request).input
   end
+
+  test "maps multimodal user content to Responses input parts" do
+    image_url = "data:image/png;base64,iVBORw0KGgo="
+
+    request = %Request{
+      model_id: "test-model",
+      instructions: "",
+      input: [
+        %{
+          role: "user",
+          content: [
+            %{type: "text", text: "Describe this image."},
+            %{type: "image_url", image_url: %{url: image_url}}
+          ]
+        }
+      ]
+    }
+
+    assert OpenAI.request_payload(request).input == [
+             %{
+               role: "user",
+               content: [
+                 %{type: "input_text", text: "Describe this image."},
+                 %{type: "input_image", image_url: image_url}
+               ]
+             }
+           ]
+  end
 end

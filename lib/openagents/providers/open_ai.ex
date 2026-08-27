@@ -136,7 +136,17 @@ defmodule OpenAgents.Providers.OpenAI do
 
   defp items_for_message(message, _outputs_by_call_id), do: [message_item(message)]
 
+  defp message_item(%{content: content} = message) when is_list(content) do
+    %{role: message.role, content: Enum.map(content, &response_content_part/1)}
+  end
+
   defp message_item(message), do: %{role: message.role, content: message.content}
+
+  defp response_content_part(%{type: "text", text: text}),
+    do: %{type: "input_text", text: text}
+
+  defp response_content_part(%{type: "image_url", image_url: %{url: url}}),
+    do: %{type: "input_image", image_url: url}
 
   defp function_call_item(call) do
     %{

@@ -136,14 +136,15 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   defp input_message(message) do
     tool_calls = message_tool_calls(message["tool_calls"])
+    content = message_content(message)
 
-    case {content_text(message), tool_calls} do
-      {"", []} -> []
-      {text, []} -> [%{role: role(message), content: text}]
+    case {content_empty?(content), tool_calls} do
+      {true, []} -> []
+      {false, []} -> [%{role: role(message), content: content}]
       # An assistant turn that called tools is part of the transcript even
       # when it carried no prose: dropping it would orphan the tool outputs
       # that answer it.
-      {text, calls} -> [%{role: role(message), content: text, tool_calls: calls}]
+      {_empty, calls} -> [%{role: role(message), content: content, tool_calls: calls}]
     end
   end
 
@@ -574,6 +575,39 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   end
 
   defp content_text(_), do: ""
+
+  defp message_content(%{"content" => content}) when is_binary(content), do: content
+
+  defp message_content(%{"content" => parts}) when is_list(parts) do
+    Enum.flat_map(parts, fn
+      %{"type" => "text", "text" => text} when is_binary(text) ->
+        [%{type: "text", text: text}]
+
+      %{"type" => "image_url", "image_url" => %{"url" => url}}
+      when is_binary(url) ->
+        if inline_image?(url),
+          do: [%{type: "image_url", image_url: %{url: url}}],
+          else: []
+
+      _invalid ->
+        []
+    end)
+  end
+
+  defp message_content(_), do: ""
+
+  defp content_empty?(""), do: true
+  defp content_empty?([]), do: true
+  defp content_empty?(_content), do: false
+
+  defp inline_image?(url) do
+    String.starts_with?(url, [
+      "data:image/png;base64,",
+      "data:image/jpeg;base64,",
+      "data:image/gif;base64,",
+      "data:image/webp;base64,"
+    ])
+  end
 
   defp join_text(messages) do
     messages |> Enum.map(&content_text/1) |> Enum.reject(&(&1 == "")) |> Enum.join("\n")

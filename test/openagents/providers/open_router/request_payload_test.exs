@@ -43,6 +43,34 @@ defmodule OpenAgents.Providers.OpenRouter.RequestPayloadTest do
            ]
   end
 
+  test "preserves multimodal user content" do
+    image_url = "data:image/png;base64,iVBORw0KGgo="
+
+    request = %Request{
+      model_id: "z-ai/glm-5.3-flash",
+      instructions: "",
+      input: [
+        %{
+          role: "user",
+          content: [
+            %{type: "text", text: "Describe this image."},
+            %{type: "image_url", image_url: %{url: image_url}}
+          ]
+        }
+      ]
+    }
+
+    assert OpenRouter.request_payload(request).messages == [
+             %{
+               role: "user",
+               content: [
+                 %{type: "text", text: "Describe this image."},
+                 %{type: "image_url", image_url: %{url: image_url}}
+               ]
+             }
+           ]
+  end
+
   test "maps tool definitions to chat-completions functions" do
     request = %Request{
       model_id: "z-ai/glm-5.3-flash",

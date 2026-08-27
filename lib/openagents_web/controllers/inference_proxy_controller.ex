@@ -28,9 +28,18 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   attributed `unresolved` and priced at nothing, because naming the requested
   model would be a claim the deployment cannot support.
 
-  The probe→proxy hop is buffered (the provider still streams from the vendor
-  internally); probe's transport reads the whole body before parsing, so this
-  matches its consumer and keeps failure handling honest.
+  ## The stream is flushed as it happens
+
+  Provider events are written to the client one chunk at a time as the adapter
+  emits them, so a client renders reasoning and text tokens while the vendor is
+  still writing them (#263). The provider still streams from its vendor
+  internally; this hop no longer collects the events and answers after the
+  fact. The cost is honest and accepted: committing to a chunked response
+  means a provider failure can no longer be a clean non-200 status, so a
+  failure after the stream opened arrives as a terminal `provider_failed`
+  frame in the stream body, carrying the same bounded reason class the JSON
+  refusal carried (`error.reason`, with `error.upstream_status` when known) —
+  never raw provider detail.
   """
 
   use OpenAgentsWeb, :controller
@@ -197,24 +206,47 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   # ── run + translate ─────────────────────────────────────────────────────
 
+  # Per-event state rides the process dictionary of this request's own
+  # process: the callback cannot rebind outer variables (the conn that carries
+  # sent chunks does not survive a closure either), and the state lives and
+  # dies with this one request.
+  @state_events :proxy_stream_events
+  @state_usage :proxy_stream_usage
+  @state_served :proxy_stream_served_model
+  @state_conn :proxy_stream_conn
+
   defp run(conn, grant, model, request) do
     selection = selection_properties(grant, model, request, conn.body_params)
     Analytics.capture("inference_model_selected", analytics_distinct_id(grant), selection)
 
-    parent = self()
+    # The stream opens before the first provider event, so the status and the
+    # model attribution commit early. The header names the grant's lane; a
+    # fallback that answered under another name still corrects every chunk and
+    # the final attribution exactly as it did when the whole body was written
+    # at the end.
+    conn =
+      conn
+      |> put_resp_content_type("text/event-stream")
+      |> put_resp_header("cache-control", "no-store")
+      |> put_resp_header("x-openagents-model", model.id)
+      |> send_chunked(200)
 
-    # The provider pushes events synchronously; capture them to this process's
-    # mailbox and drain in order once the call returns.
-    result = model.adapter.stream(request, fn event -> send(parent, {:proxy_event, event}) end)
-    events = drain_events([])
+    Process.put(@state_conn, conn)
+
+    # The provider pushes events synchronously, and each one is translated and
+    # written to the client as it arrives (#263): a reasoning or text token
+    # reaches the caller while the vendor is still producing the next one.
+    result = model.adapter.stream(request, &emit_event(conn, model, &1))
 
     case result do
       :ok ->
+        events = drained_events()
+
         # What answered is read back off the response, never assumed from the
         # request: a gateway lane configured with fallback models can serve a
         # call for one model with another and still return 200 (METER-001).
         served = served_model(model, events)
-        usage = usage_of(events)
+        usage = drained_usage()
         _ = meter(grant, usage, served)
         record_health(model, served)
 
@@ -234,17 +266,15 @@ defmodule OpenAgentsWeb.InferenceProxyController do
           })
         )
 
-        conn
-        |> put_resp_content_type("text/event-stream")
-        |> put_resp_header("cache-control", "no-store")
-        |> put_resp_header("x-openagents-model", label)
-        |> send_resp(200, sse_body(events, label))
+        Enum.each(sse_chunks(events, usage, label), &write_chunk(conn, &1))
 
       {:error, reason} ->
+        events = drained_events()
+
         # A failure that produced partial usage is still metered, against
         # whatever the partial response said was serving it — the tokens were
         # spent on that model whether or not the stream finished.
-        usage = usage_of(events)
+        usage = drained_usage()
         if usage != %{}, do: meter(grant, usage, served_model(model, events))
         class = OpenAgents.OperationalLog.code(reason)
         status = OpenAgents.OperationalLog.status(reason)
@@ -268,16 +298,82 @@ defmodule OpenAgentsWeb.InferenceProxyController do
           })
         )
 
-        refuse(conn, {:provider_failed, class, status})
+        # The 200 is already on the wire, so the failure travels as terminal
+        # frames instead of a status: the same bounded class and upstream
+        # status the JSON refusal would have carried, and nothing more.
+        write_chunk(conn, data(%{"error" => stream_error(class, status)}))
+        write_chunk(conn, "data: [DONE]\n\n")
     end
+
+    Process.get(@state_conn) || conn
   end
 
-  defp drain_events(acc) do
-    receive do
-      {:proxy_event, event} -> drain_events([event | acc])
-    after
-      0 -> Enum.reverse(acc)
+  defp stream_error(class, status) do
+    body = %{"code" => "provider_failed", "reason" => class}
+    if status == nil, do: body, else: Map.put(body, "upstream_status", status)
+  end
+
+  defp emit_event(conn, model, event) do
+    record_event(event)
+    record_disclosure(event)
+    chunks = event_chunks(event)
+
+    if chunks != [] do
+      label = chunk_model(model)
+
+      Enum.each(chunks, fn payload ->
+        write_chunk(conn, data(Map.put(payload, "model", label)))
+      end)
     end
+
+    :ok
+  end
+
+  # A fallback disclosure corrects the name on the very chunks that follow it;
+  # before one arrives, every chunk names the grant's lane, exactly as the
+  # pre-stream header does. METER-001/PROVIDER-002: the response says what
+  # answered, not what was requested.
+  defp record_disclosure({:model_served, name}) when is_binary(name) do
+    case Models.fetch(name) do
+      {:ok, %{id: id}} -> Process.put(@state_served, id)
+      :error -> Process.put(@state_served, name)
+    end
+
+    :ok
+  end
+
+  defp record_disclosure(_event), do: :ok
+
+  defp chunk_model(model) do
+    Process.get(@state_served) || model.id
+  end
+
+  defp record_event({:usage, usage}) when is_map(usage) do
+    Process.put(@state_usage, usage)
+    Process.put(@state_events, [:usage | Process.get(@state_events) || []])
+    :ok
+  end
+
+  defp record_event(event) do
+    Process.put(@state_events, [event | Process.get(@state_events) || []])
+    :ok
+  end
+
+  defp drained_events, do: Enum.reverse(Process.get(@state_events) || [])
+
+  defp drained_usage, do: Process.get(@state_usage) || %{}
+
+  # The latest conn always comes off the process dictionary: chunk/2 returns a
+  # new conn carrying the accumulated body, so feeding each call the stale
+  # closure conn would restart the body from zero, and the controller has to
+  # return a conn that holds the whole response.
+  defp write_chunk(conn, payload) do
+    case Plug.Conn.chunk(Process.get(@state_conn) || conn, payload) do
+      {:ok, sent} -> Process.put(@state_conn, sent)
+      {:error, _closed} -> :ok
+    end
+
+    :ok
   end
 
   defp meter(grant, usage, _served) when usage == %{}, do: {:ok, grant}
@@ -394,53 +490,40 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     end
   end
 
-  defp usage_of(events) do
-    Enum.reduce(events, %{}, fn
-      {:usage, usage}, _acc -> usage
-      _event, acc -> acc
-    end)
-  end
-
-  # Translate the ordered provider events into a chat-completions SSE body.
-  # Every chunk carries the effective model id, the field an OpenAI-compatible
-  # parser already reads as "the model that answered".
-  defp sse_body(events, model_id) do
+  # The terminal frames a finished stream closes with: one finish_reason chunk
+  # (tool_calls when the provider asked for a tool, stop otherwise) and the
+  # usage chunk when the provider reported one.
+  defp sse_chunks(events, usage, model_id) do
     saw_tool_call = Enum.any?(events, &match?({:tool_call, _}, &1))
     finish_reason = if saw_tool_call, do: "tool_calls", else: "stop"
-
-    chunks =
-      events
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {event, index} -> event_chunks(event, index) end)
 
     finish = [%{"choices" => [%{"index" => 0, "delta" => %{}, "finish_reason" => finish_reason}]}]
 
     usage_chunk =
-      case usage_of(events) do
+      case usage do
         usage when usage == %{} -> []
         usage -> [%{"choices" => [], "usage" => wire_usage(usage)}]
       end
 
-    frames =
-      Enum.map(chunks ++ finish ++ usage_chunk, fn payload ->
-        data(Map.put(payload, "model", model_id))
-      end)
-
-    IO.iodata_to_binary([frames, "data: [DONE]\n\n"])
+    Enum.map(finish ++ usage_chunk, fn payload ->
+      data(Map.put(payload, "model", model_id))
+    end) ++ ["data: [DONE]\n\n"]
   end
 
-  defp event_chunks({:text_delta, text}, _index) when text != "" do
+  # One provider event in, its chat-completions chunk out, flushed before the
+  # next event is asked for.
+  defp event_chunks({:text_delta, text}) when text != "" do
     [%{"choices" => [%{"index" => 0, "delta" => %{"content" => text}}]}]
   end
 
   # Reasoning rides the OpenRouter chat-completions extension field —
   # `delta.reasoning` alongside `delta.content` — the shape the CLI's
   # OpenAI-compatible parser already expects from that vendor surface.
-  defp event_chunks({:reasoning_delta, text}, _index) when text != "" do
+  defp event_chunks({:reasoning_delta, text}) when text != "" do
     [%{"choices" => [%{"index" => 0, "delta" => %{"reasoning" => text}}]}]
   end
 
-  defp event_chunks({:tool_call, tool_call}, index) do
+  defp event_chunks({:tool_call, tool_call}) do
     [
       %{
         "choices" => [
@@ -449,7 +532,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
             "delta" => %{
               "tool_calls" => [
                 %{
-                  "index" => index,
+                  "index" => 0,
                   "id" => tool_call.call_id,
                   "type" => "function",
                   "function" => %{
@@ -465,7 +548,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
     ]
   end
 
-  defp event_chunks(_event, _index), do: []
+  defp event_chunks(_event), do: []
 
   defp wire_usage(usage) do
     input = integer(usage["input_tokens"] || usage[:input_tokens])

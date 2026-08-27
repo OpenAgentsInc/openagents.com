@@ -95,13 +95,25 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
 
       conn = call(conn, token)
 
-      assert get_resp_header(conn, "x-openagents-model") == ["openai/gpt-5.6-luna"]
+      # The stream (#263) opens before any provider event, so the header names
+      # the lane the call addressed. The disclosure corrects the attribution on
+      # the response body itself — every chunk carries the model that answered.
+      assert get_resp_header(conn, "x-openagents-model") == [@gemini]
 
-      for chunk <- String.split(conn.resp_body, "\n\n", trim: true),
-          chunk != "data: [DONE]" do
-        payload = chunk |> String.replace_prefix("data: ", "") |> Jason.decode!()
+      chunks =
+        for chunk <- String.split(conn.resp_body, "\n\n", trim: true),
+            chunk != "data: [DONE]" do
+          chunk |> String.replace_prefix("data: ", "") |> Jason.decode!()
+        end
+
+      for payload <- chunks do
         assert payload["model"] == "openai/gpt-5.6-luna"
       end
+
+      # The first frame is the disclosure event's own neighbour, not a text
+      # chunk: a silent disclosure still corrects everything on the wire after
+      # it, including the terminal finish and usage frames.
+      assert length(chunks) >= 2
     end
 
     test "counts against the requested lane's health, not for it", %{conn: conn} do
@@ -170,7 +182,13 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       assert metered.usage["served_model"] == Inference.unresolved_model()
       assert metered.usage["pricing_id"] == Pricing.unpriced()
       refute Map.has_key?(metered.usage, "estimated_cost_microusd")
-      assert get_resp_header(conn, "x-openagents-model") == [Inference.unresolved_model()]
+
+      # The stream opens before any provider event, so the header names the
+      # lane the call addressed; with the answer silent there is nothing to
+      # correct it with, and naming `unresolved` there would require buffering
+      # the whole stream again (#263). The unresolved attribution lives where
+      # the record is: the metered usage above.
+      assert get_resp_header(conn, "x-openagents-model") == [@gemini]
     end
 
     test "records no health for the requested lane either way", %{conn: conn} do

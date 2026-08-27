@@ -191,6 +191,66 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert Enum.any?(decoded, &(get_in(&1, ["choices", Access.at(0), "finish_reason"]) == "stop"))
   end
 
+  test "reasoning and text chunks reach the wire in the order the model wrote them", %{
+    conn: conn
+  } do
+    # #263: the point of streaming is that each token is flushed as the vendor
+    # produces it, so the reasoning deltas must appear on the wire before the
+    # text deltas, in the provider's own order — not all at once after the
+    # turn finished.
+    %{token: token} = grant("reasoning-order")
+
+    conn =
+      post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "[reasoning]"}]})
+
+    assert conn.status == 200
+
+    kinds =
+      conn.resp_body
+      |> sse_events()
+      |> Enum.filter(&(&1 != "[DONE]"))
+      |> Enum.map(&Jason.decode!/1)
+      |> Enum.map(fn chunk ->
+        delta = get_in(chunk, ["choices", Access.at(0), "delta"]) || %{}
+
+        cond do
+          Map.has_key?(delta, "reasoning") -> :reasoning
+          Map.has_key?(delta, "content") -> :content
+          true -> :other
+        end
+      end)
+      |> Enum.reject(&(&1 == :other))
+
+    assert kinds == [:reasoning, :reasoning, :content]
+
+    # Every chunk was flushed while the state is chunked — the response the
+    # caller reads is a genuine incremental stream, not one buffered body.
+    assert conn.state == :chunked
+  end
+
+  test "a failure after the stream opened ends it with an error frame", %{conn: conn} do
+    # The provider emitted nothing before failing; the error frame is terminal
+    # and no finish_reason chunk follows it.
+    %{token: token} = grant("fail-midstream")
+
+    conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "[fail]"}]})
+
+    assert conn.status == 200
+    events = sse_events(conn.resp_body)
+    assert List.last(events) == "[DONE]"
+
+    decoded =
+      events
+      |> Enum.slice(0..-2//1)
+      |> Enum.map(&Jason.decode!/1)
+
+    assert [%{"error" => %{"code" => "provider_failed", "reason" => "provider_failed"}}] = decoded
+
+    refute Enum.any?(decoded, fn chunk ->
+             get_in(chunk, ["choices", Access.at(0), "finish_reason"])
+           end)
+  end
+
   test "a provider tool call reaches the caller as a tool_calls delta", %{conn: conn} do
     %{token: token} = grant("tool-out")
 
@@ -342,20 +402,29 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert Jason.decode!(conn.resp_body)["error"]["code"] == "grant_revoked"
   end
 
-  test "a provider failure surfaces as a bounded error, never raw detail", %{conn: conn} do
+  test "a provider failure surfaces as terminal error frames, never raw detail", %{conn: conn} do
     %{token: token} = grant("fail")
     conn = post_chat(conn, token, %{"messages" => [%{"role" => "user", "content" => "[fail]"}]})
-    assert conn.status == 502
-    body = Jason.decode!(conn.resp_body)
-    assert body["error"]["code"] == "provider_failed"
 
-    # The failure class travels with the refusal so a client can say more than
-    # "something went wrong", but it is the reason's atom tag only.
-    assert body["error"]["reason"] == "provider_failed"
+    # The stream is flushed as it happens (#263), so the 200 commits before the
+    # provider is known to have failed. The failure travels as a terminal
+    # `provider_failed` error frame carrying the same bounded class a JSON
+    # refusal would have carried — and nothing raw.
+    assert conn.status == 200
+
+    body = conn.resp_body
+    assert body =~ ~s("code":"provider_failed")
+    assert body =~ ~s("reason":"provider_failed")
+
+    # The stream still closes the way a parser expects.
+    assert body =~ "data: [DONE]"
 
     # No raw provider detail leaks. `OperationalLog.code/1` takes the tag and
-    # drops the detail, which is what keeps the line above safe to send.
-    refute conn.resp_body =~ "test_failure"
+    # drops the detail, which is what keeps the lines above safe to send.
+    refute body =~ "test_failure"
+
+    # No token-shaped content chunks were emitted for a failed turn.
+    refute body =~ ~s("delta":{"content"})
   end
 
   test "an empty message set is refused", %{conn: conn} do

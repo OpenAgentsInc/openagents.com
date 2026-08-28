@@ -304,7 +304,10 @@ defmodule OpenAgentsWeb.ThreadControllerTest do
 
       {:ok, _metered} =
         Inference.record_usage(grant, %{
-          "output_tokens" => div(allowance * 1_000_000, rate)
+          # Ceil the token count so a rate that does not divide the allowance
+          # still spends it all. Floor division left 2 microUSD on Gemini's
+          # declared promo rate and the next open was not refused.
+          "output_tokens" => div(allowance * 1_000_000 + rate - 1, rate)
         })
 
       assert Credit.remaining(grant.owner_visitor_id) == 0

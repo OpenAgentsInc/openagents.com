@@ -195,8 +195,9 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
   defp tool_calls(_state, _invalid), do: {:error, :invalid_provider_event}
 
   defp tool_call(state, %{} = call) do
-    index = if is_integer(call["index"]), do: call["index"], else: 0
     function = if is_map(call["function"]), do: call["function"], else: %{}
+    incoming_id = binary_or_nil(call["id"])
+    index = assign_tool_call_index(state, call["index"], incoming_id)
     held = Map.get(state.calls, index, %{id: nil, name: nil, arguments: ""})
 
     arguments =
@@ -219,6 +220,43 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoder do
   end
 
   defp tool_call(_state, _invalid), do: {:error, :invalid_provider_event}
+
+  # A second finished call that reuses the wire index is a new call. GLM and
+  # the live proxy both emit that shape; merging them produced concatenated
+  # names and ids (`openagentsopenagents`, `skillbash`).
+  defp assign_tool_call_index(state, raw_index, incoming_id) do
+    index = parse_tool_call_index(raw_index)
+
+    case Map.get(state.calls, index) do
+      %{id: held_id}
+      when is_binary(incoming_id) and is_binary(held_id) and incoming_id != held_id ->
+        next_tool_call_index(state)
+
+      _free_or_same ->
+        index
+    end
+  end
+
+  defp parse_tool_call_index(n) when is_integer(n) and n >= 0, do: n
+
+  defp parse_tool_call_index(s) when is_binary(s) do
+    case Integer.parse(s) do
+      {n, ""} when n >= 0 -> n
+      _ -> 0
+    end
+  end
+
+  defp parse_tool_call_index(_), do: 0
+
+  defp next_tool_call_index(%{calls: calls}) do
+    case Map.keys(calls) do
+      [] -> 0
+      keys -> Enum.max(keys) + 1
+    end
+  end
+
+  defp binary_or_nil(value) when is_binary(value) and value != "", do: value
+  defp binary_or_nil(_), do: nil
 
   defp text_or(value, _fallback) when is_binary(value) and value != "", do: value
   defp text_or(_value, fallback), do: fallback

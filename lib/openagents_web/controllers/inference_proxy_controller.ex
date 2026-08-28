@@ -228,6 +228,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   @state_raw_conn :proxy_stream_raw_conn
   @state_opened :proxy_stream_opened
   @state_allow_fallback :proxy_stream_allow_fallback
+  @state_tool_index :proxy_stream_tool_index
 
   defp run(conn, grant, model, request) do
     allow_fallback? = unnamed_selection?(grant, conn.body_params)
@@ -637,6 +638,8 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   end
 
   defp event_chunks({:tool_call, tool_call}) do
+    index = next_tool_call_index()
+
     [
       %{
         "choices" => [
@@ -645,7 +648,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
             "delta" => %{
               "tool_calls" => [
                 %{
-                  "index" => 0,
+                  "index" => index,
                   "id" => tool_call.call_id,
                   "type" => "function",
                   "function" => %{
@@ -662,6 +665,12 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   end
 
   defp event_chunks(_event), do: []
+
+  defp next_tool_call_index do
+    index = Process.get(@state_tool_index, 0)
+    Process.put(@state_tool_index, index + 1)
+    index
+  end
 
   defp wire_usage(usage) do
     input = integer(usage["input_tokens"] || usage[:input_tokens])

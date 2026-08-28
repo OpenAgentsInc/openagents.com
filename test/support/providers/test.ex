@@ -102,6 +102,33 @@ defmodule OpenAgents.Providers.Test do
           ~s({"query":"quartz"})
         )
 
+      "[two-tools]" ->
+        on_event.({:response_started, "two-tools-0"})
+
+        on_event.(
+          {:tool_call,
+           %ProviderEvent.ToolCall{
+             item_id: "item-call-a",
+             call_id: "call_a",
+             name: "openagents",
+             raw_arguments: ~s({"name":"openagents-cli"})
+           }}
+        )
+
+        on_event.(
+          {:tool_call,
+           %ProviderEvent.ToolCall{
+             item_id: "item-call-b",
+             call_id: "call_b",
+             name: "bash",
+             raw_arguments: ~s({"command":"git status"})
+           }}
+        )
+
+        on_event.({:usage, %{"input_tokens" => 3, "output_tokens" => 1}})
+        on_event.({:response_completed, "two-tools-0"})
+        :ok
+
       "[unknown-tool-loop]" ->
         emit_tool_request(on_event, "unknown-loop-0", "call-unknown-1", "missing_tool", "{}")
 

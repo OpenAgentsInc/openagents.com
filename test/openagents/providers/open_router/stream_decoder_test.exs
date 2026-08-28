@@ -125,6 +125,79 @@ defmodule OpenAgents.Providers.OpenRouter.StreamDecoderTest do
            ]
   end
 
+  test "parallel tool calls that share an index stay separate" do
+    stream =
+      frame(%{
+        "id" => "gen-p",
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{
+                  "index" => 0,
+                  "id" => "call_a",
+                  "function" => %{"name" => "openagents", "arguments" => "{\"name\":\"x\"}"}
+                },
+                %{
+                  "index" => 0,
+                  "id" => "call_b",
+                  "function" => %{"name" => "bash", "arguments" => "{\"command\":\"ls\"}"}
+                }
+              ]
+            },
+            "finish_reason" => "tool_calls"
+          }
+        ]
+      })
+
+    assert {:ok, decoder, events} = StreamDecoder.feed(StreamDecoder.new(), stream)
+    assert {:ok, _decoder, final} = StreamDecoder.finish(decoder)
+    assert events == [{:response_started, "gen-p"}]
+
+    assert [
+             {:tool_call,
+              %ToolCall{call_id: "call_a", name: "openagents", raw_arguments: "{\"name\":\"x\"}"}},
+             {:tool_call,
+              %ToolCall{call_id: "call_b", name: "bash", raw_arguments: "{\"command\":\"ls\"}"}},
+             {:response_completed, "gen-p"}
+           ] = final
+  end
+
+  test "a string tool-call index is still an index" do
+    stream =
+      frame(%{
+        "id" => "gen-s",
+        "choices" => [
+          %{
+            "delta" => %{
+              "tool_calls" => [
+                %{
+                  "index" => "0",
+                  "id" => "call_a",
+                  "function" => %{"name" => "skill", "arguments" => "{}"}
+                },
+                %{
+                  "index" => "1",
+                  "id" => "call_b",
+                  "function" => %{"name" => "bash", "arguments" => "{}"}
+                }
+              ]
+            },
+            "finish_reason" => "tool_calls"
+          }
+        ]
+      })
+
+    assert {:ok, decoder, _events} = StreamDecoder.feed(StreamDecoder.new(), stream)
+    assert {:ok, _decoder, final} = StreamDecoder.finish(decoder)
+
+    assert [
+             {:tool_call, %ToolCall{call_id: "call_a", name: "skill"}},
+             {:tool_call, %ToolCall{call_id: "call_b", name: "bash"}},
+             {:response_completed, "gen-s"}
+           ] = final
+  end
+
   test "reports a provider error and closes without a completion" do
     stream = frame(%{"error" => %{"code" => "model_not_found", "message" => "no such model"}})
 

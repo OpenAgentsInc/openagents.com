@@ -293,6 +293,48 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
            )
   end
 
+  test "parallel tool calls are numbered 0, 1 rather than both 0", %{conn: conn} do
+    %{token: token} = grant("two-tools")
+
+    conn =
+      post_chat(conn, token, %{
+        "messages" => [%{"role" => "user", "content" => "[two-tools]"}],
+        "tools" => [
+          %{
+            "type" => "function",
+            "function" => %{
+              "name" => "openagents",
+              "description" => "CLI",
+              "parameters" => %{"type" => "object"}
+            }
+          },
+          %{
+            "type" => "function",
+            "function" => %{
+              "name" => "bash",
+              "description" => "Shell",
+              "parameters" => %{"type" => "object"}
+            }
+          }
+        ]
+      })
+
+    assert conn.status == 200
+
+    tool_calls =
+      conn.resp_body
+      |> sse_events()
+      |> Enum.filter(&(&1 != "[DONE]"))
+      |> Enum.map(&Jason.decode!/1)
+      |> Enum.flat_map(fn chunk ->
+        get_in(chunk, ["choices", Access.at(0), "delta", "tool_calls"]) || []
+      end)
+
+    assert Enum.map(tool_calls, & &1["index"]) == [0, 1]
+    assert Enum.map(tool_calls, & &1["id"]) == ["call_a", "call_b"]
+    assert Enum.map(tool_calls, &get_in(&1, ["function", "name"])) == ["openagents", "bash"]
+  end
+
   test "a body naming a model outside the catalog is refused, naming the served set",
        %{conn: conn} do
     %{grant: grant, token: token} = grant("model-not-served")

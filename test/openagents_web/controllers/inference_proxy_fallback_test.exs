@@ -261,7 +261,10 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
 
       metered = Repo.get(Grant, grant.id)
       assert metered.usage["served_model"] == @gemini
-      assert metered.usage["pricing_id"] == "placeholder.gemini-3.7-flash.v1"
+
+      assert metered.usage["pricing_id"] ==
+               "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
+
       assert Pricing.cost(metered.usage) > 0
       assert Health.status(@gemini) == {:healthy, nil}
     end

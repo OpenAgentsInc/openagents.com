@@ -152,9 +152,13 @@ defmodule OpenAgents.Inference.ModelsTest do
       gemini = Enum.find(Models.catalog(), &(&1["id"] == "gemini-3.7-flash"))
 
       assert %{"pricing" => pricing} = gemini
-      assert pricing["input_per_million_tokens"] == 1_250_000
-      assert pricing["output_per_million_tokens"] == 10_000_000
-      assert pricing["cached_input_per_million_tokens"] == 100_000
+      assert pricing["id"] == "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
+      assert pricing["basis"] == "declared"
+      assert pricing["input_per_million_tokens"] == 750_000
+      assert pricing["output_per_million_tokens"] == 3_750_000
+      assert pricing["cached_input_per_million_tokens"] == 75_000
+      assert gemini["pricing_promotion"]["ends_at"] == "2027-01-01T00:00:00Z"
+      assert gemini["pricing_promotion"]["active"]
     end
 
     test "the default publishes its currently effective rate table" do

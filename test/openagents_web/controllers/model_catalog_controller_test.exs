@@ -110,9 +110,9 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
 
       assert %{
                "pricing" => %{
-                 "input_per_million_tokens" => 1_250_000,
-                 "output_per_million_tokens" => 10_000_000,
-                 "cached_input_per_million_tokens" => 100_000
+                 "input_per_million_tokens" => 750_000,
+                 "output_per_million_tokens" => 3_750_000,
+                 "cached_input_per_million_tokens" => 75_000
                }
              } = gemini
     end
@@ -151,9 +151,9 @@ defmodule OpenAgentsWeb.ModelCatalogControllerTest do
                "unpriced"
 
       gemini = Enum.find(body["models"], &(&1["id"] == "gemini-3.7-flash"))
-      assert gemini["pricing_basis"] == "provisional"
-      assert gemini["pricing"]["basis"] == "provisional"
-      assert gemini["pricing"]["id"] == "placeholder.gemini-3.7-flash.v1"
+      assert gemini["pricing_basis"] == "declared"
+      assert gemini["pricing"]["basis"] == "declared"
+      assert gemini["pricing"]["id"] == "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
     end
   end
 end

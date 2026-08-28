@@ -43,7 +43,8 @@ defmodule OpenAgents.Inference.PricingTest do
     end
 
     test "a lane with rates publishes the table those rates came from" do
-      assert Pricing.pricing_id_for("gemini-3.7-flash") == "placeholder.gemini-3.7-flash.v1"
+      assert Pricing.pricing_id_for("gemini-3.7-flash") ==
+               "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
     end
 
     test "rates without a table name are unattributed rather than silently accepted" do
@@ -88,6 +89,30 @@ defmodule OpenAgents.Inference.PricingTest do
     end
   end
 
+  describe "the Gemini 3.7 Flash published rates" do
+    test "uses intro rates before the cutoff and list rates at the cutoff" do
+      {:ok, gemini} = OpenAgents.Inference.Models.fetch("gemini-3.7-flash")
+
+      introductory = Pricing.effective_pricing(gemini, ~U[2026-12-31 23:59:59.999999Z])
+      list = Pricing.effective_pricing(gemini, ~U[2027-01-01 00:00:00Z])
+
+      assert introductory.id == "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
+      assert introductory.source == :declared
+      assert introductory.input_per_million_tokens == 750_000
+      assert introductory.output_per_million_tokens == 3_750_000
+      assert introductory.cached_input_per_million_tokens == 75_000
+      assert Pricing.promotion_active?(gemini, ~U[2026-12-31 23:59:59Z])
+
+      assert list.id == "declared.gemini-3.7-flash.v1"
+      assert list.source == :declared
+      assert list.input_per_million_tokens == 1_500_000
+      assert list.output_per_million_tokens == 7_500_000
+      assert list.cached_input_per_million_tokens == 150_000
+      refute Pricing.promotion_active?(gemini, ~U[2027-01-01 00:00:00Z])
+      assert Pricing.promotion_ends_at(gemini) == ~U[2027-01-01 00:00:00Z]
+    end
+  end
+
   describe "pricing one usage record" do
     test "an unpriced model writes no cost key — not a zero" do
       priced =
@@ -104,9 +129,10 @@ defmodule OpenAgents.Inference.PricingTest do
       priced =
         Pricing.price(%{"input_tokens" => 1_000_000, "output_tokens" => 0}, "gemini-3.7-flash")
 
-      assert priced["estimated_cost_microusd"] == 1_250_000
-      assert priced["pricing_id"] == "placeholder.gemini-3.7-flash.v1"
-      assert Pricing.cost(priced) == 1_250_000
+      # Test `pricing_now` is 2026-09-01, inside the introductory promotion.
+      assert priced["estimated_cost_microusd"] == 750_000
+      assert priced["pricing_id"] == "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
+      assert Pricing.cost(priced) == 750_000
     end
 
     test "cached reads are charged at the cached rate and cache writes at the input rate" do
@@ -121,19 +147,19 @@ defmodule OpenAgents.Inference.PricingTest do
           "gemini-3.7-flash"
         )
 
-      # 600k uncached input + 100k cache write at $1.25/M, 400k cached read at
-      # $0.10/M: 700_000 * 1.25 + 400_000 * 0.10, in microUSD.
-      assert priced["estimated_cost_microusd"] == 875_000 + 40_000
+      # 600k uncached input + 100k cache write at $0.75/M, 400k cached read at
+      # $0.075/M: 700_000 * 0.75 + 400_000 * 0.075, in microUSD.
+      assert priced["estimated_cost_microusd"] == 525_000 + 30_000
     end
   end
 
   describe "reading a stored record back" do
-    test "a placeholder-priced record carries a cost but is not billable" do
+    test "a declared Gemini record carries a cost and is billable" do
       priced = Pricing.price(%{"input_tokens" => 1_000_000}, "gemini-3.7-flash")
 
       assert Pricing.priced?(priced)
-      assert Pricing.usage_basis(priced) == "provisional"
-      refute Pricing.billable?(priced)
+      assert Pricing.usage_basis(priced) == "declared"
+      assert Pricing.billable?(priced)
     end
 
     test "an unpriced record is never billable" do
@@ -176,8 +202,7 @@ defmodule OpenAgents.Inference.PricingTest do
 
       glm = Enum.find(OpenAgents.Inference.Models.catalog(), &(&1["id"] == "glm-5.3-flash"))
 
-      assert Enum.count(bases, &(&1 == "declared")) >= 2
-      assert "provisional" in bases
+      assert Enum.all?(bases, &(&1 == "declared"))
       assert free_router["pricing"]["input_per_million_tokens"] == 0
       assert free_router["pricing"]["output_per_million_tokens"] == 0
       assert glm["pricing"]["input_per_million_tokens"] == 150_000
@@ -196,9 +221,9 @@ defmodule OpenAgents.Inference.PricingTest do
         OpenAgents.Inference.Models.catalog()
         |> Enum.find(&(&1["id"] == "gemini-3.7-flash"))
 
-      assert gemini["pricing"]["id"] == "placeholder.gemini-3.7-flash.v1"
-      assert gemini["pricing"]["basis"] == "provisional"
-      assert gemini["pricing_basis"] == "provisional"
+      assert gemini["pricing"]["id"] == "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
+      assert gemini["pricing"]["basis"] == "declared"
+      assert gemini["pricing_basis"] == "declared"
     end
   end
 end

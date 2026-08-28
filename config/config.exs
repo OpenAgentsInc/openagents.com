@@ -139,19 +139,10 @@ config :openagents,
   # (including omitting it) for a working figure. `OpenAgents.Inference.Pricing`
   # reads that word, and only `:declared` is billable (METER-001).
   #
-  # Every rate below is a placeholder: no operator has declared any of them, so
-  # all of them say `:placeholder` and nothing may bill from a cost they
-  # produced. Replacing them is an owner action: enter the provider's rates and
-  # set `source: :declared` in the same edit.
-  #
-  # The GLM 5.3 Flash figures are the ones to be careful with. Its posted rates
-  # on 2026-08-26 were $0.075 in, $0.25 out, and $0.015 cached in per million
-  # tokens — a limited-time half-price offer that ends 2026-09-09 16:00 UTC,
-  # after which list price is $0.15, $0.50, and $0.03. The entry carries list
-  # price, because a figure that silently doubles in two weeks is worse than
-  # one that is honestly high, and because neither figure is declared either
-  # way. The Gemini figures were written to make the system run and were not
-  # read off any price page.
+  # Declared rates are the provider's published table, entered here so a call
+  # can be billed (METER-001). A time-bounded `promotion` replaces that table
+  # until its exclusive UTC cutoff, then the regular table applies without
+  # another deployment.
   #
   # A model with no `pricing` key records no estimated cost at all — not a zero
   # — and its usage records stamp `pricing_id: "unpriced"`. No entry below is in
@@ -251,15 +242,24 @@ config :openagents,
       provider_model: "google/gemini-3.7-flash",
       context_window: 1_048_576,
       max_output: 65_536,
-      # Placeholder: the operator must set real provider rates and flip `source`
-      # to `:declared` before anything bills from this. The cached-input rate is
-      # optional and should be omitted if the provider does not offer one.
+      # Google's published Standard paid-tier table for Gemini 3.7 Flash
+      # (https://ai.google.dev/gemini-api/docs/pricing). List rates apply from
+      # 2027-01-01; the introductory promotion is half those rates through the
+      # exclusive UTC cutoff, the same shape as GLM's promotion.
       pricing: %{
-        id: "placeholder.gemini-3.7-flash.v1",
-        source: :placeholder,
-        input_per_million_tokens: 1_250_000,
-        output_per_million_tokens: 10_000_000,
-        cached_input_per_million_tokens: 100_000
+        id: "declared.gemini-3.7-flash.v1",
+        source: :declared,
+        input_per_million_tokens: 1_500_000,
+        output_per_million_tokens: 7_500_000,
+        cached_input_per_million_tokens: 150_000,
+        promotion: %{
+          id: "declared.gemini-3.7-flash.intro-through-2026-12-31.v1",
+          source: :declared,
+          ends_at: ~U[2027-01-01 00:00:00Z],
+          input_per_million_tokens: 750_000,
+          output_per_million_tokens: 3_750_000,
+          cached_input_per_million_tokens: 75_000
+        }
       }
     },
     %{

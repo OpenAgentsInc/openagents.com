@@ -55,12 +55,13 @@ defmodule OpenAgentsWeb.ModelCatalogLiveTest do
   test "a lane with rates publishes them and names the table they came from", %{conn: conn} do
     {:ok, view, _html} = live(reader(conn, "model-catalog-priced"), ~p"/models")
 
-    # 1_250_000 microUSD per million tokens is $1.25 per million tokens.
-    assert view |> element(~s([id="model-input-rate-gemini-3.7-flash"])) |> render() =~ "$1.25"
-    assert view |> element(~s([id="model-basis-gemini-3.7-flash"])) |> render() =~ "provisional"
+    # 750_000 microUSD per million tokens is $0.75 per million tokens, the
+    # introductory Standard paid-tier rate still in force at test `pricing_now`.
+    assert view |> element(~s([id="model-input-rate-gemini-3.7-flash"])) |> render() =~ "$0.75"
+    assert view |> element(~s([id="model-basis-gemini-3.7-flash"])) |> render() =~ "declared"
 
     assert view |> element(~s([id="model-pricing-id-gemini-3.7-flash"])) |> render() =~
-             "placeholder.gemini-3.7-flash.v1"
+             "declared.gemini-3.7-flash.intro-through-2026-12-31.v1"
   end
 
   test "the declared free router is billable at zero", %{conn: conn} do

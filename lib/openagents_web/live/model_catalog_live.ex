@@ -21,7 +21,8 @@ defmodule OpenAgentsWeb.ModelCatalogLive do
   different fact from the call having cost nothing. And a rate this deployment
   wrote to make itself run is labelled `provisional`, so nobody reads a working
   figure as a price. The Coder Free lane declares zero rates because its router
-  only selects free models; the other listed rates remain provisional.
+  only selects free models; GLM 5.3 Flash and Gemini 3.7 Flash declare the
+  provider's published rates, including any active promotion.
 
   Availability is `Models.availability/1`, the same word the endpoint
   publishes, refreshed on a slow tick: a page about what a lane costs that

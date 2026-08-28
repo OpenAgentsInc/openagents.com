@@ -64,9 +64,74 @@ defmodule OpenAgentsWeb.InferenceProxyController do
          :ok <- serving(model),
          :ok <- requested_model(model, conn.body_params),
          {:ok, request} <- build_request(model, conn.body_params) do
-      run(conn, grant, model, request)
+      case OpenAgents.Inference.CoderApiHop.target() do
+        {:ok, origin, token} -> hop(conn, grant, model, request, origin, token)
+        :local -> run(conn, grant, model, request)
+      end
     else
       {:error, reason} -> refuse(conn, reason)
+    end
+  end
+
+  defp hop(conn, grant, model, request, origin, token) do
+    selection = selection_properties(grant, model, request, conn.body_params)
+    Analytics.capture("inference_model_selected", analytics_distinct_id(grant), selection)
+
+    case OpenAgents.Inference.CoderApiHop.post(origin, token, model.id, conn.body_params) do
+      {:ok, 200, headers, body} ->
+        served_name = OpenAgents.Inference.CoderApiHop.served_model(headers) || model.id
+        served = if served_name == model.id, do: :requested, else: served_name
+        usage = OpenAgents.Inference.CoderApiHop.usage_from_sse(body)
+        _ = meter(grant, usage, served)
+        record_health(model, served)
+        label = model_label(model, served)
+
+        Analytics.capture(
+          "inference_model_served",
+          analytics_distinct_id(grant),
+          Map.merge(selection, %{
+            "served_model" => label,
+            "served_model_disclosed" => served != :unresolved,
+            "outcome" => "served",
+            "usage_reported" => usage != %{},
+            "coder_api_hop" => true
+          })
+        )
+
+        conn
+        |> put_resp_content_type("text/event-stream")
+        |> put_resp_header("cache-control", "no-store")
+        |> put_resp_header("x-openagents-model", label)
+        |> send_resp(200, body)
+
+      {:ok, status, _headers, _body} ->
+        Logger.warning("coder_api_hop_refused status=#{status}")
+
+        Analytics.capture(
+          "inference_model_failed",
+          analytics_distinct_id(grant),
+          Map.merge(selection, %{
+            "outcome" => "provider_failed",
+            "reason_code" => "coder_api_hop",
+            "upstream_status" => status,
+            "usage_reported" => false
+          })
+        )
+
+        refuse(conn, {:provider_failed, "coder_api_hop", status})
+
+      {:error, _reason} ->
+        Analytics.capture(
+          "inference_model_failed",
+          analytics_distinct_id(grant),
+          Map.merge(selection, %{
+            "outcome" => "provider_failed",
+            "reason_code" => "coder_api_hop",
+            "usage_reported" => false
+          })
+        )
+
+        refuse(conn, {:provider_failed, "coder_api_hop", nil})
     end
   end
 

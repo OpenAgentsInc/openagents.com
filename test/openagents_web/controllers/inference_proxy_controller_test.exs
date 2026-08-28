@@ -716,4 +716,73 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
       end
     end
   end
+
+  test "a coder-api hop streams rust SSE, attributes the served model, and meters", %{conn: conn} do
+    parent = self()
+
+    {:ok, pid} =
+      Bandit.start_link(
+        plug: {__MODULE__.CoderHopStub, parent},
+        scheme: :http,
+        port: 0,
+        thousand_island_options: [num_acceptors: 1]
+      )
+
+    {:ok, {_address, port}} = ThousandIsland.listener_info(pid)
+    origin = "http://127.0.0.1:#{port}"
+
+    old_origin = Application.get_env(:openagents, :coder_api_origin)
+    old_token = Application.get_env(:openagents, :coder_api_internal_token)
+    Application.put_env(:openagents, :coder_api_origin, origin)
+    Application.put_env(:openagents, :coder_api_internal_token, "hop-secret")
+
+    on_exit(fn ->
+      Application.put_env(:openagents, :coder_api_origin, old_origin)
+      Application.put_env(:openagents, :coder_api_internal_token, old_token)
+      Process.exit(pid, :normal)
+    end)
+
+    %{grant: grant, token: token} = grant("hop")
+
+    conn =
+      post_chat(conn, token, %{
+        "model" => Models.default_id(),
+        "messages" => [%{"role" => "user", "content" => "hey"}]
+      })
+
+    assert conn.status == 200
+    assert get_resp_header(conn, "x-openagents-model") == ["gemini-3.7-flash"]
+    assert conn.resp_body =~ "Ready"
+    assert_receive {:coder_hop, ["Bearer hop-secret"], [admitted]}
+    assert admitted == Models.default_id()
+
+    metered = Repo.get(Grant, grant.id)
+    assert metered.call_count == 1
+    assert metered.usage["input_tokens"] == 10
+    assert metered.usage["output_tokens"] == 2
+  end
+end
+
+defmodule OpenAgentsWeb.InferenceProxyControllerTest.CoderHopStub do
+  @behaviour Plug
+
+  def init(parent), do: parent
+
+  def call(conn, parent) do
+    send(
+      parent,
+      {:coder_hop, Plug.Conn.get_req_header(conn, "authorization"),
+       Plug.Conn.get_req_header(conn, "x-openagents-admitted-model")}
+    )
+
+    body =
+      "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"}}],\"model\":\"gemini-3.7-flash\"}\n\n" <>
+        "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n\n" <>
+        "data: [DONE]\n\n"
+
+    conn
+    |> Plug.Conn.put_resp_header("x-openagents-model", "gemini-3.7-flash")
+    |> Plug.Conn.put_resp_content_type("text/event-stream")
+    |> Plug.Conn.send_resp(200, body)
+  end
 end

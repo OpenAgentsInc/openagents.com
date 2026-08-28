@@ -549,6 +549,8 @@ if config_env() == :prod and runtime_role == :web do
     vercel_gateway_api_key: optional_text.("AI_GATEWAY_API_KEY"),
     box_api_key: optional_text.("BOX_API_KEY"),
     inference_proxy_url: optional_text.("OPENAGENTS_INFERENCE_PROXY_URL"),
+    coder_api_origin: optional_text.("OPENAGENTS_CODER_API_ORIGIN"),
+    coder_api_internal_token: optional_text.("OPENAGENTS_CODER_API_INTERNAL_TOKEN"),
     forge_enabled: forge_enabled,
     forge_deploy_lane_enabled: forge_deploy_enabled,
     repository_provisioner_enabled: forge_enabled,

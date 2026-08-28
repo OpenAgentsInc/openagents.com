@@ -1577,15 +1577,23 @@ Concretely:
   that named one gets that one or an error.
 - Amended 2026-08-25 (#250): one lane can be substituted for *by its provider*,
   and the response says so rather than the host pretending otherwise. Where
-  `config :openagents, :vercel_gateway_fallback_models` is set, Vercel answers
-  a failed primary with another model and returns 200. The proxy reads the
-  serving model back off the response and attributes that, so the header and
-  the chunks name what actually ran. Where such a lane discloses no model, the
-  attribution is the word `unresolved` — not the requested model, which the
-  deployment cannot claim served. An adapter says whether it can be
-  substituted for (`OpenAgents.Providers.Provider.substitutable?/0`, false
-  where it is not exported), so silence from a lane that cannot substitute
-  still means the model that was asked for.
+  `config :openagents, :vercel_gateway_fallback_models` is set **and the call
+  did not name a model**, Vercel answers a failed primary with another model
+  and returns 200. The proxy reads the serving model back off the response
+  and attributes that, so the header and the chunks name what actually ran.
+  Where such a lane discloses no model, the attribution is the word
+  `unresolved` — not the requested model, which the deployment cannot claim
+  served. An adapter says whether it can be substituted for
+  (`OpenAgents.Providers.Provider.substitutable?/0`, false where it is not
+  exported), so silence from a lane that cannot substitute still means the
+  model that was asked for.
+- Amended 2026-08-27 (#258): a grant that named a model is a pin. The proxy
+  does not send `providerOptions.gateway.models` on that call; the Vertex
+  `order` pin stays. Fallback remains only for unnamed-model selection
+  (neither the mint nor the call named a model). If the gateway still
+  substitutes on a pinned grant, the proxy does not return 200: the serving
+  model must be the grant's public id or that entry's `provider_model`, or
+  the call is a typed `model_substituted` refusal.
 - Amended 2026-08-25 (#199): where **nothing named a model** — neither the
   mint nor the call — the server selects, preferring a configured lane that is
   not `degraded` in catalog order and falling back to the catalog default when

@@ -24,15 +24,21 @@ defmodule OpenAgents.Providers.VercelGateway do
   `providerOptions.gateway.order` tries Vertex first, because the same slug is
   also served by `google` — the Generative Language endpoint, which is not
   where the credits are. `providerOptions.gateway.models` lists the fallback
-  models Vercel tries if the primary model fails.
+  models Vercel tries if the primary model fails, and it is attached only when
+  the call allows fallback: unnamed-model selection. A grant that named a
+  model is a pin (`allow_fallback: false`); that call keeps the Vertex `order`
+  and omits the fallback list, so Vercel is not asked to answer with another
+  model.
 
-  That list is why this lane reports `substitutable?/0` as true: a call for
-  `google/gemini-3.7-flash` can be answered by `zai/glm-5.3` and still return
+  The configured list is why this lane reports `substitutable?/0` as true: a
+  call that *does* send it — unnamed-model selection for
+  `google/gemini-3.7-flash` — can be answered by `zai/glm-5.3` and still return
   200, so the model that was asked for is not evidence of the model that
   answered. The response's `model` field is, and the chat-completions decoder
   reads it back as `{:model_served, name}` so the call is priced and attributed
   against the lane that served it rather than the lane that was requested
-  (METER-001, PROVIDER-002).
+  (METER-001, PROVIDER-002). A pinned grant whose response names another model
+  is refused by the proxy rather than returned as 200.
 
   The wire format is OpenRouter's, so the request building and the stream
   decoding are OpenRouter's too. What differs is the endpoint, the credential,
@@ -99,7 +105,7 @@ defmodule OpenAgents.Providers.VercelGateway do
   defp gateway_options(options) do
     options
     |> Keyword.put(:endpoint, @endpoint)
-    |> Keyword.put(:payload_extra, payload_extra())
+    |> Keyword.put(:payload_extra, payload_extra(options))
   end
 
   @doc "The models Vercel may try when the requested one fails."
@@ -112,9 +118,12 @@ defmodule OpenAgents.Providers.VercelGateway do
   end
 
   @doc false
-  def payload_extra do
+  def payload_extra(options \\ []) when is_list(options) do
     providers = Application.get_env(:openagents, :vercel_gateway_providers, [])
-    fallbacks = fallback_models()
+    # A pin must not send the fallback list: Vercel treats `gateway.models` as
+    # permission to answer with another model and still return 200 (#258).
+    fallbacks =
+      if Keyword.get(options, :allow_fallback, true), do: fallback_models(), else: []
 
     gateway =
       %{}

@@ -19,14 +19,18 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   and each chunk's `model` field — so a client renders what answered.
 
   What answered is read back off the response rather than assumed from the
-  request. One lane can substitute: the Vercel AI Gateway is configured with a
-  fallback model list, so a call for `google/gemini-3.7-flash` can be served by
-  `zai/glm-5.3` and still return 200. The serving model therefore
-  decides three things — the name attributed on the response, the lane whose
-  health is recorded, and the rate table the usage record is priced against
-  (METER-001). A substitutable lane whose response discloses no model is
-  attributed `unresolved` and priced at nothing, because naming the requested
-  model would be a claim the deployment cannot support.
+  request. One lane can substitute, and only where nothing named a model: the
+  Vercel AI Gateway is configured with a fallback model list, and unnamed-model
+  selection attaches it, so a call that asked for whatever this deployment
+  serves can be answered by `zai/glm-5.3` and still return 200. A grant that
+  named a model is a pin. That call omits the fallback list and keeps the
+  Vertex `order` pin; if the gateway still substitutes, the proxy does not
+  return 200 (PROVIDER-002). The serving model therefore decides three things
+  — the name attributed on the response, the lane whose health is recorded,
+  and the rate table the usage record is priced against (METER-001). A
+  substitutable unnamed call whose response discloses no model is attributed
+  `unresolved` and priced at nothing, because naming the requested model would
+  be a claim the deployment cannot support.
 
   ## The stream is flushed as it happens
 
@@ -73,7 +77,7 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   # since been withdrawn — is refused here rather than sent to a provider that
   # does not serve it.
   defp route(grant, body) do
-    if no_model_in_body?(body) and grant.model_id == Models.default_id() do
+    if unnamed_selection?(grant, body) do
       {:ok, Models.select()}
     else
       case Models.fetch(grant.model_id) do
@@ -81,6 +85,13 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         :error -> {:error, :model_unavailable}
       end
     end
+  end
+
+  # Neither the mint nor the call named a model: the server selects, and the
+  # gateway may still try its fallback list. A grant minted for a model other
+  # than the default, or a body that names one, is a pin (#258).
+  defp unnamed_selection?(grant, body) do
+    no_model_in_body?(body) and grant.model_id == Models.default_id()
   end
 
   defp no_model_in_body?(body) do
@@ -214,59 +225,46 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   @state_usage :proxy_stream_usage
   @state_served :proxy_stream_served_model
   @state_conn :proxy_stream_conn
+  @state_raw_conn :proxy_stream_raw_conn
+  @state_opened :proxy_stream_opened
+  @state_allow_fallback :proxy_stream_allow_fallback
 
   defp run(conn, grant, model, request) do
+    allow_fallback? = unnamed_selection?(grant, conn.body_params)
     selection = selection_properties(grant, model, request, conn.body_params)
     Analytics.capture("inference_model_selected", analytics_distinct_id(grant), selection)
 
-    # The stream opens before the first provider event, so the status and the
-    # model attribution commit early. The header names the grant's lane; a
-    # fallback that answered under another name still corrects every chunk and
-    # the final attribution exactly as it did when the whole body was written
-    # at the end.
-    conn =
-      conn
-      |> put_resp_content_type("text/event-stream")
-      |> put_resp_header("cache-control", "no-store")
-      |> put_resp_header("x-openagents-model", model.id)
-      |> send_chunked(200)
+    Process.put(@state_raw_conn, conn)
+    Process.put(@state_allow_fallback, allow_fallback?)
 
-    Process.put(@state_conn, conn)
+    # Unnamed-model selection may still be answered by a fallback, so the
+    # stream opens before the first provider event (#263). A pin waits until
+    # the serving model is known: opening 200 first would make a substituted
+    # grant look like a successful turn (#258).
+    if allow_fallback?, do: open_stream(model)
 
-    # The provider pushes events synchronously, and each one is translated and
-    # written to the client as it arrives (#263): a reasoning or text token
-    # reaches the caller while the vendor is still producing the next one.
-    result = model.adapter.stream(request, &emit_event(conn, model, &1))
+    # The provider pushes events synchronously. Once the stream is open, each
+    # event is translated and written to the client as it arrives.
+    result =
+      stream_adapter(model.adapter, request, &emit_event(conn, model, &1),
+        allow_fallback: allow_fallback?
+      )
 
     case result do
       :ok ->
         events = drained_events()
 
         # What answered is read back off the response, never assumed from the
-        # request: a gateway lane configured with fallback models can serve a
-        # call for one model with another and still return 200 (METER-001).
+        # request. Unnamed-model selection may still land on a fallback and
+        # return 200 (METER-001). A pin must be the grant's model.
         served = served_model(model, events)
         usage = drained_usage()
-        _ = meter(grant, usage, served)
-        record_health(model, served)
 
-        # The effective model is attributed on the response itself — the
-        # header and every chunk's `model` field — so a client renders what
-        # answered, not what it assumed (PROVIDER-002).
-        label = model_label(model, served)
-
-        Analytics.capture(
-          "inference_model_served",
-          analytics_distinct_id(grant),
-          Map.merge(selection, %{
-            "served_model" => label,
-            "served_model_disclosed" => served != :unresolved,
-            "outcome" => "served",
-            "usage_reported" => usage != %{}
-          })
-        )
-
-        Enum.each(sse_chunks(events, usage, label), &write_chunk(conn, &1))
+        if allow_fallback? or served == :requested do
+          finish_served(conn, grant, model, selection, served, usage, events)
+        else
+          finish_pin_violation(grant, model, selection, served, usage)
+        end
 
       {:error, reason} ->
         events = drained_events()
@@ -298,14 +296,100 @@ defmodule OpenAgentsWeb.InferenceProxyController do
           })
         )
 
-        # The 200 is already on the wire, so the failure travels as terminal
-        # frames instead of a status: the same bounded class and upstream
-        # status the JSON refusal would have carried, and nothing more.
-        write_chunk(conn, data(%{"error" => stream_error(class, status)}))
-        write_chunk(conn, "data: [DONE]\n\n")
+        finish_provider_error(conn, class, status)
+    end
+  end
+
+  defp stream_adapter(adapter, request, on_event, options) do
+    if Code.ensure_loaded?(adapter) and function_exported?(adapter, :stream, 3) do
+      adapter.stream(request, on_event, options)
+    else
+      adapter.stream(request, on_event)
+    end
+  end
+
+  defp finish_served(conn, grant, model, selection, served, usage, events) do
+    unless Process.get(@state_opened) do
+      open_stream(model)
+      flush_event_chunks(conn, model, events)
     end
 
+    _ = meter(grant, usage, served)
+    record_health(model, served)
+
+    # The effective model is attributed on the response itself — the
+    # header and every chunk's `model` field — so a client renders what
+    # answered, not what it assumed (PROVIDER-002).
+    label = model_label(model, served)
+
+    Analytics.capture(
+      "inference_model_served",
+      analytics_distinct_id(grant),
+      Map.merge(selection, %{
+        "served_model" => label,
+        "served_model_disclosed" => served != :unresolved,
+        "outcome" => "served",
+        "usage_reported" => usage != %{}
+      })
+    )
+
+    Enum.each(sse_chunks(events, usage, label), &write_chunk(conn, &1))
     Process.get(@state_conn) || conn
+  end
+
+  defp finish_pin_violation(grant, model, selection, served, usage) do
+    # Tokens were spent on the model that answered, even though the pin
+    # forbids returning that as a successful turn.
+    if usage != %{}, do: meter(grant, usage, served)
+    OpenAgents.Inference.Health.record_failure(model.id, nil)
+
+    served_label = model_label(model, served)
+
+    Analytics.capture(
+      "inference_model_failed",
+      analytics_distinct_id(grant),
+      Map.merge(selection, %{
+        "outcome" => "model_substituted",
+        "reason_code" => "model_substituted",
+        "served_model" => served_label,
+        "usage_reported" => usage != %{}
+      })
+    )
+
+    refuse(Process.get(@state_raw_conn), {:model_substituted, model.id, served_label})
+  end
+
+  defp finish_provider_error(conn, class, status) do
+    if Process.get(@state_opened) do
+      # The 200 is already on the wire, so the failure travels as terminal
+      # frames instead of a status: the same bounded class and upstream
+      # status the JSON refusal would have carried, and nothing more.
+      write_chunk(conn, data(%{"error" => stream_error(class, status)}))
+      write_chunk(conn, "data: [DONE]\n\n")
+      Process.get(@state_conn) || conn
+    else
+      refuse(
+        Process.get(@state_raw_conn) || conn,
+        {:provider_failed, class, status}
+      )
+    end
+  end
+
+  defp open_stream(model) do
+    if Process.get(@state_opened) do
+      :ok
+    else
+      sent =
+        Process.get(@state_raw_conn)
+        |> put_resp_content_type("text/event-stream")
+        |> put_resp_header("cache-control", "no-store")
+        |> put_resp_header("x-openagents-model", model.id)
+        |> send_chunked(200)
+
+      Process.put(@state_conn, sent)
+      Process.put(@state_opened, true)
+      :ok
+    end
   end
 
   defp stream_error(class, status) do
@@ -316,18 +400,47 @@ defmodule OpenAgentsWeb.InferenceProxyController do
   defp emit_event(conn, model, event) do
     record_event(event)
     record_disclosure(event)
-    chunks = event_chunks(event)
 
-    if chunks != [] do
-      label = chunk_model(model)
+    cond do
+      Process.get(@state_opened) ->
+        write_event_chunks(conn, model, [event])
 
-      Enum.each(chunks, fn payload ->
-        write_chunk(conn, data(Map.put(payload, "model", label)))
-      end)
+      pin_confirmed?(model) ->
+        open_stream(model)
+        write_event_chunks(conn, model, Enum.reverse(Process.get(@state_events) || []))
+
+      true ->
+        :ok
     end
 
     :ok
   end
+
+  defp pin_confirmed?(model) do
+    Process.get(@state_allow_fallback) == true or
+      served_matches_pin?(model, Process.get(@state_served))
+  end
+
+  defp served_matches_pin?(_model, nil), do: false
+
+  defp served_matches_pin?(model, name) when is_binary(name) do
+    case Models.fetch(name) do
+      {:ok, %{id: id}} -> id == model.id
+      :error -> name == model.id or name == model.provider_model
+    end
+  end
+
+  defp write_event_chunks(conn, model, events) do
+    label = chunk_model(model)
+
+    for event <- events, payload <- event_chunks(event) do
+      write_chunk(conn, data(Map.put(payload, "model", label)))
+    end
+
+    :ok
+  end
+
+  defp flush_event_chunks(conn, model, events), do: write_event_chunks(conn, model, events)
 
   # A fallback disclosure corrects the name on the very chunks that follow it;
   # before one arrives, every chunk names the grant's lane, exactly as the
@@ -617,6 +730,13 @@ defmodule OpenAgentsWeb.InferenceProxyController do
        "granted" => granted,
        "served" => Models.ids()
      }}
+  end
+
+  # A pin whose provider answered with another model is not a successful turn.
+  # The client named one model; attributing a fallback as 200 is the miss #258
+  # closes even when PROVIDER-002 would otherwise name the substitute.
+  defp error_for({:model_substituted, granted, served}) do
+    {502, %{"code" => "model_substituted", "granted" => granted, "served" => served}}
   end
 
   # The failure class travels with the refusal. `OperationalLog.code/1` takes

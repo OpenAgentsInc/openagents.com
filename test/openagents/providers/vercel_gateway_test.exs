@@ -42,6 +42,28 @@ defmodule OpenAgents.Providers.VercelGatewayTest do
                  }
                }
              }
+
+      assert VercelGateway.payload_extra(allow_fallback: true) == VercelGateway.payload_extra()
+    end
+
+    test "omits the fallback model list when the grant pinned a model" do
+      previous = Application.get_env(:openagents, :vercel_gateway_fallback_models)
+
+      Application.put_env(:openagents, :vercel_gateway_fallback_models, [
+        "zai/glm-5.3-flash",
+        "zai/glm-5.3",
+        "openai/gpt-5.6-luna"
+      ])
+
+      on_exit(fn ->
+        Application.put_env(:openagents, :vercel_gateway_fallback_models, previous)
+      end)
+
+      # Vertex `order` stays; `models` is the instruction to substitute, and a
+      # pin must not send it (#258).
+      assert VercelGateway.payload_extra(allow_fallback: false) == %{
+               providerOptions: %{gateway: %{order: ["vertex"]}}
+             }
     end
   end
 

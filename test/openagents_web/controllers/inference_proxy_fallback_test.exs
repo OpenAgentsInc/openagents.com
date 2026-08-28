@@ -3,11 +3,12 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
   What a metered call says when a fallback served it.
 
   `config :openagents, :vercel_gateway_fallback_models` tells Vercel to answer a
-  failed `google/gemini-3.7-flash` call with `openai/gpt-5.6-luna` and still
-  return 200. The adapter never read back which model answered, so the usage
-  record was priced against Gemini's rates for a call Luna served, the thread's
-  cost totalled as though it were known, and the Gemini lane was recorded
-  healthy on the strength of a call it did not serve (METER-001, PROVIDER-002).
+  failed primary with `openai/gpt-5.6-luna` and still return 200 — but only
+  unnamed-model selection may send that list. A grant that named a model is a
+  pin; fallback on that call is a miss even when the substitute is attributed
+  honestly (#258). Unnamed selection still reads the serving model back so a
+  rescued call is priced against the lane that ran, not the one that was asked
+  for (METER-001, PROVIDER-002).
   """
 
   use OpenAgentsWeb.ConnCase, async: false
@@ -60,6 +61,21 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
     %{grant: grant, token: token}
   end
 
+  # Neither the mint nor the body names a model, so the proxy may still attach
+  # the gateway fallback list (#258).
+  defp unnamed_grant(key) do
+    owner = github_user("fallback-#{key}")
+    {:ok, conversation} = OpenAgents.Conversations.ensure_conversation(owner)
+
+    {:ok, grant, token} =
+      Inference.mint(%{
+        owner_visitor_id: conversation.visitor_id,
+        conversation_id: conversation.id
+      })
+
+    %{grant: grant, token: token}
+  end
+
   defp call(conn, token) do
     conn
     |> put_req_header("authorization", "Bearer #{token}")
@@ -70,15 +86,34 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
     )
   end
 
+  describe "a pinned grant a fallback model served" do
+    test "is not a successful turn", %{conn: conn} do
+      # Explore pins `gemini-3.7-flash`. Answering with GLM and calling that
+      # 200 is the miss even when the substitute is a catalog model (#258).
+      serve_as("zai/glm-5.3-flash")
+      %{grant: grant, token: token} = gemini_grant("pinned-glm")
+
+      conn = call(conn, token)
+      refute conn.status == 200
+
+      error = Jason.decode!(conn.resp_body)["error"]
+      assert error["code"] == "model_substituted"
+      assert error["granted"] == @gemini
+      assert error["served"] == "glm-5.3-flash"
+
+      metered = Repo.get(Grant, grant.id)
+      refute metered.usage["served_model"] == @gemini
+    end
+  end
+
   describe "a call a fallback model served" do
     test "is priced against the model that served it, not the one requested", %{conn: conn} do
       # The requested lane has rates; the lane Vercel fell back to has none.
       # Pricing the call at the requested lane's rates is the bug: it produces
       # a figure, and the figure is for a call that never ran there.
-      assert Pricing.basis(@gemini) == "provisional"
       serve_as("openai/gpt-5.6-luna")
 
-      %{grant: grant, token: token} = gemini_grant("priced")
+      %{grant: grant, token: token} = unnamed_grant("priced")
       assert call(conn, token).status == 200
 
       metered = Repo.get(Grant, grant.id)
@@ -91,14 +126,14 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
 
     test "is attributed to the model that served it on the response", %{conn: conn} do
       serve_as("openai/gpt-5.6-luna")
-      %{token: token} = gemini_grant("attributed")
+      %{grant: grant, token: token} = unnamed_grant("attributed")
 
       conn = call(conn, token)
 
       # The stream (#263) opens before any provider event, so the header names
       # the lane the call addressed. The disclosure corrects the attribution on
       # the response body itself — every chunk carries the model that answered.
-      assert get_resp_header(conn, "x-openagents-model") == [@gemini]
+      assert get_resp_header(conn, "x-openagents-model") == [grant.model_id]
 
       chunks =
         for chunk <- String.split(conn.resp_body, "\n\n", trim: true),
@@ -123,14 +158,14 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       # reporting `available` forever, because the fallback kept rescuing it.
       luna = "openai/gpt-5.6-luna"
       serve_as(luna)
-      {:ok, gemini} = Models.fetch(@gemini)
+      {:ok, selected} = Models.fetch(Models.default_id())
 
       for index <- 1..Health.degraded_after() do
-        %{token: token} = gemini_grant("health-#{index}")
+        %{token: token} = unnamed_grant("health-#{index}")
         assert call(conn, token).status == 200
       end
 
-      assert Models.availability(gemini) == "degraded"
+      assert Models.availability(selected) == "degraded"
 
       # Nothing is recorded for the lane that actually answered either. It is
       # not a model this deployment admits, so there is no lane to credit.
@@ -169,7 +204,7 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
   describe "a call whose serving model the response did not disclose" do
     test "is recorded unresolved and priced at nothing", %{conn: conn} do
       disclose_nothing()
-      %{grant: grant, token: token} = gemini_grant("silent")
+      %{grant: grant, token: token} = unnamed_grant("silent")
 
       conn = call(conn, token)
       assert conn.status == 200
@@ -188,17 +223,26 @@ defmodule OpenAgentsWeb.InferenceProxyFallbackTest do
       # correct it with, and naming `unresolved` there would require buffering
       # the whole stream again (#263). The unresolved attribution lives where
       # the record is: the metered usage above.
-      assert get_resp_header(conn, "x-openagents-model") == [@gemini]
+      assert get_resp_header(conn, "x-openagents-model") == [grant.model_id]
     end
 
     test "records no health for the requested lane either way", %{conn: conn} do
       disclose_nothing()
-      %{token: token} = gemini_grant("silent-health")
+      %{grant: grant, token: token} = unnamed_grant("silent-health")
 
       assert call(conn, token).status == 200
 
       # Neither healthy nor degraded: nothing here knows whether that lane ran.
-      assert Health.status(@gemini) == {:unknown, nil}
+      assert Health.status(grant.model_id) == {:unknown, nil}
+    end
+
+    test "is not a successful turn when the grant pinned a model", %{conn: conn} do
+      disclose_nothing()
+      %{token: token} = gemini_grant("silent-pin")
+
+      conn = call(conn, token)
+      refute conn.status == 200
+      assert Jason.decode!(conn.resp_body)["error"]["code"] == "model_substituted"
     end
   end
 

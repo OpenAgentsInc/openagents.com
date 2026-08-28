@@ -44,11 +44,12 @@ defmodule OpenAgentsWeb.HomeLive do
   alias OpenAgentsWeb.LiveRefresh
   alias OpenAgentsWeb.UI.Landing
 
-  # The one line the landing page asks a reader to run. It is the command
-  # `priv/docs/install-cli.md` documents and the script
-  # `priv/static/install.sh` serves, so the page cannot advertise an installer
-  # this site does not hand out.
-  @install_command "curl -fsSL https://openagents.com/install.sh | sh"
+  # The one line the landing page asks a reader to run. Unix pipes
+  # `install.sh` into `sh`. Windows PowerShell has no `sh`, so the page
+  # swaps to `install.ps1` through `irm | iex` in the browser. Both scripts
+  # are served from this site.
+  @install_command OpenAgentsWeb.CliInstall.unix()
+  @windows_install_command OpenAgentsWeb.CliInstall.windows()
 
   @feed_limit 8
   @project_limit 6
@@ -68,7 +69,8 @@ defmodule OpenAgentsWeb.HomeLive do
       {:ok,
        socket
        |> assign(:device_user_code, device_user_code(params))
-       |> assign(:install_command, @install_command)}
+       |> assign(:install_command, @install_command)
+       |> assign(:windows_install_command, @windows_install_command)}
     end
   end
 
@@ -496,7 +498,11 @@ defmodule OpenAgentsWeb.HomeLive do
           --%>
 
           <:command>
-            <Landing.install_command id="home-install-command" command={@install_command} />
+            <Landing.install_command
+              id="home-install-command"
+              command={@install_command}
+              windows_command={@windows_install_command}
+            />
           </:command>
 
           <%!-- Two lines, not one sentence. The first is what the reader gets

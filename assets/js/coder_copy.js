@@ -1,7 +1,18 @@
 const CoderCopy = {
   mounted() {
+    this.applyShell()
     this.onClick = () => this.copy()
     this.el.addEventListener("click", this.onClick)
+  },
+
+  applyShell() {
+    const windowsCommand = this.el.dataset.windowsCommand
+    if (!windowsCommand) return
+    const platform = navigator.userAgentData?.platform || navigator.platform || ""
+    if (!/Win/i.test(platform)) return
+    this.el.dataset.copyText = windowsCommand
+    const hintEl = document.getElementById("copy-hint")
+    if (hintEl) hintEl.textContent = " " + windowsCommand + " "
   },
 
   destroyed() {

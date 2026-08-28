@@ -7,6 +7,12 @@
 # General application configuration
 import Config
 
+# `irm | iex` needs a text body. Without this, Plug.Static would serve
+# `install.ps1` as application/octet-stream.
+config :mime, :types, %{
+  "text/plain" => ["ps1"]
+}
+
 config :phoenix,
   filter_parameters: [
     "authorization",

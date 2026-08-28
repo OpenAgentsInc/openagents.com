@@ -1,9 +1,16 @@
 # Install the OpenAgents CLI
 
-The CLI is a single native binary. Install it with the installer script:
+The CLI is a single native binary. On macOS and Linux:
 
 ```sh
 curl -fsSL https://openagents.com/install.sh | sh
+```
+
+On Windows, PowerShell has no `sh`, and its `curl` is not the curl that command
+names. Run this instead:
+
+```powershell
+irm https://openagents.com/install.ps1 | iex
 ```
 
 The installer detects your operating system and processor, downloads the

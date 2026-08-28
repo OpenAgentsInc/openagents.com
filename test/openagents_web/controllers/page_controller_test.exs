@@ -19,10 +19,19 @@ defmodule OpenAgentsWeb.PageControllerTest do
     # it from the docs run the same installer.
     assert html =~ ~s(id="home-install-command")
     assert html =~ "curl -fsSL https://openagents.com/install.sh | sh"
+    assert html =~ "irm https://openagents.com/install.ps1 | iex"
 
     # `npm i -g @openagentsinc/cli` was a previous answer and is not one now:
     # there is no npm package, and a homepage that prints an install command
     # nothing publishes is worse than one that prints none.
     refute html =~ "npm i -g"
+  end
+
+  test "GET /install.ps1 serves the Windows installer", %{conn: conn} do
+    conn = get(conn, "/install.ps1")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "irm https://openagents.com/install.ps1 | iex"
+    assert conn.resp_body =~ "SHA256SUMS-"
   end
 end

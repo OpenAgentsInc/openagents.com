@@ -143,6 +143,7 @@ defmodule OpenAgentsWeb.DocsCatalogTest do
     # way to connect the two.
     assert install.markdown =~ "`openagents`, `coder`, and `oa`"
     assert install.markdown =~ "curl -fsSL https://openagents.com/install.sh | sh"
+    assert install.markdown =~ "irm https://openagents.com/install.ps1 | iex"
 
     # The page must not send anyone to the npm package. It publishes a *different*
     # program under the same `openagents` name, and having both on one PATH is not

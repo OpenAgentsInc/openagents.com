@@ -231,7 +231,9 @@ defmodule OpenAgentsWeb.UI.Landing do
   """
   attr :id, :string, required: true
   attr :command, :string, required: true
+  attr :windows_command, :string, default: nil
   attr :prompt, :string, default: "$", doc: "the shell prompt drawn before the command"
+  attr :windows_prompt, :string, default: "PS>"
   attr :label, :string, default: "Copy the install command"
   attr :class, :any, default: nil
 
@@ -244,11 +246,15 @@ defmodule OpenAgentsWeb.UI.Landing do
         class="install-command__button"
         data-copied="false"
         data-copy-text={@command}
+        data-unix-command={@command}
+        data-windows-command={@windows_command}
+        data-unix-prompt={@prompt}
+        data-windows-prompt={@windows_prompt}
         aria-label={@label}
         phx-hook=".CopyCommand"
       >
         <code class="install-command__text">
-          <span class="install-command__prompt" aria-hidden="true">{@prompt}</span>{@command}
+          <span class="install-command__prompt" aria-hidden="true">{@prompt}</span><span class="install-command__body">{@command}</span>
         </code>
         <span class="install-command__glyph" aria-hidden="true">
           <UI.icon name="copy" class="install-command__idle" />
@@ -259,6 +265,7 @@ defmodule OpenAgentsWeb.UI.Landing do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyCommand">
       export default {
         mounted() {
+          this.applyShell()
           this.el.addEventListener("click", async () => {
             try {
               await navigator.clipboard.writeText(this.el.dataset.copyText)
@@ -271,6 +278,19 @@ defmodule OpenAgentsWeb.UI.Landing do
               this.el.dataset.copied = "false"
             }, 1600)
           })
+        },
+        applyShell() {
+          const windowsCommand = this.el.dataset.windowsCommand
+          if (!windowsCommand) return
+          const platform = navigator.userAgentData?.platform || navigator.platform || ""
+          if (!/Win/i.test(platform)) return
+          const command = windowsCommand
+          const prompt = this.el.dataset.windowsPrompt || "PS>"
+          this.el.dataset.copyText = command
+          const promptEl = this.el.querySelector(".install-command__prompt")
+          const bodyEl = this.el.querySelector(".install-command__body")
+          if (promptEl) promptEl.textContent = prompt
+          if (bodyEl) bodyEl.textContent = command
         },
         destroyed() {
           clearTimeout(this.resetTimer)

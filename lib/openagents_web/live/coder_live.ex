@@ -25,7 +25,8 @@ defmodule OpenAgentsWeb.CoderLive do
   """
   use OpenAgentsWeb, :live_view
 
-  @cmd "curl -fsSL https://openagents.com/install.sh | sh"
+  @cmd OpenAgentsWeb.CliInstall.unix()
+  @windows_cmd OpenAgentsWeb.CliInstall.windows()
 
   # Three spaces between the frame and the hint, and the hint carries one space
   # of its own on each side, which is the gap the copy confirmation replaces.
@@ -100,6 +101,7 @@ defmodule OpenAgentsWeb.CoderLive do
      socket
      |> assign(:page_title, "OpenAgents Coder")
      |> assign(:cmd, @cmd)
+     |> assign(:windows_cmd, @windows_cmd)
      |> assign(:frame, @frame)}
   end
 
@@ -110,6 +112,8 @@ defmodule OpenAgentsWeb.CoderLive do
       id="coder-viewport"
       phx-hook="CoderCopy"
       data-copy-text={@cmd}
+      data-unix-command={@cmd}
+      data-windows-command={@windows_cmd}
       class="min-h-screen w-full flex flex-col items-center justify-center p-4 select-none cursor-pointer"
       style="background-color: var(--background0, #000); color: var(--foreground0, #fff); font-family: var(--font-family, monospace); -webkit-user-select: none; user-select: none;"
     >

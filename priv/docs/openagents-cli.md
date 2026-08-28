@@ -36,6 +36,12 @@ curl -fsSL https://openagents.com/install.sh | sh
 openagents --help
 ```
 
+On Windows PowerShell:
+
+```powershell
+irm https://openagents.com/install.ps1 | iex
+```
+
 Open a new shell first if the installer has just added `~/.openagents/bin` to
 your `PATH`. `openagents --version` reports the installed build, and
 `openagents update --check` says what the channel currently names without

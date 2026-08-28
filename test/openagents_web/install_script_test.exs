@@ -17,6 +17,7 @@ defmodule OpenAgentsWeb.InstallScriptTest do
   use ExUnit.Case, async: true
 
   @script Path.join([File.cwd!(), "priv", "static", "install.sh"])
+  @windows_script Path.join([File.cwd!(), "priv", "static", "install.ps1"])
 
   defp libc(source, arch, root) do
     {output, 0} =
@@ -46,6 +47,12 @@ defmodule OpenAgentsWeb.InstallScriptTest do
 
     assert Enum.any?(OpenAgentsWeb.static_prefixes(), &String.starts_with?("install.sh", &1)),
            "no prefix in static_prefixes/0 covers install.sh, so it 404s once digested"
+
+    assert "install.ps1" in OpenAgentsWeb.static_paths(),
+           "`install.ps1` is not in static_paths/0, so /install.ps1 is a 404"
+
+    assert Enum.any?(OpenAgentsWeb.static_prefixes(), &String.starts_with?("install.ps1", &1)),
+           "no prefix in static_prefixes/0 covers install.ps1, so it 404s once digested"
   end
 
   test "the script parses" do
@@ -74,6 +81,19 @@ defmodule OpenAgentsWeb.InstallScriptTest do
     refute body =~ "[[", "`[[ ]]` is a bash conditional"
     refute body =~ "=~", "`=~` is a bash regex match"
     refute body =~ ~r/\[@\]/, "an array expansion is bash-only"
+  end
+
+  test "the PowerShell installer refuses unverified bytes and does not exit the shell" do
+    script = File.read!(@windows_script)
+
+    assert script =~ "irm https://openagents.com/install.ps1 | iex"
+    assert script =~ "SHA256SUMS-"
+    assert script =~ "refusing to install unverified bytes"
+    assert script =~ "Checksum mismatch"
+    body = String.replace(script, ~r/#.*$/m, "")
+    # `irm | iex` runs in the reader's PowerShell. `exit` would close it.
+    refute body =~ ~r/\bexit\b/,
+           "the PowerShell installer must throw, not exit, so irm | iex does not close the window"
   end
 
   test "nothing is installed without a checksum that matches" do

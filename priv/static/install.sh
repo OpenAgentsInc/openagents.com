@@ -6,7 +6,8 @@
 #   curl -fsSL https://openagents.com/install.sh | sh            # latest stable
 #   curl -fsSL https://openagents.com/install.sh | sh -s 0.1.0   # specific version
 #
-# Windows: run under Git for Windows / MSYS2 Bash; WSL uses the Linux binary.
+# Windows PowerShell: irm https://openagents.com/install.ps1 | iex
+# Git for Windows / MSYS2 Bash can still run this script; WSL uses the Linux binary.
 #
 # This is POSIX shell, not bash, and the difference is the point. The musl
 # builds exist for Alpine above all, and Alpine ships no bash: piping this into

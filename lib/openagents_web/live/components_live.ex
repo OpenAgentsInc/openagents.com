@@ -1676,7 +1676,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
           <:command>
             <Landing.install_command
               id="demo-hero-install-command"
-              command="curl -fsSL https://openagents.com/install.sh | sh"
+              command={OpenAgentsWeb.CliInstall.unix()}
+              windows_command={OpenAgentsWeb.CliInstall.windows()}
             />
           </:command>
           <:note>Every new account starts with $20 of credit.</:note>
@@ -1724,7 +1725,8 @@ defmodule OpenAgentsWeb.ComponentsLive do
       <div class="demo-frame flex justify-center">
         <Landing.install_command
           id="demo-install-command"
-          command="curl -fsSL https://openagents.com/install.sh | sh"
+          command={OpenAgentsWeb.CliInstall.unix()}
+          windows_command={OpenAgentsWeb.CliInstall.windows()}
         />
       </div>
     </div>

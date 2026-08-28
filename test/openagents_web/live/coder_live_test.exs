@@ -11,6 +11,7 @@ defmodule OpenAgentsWeb.CoderLiveTest do
     {:ok, _view, html} = live(conn, ~p"/coder")
 
     assert html =~ "curl -fsSL https://openagents.com/install.sh | sh"
+    assert html =~ "irm https://openagents.com/install.ps1 | iex"
 
     # This assertion used to run the other way. The binary release had been
     # withdrawn — artifacts and every channel pointer deleted — so the curl

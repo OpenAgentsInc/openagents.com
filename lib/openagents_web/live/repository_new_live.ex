@@ -8,13 +8,15 @@ defmodule OpenAgentsWeb.RepositoryNewLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {namespaces, namespace_notice} = namespaces(socket.assigns.current_user)
+    {namespaces, namespace_notice, connect_required?} =
+      namespaces(socket.assigns.current_user)
 
     {:ok,
      socket
      |> assign(:page_title, "New repository")
      |> assign(:namespaces, namespaces)
      |> assign(:namespace_notice, namespace_notice)
+     |> assign(:connect_required, connect_required?)
      |> assign(:form, repository_form(hd(namespaces).slug))}
   end
 
@@ -66,6 +68,16 @@ defmodule OpenAgentsWeb.RepositoryNewLive do
 
         <.alert :if={@namespace_notice} id="namespace-notice" variant={:warning}>
           {@namespace_notice}
+          <span :if={@connect_required} class="block pt-2">
+            <.button
+              navigate={~p"/github/connect"}
+              variant={:secondary}
+              size={:sm}
+              id="connect-github-from-new"
+            >
+              Connect GitHub
+            </.button>
+          </span>
         </.alert>
 
         <.card>
@@ -117,16 +129,26 @@ defmodule OpenAgentsWeb.RepositoryNewLive do
     """
   end
 
+  # The personal namespace needs no GitHub grant, so it is always present and
+  # the form always has a first option. What the caller learns from the error
+  # is whether a connect would widen the choice.
   defp namespaces(user) do
+    {:ok, user_namespace} = Repositories.ensure_user_namespace(user)
+
     case GitHubProjection.available_namespaces(user) do
       {:ok, namespaces} ->
-        {namespaces, nil}
+        {namespaces, nil, false}
+
+      {:error, :github_connection_required} ->
+        {[user_namespace], "Connect GitHub with repository access to create repositories.", true}
+
+      {:error, :github_scope_required} ->
+        {[user_namespace],
+         "GitHub is connected without repository access, so organization namespaces are unavailable.",
+         true}
 
       {:error, _reason} ->
-        {:ok, user_namespace} = Repositories.ensure_user_namespace(user)
-
-        {[user_namespace],
-         "Reconnect GitHub with repository and organization access to use organization namespaces."}
+        {[user_namespace], "GitHub namespaces are unavailable right now.", false}
     end
   end
 

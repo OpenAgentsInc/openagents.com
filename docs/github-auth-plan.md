@@ -12,38 +12,53 @@ GitHub serves two distinct roles that use separate grants:
 
 1. Sign-in establishes the local OpenAgents account identity from GitHub's
    immutable numeric user ID. It requests only `user:email`.
-2. A future repository authorization flow will request the separate rights
-   that server-side GitHub repository tools need.
+2. The repository authorization flow requests the rights that server-side
+   GitHub repository tools need: `repo,read:org`. A person starts it from the
+   connect page (`/github/connect`) or from `openagents auth connect-github`,
+   never automatically at sign-in.
 
 The sign-in callback stores the email-scoped token as versioned AES-256-GCM
 ciphertext in the local user row. It does not authorize repository imports,
 organization membership checks, or other repository tools. Those operations
-continue to require the exact `repo,read:org` scope set and fail closed until a
-separate authorization flow supplies it.
+require the `repo,read:org` scope set to be present in the stored grant and
+fail closed without it. Because GitHub reports the union of every scope an
+application has ever been granted, the repository requirement is presence,
+not exact equality: a returning account's grant may carry more than what the
+request asked for, and the required set inside it is what matters.
 
 GitHub exposes public profile identity without a scope. OpenAgents requests
 `user:email` so sign-in can access the account's email address without asking
 for repository access. A future GitHub App integration should use fine-grained,
-repository-selected permissions for repository tools. See GitHub's
+repository-selected permissions for repository tools; until then, the classic
+OAuth `repo` scope covers every repository the account can reach, and the
+connect page says so. See GitHub's
 [OAuth scope reference](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
-and [authorization guidance](https://docs.github.com/en/apps/oauth-apps/using-oauth-apps/authorizing-oauth-apps).
+and [authorization guidance](https://docs.github.com/en/apps/oauth-apps/authorizing-oauth-apps).
 
 ## Implemented flow
 
 1. `POST /auth/github` creates a high-entropy state value, a PKCE S256
-   challenge, and a short-lived PostgreSQL OAuth-attempt row.
+   challenge, and a short-lived PostgreSQL OAuth-attempt row. The attempt
+   records its mode in the browser session: sign-in (the default, public) or
+   repository (requires a signed-in account; a repository start from an
+   anonymous visitor is refused).
 2. The encrypted browser session carries only the attempt reference and PKCE
-   verifier while GitHub handles authorization.
+   verifier while GitHub handles authorization. The requested scope comes
+   from the mode: `user:email` for sign-in, `repo,read:org` for repository.
 3. `GET /auth/github/callback` consumes the attempt exactly once, exchanges the
-   code server-side, refuses any grant other than `user:email`, and reads the
-   GitHub `/user` projection server-side.
+   code server-side, validates the grant against the attempt's mode — exact
+   `user:email` for sign-in, `repo,read:org` present for repository — and
+   reads the GitHub `/user` projection server-side.
 4. `OpenAgents.Accounts` upserts the local account by numeric GitHub ID and
    refreshes the mutable login, name, and avatar projection.
 5. `OpenAgents.Accounts.TokenVault` encrypts the access token in a version-2
    envelope carrying the non-secret active key ID before the ciphertext is
    stored. The row also records scopes and connection/rotation timestamps.
 6. The authenticated session contains only the local user ID. Repository tools
-   reject the sign-in token because it does not contain their required scopes.
+   reject a grant that does not contain their required scopes. A repository
+   callback keeps the session, flashes success, and returns to
+   `/github/connect`; a sign-in callback renews the session and lands where
+   the person started.
 7. `DELETE /logout` clears the browser session but intentionally does not
    revoke the retained GitHub grant.
 8. `DELETE /github/connection` authenticates the browser and uses the OAuth
@@ -52,6 +67,20 @@ and [authorization guidance](https://docs.github.com/en/apps/oauth-apps/using-oa
    failure preserves the local record so the revocation can be retried. GitHub
    documents the endpoint in its
    [OAuth authorization REST API](https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-token).
+
+### The CLI connect flow
+
+`openagents auth connect-github` starts a device authorization with `kind:
+"github_connect"` against `POST /api/v1/device/authorizations` and prints the
+connect-page URL with its code. The connect page shows the same request the
+browser path shows, and the Connect GitHub button is the approval: starting
+the repository authorization while the page carries the code claims the
+device record for that account. The CLI then polls the unchanged token
+endpoint; a `github_connect` claim answers `{"status": "connected",
+"github_login": ...}` and mints no API token, because the retained GitHub
+token never leaves the server. A `github:connect` scope is a request marker,
+not an API scope: `ApiTokens.create/2` refuses it, and a device create that
+mixes it with API scopes is refused.
 
 The token must never enter LiveView assigns, HTML, JSON responses, logs,
 telemetry, receipts, exception messages, build output, or exported account

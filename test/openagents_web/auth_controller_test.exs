@@ -108,6 +108,128 @@ defmodule OpenAgentsWeb.AuthControllerTest do
 
     assert redirected_to(started) =~ "https://github.com/login/oauth/authorize?"
     assert get_session(started, "github_oauth_attempt")
+    assert started |> get_session("github_oauth_attempt") |> Map.get("kind") == "sign_in"
+
+    scope =
+      started
+      |> redirected_to()
+      |> URI.parse()
+      |> Map.fetch!(:query)
+      |> URI.decode_query()
+      |> Map.get("scope")
+
+    assert scope == "user:email"
+  end
+
+  test "a repository start from an anonymous visitor is refused", %{conn: conn} do
+    refused =
+      conn
+      |> init_test_session(%{})
+      |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
+      |> post(~p"/auth/github", %{"auth" => %{"mode" => "repository"}})
+
+    assert redirected_to(refused) == ~p"/?auth_error=unavailable"
+    assert get_session(refused, "github_oauth_attempt") == nil
+  end
+
+  test "a signed-in account starts and completes a repository grant, keeping its session", %{
+    conn: conn
+  } do
+    # Pre-create the identity the mocked GitHub profile will return, so the
+    # grant lands on the account the session already names.
+    {:ok, user} =
+      Accounts.upsert_github_user(%{
+        github_id: 601,
+        github_login: "repo-grant-owner",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/601?v=4"
+      })
+
+    started =
+      conn
+      |> init_test_session(%{"user_id" => user.id})
+      |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
+      |> post(~p"/auth/github", %{"auth" => %{"mode" => "repository"}})
+
+    assert redirected_to(started) =~ "https://github.com/login/oauth/authorize?"
+
+    query =
+      started
+      |> redirected_to()
+      |> URI.parse()
+      |> Map.fetch!(:query)
+      |> URI.decode_query()
+
+    assert query["scope"] == "repo read:org"
+
+    attempt = get_session(started, "github_oauth_attempt")
+    assert attempt["kind"] == "repository"
+    state = attempt["state"]
+
+    expect_repository_grant("repo-token", 601, "repo-grant-owner")
+
+    connected =
+      started
+      |> recycle()
+      |> get(~p"/auth/github/callback?code=valid-code&state=#{state}")
+
+    assert redirected_to(connected) == ~p"/github/connect"
+    assert get_session(connected, "user_id") == user.id
+
+    {:ok, stored} = Accounts.get_active_user(user.id)
+    assert {:ok, "repo-token"} = Accounts.github_token(stored)
+    assert stored.github_token_scopes == ["repo", "read:org"]
+  end
+
+  test "a repository callback stores the exact required set even when GitHub adds scopes", %{
+    conn: conn
+  } do
+    {:ok, user} =
+      Accounts.upsert_github_user(%{
+        github_id: 603,
+        github_login: "repo-union-owner",
+        github_avatar_url: "https://avatars.githubusercontent.com/u/603?v=4"
+      })
+
+    started =
+      conn
+      |> init_test_session(%{"user_id" => user.id})
+      |> put_req_header("x-csrf-token", Plug.CSRFProtection.get_csrf_token())
+      |> post(~p"/auth/github", %{"auth" => %{"mode" => "repository"}})
+
+    attempt = get_session(started, "github_oauth_attempt")
+    state = attempt["state"]
+
+    expect_repository_grant("union-token", 603, "repo-union-owner", "user:email repo read:org")
+
+    connected =
+      started
+      |> recycle()
+      |> get(~p"/auth/github/callback?code=valid-code&state=#{state}")
+
+    assert redirected_to(connected) == ~p"/github/connect"
+
+    {:ok, stored} = Accounts.get_active_user(user.id)
+    assert {:ok, "union-token"} = Accounts.github_token(stored)
+    assert stored.github_token_scopes == ["user:email", "repo", "read:org"]
+  end
+
+  test "a repository grant claims a pending CLI connect code on start", %{conn: conn} do
+    user = github_user("connect-owner-cli", "cli-connect-owner")
+
+    %{"user_code" => user_code} =
+      post(conn, ~p"/api/v1/device/authorizations", %{"kind" => "github_connect"})
+      |> json_response(201)
+
+    csrf_token = Plug.CSRFProtection.get_csrf_token()
+
+    started =
+      conn
+      |> init_test_session(%{"user_id" => user.id})
+      |> put_req_header("x-csrf-token", csrf_token)
+      |> post(~p"/auth/github", %{"auth" => %{"mode" => "repository", "code" => user_code}})
+
+    assert redirected_to(started) =~ "https://github.com/login/oauth/authorize?"
+    assert get_session(started, "github_oauth_attempt")["user_code"] == user_code
   end
 
   test "disconnect revokes the GitHub grant and clears local token metadata", %{conn: conn} do
@@ -220,6 +342,20 @@ defmodule OpenAgentsWeb.AuthControllerTest do
         "access_token" => "ephemeral-github-token",
         "scope" => "user:email"
       })
+    end)
+
+    Req.Test.expect(__MODULE__, fn conn ->
+      Req.Test.json(conn, %{
+        "id" => github_id,
+        "login" => login,
+        "avatar_url" => "https://avatars.githubusercontent.com/u/#{github_id}?v=4"
+      })
+    end)
+  end
+
+  defp expect_repository_grant(token, github_id, login, granted_scope \\ "repo read:org") do
+    Req.Test.expect(__MODULE__, fn conn ->
+      Req.Test.json(conn, %{"access_token" => token, "scope" => granted_scope})
     end)
 
     Req.Test.expect(__MODULE__, fn conn ->

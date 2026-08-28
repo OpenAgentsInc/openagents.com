@@ -245,6 +245,7 @@ defmodule OpenAgentsWeb.Router do
       live "/repositories", RepositoryIndexLive, :index
       live "/repositories/new", RepositoryNewLive, :new
       live "/repositories/import/github", RepositoryImportLive, :new
+      live "/github/connect", GitHubConnectLive, :show
 
       live "/forum/claim", ForumClaimLive, :new
       live "/forum/tips", ForumTipsLive, :show

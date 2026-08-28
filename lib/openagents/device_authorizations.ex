@@ -55,22 +55,65 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def cast_user_code(_code), do: :error
 
-  def create(scopes \\ ApiTokens.default_scopes(), device_name \\ nil)
+  def create(scopes \\ ApiTokens.default_scopes(), device_name \\ nil, kind \\ "token")
 
-  def create(scopes, device_name) when is_list(scopes),
-    do: insert_authorization(scopes, normalize_device_name(device_name), @maximum_create_attempts)
+  def create(scopes, device_name, kind)
+      when kind in ["token", "github_connect"] and is_list(scopes),
+      do:
+        insert_authorization(
+          scopes,
+          normalize_device_name(device_name),
+          @maximum_create_attempts,
+          kind
+        )
 
-  def create(_scopes, _device_name), do: {:error, :invalid_scopes}
+  def create(_scopes, _device_name, _kind), do: {:error, :invalid_scopes}
+
+  @doc """
+  Reads one pending github_connect authorization for the approval page.
+
+  The code arrives on the connect page URL, so it is cast first and a lookup
+  miss answers nil: the page renders the code-entry form again rather than an
+  error about a value the URL may never have carried.
+  """
+  def get_pending_github_connect(user_code) when is_binary(user_code) do
+    case cast_user_code(user_code) do
+      {:ok, normalized} ->
+        now = DateTime.utc_now()
+
+        Repo.one(
+          from authorization in DeviceAuthorization,
+            where:
+              authorization.user_code_digest == ^digest(normalized) and
+                authorization.state == "pending" and
+                authorization.kind == "github_connect" and
+                authorization.expires_at > ^now
+        )
+
+      :error ->
+        nil
+    end
+  end
+
+  def get_pending_github_connect(_user_code), do: nil
 
   def get_pending_by_user_code(user_code) when is_binary(user_code) do
-    now = DateTime.utc_now()
+    case cast_user_code(user_code) do
+      {:ok, normalized} ->
+        now = DateTime.utc_now()
 
-    Repo.one(
-      from authorization in DeviceAuthorization,
-        where:
-          authorization.user_code_digest == ^digest(normalize_user_code(user_code)) and
-            authorization.state == "pending" and authorization.expires_at > ^now
-    )
+        Repo.one(
+          from authorization in DeviceAuthorization,
+            where:
+              authorization.user_code_digest == ^digest(normalized) and
+                authorization.state == "pending" and
+                authorization.kind == "token" and
+                authorization.expires_at > ^now
+        )
+
+      :error ->
+        nil
+    end
   end
 
   def get_pending_by_user_code(_user_code), do: nil
@@ -87,6 +130,19 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def deny(_user_code, %User{}), do: {:error, :access_denied}
 
+  @doc """
+  Polls once for the outcome of one device authorization.
+
+  A `token` authorization answers `{:ok, plaintext, api_token}` when its
+  approval has been claimed. A `github_connect` authorization answers
+  `{:ok, {:connected, github_login}, :connect_completed}` — there is no
+  credential in the answer, because the retained GitHub token never leaves
+  the server.
+  """
+  @spec poll(String.t() | nil) ::
+          {:ok, String.t(), OpenAgents.ApiTokens.ApiToken.t()}
+          | {:ok, {:connected, String.t()}, :connect_completed}
+          | {:error, :authorization_pending | :slow_down | :access_denied}
   def poll(device_code) when is_binary(device_code) and byte_size(device_code) < 256 do
     Repo.transaction(fn -> poll_locked(device_code, DateTime.utc_now()) end)
     |> case do
@@ -97,10 +153,10 @@ defmodule OpenAgents.DeviceAuthorizations do
 
   def poll(_device_code), do: {:error, :access_denied}
 
-  defp insert_authorization(_scopes, _device_name, 0),
+  defp insert_authorization(_scopes, _device_name, 0, _kind),
     do: {:error, :authorization_unavailable}
 
-  defp insert_authorization(scopes, device_name, attempts_left) do
+  defp insert_authorization(scopes, device_name, attempts_left, kind) do
     device_code = random_url_token(32)
     user_code = random_user_code()
     expires_at = DateTime.add(DateTime.utc_now(), @ttl_seconds, :second)
@@ -110,6 +166,7 @@ defmodule OpenAgents.DeviceAuthorizations do
       device_code_digest: digest(device_code),
       user_code_digest: digest(user_code),
       device_name: device_name,
+      kind: kind,
       expires_at: expires_at,
       interval_seconds: @interval_seconds,
       scopes: scopes
@@ -122,7 +179,7 @@ defmodule OpenAgents.DeviceAuthorizations do
       {:error, changeset} ->
         if Keyword.has_key?(changeset.errors, :device_code_digest) or
              Keyword.has_key?(changeset.errors, :user_code_digest),
-           do: insert_authorization(scopes, device_name, attempts_left - 1),
+           do: insert_authorization(scopes, device_name, attempts_left - 1, kind),
            else: {:error, changeset}
     end
   end
@@ -141,6 +198,55 @@ defmodule OpenAgents.DeviceAuthorizations do
   end
 
   defp normalize_device_name(_name), do: nil
+
+  @doc """
+  Marks one pending github_connect authorization claimed by its owner.
+
+  Approval of a CLI-initiated connect happens the moment the person starts the
+  repository authorization while carrying the code: the OAuth grant decision
+  is the approval, and it is made by the signed-in account, so the device row
+  records that account immediately rather than after the callback.
+  """
+  def claim_github_connect(user_code, %User{status: "active", id: user_id}) do
+    now = DateTime.utc_now()
+
+    result =
+      Repo.transaction(fn ->
+        authorization =
+          Repo.one(
+            from authorization in DeviceAuthorization,
+              where:
+                authorization.user_code_digest == ^digest(normalize_user_code(user_code)) and
+                  authorization.state == "pending" and
+                  authorization.kind == "github_connect" and
+                  is_nil(authorization.user_id) and
+                  authorization.expires_at > ^now,
+              lock: "FOR UPDATE"
+          )
+
+        case authorization do
+          %DeviceAuthorization{} = authorization ->
+            authorization
+            |> Ecto.Changeset.change(
+              state: "approved",
+              user_id: user_id,
+              approved_at: now
+            )
+            |> Repo.update!()
+
+          nil ->
+            Repo.rollback(:not_found)
+        end
+      end)
+
+    case result do
+      {:ok, authorization} -> {:ok, authorization}
+      {:error, _reason} -> {:error, :not_found}
+    end
+  end
+
+  def claim_github_connect(_user_code, %User{}), do: {:error, :not_found}
+  def claim_github_connect(_user_code, _other), do: {:error, :not_found}
 
   defp transition(user_code, next_state, user_id, user) do
     now = DateTime.utc_now()
@@ -228,6 +334,22 @@ defmodule OpenAgents.DeviceAuthorizations do
     if elapsed < authorization.interval_seconds,
       do: {:error, :slow_down},
       else: {:error, :authorization_pending}
+  end
+
+  # A github_connect approval is not a credential: the retained GitHub token
+  # lives in the user row and no API token is minted, so the poll answer
+  # carries only the GitHub identity the connect completed with.
+  defp claim(
+         %DeviceAuthorization{kind: "github_connect"} = authorization,
+         %User{status: "active", github_login: login} = _user,
+         now
+       )
+       when is_binary(login) do
+    authorization
+    |> Ecto.Changeset.change(state: "claimed", claimed_at: now)
+    |> Repo.update!()
+
+    {:ok, {:connected, login}, :connect_completed}
   end
 
   defp claim(

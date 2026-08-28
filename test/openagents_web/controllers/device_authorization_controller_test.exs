@@ -94,6 +94,86 @@ defmodule OpenAgentsWeb.DeviceAuthorizationControllerTest do
     assert authorization.api_token_id
   end
 
+  test "a github_connect authorization never mints a token and answers the login", %{conn: conn} do
+    %{"device_code" => device_code, "user_code" => user_code, "verification_uri" => uri} =
+      conn
+      |> post(~p"/api/v1/device/authorizations", %{"kind" => "github_connect"})
+      |> json_response(201)
+
+    authorization = Repo.one!(DeviceAuthorization)
+    assert authorization.kind == "github_connect"
+    assert authorization.scopes == ["github:connect"]
+    assert String.ends_with?(uri, "/github/connect")
+
+    pending =
+      post(recycle(conn), ~p"/api/v1/device/authorizations/token", %{device_code: device_code})
+
+    assert json_response(pending, 428) == %{"code" => "authorization_pending"}
+
+    user = github_user("device-connect", "connect-owner")
+
+    assert {:ok, _authorization} =
+             OpenAgents.DeviceAuthorizations.claim_github_connect(user_code, user)
+
+    claimed =
+      conn
+      |> recycle()
+      |> post(~p"/api/v1/device/authorizations/token", %{device_code: device_code})
+
+    assert %{
+             "status" => "connected",
+             "github_login" => "connect-owner",
+             "scope" => "github:connect"
+           } = json_response(claimed, 200)
+
+    authorization = Repo.get!(DeviceAuthorization, authorization.id)
+    assert authorization.state == "claimed"
+    refute authorization.api_token_id
+  end
+
+  test "a github_connect create refuses a scope parameter instead of resetting it", %{conn: conn} do
+    refused =
+      post(conn, ~p"/api/v1/device/authorizations", %{
+        "kind" => "github_connect",
+        "scope" => "forge:write"
+      })
+
+    assert json_response(refused, 400) == %{"code" => "invalid_scope"}
+  end
+
+  test "mixing github:connect with API scopes refuses at the controller and the changeset", %{
+    conn: conn
+  } do
+    refused =
+      post(conn, ~p"/api/v1/device/authorizations", %{
+        "kind" => "token",
+        "scope" => "forge:write github:connect"
+      })
+
+    assert json_response(refused, 400) == %{"code" => "invalid_scope"}
+
+    assert {:error, %Ecto.Changeset{}} =
+             OpenAgents.DeviceAuthorizations.create(["github:connect"], nil, "token")
+  end
+
+  test "claim_github_connect approves exactly once, like the token flow", %{conn: conn} do
+    %{"user_code" => user_code} =
+      conn
+      |> post(~p"/api/v1/device/authorizations", %{"kind" => "github_connect"})
+      |> json_response(201)
+
+    user = github_user("device-connect-once")
+
+    assert {:ok, _authorization} =
+             OpenAgents.DeviceAuthorizations.claim_github_connect(user_code, user)
+
+    # A second presentment of the same code finds nothing pending: one code,
+    # one approval, whatever account presents it — the same trust model the
+    # token flow's approve/2 has always had.
+    assert {:error, :not_found} =
+             OpenAgents.DeviceAuthorizations.claim_github_connect(user_code, user)
+  end
+
   test "unknown, denied, expired, and claimed codes share one refusal", %{conn: conn} do
     unknown =
       post(conn, ~p"/api/v1/device/authorizations/token", %{device_code: "unknown-device"})

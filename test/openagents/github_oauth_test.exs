@@ -177,6 +177,69 @@ defmodule OpenAgents.GitHubOAuthTest do
     assert GitHubOAuth.requested_scopes() == ["user:email"]
   end
 
+  test "repository authorization requests repo, read:org and keeps the same state machinery" do
+    assert {:ok, attempt, authorization_url} = GitHubOAuth.begin_repository_authorization()
+    query = authorization_url |> URI.parse() |> Map.fetch!(:query) |> URI.decode_query()
+
+    assert query["scope"] == "repo read:org"
+    assert query["state"] == attempt["state"]
+    assert query["code_challenge_method"] == "S256"
+    assert byte_size(query["code_challenge"]) == 43
+    refute query["code_challenge"] == attempt["verifier"]
+    assert attempt["kind"] == "repository"
+
+    assert :ok = GitHubOAuth.consume_attempt(attempt, attempt["state"])
+  end
+
+  test "repository exchange accepts the required set and a union carrying it" do
+    for granted <- ["repo read:org", "repo,read:org", "user:email repo read:org"] do
+      setup_req_test()
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{"access_token" => "repo-token", "scope" => granted})
+      end)
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{
+          "id" => 501,
+          "login" => "octo-person",
+          "avatar_url" => "https://avatars.githubusercontent.com/u/501?v=4"
+        })
+      end)
+
+      verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+
+      assert {:ok, _profile, "repo-token", scopes} =
+               GitHubOAuth.repository_exchange_and_fetch("code", verifier)
+
+      assert GitHubOAuth.required_scopes_present?(scopes)
+    end
+  end
+
+  test "repository exchange refuses a grant without the required set" do
+    for granted <- ["user:email", "read:org", "repo", ""] do
+      setup_req_test()
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        Req.Test.json(conn, %{"access_token" => "narrow-token", "scope" => granted})
+      end)
+
+      verifier = Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
+
+      assert {:error, :oauth_scope_mismatch} =
+               GitHubOAuth.repository_exchange_and_fetch("code", verifier)
+    end
+  end
+
+  test "required_scopes_present? answers the question the predicates ask" do
+    assert GitHubOAuth.required_scopes_present?(["repo", "read:org"])
+    assert GitHubOAuth.required_scopes_present?(["read:org", "repo"])
+    assert GitHubOAuth.required_scopes_present?(["repo", "read:org", "user:email"])
+    refute GitHubOAuth.required_scopes_present?(["repo"])
+    refute GitHubOAuth.required_scopes_present?([])
+    refute GitHubOAuth.required_scopes_present?(nil)
+  end
+
   defp setup_req_test do
     original = Application.fetch_env!(:openagents, :github_oauth)
 

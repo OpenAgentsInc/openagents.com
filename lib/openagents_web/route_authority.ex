@@ -46,6 +46,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
     "/memory",
     "/device",
     "/repositories",
+    "/github/connect",
     # The signed-in forum surfaces: claiming a legacy identity and setting a
     # tip destination. The board, topic, and home reads are public and are
     # classified above; this prefix covers what is left under `/forum`.
@@ -720,6 +721,7 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp browser_scope("/timeline"), do: "timeline:self"
   defp browser_scope("/memory/" <> _path), do: "memory:self"
   defp browser_scope("/github/connection"), do: "github-tools:self"
+  defp browser_scope("/github/connect"), do: "github-tools:self"
   defp browser_scope("/notifications"), do: "notification:self"
   defp browser_scope("/settings/api-tokens"), do: "api-token:self"
   defp browser_scope("/models"), do: "model-catalog:read"

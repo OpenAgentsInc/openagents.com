@@ -8,7 +8,8 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {repositories, next_page, error} = candidates(socket.assigns.current_user, 1)
+    {repositories, next_page, error, connect_required?} =
+      candidates(socket.assigns.current_user, 1)
 
     {:ok,
      socket
@@ -16,6 +17,7 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
      |> assign(:source_repositories, repositories)
      |> assign(:next_page, next_page)
      |> assign(:source_error, error)
+     |> assign(:connect_required, connect_required?)
      |> assign(:form, import_form(repositories))}
   end
 
@@ -42,7 +44,7 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
     do: {:noreply, socket}
 
   def handle_event("load-more", _params, socket) do
-    {repositories, next_page, error} =
+    {repositories, next_page, error, _connect_required?} =
       candidates(socket.assigns.current_user, socket.assigns.next_page)
 
     {:noreply,
@@ -90,6 +92,16 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
 
         <.alert :if={@source_error} id="github-import-error" variant={:warning}>
           {@source_error}
+          <span :if={@connect_required} class="block pt-2">
+            <.button
+              navigate={~p"/github/connect"}
+              variant={:secondary}
+              size={:sm}
+              id="connect-github-from-import"
+            >
+              Connect GitHub
+            </.button>
+          </span>
         </.alert>
 
         <.empty
@@ -148,16 +160,18 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
     case GitHubProjection.import_candidates(user, page) do
       {:ok, result} ->
         next_page = if result["has_next_page"], do: result["next_page"], else: nil
-        {result["items"], next_page, nil}
+        {result["items"], next_page, nil, false}
 
       {:error, :github_connection_required} ->
-        {[], nil, "Connect GitHub before importing a repository."}
+        {[], nil, "Connect GitHub before importing a repository.", true}
 
       {:error, :github_scope_required} ->
-        {[], nil, "Reconnect GitHub with repository and organization access before importing."}
+        {[], nil,
+         "GitHub is connected without repository access. Reconnect from the connect page to import.",
+         true}
 
       {:error, _reason} ->
-        {[], nil, "GitHub repositories are unavailable right now."}
+        {[], nil, "GitHub repositories are unavailable right now.", false}
     end
   end
 
@@ -212,7 +226,7 @@ defmodule OpenAgentsWeb.RepositoryImportLive do
     do: "OpenAgents cannot read that GitHub repository."
 
   defp error_message(:github_scope_required),
-    do: "Reconnect GitHub with repository and organization access."
+    do: "GitHub is connected without repository access. Reconnect from the connect page."
 
   defp error_message(%Ecto.Changeset{}), do: "Check the destination name, then try again."
   defp error_message(_reason), do: "OpenAgents could not start this GitHub import."

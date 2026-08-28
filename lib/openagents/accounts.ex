@@ -331,7 +331,14 @@ defmodule OpenAgents.Accounts do
   defp configured_github_scopes,
     do: Application.fetch_env!(:openagents, :github_oauth_scopes)
 
+  # GitHub reports the union of every scope the application has ever been
+  # granted, so a returning account's repository grant can carry more than
+  # what this request asked for. What the repository tools need is that the
+  # required set is present; the sign-in set stays exact because identity
+  # never asks for more than identity needs.
   defp valid_scopes?(scopes) do
-    scopes in [configured_github_scopes(), OpenAgents.GitHubOAuth.required_scopes()]
+    scopes == configured_github_scopes() or
+      scopes == OpenAgents.GitHubOAuth.required_scopes() or
+      (scopes != [] and OpenAgents.GitHubOAuth.required_scopes_present?(scopes))
   end
 end

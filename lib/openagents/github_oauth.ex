@@ -16,7 +16,19 @@ defmodule OpenAgents.GitHubOAuth do
 
   @type attempt :: %{required(String.t()) => String.t() | integer()}
 
-  def begin_authorization do
+  def begin_authorization, do: begin_mode_authorization("sign_in", @requested_scopes)
+
+  @doc """
+  Begins the repository-tools authorization.
+
+  Requests `repo, read:org` rather than the sign-in scope set. The callback
+  stores the grant on the account that started it, which is what lets the
+  namespace, import, and private-source paths retain their token.
+  """
+  def begin_repository_authorization,
+    do: begin_mode_authorization("repository", required_scopes())
+
+  defp begin_mode_authorization(kind, scopes) do
     with {:ok, config} <- config(),
          state <- random_url_token(),
          verifier <- random_url_token(),
@@ -27,7 +39,8 @@ defmodule OpenAgents.GitHubOAuth do
         "id" => receipt.id,
         "state" => state,
         "verifier" => verifier,
-        "expires_at" => DateTime.to_unix(expires_at)
+        "expires_at" => DateTime.to_unix(expires_at),
+        "kind" => kind
       }
 
       query =
@@ -36,7 +49,7 @@ defmodule OpenAgents.GitHubOAuth do
           "code_challenge" => challenge,
           "code_challenge_method" => "S256",
           "redirect_uri" => config.redirect_uri,
-          "scope" => oauth_scope(),
+          "scope" => Enum.join(scopes, " "),
           "state" => state
         })
 
@@ -64,16 +77,36 @@ defmodule OpenAgents.GitHubOAuth do
 
   def consume_attempt(_attempt, _returned_state), do: {:error, :invalid_oauth_state}
 
-  def exchange_and_fetch(code, verifier) when is_binary(code) and is_binary(verifier) do
+  def exchange_and_fetch(code, verifier) when is_binary(code) and is_binary(verifier),
+    do: mode_exchange_and_fetch(code, verifier, @requested_scopes)
+
+  def exchange_and_fetch(_code, _verifier), do: {:error, :invalid_oauth_callback}
+
+  @doc """
+  Exchanges a repository-mode code and reads the profile.
+
+  The grant GitHub returns may carry more than what was requested, because a
+  returning authorization reports every scope the application already holds.
+  The required set must be present; nothing else about the grant is assumed.
+  """
+  def repository_exchange_and_fetch(code, verifier) when is_binary(code) and is_binary(verifier),
+    do: mode_exchange_and_fetch(code, verifier, required_scopes())
+
+  @doc "Whether a scope set carries every scope the repository tools require."
+  @spec required_scopes_present?([String.t()] | nil) :: boolean()
+  def required_scopes_present?(scopes) when is_list(scopes),
+    do: MapSet.subset?(MapSet.new(required_scopes()), MapSet.new(scopes))
+
+  def required_scopes_present?(_scopes), do: false
+
+  defp mode_exchange_and_fetch(code, verifier, expected_scopes) do
     with :ok <- validate_code_and_verifier(code, verifier),
          {:ok, config} <- config(),
-         {:ok, access_token, scopes} <- exchange_code(config, code, verifier),
+         {:ok, access_token, scopes} <- exchange_code(config, code, verifier, expected_scopes),
          {:ok, profile} <- fetch_profile(config, access_token) do
       {:ok, profile, access_token, scopes}
     end
   end
-
-  def exchange_and_fetch(_code, _verifier), do: {:error, :invalid_oauth_callback}
 
   @doc "Revokes one OAuth grant using the OAuth application's own credentials."
   @spec revoke(String.t()) :: :ok | {:error, atom()}
@@ -116,7 +149,7 @@ defmodule OpenAgents.GitHubOAuth do
   @spec required_scopes() :: [String.t()]
   def required_scopes, do: @repository_scopes
 
-  defp exchange_code(config, code, verifier) do
+  defp exchange_code(config, code, verifier, expected_scopes) do
     request_options =
       [
         headers: oauth_headers(),
@@ -140,7 +173,8 @@ defmodule OpenAgents.GitHubOAuth do
        }}
       when status in 200..299 and is_binary(token) and byte_size(token) > 0 and
              is_binary(granted_scope) ->
-        with {:ok, scopes} <- validate_granted_scopes(granted_scope), do: {:ok, token, scopes}
+        with {:ok, scopes} <- validate_granted_scopes(granted_scope, expected_scopes),
+             do: {:ok, token, scopes}
 
       {:ok, %Req.Response{status: status}} when status in 400..599 ->
         {:error, :oauth_code_exchange_rejected}
@@ -265,22 +299,30 @@ defmodule OpenAgents.GitHubOAuth do
     ]
   end
 
-  defp oauth_scope do
-    requested_scopes()
-    |> Enum.join(" ")
+  defp validate_granted_scopes(granted_scope, expected_scopes) do
+    granted = granted_scope_list(granted_scope)
+
+    if granted_scope_set_acceptable?(granted, expected_scopes),
+      do: {:ok, granted},
+      else: {:error, :oauth_scope_mismatch}
   end
 
-  defp validate_granted_scopes(granted_scope) do
-    granted =
-      granted_scope
-      |> String.split([",", " "], trim: true)
-      |> Enum.uniq()
+  # Sign-in's exactness rule is a guard on the request itself: the store
+  # records what GitHub granted, and the sign-in grant must never widen
+  # silently. The repository rule is presence, not equality, because GitHub
+  # reports the union of everything the application has ever been granted.
+  defp granted_scope_set_acceptable?(granted, @requested_scopes = requested) do
+    MapSet.new(granted) == MapSet.new(requested)
+  end
 
-    requested = requested_scopes()
+  defp granted_scope_set_acceptable?(granted, _repository_scopes) do
+    required_scopes_present?(granted)
+  end
 
-    if MapSet.new(granted) == MapSet.new(requested),
-      do: {:ok, requested},
-      else: {:error, :oauth_scope_mismatch}
+  defp granted_scope_list(granted_scope) do
+    granted_scope
+    |> String.split([",", " "], trim: true)
+    |> Enum.uniq()
   end
 
   defp config_value(value), do: to_string(value)

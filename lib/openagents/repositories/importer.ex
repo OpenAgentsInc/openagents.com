@@ -193,9 +193,9 @@ defmodule OpenAgents.Repositories.Importer do
 
           "private" ->
             with true <-
-                   repository.created_by_user.github_token_scopes ==
-                     GitHubOAuth.required_scopes() or
-                     {:error, :github_scope_required},
+                   GitHubOAuth.required_scopes_present?(
+                     repository.created_by_user.github_token_scopes
+                   ) or {:error, :github_scope_required},
                  {:ok, credential} <- Accounts.github_token(repository.created_by_user) do
               {:ok, source_url, credential}
             end
@@ -204,7 +204,7 @@ defmodule OpenAgents.Repositories.Importer do
   end
 
   defp optional_github_credential(user) do
-    if user.github_token_scopes == GitHubOAuth.required_scopes() do
+    if GitHubOAuth.required_scopes_present?(user.github_token_scopes) do
       case Accounts.github_token(user) do
         {:ok, credential} -> credential
         {:error, _reason} -> nil

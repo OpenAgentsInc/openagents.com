@@ -139,7 +139,12 @@ defmodule OpenAgents.Repositories.GitHubProjection do
   end
 
   defp retained_token(%User{} = user) do
-    if user.github_token_scopes == GitHubOAuth.required_scopes() do
+    # GitHub reports the union of every scope the application already holds,
+    # so a returning repository grant often includes `user:email` from
+    # sign-in as well as `repo` and `read:org`. Exact equality against
+    # `required_scopes/0` then 403s `GET /api/v1/user` after a successful
+    # connect. Presence of the required set is the contract.
+    if GitHubOAuth.required_scopes_present?(user.github_token_scopes) do
       Accounts.github_token(user)
     else
       {:error, :github_scope_required}

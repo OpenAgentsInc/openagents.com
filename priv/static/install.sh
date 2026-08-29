@@ -382,6 +382,9 @@ if [ "$os" != "windows" ] && ! path_has_dir "$BIN_DIR"; then
             ln -sf "$BIN_DIR/openagents" "$candidate/openagents"
             ln -sf "$BIN_DIR/coder" "$candidate/coder"
             ln -sf "$BIN_DIR/oa" "$candidate/oa"
+            if [ -e "$BIN_DIR/openagents-coder-api" ]; then
+                ln -sf "$BIN_DIR/openagents-coder-api" "$candidate/openagents-coder-api"
+            fi
             SYMLINK_CREATED="$candidate"
             break
         fi

@@ -119,6 +119,9 @@ defmodule OpenAgentsWeb.InstallScriptTest do
     assert script =~ "$BIN_DIR/openagents-coder-api",
            "the POSIX installer does not place openagents-coder-api in the CLI bin dir"
 
+    assert script =~ ~s(ln -sf "$BIN_DIR/openagents-coder-api" "$candidate/openagents-coder-api"),
+           "the POSIX installer does not expose openagents-coder-api on the PATH dir it already uses"
+
     assert windows =~ "openagents-coder-api-$Version-$Platform",
            "the PowerShell installer does not fetch the local inference door"
 

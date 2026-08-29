@@ -34,10 +34,10 @@ defmodule OpenAgentsWeb.ReleaseController do
 
   # One segment, and a conservative one. Letters, digits, dot, underscore, and
   # hyphen cover every object we publish (`openagents-0.1.0-rc.1-macos-aarch64`,
-  # `SHA256SUMS-0.1.0-rc.1`, `stable`) and admit no slash, no percent escape,
-  # and no leading dot. The caller controls this segment and it is interpolated
-  # into an outbound URL, so the allowlist is the boundary that keeps the
-  # request inside the bucket.
+  # `openagents-coder-api-0.1.0-rc.1-macos-aarch64`, `SHA256SUMS-0.1.0-rc.1`,
+  # `stable`) and admit no slash, no percent escape, and no leading dot. The
+  # caller controls this segment and it is interpolated into an outbound URL,
+  # so the allowlist is the boundary that keeps the request inside the bucket.
   @name_pattern ~r/\A[A-Za-z0-9][A-Za-z0-9._-]*\z/
   @name_max_bytes 128
 

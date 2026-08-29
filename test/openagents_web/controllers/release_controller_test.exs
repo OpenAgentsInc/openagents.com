@@ -197,8 +197,10 @@ defmodule OpenAgentsWeb.ReleaseControllerTest do
           "windows-x86_64"
         ] do
       name = "openagents-0.1.0-rc.2-#{platform}"
+      sibling = "openagents-coder-api-0.1.0-rc.2-#{platform}"
 
       assert get(conn, ~p"/releases/#{name}").status == 200, "#{name} was refused"
+      assert get(conn, ~p"/releases/#{sibling}").status == 200, "#{sibling} was refused"
     end
   end
 

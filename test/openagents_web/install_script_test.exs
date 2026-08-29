@@ -109,6 +109,23 @@ defmodule OpenAgentsWeb.InstallScriptTest do
            "the installer does not refuse a mismatched artifact"
   end
 
+  test "a release that ships openagents-coder-api installs it next to the CLI" do
+    script = File.read!(@script)
+    windows = File.read!(@windows_script)
+
+    assert script =~ "openagents-coder-api-${version}-${platform}",
+           "the POSIX installer does not fetch the local inference door"
+
+    assert script =~ "$BIN_DIR/openagents-coder-api",
+           "the POSIX installer does not place openagents-coder-api in the CLI bin dir"
+
+    assert windows =~ "openagents-coder-api-$Version-$Platform",
+           "the PowerShell installer does not fetch the local inference door"
+
+    assert windows =~ "openagents-coder-api.exe",
+           "the PowerShell installer does not place openagents-coder-api next to the CLI"
+  end
+
   test "there is no path that installs a binary nobody named" do
     script = File.read!(@script)
 

@@ -300,7 +300,6 @@ if [ "$actual" != "$expected" ]; then
     rm -f "$binary_tmp" "$sums_tmp"
     exit 1
 fi
-rm -f "$sums_tmp"
 echo "  Verified sha256 ${actual}." >&2
 
 # Installs three names for one binary: `openagents`, `coder`, and `oa`.
@@ -327,6 +326,50 @@ else
     ln -sf "$link_target" "$BIN_DIR/coder"
     ln -sf "$link_target" "$BIN_DIR/oa"
 fi
+
+# The local inference door `openagents coder --dev` spawns
+# `openagents-coder-api` from this same bin directory. Historical releases
+# ship only the CLI, so a missing sums entry is a skip, not a failed install.
+api_name="openagents-coder-api-${version}-${platform}"
+[ "$os" = "windows" ] && api_name="${api_name}.exe"
+api_expected="$(awk -v name="$api_name" '$2 == name || $2 == "*" name { print $1 }' "$sums_tmp" | head -1)"
+if [ -n "$api_expected" ]; then
+    echo "Installing the local Coder inference door..." >&2
+    api_path="$DOWNLOAD_DIR/openagents-coder-api-$platform"
+    [ "$os" = "windows" ] && api_path="${api_path}.exe"
+    api_tmp="${api_path}.tmp.$$"
+    api_base="${BASE_URL_PRIMARY}/openagents-coder-api-${version}-${platform}"
+    rm -f "$api_tmp" 2>/dev/null || true
+    if ! download_file_parallel "$api_base" "$api_tmp" 2>/dev/null; then
+        echo "Could not download ${api_base}." >&2
+        echo "No local fallback is used: an installer must install what it says it did." >&2
+        rm -f "$binary_tmp" "$api_tmp" "$sums_tmp"
+        exit 1
+    fi
+    api_actual="$($checksum_tool "$api_tmp" | awk '{ print $1 }')"
+    if [ "$api_actual" != "$api_expected" ]; then
+        echo "Checksum mismatch for ${api_name}." >&2
+        echo "  expected ${api_expected}" >&2
+        echo "  actual   ${api_actual}" >&2
+        rm -f "$api_tmp" "$sums_tmp"
+        exit 1
+    fi
+    echo "  Verified sha256 ${api_actual}." >&2
+    if [ "$os" = "windows" ]; then
+        mv -f "$api_tmp" "$api_path"
+        cp -f "$api_path" "$BIN_DIR/openagents-coder-api.exe" 2>/dev/null || true
+    else
+        chmod +x "$api_tmp"
+        mv -f "$api_tmp" "$api_path"
+        if [ "$(dirname "$BIN_DIR")" = "$(dirname "$DOWNLOAD_DIR")" ]; then
+            api_link="../$(basename "$DOWNLOAD_DIR")/$(basename "$api_path")"
+        else
+            api_link="$api_path"
+        fi
+        ln -sf "$api_link" "$BIN_DIR/openagents-coder-api"
+    fi
+fi
+rm -f "$sums_tmp"
 
 path_has_dir() {
     case ":$PATH:" in *":$1:"*) return 0 ;; *) return 1 ;; esac

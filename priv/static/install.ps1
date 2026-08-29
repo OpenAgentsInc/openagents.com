@@ -86,12 +86,44 @@ if ($Actual -ne $Expected) {
     throw "Checksum mismatch for $SumsName.`n  expected $Expected`n  actual   $Actual"
 }
 
+# Historical releases ship only the CLI. A missing sums entry skips the
+# local inference door instead of failing the install.
+$ApiSumsName = "openagents-coder-api-$Version-$Platform.exe"
+$ApiExpected = $null
+Get-Content $SumsTmp | ForEach-Object {
+    $parts = $_ -split '\s+', 2
+    if ($parts.Count -eq 2 -and ($parts[1] -eq $ApiSumsName -or $parts[1] -eq "*$ApiSumsName")) {
+        $ApiExpected = $parts[0].ToLowerInvariant()
+    }
+}
+
 Remove-Item -Force $SumsTmp
 Move-Item -Force $Tmp $Dest
 Write-Host "  Verified sha256 $Actual."
 
 foreach ($Name in @('openagents', 'coder', 'oa')) {
     Copy-Item -Force $Dest (Join-Path $BinDir "$Name.exe")
+}
+
+if ($ApiExpected) {
+    $ApiUrl = "$BaseUrl/openagents-coder-api-$Version-$Platform"
+    $ApiTmp = Join-Path $DownloadDir "openagents-coder-api-$Platform.exe.tmp"
+    $ApiDest = Join-Path $DownloadDir "openagents-coder-api-$Platform.exe"
+    Write-Host "Installing the local Coder inference door..."
+    try {
+        Invoke-WebRequest -Uri $ApiUrl -OutFile $ApiTmp -UseBasicParsing
+    } catch {
+        if (Test-Path $ApiTmp) { Remove-Item -Force $ApiTmp }
+        throw "Could not download $ApiUrl. No local fallback is used: an installer must install what it says it did."
+    }
+    $ApiActual = (Get-FileHash -Algorithm SHA256 -Path $ApiTmp).Hash.ToLowerInvariant()
+    if ($ApiActual -ne $ApiExpected) {
+        Remove-Item -Force $ApiTmp -ErrorAction SilentlyContinue
+        throw "Checksum mismatch for $ApiSumsName.`n  expected $ApiExpected`n  actual   $ApiActual"
+    }
+    Move-Item -Force $ApiTmp $ApiDest
+    Copy-Item -Force $ApiDest (Join-Path $BinDir 'openagents-coder-api.exe')
+    Write-Host "  Verified sha256 $ApiActual."
 }
 
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')

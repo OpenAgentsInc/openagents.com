@@ -751,6 +751,7 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
       })
 
     assert conn.status == 200
+    assert conn.state == :chunked
     assert get_resp_header(conn, "x-openagents-model") == ["gemini-3.7-flash"]
     assert conn.resp_body =~ "Ready"
     assert_receive {:coder_hop, ["Bearer hop-secret"], [admitted]}
@@ -760,6 +761,59 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest do
     assert metered.call_count == 1
     assert metered.usage["input_tokens"] == 10
     assert metered.usage["output_tokens"] == 2
+
+    assert_receive {:analytics, "inference_model_selected", _distinct_id, _selected}
+    assert_receive {:analytics, "inference_model_served", _distinct_id, served}
+    assert served["coder_api_hop"] == true
+    assert served["served_model"] == "gemini-3.7-flash"
+    assert served["outcome"] == "served"
+    assert served["usage_reported"] == true
+  end
+
+  test "a coder-api hop refusal stays a JSON 502 and is not streamed", %{conn: conn} do
+    parent = self()
+
+    {:ok, pid} =
+      Bandit.start_link(
+        plug: {__MODULE__.CoderHopRefuseStub, parent},
+        scheme: :http,
+        port: 0,
+        thousand_island_options: [num_acceptors: 1]
+      )
+
+    {:ok, {_address, port}} = ThousandIsland.listener_info(pid)
+    origin = "http://127.0.0.1:#{port}"
+
+    old_origin = Application.get_env(:openagents, :coder_api_origin)
+    old_token = Application.get_env(:openagents, :coder_api_internal_token)
+    Application.put_env(:openagents, :coder_api_origin, origin)
+    Application.put_env(:openagents, :coder_api_internal_token, "hop-secret")
+
+    on_exit(fn ->
+      Application.put_env(:openagents, :coder_api_origin, old_origin)
+      Application.put_env(:openagents, :coder_api_internal_token, old_token)
+      Process.exit(pid, :normal)
+    end)
+
+    %{token: token} = grant("hop-refuse")
+
+    conn =
+      post_chat(conn, token, %{
+        "model" => Models.default_id(),
+        "messages" => [%{"role" => "user", "content" => "hey"}]
+      })
+
+    assert conn.status == 502
+    assert Jason.decode!(conn.resp_body)["error"]["code"] == "provider_failed"
+    assert Jason.decode!(conn.resp_body)["error"]["reason"] == "coder_api_hop"
+    assert Jason.decode!(conn.resp_body)["error"]["upstream_status"] == 502
+    assert_receive {:coder_hop_refused, ["Bearer hop-secret"]}
+
+    assert_receive {:analytics, "inference_model_selected", _distinct_id, _selected}
+    assert_receive {:analytics, "inference_model_failed", _distinct_id, failed}
+    assert failed["reason_code"] == "coder_api_hop"
+    assert failed["upstream_status"] == 502
+    assert failed["usage_reported"] == false
   end
 end
 
@@ -775,14 +829,39 @@ defmodule OpenAgentsWeb.InferenceProxyControllerTest.CoderHopStub do
        Plug.Conn.get_req_header(conn, "x-openagents-admitted-model")}
     )
 
-    body =
-      "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"}}],\"model\":\"gemini-3.7-flash\"}\n\n" <>
-        "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n\n" <>
-        "data: [DONE]\n\n"
+    conn =
+      conn
+      |> Plug.Conn.put_resp_header("x-openagents-model", "gemini-3.7-flash")
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_chunked(200)
+
+    {:ok, conn} =
+      Plug.Conn.chunk(
+        conn,
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"}}],\"model\":\"gemini-3.7-flash\"}\n\n"
+      )
+
+    {:ok, conn} =
+      Plug.Conn.chunk(
+        conn,
+        "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n\n"
+      )
+
+    {:ok, conn} = Plug.Conn.chunk(conn, "data: [DONE]\n\n")
+    conn
+  end
+end
+
+defmodule OpenAgentsWeb.InferenceProxyControllerTest.CoderHopRefuseStub do
+  @behaviour Plug
+
+  def init(parent), do: parent
+
+  def call(conn, parent) do
+    send(parent, {:coder_hop_refused, Plug.Conn.get_req_header(conn, "authorization")})
 
     conn
-    |> Plug.Conn.put_resp_header("x-openagents-model", "gemini-3.7-flash")
-    |> Plug.Conn.put_resp_content_type("text/event-stream")
-    |> Plug.Conn.send_resp(200, body)
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.send_resp(502, ~s({"error":"coder_api_hop"}))
   end
 end

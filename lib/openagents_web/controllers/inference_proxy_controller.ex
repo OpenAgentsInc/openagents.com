@@ -36,14 +36,15 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
   Provider events are written to the client one chunk at a time as the adapter
   emits them, so a client renders reasoning and text tokens while the vendor is
-  still writing them (#263). The provider still streams from its vendor
-  internally; this hop no longer collects the events and answers after the
-  fact. The cost is honest and accepted: committing to a chunked response
-  means a provider failure can no longer be a clean non-200 status, so a
-  failure after the stream opened arrives as a terminal `provider_failed`
-  frame in the stream body, carrying the same bounded reason class the JSON
-  refusal carried (`error.reason`, with `error.upstream_status` when known) —
-  never raw provider detail.
+  still writing them (#263). The rust coder-api hop does the same: each SSE
+  frame is `chunk/2`'d as it arrives, rather than after the rust body ends
+  (#329). The provider still streams from its vendor internally; this hop no
+  longer collects the events and answers after the fact. The cost is honest
+  and accepted: committing to a chunked response means a provider failure can
+  no longer be a clean non-200 status, so a failure after the stream opened
+  arrives as a terminal `provider_failed` frame in the stream body, carrying
+  the same bounded reason class the JSON refusal carried (`error.reason`, with
+  `error.upstream_status` when known) — never raw provider detail.
   """
 
   use OpenAgentsWeb, :controller
@@ -81,10 +82,19 @@ defmodule OpenAgentsWeb.InferenceProxyController do
       {:ok, 200, headers, body} ->
         served_name = OpenAgents.Inference.CoderApiHop.served_model(headers) || model.id
         served = if served_name == model.id, do: :requested, else: served_name
-        usage = OpenAgents.Inference.CoderApiHop.usage_from_sse(body)
+        label = model_label(model, served)
+
+        conn =
+          conn
+          |> put_resp_content_type("text/event-stream")
+          |> put_resp_header("cache-control", "no-store")
+          |> put_resp_header("x-openagents-model", label)
+          |> send_chunked(200)
+
+        {conn, collected} = stream_hop_body(conn, body)
+        usage = OpenAgents.Inference.CoderApiHop.usage_from_sse(collected)
         _ = meter(grant, usage, served)
         record_health(model, served)
-        label = model_label(model, served)
 
         Analytics.capture(
           "inference_model_served",
@@ -99,12 +109,9 @@ defmodule OpenAgentsWeb.InferenceProxyController do
         )
 
         conn
-        |> put_resp_content_type("text/event-stream")
-        |> put_resp_header("cache-control", "no-store")
-        |> put_resp_header("x-openagents-model", label)
-        |> send_resp(200, body)
 
-      {:ok, status, _headers, _body} ->
+      {:ok, status, _headers, body} ->
+        OpenAgents.Inference.CoderApiHop.discard(body)
         Logger.warning("coder_api_hop_refused status=#{status}")
 
         Analytics.capture(
@@ -133,6 +140,20 @@ defmodule OpenAgentsWeb.InferenceProxyController do
 
         refuse(conn, {:provider_failed, "coder_api_hop", nil})
     end
+  end
+
+  # Forward rust SSE as it arrives. A copy is kept only so metering can still
+  # read the terminal usage frame after the client has already seen the tokens.
+  defp stream_hop_body(conn, body) do
+    OpenAgents.Inference.CoderApiHop.reduce_chunks(body, {conn, ""}, fn chunk, {conn, acc} ->
+      conn =
+        case Plug.Conn.chunk(conn, chunk) do
+          {:ok, next} -> next
+          {:error, _closed} -> conn
+        end
+
+      {conn, acc <> chunk}
+    end)
   end
 
   # ── request assembly ────────────────────────────────────────────────────

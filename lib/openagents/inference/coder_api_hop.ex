@@ -4,6 +4,10 @@ defmodule OpenAgents.Inference.CoderApiHop do
 
   Phoenix keeps grant auth, credit, and metering. The rust process runs the
   catalog, simple-flash classifier, and pinned provider stream.
+
+  The hop POST uses `into: :self` so response headers return before the SSE
+  body finishes. Callers write each chunk as it arrives; collecting a copy
+  for `usage_from_sse/1` is fine as long as the client sees bytes first.
   """
 
   require Logger
@@ -21,9 +25,15 @@ defmodule OpenAgents.Inference.CoderApiHop do
     end
   end
 
-  @doc "POST the OpenAI body to rust and return status, headers, and SSE body."
+  @doc """
+  POST the OpenAI body to rust and return status, headers, and the SSE body.
+
+  The body is a `Req.Response.Async` when rust answers with a stream: headers
+  are available before the last frame. Consume it with `reduce_chunks/3` so
+  the client sees bytes as they arrive.
+  """
   @spec post(String.t(), String.t(), String.t(), map()) ::
-          {:ok, pos_integer(), [{String.t(), String.t()}], binary()} | {:error, term()}
+          {:ok, pos_integer(), term(), binary() | Req.Response.Async.t()} | {:error, term()}
   def post(origin, internal_token, admitted_model, body) when is_map(body) do
     url = origin <> "/api/inference/proxy"
 
@@ -34,17 +44,43 @@ defmodule OpenAgents.Inference.CoderApiHop do
              {"x-openagents-admitted-model", admitted_model},
              {"accept", "text/event-stream"}
            ],
+           into: :self,
            receive_timeout: 120_000,
            retry: false
          ) do
       {:ok, %Req.Response{status: status, headers: headers, body: body}} ->
-        {:ok, status, headers, body_to_binary(body)}
+        {:ok, status, headers, body}
 
       {:error, reason} ->
         Logger.warning("coder_api_hop_failed reason=#{inspect(reason, limit: 80)}")
         {:error, reason}
     end
   end
+
+  @doc "Fold each SSE chunk as it arrives. Binary bodies yield once."
+  @spec reduce_chunks(binary() | Req.Response.Async.t() | term(), acc, (binary(), acc -> acc)) ::
+          acc
+        when acc: var
+  def reduce_chunks(%Req.Response.Async{} = async, acc, fun) when is_function(fun, 2) do
+    Enum.reduce(async, acc, fn chunk, acc -> fun.(chunk_binary(chunk), acc) end)
+  end
+
+  def reduce_chunks(body, acc, fun) when is_binary(body) and is_function(fun, 2) do
+    fun.(body, acc)
+  end
+
+  def reduce_chunks(_body, acc, fun) when is_function(fun, 2), do: acc
+
+  @doc "Drain a hop body that will not be forwarded."
+  @spec discard(term()) :: :ok
+  def discard(%Req.Response.Async{} = async) do
+    Enum.each(async, fn _chunk -> :ok end)
+    :ok
+  rescue
+    _exception -> :ok
+  end
+
+  def discard(_body), do: :ok
 
   @doc "OpenAI `usage` object → Phoenix grant usage keys."
   @spec usage_from_sse(binary()) :: map()
@@ -101,9 +137,8 @@ defmodule OpenAgents.Inference.CoderApiHop do
     |> Map.new()
   end
 
-  defp body_to_binary(body) when is_binary(body), do: body
-  defp body_to_binary(%Req.Response.Async{} = async), do: Enum.into(async, "")
-  defp body_to_binary(_), do: ""
+  defp chunk_binary(chunk) when is_binary(chunk), do: chunk
+  defp chunk_binary(chunk), do: IO.iodata_to_binary(List.wrap(chunk))
 
   defp header_value([value | _]) when is_binary(value), do: value
   defp header_value(value) when is_binary(value), do: value

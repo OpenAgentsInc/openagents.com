@@ -108,8 +108,18 @@ if ($env:Path -notlike "*$BinDir*") {
 
 Write-Host ""
 Write-Host "OpenAgents v$Version installed."
-Write-Host "Open a new terminal, then run: openagents --version"
-Write-Host "Loading Coder..."
 
 $Coder = Join-Path $BinDir 'coder.exe'
-& $Coder
+
+# Do not launch Coder inside an existing session. A nested TUI enables
+# mouse tracking, then the outer session kills it, and the terminal
+# keeps emitting CSI mouse reports as text.
+if ($env:OPENAGENTS_INSTALL_NO_LAUNCH) {
+    Write-Host "Coder is already running in this terminal; not launching another session."
+    Write-Host "The installed binary is $Coder"
+} elseif ([Environment]::UserInteractive -and -not [Console]::IsOutputRedirected) {
+    Write-Host "Loading Coder..."
+    & $Coder
+} else {
+    Write-Host "Open a new terminal, then run: openagents --version"
+}

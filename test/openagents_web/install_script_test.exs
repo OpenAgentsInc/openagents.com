@@ -260,5 +260,44 @@ defmodule OpenAgentsWeb.InstallScriptTest do
       refute script =~ "installs 'oa' only",
              "the installer still claims it installs oa only"
     end
+
+    test "does not launch a nested Coder session onto the same terminal" do
+      script = File.read!(@script)
+
+      assert script =~ "coder_already_running",
+             "the installer has no nested-session check"
+
+      assert script =~ "OPENAGENTS_INSTALL_NO_LAUNCH",
+             "the installer has no explicit launch opt-out"
+
+      assert script =~ "Coder is already running in this terminal; not launching another session.",
+             "the installer does not explain why it skipped the launch"
+
+      # The skip must precede the exec. A nested TUI enables mouse tracking,
+      # then the outer session SIGKILLs it, and the terminal keeps emitting
+      # CSI mouse reports as text.
+      [prefix, _exec] = String.split(script, ~s(exec "$coder_path"), parts: 2)
+      assert prefix =~ "coder_already_running"
+      assert prefix =~ "[ ! -t 1 ]"
+    end
+
+    test "OPENAGENTS_INSTALL_NO_LAUNCH is treated as already running" do
+      script = File.read!(@script)
+      [function] = Regex.run(~r/^coder_already_running\(\).*?^\}/ms, script)
+
+      dir = Path.join(System.tmp_dir!(), "install-nested-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      source = Path.join(dir, "coder_already_running.sh")
+      File.write!(source, function <> "\n")
+
+      assert {_output, 0} =
+               System.cmd(
+                 "sh",
+                 ["-c", ". #{source}; coder_already_running"],
+                 env: [{"OPENAGENTS_INSTALL_NO_LAUNCH", "1"}]
+               )
+    end
   end
 end

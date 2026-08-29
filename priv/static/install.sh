@@ -384,12 +384,52 @@ fi
 
 echo "" >&2
 echo "OpenAgents v$version installed." >&2
-echo "Loading Coder..." >&2
 
 coder_path="$BIN_DIR/coder"
 [ "$os" = "windows" ] && coder_path="${coder_path}.exe"
 
-# The installer usually runs from a pipe. Coder detects the controlling
-# terminal and opens it for input itself; redirecting stdin here makes
-# Crossterm fail to initialize its macOS input reader.
+# curl | sh has stdin as the pipe. Coder opens the controlling terminal
+# itself; do not redirect stdin onto /dev/tty — that breaks Crossterm's
+# macOS input reader.
+#
+# Do not launch Coder when this installer is already running under one.
+# A nested session enables mouse tracking and the alternate screen, then
+# the outer session kills it (SIGKILL, so no restore), and the terminal
+# keeps emitting CSI mouse reports as text into the transcript.
+
+coder_already_running() {
+    [ -n "${OPENAGENTS_INSTALL_NO_LAUNCH:-}" ] && return 0
+
+    pid=${PPID:-}
+    n=0
+    while [ "$n" -lt 24 ] && [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
+        comm=$(ps -o comm= -p "$pid" 2>/dev/null || true)
+        comm=$(printf '%s' "$comm" | tr -d ' \t')
+        base=$comm
+        case "$comm" in
+            */*) base=${comm##*/} ;;
+        esac
+        case "$base" in
+            openagents | openagents-* | coder | oa)
+                return 0
+                ;;
+        esac
+        pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' \t' || true)
+        n=$((n + 1))
+    done
+    return 1
+}
+
+if coder_already_running; then
+    echo "Coder is already running in this terminal; not launching another session." >&2
+    echo "The installed binary is $coder_path" >&2
+    exit 0
+fi
+
+if [ ! -t 1 ]; then
+    echo "Run \`openagents\` from a terminal." >&2
+    exit 0
+fi
+
+echo "Loading Coder..." >&2
 exec "$coder_path"

@@ -140,6 +140,10 @@ config :openagents, :voice_recording_encryption_key, Base.encode64(:crypto.stron
 # GitHub token.
 config :openagents, :content_encryption_key, Base.encode64(:crypto.strong_rand_bytes(32))
 
+# An Ed25519 seed generated per run, so Coder-token tests mint and verify
+# without a committed key.
+config :openagents, :coder_token_signing_key, Base.encode64(:crypto.strong_rand_bytes(32))
+
 config :openagents, :voice_recording,
   enabled: true,
   timeslice_ms: 5_000,

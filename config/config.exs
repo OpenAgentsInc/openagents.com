@@ -507,6 +507,10 @@ config :openagents,
   inference_proxy_url: nil,
   coder_api_origin: nil,
   coder_api_internal_token: nil,
+  # The dedicated Ed25519 seed that signs Coder-audience tokens, standard
+  # base64 of 32 raw bytes. Nil refuses to mint; there is no symmetric
+  # fallback, because Coder validates the token without Phoenix's secret.
+  coder_token_signing_key: nil,
   inference_grant_max_total_tokens: 2_000_000,
   inference_grant_max_calls: 64,
   inference_grant_max_cost_microusd: 5_000_000,

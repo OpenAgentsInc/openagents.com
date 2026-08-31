@@ -551,6 +551,7 @@ if config_env() == :prod and runtime_role == :web do
     inference_proxy_url: optional_text.("OPENAGENTS_INFERENCE_PROXY_URL"),
     coder_api_origin: optional_text.("OPENAGENTS_CODER_API_ORIGIN"),
     coder_api_internal_token: optional_text.("OPENAGENTS_CODER_API_INTERNAL_TOKEN"),
+    coder_token_signing_key: optional_text.("CODER_TOKEN_SIGNING_KEY"),
     forge_enabled: forge_enabled,
     forge_deploy_lane_enabled: forge_deploy_enabled,
     repository_provisioner_enabled: forge_enabled,

@@ -414,6 +414,18 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "return a user-authored OpenAgents record."
     },
     %{
+      family: :coder_token,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "A short-lived signed token for Coder, minted per request and " <>
+          "expired within minutes. It asserts the account's GitHub identity " <>
+          "but writes no durable record and nothing reads one back."
+    },
+    %{
       family: :model,
       api?: true,
       status: :not_user_data,

@@ -600,8 +600,10 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/v1/coder/identity", verb: verb}) when verb in [:get, :head],
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
 
+  # Minting a credential is a mutation: the POST creates a new short-lived
+  # token, even though no durable record is written.
   defp policy(%{path: "/api/v1/coder/token", verb: :post}),
-    do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
+    do: declaration(:authenticated_api, "first-party bearer token", "chat:account", true)
 
   defp policy(%{path: path, verb: verb})
        when path in @optional_forge_read_paths and verb in [:get, :head],

@@ -6,6 +6,7 @@ defmodule OpenAgents.Repositories.GitHubProjection do
   alias OpenAgents.Repositories.Namespace
 
   @maximum_organization_pages 10
+  @maximum_coder_repository_pages 20
 
   def available_namespaces(%User{} = user) do
     with {:ok, user_namespace} <- Repositories.ensure_user_namespace(user),
@@ -27,6 +28,20 @@ defmodule OpenAgents.Repositories.GitHubProjection do
       {:ok, [user_namespace | namespaces]}
     else
       {:error, :github_token_missing} -> {:error, :github_connection_required}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Returns the readable GitHub repositories available to Coder for a user."
+  @spec available_repositories(User.t()) :: {:ok, [String.t()]} | {:error, atom()}
+  def available_repositories(%User{} = user) do
+    with {:ok, namespaces} <- available_namespaces(user),
+         {:ok, token} <- retained_token(user),
+         namespace_ids = MapSet.new(namespaces, & &1.provider_account_id),
+         {:ok, repositories} <-
+           collect_coder_repositories(token, namespace_ids, 1, []) do
+      {:ok, repositories}
+    else
       {:error, reason} -> {:error, reason}
     end
   end
@@ -148,6 +163,30 @@ defmodule OpenAgents.Repositories.GitHubProjection do
       Accounts.github_token(user)
     else
       {:error, :github_scope_required}
+    end
+  end
+
+  defp collect_coder_repositories(_token, _namespace_ids, page, _acc)
+       when page > @maximum_coder_repository_pages do
+    {:error, :github_pagination_limit_exceeded}
+  end
+
+  defp collect_coder_repositories(token, namespace_ids, page, acc) do
+    with {:ok, result} <- GitHub.list_repository_page(token, page: page, per_page: 100) do
+      current =
+        result["items"]
+        |> Enum.filter(fn repository ->
+          repository["readable"] and
+            MapSet.member?(namespace_ids, get_in(repository, ["owner", "id"])) and
+            is_binary(repository["full_name"])
+        end)
+        |> Enum.map(&"https://github.com/#{&1["full_name"]}.git")
+
+      repositories = acc ++ current
+
+      if result["has_next_page"],
+        do: collect_coder_repositories(token, namespace_ids, page + 1, repositories),
+        else: {:ok, Enum.uniq(repositories)}
     end
   end
 

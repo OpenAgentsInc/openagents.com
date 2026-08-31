@@ -597,6 +597,9 @@ defmodule OpenAgentsWeb.RouteAuthority do
   defp policy(%{path: "/api/v1/capacity/matches", verb: :post}),
     do: declaration(:authenticated_api, "first-party bearer token", "chat:account", true)
 
+  defp policy(%{path: "/api/v1/coder/identity", verb: verb}) when verb in [:get, :head],
+    do: declaration(:authenticated_api, "first-party bearer token", "chat:account", false)
+
   defp policy(%{path: path, verb: verb})
        when path in @optional_forge_read_paths and verb in [:get, :head],
        do:

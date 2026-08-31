@@ -196,11 +196,14 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
   test "account chat uses its own scoped bearer pipeline" do
     events = route!(:get, "/api/v1/chat/events")
     turns = route!(:post, "/api/v1/chat/turns")
+    coder_identity = route!(:get, "/api/v1/coder/identity")
 
     assert events.scope == "chat:account"
     refute events.mutation
     assert turns.scope == "chat:account"
     assert turns.mutation
+    assert coder_identity.scope == "chat:account"
+    refute coder_identity.mutation
 
     assert Phoenix.Router.route_info(
              OpenAgentsWeb.Router,
@@ -213,6 +216,13 @@ defmodule OpenAgentsWeb.RouteAuthorityTest do
              OpenAgentsWeb.Router,
              "POST",
              "/api/v1/chat/turns",
+             "stage.openagents.com"
+           ).pipe_through == [:chat_account_api]
+
+    assert Phoenix.Router.route_info(
+             OpenAgentsWeb.Router,
+             "GET",
+             "/api/v1/coder/identity",
              "stage.openagents.com"
            ).pipe_through == [:chat_account_api]
   end

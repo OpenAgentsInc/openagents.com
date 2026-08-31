@@ -402,6 +402,18 @@ defmodule OpenAgents.DataRights.ExportInventory do
       note: "The API's own route and extension inventory."
     },
     %{
+      family: :coder_identity,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "A short-lived identity and repository projection for Coder. It reads " <>
+          "the account's retained GitHub connection but does not create or " <>
+          "return a user-authored OpenAgents record."
+    },
+    %{
       family: :model,
       api?: true,
       status: :not_user_data,

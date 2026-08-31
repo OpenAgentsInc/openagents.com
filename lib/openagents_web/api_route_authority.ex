@@ -200,6 +200,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       # Scoped bearer pipelines require the route-specific token authority.
       "get /api/v1/chat/events" => {:required_bearer, :chat, :legacy},
       "post /api/v1/chat/turns" => {:required_bearer, :chat, :legacy},
+      "get /api/v1/coder/identity" => {:required_bearer, :coder_identity, :legacy},
       "get /api/v1/models" => {:required_bearer, :model, :envelope},
       "get /api/v1/credit" => {:required_bearer, :credit, :envelope},
       "post /api/v1/threads" => {:required_bearer, :thread, :envelope},

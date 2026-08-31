@@ -614,6 +614,7 @@ defmodule OpenAgentsWeb.Router do
   scope "/api/v1", OpenAgentsWeb do
     pipe_through :chat_account_api
 
+    get "/coder/identity", CoderIdentityController, :show
     get "/chat/events", ChatTurnController, :index
     post "/chat/turns", ChatTurnController, :create
     get "/capacity", CapacityController, :show

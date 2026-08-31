@@ -64,6 +64,47 @@ defmodule OpenAgentsWeb.CoderIdentityControllerTest do
              |> json_response(401)
   end
 
+  test "rejects a malformed bearer token", %{conn: conn} do
+    assert %{"code" => "unauthenticated"} =
+             conn
+             |> put_req_header("authorization", "Bearer not-a-token")
+             |> get(~p"/api/v1/coder/identity")
+             |> json_response(401)
+  end
+
+  test "rejects a token that lacks the chat account scope", %{conn: conn} do
+    user = github_user("coder-identity-wrong-scope", "octavia-scope")
+    {:ok, _token, plaintext} = ApiTokens.create(user, %{name: "No chat", scopes: ["forge:write"]})
+
+    assert %{"code" => "unauthenticated"} =
+             conn
+             |> put_req_header("authorization", "Bearer " <> plaintext)
+             |> get(~p"/api/v1/coder/identity")
+             |> json_response(401)
+  end
+
+  test "rejects an expired token", %{conn: conn} do
+    user = github_user("coder-identity-expired", "octavia-expired")
+
+    {:ok, token, plaintext} =
+      ApiTokens.create(user, %{name: "Expired", scopes: ["chat:account"], lifetime_days: 1})
+
+    yesterday = DateTime.add(DateTime.utc_now(), -1, :day)
+
+    token
+    |> Ecto.Changeset.change(
+      inserted_at: DateTime.add(yesterday, -1, :day),
+      expires_at: yesterday
+    )
+    |> OpenAgents.Repo.update!()
+
+    assert %{"code" => "unauthenticated"} =
+             conn
+             |> put_req_header("authorization", "Bearer " <> plaintext)
+             |> get(~p"/api/v1/coder/identity")
+             |> json_response(401)
+  end
+
   defp repository(owner_id, full_name, readable?) do
     [owner, name] = String.split(full_name, "/")
 

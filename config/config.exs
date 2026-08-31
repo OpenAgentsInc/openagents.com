@@ -511,6 +511,9 @@ config :openagents,
   # base64 of 32 raw bytes. Nil refuses to mint; there is no symmetric
   # fallback, because Coder validates the token without Phoenix's secret.
   coder_token_signing_key: nil,
+  # The most one Coder spending grant may authorize, in microUSD. The account's
+  # remaining credit caps a grant again below this ceiling.
+  coder_grant_ceiling_microusd: 5_000_000,
   inference_grant_max_total_tokens: 2_000_000,
   inference_grant_max_calls: 64,
   inference_grant_max_cost_microusd: 5_000_000,

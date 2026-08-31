@@ -202,6 +202,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v1/chat/turns" => {:required_bearer, :chat, :legacy},
       "get /api/v1/coder/identity" => {:required_bearer, :coder_identity, :legacy},
       "post /api/v1/coder/token" => {:required_bearer, :coder_token, :legacy},
+      "post /api/v1/coder/grant" => {:required_bearer, :coder_grant, :legacy},
       "get /api/v1/models" => {:required_bearer, :model, :envelope},
       "get /api/v1/credit" => {:required_bearer, :credit, :envelope},
       "post /api/v1/threads" => {:required_bearer, :thread, :envelope},

@@ -426,6 +426,19 @@ defmodule OpenAgents.DataRights.ExportInventory do
           "but writes no durable record and nothing reads one back."
     },
     %{
+      family: :coder_grant,
+      api?: true,
+      status: :not_user_data,
+      mechanism: nil,
+      proof: nil,
+      issue: nil,
+      note:
+        "A short-lived signed spending grant for Coder, minted per request " <>
+          "and expired within an hour. It authorizes a bounded amount of the " <>
+          "account's credit but writes no durable record here; Coder records " <>
+          "acceptance on its own side."
+    },
+    %{
       family: :model,
       api?: true,
       status: :not_user_data,

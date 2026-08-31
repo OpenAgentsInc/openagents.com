@@ -48,6 +48,21 @@ defmodule OpenAgents.CoderToken do
     end
   end
 
+  @doc """
+  Signs arbitrary claims with the configured Ed25519 seed.
+
+  The spending-grant lane (`OpenAgents.CoderGrant`) mints with the same key
+  and the same compact-JWT shape as the Coder-audience token, so Coder
+  verifies both against one public key. Only the claims differ.
+  """
+  @spec sign_claims(map()) ::
+          {:ok, String.t()} | {:error, :signing_key_unconfigured | :signing_key_invalid}
+  def sign_claims(claims) when is_map(claims) do
+    with {:ok, seed} <- signing_seed() do
+      {:ok, sign(claims, seed)}
+    end
+  end
+
   defp github_identity(%{github_id: github_id, github_login: login})
        when is_integer(github_id) and github_id > 0 and is_binary(login) and login != "",
        do: :ok

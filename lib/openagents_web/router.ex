@@ -616,6 +616,7 @@ defmodule OpenAgentsWeb.Router do
 
     get "/coder/identity", CoderIdentityController, :show
     post "/coder/token", CoderTokenController, :create
+    post "/coder/grant", CoderGrantController, :create
     get "/chat/events", ChatTurnController, :index
     post "/chat/turns", ChatTurnController, :create
     get "/capacity", CapacityController, :show

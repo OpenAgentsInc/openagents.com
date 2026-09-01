@@ -14,7 +14,9 @@ defmodule OpenAgents.Gym.Run do
   finalize reaches; it requires the task counts and a `completed_at`.
   `abandoned` is the terminal state for a run that died without a grade —
   declared by the harness or applied by the lazy staleness sweep — so the
-  scoreboard never shows a forever-running row.
+  scoreboard never shows a forever-running row. `cancelled` is the terminal
+  state for a run an operator stopped on purpose: gradeless like `abandoned`,
+  but a decision rather than a death, and never applied by the sweep.
 
   `recipe_digest` is unique: submitting the same run twice replays the first
   row rather than duplicating it, so a trend line never counts a run twice.
@@ -34,7 +36,7 @@ defmodule OpenAgents.Gym.Run do
 
   @primary_key {:id, :binary_id, autogenerate: true}
 
-  @statuses ~w(running graded abandoned)
+  @statuses ~w(running graded abandoned cancelled)
   @bounded_fields [:suite, :agent, :model, :recipe_digest]
   @maximum_report_bytes 262_144
 
@@ -54,6 +56,7 @@ defmodule OpenAgents.Gym.Run do
     field :recipe_digest, :string
     field :report, :map, default: %{}
     field :completed_at, :utc_datetime_usec
+    field :recorded_by_user_id, :binary_id
 
     has_many :trials, Trial, foreign_key: :run_id
 
@@ -156,6 +159,13 @@ defmodule OpenAgents.Gym.Run do
   def abandon_changeset(run, now) do
     run
     |> change(%{status: "abandoned", completed_at: now})
+    |> check_constraint(:status, name: :gym_runs_status_check)
+  end
+
+  @doc "The operator-declared gradeless terminal state. Never applied by the sweep."
+  def cancel_changeset(run, now) do
+    run
+    |> change(%{status: "cancelled", completed_at: now})
     |> check_constraint(:status, name: :gym_runs_status_check)
   end
 

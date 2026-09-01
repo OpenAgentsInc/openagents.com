@@ -561,6 +561,7 @@ defmodule OpenAgentsWeb.Router do
     post "/gym/runs/:id/trials", GymRunController, :create_trial
     patch "/gym/runs/:id", GymRunController, :update
     get "/gym/runs", GymRunController, :index
+    get "/gym/runs/:id", GymRunController, :show
   end
 
   scope "/api/v1", OpenAgentsWeb do

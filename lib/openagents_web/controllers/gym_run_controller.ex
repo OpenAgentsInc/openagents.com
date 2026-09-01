@@ -15,9 +15,15 @@ defmodule OpenAgentsWeb.GymRunController do
   registers a run as `running`, `create_trial` upserts one task's state
   (optionally linked to the thread carrying its transcript, verified
   against the bearer's account), and `update` closes the run — `graded`
-  with the totals, or `abandoned` without them. The two `409` refusals
-  carry the colliding run beside the envelope so a harness can read what
-  it lost to.
+  with the totals, `abandoned` without them, or `cancelled` when an
+  operator says stop. The `409` refusals carry the colliding run beside
+  the envelope so a harness can read what it lost to.
+
+  The read half serves the CLI's frozen rendering contract: `show` and
+  `index` answer in `openagents.gym.run_status.v1` — the exact document
+  `openagents gym run status|list` deserializes — with grades computed
+  from the run's trial rows. The write paths keep their original `run`
+  envelope, which registration and finalization already parse.
   """
 
   use OpenAgentsWeb, :controller
@@ -30,7 +36,7 @@ defmodule OpenAgentsWeb.GymRunController do
 
   def create(conn, params) do
     with :ok <- operator(conn) do
-      case Gym.record_run(params) do
+      case Gym.record_run(params, conn.assigns.current_user) do
         {:ok, run, replayed?} ->
           conn
           |> put_status(if(replayed?, do: :ok, else: :created))
@@ -44,7 +50,7 @@ defmodule OpenAgentsWeb.GymRunController do
 
   def start(conn, params) do
     with :ok <- operator(conn) do
-      case Gym.start_run(params) do
+      case Gym.start_run(params, conn.assigns.current_user) do
         {:ok, run, replayed?} ->
           conn
           |> put_status(if(replayed?, do: :ok, else: :created))
@@ -96,6 +102,9 @@ defmodule OpenAgentsWeb.GymRunController do
       {:error, :already_graded, graded} ->
         ApiError.refuse(conn, "run_already_graded", legacy: %{"run" => run_view(graded)})
 
+      {:error, :cancelled, cancelled} ->
+        ApiError.refuse(conn, "run_cancelled", legacy: %{"run" => run_view(cancelled)})
+
       {:error, :digest_conflict, existing} ->
         ApiError.refuse(conn, "recipe_digest_conflict", legacy: %{"run" => run_view(existing)})
 
@@ -111,17 +120,48 @@ defmodule OpenAgentsWeb.GymRunController do
 
       {:error, :already_graded, graded} ->
         ApiError.refuse(conn, "run_already_graded", legacy: %{"run" => run_view(graded)})
+
+      {:error, :cancelled, cancelled} ->
+        ApiError.refuse(conn, "run_cancelled", legacy: %{"run" => run_view(cancelled)})
+    end
+  end
+
+  defp close(conn, run, %{"status" => "cancelled"}) do
+    case Gym.cancel_run(run) do
+      {:ok, updated} ->
+        json(conn, %{"run" => run_view(updated)})
+
+      {:error, :already_graded, graded} ->
+        ApiError.refuse(conn, "run_already_graded", legacy: %{"run" => run_view(graded)})
+
+      {:error, :already_abandoned, abandoned} ->
+        ApiError.refuse(conn, "run_already_abandoned", legacy: %{"run" => run_view(abandoned)})
     end
   end
 
   defp close(conn, _run, _params) do
-    ApiError.validation_failed(conn, %{"status" => ["must be graded or abandoned"]})
+    ApiError.validation_failed(conn, %{"status" => ["must be graded, abandoned, or cancelled"]})
+  end
+
+  def show(conn, %{"id" => run_id}) do
+    with :ok <- operator(conn) do
+      case Gym.fetch_run(run_id) do
+        {:ok, run} -> json(conn, %{"run" => status_view(run)})
+        :error -> ApiError.not_found(conn)
+      end
+    end
   end
 
   def index(conn, params) do
     with :ok <- operator(conn) do
-      runs = Gym.list_runs(suite: params["suite"])
-      json(conn, %{"runs" => Enum.map(runs, &run_view/1)})
+      runs =
+        Gym.list_runs(
+          suite: params["suite"],
+          recorded_by: if(params["mine"] in ["true", "1", true], do: conn.assigns.current_user),
+          trials: true
+        )
+
+      json(conn, %{"runs" => Enum.map(runs, &status_view/1)})
     end
   end
 
@@ -164,6 +204,74 @@ defmodule OpenAgentsWeb.GymRunController do
       "thread_id" => trial.thread_id,
       "recorded_at" => trial.inserted_at,
       "updated_at" => trial.updated_at
+    }
+  end
+
+  # The CLI's frozen rendering contract, `openagents.gym.run_status.v1`
+  # (`crates/openagents-cli/src/gym/schemas.rs` in the monorepo). Every key
+  # below is deserialized by `openagents gym run status|list`, so this shape
+  # only ever gains keys.
+  @run_status_schema "openagents.gym.run_status.v1"
+
+  defp status_view(%Run{} = run) do
+    trials = run.trials
+    {accepted, rejected, ungraded, graded, tasks_total} = grades(run, trials)
+
+    %{
+      "schema" => @run_status_schema,
+      "run_id" => run.id,
+      "suite_id" => run.suite,
+      "lane" => run.lane || "unknown",
+      "model" => run.model,
+      "state" => run.status,
+      "started_at" => run.inserted_at,
+      "updated_at" => run.updated_at,
+      "tasks_total" => tasks_total,
+      "accepted" => accepted,
+      "rejected" => rejected,
+      "ungraded" => ungraded,
+      "graded" => graded,
+      "summary" =>
+        "#{accepted} accepted, #{rejected} rejected, #{ungraded} ungraded; " <>
+          "#{graded} of #{tasks_total} tasks graded",
+      "trials" => Enum.map(trials, &trial_status_view/1)
+    }
+  end
+
+  # Grades mirror the CLI's local rules: a trial the verifier never graded is
+  # `ungraded`, a graded trial is `accepted` (reward) or `rejected` (none),
+  # and `graded` counts verdicts, so a still-running trial lands in no bucket.
+  # A run with no trial rows — the one-shot ingest — answers from its
+  # headline columns instead, where `tasks_passed` already is the accepted
+  # count over a fully graded suite.
+  defp grades(%Run{status: "graded", tasks_total: total, tasks_passed: passed}, [])
+       when is_integer(total) and is_integer(passed) do
+    {passed, total - passed, 0, total, total}
+  end
+
+  defp grades(%Run{} = run, trials) do
+    accepted = Enum.count(trials, &(&1.state == "passed"))
+    rejected = Enum.count(trials, &(&1.state == "failed"))
+    ungraded = Enum.count(trials, &(&1.state == "ungraded"))
+    {accepted, rejected, ungraded, accepted + rejected, run.tasks_total || length(trials)}
+  end
+
+  defp trial_status_view(%Trial{} = trial) do
+    {state, outcome} =
+      case trial.state do
+        "passed" -> {"accepted", "accepted"}
+        "failed" -> {"rejected", "rejected"}
+        other -> {other, nil}
+      end
+
+    %{
+      "task" => trial.task,
+      "state" => state,
+      "outcome" => outcome,
+      "started_at" => trial.inserted_at,
+      "finished_at" => if(trial.state == "running", do: nil, else: trial.updated_at),
+      "transcript_ref" => trial.thread_id && "thread:" <> trial.thread_id,
+      "cost_usd" => nil
     }
   end
 end

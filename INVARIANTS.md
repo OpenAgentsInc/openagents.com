@@ -3592,13 +3592,20 @@ sentence:
   is not a live system row.
 - Recording Gym runs and trials under `POST /api/v1/gym/runs`, the lifecycle
   routes `POST /api/v1/gym/runs/start`, `POST /api/v1/gym/runs/:id/trials`,
-  and `PATCH /api/v1/gym/runs/:id`
+  and `PATCH /api/v1/gym/runs/:id` (which also admits the terminal
+  `cancelled` close), the API read-back routes `GET /api/v1/gym/runs` and
+  `GET /api/v1/gym/runs/:id` serving the CLI's
+  `openagents.gym.run_status.v1` document
   (`OpenAgentsWeb.GymRunController`, which rechecks the operator on every
   request over the bearer scope), and reading the scoreboard from `/gym`
   and a run's page from `/gym/runs/:id` (`OpenAgentsWeb.GymLive` and
   `OpenAgentsWeb.GymRunLive`, recheck on mount and on every event). A run
   is a benchmark record — recipe digest, task, model, lane, reward,
-  duration — never account data. The one cross-record link a trial may
+  duration — never account data, beside one attribution stamp:
+  `recorded_by_user_id` names the operator account that recorded the run so
+  `mine=true` can filter, carries no foreign key (the record outlives the
+  account, like a trial's `thread_id`), and buys no read — every Gym read
+  path is already operator-gated. The one cross-record link a trial may
   carry, a `thread_id`, is verified at ingest: `OpenAgents.Gym.record_trial/3`
   admits a thread only when `OpenAgents.Threads.get_for_user/2` resolves it
   for the bearer's account, and an unknown thread and an unowned one refuse

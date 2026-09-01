@@ -367,6 +367,7 @@ defmodule OpenAgentsWeb.ApiRouteAuthority do
       "post /api/v1/gym/runs/:id/trials" => {:required_bearer, :gym, :envelope},
       "patch /api/v1/gym/runs/:id" => {:required_bearer, :gym, :envelope},
       "get /api/v1/gym/runs" => {:required_bearer, :gym, :envelope},
+      "get /api/v1/gym/runs/:id" => {:required_bearer, :gym, :envelope},
       "delete /api/v1/agents/:handle/box-control" => {:required_bearer, :agent, :legacy},
       "post /api/v1/agents/:handle/computer-control" => {:required_bearer, :agent, :legacy},
       "delete /api/v1/agents/:handle/computer-control" => {:required_bearer, :agent, :legacy},

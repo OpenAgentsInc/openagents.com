@@ -16,8 +16,10 @@ defmodule OpenAgents.Gym do
   `graded` row, as it always has. The live lifecycle starts a run as
   `running` (`start_run/1`), upserts per-task trials against it
   (`record_trial/3`) — each optionally linked to the thread that carries
-  its transcript — and closes it with `finalize_run/2` (grades, `graded`)
-  or `abandon_run/1` (no grades, `abandoned`). Recipe-digest idempotency
+  its transcript — and closes it with `finalize_run/2` (grades, `graded`),
+  `abandon_run/1` (no grades, `abandoned`), or `cancel_run/1` (no grades,
+  `cancelled`: an operator's decision to stop, terminal like the other two
+  and never touched by the staleness sweep). Recipe-digest idempotency
   holds across both ways in: a resubmitted digest replays the existing row.
 
   A trial's thread link is verified at ingest: the thread must exist and
@@ -76,13 +78,18 @@ defmodule OpenAgents.Gym do
   A resubmitted digest returns the existing row as `{:ok, run, replayed?:
   true}` rather than duplicating or refusing: the harness retries uploads,
   and a retry is not a second run.
+
+  `recorded_by` is the account behind the request, stamped for the `mine`
+  read filter; a replay keeps the first recorder.
   """
-  @spec record_run(map()) :: {:ok, Run.t(), boolean()} | {:error, Ecto.Changeset.t()}
-  def record_run(attributes) when is_map(attributes) do
+  @spec record_run(map(), User.t() | nil) ::
+          {:ok, Run.t(), boolean()} | {:error, Ecto.Changeset.t()}
+  def record_run(attributes, recorded_by \\ nil) when is_map(attributes) do
     changeset =
       %Run{}
       |> Run.changeset(attributes)
       |> Ecto.Changeset.put_change(:completed_at, DateTime.utc_now())
+      |> stamp_recorder(recorded_by)
 
     insert_or_replay(changeset)
   end
@@ -95,9 +102,10 @@ defmodule OpenAgents.Gym do
   existing run the same way `record_run/1` does; an absent digest takes a
   generated `pending:` placeholder that `finalize_run/2` replaces.
   """
-  @spec start_run(map()) :: {:ok, Run.t(), boolean()} | {:error, Ecto.Changeset.t()}
-  def start_run(attributes) when is_map(attributes) do
-    insert_or_replay(Run.start_changeset(%Run{}, attributes))
+  @spec start_run(map(), User.t() | nil) ::
+          {:ok, Run.t(), boolean()} | {:error, Ecto.Changeset.t()}
+  def start_run(attributes, recorded_by \\ nil) when is_map(attributes) do
+    insert_or_replay(%Run{} |> Run.start_changeset(attributes) |> stamp_recorder(recorded_by))
   end
 
   @doc """
@@ -112,9 +120,11 @@ defmodule OpenAgents.Gym do
   @spec finalize_run(Run.t(), map()) ::
           {:ok, Run.t()}
           | {:error, :already_graded, Run.t()}
+          | {:error, :cancelled, Run.t()}
           | {:error, :digest_conflict, Run.t()}
           | {:error, Ecto.Changeset.t()}
   def finalize_run(%Run{status: "graded"} = run, _attributes), do: {:error, :already_graded, run}
+  def finalize_run(%Run{status: "cancelled"} = run, _attributes), do: {:error, :cancelled, run}
 
   def finalize_run(%Run{} = run, attributes) when is_map(attributes) do
     changeset = Run.finalize_changeset(run, attributes, DateTime.utc_now())
@@ -144,12 +154,37 @@ defmodule OpenAgents.Gym do
   Idempotent for an already-abandoned run; a graded run refuses, because a
   grade on record outranks a late abandonment.
   """
-  @spec abandon_run(Run.t()) :: {:ok, Run.t()} | {:error, :already_graded, Run.t()}
+  @spec abandon_run(Run.t()) ::
+          {:ok, Run.t()} | {:error, :already_graded, Run.t()} | {:error, :cancelled, Run.t()}
   def abandon_run(%Run{status: "graded"} = run), do: {:error, :already_graded, run}
+  def abandon_run(%Run{status: "cancelled"} = run), do: {:error, :cancelled, run}
   def abandon_run(%Run{status: "abandoned"} = run), do: {:ok, run}
 
   def abandon_run(%Run{} = run) do
     {:ok, updated} = run |> Run.abandon_changeset(DateTime.utc_now()) |> Repo.update()
+    broadcast_run(updated)
+    {:ok, updated}
+  end
+
+  @doc """
+  Close a run without grades because an operator said stop, as `cancelled`.
+
+  Idempotent for an already-cancelled run; a graded run refuses, because a
+  grade on record outranks a late cancellation, and an abandoned run refuses,
+  because it already closed under a different word and rewriting it would
+  falsify the record. A cancelled run is terminal: the staleness sweep never
+  touches it, and `finalize_run/2` and `abandon_run/1` refuse it.
+  """
+  @spec cancel_run(Run.t()) ::
+          {:ok, Run.t()}
+          | {:error, :already_graded, Run.t()}
+          | {:error, :already_abandoned, Run.t()}
+  def cancel_run(%Run{status: "graded"} = run), do: {:error, :already_graded, run}
+  def cancel_run(%Run{status: "abandoned"} = run), do: {:error, :already_abandoned, run}
+  def cancel_run(%Run{status: "cancelled"} = run), do: {:ok, run}
+
+  def cancel_run(%Run{} = run) do
+    {:ok, updated} = run |> Run.cancel_changeset(DateTime.utc_now()) |> Repo.update()
     broadcast_run(updated)
     {:ok, updated}
   end
@@ -252,6 +287,10 @@ defmodule OpenAgents.Gym do
 
   Sweeps staleness first, so a read never lists a run that stopped
   reporting six hours ago as still running.
+
+  Options beside `:suite` and `:limit`: `:recorded_by` narrows to the runs
+  one account recorded (the API's `mine=true`), and `:trials` preloads each
+  run's trials in task order for the read-back view.
   """
   @spec list_runs(keyword()) :: [Run.t()]
   def list_runs(options \\ []) do
@@ -259,11 +298,17 @@ defmodule OpenAgents.Gym do
 
     limit = options |> Keyword.get(:limit, 50) |> min(@maximum_listed) |> max(1)
 
-    Run
-    |> filter_suite(options[:suite])
-    |> order_by(desc: :inserted_at)
-    |> limit(^limit)
-    |> Repo.all()
+    runs =
+      Run
+      |> filter_suite(options[:suite])
+      |> filter_recorder(options[:recorded_by])
+      |> order_by(desc: :inserted_at)
+      |> limit(^limit)
+      |> Repo.all()
+
+    if Keyword.get(options, :trials, false),
+      do: Repo.preload(runs, trials: trials_query()),
+      else: runs
   end
 
   @doc "Distinct suites present, for the surface's filter row."
@@ -331,6 +376,16 @@ defmodule OpenAgents.Gym do
     do: where(query, [r], r.suite == ^suite)
 
   defp filter_suite(query, _absent), do: query
+
+  defp filter_recorder(query, %User{id: user_id}),
+    do: where(query, [r], r.recorded_by_user_id == ^user_id)
+
+  defp filter_recorder(query, _absent), do: query
+
+  defp stamp_recorder(changeset, %User{id: user_id}),
+    do: Ecto.Changeset.put_change(changeset, :recorded_by_user_id, user_id)
+
+  defp stamp_recorder(changeset, _absent), do: changeset
 
   defp verify_thread(changeset, bearer) do
     case Ecto.Changeset.get_change(changeset, :thread_id) do

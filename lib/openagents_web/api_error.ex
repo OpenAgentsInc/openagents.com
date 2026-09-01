@@ -115,6 +115,12 @@ defmodule OpenAgentsWeb.ApiError do
     # what it lost to rather than fetching again.
     "run_already_graded" => {409, "This run is already graded"},
     "recipe_digest_conflict" => {409, "That recipe digest already names another run"},
+    # Cancellation is terminal: a cancelled run takes no grade and no late
+    # abandonment, and a run that already closed as abandoned keeps its word
+    # rather than being rewritten to cancelled. Each refusal carries the
+    # standing run beside the envelope, like the two conflicts above.
+    "run_cancelled" => {409, "This run was cancelled"},
+    "run_already_abandoned" => {409, "This run was already abandoned"},
     "trace_body_too_large" => {413, "The trace body is larger than the maximum allowed size"},
     # Binding a trace to an attempt is an authority claim, so a caller that
     # names somebody else's attempt is refused rather than having the binding
